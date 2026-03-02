@@ -15,7 +15,6 @@ Thumbs.db
 
 # Node.js (codegen tooling)
 node_modules/
-package-lock.json
 
 # Kotlin
 *.class
