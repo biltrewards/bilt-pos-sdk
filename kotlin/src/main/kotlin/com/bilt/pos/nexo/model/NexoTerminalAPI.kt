@@ -10,18 +10,6 @@
  *   This file is auto-generated from the Nexo Sale to POI v3.0 JSON Schema.
  *   Do not modify manually — re-run code generation instead.
  */
-/*
- *    ____  _ _ _
- *   | __ )(_) | |_
- *   |  _ \| | | __|
- *   | |_) | | | |_
- *   |____/|_|_|\__|
- *
- *   Bilt POS SDK
- *
- *   This file is auto-generated from the Nexo Sale to POI v3.0 JSON Schema.
- *   Do not modify manually — re-run code generation instead.
- */
 // To parse the JSON, install kotlin's serialization plugin and do:
 //
 // val json            = Json { allowStructuredMapKeys = true }

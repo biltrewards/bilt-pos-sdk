@@ -13,6 +13,7 @@ node {
 
 val schemaFile = layout.projectDirectory.file("nexo_sale_to_poi_v3_0_schema.json")
 
+val kotlinRawOutputFile = layout.buildDirectory.file("generated/NexoTerminalAPI.kt")
 val kotlinOutputFile = rootProject.layout.projectDirectory.file(
     "kotlin/src/main/kotlin/com/bilt/pos/nexo/model/NexoTerminalAPI.kt",
 )
@@ -26,7 +27,7 @@ val generateNexoKotlinRaw = tasks.register<NpxTask>("generateNexoKotlinRaw") {
     dependsOn(tasks.named("npmInstall"))
 
     inputs.file(schemaFile)
-    outputs.file(kotlinOutputFile)
+    outputs.file(kotlinRawOutputFile)
 
     command.set("quicktype")
     args.set(
@@ -35,7 +36,7 @@ val generateNexoKotlinRaw = tasks.register<NpxTask>("generateNexoKotlinRaw") {
             "--src-lang", "schema",
             "--lang", "kotlin",
             "--framework", "kotlinx",
-            "--out", kotlinOutputFile.asFile.absolutePath,
+            "--out", kotlinRawOutputFile.get().asFile.absolutePath,
             "--package", "com.bilt.pos.nexo.model",
         ),
     )
@@ -45,7 +46,8 @@ tasks.register<AddHeaderTask>("generateNexoKotlin") {
     group = "codegen"
     description = "Regenerate Kotlin types from the Nexo JSON Schema. Commit the result."
     dependsOn(generateNexoKotlinRaw)
-    targetFile.set(kotlinOutputFile)
+    inputFile.set(kotlinRawOutputFile)
+    outputFile.set(kotlinOutputFile)
 }
 
 tasks.register<NodeTask>("generateNexoJava") {
@@ -76,7 +78,10 @@ tasks.register("generateNexo") {
 abstract class AddHeaderTask : DefaultTask() {
     @get:InputFile
     @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val targetFile: RegularFileProperty
+    abstract val inputFile: RegularFileProperty
+
+    @get:OutputFile
+    abstract val outputFile: RegularFileProperty
 
     @TaskAction
     fun run() {
@@ -94,7 +99,6 @@ abstract class AddHeaderTask : DefaultTask() {
             | *   Do not modify manually — re-run code generation instead.
             | */
             |""".trimMargin()
-        val file = targetFile.get().asFile
-        file.writeText(header + file.readText())
+        outputFile.get().asFile.writeText(header + inputFile.get().asFile.readText())
     }
 }
