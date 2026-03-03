@@ -18,6 +18,7 @@ class JavaLibraryConventionPlugin : Plugin<Project> {
 
         dependencies {
             add("testImplementation", libs.findLibrary("junit-jupiter").get())
+            add("testRuntimeOnly", libs.findLibrary("junit-platform-launcher").get())
         }
 
         configureTests()

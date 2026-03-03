@@ -26,6 +26,7 @@ class KotlinLibraryConventionPlugin : Plugin<Project> {
 
         dependencies {
             add("testImplementation", libs.findLibrary("junit-jupiter").get())
+            add("testRuntimeOnly", libs.findLibrary("junit-platform-launcher").get())
             add("testImplementation", libs.findLibrary("mockk").get())
             add("testImplementation", libs.findLibrary("kotest-assertions-core").get())
         }
