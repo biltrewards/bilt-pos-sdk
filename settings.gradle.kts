@@ -28,3 +28,4 @@ rootProject.name = "bilt-pos-sdk"
 include(":java")
 include(":kotlin")
 include(":schema")
+include(":cli")
