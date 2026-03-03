@@ -16,15 +16,20 @@ import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
 import com.bilt.pos.nexo.model.MessageHeader;
 import com.bilt.pos.nexo.model.MessageTypeType;
+import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.PaymentRequest;
 import com.bilt.pos.nexo.model.PaymentTransaction;
+import com.bilt.pos.nexo.model.SaleData;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.nexo.security.SecurityKey;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -48,7 +53,7 @@ public final class Main {
         String passphrase = null;
         String keyId = null;
         int keyVersion = 0;
-        double amount = 25.00;
+        double amount = 2.50;
         String currency = "USD";
 
         for (int i = 1; i < args.length; i++) {
@@ -132,15 +137,23 @@ public final class Main {
                 throw new IllegalArgumentException("Unknown request type: " + type + ". Supported: payment, diagnosis");
         }
 
-        LOG.fine("Request built, sending to terminal...");
-
-        SaleToPOIResponse response = client.request(request);
-
-        LOG.info("Response received successfully");
-
         ObjectMapper mapper = new ObjectMapper()
                 .setSerializationInclusion(JsonInclude.Include.NON_NULL)
                 .enable(SerializationFeature.INDENT_OUTPUT);
+
+        NexoTerminalAPI apiRequest = NexoTerminalAPI.builder()
+                .saleToPOIRequest(request)
+                .build();
+
+        NexoTerminalAPI apiResponse = client.request(apiRequest);
+
+        SaleToPOIResponse response = apiResponse.getSaleToPOIResponse();
+        if (response == null) {
+            LOG.severe("Response did not contain SaleToPOIResponse");
+            System.exit(1);
+            return;
+        }
+
         System.out.println(mapper.writeValueAsString(response));
     }
 
@@ -156,6 +169,12 @@ public final class Main {
                         .poiid("bilt-terminal")
                         .build())
                 .paymentRequest(PaymentRequest.builder()
+                        .saleData(SaleData.builder()
+                                .saleTransactionID(TransactionIdentificationType.builder()
+                                        .transactionID(UUID.randomUUID().toString())
+                                        .timeStamp(OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                                        .build())
+                                .build())
                         .paymentTransaction(PaymentTransaction.builder()
                                 .amountsReq(AmountsReq.builder()
                                         .currency(currency)

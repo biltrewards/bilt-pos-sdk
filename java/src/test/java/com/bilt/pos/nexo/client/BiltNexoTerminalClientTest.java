@@ -4,6 +4,7 @@ import com.bilt.pos.nexo.model.*;
 import com.bilt.pos.nexo.security.MessageEncryptor;
 import com.bilt.pos.nexo.security.SaleToPOISecuredMessage;
 import com.bilt.pos.nexo.security.SecurityKey;
+import com.bilt.pos.nexo.client.BiltNexoClientException;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -45,32 +46,34 @@ class BiltNexoTerminalClientTest {
     @Test
     void requestSerializesAndSendsPayment() throws Exception {
         server.enqueue(new MockResponse()
-                .setBody("{\"MessageHeader\":{\"ProtocolVersion\":\"3.0\"},"
-                        + "\"PaymentResponse\":{\"Response\":{\"Result\":\"Success\"}}}"));
+                .setBody("{\"SaleToPOIResponse\":{\"MessageHeader\":{\"ProtocolVersion\":\"3.0\"},"
+                        + "\"PaymentResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
 
-        SaleToPOIRequest request = SaleToPOIRequest.builder()
-                .messageHeader(MessageHeader.builder()
-                        .protocolVersion("3.0")
-                        .messageClass(MessageClassType.SERVICE)
-                        .messageCategory(MessageCategoryType.PAYMENT)
-                        .messageType(MessageTypeType.REQUEST)
-                        .serviceID("txn-001")
-                        .saleID("POS-1")
-                        .poiid("TERM-1")
-                        .build())
-                .paymentRequest(PaymentRequest.builder()
-                        .paymentTransaction(PaymentTransaction.builder()
-                                .amountsReq(AmountsReq.builder()
-                                        .currency("USD")
-                                        .requestedAmount(25.00)
+        NexoTerminalAPI request = NexoTerminalAPI.builder()
+                .saleToPOIRequest(SaleToPOIRequest.builder()
+                        .messageHeader(MessageHeader.builder()
+                                .protocolVersion("3.0")
+                                .messageClass(MessageClassType.SERVICE)
+                                .messageCategory(MessageCategoryType.PAYMENT)
+                                .messageType(MessageTypeType.REQUEST)
+                                .serviceID("txn-001")
+                                .saleID("POS-1")
+                                .poiid("TERM-1")
+                                .build())
+                        .paymentRequest(PaymentRequest.builder()
+                                .paymentTransaction(PaymentTransaction.builder()
+                                        .amountsReq(AmountsReq.builder()
+                                                .currency("USD")
+                                                .requestedAmount(25.00)
+                                                .build())
                                         .build())
                                 .build())
                         .build())
                 .build();
 
-        SaleToPOIResponse response = client.request(request);
+        NexoTerminalAPI response = client.request(request);
 
-        assertEquals(ResultType.SUCCESS, response.getPaymentResponse().getResponse().getResult());
+        assertEquals(ResultType.SUCCESS, response.getSaleToPOIResponse().getPaymentResponse().getResponse().getResult());
 
         RecordedRequest recorded = server.takeRequest();
         assertEquals("POST", recorded.getMethod());
@@ -78,6 +81,7 @@ class BiltNexoTerminalClientTest {
         assertTrue(recorded.getHeader("Content-Type").startsWith("application/json"));
 
         String sentJson = recorded.getBody().readUtf8();
+        assertTrue(sentJson.contains("\"SaleToPOIRequest\""));
         assertTrue(sentJson.contains("\"RequestedAmount\":25.0"));
         assertTrue(sentJson.contains("\"Currency\":\"USD\""));
         assertFalse(sentJson.contains("null"));
@@ -85,7 +89,7 @@ class BiltNexoTerminalClientTest {
 
     @Test
     void requestDeserializesFullPaymentResponse() throws Exception {
-        String responseJson = "{"
+        String responseJson = "{\"SaleToPOIResponse\":{"
                 + "\"MessageHeader\":{"
                 + "  \"ProtocolVersion\":\"3.0\","
                 + "  \"MessageClass\":\"Service\","
@@ -101,24 +105,27 @@ class BiltNexoTerminalClientTest {
                 + "    \"PaymentType\":\"Normal\","
                 + "    \"AmountsResp\":{\"Currency\":\"USD\",\"AuthorizedAmount\":25.0}"
                 + "  }"
-                + "}}";
+                + "}}}";
 
         server.enqueue(new MockResponse().setBody(responseJson));
 
-        SaleToPOIResponse response = client.request(
-                SaleToPOIRequest.builder()
-                        .messageHeader(MessageHeader.builder().build())
+        NexoTerminalAPI response = client.request(
+                NexoTerminalAPI.builder()
+                        .saleToPOIRequest(SaleToPOIRequest.builder()
+                                .messageHeader(MessageHeader.builder().build())
+                                .build())
                         .build());
 
-        assertEquals("3.0", response.getMessageHeader().getProtocolVersion());
-        assertEquals(ResultType.SUCCESS, response.getPaymentResponse().getResponse().getResult());
-        assertEquals(25.0, response.getPaymentResponse().getPaymentResult()
+        SaleToPOIResponse poiResponse = response.getSaleToPOIResponse();
+        assertEquals("3.0", poiResponse.getMessageHeader().getProtocolVersion());
+        assertEquals(ResultType.SUCCESS, poiResponse.getPaymentResponse().getResponse().getResult());
+        assertEquals(25.0, poiResponse.getPaymentResponse().getPaymentResult()
                 .getAmountsResp().getAuthorizedAmount());
     }
 
     @Test
     void requestHandlesFailureResponse() throws Exception {
-        String responseJson = "{"
+        String responseJson = "{\"SaleToPOIResponse\":{"
                 + "\"MessageHeader\":{\"ProtocolVersion\":\"3.0\"},"
                 + "\"PaymentResponse\":{"
                 + "  \"Response\":{"
@@ -126,18 +133,21 @@ class BiltNexoTerminalClientTest {
                 + "    \"ErrorCondition\":\"Refusal\","
                 + "    \"AdditionalResponse\":\"Insufficient funds\""
                 + "  }"
-                + "}}";
+                + "}}}";
 
         server.enqueue(new MockResponse().setBody(responseJson));
 
-        SaleToPOIResponse response = client.request(
-                SaleToPOIRequest.builder()
-                        .messageHeader(MessageHeader.builder().build())
+        NexoTerminalAPI response = client.request(
+                NexoTerminalAPI.builder()
+                        .saleToPOIRequest(SaleToPOIRequest.builder()
+                                .messageHeader(MessageHeader.builder().build())
+                                .build())
                         .build());
 
-        assertEquals(ResultType.FAILURE, response.getPaymentResponse().getResponse().getResult());
+        SaleToPOIResponse poiResponse = response.getSaleToPOIResponse();
+        assertEquals(ResultType.FAILURE, poiResponse.getPaymentResponse().getResponse().getResult());
         assertEquals("Insufficient funds",
-                response.getPaymentResponse().getResponse().getAdditionalResponse());
+                poiResponse.getPaymentResponse().getResponse().getAdditionalResponse());
     }
 
     @Test
@@ -145,8 +155,10 @@ class BiltNexoTerminalClientTest {
         server.enqueue(new MockResponse().setResponseCode(500).setBody("Internal error"));
 
         BiltNexoClientException ex = assertThrows(BiltNexoClientException.class, () ->
-                client.request(SaleToPOIRequest.builder()
-                        .messageHeader(MessageHeader.builder().build())
+                client.request(NexoTerminalAPI.builder()
+                        .saleToPOIRequest(SaleToPOIRequest.builder()
+                                .messageHeader(MessageHeader.builder().build())
+                                .build())
                         .build()));
 
         assertTrue(ex.getMessage().contains("500"));
@@ -158,8 +170,10 @@ class BiltNexoTerminalClientTest {
         server.shutdown();
 
         BiltNexoClientException ex = assertThrows(BiltNexoClientException.class, () ->
-                client.request(SaleToPOIRequest.builder()
-                        .messageHeader(MessageHeader.builder().build())
+                client.request(NexoTerminalAPI.builder()
+                        .saleToPOIRequest(SaleToPOIRequest.builder()
+                                .messageHeader(MessageHeader.builder().build())
+                                .build())
                         .build()));
 
         assertTrue(ex.getMessage().contains("Failed to communicate"));
@@ -168,11 +182,13 @@ class BiltNexoTerminalClientTest {
     @Test
     void requestWithPerRequestTimeout() throws Exception {
         server.enqueue(new MockResponse()
-                .setBody("{\"MessageHeader\":{\"ProtocolVersion\":\"3.0\"}}"));
+                .setBody("{\"SaleToPOIResponse\":{\"MessageHeader\":{\"ProtocolVersion\":\"3.0\"}}}"));
 
-        SaleToPOIResponse response = client.request(
-                SaleToPOIRequest.builder()
-                        .messageHeader(MessageHeader.builder().build())
+        NexoTerminalAPI response = client.request(
+                NexoTerminalAPI.builder()
+                        .saleToPOIRequest(SaleToPOIRequest.builder()
+                                .messageHeader(MessageHeader.builder().build())
+                                .build())
                         .build(),
                 Duration.ofSeconds(5));
 
@@ -225,28 +241,30 @@ class BiltNexoTerminalClientTest {
 
         server.enqueue(new MockResponse().setBody(encryptedResponseJson));
 
-        SaleToPOIRequest request = SaleToPOIRequest.builder()
-                .messageHeader(MessageHeader.builder()
-                        .protocolVersion("3.0")
-                        .messageClass(MessageClassType.SERVICE)
-                        .messageCategory(MessageCategoryType.PAYMENT)
-                        .messageType(MessageTypeType.REQUEST)
-                        .serviceID("txn-001")
-                        .saleID("POS-1")
-                        .poiid("TERM-1")
-                        .build())
-                .paymentRequest(PaymentRequest.builder()
-                        .paymentTransaction(PaymentTransaction.builder()
-                                .amountsReq(AmountsReq.builder()
-                                        .currency("USD")
-                                        .requestedAmount(42.00)
+        NexoTerminalAPI request = NexoTerminalAPI.builder()
+                .saleToPOIRequest(SaleToPOIRequest.builder()
+                        .messageHeader(MessageHeader.builder()
+                                .protocolVersion("3.0")
+                                .messageClass(MessageClassType.SERVICE)
+                                .messageCategory(MessageCategoryType.PAYMENT)
+                                .messageType(MessageTypeType.REQUEST)
+                                .serviceID("txn-001")
+                                .saleID("POS-1")
+                                .poiid("TERM-1")
+                                .build())
+                        .paymentRequest(PaymentRequest.builder()
+                                .paymentTransaction(PaymentTransaction.builder()
+                                        .amountsReq(AmountsReq.builder()
+                                                .currency("USD")
+                                                .requestedAmount(42.00)
+                                                .build())
                                         .build())
                                 .build())
                         .build())
                 .build();
 
-        SaleToPOIResponse response = encryptedClient.request(request);
-        assertEquals(ResultType.SUCCESS, response.getPaymentResponse().getResponse().getResult());
+        NexoTerminalAPI response = encryptedClient.request(request);
+        assertEquals(ResultType.SUCCESS, response.getSaleToPOIResponse().getPaymentResponse().getResponse().getResult());
 
         // Verify the request was sent encrypted (contains NexoBlob, not plaintext)
         RecordedRequest recorded = server.takeRequest();
@@ -261,6 +279,14 @@ class BiltNexoTerminalClientTest {
         @JsonProperty("SaleToPOIResponse")
         final SaleToPOISecuredMessage saleToPOIResponse;
         TestSecuredResponseEnvelope(SaleToPOISecuredMessage msg) { this.saleToPOIResponse = msg; }
+    }
+
+    @Test
+    void requestThrowsWhenSaleToPOIRequestIsNull() {
+        BiltNexoClientException ex = assertThrows(BiltNexoClientException.class, () ->
+                client.request(NexoTerminalAPI.builder().build()));
+
+        assertTrue(ex.getMessage().contains("saleToPOIRequest"));
     }
 
     @Test
