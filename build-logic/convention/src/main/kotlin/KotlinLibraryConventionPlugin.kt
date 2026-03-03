@@ -32,6 +32,7 @@ class KotlinLibraryConventionPlugin : Plugin<Project> {
         }
 
         configureTests()
+        configurePublishing()
     }
 }
 
