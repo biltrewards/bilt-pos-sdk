@@ -3,6 +3,15 @@ pluginManagement {
     repositories {
         mavenCentral()
         gradlePluginPortal()
+        // Node.js binary distribution — required by the node-gradle plugin in :schema
+        ivy {
+            url = uri("https://nodejs.org/dist/")
+            patternLayout {
+                artifact("v[revision]/[artifact](-v[revision]-[classifier]).[ext]")
+            }
+            metadataSources { artifact() }
+            content { includeModule("org.nodejs", "node") }
+        }
     }
 }
 
@@ -18,3 +27,4 @@ rootProject.name = "bilt-pos-sdk"
 
 include(":java")
 include(":kotlin")
+include(":schema")

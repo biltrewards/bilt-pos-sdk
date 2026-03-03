@@ -1,0 +1,7 @@
+{
+  "name": "nexo-codegen",
+  "private": true,
+  "devDependencies": {
+    "quicktype": "23.0.170"
+  }
+}
