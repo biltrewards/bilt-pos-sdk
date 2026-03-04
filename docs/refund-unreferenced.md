@@ -2,7 +2,7 @@
 
 Issue a refund to any card presented to the terminal, without linking it to an original payment.
 
-An unreferenced refund pushes a specified amount from the merchant account to any card the shopper presents. Unlike a [referenced refund](./refund-referenced.md), there is no validation against an original transaction, so your POS app is responsible for reconciling the refund against the original purchase to prevent return fraud and human error.
+An unreferenced refund pushes a specified amount from the merchant account to any card the shopper presents. Unlike a [referenced refund](./refund-referenced.md), there is no validation against an original transaction, so your POS app is responsible for reconciling the refund against the original purchase to prevent return fraud and human error. Use this when you don't have the original transaction reference, or the refund is being made to a different card than the original payment.
 
 > Unreferenced refunds must be enabled before use. Contact support to enable this feature for your account.
 
@@ -122,6 +122,8 @@ For general guidance on handling failed requests, see [Handle responses](./error
 
 ## Next steps
 
+- [Cancel, reverse, or refund a payment](./undo-payment.md) — overview of all options for undoing a payment.
 - [Referenced refund](./refund-referenced.md) — refund linked to the original payment.
-- [Cancel a payment](./cancel-a-payment.md) — abort an in-progress payment before it completes.
+- [Reverse a payment](./reverse-payment.md) — void a completed payment before the batch settles.
+- [Cancel a payment](./cancel-payment.md) — abort an in-progress payment before it completes.
 - [Verify payment status](./verify-transaction-status.md) — check the status of a transaction when you don't receive a result.

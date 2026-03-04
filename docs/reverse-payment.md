@@ -1,12 +1,12 @@
-# Referenced refund
+# Reverse a payment
 
-Issue a refund linked to the original payment.
+Void a completed payment before the batch settles, using a `ReversalRequest`.
 
-A referenced refund is tied to the original transaction using its transaction identifier. This lets the platform validate the refund against the original payment, reducing the risk of duplicate refunds and fraud. Referenced refunds are the preferred refund method and are universally supported. The funds are returned to the original payment method without requiring the shopper to present their card.
+A reversal cancels a completed payment that has not yet been cleared by the acquirer. Because the funds were authorized but not yet settled, a reversal releases the hold on the shopper's account immediately and typically incurs fewer fees than a post-clearing refund.
 
-You can make a **full refund** to return the total amount, or a **partial refund** to return part of it. Multiple partial refunds can be made against the same original payment, as long as the total does not exceed the original amount.
+You can make a **full reversal** to void the entire amount, or a **partial reversal** to reduce the authorized amount. Multiple partial reversals can be made against the same original payment, as long as the total does not exceed the original amount.
 
-If the batch has not yet settled, consider [cancelling the payment](./cancel-a-payment.md) instead — this generally results in fewer fees.
+> A reversal must be made **before the batch settles**. Once the batch has cleared, use a [referenced refund](./refund-referenced.md) or [unreferenced refund](./refund-unreferenced.md) instead.
 
 ---
 
@@ -16,9 +16,9 @@ You need the transaction identifier of the original payment. This is returned in
 
 ---
 
-## Make a referenced refund request
+## Make a reversal request
 
-A referenced refund uses a `ReversalRequest` body. Send a Terminal API request with the following `MessageHeader` fields:
+A reversal uses a `ReversalRequest` body. Send a Terminal API request with the following `MessageHeader` fields:
 
 - **`ProtocolVersion`** — `3.0`
 - **`MessageClass`** — `Service`
@@ -32,12 +32,11 @@ And the following `ReversalRequest` fields:
 
 - **`OriginalPOITransaction.POITransactionID.TransactionID`** — The transaction identifier from the original payment response.
 - **`OriginalPOITransaction.POITransactionID.TimeStamp`** — The timestamp from the original payment response.
-- **`ReversalReason`** — `MerchantCancel` for a full refund; `Malfunction` may apply in other cases depending on your use case.
-- **`TransactionConditions.AcquirerID`** — *(optional)* restrict the refund to a specific acquirer.
-- **`PaymentTransaction.AmountsReq.Currency`** — The transaction currency code (e.g. `USD`). Required for partial refunds.
-- **`PaymentTransaction.AmountsReq.RequestedAmount`** — The amount to refund. Omit for a full refund. Must not exceed the original payment amount.
+- **`ReversalReason`** — `MerchantCancel` for a full reversal; `Malfunction` may apply in other cases depending on your use case.
+- **`PaymentTransaction.AmountsReq.Currency`** — The transaction currency code (e.g. `USD`). Required for partial reversals.
+- **`PaymentTransaction.AmountsReq.RequestedAmount`** — The amount to reverse. Omit for a full reversal. Must not exceed the original payment amount.
 
-Example — full referenced refund:
+Example — full reversal:
 
 ```json
 {
@@ -64,7 +63,7 @@ Example — full referenced refund:
 }
 ```
 
-Example — partial referenced refund:
+Example — partial reversal:
 
 ```json
 {
@@ -99,16 +98,16 @@ Example — partial referenced refund:
 
 ---
 
-## Refund response
+## Reversal response
 
 The result is returned in the API response in a `ReversalResponse` body. The main result is in `ReversalResponse.Response.Result`.
 
-### Successful refund
+### Successful reversal
 
-When a refund request is accepted, your integration receives:
+When a reversal is accepted, your integration receives:
 
-- **`ReversalResponse.Response.Result`** — `Success`. This confirms the request was received; the refund is processed asynchronously.
-- **`POIData.POITransactionID.TransactionID`** — the transaction identifier for this refund.
+- **`ReversalResponse.Response.Result`** — `Success`.
+- **`POIData.POITransactionID.TransactionID`** — the transaction identifier for this reversal.
 
 Example response:
 
@@ -140,12 +139,12 @@ Example response:
 }
 ```
 
-### Failed refund
+### Failed reversal
 
-When a refund fails, the result includes:
+When a reversal fails, the result includes:
 
 - **`ReversalResponse.Response.Result`** — `Failure`.
-- **`ReversalResponse.Response.ErrorCondition`** — the reason for failure. For example, `Refusal` if the refund amount exceeds the original payment amount.
+- **`ReversalResponse.Response.ErrorCondition`** — the reason for failure. For example, `NotAllowed` if the batch has already settled.
 
 For general guidance on handling failed requests, see [Handle responses](./error-scenarios.md).
 
@@ -153,6 +152,8 @@ For general guidance on handling failed requests, see [Handle responses](./error
 
 ## Next steps
 
+- [Cancel, reverse, or refund a payment](./undo-payment.md) — overview of all options for undoing a payment.
+- [Cancel a payment](./cancel-payment.md) — abort an in-progress payment before it completes.
+- [Referenced refund](./refund-referenced.md) — post-clearing refund linked to the original payment.
 - [Unreferenced refund](./refund-unreferenced.md) — refund to any card without linking to the original payment.
-- [Cancel a payment](./cancel-a-payment.md) — abort an in-progress payment before it completes.
 - [Verify payment status](./verify-transaction-status.md) — check the status of a transaction when you don't receive a result.

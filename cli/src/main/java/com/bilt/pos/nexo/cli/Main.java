@@ -10,6 +10,7 @@
 package com.bilt.pos.nexo.cli;
 
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.model.AbortRequest;
 import com.bilt.pos.nexo.model.AmountsReq;
 import com.bilt.pos.nexo.model.DeviceEnum;
 import com.bilt.pos.nexo.model.DiagnosisRequest;
@@ -19,6 +20,7 @@ import com.bilt.pos.nexo.model.InfoQualifyEnum;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
 import com.bilt.pos.nexo.model.MessageHeader;
+import com.bilt.pos.nexo.model.MessageReference;
 import com.bilt.pos.nexo.model.MessageTypeType;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.OutputContent;
@@ -60,6 +62,7 @@ public final class Main {
         String passphrase = null;
         String keyId = null;
         int keyVersion = 0;
+        String abortServiceID = null;
         double amount = 2.50;
         String currency = "USD";
 
@@ -86,6 +89,9 @@ public final class Main {
                 case "--currency":
                     currency = requireArg(args, ++i, "--currency");
                     break;
+                case "--abort-service-id":
+                    abortServiceID = requireArg(args, ++i, "--abort-service-id");
+                    break;
                 default:
                     LOG.severe("Unknown option: " + args[i]);
                     printUsage();
@@ -101,7 +107,7 @@ public final class Main {
         }
 
         try {
-            run(ip, type, encryption, passphrase, keyId, keyVersion, amount, currency);
+            run(ip, type, encryption, passphrase, keyId, keyVersion, amount, currency, abortServiceID);
         } catch (Exception e) {
             LOG.log(Level.SEVERE, "Request failed", e);
             System.exit(1);
@@ -110,7 +116,7 @@ public final class Main {
 
     private static void run(String ip, String type, boolean encryption,
                             String passphrase, String keyId, int keyVersion,
-                            double amount, String currency) throws Exception {
+                            double amount, String currency, String abortServiceID) throws Exception {
 
         String endpoint = "https://" + ip + ":8443/nexo";
         String serviceID = UUID.randomUUID().toString().substring(0, 8);
@@ -146,9 +152,15 @@ public final class Main {
             case "display-receipt":
                 request = buildDisplayReceiptRequest(serviceID);
                 break;
+            case "abort":
+                if (abortServiceID == null) {
+                    throw new IllegalArgumentException("--abort-service-id is required for abort requests");
+                }
+                request = buildAbortRequest(serviceID, abortServiceID);
+                break;
             default:
                 throw new IllegalArgumentException("Unknown request type: " + type
-                        + ". Supported: payment, diagnosis, display-standby, display-receipt");
+                        + ". Supported: payment, diagnosis, display-standby, display-receipt, abort");
         }
 
         ObjectMapper mapper = new ObjectMapper()
@@ -165,6 +177,10 @@ public final class Main {
 
         SaleToPOIResponse response = apiResponse.getSaleToPOIResponse();
         if (response == null) {
+            if ("abort".equals(type)) {
+                LOG.info("Abort request accepted (no response body)");
+                return;
+            }
             LOG.severe("Response did not contain SaleToPOIResponse");
             System.exit(1);
             return;
@@ -316,6 +332,28 @@ public final class Main {
                 .build();
     }
 
+    private static SaleToPOIRequest buildAbortRequest(String serviceID, String abortServiceID) {
+        return SaleToPOIRequest.builder()
+                .messageHeader(MessageHeader.builder()
+                        .protocolVersion("3.0")
+                        .messageClass(MessageClassType.SERVICE)
+                        .messageCategory(MessageCategoryType.ABORT)
+                        .messageType(MessageTypeType.REQUEST)
+                        .serviceID(serviceID)
+                        .saleID("bilt-cli")
+                        .poiid("bilt-terminal")
+                        .build())
+                .abortRequest(AbortRequest.builder()
+                        .abortReason("MerchantAbort")
+                        .messageReference(MessageReference.builder()
+                                .messageCategory(MessageCategoryType.PAYMENT)
+                                .serviceID(abortServiceID)
+                                .saleID("bilt-cli")
+                                .build())
+                        .build())
+                .build();
+    }
+
     private static String requireArg(String[] args, int index, String flag) {
         if (index >= args.length) {
             LOG.severe("Missing value for " + flag);
@@ -329,13 +367,14 @@ public final class Main {
                 "Usage: bilt-cli <ip> [options]",
                 "",
                 "Options:",
-                "  --type <payment|diagnosis|display-standby|display-receipt>",
+                "  --type <payment|diagnosis|display-standby|display-receipt|abort>",
                 "  --no-encryption              Disable message encryption",
                 "  --passphrase <value>         Encryption passphrase",
                 "  --key-id <value>             Encryption key identifier",
                 "  --key-version <number>       Encryption key version (default: 0)",
                 "  --amount <number>            Payment amount (default: 2.50)",
                 "  --currency <code>            Currency code (default: USD)",
+                "  --abort-service-id <value>   ServiceID of the in-progress payment to abort",
                 "  -h, --help                   Show this help"
         );
         LOG.info(usage);

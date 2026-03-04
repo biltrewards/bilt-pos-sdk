@@ -21,20 +21,20 @@ To initiate a card payment, send a Terminal API request from your POS app. The t
 
 1. Send a Terminal API payment request with the following `MessageHeader` fields:
 
-   - **`ProtocolVersion`** — `3.0`
-   - **`MessageClass`** — `Service`
-   - **`MessageCategory`** — `Payment`
-   - **`MessageType`** — `Request`
-   - **`ServiceID`** — Unique ID, 1–10 alphanumeric characters, unique within 48 hours per terminal.
-   - **`SaleID`** — Your POS system identifier.
-   - **`POIID`** — Target terminal ID, format: `[model]-[serial]`.
+    - **`ProtocolVersion`** — `3.0`
+    - **`MessageClass`** — `Service`
+    - **`MessageCategory`** — `Payment`
+    - **`MessageType`** — `Request`
+    - **`ServiceID`** — Unique ID, 1–10 alphanumeric characters, unique within 48 hours per terminal.
+    - **`SaleID`** — Your POS system identifier.
+    - **`POIID`** — Target terminal ID, format: `[model]-[serial]`.
 
    And the following `PaymentRequest` fields:
 
-   - **`SaleData.SaleTransactionID.TransactionID`** — Your reference for this payment. We recommend using a unique value per transaction. This appears as the merchant reference in reports.
-   - **`SaleData.SaleTransactionID.TimeStamp`** — Date and time of the request in UTC format.
-   - **`PaymentTransaction.AmountsReq.Currency`** — The transaction currency code (e.g. `USD`).
-   - **`PaymentTransaction.AmountsReq.RequestedAmount`** — The final transaction amount.
+    - **`SaleData.SaleTransactionID.TransactionID`** — Your reference for this payment. We recommend using a unique value per transaction. This appears as the merchant reference in reports.
+    - **`SaleData.SaleTransactionID.TimeStamp`** — Date and time of the request in UTC format.
+    - **`PaymentTransaction.AmountsReq.Currency`** — The transaction currency code (e.g. `USD`).
+    - **`PaymentTransaction.AmountsReq.RequestedAmount`** — The final transaction amount.
 
    Example request:
 
@@ -85,10 +85,10 @@ When a payment succeeds:
 - The terminal display shows that the transaction is approved.
 - Your integration receives a result containing:
 
-  - **`POIData.POITransactionID.TransactionID`** — the transaction identifier.
-  - **`PaymentResponse.Response.Result`** — `Success`. Other possible values are `Partial` for a successful partial payment, or `Failure` for a declined payment.
-  - **`PaymentResponse.Response.AdditionalResponse`** — additional transaction data, such as shopper recognition or shopper input details.
-  - **`PaymentReceipt`** — data you can use to generate a receipt.
+    - **`POIData.POITransactionID.TransactionID`** — the transaction identifier.
+    - **`PaymentResponse.Response.Result`** — `Success`. Other possible values are `Partial` for a successful partial payment, or `Failure` for a declined payment.
+    - **`PaymentResponse.Response.AdditionalResponse`** — additional transaction data, such as shopper recognition or shopper input details.
+    - **`PaymentReceipt`** — data you can use to generate a receipt.
 
   Example response:
 
@@ -136,9 +136,9 @@ When a payment fails, the result includes `Result: Failure` along with informati
 - The terminal display shows **Declined**.
 - Your integration receives a result containing:
 
-  - **`POIData.POITransactionID.TransactionID`** — the transaction identifier for the failed attempt.
-  - **`PaymentResponse.Response.Result`** — `Failure`.
-  - **`PaymentResponse.Response.ErrorCondition`** — the reason for failure. For example, `Refused` means the card issuer declined the transaction; `Cancel` means the transaction was cancelled on the terminal.
+    - **`POIData.POITransactionID.TransactionID`** — the transaction identifier for the failed attempt.
+    - **`PaymentResponse.Response.Result`** — `Failure`.
+    - **`PaymentResponse.Response.ErrorCondition`** — the reason for failure. For example, `Refused` means the card issuer declined the transaction; `Cancel` means the transaction was cancelled on the terminal.
 
   Example response:
 
@@ -195,13 +195,12 @@ When a payment fails, the result includes `Result: Failure` along with informati
   ```
 
 For a full list of failure reasons and what they mean, see [Refusal reasons](./refusal-reasons.md). For general guidance on handling failed requests, see [Handle responses](./error-scenarios.md).
-
 > **Testing tip:** while building a test integration you can simulate a declined payment by setting the last three digits of `RequestedAmount` to `123` — for example `41.23` or `101.23`.
 
 ---
 
 ## Next steps
 
-- [Refund a payment](./refund-payment.md) — issue a point-of-sale refund.
+- [Cancel, reverse, or refund a payment](./undo-payment.md) — cancel, void, or refund a payment.
 - [Verify payment status](./verify-transaction-status.md) — verify the status of a transaction when you don't receive a result, for example due to a connection issue. We strongly recommend implementing this to avoid unnecessary refunds or duplicate payments.
-- [Cancel an in-progress transaction](./cancel-a-transaction.md) — abort a payment while it is in progress.
+- [Cancel a payment](./cancel-payment.md) — abort a payment while it is in progress.
