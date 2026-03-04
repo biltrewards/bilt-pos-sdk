@@ -219,7 +219,7 @@ public final class Main {
                 "  --passphrase <value>         Encryption passphrase",
                 "  --key-id <value>             Encryption key identifier",
                 "  --key-version <number>       Encryption key version (default: 0)",
-                "  --amount <number>            Payment amount (default: 25.00)",
+                "  --amount <number>            Payment amount (default: 2.50)",
                 "  --currency <code>            Currency code (default: USD)",
                 "  -h, --help                   Show this help"
         );
