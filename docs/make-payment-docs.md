@@ -147,7 +147,7 @@ When a payment fails, the result includes `Result: Failure` along with informati
     "SaleToPOIResponse": {
       "MessageHeader": {
         "ProtocolVersion": "3.0",
-        "MessageClass": "Service",
+        "MessageClass": "Device",
         "MessageCategory": "Payment",
         "MessageType": "Response",
         "ServiceID": "SVC-00842",
@@ -157,15 +157,38 @@ When a payment fails, the result includes `Result: Failure` along with informati
       "PaymentResponse": {
         "Response": {
           "Result": "Failure",
-          "ErrorCondition": "Refused",
-          "AdditionalResponse": "refusalReason=Not+enough+balance&..."
+          "ErrorCondition": "Refusal",
+          "AdditionalResponse": "Transaction declined."
         },
         "POIData": {
           "POITransactionID": {
-            "TransactionID": "9mBQ001726385100000.NC6HT9CRT65ZGN82",
-            "TimeStamp": "2026-03-02T14:38:22+00:00"
+            "TransactionID": "0f17480f-e013-4714-9508-f9681fd5ba8d",
+            "TimeStamp": "2026-03-03T19:12:53-05:00"
           }
-        }
+        },
+        "SaleData": {
+          "SaleTransactionID": {
+            "TransactionID": "c6b793da-d0d6-4119-965e-c8bf3f692501",
+            "TimeStamp": "2026-03-03T19:12:52.533469-05:00"
+          }
+        },
+        "PaymentResult": {},
+        "PaymentReceipt": [
+          {
+            "DocumentQualifier": "SaleReceipt",
+            "OutputContent": {
+              "OutputFormat": "XHTML",
+              "OutputXHTML": "..."
+            }
+          },
+          {
+            "DocumentQualifier": "CustomerReceipt",
+            "OutputContent": {
+              "OutputFormat": "XHTML",
+              "OutputXHTML": "..."
+            }
+          }
+        ]
       }
     }
   }

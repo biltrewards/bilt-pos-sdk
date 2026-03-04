@@ -18,7 +18,7 @@ Command-line tool for sending Nexo Sale to POI requests to a Bilt payment termin
 
 | Option | Description | Default |
 |---|---|---|
-| `--type <payment\|diagnosis>` | Request type | `payment` |
+| `--type <payment\|diagnosis\|display-standby\|display-receipt>` | Request type | `payment` |
 | `--no-encryption` | Disable message encryption | encryption enabled |
 | `--passphrase <value>` | Encryption passphrase | — |
 | `--key-id <value>` | Encryption key identifier | — |
@@ -51,6 +51,18 @@ Command-line tool for sending Nexo Sale to POI requests to a Bilt payment termin
 
 ```bash
 ./gradlew :cli:run --args="192.168.1.100 --no-encryption --type diagnosis"
+```
+
+**Display standby screen:**
+
+```bash
+./gradlew :cli:run --args="192.168.1.100 --no-encryption --type display-standby"
+```
+
+**Display sample receipt:**
+
+```bash
+./gradlew :cli:run --args="192.168.1.100 --no-encryption --type display-receipt"
 ```
 
 The CLI connects to `https://<ip>:8443/nexo` and prints the terminal's JSON response to stdout.
