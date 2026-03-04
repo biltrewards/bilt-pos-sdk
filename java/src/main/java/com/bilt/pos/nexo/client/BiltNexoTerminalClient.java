@@ -173,6 +173,8 @@ public final class BiltNexoTerminalClient {
                 } else {
                     return objectMapper.readValue(responseJson, NexoTerminalAPI.class);
                 }
+            } catch (EncryptionException e) {
+                throw e;
             } catch (Exception e) {
                 throw new BiltNexoClientException(
                         "Failed to parse terminal response: " + responseJson, e);
