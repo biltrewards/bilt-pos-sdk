@@ -4,7 +4,6 @@ plugins {
 
 dependencies {
     compileOnly(libs.plugins.kotlin.jvm.toDep())
-    implementation(libs.plugins.artifact.registry.toDep())
 }
 
 gradlePlugin {
