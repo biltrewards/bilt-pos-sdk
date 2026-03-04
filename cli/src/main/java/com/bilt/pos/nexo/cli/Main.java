@@ -11,20 +11,32 @@ package com.bilt.pos.nexo.cli;
 
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.AmountsReq;
+import com.bilt.pos.nexo.model.DeviceEnum;
 import com.bilt.pos.nexo.model.DiagnosisRequest;
+import com.bilt.pos.nexo.model.DisplayOutput;
+import com.bilt.pos.nexo.model.DisplayRequest;
+import com.bilt.pos.nexo.model.InfoQualifyEnum;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
 import com.bilt.pos.nexo.model.MessageHeader;
 import com.bilt.pos.nexo.model.MessageTypeType;
+import com.bilt.pos.nexo.model.NexoTerminalAPI;
+import com.bilt.pos.nexo.model.OutputContent;
+import com.bilt.pos.nexo.model.OutputFormatEnum;
 import com.bilt.pos.nexo.model.PaymentRequest;
 import com.bilt.pos.nexo.model.PaymentTransaction;
+import com.bilt.pos.nexo.model.SaleData;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.nexo.security.SecurityKey;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Base64;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -48,7 +60,7 @@ public final class Main {
         String passphrase = null;
         String keyId = null;
         int keyVersion = 0;
-        double amount = 25.00;
+        double amount = 2.50;
         String currency = "USD";
 
         for (int i = 1; i < args.length; i++) {
@@ -128,19 +140,36 @@ public final class Main {
             case "diagnosis":
                 request = buildDiagnosisRequest(serviceID);
                 break;
+            case "display-standby":
+                request = buildDisplayStandbyRequest(serviceID);
+                break;
+            case "display-receipt":
+                request = buildDisplayReceiptRequest(serviceID);
+                break;
             default:
-                throw new IllegalArgumentException("Unknown request type: " + type + ". Supported: payment, diagnosis");
+                throw new IllegalArgumentException("Unknown request type: " + type
+                        + ". Supported: payment, diagnosis, display-standby, display-receipt");
         }
-
-        LOG.fine("Request built, sending to terminal...");
-
-        SaleToPOIResponse response = client.request(request);
-
-        LOG.info("Response received successfully");
 
         ObjectMapper mapper = new ObjectMapper()
                 .setSerializationInclusion(JsonInclude.Include.NON_NULL)
                 .enable(SerializationFeature.INDENT_OUTPUT);
+
+        NexoTerminalAPI apiRequest = NexoTerminalAPI.builder()
+                .saleToPOIRequest(request)
+                .build();
+
+        LOG.info("Request:\n" + mapper.writeValueAsString(request));
+
+        NexoTerminalAPI apiResponse = client.request(apiRequest);
+
+        SaleToPOIResponse response = apiResponse.getSaleToPOIResponse();
+        if (response == null) {
+            LOG.severe("Response did not contain SaleToPOIResponse");
+            System.exit(1);
+            return;
+        }
+
         System.out.println(mapper.writeValueAsString(response));
     }
 
@@ -156,6 +185,12 @@ public final class Main {
                         .poiid("bilt-terminal")
                         .build())
                 .paymentRequest(PaymentRequest.builder()
+                        .saleData(SaleData.builder()
+                                .saleTransactionID(TransactionIdentificationType.builder()
+                                        .transactionID(UUID.randomUUID().toString())
+                                        .timeStamp(OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                                        .build())
+                                .build())
                         .paymentTransaction(PaymentTransaction.builder()
                                 .amountsReq(AmountsReq.builder()
                                         .currency(currency)
@@ -182,6 +217,105 @@ public final class Main {
                 .build();
     }
 
+    private static SaleToPOIRequest buildDisplayStandbyRequest(String serviceID) {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<displayPayload xmlns=\"urn:bilt:display:v1\" layout=\"standby.xslt\" version=\"1.0\">\n"
+                + "  <standby/>\n"
+                + "</displayPayload>";
+        String encoded = Base64.getEncoder().encodeToString(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        return SaleToPOIRequest.builder()
+                .messageHeader(MessageHeader.builder()
+                        .protocolVersion("3.0")
+                        .messageClass(MessageClassType.DEVICE)
+                        .messageCategory(MessageCategoryType.DISPLAY)
+                        .messageType(MessageTypeType.REQUEST)
+                        .serviceID(serviceID)
+                        .saleID("bilt-cli")
+                        .poiid("bilt-terminal")
+                        .build())
+                .displayRequest(DisplayRequest.builder()
+                        .displayOutput(new DisplayOutput[]{
+                                DisplayOutput.builder()
+                                        .device(DeviceEnum.CUSTOMER_DISPLAY)
+                                        .infoQualify(InfoQualifyEnum.DISPLAY)
+                                        .outputContent(OutputContent.builder()
+                                                .outputFormat(OutputFormatEnum.XHTML)
+                                                .outputXHTML(encoded)
+                                                .build())
+                                        .build()
+                        })
+                        .build())
+                .build();
+    }
+
+    private static SaleToPOIRequest buildDisplayReceiptRequest(String serviceID) {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<displayPayload xmlns=\"urn:bilt:display:v1\" layout=\"receipt.xslt\" version=\"1.0\">\n"
+                + "  <receipt>\n"
+                + "    <header><text>Your items</text></header>\n"
+                + "    <lineItems>\n"
+                + "      <lineItem kind=\"item\">\n"
+                + "        <description>Running shoes</description>\n"
+                + "        <quantity>1</quantity>\n"
+                + "        <unitPrice><currency>$</currency><value>79.99</value></unitPrice>\n"
+                + "        <amount><currency>$</currency><value>79.99</value></amount>\n"
+                + "      </lineItem>\n"
+                + "      <lineItem kind=\"item\">\n"
+                + "        <description>Green T-shirt</description>\n"
+                + "        <quantity>2</quantity>\n"
+                + "        <unitPrice><currency>$</currency><value>9.89</value></unitPrice>\n"
+                + "        <amount><currency>$</currency><value>19.78</value></amount>\n"
+                + "      </lineItem>\n"
+                + "    </lineItems>\n"
+                + "    <subtotal>\n"
+                + "      <description>Subtotal</description>\n"
+                + "      <amount><currency>$</currency><value>99.77</value></amount>\n"
+                + "    </subtotal>\n"
+                + "    <tax>\n"
+                + "      <taxItem>\n"
+                + "        <description>State tax</description>\n"
+                + "        <amount><currency>$</currency><value>7.23</value></amount>\n"
+                + "      </taxItem>\n"
+                + "      <taxTotal>\n"
+                + "        <description>Total tax</description>\n"
+                + "        <amount><currency>$</currency><value>7.23</value></amount>\n"
+                + "      </taxTotal>\n"
+                + "    </tax>\n"
+                + "    <total>\n"
+                + "      <description>Total amount</description>\n"
+                + "      <amount><currency>$</currency><value>107.00</value></amount>\n"
+                + "    </total>\n"
+                + "    <footer><text>Thank you for your purchase!</text></footer>\n"
+                + "  </receipt>\n"
+                + "</displayPayload>";
+        String encoded = Base64.getEncoder().encodeToString(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        return SaleToPOIRequest.builder()
+                .messageHeader(MessageHeader.builder()
+                        .protocolVersion("3.0")
+                        .messageClass(MessageClassType.DEVICE)
+                        .messageCategory(MessageCategoryType.DISPLAY)
+                        .messageType(MessageTypeType.REQUEST)
+                        .serviceID(serviceID)
+                        .saleID("bilt-cli")
+                        .poiid("bilt-terminal")
+                        .build())
+                .displayRequest(DisplayRequest.builder()
+                        .displayOutput(new DisplayOutput[]{
+                                DisplayOutput.builder()
+                                        .device(DeviceEnum.CUSTOMER_DISPLAY)
+                                        .infoQualify(InfoQualifyEnum.DISPLAY)
+                                        .outputContent(OutputContent.builder()
+                                                .outputFormat(OutputFormatEnum.XHTML)
+                                                .outputXHTML(encoded)
+                                                .build())
+                                        .build()
+                        })
+                        .build())
+                .build();
+    }
+
     private static String requireArg(String[] args, int index, String flag) {
         if (index >= args.length) {
             LOG.severe("Missing value for " + flag);
@@ -195,12 +329,12 @@ public final class Main {
                 "Usage: bilt-cli <ip> [options]",
                 "",
                 "Options:",
-                "  --type <payment|diagnosis>   Request type (default: payment)",
+                "  --type <payment|diagnosis|display-standby|display-receipt>",
                 "  --no-encryption              Disable message encryption",
                 "  --passphrase <value>         Encryption passphrase",
                 "  --key-id <value>             Encryption key identifier",
                 "  --key-version <number>       Encryption key version (default: 0)",
-                "  --amount <number>            Payment amount (default: 25.00)",
+                "  --amount <number>            Payment amount (default: 2.50)",
                 "  --currency <code>            Currency code (default: USD)",
                 "  -h, --help                   Show this help"
         );

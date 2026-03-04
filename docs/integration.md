@@ -1,8 +1,8 @@
-# Nexo Terminal Api Java Client — Integration Guide
+# Nexo Terminal API Java Client — Integration Guide
 
 ## Overview
 
-The Nexo Terminal Api Java client is a client library for communicating with a Bilt Terminal Application via the **Nexo Sale to POI protocol (version 3.0)**. The Nexo standard defines a message-based API between a Sale System (e.g. a POS application) and a POI terminal (the payment device). All messages are JSON-serialised and follow a common envelope structure: a `SaleToPOIRequest` or `SaleToPOIResponse` wrapping a `MessageHeader` plus one typed request/response body.
+The Nexo Terminal API Java client (`BiltNexoTerminalClient`) is a client library for communicating with a Bilt Terminal Application via the **Nexo Sale to POI protocol (version 3.0)**. The Nexo standard defines a message-based API between a Sale System (e.g. a POS application) and a POI terminal (the payment device). All messages are JSON-serialised and follow a common envelope structure: a `SaleToPOIRequest` or `SaleToPOIResponse` wrapping a `MessageHeader` plus one typed request/response body.
 
 The terminal exposes a single HTTPS endpoint:
 
@@ -11,27 +11,62 @@ POST https://<device_local_ip_address>:8443/nexo
 Content-Type: application/json
 ```
 
-Each request sends a `SaleToPOIRequest` and receives a `SaleToPOIResponse` in the body.
+Each request sends a `NexoTerminalAPI` envelope containing a `SaleToPOIRequest` and receives a `NexoTerminalAPI` envelope containing a `SaleToPOIResponse`.
 
-> The device uses a self-signed TLS certificate. Your HTTP client must validate this certificate (can be disable certificate verification in a development/test context).
+> The device uses a self-signed TLS certificate. Your HTTP client must validate this certificate (certificate verification can be disabled in a development/test context).
 
 ---
 
-## Example
+## Getting started
+
+### Create a client
+
+**Unencrypted (development only):**
+
+> Unencrypted mode is only available on development terminals. Production devices require encryption and will reject unencrypted requests.
+
+```java
+import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+
+BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
+    .endpoint("https://192.168.1.100:8443/nexo")
+    .trustAllCertificates()
+    .build();
+```
+
+**Encrypted (required for production):**
+
+```java
+import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.security.SecurityKey;
+
+SecurityKey key = SecurityKey.builder()
+    .passphrase("sharedSecret")
+    .keyIdentifier("myTerminal")
+    .keyVersion(0)
+    .build();
+
+BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
+    .endpoint("https://192.168.1.100:8443/nexo")
+    .securityKey(key)
+    .build();
+```
+
+When a `SecurityKey` is provided, all requests are AES-encrypted and all responses are decrypted transparently.
+
+---
+
+## Example — Make a payment
 
 The following example initiates a $25.00 USD payment transaction.
 
 ### Java code
 
 ```java
+import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.*;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
-ObjectMapper mapper = new ObjectMapper()
-    .setSerializationInclusion(JsonInclude.Include.NON_NULL);
-
-SaleToPOIRequest request = SaleToPOIRequest.builder()
+SaleToPOIRequest saleToPOIRequest = SaleToPOIRequest.builder()
     .messageHeader(MessageHeader.builder()
         .protocolVersion("3.0")
         .messageClass(MessageClassType.SERVICE)
@@ -57,34 +92,39 @@ SaleToPOIRequest request = SaleToPOIRequest.builder()
         .build())
     .build();
 
-String json = mapper.writeValueAsString(request);
-// POST json to https://<device_local_ip_address>:8443/nexo
+NexoTerminalAPI request = NexoTerminalAPI.builder()
+    .saleToPOIRequest(saleToPOIRequest)
+    .build();
+
+NexoTerminalAPI response = client.request(request);
 ```
 
 ### Expected JSON request
 
 ```json
 {
-  "MessageHeader": {
-    "ProtocolVersion": "3.0",
-    "MessageClass": "Service",
-    "MessageCategory": "Payment",
-    "MessageType": "Request",
-    "ServiceID": "20240101-001",
-    "SaleID": "POS-LANE-1",
-    "POIID": "TERMINAL-001"
-  },
-  "PaymentRequest": {
-    "SaleData": {
-      "SaleTransactionID": {
-        "TransactionID": "TXN-0042",
-        "TimeStamp": "2024-01-01T12:00:00.000Z"
-      }
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "ProtocolVersion": "3.0",
+      "MessageClass": "Service",
+      "MessageCategory": "Payment",
+      "MessageType": "Request",
+      "ServiceID": "20240101-001",
+      "SaleID": "POS-LANE-1",
+      "POIID": "TERMINAL-001"
     },
-    "PaymentTransaction": {
-      "AmountsReq": {
-        "Currency": "USD",
-        "RequestedAmount": 25.0
+    "PaymentRequest": {
+      "SaleData": {
+        "SaleTransactionID": {
+          "TransactionID": "TXN-0042",
+          "TimeStamp": "2024-01-01T12:00:00.000Z"
+        }
+      },
+      "PaymentTransaction": {
+        "AmountsReq": {
+          "Currency": "USD",
+          "RequestedAmount": 25.0
+        }
       }
     }
   }
@@ -95,38 +135,40 @@ String json = mapper.writeValueAsString(request);
 
 ```json
 {
-  "MessageHeader": {
-    "ProtocolVersion": "3.0",
-    "MessageClass": "Service",
-    "MessageCategory": "Payment",
-    "MessageType": "Response",
-    "ServiceID": "20240101-001",
-    "SaleID": "POS-LANE-1",
-    "POIID": "TERMINAL-001"
-  },
-  "PaymentResponse": {
-    "Response": {
-      "Result": "Success"
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "ProtocolVersion": "3.0",
+      "MessageClass": "Service",
+      "MessageCategory": "Payment",
+      "MessageType": "Response",
+      "ServiceID": "20240101-001",
+      "SaleID": "POS-LANE-1",
+      "POIID": "TERMINAL-001"
     },
-    "PaymentResult": {
-      "PaymentType": "Normal",
-      "AmountsResp": {
-        "Currency": "USD",
-        "AuthorizedAmount": 25.0
+    "PaymentResponse": {
+      "Response": {
+        "Result": "Success"
       },
-      "PaymentAcquirerData": {
-        "AcquirerID": "123456",
-        "ApprovalCode": "ABC123",
-        "TransactionID": {
-          "TransactionID": "ACQ-789",
+      "PaymentResult": {
+        "PaymentType": "Normal",
+        "AmountsResp": {
+          "Currency": "USD",
+          "AuthorizedAmount": 25.0
+        },
+        "PaymentAcquirerData": {
+          "AcquirerID": "123456",
+          "ApprovalCode": "ABC123",
+          "TransactionID": {
+            "TransactionID": "ACQ-789",
+            "TimeStamp": "2024-01-01T12:00:05.000Z"
+          }
+        }
+      },
+      "POIData": {
+        "POITransactionID": {
+          "TransactionID": "POI-0099",
           "TimeStamp": "2024-01-01T12:00:05.000Z"
         }
-      }
-    },
-    "POIData": {
-      "POITransactionID": {
-        "TransactionID": "POI-0099",
-        "TimeStamp": "2024-01-01T12:00:05.000Z"
       }
     }
   }
@@ -136,9 +178,8 @@ String json = mapper.writeValueAsString(request);
 ### Parsing the response
 
 ```java
-SaleToPOIResponse response = mapper.readValue(responseJson, SaleToPOIResponse.class);
-
-PaymentResponse paymentResponse = response.getPaymentResponse();
+SaleToPOIResponse poiResponse = response.getSaleToPOIResponse();
+PaymentResponse paymentResponse = poiResponse.getPaymentResponse();
 Response result = paymentResponse.getResponse();
 
 if (result.getResult() == ResultType.SUCCESS) {
@@ -162,8 +203,9 @@ All types have a static `builder()` factory method for fluent construction.
 
 | Type | Purpose |
 |---|---|
-| `SaleToPOIRequest` | Root envelope for all outgoing messages |
-| `SaleToPOIResponse` | Root envelope for all incoming messages |
+| `NexoTerminalAPI` | Wire envelope wrapping `SaleToPOIRequest` or `SaleToPOIResponse` |
+| `SaleToPOIRequest` | Root object for all outgoing messages |
+| `SaleToPOIResponse` | Root object for all incoming messages |
 | `MessageHeader` | Routing and protocol metadata, required on every message |
 | `Response` | Contains `Result` (`Success`/`Failure`/`Partial`) and error details |
 | `AmountsReq` | Requested amounts (currency + `requestedAmount` required) |
@@ -201,3 +243,13 @@ Each message category has a dedicated request and response type set on the `Sale
 | `StoredValueRequest` | `StoredValueResponse` | `STORED_VALUE` | Activates, reloads, or redeems a stored value or gift card |
 | `TransactionStatusRequest` | `TransactionStatusResponse` | `TRANSACTION_STATUS` | Queries the current or last known status of a specific transaction |
 | `TransmitRequest` | `TransmitResponse` | `TRANSMIT` | Transmits raw data to the terminal for proprietary extensions |
+
+---
+
+## Next steps
+
+- [Make a payment](./make-payment-docs.md) — full payment request/response details.
+- [Cancel a payment](./cancel-payment-docs.md) — abort an in-progress transaction.
+- [Referenced refund](./refund-referenced-docs.md) — refund linked to the original payment.
+- [Unreferenced refund](./refund-unreferenced-docs.md) — refund to any card.
+- [Show an image](./display-image-docs.md) — display content on the terminal screen.

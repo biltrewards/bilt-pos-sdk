@@ -9,6 +9,7 @@
  */
 package com.bilt.pos.nexo.client;
 
+import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.security.EncryptionException;
@@ -44,7 +45,8 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>The terminal exposes a single HTTPS endpoint at
  * {@code https://<device_ip>:8443/nexo}. Each call sends a
- * {@link SaleToPOIRequest} and receives a {@link SaleToPOIResponse}.</p>
+ * {@link NexoTerminalAPI} containing a {@link SaleToPOIRequest} and receives
+ * a {@link NexoTerminalAPI} containing a {@link SaleToPOIResponse}.</p>
  *
  * <h3>Unencrypted (development/testing)</h3>
  * <pre>{@code
@@ -53,7 +55,11 @@ import java.util.concurrent.TimeUnit;
  *     .trustAllCertificates()
  *     .build();
  *
- * SaleToPOIResponse response = client.request(myRequest);
+ * NexoTerminalAPI request = NexoTerminalAPI.builder()
+ *     .saleToPOIRequest(myRequest)
+ *     .build();
+ * NexoTerminalAPI response = client.request(request);
+ * SaleToPOIResponse poiResponse = response.getSaleToPOIResponse();
  * }</pre>
  *
  * <h3>Encrypted (production)</h3>
@@ -69,7 +75,8 @@ import java.util.concurrent.TimeUnit;
  *     .securityKey(key)
  *     .build();
  *
- * SaleToPOIResponse response = client.request(myRequest);
+ * NexoTerminalAPI response = client.request(request);
+ * SaleToPOIResponse poiResponse = response.getSaleToPOIResponse();
  * }</pre>
  */
 public final class BiltNexoTerminalClient {
@@ -104,30 +111,35 @@ public final class BiltNexoTerminalClient {
      * <p>If a {@link SecurityKey} was provided to the builder, the request is
      * automatically encrypted and the response is decrypted.</p>
      *
-     * @param request the request to send
-     * @return the terminal's response
+     * @param request the request envelope; must have {@code saleToPOIRequest} set
+     * @return the terminal's response envelope containing {@code saleToPOIResponse}
      * @throws BiltNexoClientException if serialization, encryption, HTTP transport,
      *         decryption, or deserialization fails
      */
-    public SaleToPOIResponse request(SaleToPOIRequest request) throws BiltNexoClientException {
+    public NexoTerminalAPI request(NexoTerminalAPI request) throws BiltNexoClientException {
         return request(request, null);
     }
 
     /**
      * Send a Sale to POI request with a per-request timeout override.
      *
-     * @param request the request to send
+     * @param request the request envelope; must have {@code saleToPOIRequest} set
      * @param timeout per-request timeout, or {@code null} to use the client default
-     * @return the terminal's response
+     * @return the terminal's response envelope containing {@code saleToPOIResponse}
      * @throws BiltNexoClientException if any step in the request/response pipeline fails
      */
-    public SaleToPOIResponse request(SaleToPOIRequest request, Duration timeout)
+    public NexoTerminalAPI request(NexoTerminalAPI request, Duration timeout)
             throws BiltNexoClientException {
+        SaleToPOIRequest saleToPOIRequest = request.getSaleToPOIRequest();
+        if (saleToPOIRequest == null) {
+            throw new BiltNexoClientException("request must have saleToPOIRequest set");
+        }
+
         try {
             String jsonBody;
 
             if (encryptor != null) {
-                jsonBody = encryptRequest(request);
+                jsonBody = encryptRequest(saleToPOIRequest);
             } else {
                 jsonBody = objectMapper.writeValueAsString(request);
             }
@@ -144,20 +156,28 @@ public final class BiltNexoTerminalClient {
                         .build();
             }
 
+            String responseJson;
             try (Response httpResponse = client.newCall(httpRequest).execute()) {
                 ResponseBody body = httpResponse.body();
-                String responseJson = body != null ? body.string() : "";
+                responseJson = body != null ? body.string() : "";
 
                 if (!httpResponse.isSuccessful()) {
                     throw new BiltNexoClientException(
                             "Terminal returned HTTP " + httpResponse.code() + ": " + responseJson);
                 }
+            }
 
+            try {
                 if (encryptor != null) {
                     return decryptResponse(responseJson);
                 } else {
-                    return objectMapper.readValue(responseJson, SaleToPOIResponse.class);
+                    return objectMapper.readValue(responseJson, NexoTerminalAPI.class);
                 }
+            } catch (EncryptionException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new BiltNexoClientException(
+                        "Failed to parse terminal response: " + responseJson, e);
             }
         } catch (BiltNexoClientException e) {
             throw e;
@@ -210,11 +230,14 @@ public final class BiltNexoTerminalClient {
         return objectMapper.writeValueAsString(envelope);
     }
 
-    private SaleToPOIResponse decryptResponse(String responseJson) throws IOException, EncryptionException {
+    private NexoTerminalAPI decryptResponse(String responseJson) throws IOException, EncryptionException {
         SecuredResponseEnvelope envelope =
                 objectMapper.readValue(responseJson, SecuredResponseEnvelope.class);
         String plainJson = encryptor.decrypt(envelope.saleToPOIResponse);
-        return objectMapper.readValue(plainJson, SaleToPOIResponse.class);
+        SaleToPOIResponse saleToPOIResponse = objectMapper.readValue(plainJson, SaleToPOIResponse.class);
+        return NexoTerminalAPI.builder()
+                .saleToPOIResponse(saleToPOIResponse)
+                .build();
     }
 
     /** Wire envelope: {@code {"SaleToPOIRequest": <secured message>}} */
