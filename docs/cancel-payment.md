@@ -2,7 +2,7 @@
 
 Cancel a payment that is currently in progress on the terminal. This stops the transaction before it completes, and is preferable to issuing a refund when possible as it generally results in fewer fees.
 
-> An abort request can only cancel a payment that is **in progress**. Once a payment has completed, it cannot be aborted — use a [refund](./refund-payment.md) instead.
+> An abort request can only cancel a payment that is **in progress**. Once a payment has completed, it cannot be aborted — use a [reversal](./reverse-payment.md) or [refund](./undo-payment.md) instead.
 
 ---
 
@@ -43,7 +43,7 @@ Example request:
       "MessageType": "Request",
       "ServiceID": "SVC-00844",
       "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
+      "POIID": "VictaLane-275839164"
     },
     "AbortRequest": {
       "AbortReason": "MerchantAbort",
@@ -78,13 +78,13 @@ Example payment response after a successful abort:
       "MessageType": "Response",
       "ServiceID": "SVC-00842",
       "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
+      "POIID": "VictaLane-275839164"
     },
     "PaymentResponse": {
       "Response": {
         "Result": "Failure",
         "ErrorCondition": "Aborted",
-        "AdditionalResponse": "message=Transaction+cancelled"
+        "AdditionalResponse": "POS aborted"
       }
     }
   }
@@ -101,6 +101,8 @@ If you do not receive the original payment response at all, use [Verify payment 
 
 ## Next steps
 
-- [Refund a payment](./refund-payment.md) — return funds to the shopper for a completed payment.
+- [Cancel, reverse, or refund a payment](./undo-payment.md) — overview of all options for undoing a payment.
+- [Reverse a payment](./reverse-payment.md) — void a completed payment before the batch settles.
+- [Referenced refund](./refund-referenced.md) — post-clearing refund linked to the original payment.
 - [Verify payment status](./verify-transaction-status.md) — check the status of a transaction when you don't receive a result.
-- [Make a payment](./make-a-payment.md) — initiate a new payment.
+- [Make a payment](./make-payment.md) — initiate a new payment.

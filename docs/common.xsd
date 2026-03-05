@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  common.xsd  —  v1.0
+  ═══════════════════════════════════════════════════════════════════
+  Shared types imported by display.xsd and input.xsd.
+  ═══════════════════════════════════════════════════════════════════
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:bilt:common:v1"
+           xmlns:c="urn:bilt:common:v1"
+           elementFormDefault="qualified">
+
+    <!-- ═══════════════════════════════════════════
+         DisplayType
+         A title and zero or more text lines.
+         Used wherever a message needs to be shown
+         to the shopper (standby, waiting, input screens).
+         Each schema that imports this declares its own
+         local <display> element typed as c:DisplayType.
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="DisplayType">
+        <xs:sequence>
+            <xs:element name="title" type="xs:string" minOccurs="0"/>
+            <xs:element name="text"  type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>

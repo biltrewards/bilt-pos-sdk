@@ -66,6 +66,15 @@ The following example initiates a $25.00 USD payment transaction.
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.*;
 
+// Note, trusting all certificates is only allowed in development environments.
+// Note, not providing a security key is only allowed in development environments.
+String endpoint = "https://192.168.1.100:8443/nexo";
+BiltNexoTerminalClient.Builder clientBuilder = BiltNexoTerminalClient.builder()
+    .endpoint(endpoint)
+    .trustAllCertificates();
+
+BiltNexoTerminalClient client = clientBuilder.build();
+
 SaleToPOIRequest saleToPOIRequest = SaleToPOIRequest.builder()
     .messageHeader(MessageHeader.builder()
         .protocolVersion("3.0")
@@ -248,8 +257,13 @@ Each message category has a dedicated request and response type set on the `Sale
 
 ## Next steps
 
-- [Make a payment](./make-payment-docs.md) — full payment request/response details.
-- [Cancel a payment](./cancel-payment-docs.md) — abort an in-progress transaction.
-- [Referenced refund](./refund-referenced-docs.md) — refund linked to the original payment.
-- [Unreferenced refund](./refund-unreferenced-docs.md) — refund to any card.
-- [Show an image](./display-image-docs.md) — display content on the terminal screen.
+- [Make a payment](./make-payment.md) — full payment request/response details.
+- [Cancel, reverse, or refund a payment](./undo-payment.md) — overview of all options for undoing a payment.
+- [Cancel a payment](./cancel-payment.md) — abort an in-progress transaction.
+- [Reverse a payment](./reverse-payment.md) — void a completed payment before the batch settles.
+- [Referenced refund](./refund-referenced.md) — post-clearing refund linked to the original payment.
+- [Unreferenced refund](./refund-unreferenced.md) — refund to any card.
+- [Show an image on the terminal](./display-image.md) — display an image on the terminal screen.
+- [Show a QR code or barcode on the terminal](./display-qr.md) — display a QR code or barcode on the terminal screen.
+- [Show a virtual receipt on the terminal](./display-receipt.md) — display a virtual receipt on the terminal screen.
+- [Show the standby screen](./display-standby.md) — return the terminal to its standby display.

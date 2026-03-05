@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 1 — Signature
+     ═══════════════════════════════════════════════════════════════ -->
+<inputPayload xmlns="urn:bilt:input:v1" version="1.0">
+
+  <display>
+    <title>Signature required</title>
+    <text>Please sign below to authorise your payment of $94.50</text>
+    <text>By signing you agree to our terms and conditions</text>
+  </display>
+
+  <signature>
+    <confirmButton>I agree</confirmButton>
+    <cancelButton>Cancel</cancelButton>
+  </signature>
+
+</inputPayload>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 2 — Signature, minimal (title only, default buttons)
+     ═══════════════════════════════════════════════════════════════ -->
+<inputPayload xmlns="urn:bilt:input:v1" version="1.0">
+
+  <display>
+    <title>Signature required</title>
+  </display>
+
+  <signature/>
+
+</inputPayload>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 3 — Confirmation
+     ═══════════════════════════════════════════════════════════════ -->
+<inputPayload xmlns="urn:bilt:input:v1" version="1.0">
+
+  <display>
+    <title>Would you like a receipt?</title>
+    <text>We can email your receipt to you.</text>
+    <text>Standard data rates may apply.</text>
+  </display>
+
+  <confirmation>
+    <confirmButton>Yes please</confirmButton>
+    <cancelButton>No thanks</cancelButton>
+  </confirmation>
+
+</inputPayload>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 4 — Confirmation, no display block
+     (input type with no accompanying message)
+     ═══════════════════════════════════════════════════════════════ -->
+<inputPayload xmlns="urn:bilt:input:v1" version="1.0">
+
+  <confirmation>
+    <confirmButton>Confirm</confirmButton>
+    <cancelButton>Cancel</cancelButton>
+  </confirmation>
+
+</inputPayload>
