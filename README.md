@@ -81,6 +81,16 @@ BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
 ./gradlew build
 ```
 
+## Generate API Reference
+
+Regenerate the schema reference docs (requires Node.js):
+
+```bash
+cd schema && npm install && npm run generate:api-reference
+```
+
+This converts the nexo JSON Schema to an OpenAPI spec and renders it as a self-contained HTML page at `docs/api-reference.html`.
+
 ## Project Structure
 
 Source code is generated from JSON Schema (nexo protocol) and committed at the source level for readability. Generation tooling lives externally — this repo contains libraries only.
