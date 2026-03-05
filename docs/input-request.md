@@ -11,6 +11,7 @@ An input request displays a message on the terminal and waits for the user to re
 | InputCommand | Purpose | Response field | Doc |
 |---|---|---|---|
 | `GetConfirmation` | Yes/No confirmation | `ConfirmedFlag` | [GetConfirmation](./input-get-confirmation.md) |
+| `GetConfirmation` | Signature capture | `ConfirmedFlag` + `AdditionalResponse` | [Signature](./input-signature.md) |
 | `TextString` | Free-text input | `TextInput` | [TextString](./input-text-string.md) |
 | `DigitString` | Numeric-only input | `DigitInput` | [DigitString](./input-digit-string.md) |
 | `DecimalString` | Decimal number input | `TextInput` | [DecimalString](./input-decimal-string.md) |

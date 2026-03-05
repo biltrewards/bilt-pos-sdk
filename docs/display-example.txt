@@ -192,3 +192,121 @@
   <standby theme="christmas"/>
 
 </displayPayload>
+
+!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 7 — Standby screen with title and text
+     ═══════════════════════════════════════════════════════════════ -->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="standby.xslt"
+    version="1.0">
+
+  <standby>
+    <display>
+      <title>Welcome to Store42</title>
+      <text>Present your card to the cashier to get started.</text>
+      <text>Earn Bilt points on every purchase.</text>
+    </display>
+  </standby>
+
+</displayPayload>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 8 — Standby screen, themed with title and text
+     ═══════════════════════════════════════════════════════════════ -->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="standby.xslt"
+    version="1.0">
+
+  <standby theme="christmas">
+    <display>
+      <title>Happy Holidays!</title>
+      <text>Wishing you a wonderful festive season.</text>
+    </display>
+  </standby>
+
+</displayPayload>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 9 — Standalone waiting screen
+     ═══════════════════════════════════════════════════════════════ -->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="waiting.xslt"
+    version="1.0">
+
+  <waiting>
+    <display>
+      <title>Processing your payment...</title>
+      <text>Please do not remove your card.</text>
+    </display>
+  </waiting>
+
+</displayPayload>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 10 — Standalone waiting screen, minimal
+     ═══════════════════════════════════════════════════════════════ -->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="waiting.xslt"
+    version="1.0">
+
+  <waiting/>
+
+</displayPayload>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 11 — Receipt with embedded waiting block
+     (e.g. order submitted, waiting for kitchen confirmation)
+     ═══════════════════════════════════════════════════════════════ -->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="receipt.xslt"
+    version="1.0">
+
+  <receipt>
+
+    <waiting>
+      <display>
+        <title>Waiting for order to complete...</title>
+      </display>
+    </waiting>
+
+    <header><text>Your items</text></header>
+
+    <lineItems>
+
+      <lineItem kind="item">
+        <description>Running shoes</description>
+        <quantity>1</quantity>
+        <unitPrice><currency>$</currency><value>79.99</value></unitPrice>
+        <amount><currency>$</currency><value>79.99</value></amount>
+      </lineItem>
+
+      <lineItem kind="item">
+        <description>Green T-shirt</description>
+        <quantity>2</quantity>
+        <unitPrice><currency>$</currency><value>9.89</value></unitPrice>
+        <amount><currency>$</currency><value>19.78</value></amount>
+      </lineItem>
+
+      <lineItem kind="void">
+        <description>Green T-shirt</description>
+      </lineItem>
+
+    </lineItems>
+
+    <total>
+      <description>Total amount</description>
+      <amount><currency>$</currency><value>79.99</value></amount>
+    </total>
+
+  </receipt>
+
+</displayPayload>

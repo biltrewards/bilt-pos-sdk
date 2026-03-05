@@ -14,16 +14,21 @@
     <signature>    — prompts the shopper to provide a signature
     <confirmation> — prompts the shopper to confirm or cancel
 
-  Both types share an optional <display> block for title and text.
+  Both types share an optional <display> block (from common.xsd)
+  for title and text lines shown above the input control.
+
   The shopper's response is returned in the nexo InputResponse via
-  InputResult.Input, and any captured signature image is returned
-  as a Base64 string in Response.AdditionalResponse.
+  InputResult.Input. Any captured signature image is returned as a
+  Base64 string in Response.AdditionalResponse.
   ═══════════════════════════════════════════════════════════════════
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="urn:bilt:input:v1"
            xmlns:i="urn:bilt:input:v1"
+           xmlns:c="urn:bilt:common:v1"
            elementFormDefault="qualified">
+
+    <xs:import namespace="urn:bilt:common:v1" schemaLocation="common.xsd"/>
 
 
     <!-- ═══════════════════════════════════════════
@@ -32,8 +37,8 @@
     <xs:element name="inputPayload">
         <xs:complexType>
             <xs:sequence>
-                <!-- Optional shared display content -->
-                <xs:element name="display"      type="i:DisplayType"      minOccurs="0"/>
+                <!-- Optional shared display content (title + text lines) -->
+                <xs:element name="display" type="c:DisplayType" minOccurs="0"/>
                 <!-- Exactly one input type -->
                 <xs:choice>
                     <xs:element name="signature"    type="i:SignatureType"/>
@@ -43,20 +48,6 @@
             <xs:attribute name="version" type="xs:string" default="1.0"/>
         </xs:complexType>
     </xs:element>
-
-
-    <!-- ═══════════════════════════════════════════
-         DisplayType
-         Shared optional block for all input types.
-         Provides a title and zero or more text lines
-         rendered above the input control.
-         ═══════════════════════════════════════════ -->
-    <xs:complexType name="DisplayType">
-        <xs:sequence>
-            <xs:element name="title" type="xs:string" minOccurs="0"/>
-            <xs:element name="text"  type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
-        </xs:sequence>
-    </xs:complexType>
 
 
     <!-- ═══════════════════════════════════════════
@@ -76,8 +67,7 @@
          SignatureType
          Renders a signature capture screen.
          The captured signature is returned as a
-         Base64 image string in
-         Response.AdditionalResponse.
+         Base64 image string in Response.AdditionalResponse.
          ═══════════════════════════════════════════ -->
     <xs:complexType name="SignatureType">
         <xs:complexContent>

@@ -1,10 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="urn:bilt:display:v1"
-           xmlns:d="urn:bilt:display:v1"
-           elementFormDefault="qualified">
-
-  <!--
+<!--
   ═══════════════════════════════════════════════════════════════════
   display.xsd  —  v1.0
   ═══════════════════════════════════════════════════════════════════
@@ -16,210 +11,254 @@
   is carried by the nexo MessageHeader and is NOT part of this schema.
 
   Content types supported in v1.0:
-    <receipt>  — itemised purchase summary, optionally with
-                 an embedded <image> and/or <qrCode>
+    <receipt>  — itemised purchase summary
     <qrCode>   — standalone QR code or barcode screen
     <image>    — standalone image screen
+    <standby>  — idle/standby screen
+    <waiting>  — waiting/progress screen
   ═══════════════════════════════════════════════════════════════════
-  -->
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:bilt:display:v1"
+           xmlns:d="urn:bilt:display:v1"
+           xmlns:c="urn:bilt:common:v1"
+           elementFormDefault="qualified">
+
+    <xs:import namespace="urn:bilt:common:v1" schemaLocation="common.xsd"/>
 
 
-  <!-- ═══════════════════════════════════════════
-       Root element
-       ═══════════════════════════════════════════ -->
-  <xs:element name="displayPayload">
-    <xs:complexType>
-      <xs:sequence>
-        <!-- Exactly one content type per payload -->
-        <xs:choice>
-          <xs:element name="receipt"  type="d:ReceiptType"/>
-          <xs:element name="qrCode"  type="d:QrCodeType"/>
-          <xs:element name="image"   type="d:ImageType"/>
-          <xs:element name="standby" type="d:StandbyType"/>
-        </xs:choice>
-      </xs:sequence>
-      <!--
-        Identifies the XSLT the terminal applies to render this payload.
-        Examples: "receipt-qr.xslt", "receipt.xslt", "qr.xslt",
-                  "barcode.xslt", "image.xslt"
-        Kept as xs:string (not an enum) so new layouts can be introduced
-        without a schema change.
-      -->
-      <xs:attribute name="layout"  type="xs:string" use="required"/>
-      <xs:attribute name="version" type="xs:string" default="1.0"/>
+    <!-- ═══════════════════════════════════════════
+         Root element
+         ═══════════════════════════════════════════ -->
+    <xs:element name="displayPayload">
+        <xs:complexType>
+            <xs:sequence>
+                <!-- Exactly one content type per payload -->
+                <xs:choice>
+                    <xs:element name="receipt" type="d:ReceiptType"/>
+                    <xs:element name="qrCode"  type="d:QrCodeType"/>
+                    <xs:element name="image"   type="d:ImageType"/>
+                    <xs:element name="standby" type="d:StandbyType"/>
+                    <xs:element name="waiting" type="d:WaitingType"/>
+                </xs:choice>
+            </xs:sequence>
+            <!--
+              Identifies the XSLT the terminal applies to render this payload.
+              Examples: "receipt-qr.xslt", "receipt.xslt", "qr.xslt",
+                        "barcode.xslt", "image.xslt", "standby.xslt",
+                        "waiting.xslt"
+              Kept as xs:string (not an enum) so new layouts can be introduced
+              without a schema change.
+            -->
+            <xs:attribute name="layout"  type="xs:string" use="required"/>
+            <xs:attribute name="version" type="xs:string" default="1.0"/>
+        </xs:complexType>
+    </xs:element>
+
+
+    <!-- ═══════════════════════════════════════════
+         Shared: HeaderFooterType
+         Positional/structural elements used in
+         <receipt> and <qrCode>. Not the same as
+         DisplayType from common.xsd — these mark
+         top/bottom positions in a content block,
+         not general shopper messages.
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="HeaderFooterType">
+        <xs:sequence>
+            <xs:element name="text" type="xs:string"/>
+        </xs:sequence>
     </xs:complexType>
-  </xs:element>
 
 
-  <!-- ═══════════════════════════════════════════
-       Shared: HeaderFooterType
-       Used by: <receipt>, <qrCode>
-       Extensible: add <image>, <subtitle>, etc. here later
-       ═══════════════════════════════════════════ -->
-  <xs:complexType name="HeaderFooterType">
-    <xs:sequence>
-      <xs:element name="text" type="xs:string"/>
-    </xs:sequence>
-  </xs:complexType>
+    <!-- ═══════════════════════════════════════════
+         Shared: ImageType
+         Used by: standalone <image>, <receipt> banner,
+         and <lineItem> thumbnail.
+         Content: base64-encoded binary (PNG, JPEG, etc.)
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="ImageType">
+        <xs:simpleContent>
+            <xs:extension base="xs:base64Binary">
+                <xs:attribute name="mediaType" type="xs:string" default="image/png"/>
+                <xs:attribute name="altText"   type="xs:string"/>
+            </xs:extension>
+        </xs:simpleContent>
+    </xs:complexType>
 
 
-  <!-- ═══════════════════════════════════════════
-       Shared: ImageType
-       Used by: <displayPayload> (standalone), <receipt>, <lineItem>
-       Content: base64-encoded binary (PNG, JPEG, etc.)
-       ═══════════════════════════════════════════ -->
-  <xs:complexType name="ImageType">
-    <xs:simpleContent>
-      <xs:extension base="xs:base64Binary">
-        <xs:attribute name="mediaType" type="xs:string" default="image/png"/>
-        <xs:attribute name="altText"   type="xs:string"/>
-      </xs:extension>
-    </xs:simpleContent>
-  </xs:complexType>
+    <!-- ═══════════════════════════════════════════
+         Shared: QrCodeType
+         Used by: standalone <qrCode> and embedded
+         in <receipt>.
+         Symbology is controlled by the `type` attribute.
+         Suggested values: "qr", "barcode128", "pdf417",
+         "datamatrix"
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="QrCodeType">
+        <xs:sequence>
+            <xs:element name="header"       type="d:HeaderFooterType" minOccurs="0"/>
+            <xs:element name="data"         type="xs:anyURI"/>
+            <xs:element name="callToAction" type="xs:string"          minOccurs="0"/>
+            <xs:element name="footer"       type="d:HeaderFooterType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="type" type="xs:string" default="qr"/>
+    </xs:complexType>
 
 
-  <!-- ═══════════════════════════════════════════
-       Shared: QrCodeType
-       Used by: <displayPayload> (standalone), <receipt>
-       ═══════════════════════════════════════════ -->
-  <xs:complexType name="QrCodeType">
-    <xs:sequence>
-      <xs:element name="header"       type="d:HeaderFooterType" minOccurs="0"/>
-      <xs:element name="data"         type="xs:anyURI"/>
-      <xs:element name="callToAction" type="xs:string"          minOccurs="0"/>
-      <xs:element name="footer"       type="d:HeaderFooterType" minOccurs="0"/>
-    </xs:sequence>
-    <!--
-      Symbology of the code to render.
-      "qr" is the default; other values are XSLT-dependent.
-      Suggested values: "qr", "barcode128", "pdf417", "datamatrix"
-    -->
-    <xs:attribute name="type" type="xs:string" default="qr"/>
-  </xs:complexType>
+    <!-- ═══════════════════════════════════════════
+         Shared: MoneyType
+         Used by: <unitPrice>, <amount> throughout.
+         Currency can be ISO 4217 code or display
+         symbol (e.g. "USD" or "$").
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="MoneyType">
+        <xs:sequence>
+            <xs:element name="currency" type="xs:string"/>
+            <xs:element name="value"    type="xs:decimal"/>
+        </xs:sequence>
+    </xs:complexType>
 
 
-  <!-- ═══════════════════════════════════════════
-       Shared: MoneyType
-       Used by: <unitPrice>, <amount> throughout
-       ═══════════════════════════════════════════ -->
-  <xs:complexType name="MoneyType">
-    <xs:sequence>
-      <!-- ISO 4217 code or display symbol (e.g. "USD" or "$") -->
-      <xs:element name="currency" type="xs:string"/>
-      <xs:element name="value"    type="xs:decimal"/>
-    </xs:sequence>
-  </xs:complexType>
+    <!-- ═══════════════════════════════════════════
+         Shared: LabeledAmountType
+         A description + optional amount pair.
+         Used by: <subtotal>, <total>, <totalDiscount>,
+         <taxItem>, <taxTotal>.
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="LabeledAmountType">
+        <xs:sequence>
+            <xs:element name="description" type="xs:string"   minOccurs="0"/>
+            <xs:element name="amount"      type="d:MoneyType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
 
 
-  <!-- ═══════════════════════════════════════════
-       Shared: LabeledAmountType
-       A description + optional amount pair.
-       Used by: <subtotal>, <total>, <totalDiscount>,
-                <taxItem>, <taxTotal>
-       ═══════════════════════════════════════════ -->
-  <xs:complexType name="LabeledAmountType">
-    <xs:sequence>
-      <xs:element name="description" type="xs:string"    minOccurs="0"/>
-      <xs:element name="amount"      type="d:MoneyType"  minOccurs="0"/>
-    </xs:sequence>
-  </xs:complexType>
+    <!-- ═══════════════════════════════════════════
+         StandbyType
+         Instructs the terminal to return to its
+         idle/standby screen.
+         The optional `theme` attribute selects a
+         seasonal or branded visual variant
+         (e.g. "christmas", "halloween").
+         The optional <display> block (from common.xsd)
+         allows a title and text lines to be shown
+         on the standby screen.
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="StandbyType">
+        <xs:sequence>
+            <xs:element name="display" type="c:DisplayType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="theme" type="xs:string" use="optional"/>
+    </xs:complexType>
 
 
-  <!-- ═══════════════════════════════════════════
-       StandbyType
-       Instructs the terminal to return to its idle/standby screen.
-       The optional `theme` attribute allows the XSLT to select a
-       seasonal or branded visual variant (e.g. "christmas", "halloween").
-       ═══════════════════════════════════════════ -->
-  <xs:complexType name="StandbyType">
-    <xs:attribute name="theme" type="xs:string" use="optional"/>
-  </xs:complexType>
+    <!-- ═══════════════════════════════════════════
+         WaitingType
+         Shows a waiting/progress screen.
+         Can be used standalone or embedded inside
+         <receipt> (same pattern as <qrCode> and
+         <image>).
+         Uses the shared DisplayType from common.xsd
+         for title and text lines.
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="WaitingType">
+        <xs:sequence>
+            <xs:element name="display" type="c:DisplayType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
 
 
-  <!-- ═══════════════════════════════════════════
-       ReceiptType
-       ═══════════════════════════════════════════ -->
-  <xs:complexType name="ReceiptType">
-    <xs:sequence>
-      <!-- Optional banner image at the top of the receipt -->
-      <xs:element name="image"     type="d:ImageType"  minOccurs="0"/>
-      <!-- Optional QR/barcode embedded within the receipt -->
-      <xs:element name="qrCode"    type="d:QrCodeType" minOccurs="0"/>
-      <!-- Section heading shown above the line items -->
-      <xs:element name="header"    type="d:HeaderFooterType" minOccurs="0"/>
-      <!-- Line items -->
-      <xs:element name="lineItems" type="d:LineItemsType"    minOccurs="0"/>
-      <!-- Totals block -->
-      <xs:element name="subtotal"  type="d:LabeledAmountType" minOccurs="0"/>
-      <xs:element name="tax"       type="d:TaxType"           minOccurs="0"/>
-      <xs:element name="total"     type="d:LabeledAmountType" minOccurs="0"/>
-      <!-- Optional closing message -->
-      <xs:element name="footer"    type="d:HeaderFooterType"  minOccurs="0"/>
-    </xs:sequence>
-  </xs:complexType>
+    <!-- ═══════════════════════════════════════════
+         ReceiptType
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="ReceiptType">
+        <xs:sequence>
+            <!-- Optional banner image at the top of the receipt -->
+            <xs:element name="image"     type="d:ImageType"         minOccurs="0"/>
+            <!-- Optional QR/barcode embedded within the receipt -->
+            <xs:element name="qrCode"    type="d:QrCodeType"        minOccurs="0"/>
+            <!-- Optional waiting block embedded within the receipt -->
+            <xs:element name="waiting"   type="d:WaitingType"       minOccurs="0"/>
+            <!-- Section heading shown above the line items -->
+            <xs:element name="header"    type="d:HeaderFooterType"  minOccurs="0"/>
+            <!-- Line items -->
+            <xs:element name="lineItems" type="d:LineItemsType"     minOccurs="0"/>
+            <!-- Totals block -->
+            <xs:element name="subtotal"  type="d:LabeledAmountType" minOccurs="0"/>
+            <xs:element name="tax"       type="d:TaxType"           minOccurs="0"/>
+            <xs:element name="total"     type="d:LabeledAmountType" minOccurs="0"/>
+            <!-- Optional closing message -->
+            <xs:element name="footer"    type="d:HeaderFooterType"  minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
 
 
-  <!-- ═══════════════════════════════════════════
-       LineItemsType  —  container
-       ═══════════════════════════════════════════ -->
-  <xs:complexType name="LineItemsType">
-    <xs:sequence>
-      <xs:element name="lineItem" type="d:LineItemType"
-                  minOccurs="0" maxOccurs="unbounded"/>
-    </xs:sequence>
-  </xs:complexType>
+    <!-- ═══════════════════════════════════════════
+         LineItemsType  —  container
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="LineItemsType">
+        <xs:sequence>
+            <xs:element name="lineItem" type="d:LineItemType"
+                        minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
 
 
-  <!-- ═══════════════════════════════════════════
-       LineItemType  —  single row
-       ═══════════════════════════════════════════ -->
-  <xs:complexType name="LineItemType">
-    <xs:sequence>
-      <!--
-        All child elements are optional; which ones are meaningful
-        depends on `kind`:
+    <!-- ═══════════════════════════════════════════
+         LineItemType  —  single row
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="LineItemType">
+        <xs:sequence>
+            <!--
+              All child elements are optional; meaningful ones
+              depend on `kind`:
 
-        kind="item"      — description, subtitle, image, quantity,
-                           unitPrice, amount
-        kind="heading"   — description only
-        kind="discount"  — description, amount (negative value)
-        kind="return"    — description, quantity, unitPrice,
-                           amount (negative value)
-        kind="separator" — no children (renders a horizontal rule)
-        kind="spacer"    — no children (renders a blank line)
-      -->
-      <xs:element name="image"       type="d:ImageType"  minOccurs="0"/>
-      <xs:element name="description" type="xs:string"    minOccurs="0"/>
-      <xs:element name="subtitle"    type="xs:string"    minOccurs="0"/>
-      <xs:element name="quantity"    type="xs:decimal"   minOccurs="0"/>
-      <xs:element name="unitPrice"   type="d:MoneyType"  minOccurs="0"/>
-      <xs:element name="amount"      type="d:MoneyType"  minOccurs="0"/>
-    </xs:sequence>
-    <xs:attribute name="kind" type="d:LineItemKindType" default="item"/>
-  </xs:complexType>
+              kind="item"      — description, subtitle, image,
+                                 quantity, unitPrice, amount
+              kind="heading"   — description only
+              kind="discount"  — description, amount (negative)
+              kind="return"    — description, quantity, unitPrice,
+                                 amount (negative)
+              kind="void"      — description only; XSLT renders as
+                                 "*** Removed", paired with the
+                                 original item line above it
+              kind="separator" — no children (horizontal rule)
+              kind="spacer"    — no children (blank line)
+            -->
+            <xs:element name="image"       type="d:ImageType" minOccurs="0"/>
+            <xs:element name="description" type="xs:string"   minOccurs="0"/>
+            <xs:element name="subtitle"    type="xs:string"   minOccurs="0"/>
+            <xs:element name="quantity"    type="xs:decimal"  minOccurs="0"/>
+            <xs:element name="unitPrice"   type="d:MoneyType" minOccurs="0"/>
+            <xs:element name="amount"      type="d:MoneyType" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="kind" type="d:LineItemKindType" default="item"/>
+    </xs:complexType>
 
-  <xs:simpleType name="LineItemKindType">
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="item"/>
-      <xs:enumeration value="heading"/>
-      <xs:enumeration value="discount"/>
-      <xs:enumeration value="return"/>
-      <xs:enumeration value="separator"/>
-      <xs:enumeration value="spacer"/>
-    </xs:restriction>
-  </xs:simpleType>
+    <xs:simpleType name="LineItemKindType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="item"/>
+            <xs:enumeration value="heading"/>
+            <xs:enumeration value="discount"/>
+            <xs:enumeration value="return"/>
+            <xs:enumeration value="void"/>
+            <xs:enumeration value="separator"/>
+            <xs:enumeration value="spacer"/>
+        </xs:restriction>
+    </xs:simpleType>
 
 
-  <!-- ═══════════════════════════════════════════
-       TaxType
-       ═══════════════════════════════════════════ -->
-  <xs:complexType name="TaxType">
-    <xs:sequence>
-      <xs:element name="totalDiscount" type="d:LabeledAmountType" minOccurs="0"/>
-      <xs:element name="taxItem"       type="d:LabeledAmountType"
-                  minOccurs="0" maxOccurs="unbounded"/>
-      <xs:element name="taxTotal"      type="d:LabeledAmountType" minOccurs="0"/>
-    </xs:sequence>
-  </xs:complexType>
+    <!-- ═══════════════════════════════════════════
+         TaxType
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="TaxType">
+        <xs:sequence>
+            <xs:element name="totalDiscount" type="d:LabeledAmountType" minOccurs="0"/>
+            <xs:element name="taxItem"       type="d:LabeledAmountType"
+                        minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="taxTotal"      type="d:LabeledAmountType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
 
 </xs:schema>
