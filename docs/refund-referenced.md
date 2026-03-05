@@ -50,7 +50,7 @@ Example — full referenced refund:
       "MessageType": "Request",
       "ServiceID": "SVC-00871",
       "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
+      "POIID": "VictaLane-275839164"
     },
     "PaymentRequest": {
       "SaleData": {
@@ -63,7 +63,7 @@ Example — full referenced refund:
         "PaymentType": "Refund",
         "OriginalPOITransaction": {
           "POITransactionID": {
-            "TransactionID": "4rKV001726384910000.AJ7F2M9KR43TPQB8",
+            "TransactionID": "a816b0a9-8a11-4dc0-ba9d-5ad1e8c7e0d6",
             "TimeStamp": "2026-03-02T14:35:12+00:00"
           }
         }
@@ -91,7 +91,7 @@ Example — partial referenced refund:
       "MessageType": "Request",
       "ServiceID": "SVC-00872",
       "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
+      "POIID": "VictaLane-275839164"
     },
     "PaymentRequest": {
       "SaleData": {
@@ -104,7 +104,7 @@ Example — partial referenced refund:
         "PaymentType": "Refund",
         "OriginalPOITransaction": {
           "POITransactionID": {
-            "TransactionID": "4rKV001726384910000.AJ7F2M9KR43TPQB8",
+            "TransactionID": "a816b0a9-8a11-4dc0-ba9d-5ad1e8c7e0d6",
             "TimeStamp": "2026-03-02T14:35:12+00:00"
           }
         }
@@ -145,16 +145,15 @@ Example response:
       "MessageType": "Response",
       "ServiceID": "SVC-00871",
       "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
+      "POIID": "VictaLane-275839164"
     },
     "PaymentResponse": {
       "Response": {
         "Result": "Success",
-        "AdditionalResponse": "transactionType=REFUND&pspReference=9MB3001726385900000..."
       },
       "POIData": {
         "POITransactionID": {
-          "TransactionID": "9MB3001726385900000.CP4J6R2MT87WSNQ1",
+          "TransactionID": "bce9bf88-f253-49ee-ab16-0d0d6e962452",
           "TimeStamp": "2026-03-02T16:00:08+00:00"
         }
       }

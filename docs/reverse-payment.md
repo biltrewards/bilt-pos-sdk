@@ -4,7 +4,7 @@ Void a completed payment before the batch settles, using a `ReversalRequest`.
 
 A reversal cancels a completed payment that has not yet been cleared by the acquirer. Because the funds were authorized but not yet settled, a reversal releases the hold on the shopper's account immediately and typically incurs fewer fees than a post-clearing refund.
 
-You can make a **full reversal** to void the entire amount, or a **partial reversal** to reduce the authorized amount. Multiple partial reversals can be made against the same original payment, as long as the total does not exceed the original amount.
+Voiding a payment is an all or nothing operation, only the full amount can be reversed.
 
 > A reversal must be made **before the batch settles**. Once the batch has cleared, use a [referenced refund](./refund-referenced.md) or [unreferenced refund](./refund-unreferenced.md) instead.
 
@@ -12,7 +12,7 @@ You can make a **full reversal** to void the entire amount, or a **partial rever
 
 ## Before you begin
 
-You need the transaction identifier of the original payment. This is returned in the payment response as `POIData.POITransactionID.TransactionID`, in the format `tenderReference.pspReference`. Make sure your POS app stores this when a payment completes.
+You need the transaction identifier of the original payment. This is returned in the payment response as `POIData.POITransactionID.TransactionID`. Make sure your POS app stores this when a payment completes.
 
 ---
 
@@ -36,7 +36,7 @@ And the following `ReversalRequest` fields:
 - **`PaymentTransaction.AmountsReq.Currency`** — The transaction currency code (e.g. `USD`). Required for partial reversals.
 - **`PaymentTransaction.AmountsReq.RequestedAmount`** — The amount to reverse. Omit for a full reversal. Must not exceed the original payment amount.
 
-Example — full reversal:
+Example — reversal:
 
 ```json
 {
@@ -48,49 +48,16 @@ Example — full reversal:
       "MessageType": "Request",
       "ServiceID": "SVC-00851",
       "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
+      "POIID": "VictaLane-275839164"
     },
     "ReversalRequest": {
       "OriginalPOITransaction": {
         "POITransactionID": {
-          "TransactionID": "4rKV001726384910000.AJ7F2M9KR43TPQB8",
+          "TransactionID": "1f8a2301-5c3d-49a5-bb17-b1c10dd74ed6",
           "TimeStamp": "2026-03-02T14:35:12+00:00"
         }
       },
       "ReversalReason": "MerchantCancel"
-    }
-  }
-}
-```
-
-Example — partial reversal:
-
-```json
-{
-  "SaleToPOIRequest": {
-    "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Service",
-      "MessageCategory": "Reversal",
-      "MessageType": "Request",
-      "ServiceID": "SVC-00852",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
-    },
-    "ReversalRequest": {
-      "OriginalPOITransaction": {
-        "POITransactionID": {
-          "TransactionID": "4rKV001726384910000.AJ7F2M9KR43TPQB8",
-          "TimeStamp": "2026-03-02T14:35:12+00:00"
-        }
-      },
-      "ReversalReason": "MerchantCancel",
-      "PaymentTransaction": {
-        "AmountsReq": {
-          "Currency": "USD",
-          "RequestedAmount": 29.99
-        }
-      }
     }
   }
 }
@@ -121,16 +88,15 @@ Example response:
       "MessageType": "Response",
       "ServiceID": "SVC-00851",
       "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
+      "POIID": "VictaLane-275839164"
     },
     "ReversalResponse": {
       "Response": {
-        "Result": "Success",
-        "AdditionalResponse": "transactionType=REFUND&pspReference=9MB3001726385900000..."
+        "Result": "Success"
       },
       "POIData": {
         "POITransactionID": {
-          "TransactionID": "9MB3001726385900000.CP4J6R2MT87WSNQ1",
+          "TransactionID": "a816b0a9-8a11-4dc0-ba9d-5ad1e8c7e0d6",
           "TimeStamp": "2026-03-02T15:10:08+00:00"
         }
       }

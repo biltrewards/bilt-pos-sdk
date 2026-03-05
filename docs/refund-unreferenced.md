@@ -42,7 +42,7 @@ Example request:
       "MessageType": "Request",
       "ServiceID": "SVC-00861",
       "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
+      "POIID": "VictaLane-275839164"
     },
     "PaymentRequest": {
       "SaleData": {
@@ -91,16 +91,15 @@ Example response:
       "MessageType": "Response",
       "ServiceID": "SVC-00861",
       "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
+      "POIID": "VictaLane-275839164"
     },
     "PaymentResponse": {
       "Response": {
-        "Result": "Success",
-        "AdditionalResponse": "transactionType=REFUND&pspReference=7RD5001726387200000..."
+        "Result": "Success"
       },
       "POIData": {
         "POITransactionID": {
-          "TransactionID": "7RD5001726387200000.FN9K1P5XQ26YJBT3",
+          "TransactionID": "bce9bf88-f253-49ee-ab16-0d0d6e962452",
           "TimeStamp": "2026-03-02T15:30:09+00:00"
         }
       }
@@ -114,7 +113,7 @@ Example response:
 When a refund fails, the result includes:
 
 - **`PaymentResponse.Response.Result`** — `Failure`.
-- **`PaymentResponse.Response.ErrorCondition`** — the reason for failure. For example, `NotAllowed` if unreferenced refunds are not enabled for the terminal.
+- **`PaymentResponse.Response.ErrorCondition`** — the reason for failure.
 
 For general guidance on handling failed requests, see [Handle responses](./error-scenarios.md).
 

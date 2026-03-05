@@ -48,7 +48,7 @@ To initiate a card payment, send a Terminal API request from your POS app. The t
          "MessageType": "Request",
          "ServiceID": "SVC-00842",
          "SaleID": "BiltPOS-Lane3",
-         "POIID": "P400Plus-275839164"
+         "POIID": "VictaLane-275839164"
        },
        "PaymentRequest": {
          "SaleData": {
@@ -102,12 +102,12 @@ When a payment succeeds:
         "MessageType": "Response",
         "ServiceID": "SVC-00842",
         "SaleID": "BiltPOS-Lane3",
-        "POIID": "P400Plus-275839164"
+        "POIID": "VictaLane-275839164"
       },
       "PaymentResponse": {
         "Response": {
           "Result": "Success",
-          "AdditionalResponse": "tidUsed=P400Plus-275839164&..."
+          "AdditionalResponse": "tidUsed=VictaLane-275839164&..."
         },
         "POIData": {
           "POITransactionID": {
@@ -152,7 +152,7 @@ When a payment fails, the result includes `Result: Failure` along with informati
         "MessageType": "Response",
         "ServiceID": "SVC-00842",
         "SaleID": "BiltPOS-Lane3",
-        "POIID": "P400Plus-275839164"
+        "POIID": "VictaLane-275839164"
       },
       "PaymentResponse": {
         "Response": {

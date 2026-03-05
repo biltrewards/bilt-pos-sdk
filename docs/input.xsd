@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  input.xsd  —  v1.0
+  ═══════════════════════════════════════════════════════════════════
+  Defines the XML payload placed in:
+    SaleToPOIRequest > InputRequest > DisplayOutput >
+    OutputContent[OutputFormat="XHTML"] > OutputXHTML  (as Base64)
+
+  Transport context (POIID, SaleID, ServiceID, ProtocolVersion…)
+  is carried by the nexo MessageHeader and is NOT part of this schema.
+
+  Input types supported in v1.0:
+    <signature>    — prompts the shopper to provide a signature
+    <confirmation> — prompts the shopper to confirm or cancel
+
+  Both types share an optional <display> block for title and text.
+  The shopper's response is returned in the nexo InputResponse via
+  InputResult.Input, and any captured signature image is returned
+  as a Base64 string in Response.AdditionalResponse.
+  ═══════════════════════════════════════════════════════════════════
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:bilt:input:v1"
+           xmlns:i="urn:bilt:input:v1"
+           elementFormDefault="qualified">
+
+
+    <!-- ═══════════════════════════════════════════
+         Root element
+         ═══════════════════════════════════════════ -->
+    <xs:element name="inputPayload">
+        <xs:complexType>
+            <xs:sequence>
+                <!-- Optional shared display content -->
+                <xs:element name="display"      type="i:DisplayType"      minOccurs="0"/>
+                <!-- Exactly one input type -->
+                <xs:choice>
+                    <xs:element name="signature"    type="i:SignatureType"/>
+                    <xs:element name="confirmation" type="i:ConfirmationType"/>
+                </xs:choice>
+            </xs:sequence>
+            <xs:attribute name="version" type="xs:string" default="1.0"/>
+        </xs:complexType>
+    </xs:element>
+
+
+    <!-- ═══════════════════════════════════════════
+         DisplayType
+         Shared optional block for all input types.
+         Provides a title and zero or more text lines
+         rendered above the input control.
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="DisplayType">
+        <xs:sequence>
+            <xs:element name="title" type="xs:string" minOccurs="0"/>
+            <xs:element name="text"  type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+
+    <!-- ═══════════════════════════════════════════
+         Shared: ButtonsType
+         Reusable confirm/cancel button label pair.
+         When omitted, the XSLT renders default labels.
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="ButtonsType">
+        <xs:sequence>
+            <xs:element name="confirmButton" type="xs:string" minOccurs="0"/>
+            <xs:element name="cancelButton"  type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+
+    <!-- ═══════════════════════════════════════════
+         SignatureType
+         Renders a signature capture screen.
+         The captured signature is returned as a
+         Base64 image string in
+         Response.AdditionalResponse.
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="SignatureType">
+        <xs:complexContent>
+            <xs:extension base="i:ButtonsType"/>
+        </xs:complexContent>
+    </xs:complexType>
+
+
+    <!-- ═══════════════════════════════════════════
+         ConfirmationType
+         Renders a yes/no confirmation screen.
+         The shopper's choice is returned via
+         InputResult.Input in the nexo InputResponse.
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="ConfirmationType">
+        <xs:complexContent>
+            <xs:extension base="i:ButtonsType"/>
+        </xs:complexContent>
+    </xs:complexType>
+
+
+</xs:schema>

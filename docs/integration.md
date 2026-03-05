@@ -66,6 +66,15 @@ The following example initiates a $25.00 USD payment transaction.
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.*;
 
+// Note, trusting all certificates is only allowed in development environments.
+// Note, not providing a security key is only allowed in development environments.
+String endpoint = "https://192.168.1.100:8443/nexo";
+BiltNexoTerminalClient.Builder clientBuilder = BiltNexoTerminalClient.builder()
+    .endpoint(endpoint)
+    .trustAllCertificates();
+
+BiltNexoTerminalClient client = clientBuilder.build();
+
 SaleToPOIRequest saleToPOIRequest = SaleToPOIRequest.builder()
     .messageHeader(MessageHeader.builder()
         .protocolVersion("3.0")

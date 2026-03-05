@@ -43,7 +43,7 @@ Example request:
       "MessageType": "Request",
       "ServiceID": "SVC-00844",
       "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
+      "POIID": "VictaLane-275839164"
     },
     "AbortRequest": {
       "AbortReason": "MerchantAbort",
@@ -78,13 +78,13 @@ Example payment response after a successful abort:
       "MessageType": "Response",
       "ServiceID": "SVC-00842",
       "SaleID": "BiltPOS-Lane3",
-      "POIID": "P400Plus-275839164"
+      "POIID": "VictaLane-275839164"
     },
     "PaymentResponse": {
       "Response": {
         "Result": "Failure",
         "ErrorCondition": "Aborted",
-        "AdditionalResponse": "message=Transaction+cancelled"
+        "AdditionalResponse": "POS aborted"
       }
     }
   }
