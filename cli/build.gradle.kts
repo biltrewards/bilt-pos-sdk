@@ -3,6 +3,11 @@ plugins {
     application
 }
 
+// CLI is an application, not a published library
+tasks.withType<AbstractPublishToMaven>().configureEach { enabled = false }
+tasks.withType<Sign>().configureEach { enabled = false }
+tasks.withType<GenerateModuleMetadata>().configureEach { enabled = false }
+
 dependencies {
     implementation(projects.java)
 }

@@ -4,6 +4,7 @@ plugins {
 
 dependencies {
     compileOnly(libs.plugins.kotlin.jvm.toDep())
+    compileOnly(libs.plugins.maven.publish.toDep())
 }
 
 gradlePlugin {
