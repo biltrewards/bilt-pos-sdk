@@ -59,35 +59,39 @@ Send a Terminal API input request with `InputCommand` set to `DigitString`. The 
 - **`OutputContent.OutputFormat`** — `XHTML`
 - **`OutputContent.OutputXHTML`** — Base64-encoded XML payload.
 
-### Example request
+---
+
+## Examples
+
+### ZIP code (auto-submit)
+
+Collect a 5-digit ZIP code that auto-submits when complete:
+
+**Request:**
 
 ```json
 {
   "SaleToPOIRequest": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Request",
-      "ServiceID": "SVC-01005",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputRequest": {
       "DisplayOutput": {
         "Device": "CustomerDisplay",
         "InfoQualify": "Display",
         "OutputContent": {
-          "OutputFormat": "XHTML",
-          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiIHZlcnNpb249IjEuMCI+CiAgPGRpc3BsYXk+CiAgICA8dGl0bGU+RW50ZXIgeW91ciB6aXAgY29kZTwvdGl0bGU+CiAgPC9kaXNwbGF5Pgo8L2lucHV0UGF5bG9hZD4="
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter ZIP Code"}]
         }
       },
       "InputData": {
         "Device": "CustomerInput",
         "InfoQualify": "Input",
         "InputCommand": "DigitString",
-        "MaxInputTime": 30,
-        "MinLength": 5,
         "MaxLength": 5
       }
     }
@@ -95,25 +99,17 @@ Send a Terminal API input request with `InputCommand` set to `DigitString`. The 
 }
 ```
 
----
-
-## Response
-
-The response includes **`Input.DigitInput`** — the digit string entered by the user.
-
-Example response:
+**Response:**
 
 ```json
 {
   "SaleToPOIResponse": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Response",
-      "ServiceID": "SVC-01005",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputResponse": {
       "InputResult": {
@@ -124,13 +120,276 @@ Example response:
         },
         "Input": {
           "InputCommand": "DigitString",
-          "DigitInput": "10001"
+          "DigitInput": "90210"
         }
       }
     }
   }
 }
 ```
+
+---
+
+### Phone number with format mask
+
+Collect a phone number with formatted display:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter Phone Number"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "DigitString",
+        "StringMask": "(###) ###-####"
+      }
+    }
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Success"
+        },
+        "Input": {
+          "InputCommand": "DigitString",
+          "DigitInput": "5551234567"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Masked PIN entry
+
+Collect a 4-digit PIN with masked display:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter PIN"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "DigitString",
+        "MaskCharactersFlag": true,
+        "MaxLength": 4
+      }
+    }
+  }
+}
+```
+
+Each digit is displayed as `•` on the terminal.
+
+---
+
+### Pre-filled ZIP code
+
+Edit a ZIP code with a default value:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Edit ZIP Code"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "DigitString",
+        "MaxLength": 5,
+        "DefaultInputString": "90210"
+      }
+    }
+  }
+}
+```
+
+The terminal shows "90210" as a placeholder. If confirmed without typing, "90210" is submitted.
+
+---
+
+### ZIP code with timeout
+
+Collect ZIP code with a 30-second countdown:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter ZIP Code"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "DigitString",
+        "MaxLength": 5,
+        "MaxInputTime": 30
+      }
+    }
+  }
+}
+```
+
+A countdown progress bar is displayed. If timeout expires:
+
+**Response (timeout):**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Failure",
+          "ErrorCondition": "Cancel"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Mandatory input (no cancel)
+
+Collect ZIP code without allowing cancel:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter ZIP Code"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "DigitString",
+        "MaxLength": 5,
+        "DisableCancelFlag": true
+      }
+    }
+  }
+}
+```
+
+The cancel/close button is hidden. User must enter a value to proceed.
+
+---
+
+## Response
+
+The response includes **`Input.DigitInput`** — the digit string entered by the user.
 
 ### Failed input
 
