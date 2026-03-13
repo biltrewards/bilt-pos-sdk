@@ -116,3 +116,195 @@ When the timeout expires:
 The POS cannot distinguish between a user-initiated cancel and a timeout via the `ErrorCondition` alone — both return `Cancel`. If you need to differentiate, track the elapsed time on the POS side.
 
 > **Note:** If the user submits input at the exact moment the timeout fires, the terminal guarantees only one response is sent — either the user's input or the timeout, but never both.
+
+---
+
+## Examples
+
+### Example 1: Auto-submit on MaxLength
+
+Collect a 5-digit zip code that submits automatically when the user enters the 5th digit:
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "ProtocolVersion": "3.0",
+      "MessageClass": "Device",
+      "MessageCategory": "Input",
+      "MessageType": "Request",
+      "ServiceID": "SVC-00101",
+      "SaleID": "POS-Lane1",
+      "POIID": "VictaLane-275839164"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "XHTML",
+          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIj8+PGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiPjxkaXNwbGF5Pjx0aXRsZT5FbnRlciB5b3VyIHppcCBjb2RlPC90aXRsZT48L2Rpc3BsYXk+PC9pbnB1dFBheWxvYWQ+"
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "DigitString",
+        "MaxLength": 5,
+        "MinLength": 5
+      }
+    }
+  }
+}
+```
+
+With `WaitUserValidationFlag` absent (defaults to `false`), the input auto-submits when the user enters 5 digits. To require explicit confirmation, set `"WaitUserValidationFlag": true`.
+
+---
+
+### Example 2: Timed input with countdown
+
+Collect a phone number with a 30-second timeout:
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "ProtocolVersion": "3.0",
+      "MessageClass": "Device",
+      "MessageCategory": "Input",
+      "MessageType": "Request",
+      "ServiceID": "SVC-00102",
+      "SaleID": "POS-Lane1",
+      "POIID": "VictaLane-275839164"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "XHTML",
+          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIj8+PGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiPjxkaXNwbGF5Pjx0aXRsZT5FbnRlciB5b3VyIHBob25lIG51bWJlcjwvdGl0bGU+PC9kaXNwbGF5PjwvaW5wdXRQYXlsb2FkPg=="
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "DigitString",
+        "MaxInputTime": 30,
+        "MaxLength": 10
+      }
+    }
+  }
+}
+```
+
+The terminal displays a countdown progress bar. If the user doesn't respond in 30 seconds:
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "ProtocolVersion": "3.0",
+      "MessageClass": "Device",
+      "MessageCategory": "Input",
+      "MessageType": "Response",
+      "ServiceID": "SVC-00102",
+      "SaleID": "POS-Lane1",
+      "POIID": "VictaLane-275839164"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Failure",
+          "ErrorCondition": "Cancel"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Example 3: Pre-filled default value
+
+Prompt for a tip amount with a default of $5.00:
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "ProtocolVersion": "3.0",
+      "MessageClass": "Device",
+      "MessageCategory": "Input",
+      "MessageType": "Request",
+      "ServiceID": "SVC-00103",
+      "SaleID": "POS-Lane1",
+      "POIID": "VictaLane-275839164"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "XHTML",
+          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIj8+PGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiPjxkaXNwbGF5Pjx0aXRsZT5FbnRlciB0aXAgYW1vdW50PC90aXRsZT48L2Rpc3BsYXk+PC9pbnB1dFBheWxvYWQ+"
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "DecimalString",
+        "DefaultInputString": "500",
+        "MaxLength": 6,
+        "MaxDecimalLength": 2
+      }
+    }
+  }
+}
+```
+
+The terminal shows "5.00" as a placeholder. If the user presses confirm without typing, "500" is submitted. If they start typing, the placeholder clears and their input replaces it.
+
+---
+
+### Example 4: Mandatory confirmation (no cancel option)
+
+Force the user to acknowledge a message without allowing cancel:
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "ProtocolVersion": "3.0",
+      "MessageClass": "Device",
+      "MessageCategory": "Input",
+      "MessageType": "Request",
+      "ServiceID": "SVC-00104",
+      "SaleID": "POS-Lane1",
+      "POIID": "VictaLane-275839164"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "XHTML",
+          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIj8+PGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiPjxkaXNwbGF5Pjx0aXRsZT5JIGFja25vd2xlZGdlIHRoZSB0ZXJtcyBvZiBzZXJ2aWNlPC90aXRsZT48L2Rpc3BsYXk+PGNvbmZpcm1hdGlvbj48Y29uZmlybUJ1dHRvbj5JIEFncmVlPC9jb25maXJtQnV0dG9uPjwvY29uZmlybWF0aW9uPjwvaW5wdXRQYXlsb2FkPg=="
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetConfirmation",
+        "DisableCancelFlag": true
+      }
+    }
+  }
+}
+```
+
+Only the "I Agree" button is shown. The user must tap it to proceed.
