@@ -43,11 +43,15 @@ Send a Terminal API input request with `InputCommand` set to `DecimalString`. Th
 - **`Device`** — `CustomerInput`
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `DecimalString`
-- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation.
+- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
 - **`MinLength`** — *(optional)* Minimum total number of digits.
 - **`MaxLength`** — *(optional)* Maximum total number of digits.
 - **`MaxDecimalLength`** — *(optional)* Maximum number of digits after the decimal point. Must be between `MinLength` and `MaxLength`.
 - **`FromRightToLeftFlag`** — *(optional)* When `true`, digits are entered right-to-left (useful for amount entry where the decimal point is fixed). Default `false`.
+- **`DefaultInputString`** — *(optional)* Pre-filled value displayed as a placeholder until the user starts typing.
+- **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
+- **`DisableValidFlag`** — *(optional)* When `true`, hides the Confirm button.
+- **`WaitUserValidationFlag`** — *(optional)* When `false` (default) and `MaxLength` is set, auto-submits when `MaxLength` is reached. When `true`, requires explicit confirmation.
 
 `DisplayOutput` fields:
 

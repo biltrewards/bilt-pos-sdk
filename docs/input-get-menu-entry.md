@@ -43,10 +43,12 @@ Send a Terminal API input request with `InputCommand` set to `GetMenuEntry`. The
 - **`Device`** — `CustomerInput`
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `GetMenuEntry`
-- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation.
+- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
 - **`MinLength`** — *(optional)* Minimum number of entries the user must select. Default `1`.
 - **`MaxLength`** — *(optional)* Maximum number of entries the user can select. Set to `1` for single selection, or higher for multiple selection.
 - **`MenuBackFlag`** — *(optional)* When `true`, enables Back (returns `-1`) and Home (returns `0`) navigation keys. Default `false`.
+- **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
+- **`DisableValidFlag`** — *(optional)* When `true`, hides the Confirm button (for multiple selection mode).
 
 `DisplayOutput` fields:
 

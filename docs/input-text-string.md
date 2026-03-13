@@ -43,11 +43,14 @@ Send a Terminal API input request with `InputCommand` set to `TextString`. The d
 - **`Device`** — `CustomerInput`
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `TextString`
-- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation.
+- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
 - **`MinLength`** — *(optional)* Minimum number of characters the user must enter.
 - **`MaxLength`** — *(optional)* Maximum number of characters the user can enter.
-- **`DefaultInputString`** — *(optional)* Pre-filled text in the input field.
+- **`DefaultInputString`** — *(optional)* Pre-filled text displayed as a placeholder until the user starts typing.
 - **`MaskCharactersFlag`** — *(optional)* When `true`, entered characters are masked with `•`. Default `false`.
+- **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
+- **`DisableValidFlag`** — *(optional)* When `true`, hides the Confirm button.
+- **`WaitUserValidationFlag`** — *(optional)* When `false` (default) and `MaxLength` is set, auto-submits when `MaxLength` is reached. When `true`, requires explicit confirmation.
 
 `DisplayOutput` fields:
 

@@ -43,11 +43,14 @@ Send a Terminal API input request with `InputCommand` set to `DigitString`. The 
 - **`Device`** — `CustomerInput`
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `DigitString`
-- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation.
+- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
 - **`MinLength`** — *(optional)* Minimum number of digits the user must enter.
 - **`MaxLength`** — *(optional)* Maximum number of digits the user can enter.
 - **`StringMask`** — *(optional)* Format mask for the input. Use `d` for a required digit position (e.g. `ddddd` for a 5-digit zip code).
-- **`DefaultInputString`** — *(optional)* Pre-filled digits in the input field.
+- **`DefaultInputString`** — *(optional)* Pre-filled digits displayed as a placeholder until the user starts typing.
+- **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
+- **`DisableValidFlag`** — *(optional)* When `true`, hides the Confirm button.
+- **`WaitUserValidationFlag`** — *(optional)* When `false` (default) and `MaxLength` is set, auto-submits when `MaxLength` is reached. When `true`, requires explicit confirmation.
 
 `DisplayOutput` fields:
 

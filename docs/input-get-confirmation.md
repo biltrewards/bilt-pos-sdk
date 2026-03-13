@@ -50,8 +50,10 @@ Send a Terminal API input request with `InputCommand` set to `GetConfirmation`. 
 - **`Device`** — `CustomerInput`
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `GetConfirmation`
-- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation.
-- **`DefaultInputString`** — *(optional)* Pre-select the default answer: `Y` for yes, `N` for no.
+- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
+- **`DefaultInputString`** — *(optional)* Pre-select the default answer: `"Y"` for yes, `"N"` for no.
+- **`DisableCancelFlag`** — *(optional)* When `true`, hides the decline/cancel button, leaving only the confirm button.
+- **`DisableValidFlag`** — *(optional)* When `true`, hides the confirm button, leaving only the decline/cancel button.
 
 `DisplayOutput` fields:
 

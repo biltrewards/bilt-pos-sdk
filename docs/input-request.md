@@ -38,7 +38,11 @@ Every input request uses `MessageCategory: Input` and `MessageClass: Device`. Th
 - **`Device`** — The input device. Use `CustomerInput` for the shopper-facing device.
 - **`InfoQualify`** — `Input`.
 - **`InputCommand`** — The type of input to collect. See the table above.
-- **`MaxInputTime`** — *(optional)* Maximum seconds to wait for the user to respond before the request is automatically cancelled.
+- **`MaxInputTime`** — *(optional)* Maximum seconds to wait for the user to respond. When the timeout expires, the terminal displays a "Please wait…" overlay and returns an `InputResponse` with `ErrorCondition: Cancel`. A visual countdown progress bar is displayed while the timer is active.
+- **`DefaultInputString`** — *(optional)* Pre-fills the input field with a default value. The value is displayed as a placeholder until the user starts typing. If the user confirms without typing, the placeholder value is submitted. For `GetConfirmation`, use `"Y"` or `"N"` to pre-select yes or no.
+- **`DisableCancelFlag`** — *(optional)* When `true`, the Cancel button is hidden and the user cannot cancel the input. Default `false`.
+- **`DisableValidFlag`** — *(optional)* When `true`, the Confirm/Valid button is hidden. Use this when input should be confirmed via another mechanism (e.g., automatic submission on reaching `MaxLength`). Default `false`.
+- **`WaitUserValidationFlag`** — *(optional)* When `false` (default) and `MaxLength` is set, the input automatically submits once the user reaches `MaxLength`. When `true`, the user must explicitly press confirm even after reaching `MaxLength`.
 
 `DisplayOutput` fields (common to all commands):
 
@@ -91,8 +95,24 @@ The result is returned in an `InputResponse` body. The main result is in `InputR
 
 When an input request fails, the response includes `Result: Failure` with an `ErrorCondition` indicating the reason:
 
-- **`Cancel`** — The user pressed Cancel, or the `MaxInputTime` timeout expired.
+- **`Cancel`** — The user pressed Cancel, or the `MaxInputTime` timeout expired. When a timeout occurs, the terminal displays a "Please wait…" overlay with a spinner before sending the response.
 - **`Busy`** — The terminal is processing another request (e.g. a payment arrived while waiting for input).
 - **`DeviceOut`** — The terminal is unavailable.
 
 For general guidance on handling failed requests, see [Handle responses](./error-scenarios.md).
+
+---
+
+## Input timeout behavior
+
+When `MaxInputTime` is specified, the terminal displays a countdown progress bar at the top of the input screen. The progress bar visually indicates the remaining time.
+
+When the timeout expires:
+
+1. The input control is disabled
+2. A "Please wait…" overlay with a spinner is displayed
+3. An `InputResponse` is sent with `ErrorCondition: Cancel`
+
+The POS cannot distinguish between a user-initiated cancel and a timeout via the `ErrorCondition` alone — both return `Cancel`. If you need to differentiate, track the elapsed time on the POS side.
+
+> **Note:** If the user submits input at the exact moment the timeout fires, the terminal guarantees only one response is sent — either the user's input or the timeout, but never both.
