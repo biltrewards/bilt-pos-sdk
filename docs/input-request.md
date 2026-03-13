@@ -121,37 +121,65 @@ The POS cannot distinguish between a user-initiated cancel and a timeout via the
 
 ## Examples
 
-### Example 1: Auto-submit on MaxLength
+### Example 1: ZIP code with auto-submit
 
-Collect a 5-digit zip code that submits automatically when the user enters the 5th digit:
+Collect a 5-digit ZIP code that auto-submits when complete:
+
+**Request:**
 
 ```json
 {
   "SaleToPOIRequest": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Request",
-      "ServiceID": "SVC-00101",
-      "SaleID": "POS-Lane1",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputRequest": {
       "DisplayOutput": {
         "Device": "CustomerDisplay",
         "InfoQualify": "Display",
         "OutputContent": {
-          "OutputFormat": "XHTML",
-          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIj8+PGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiPjxkaXNwbGF5Pjx0aXRsZT5FbnRlciB5b3VyIHppcCBjb2RlPC90aXRsZT48L2Rpc3BsYXk+PC9pbnB1dFBheWxvYWQ+"
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter ZIP Code"}]
         }
       },
       "InputData": {
         "Device": "CustomerInput",
         "InfoQualify": "Input",
         "InputCommand": "DigitString",
-        "MaxLength": 5,
-        "MinLength": 5
+        "MaxLength": 5
+      }
+    }
+  }
+}
+```
+
+**Response (success):**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Success"
+        },
+        "Input": {
+          "InputCommand": "DigitString",
+          "DigitInput": "90210"
+        }
       }
     }
   }
@@ -166,25 +194,25 @@ With `WaitUserValidationFlag` absent (defaults to `false`), the input auto-submi
 
 Collect a phone number with a 30-second timeout:
 
+**Request:**
+
 ```json
 {
   "SaleToPOIRequest": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Request",
-      "ServiceID": "SVC-00102",
-      "SaleID": "POS-Lane1",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputRequest": {
       "DisplayOutput": {
         "Device": "CustomerDisplay",
         "InfoQualify": "Display",
         "OutputContent": {
-          "OutputFormat": "XHTML",
-          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIj8+PGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiPjxkaXNwbGF5Pjx0aXRsZT5FbnRlciB5b3VyIHBob25lIG51bWJlcjwvdGl0bGU+PC9kaXNwbGF5PjwvaW5wdXRQYXlsb2FkPg=="
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter Phone Number"}]
         }
       },
       "InputData": {
@@ -192,26 +220,26 @@ Collect a phone number with a 30-second timeout:
         "InfoQualify": "Input",
         "InputCommand": "DigitString",
         "MaxInputTime": 30,
-        "MaxLength": 10
+        "StringMask": "(###) ###-####"
       }
     }
   }
 }
 ```
 
-The terminal displays a countdown progress bar. If the user doesn't respond in 30 seconds:
+The terminal displays a countdown progress bar at the top of the screen.
+
+**Response (timeout):**
 
 ```json
 {
   "SaleToPOIResponse": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Response",
-      "ServiceID": "SVC-00102",
-      "SaleID": "POS-Lane1",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputResponse": {
       "InputResult": {
@@ -229,71 +257,109 @@ The terminal displays a countdown progress bar. If the user doesn't respond in 3
 
 ---
 
-### Example 3: Pre-filled default value
+### Example 3: Pre-filled ZIP code
 
-Prompt for a tip amount with a default of $5.00:
+Edit a ZIP code with a pre-filled default value:
+
+**Request:**
 
 ```json
 {
   "SaleToPOIRequest": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Request",
-      "ServiceID": "SVC-00103",
-      "SaleID": "POS-Lane1",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputRequest": {
       "DisplayOutput": {
         "Device": "CustomerDisplay",
         "InfoQualify": "Display",
         "OutputContent": {
-          "OutputFormat": "XHTML",
-          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIj8+PGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiPjxkaXNwbGF5Pjx0aXRsZT5FbnRlciB0aXAgYW1vdW50PC90aXRsZT48L2Rpc3BsYXk+PC9pbnB1dFBheWxvYWQ+"
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Edit ZIP Code"}]
         }
       },
       "InputData": {
         "Device": "CustomerInput",
         "InfoQualify": "Input",
-        "InputCommand": "DecimalString",
-        "DefaultInputString": "500",
-        "MaxLength": 6,
-        "MaxDecimalLength": 2
+        "InputCommand": "DigitString",
+        "MaxLength": 5,
+        "DefaultInputString": "90210"
       }
     }
   }
 }
 ```
 
-The terminal shows "5.00" as a placeholder. If the user presses confirm without typing, "500" is submitted. If they start typing, the placeholder clears and their input replaces it.
+The terminal shows "90210" as a placeholder. If the user presses confirm without typing, "90210" is submitted. If they start typing, the placeholder clears.
 
 ---
 
-### Example 4: Mandatory confirmation (no cancel option)
+### Example 4: Pre-filled text input
 
-Force the user to acknowledge a message without allowing cancel:
+Edit a name with a pre-filled value:
+
+**Request:**
 
 ```json
 {
   "SaleToPOIRequest": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Request",
-      "ServiceID": "SVC-00104",
-      "SaleID": "POS-Lane1",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputRequest": {
       "DisplayOutput": {
         "Device": "CustomerDisplay",
         "InfoQualify": "Display",
         "OutputContent": {
-          "OutputFormat": "XHTML",
-          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIj8+PGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiPjxkaXNwbGF5Pjx0aXRsZT5JIGFja25vd2xlZGdlIHRoZSB0ZXJtcyBvZiBzZXJ2aWNlPC90aXRsZT48L2Rpc3BsYXk+PGNvbmZpcm1hdGlvbj48Y29uZmlybUJ1dHRvbj5JIEFncmVlPC9jb25maXJtQnV0dG9uPjwvY29uZmlybWF0aW9uPjwvaW5wdXRQYXlsb2FkPg=="
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Edit your name"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "TextString",
+        "MaxLength": 50,
+        "DefaultInputString": "John Doe"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Example 5: Mandatory confirmation (no cancel)
+
+Force the user to acknowledge without allowing cancel:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Amount OK?"}]
         }
       },
       "InputData": {
@@ -307,4 +373,281 @@ Force the user to acknowledge a message without allowing cancel:
 }
 ```
 
-Only the "I Agree" button is shown. The user must tap it to proceed.
+Only the confirm button is shown. The user must tap it to proceed.
+
+---
+
+### Example 6: Single selection with timeout
+
+Select a payment method with a 30-second timeout:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Select payment method"}]
+        },
+        "MenuEntry": [
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Credit Card"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Debit Card"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Cash"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Gift Card"}]}
+        ]
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetMenuEntry",
+        "MaxLength": 1,
+        "MaxInputTime": 30
+      }
+    }
+  }
+}
+```
+
+**Response (user selected Debit Card):**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Success"
+        },
+        "Input": {
+          "InputCommand": "GetMenuEntry",
+          "MenuEntryNumber": [2]
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Example 7: Multiple selection (no cancel)
+
+Select receipt options without allowing cancel:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Select receipt options"}]
+        },
+        "MenuEntry": [
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Email receipt"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Print receipt"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "SMS receipt"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "No receipt"}]}
+        ]
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetMenuEntry",
+        "MinLength": 1,
+        "MaxLength": 3,
+        "DisableCancelFlag": true
+      }
+    }
+  }
+}
+```
+
+**Response (user selected Email and Print):**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Success"
+        },
+        "Input": {
+          "InputCommand": "GetMenuEntry",
+          "MenuEntryNumber": [1, 2]
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Example 8: Signature with timeout
+
+Capture signature with a 60-second timeout:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "XHTML",
+          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB2ZXJzaW9uPSIxLjAiPgogIDxkaXNwbGF5PgogICAgPHRpdGxlPlBsZWFzZSBzaWduIGJlbG93PC90aXRsZT4KICAgIDx0ZXh0PkkgYWdyZWUgdG8gdGhlIHRlcm1zIGFuZCBjb25kaXRpb25zPC90ZXh0PgogIDwvZGlzcGxheT4KICA8c2lnbmF0dXJlPgogICAgPGNvbmZpcm1CdXR0b24+QWNjZXB0PC9jb25maXJtQnV0dG9uPgogICAgPGNhbmNlbEJ1dHRvbj5DYW5jZWw8L2NhbmNlbEJ1dHRvbj4KICAgIDxjbGVhckJ1dHRvbj5DbGVhcjwvY2xlYXJCdXR0b24+CiAgPC9zaWduYXR1cmU+CjwvaW5wdXRQYXlsb2FkPg=="
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetConfirmation",
+        "MaxInputTime": 60
+      }
+    }
+  }
+}
+```
+
+The XML payload (decoded):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<inputPayload version="1.0">
+  <display>
+    <title>Please sign below</title>
+    <text>I agree to the terms and conditions</text>
+  </display>
+  <signature>
+    <confirmButton>Accept</confirmButton>
+    <cancelButton>Cancel</cancelButton>
+    <clearButton>Clear</clearButton>
+  </signature>
+</inputPayload>
+```
+
+**Response (signature captured):**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Success",
+          "AdditionalResponse": "iVBORw0KGgoAAAANSUhEUgAA..."
+        },
+        "Input": {
+          "InputCommand": "GetConfirmation",
+          "ConfirmedFlag": true
+        }
+      }
+    }
+  }
+}
+```
+
+The signature image is returned as a Base64-encoded PNG in `AdditionalResponse`.
+
+---
+
+### Example 9: Masked PIN entry
+
+Collect a 4-digit PIN with masked display:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter PIN"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "DigitString",
+        "MaskCharactersFlag": true,
+        "MaxLength": 4
+      }
+    }
+  }
+}
+```
+
+Each digit is displayed as `•` on the terminal.
