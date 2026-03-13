@@ -13,8 +13,10 @@ fun Project.configurePublishing() {
         publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL, automaticRelease = true)
         signAllPublications()
 
+        coordinates(project.group.toString(), "pos-lib-${project.name}", project.version.toString())
+
         pom {
-            name.set(project.name)
+            name.set("pos-lib-${project.name}")
             description.set("Bilt POS SDK - ${project.name}")
             url.set("https://github.com/biltpos/pretty-porpoise")
             inceptionYear.set("2025")
