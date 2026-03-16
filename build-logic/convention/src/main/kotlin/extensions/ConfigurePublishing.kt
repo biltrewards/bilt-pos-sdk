@@ -1,5 +1,4 @@
 import com.vanniktech.maven.publish.MavenPublishBaseExtension
-import com.vanniktech.maven.publish.SonatypeHost
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.configure
 
@@ -10,7 +9,7 @@ fun Project.configurePublishing() {
     version = findProperty("VERSION") as String
 
     extensions.configure<MavenPublishBaseExtension> {
-        publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL, automaticRelease = true)
+        publishToMavenCentral()
         signAllPublications()
 
         coordinates(project.group.toString(), "pos-lib-${project.name}", project.version.toString())
