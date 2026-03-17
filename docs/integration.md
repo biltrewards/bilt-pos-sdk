@@ -17,6 +17,59 @@ Each request sends a `NexoTerminalAPI` envelope containing a `SaleToPOIRequest` 
 
 ---
 
+## Installation
+
+The SDK is published to Maven Central under the `com.bilt` group. Two artifacts are available — use the one that matches your project language:
+
+| Artifact | Language |
+|---|---|
+| `pos-lib-java` | Java |
+| `pos-lib-kotlin` | Kotlin |
+
+### Gradle (Kotlin DSL)
+
+```kotlin
+dependencies {
+    // Java library
+    implementation("com.bilt:pos-lib-java:0.5.2")
+
+    // Kotlin library
+    implementation("com.bilt:pos-lib-kotlin:0.5.2")
+}
+```
+
+### Gradle (Groovy DSL)
+
+```groovy
+dependencies {
+    // Java library
+    implementation 'com.bilt:pos-lib-java:0.5.2'
+
+    // Kotlin library
+    implementation 'com.bilt:pos-lib-kotlin:0.5.2'
+}
+```
+
+### Maven
+
+```xml
+<!-- Java library -->
+<dependency>
+    <groupId>com.bilt</groupId>
+    <artifactId>pos-lib-java</artifactId>
+    <version>0.5.2</version>
+</dependency>
+
+<!-- Kotlin library -->
+<dependency>
+    <groupId>com.bilt</groupId>
+    <artifactId>pos-lib-kotlin</artifactId>
+    <version>0.5.2</version>
+</dependency>
+```
+
+---
+
 ## Getting started
 
 ### Create a client
