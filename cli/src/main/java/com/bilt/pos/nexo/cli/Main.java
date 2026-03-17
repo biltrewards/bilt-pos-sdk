@@ -181,7 +181,7 @@ public final class Main {
                     if (originalTimestamp == null) {
                         throw new IllegalArgumentException("--original-timestamp is required for referenced refund requests");
                     }
-                    request = buildReferencedRefundRequest(serviceID, originalServiceID, originalTimestamp);
+                    request = buildReferencedRefundRequest(serviceID, originalServiceID, originalTimestamp, amount, currency);
                 } else {
                     request = buildUnreferencedRefundRequest(serviceID, amount, currency);
                 }
@@ -291,7 +291,8 @@ public final class Main {
     }
 
     private static SaleToPOIRequest buildReferencedRefundRequest(String serviceID,
-                                                                    String originalServiceID, String originalTimestamp) {
+                                                                    String originalServiceID, String originalTimestamp,
+                                                                    double amount, String currency) {
         return SaleToPOIRequest.builder()
                 .messageHeader(MessageHeader.builder()
                         .protocolVersion("3.0")
@@ -313,6 +314,10 @@ public final class Main {
                                         .build())
                                 .build())
                         .paymentTransaction(PaymentTransaction.builder()
+                                .amountsReq(AmountsReq.builder()
+                                        .currency(currency)
+                                        .requestedAmount(amount)
+                                        .build())
                                 .originalPOITransaction(OriginalPOITransaction.builder()
                                         .poiTransactionID(TransactionIdentificationType.builder()
                                                 .transactionID(originalServiceID)
