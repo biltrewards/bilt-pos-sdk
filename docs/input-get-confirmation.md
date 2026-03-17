@@ -50,8 +50,8 @@ Send a Terminal API input request with `InputCommand` set to `GetConfirmation`. 
 - **`Device`** — `CustomerInput`
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `GetConfirmation`
-- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation.
-- **`DefaultInputString`** — *(optional)* Pre-select the default answer: `Y` for yes, `N` for no.
+- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
+- **`DisableCancelFlag`** — *(optional)* When `true`, hides the decline/cancel button, leaving only the confirm button.
 
 `DisplayOutput` fields:
 
@@ -60,59 +60,56 @@ Send a Terminal API input request with `InputCommand` set to `GetConfirmation`. 
 - **`OutputContent.OutputFormat`** — `XHTML`
 - **`OutputContent.OutputXHTML`** — Base64-encoded XML payload.
 
-### Example request
+---
+
+## Examples
+
+### Basic confirmation
+
+Ask the user to confirm an amount:
+
+**Request:**
 
 ```json
 {
   "SaleToPOIRequest": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Request",
-      "ServiceID": "SVC-01002",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputRequest": {
       "DisplayOutput": {
         "Device": "CustomerDisplay",
         "InfoQualify": "Display",
         "OutputContent": {
-          "OutputFormat": "XHTML",
-          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiIHZlcnNpb249IjEuMCI+CiAgPGRpc3BsYXk+CiAgICA8dGl0bGU+V291bGQgeW91IGxpa2UgYSByZWNlaXB0PzwvdGl0bGU+CiAgICA8dGV4dD5XZSBjYW4gZW1haWwgeW91ciByZWNlaXB0IHRvIHlvdS48L3RleHQ+CiAgPC9kaXNwbGF5PgogIDxjb25maXJtYXRpb24+CiAgICA8Y29uZmlybUJ1dHRvbj5ZZXMgcGxlYXNlPC9jb25maXJtQnV0dG9uPgogICAgPGNhbmNlbEJ1dHRvbj5ObyB0aGFua3M8L2NhbmNlbEJ1dHRvbj4KICA8L2NvbmZpcm1hdGlvbj4KPC9pbnB1dFBheWxvYWQ+"
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Amount OK?"}]
         }
       },
       "InputData": {
         "Device": "CustomerInput",
         "InfoQualify": "Input",
-        "InputCommand": "GetConfirmation",
-        "MaxInputTime": 30
+        "InputCommand": "GetConfirmation"
       }
     }
   }
 }
 ```
 
----
-
-## Response
-
-The response includes **`Input.ConfirmedFlag`** — `true` if the user confirmed, `false` if they declined.
-
-Example response — user confirmed:
+**Response (confirmed):**
 
 ```json
 {
   "SaleToPOIResponse": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Response",
-      "ServiceID": "SVC-01002",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputResponse": {
       "InputResult": {
@@ -130,6 +127,198 @@ Example response — user confirmed:
   }
 }
 ```
+
+**Response (declined):**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Success"
+        },
+        "Input": {
+          "InputCommand": "GetConfirmation",
+          "ConfirmedFlag": false
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Terms and conditions (short)
+
+Display terms with custom button labels using XML payload:
+
+**XML Payload:**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<inputPayload version="1.0">
+  <display>
+    <title>Terms and Conditions</title>
+    <text>By proceeding, you agree to our terms of service and privacy policy.</text>
+  </display>
+  <confirmation>
+    <confirmButton>I Agree</confirmButton>
+    <cancelButton>Decline</cancelButton>
+  </confirmation>
+</inputPayload>
+```
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "XHTML",
+          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB2ZXJzaW9uPSIxLjAiPgogIDxkaXNwbGF5PgogICAgPHRpdGxlPlRlcm1zIGFuZCBDb25kaXRpb25zPC90aXRsZT4KICAgIDx0ZXh0PkJ5IHByb2NlZWRpbmcsIHlvdSBhZ3JlZSB0byBvdXIgdGVybXMgb2Ygc2VydmljZSBhbmQgcHJpdmFjeSBwb2xpY3kuPC90ZXh0PgogIDwvZGlzcGxheT4KICA8Y29uZmlybWF0aW9uPgogICAgPGNvbmZpcm1CdXR0b24+SSBBZ3JlZTwvY29uZmlybUJ1dHRvbj4KICAgIDxjYW5jZWxCdXR0b24+RGVjbGluZTwvY2FuY2VsQnV0dG9uPgogIDwvY29uZmlybWF0aW9uPgo8L2lucHV0UGF5bG9hZD4="
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetConfirmation"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Confirmation with timeout
+
+Ask confirmation with a 30-second countdown:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Amount OK?"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetConfirmation",
+        "MaxInputTime": 30
+      }
+    }
+  }
+}
+```
+
+**Response (timeout):**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Failure",
+          "ErrorCondition": "Cancel"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Mandatory acknowledgment (no cancel)
+
+Force user to confirm without allowing decline:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Amount OK?"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetConfirmation",
+        "DisableCancelFlag": true
+      }
+    }
+  }
+}
+```
+
+Only the confirm button is shown. The user must tap it to proceed.
+
+---
+
+## Response
+
+The response includes **`Input.ConfirmedFlag`** — `true` if the user confirmed, `false` if they declined.
 
 ### Failed input
 

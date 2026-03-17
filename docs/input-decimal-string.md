@@ -43,11 +43,12 @@ Send a Terminal API input request with `InputCommand` set to `DecimalString`. Th
 - **`Device`** — `CustomerInput`
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `DecimalString`
-- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation.
-- **`MinLength`** — *(optional)* Minimum total number of digits.
+- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
+- **`MinLength`** — *(optional)* Minimum total number of digits. The confirm button is disabled until the minimum is met.
 - **`MaxLength`** — *(optional)* Maximum total number of digits.
-- **`MaxDecimalLength`** — *(optional)* Maximum number of digits after the decimal point. Must be between `MinLength` and `MaxLength`.
-- **`FromRightToLeftFlag`** — *(optional)* When `true`, digits are entered right-to-left (useful for amount entry where the decimal point is fixed). Default `false`.
+- **`MaskCharactersFlag`** — *(optional)* When `true`, entered digits are masked with `•`. Default `false`.
+- **`DefaultInputString`** — *(optional)* Placeholder digits displayed until the user starts typing. The user must type to enable the confirm button.
+- **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
 
 `DisplayOutput` fields:
 
@@ -56,19 +57,42 @@ Send a Terminal API input request with `InputCommand` set to `DecimalString`. Th
 - **`OutputContent.OutputFormat`** — `XHTML`
 - **`OutputContent.OutputXHTML`** — Base64-encoded XML payload.
 
-### Example request
+---
+
+## Examples
+
+### Amount entry with XML payload
+
+Collect a tip amount with currency display using XML payload:
+
+**XML Payload:**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<inputPayload version="1.0">
+  <display>
+    <title>Enter Amount</title>
+  </display>
+  <amount>
+    <currencySymbol>$</currencySymbol>
+    <currencyCode>USD</currencyCode>
+    <confirmButton>OK</confirmButton>
+    <cancelButton>Cancel</cancelButton>
+  </amount>
+</inputPayload>
+```
+
+**Request:**
 
 ```json
 {
   "SaleToPOIRequest": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Request",
-      "ServiceID": "SVC-01006",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputRequest": {
       "DisplayOutput": {
@@ -76,16 +100,145 @@ Send a Terminal API input request with `InputCommand` set to `DecimalString`. Th
         "InfoQualify": "Display",
         "OutputContent": {
           "OutputFormat": "XHTML",
-          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiIHZlcnNpb249IjEuMCI+CiAgPGRpc3BsYXk+CiAgICA8dGl0bGU+RW50ZXIgdGlwIGFtb3VudDwvdGl0bGU+CiAgPC9kaXNwbGF5Pgo8L2lucHV0UGF5bG9hZD4="
+          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB2ZXJzaW9uPSIxLjAiPgogIDxkaXNwbGF5PgogICAgPHRpdGxlPkVudGVyIEFtb3VudDwvdGl0bGU+CiAgPC9kaXNwbGF5PgogIDxhbW91bnQ+CiAgICA8Y3VycmVuY3lTeW1ib2w+JDwvY3VycmVuY3lTeW1ib2w+CiAgICA8Y3VycmVuY3lDb2RlPlVTRDwvY3VycmVuY3lDb2RlPgogICAgPGNvbmZpcm1CdXR0b24+T0s8L2NvbmZpcm1CdXR0b24+CiAgICA8Y2FuY2VsQnV0dG9uPkNhbmNlbDwvY2FuY2VsQnV0dG9uPgogIDwvYW1vdW50Pgo8L2lucHV0UGF5bG9hZD4="
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "DecimalString"
+      }
+    }
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Success"
+        },
+        "Input": {
+          "InputCommand": "DecimalString",
+          "TextInput": "15.50"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Basic decimal input
+
+Collect a tip amount with simple text prompt:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter tip amount"}]
         }
       },
       "InputData": {
         "Device": "CustomerInput",
         "InfoQualify": "Input",
         "InputCommand": "DecimalString",
-        "MaxInputTime": 30,
+        "MaxLength": 6
+      }
+    }
+  }
+}
+```
+
+---
+
+### Decimal with timeout
+
+Collect amount with 30-second countdown:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter tip amount"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "DecimalString",
         "MaxLength": 6,
-        "MaxDecimalLength": 2
+        "MaxInputTime": 30
+      }
+    }
+  }
+}
+```
+
+**Response (timeout):**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Failure",
+          "ErrorCondition": "Cancel"
+        }
       }
     }
   }
@@ -97,37 +250,6 @@ Send a Terminal API input request with `InputCommand` set to `DecimalString`. Th
 ## Response
 
 The response includes **`Input.TextInput`** — the decimal value entered by the user, as a string.
-
-Example response:
-
-```json
-{
-  "SaleToPOIResponse": {
-    "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
-      "MessageCategory": "Input",
-      "MessageType": "Response",
-      "ServiceID": "SVC-01006",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
-    },
-    "InputResponse": {
-      "InputResult": {
-        "Device": "CustomerInput",
-        "InfoQualify": "Input",
-        "Response": {
-          "Result": "Success"
-        },
-        "Input": {
-          "InputCommand": "DecimalString",
-          "TextInput": "5.00"
-        }
-      }
-    }
-  }
-}
-```
 
 ### Failed input
 

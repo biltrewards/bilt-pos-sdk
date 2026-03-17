@@ -1,6 +1,24 @@
 # Payment Error Conditions
 
-When a payment fails, the `PaymentResponse.Response` includes an `ErrorCondition` that classifies the failure and an `AdditionalResponse` with a human-readable message. This document describes each error condition, its causes, and recommended actions.
+When a payment fails, the `PaymentResponse.Response` includes an `ErrorCondition` that classifies the failure and an `AdditionalResponse` with details. This document describes each error condition, its causes, and recommended actions.
+
+## AdditionalResponse format
+
+The `AdditionalResponse` field contains structured key-value pairs separated by `&`, similar to URL query parameters:
+
+```
+authorizationResult=DECLINED&failureReason=Insufficient funds
+```
+
+Common fields:
+
+| Field | Description |
+|-------|-------------|
+| `authorizationResult` | The raw authorization result from the payment processor (e.g., `AUTHORIZED`, `DECLINED`, `CANCELLED`, `CARD_NOT_READABLE`) |
+| `failureReason` | Human-readable description of why the transaction failed |
+| `additionalAcquirerData` | Extra data from the acquirer, if available |
+
+Parse these fields to get detailed information about the transaction outcome beyond the `ErrorCondition`.
 
 ## Error Condition Reference
 

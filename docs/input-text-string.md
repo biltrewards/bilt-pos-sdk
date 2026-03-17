@@ -43,11 +43,12 @@ Send a Terminal API input request with `InputCommand` set to `TextString`. The d
 - **`Device`** — `CustomerInput`
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `TextString`
-- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation.
-- **`MinLength`** — *(optional)* Minimum number of characters the user must enter.
+- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
+- **`MinLength`** — *(optional)* Minimum number of characters the user must enter. The confirm button is disabled until the minimum is met.
 - **`MaxLength`** — *(optional)* Maximum number of characters the user can enter.
-- **`DefaultInputString`** — *(optional)* Pre-filled text in the input field.
+- **`DefaultInputString`** — *(optional)* Placeholder text displayed until the user starts typing. The user must type to enable the confirm button.
 - **`MaskCharactersFlag`** — *(optional)* When `true`, entered characters are masked with `•`. Default `false`.
+- **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
 
 `DisplayOutput` fields:
 
@@ -56,34 +57,39 @@ Send a Terminal API input request with `InputCommand` set to `TextString`. The d
 - **`OutputContent.OutputFormat`** — `XHTML`
 - **`OutputContent.OutputXHTML`** — Base64-encoded XML payload.
 
-### Example request
+---
+
+## Examples
+
+### Basic name input
+
+Collect the user's name:
+
+**Request:**
 
 ```json
 {
   "SaleToPOIRequest": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Request",
-      "ServiceID": "SVC-01004",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputRequest": {
       "DisplayOutput": {
         "Device": "CustomerDisplay",
         "InfoQualify": "Display",
         "OutputContent": {
-          "OutputFormat": "XHTML",
-          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiIHZlcnNpb249IjEuMCI+CiAgPGRpc3BsYXk+CiAgICA8dGl0bGU+RW50ZXIgeW91ciBlbWFpbCBhZGRyZXNzPC90aXRsZT4KICA8L2Rpc3BsYXk+CjwvaW5wdXRQYXlsb2FkPg=="
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter your name"}]
         }
       },
       "InputData": {
         "Device": "CustomerInput",
         "InfoQualify": "Input",
         "InputCommand": "TextString",
-        "MaxInputTime": 60,
         "MaxLength": 50
       }
     }
@@ -91,25 +97,17 @@ Send a Terminal API input request with `InputCommand` set to `TextString`. The d
 }
 ```
 
----
-
-## Response
-
-The response includes **`Input.TextInput`** — the text entered by the user.
-
-Example response:
+**Response:**
 
 ```json
 {
   "SaleToPOIResponse": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Response",
-      "ServiceID": "SVC-01004",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputResponse": {
       "InputResult": {
@@ -120,13 +118,168 @@ Example response:
         },
         "Input": {
           "InputCommand": "TextString",
-          "TextInput": "shopper@example.com"
+          "TextInput": "John Smith"
         }
       }
     }
   }
 }
 ```
+
+---
+
+### Pre-filled name
+
+Edit a name with a default value:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Edit your name"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "TextString",
+        "MaxLength": 50,
+        "DefaultInputString": "John Doe"
+      }
+    }
+  }
+}
+```
+
+The terminal shows "John Doe" as a placeholder. The user must type to enable the confirm button — the placeholder value cannot be submitted directly.
+
+---
+
+### Text input with timeout
+
+Collect input with a 60-second countdown:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter your name"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "TextString",
+        "MaxLength": 50,
+        "MaxInputTime": 60
+      }
+    }
+  }
+}
+```
+
+A countdown progress bar is displayed at the top of the screen.
+
+**Response (timeout):**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Failure",
+          "ErrorCondition": "Cancel"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Mandatory input (no cancel)
+
+Collect name without allowing cancel:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Enter your name"}]
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "TextString",
+        "MaxLength": 50,
+        "DisableCancelFlag": true
+      }
+    }
+  }
+}
+```
+
+The cancel/close button is hidden.
+
+---
+
+## Response
+
+The response includes **`Input.TextInput`** — the text entered by the user.
 
 ### Failed input
 

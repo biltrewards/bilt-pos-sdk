@@ -2729,7 +2729,10 @@ components:
             the input. Default false.
         MaxInputTime:
           type: integer
-          description: Maximum time in seconds to wait for the user to complete the input before automatic cancellation.
+          description: >-
+            Maximum time in seconds to wait for the user to complete the input before automatic cancellation.
+            A visual countdown progress bar is displayed while active. When the timeout expires, returns
+            ErrorCondition: Cancel.
         ImmediateResponseFlag:
           type: boolean
           description: 'For GetAnyKey: when true, response is sent immediately without waiting for user confirmation. Default true.'
@@ -2746,10 +2749,15 @@ components:
             MaxLength.
         WaitUserValidationFlag:
           type: boolean
-          description: When true, waits for user confirmation even after reaching MaxLength, allowing corrections. Default false.
+          description: >-
+            When false (default) and MaxLength is set, input auto-submits once the user reaches MaxLength.
+            When true, requires explicit confirmation even after reaching MaxLength, allowing corrections.
         DefaultInputString:
           type: string
-          description: 'Default string pre-filled in the input field. For GetConfirmation: ''Y'' or ''N''.'
+          description: >-
+            Default value displayed as a placeholder until the user starts typing. The first keystroke clears
+            the placeholder and starts fresh. If confirmed without typing, the placeholder value is submitted.
+            For GetConfirmation: 'Y' or 'N' to pre-select yes or no.
         StringMask:
           type: string
           description: >-

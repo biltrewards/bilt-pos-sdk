@@ -4,6 +4,8 @@ How to handle the different timeout scenarios that can occur during payment proc
 
 During a payment flow, three types of timeouts can occur: a processing timeout while waiting for the acquirer, a user action timeout while waiting for the shopper, and a request timeout on the POS side. Each produces a different response and requires a different recovery strategy.
 
+For input requests, a fourth type of timeout exists: the **input timeout**, which is configurable via the `MaxInputTime` field. See [Input timeout](#input-timeout) for details.
+
 For the full list of error conditions, see [Refusal reasons](./refusal-reasons.md).
 
 ---
@@ -14,6 +16,7 @@ For the full list of error conditions, see [Refusal reasons](./refusal-reasons.m
 |---|---|---|---|---|
 | [Processing timeout](#processing-timeout) | 30 seconds | No | `UnreachableHost` | Terminal waiting for acquirer |
 | [User action timeout](#user-action-timeout) | 30 seconds | No | `Cancel` | Terminal waiting for shopper |
+| [Input timeout](#input-timeout) | POS-defined | Yes (`MaxInputTime`) | `Cancel` | Terminal waiting for input |
 | [Request timeout](#request-timeout) | 120 seconds | Yes | None (no response) | POS waiting for terminal |
 
 ---
@@ -105,6 +108,49 @@ The transaction was not processed — no funds were captured. The POS can safely
 
 ---
 
+## Input timeout
+
+The POS sends an `InputRequest` with a `MaxInputTime` value, and the user does not complete the input within the specified time.
+
+### When it happens
+
+When sending an `InputRequest`, the POS can specify `InputData.MaxInputTime` (in seconds). If the user does not complete the input within this time, the terminal automatically cancels the request.
+
+**Timeout duration:** Specified by the POS via `MaxInputTime`. Values of 0 or negative are ignored.
+
+### Visual feedback
+
+While the timeout is active, the terminal displays a **countdown progress bar** at the top of the input screen. The progress bar animates from full to empty over the timeout duration, giving the user a visual indication of remaining time.
+
+When the timeout expires:
+
+1. The input controls are disabled
+2. A **"Please wait…"** overlay with a spinner is displayed
+3. The terminal sends an `InputResponse` with `ErrorCondition: Cancel`
+
+### Response
+
+```json
+{
+  "InputResponse": {
+    "InputResult": {
+      "Response": {
+        "Result": "Failure",
+        "ErrorCondition": "Cancel"
+      }
+    }
+  }
+}
+```
+
+### Recommended action
+
+The input was not completed — no data was captured. The POS can safely retry the input request if needed. Note that the `Cancel` error condition is the same whether the user pressed Cancel or the timeout expired; if you need to distinguish, track elapsed time on the POS side.
+
+> **Note:** If the user submits input at the exact moment the timeout fires, the terminal guarantees only one response is sent — either the user's input (success) or the timeout (cancel), but never both.
+
+---
+
 ## Request timeout
 
 The POS application sends a payment request to the terminal but does not receive a response within its own timeout period.
@@ -151,12 +197,18 @@ POS                    Terminal                  Acquirer
  |                       |                        |
  |                       |  User action timeout   |
  |                       |  (shopper inaction)    |
+ |                       |                        |
+ |--- InputRequest ----->|                        |
+ |  (MaxInputTime=30)    |                        |
+ |                       |  Input timeout         |
+ |                       |  (MaxInputTime expired)|
 ```
 
-| Timeout | Duration | Payment processed? | Safe to retry? | ErrorCondition |
+| Timeout | Duration | Payment/input processed? | Safe to retry? | ErrorCondition |
 |---|---|---|---|---|
 | Processing timeout | 30s | Unknown | No — verify first | `UnreachableHost` |
 | User action timeout | 30s | No | Yes | `Cancel` |
+| Input timeout | POS-defined | No | Yes | `Cancel` |
 | Request timeout | 120s (configurable) | Unknown | No — verify first | None (no response) |
 
 ---

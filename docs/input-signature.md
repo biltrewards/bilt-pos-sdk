@@ -54,7 +54,8 @@ Send a Terminal API input request with `InputCommand` set to `GetConfirmation`. 
 - **`Device`** — `CustomerInput`
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `GetConfirmation`
-- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation.
+- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
+- **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
 
 `DisplayOutput` fields:
 
@@ -63,19 +64,42 @@ Send a Terminal API input request with `InputCommand` set to `GetConfirmation`. 
 - **`OutputContent.OutputFormat`** — `XHTML`
 - **`OutputContent.OutputXHTML`** — Base64-encoded XML payload.
 
-### Example request
+---
+
+## Examples
+
+### Basic signature capture
+
+Capture a signature with custom prompt:
+
+**XML Payload:**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<inputPayload version="1.0">
+  <display>
+    <title>Please sign below</title>
+    <text>I agree to the terms and conditions</text>
+  </display>
+  <signature>
+    <confirmButton>Accept</confirmButton>
+    <cancelButton>Cancel</cancelButton>
+    <clearButton>Clear</clearButton>
+  </signature>
+</inputPayload>
+```
+
+**Request:**
 
 ```json
 {
   "SaleToPOIRequest": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Request",
-      "ServiceID": "SVC-01010",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputRequest": {
       "DisplayOutput": {
@@ -83,42 +107,30 @@ Send a Terminal API input request with `InputCommand` set to `GetConfirmation`. 
         "InfoQualify": "Display",
         "OutputContent": {
           "OutputFormat": "XHTML",
-          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiIHZlcnNpb249IjEuMCI+CiAgPGRpc3BsYXk+CiAgICA8dGl0bGU+U2lnbmF0dXJlIHJlcXVpcmVkPC90aXRsZT4KICAgIDx0ZXh0PlBsZWFzZSBzaWduIGJlbG93IHRvIGF1dGhvcmlzZSB5b3VyIHBheW1lbnQgb2YgJDk0LjUwPC90ZXh0PgogIDwvZGlzcGxheT4KICA8c2lnbmF0dXJlPgogICAgPGNvbmZpcm1CdXR0b24+SSBhZ3JlZTwvY29uZmlybUJ1dHRvbj4KICAgIDxjYW5jZWxCdXR0b24+Q2FuY2VsPC9jYW5jZWxCdXR0b24+CiAgPC9zaWduYXR1cmU+CjwvaW5wdXRQYXlsb2FkPg=="
+          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB2ZXJzaW9uPSIxLjAiPgogIDxkaXNwbGF5PgogICAgPHRpdGxlPlBsZWFzZSBzaWduIGJlbG93PC90aXRsZT4KICAgIDx0ZXh0PkkgYWdyZWUgdG8gdGhlIHRlcm1zIGFuZCBjb25kaXRpb25zPC90ZXh0PgogIDwvZGlzcGxheT4KICA8c2lnbmF0dXJlPgogICAgPGNvbmZpcm1CdXR0b24+QWNjZXB0PC9jb25maXJtQnV0dG9uPgogICAgPGNhbmNlbEJ1dHRvbj5DYW5jZWw8L2NhbmNlbEJ1dHRvbj4KICAgIDxjbGVhckJ1dHRvbj5DbGVhcjwvY2xlYXJCdXR0b24+CiAgPC9zaWduYXR1cmU+CjwvaW5wdXRQYXlsb2FkPg=="
         }
       },
       "InputData": {
         "Device": "CustomerInput",
         "InfoQualify": "Input",
-        "InputCommand": "GetConfirmation",
-        "MaxInputTime": 60
+        "InputCommand": "GetConfirmation"
       }
     }
   }
 }
 ```
 
----
-
-## Response
-
-A successful response includes:
-
-- **`Input.ConfirmedFlag`** — `true` if the user signed and confirmed, `false` if they cancelled.
-- **`Response.AdditionalResponse`** — The captured signature as a Base64-encoded PNG image. Only present when `ConfirmedFlag` is `true`.
-
-Example response — user signed and confirmed:
+**Response (signed):**
 
 ```json
 {
   "SaleToPOIResponse": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Response",
-      "ServiceID": "SVC-01010",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputResponse": {
       "InputResult": {
@@ -138,19 +150,19 @@ Example response — user signed and confirmed:
 }
 ```
 
-Example response — user cancelled:
+The signature image is returned as a Base64-encoded PNG in `AdditionalResponse`.
+
+**Response (cancelled):**
 
 ```json
 {
   "SaleToPOIResponse": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Response",
-      "ServiceID": "SVC-01010",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputResponse": {
       "InputResult": {
@@ -168,6 +180,121 @@ Example response — user cancelled:
   }
 }
 ```
+
+---
+
+### Signature with timeout
+
+Capture signature with 60-second countdown:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "XHTML",
+          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB2ZXJzaW9uPSIxLjAiPgogIDxkaXNwbGF5PgogICAgPHRpdGxlPlBsZWFzZSBzaWduIGJlbG93PC90aXRsZT4KICAgIDx0ZXh0PkkgYWdyZWUgdG8gdGhlIHRlcm1zIGFuZCBjb25kaXRpb25zPC90ZXh0PgogIDwvZGlzcGxheT4KICA8c2lnbmF0dXJlPgogICAgPGNvbmZpcm1CdXR0b24+QWNjZXB0PC9jb25maXJtQnV0dG9uPgogICAgPGNhbmNlbEJ1dHRvbj5DYW5jZWw8L2NhbmNlbEJ1dHRvbj4KICAgIDxjbGVhckJ1dHRvbj5DbGVhcjwvY2xlYXJCdXR0b24+CiAgPC9zaWduYXR1cmU+CjwvaW5wdXRQYXlsb2FkPg=="
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetConfirmation",
+        "MaxInputTime": 60
+      }
+    }
+  }
+}
+```
+
+A countdown progress bar is displayed. If timeout expires:
+
+**Response (timeout):**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Failure",
+          "ErrorCondition": "Cancel"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Mandatory signature (no cancel)
+
+Capture signature without allowing cancel:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "XHTML",
+          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB2ZXJzaW9uPSIxLjAiPgogIDxkaXNwbGF5PgogICAgPHRpdGxlPlBsZWFzZSBzaWduIGJlbG93PC90aXRsZT4KICAgIDx0ZXh0PkkgYWdyZWUgdG8gdGhlIHRlcm1zIGFuZCBjb25kaXRpb25zPC90ZXh0PgogIDwvZGlzcGxheT4KICA8c2lnbmF0dXJlPgogICAgPGNvbmZpcm1CdXR0b24+QWNjZXB0PC9jb25maXJtQnV0dG9uPgogICAgPGNhbmNlbEJ1dHRvbj5DYW5jZWw8L2NhbmNlbEJ1dHRvbj4KICAgIDxjbGVhckJ1dHRvbj5DbGVhcjwvY2xlYXJCdXR0b24+CiAgPC9zaWduYXR1cmU+CjwvaW5wdXRQYXlsb2FkPg=="
+        }
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetConfirmation",
+        "DisableCancelFlag": true
+      }
+    }
+  }
+}
+```
+
+The cancel button is hidden. User must sign and accept to proceed.
+
+---
+
+## Response
+
+A successful response includes:
+
+- **`Input.ConfirmedFlag`** — `true` if the user signed and confirmed, `false` if they cancelled.
+- **`Response.AdditionalResponse`** — The captured signature as a Base64-encoded PNG image. Only present when `ConfirmedFlag` is `true`.
 
 ### Failed input
 

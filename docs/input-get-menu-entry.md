@@ -43,10 +43,10 @@ Send a Terminal API input request with `InputCommand` set to `GetMenuEntry`. The
 - **`Device`** — `CustomerInput`
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `GetMenuEntry`
-- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation.
-- **`MinLength`** — *(optional)* Minimum number of entries the user must select. Default `1`.
-- **`MaxLength`** — *(optional)* Maximum number of entries the user can select. Set to `1` for single selection, or higher for multiple selection.
-- **`MenuBackFlag`** — *(optional)* When `true`, enables Back (returns `-1`) and Home (returns `0`) navigation keys. Default `false`.
+- **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
+- **`MinLength`** — *(optional)* Minimum number of entries the user must select. Default `0`.
+- **`MaxLength`** — *(optional)* Maximum number of entries the user can select. Set to `1` for single selection (default), or higher for multiple selection.
+- **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
 
 `DisplayOutput` fields:
 
@@ -57,76 +57,64 @@ Send a Terminal API input request with `InputCommand` set to `GetMenuEntry`. The
 - **`MenuEntry`** — Array of menu entries. Each entry has:
   - **`OutputFormat`** — `Text`.
   - **`OutputText`** — Array with a `Text` field containing the label for this entry.
-  - **`MenuEntryTag`** — *(optional)* `Selectable` (default), `NonSelectable` (header/separator), `SubMenu`, or `NonSelectableSubMenu`.
-  - **`DefaultSelectedFlag`** — *(optional)* When `true`, this entry is pre-selected. Default `false`.
 
-### Single selection
+---
 
-Example request — select a tip amount:
+## Examples
+
+### Single selection — payment method
+
+Select a payment method:
+
+**Request:**
 
 ```json
 {
   "SaleToPOIRequest": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Request",
-      "ServiceID": "SVC-01008",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputRequest": {
       "DisplayOutput": {
         "Device": "CustomerDisplay",
         "InfoQualify": "Display",
         "OutputContent": {
-          "OutputFormat": "XHTML",
-          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiIHZlcnNpb249IjEuMCI+CiAgPGRpc3BsYXk+CiAgICA8dGl0bGU+U2VsZWN0IGEgdGlwIGFtb3VudDwvdGl0bGU+CiAgPC9kaXNwbGF5Pgo8L2lucHV0UGF5bG9hZD4="
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Select payment method"}]
         },
         "MenuEntry": [
-          {
-            "OutputFormat": "Text",
-            "OutputText": [{ "Text": "15% — $14.18" }]
-          },
-          {
-            "OutputFormat": "Text",
-            "OutputText": [{ "Text": "20% — $18.90" }]
-          },
-          {
-            "OutputFormat": "Text",
-            "OutputText": [{ "Text": "25% — $23.63" }]
-          },
-          {
-            "OutputFormat": "Text",
-            "OutputText": [{ "Text": "No tip" }]
-          }
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Credit Card"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Debit Card"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Cash"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Gift Card"}]}
         ]
       },
       "InputData": {
         "Device": "CustomerInput",
         "InfoQualify": "Input",
         "InputCommand": "GetMenuEntry",
-        "MaxInputTime": 30
+        "MaxLength": 1
       }
     }
   }
 }
 ```
 
-Example response — user selected the second option:
+**Response (user selected Debit Card):**
 
 ```json
 {
   "SaleToPOIResponse": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Response",
-      "ServiceID": "SVC-01008",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputResponse": {
       "InputResult": {
@@ -145,88 +133,180 @@ Example response — user selected the second option:
 }
 ```
 
-### Multiple selection
+---
 
-To allow multiple selections, set `MaxLength` to the maximum number of entries the user can select. The response `MenuEntryNumber` array will contain all selected indexes.
+### Single selection with timeout
 
-Example input payload:
+Select payment method with 30-second countdown:
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<inputPayload xmlns="urn:bilt:input:v1" version="1.0">
-  <display>
-    <title>Select toppings</title>
-  </display>
-</inputPayload>
-```
-
-Example request — select toppings:
+**Request:**
 
 ```json
 {
   "SaleToPOIRequest": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Request",
-      "ServiceID": "SVC-01009",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputRequest": {
       "DisplayOutput": {
         "Device": "CustomerDisplay",
         "InfoQualify": "Display",
         "OutputContent": {
-          "OutputFormat": "XHTML",
-          "OutputXHTML": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGlucHV0UGF5bG9hZCB4bWxucz0idXJuOmJpbHQ6aW5wdXQ6djEiIHZlcnNpb249IjEuMCI+CiAgPGRpc3BsYXk+CiAgICA8dGl0bGU+U2VsZWN0IHRvcHBpbmdzPC90aXRsZT4KICA8L2Rpc3BsYXk+CjwvaW5wdXRQYXlsb2FkPg=="
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Select payment method"}]
         },
         "MenuEntry": [
-          {
-            "OutputFormat": "Text",
-            "OutputText": [{ "Text": "Extra cheese" }]
-          },
-          {
-            "OutputFormat": "Text",
-            "OutputText": [{ "Text": "Pepperoni" }]
-          },
-          {
-            "OutputFormat": "Text",
-            "OutputText": [{ "Text": "Mushrooms" }]
-          },
-          {
-            "OutputFormat": "Text",
-            "OutputText": [{ "Text": "Olives" }]
-          }
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Credit Card"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Debit Card"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Cash"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Gift Card"}]}
         ]
       },
       "InputData": {
         "Device": "CustomerInput",
         "InfoQualify": "Input",
         "InputCommand": "GetMenuEntry",
-        "MaxInputTime": 30,
-        "MinLength": 1,
-        "MaxLength": 4
+        "MaxLength": 1,
+        "MaxInputTime": 30
       }
     }
   }
 }
 ```
 
-Example response — user selected multiple options:
+**Response (timeout):**
 
 ```json
 {
   "SaleToPOIResponse": {
     "MessageHeader": {
-      "ProtocolVersion": "3.0",
-      "MessageClass": "Device",
       "MessageCategory": "Input",
+      "MessageClass": "Device",
       "MessageType": "Response",
-      "ServiceID": "SVC-01009",
-      "SaleID": "BiltPOS-Lane3",
-      "POIID": "VictaLane-275839164"
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputResponse": {
+      "InputResult": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "Response": {
+          "Result": "Failure",
+          "ErrorCondition": "Cancel"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Single selection (no cancel)
+
+Select payment method without allowing cancel:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Select payment method"}]
+        },
+        "MenuEntry": [
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Credit Card"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Debit Card"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Cash"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Gift Card"}]}
+        ]
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetMenuEntry",
+        "MaxLength": 1,
+        "DisableCancelFlag": true
+      }
+    }
+  }
+}
+```
+
+The cancel/close button is hidden. User must select an option.
+
+---
+
+### Multiple selection — receipt options
+
+Select multiple receipt options:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Select receipt options"}]
+        },
+        "MenuEntry": [
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Email receipt"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Print receipt"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "SMS receipt"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "No receipt"}]}
+        ]
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetMenuEntry",
+        "MinLength": 1,
+        "MaxLength": 3
+      }
+    }
+  }
+}
+```
+
+**Response (user selected Email and Print):**
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Response",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
     },
     "InputResponse": {
       "InputResult": {
@@ -237,8 +317,54 @@ Example response — user selected multiple options:
         },
         "Input": {
           "InputCommand": "GetMenuEntry",
-          "MenuEntryNumber": [1, 3]
+          "MenuEntryNumber": [1, 2]
         }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Multiple selection (no cancel)
+
+Select receipt options without allowing cancel:
+
+**Request:**
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "MessageCategory": "Input",
+      "MessageClass": "Device",
+      "MessageType": "Request",
+      "POIID": "POI-1",
+      "SaleID": "SALE-1"
+    },
+    "InputRequest": {
+      "DisplayOutput": {
+        "Device": "CustomerDisplay",
+        "InfoQualify": "Display",
+        "OutputContent": {
+          "OutputFormat": "Text",
+          "OutputText": [{"Text": "Select receipt options"}]
+        },
+        "MenuEntry": [
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Email receipt"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "Print receipt"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "SMS receipt"}]},
+          {"OutputFormat": "Text", "OutputText": [{"Text": "No receipt"}]}
+        ]
+      },
+      "InputData": {
+        "Device": "CustomerInput",
+        "InfoQualify": "Input",
+        "InputCommand": "GetMenuEntry",
+        "MinLength": 1,
+        "MaxLength": 3,
+        "DisableCancelFlag": true
       }
     }
   }
@@ -249,7 +375,7 @@ Example response — user selected multiple options:
 
 ## Response
 
-The response includes **`Input.MenuEntryNumber`** — an array of 1-based indexes of the selected entries. If `MenuBackFlag` is enabled, `-1` means Back and `0` means Home.
+The response includes **`Input.MenuEntryNumber`** — an array of 1-based indexes of the selected entries.
 
 ### Failed input
 
