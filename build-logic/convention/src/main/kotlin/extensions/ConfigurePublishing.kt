@@ -1,6 +1,7 @@
 import com.vanniktech.maven.publish.MavenPublishBaseExtension
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.configure
+import java.time.Duration
 
 fun Project.configurePublishing() {
     pluginManager.apply("com.vanniktech.maven.publish")
@@ -9,7 +10,7 @@ fun Project.configurePublishing() {
     version = findProperty("VERSION") as String
 
     extensions.configure<MavenPublishBaseExtension> {
-        publishToMavenCentral()
+        publishToMavenCentral(publishingServiceTimeout = Duration.ofMinutes(30))
         signAllPublications()
 
         coordinates(project.group.toString(), "pos-lib-${project.name}", project.version.toString())
