@@ -80,6 +80,24 @@ For commands like `TextString`, `DigitString`, `DecimalString`, and `GetMenuEntr
 
 ---
 
+## InputData field reference
+
+This table shows all supported `InputData` fields and which input commands they apply to.
+
+| Field | DigitString | TextString | DecimalString | GetConfirmation | GetMenuEntry |
+|-------|:-----------:|:----------:|:-------------:|:---------------:|:------------:|
+| `MaxInputTime` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `DisableCancelFlag` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `MinLength` | ✓ | ✓ | ✓ | — | ✓ |
+| `MaxLength` | ✓ | ✓ | ✓ | — | ✓ |
+| `DefaultInputString` | ✓ | ✓ | ✓ | — | — |
+| `MaskCharactersFlag` | ✓ | ✓ | ✓ | — | — |
+| `StringMask` | ✓ | — | — | — | — |
+
+> **NEXO compatibility note:** This terminal supports a subset of the NEXO `InputData` fields. Fields not listed above (such as `WaitUserValidationFlag`, `DisableValidFlag`, `FromRightToLeftFlag`, `MaxDecimalLength`, `MenuBackFlag`, `MenuEntryTag`, and `DefaultSelectedFlag`) are ignored.
+
+---
+
 ## Common response fields
 
 The result is returned in an `InputResponse` body. The main result is in `InputResponse.InputResult.Response.Result`.
@@ -119,9 +137,9 @@ The POS cannot distinguish between a user-initiated cancel and a timeout via the
 
 ## Examples
 
-### Example 1: ZIP code with auto-submit
+### Example 1: ZIP code entry
 
-Collect a 5-digit ZIP code that auto-submits when complete:
+Collect a 5-digit ZIP code:
 
 **Request:**
 
@@ -183,8 +201,6 @@ Collect a 5-digit ZIP code that auto-submits when complete:
   }
 }
 ```
-
-The user must press confirm to submit the input. Auto-submission is not supported.
 
 ---
 
