@@ -48,7 +48,7 @@ import java.util.concurrent.TimeUnit;
  * {@link NexoTerminalAPI} containing a {@link SaleToPOIRequest} and receives
  * a {@link NexoTerminalAPI} containing a {@link SaleToPOIResponse}.</p>
  *
- * <h3>Unencrypted (development/testing)</h3>
+ * <h2>Unencrypted (development/testing)</h2>
  * <pre>{@code
  * BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
  *     .endpoint("https://192.168.1.100:8443/nexo")
@@ -62,7 +62,7 @@ import java.util.concurrent.TimeUnit;
  * SaleToPOIResponse poiResponse = response.getSaleToPOIResponse();
  * }</pre>
  *
- * <h3>Encrypted (production)</h3>
+ * <h2>Encrypted (production)</h2>
  * <pre>{@code
  * SecurityKey key = SecurityKey.builder()
  *     .passphrase("sharedSecret")
@@ -167,11 +167,16 @@ public final class BiltNexoTerminalClient {
                 }
             }
 
+            if (responseJson.isEmpty()) {
+                return null;
+            }
+
+            NexoTerminalAPI responseApi;
             try {
                 if (encryptor != null) {
-                    return decryptResponse(responseJson);
+                    responseApi = decryptResponse(responseJson);
                 } else {
-                    return objectMapper.readValue(responseJson, NexoTerminalAPI.class);
+                    responseApi = objectMapper.readValue(responseJson, NexoTerminalAPI.class);
                 }
             } catch (EncryptionException e) {
                 throw e;
@@ -179,6 +184,8 @@ public final class BiltNexoTerminalClient {
                 throw new BiltNexoClientException(
                         "Failed to parse terminal response: " + responseJson, e);
             }
+
+            return responseApi;
         } catch (BiltNexoClientException e) {
             throw e;
         } catch (EncryptionException e) {

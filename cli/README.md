@@ -18,7 +18,7 @@ Command-line tool for sending Nexo Sale to POI requests to a Bilt payment termin
 
 | Option | Description | Default |
 |---|---|---|
-| `--type <payment\|diagnosis\|display-standby\|display-receipt\|confirmation\|signature\|abort>` | Request type | `payment` |
+| `--type <payment\|refund\|diagnosis\|display-standby\|display-receipt\|confirmation\|signature\|reversal\|transaction-status\|abort>` | Request type | `payment` |
 | `--no-encryption` | Disable message encryption | encryption enabled |
 | `--passphrase <value>` | Encryption passphrase | — |
 | `--key-id <value>` | Encryption key identifier | — |
@@ -26,6 +26,10 @@ Command-line tool for sending Nexo Sale to POI requests to a Bilt payment termin
 | `--amount <number>` | Payment amount | `2.50` |
 | `--currency <code>` | Currency code | `USD` |
 | `--prompt <text>` | Prompt text for confirmation/signature | see below |
+| `--original-service-id <value>` | POI transaction ID of the original payment to reverse | — |
+| `--original-timestamp <value>` | Timestamp of the original POI transaction (ISO 8601) | — |
+| `--reversal-reason <value>` | Reversal reason: `CustCancel`, `MerchantCancel`, `Malfunction`, `Unable2Compl` | `MerchantCancel` |
+| `--status-service-id <value>` | ServiceID of the transaction to query status for | — |
 | `--abort-service-id <value>` | ServiceID of the request to abort | — |
 | `-h, --help` | Show help | — |
 
@@ -89,6 +93,36 @@ Command-line tool for sending Nexo Sale to POI requests to a Bilt payment termin
 
 ```bash
 ./gradlew :cli:run --args="192.168.1.100 --no-encryption --type signature --prompt 'Sign to authorize \$94.50'"
+```
+
+**Referenced refund (using original transaction ID):**
+
+```bash
+./gradlew :cli:run --args="192.168.1.100 --no-encryption --type refund --original-service-id TXN-12345 --original-timestamp 2026-03-06T11:00:00-05:00"
+```
+
+**Unreferenced refund (card-present, specify amount):**
+
+```bash
+./gradlew :cli:run --args="192.168.1.100 --no-encryption --type refund --amount 10.00"
+```
+
+**Reverse a completed payment:**
+
+```bash
+./gradlew :cli:run --args="192.168.1.100 --no-encryption --type reversal --original-service-id TXN-12345 --original-timestamp 2026-03-06T11:00:00-05:00"
+```
+
+**Reverse with a specific reason:**
+
+```bash
+./gradlew :cli:run --args="192.168.1.100 --no-encryption --type reversal --original-service-id TXN-12345 --original-timestamp 2026-03-06T11:00:00-05:00 --reversal-reason CustCancel"
+```
+
+**Query the status of a previous transaction:**
+
+```bash
+./gradlew :cli:run --args="192.168.1.100 --no-encryption --type transaction-status --status-service-id SVC-01002"
 ```
 
 **Abort an in-progress request:**

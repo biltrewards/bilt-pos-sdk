@@ -26,6 +26,11 @@ import com.bilt.pos.nexo.model.MessageHeader;
 import com.bilt.pos.nexo.model.MessageReference;
 import com.bilt.pos.nexo.model.MessageTypeType;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
+import com.bilt.pos.nexo.model.OriginalPOITransaction;
+import com.bilt.pos.nexo.model.ReversalReasonEnum;
+import com.bilt.pos.nexo.model.ReversalRequest;
+import com.bilt.pos.nexo.model.PaymentData;
+import com.bilt.pos.nexo.model.PaymentTypeEnum;
 import com.bilt.pos.nexo.model.OutputContent;
 import com.bilt.pos.nexo.model.OutputFormatEnum;
 import com.bilt.pos.nexo.model.PaymentRequest;
@@ -34,6 +39,7 @@ import com.bilt.pos.nexo.model.SaleData;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
+import com.bilt.pos.nexo.model.TransactionStatusRequest;
 import com.bilt.pos.nexo.security.SecurityKey;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -66,6 +72,10 @@ public final class Main {
         String keyId = null;
         int keyVersion = 0;
         String abortServiceID = null;
+        String originalServiceID = null;
+        String originalTimestamp = null;
+        String reversalReason = "MerchantCancel";
+        String statusServiceID = null;
         String prompt = null;
         double amount = 2.50;
         String currency = "USD";
@@ -96,6 +106,18 @@ public final class Main {
                 case "--abort-service-id":
                     abortServiceID = requireArg(args, ++i, "--abort-service-id");
                     break;
+                case "--original-service-id":
+                    originalServiceID = requireArg(args, ++i, "--original-service-id");
+                    break;
+                case "--original-timestamp":
+                    originalTimestamp = requireArg(args, ++i, "--original-timestamp");
+                    break;
+                case "--reversal-reason":
+                    reversalReason = requireArg(args, ++i, "--reversal-reason");
+                    break;
+                case "--status-service-id":
+                    statusServiceID = requireArg(args, ++i, "--status-service-id");
+                    break;
                 case "--prompt":
                     prompt = requireArg(args, ++i, "--prompt");
                     break;
@@ -114,7 +136,8 @@ public final class Main {
         }
 
         try {
-            run(ip, type, encryption, passphrase, keyId, keyVersion, amount, currency, abortServiceID, prompt);
+            run(ip, type, encryption, passphrase, keyId, keyVersion, amount, currency, abortServiceID,
+                    originalServiceID, originalTimestamp, reversalReason, statusServiceID, prompt);
         } catch (Exception e) {
             LOG.log(Level.SEVERE, "Request failed", e);
             System.exit(1);
@@ -124,6 +147,8 @@ public final class Main {
     private static void run(String ip, String type, boolean encryption,
                             String passphrase, String keyId, int keyVersion,
                             double amount, String currency, String abortServiceID,
+                            String originalServiceID, String originalTimestamp,
+                            String reversalReason, String statusServiceID,
                             String prompt) throws Exception {
 
         String endpoint = "https://" + ip + ":8443/nexo";
@@ -151,6 +176,16 @@ public final class Main {
             case "payment":
                 request = buildPaymentRequest(serviceID, amount, currency);
                 break;
+            case "refund":
+                if (originalServiceID != null) {
+                    if (originalTimestamp == null) {
+                        throw new IllegalArgumentException("--original-timestamp is required for referenced refund requests");
+                    }
+                    request = buildReferencedRefundRequest(serviceID, originalServiceID, originalTimestamp);
+                } else {
+                    request = buildUnreferencedRefundRequest(serviceID, amount, currency);
+                }
+                break;
             case "diagnosis":
                 request = buildDiagnosisRequest(serviceID);
                 break;
@@ -168,6 +203,18 @@ public final class Main {
                 request = buildSignatureRequest(serviceID,
                         prompt != null ? prompt : "Signature required");
                 break;
+            case "reversal":
+                if (originalServiceID == null) {
+                    throw new IllegalArgumentException("--original-service-id is required for reversal requests");
+                }
+                if (originalTimestamp == null) {
+                    throw new IllegalArgumentException("--original-timestamp is required for reversal requests");
+                }
+                request = buildReversalRequest(serviceID, originalServiceID, originalTimestamp, reversalReason);
+                break;
+            case "transaction-status":
+                request = buildTransactionStatusRequest(serviceID, statusServiceID);
+                break;
             case "abort":
                 if (abortServiceID == null) {
                     throw new IllegalArgumentException("--abort-service-id is required for abort requests");
@@ -176,7 +223,7 @@ public final class Main {
                 break;
             default:
                 throw new IllegalArgumentException("Unknown request type: " + type
-                        + ". Supported: payment, diagnosis, display-standby, display-receipt, confirmation, signature, abort");
+                        + ". Supported: payment, refund, diagnosis, display-standby, display-receipt, confirmation, signature, reversal, transaction-status, abort");
         }
 
         ObjectMapper mapper = new ObjectMapper()
@@ -190,6 +237,16 @@ public final class Main {
         LOG.info("Request:\n" + mapper.writeValueAsString(request));
 
         NexoTerminalAPI apiResponse = client.request(apiRequest);
+
+        if (apiResponse == null) {
+            if ("abort".equals(type)) {
+                LOG.info("Abort request accepted (no response body)");
+                return;
+            }
+            LOG.severe("Response did not contain a body");
+            System.exit(1);
+            return;
+        }
 
         SaleToPOIResponse response = apiResponse.getSaleToPOIResponse();
         if (response == null) {
@@ -217,6 +274,71 @@ public final class Main {
                         .poiid("bilt-terminal")
                         .build())
                 .paymentRequest(PaymentRequest.builder()
+                        .saleData(SaleData.builder()
+                                .saleTransactionID(TransactionIdentificationType.builder()
+                                        .transactionID(UUID.randomUUID().toString())
+                                        .timeStamp(OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                                        .build())
+                                .build())
+                        .paymentTransaction(PaymentTransaction.builder()
+                                .amountsReq(AmountsReq.builder()
+                                        .currency(currency)
+                                        .requestedAmount(amount)
+                                        .build())
+                                .build())
+                        .build())
+                .build();
+    }
+
+    private static SaleToPOIRequest buildReferencedRefundRequest(String serviceID,
+                                                                    String originalServiceID, String originalTimestamp) {
+        return SaleToPOIRequest.builder()
+                .messageHeader(MessageHeader.builder()
+                        .protocolVersion("3.0")
+                        .messageClass(MessageClassType.SERVICE)
+                        .messageCategory(MessageCategoryType.PAYMENT)
+                        .messageType(MessageTypeType.REQUEST)
+                        .serviceID(serviceID)
+                        .saleID("bilt-cli")
+                        .poiid("bilt-terminal")
+                        .build())
+                .paymentRequest(PaymentRequest.builder()
+                        .paymentData(PaymentData.builder()
+                                .paymentType(PaymentTypeEnum.REFUND)
+                                .build())
+                        .saleData(SaleData.builder()
+                                .saleTransactionID(TransactionIdentificationType.builder()
+                                        .transactionID(UUID.randomUUID().toString())
+                                        .timeStamp(OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                                        .build())
+                                .build())
+                        .paymentTransaction(PaymentTransaction.builder()
+                                .originalPOITransaction(OriginalPOITransaction.builder()
+                                        .poiTransactionID(TransactionIdentificationType.builder()
+                                                .transactionID(originalServiceID)
+                                                .timeStamp(originalTimestamp)
+                                                .build())
+                                        .build())
+                                .build())
+                        .build())
+                .build();
+    }
+
+    private static SaleToPOIRequest buildUnreferencedRefundRequest(String serviceID, double amount, String currency) {
+        return SaleToPOIRequest.builder()
+                .messageHeader(MessageHeader.builder()
+                        .protocolVersion("3.0")
+                        .messageClass(MessageClassType.SERVICE)
+                        .messageCategory(MessageCategoryType.PAYMENT)
+                        .messageType(MessageTypeType.REQUEST)
+                        .serviceID(serviceID)
+                        .saleID("bilt-cli")
+                        .poiid("bilt-terminal")
+                        .build())
+                .paymentRequest(PaymentRequest.builder()
+                        .paymentData(PaymentData.builder()
+                                .paymentType(PaymentTypeEnum.REFUND)
+                                .build())
                         .saleData(SaleData.builder()
                                 .saleTransactionID(TransactionIdentificationType.builder()
                                         .transactionID(UUID.randomUUID().toString())
@@ -408,6 +530,79 @@ public final class Main {
                 .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
+    private static SaleToPOIRequest buildTransactionStatusRequest(String serviceID, String statusServiceID) {
+        TransactionStatusRequest.Builder tsBuilder = TransactionStatusRequest.builder();
+        if (statusServiceID != null) {
+            tsBuilder.messageReference(MessageReference.builder()
+                    .messageCategory(MessageCategoryType.PAYMENT)
+                    .serviceID(statusServiceID)
+                    .saleID("bilt-cli")
+                    .build());
+        }
+
+        return SaleToPOIRequest.builder()
+                .messageHeader(MessageHeader.builder()
+                        .protocolVersion("3.0")
+                        .messageClass(MessageClassType.SERVICE)
+                        .messageCategory(MessageCategoryType.TRANSACTION_STATUS)
+                        .messageType(MessageTypeType.REQUEST)
+                        .serviceID(serviceID)
+                        .saleID("bilt-cli")
+                        .poiid("bilt-terminal")
+                        .build())
+                .transactionStatusRequest(tsBuilder.build())
+                .build();
+    }
+
+    private static SaleToPOIRequest buildReversalRequest(String serviceID, String originalServiceID,
+                                                            String originalTimestamp, String reversalReason) {
+        ReversalReasonEnum reason;
+        switch (reversalReason) {
+            case "CustCancel":
+                reason = ReversalReasonEnum.CUST_CANCEL;
+                break;
+            case "MerchantCancel":
+                reason = ReversalReasonEnum.MERCHANT_CANCEL;
+                break;
+            case "Malfunction":
+                reason = ReversalReasonEnum.MALFUNCTION;
+                break;
+            case "Unable2Compl":
+                reason = ReversalReasonEnum.UNABLE2_COMPL;
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown reversal reason: " + reversalReason
+                        + ". Supported: CustCancel, MerchantCancel, Malfunction, Unable2Compl");
+        }
+
+        return SaleToPOIRequest.builder()
+                .messageHeader(MessageHeader.builder()
+                        .protocolVersion("3.0")
+                        .messageClass(MessageClassType.SERVICE)
+                        .messageCategory(MessageCategoryType.REVERSAL)
+                        .messageType(MessageTypeType.REQUEST)
+                        .serviceID(serviceID)
+                        .saleID("bilt-cli")
+                        .poiid("bilt-terminal")
+                        .build())
+                .reversalRequest(ReversalRequest.builder()
+                        .originalPOITransaction(OriginalPOITransaction.builder()
+                                .poiTransactionID(TransactionIdentificationType.builder()
+                                        .transactionID(originalServiceID)
+                                        .timeStamp(originalTimestamp)
+                                        .build())
+                                .build())
+                        .reversalReason(reason)
+                        .saleData(SaleData.builder()
+                                .saleTransactionID(TransactionIdentificationType.builder()
+                                        .transactionID(UUID.randomUUID().toString())
+                                        .timeStamp(OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                                        .build())
+                                .build())
+                        .build())
+                .build();
+    }
+
     private static SaleToPOIRequest buildAbortRequest(String serviceID, String abortServiceID) {
         return SaleToPOIRequest.builder()
                 .messageHeader(MessageHeader.builder()
@@ -443,14 +638,18 @@ public final class Main {
                 "Usage: bilt-cli <ip> [options]",
                 "",
                 "Options:",
-                "  --type <payment|diagnosis|display-standby|display-receipt|confirmation|signature|abort>",
+                "  --type <payment|refund|diagnosis|display-standby|display-receipt|confirmation|signature|reversal|transaction-status|abort>",
                 "  --no-encryption              Disable message encryption",
                 "  --passphrase <value>         Encryption passphrase",
                 "  --key-id <value>             Encryption key identifier",
                 "  --key-version <number>       Encryption key version (default: 0)",
-                "  --amount <number>            Payment amount (default: 2.50)",
+                "  --amount <number>            Payment amount / reversal amount (default: 2.50)",
                 "  --currency <code>            Currency code (default: USD)",
                 "  --prompt <text>              Prompt text for confirmation/signature requests",
+                "  --original-service-id <value> POI transaction ID of the original payment to reverse",
+                "  --original-timestamp <value> Timestamp of the original POI transaction (ISO 8601)",
+                "  --reversal-reason <value>    Reversal reason: CustCancel, MerchantCancel, Malfunction, Unable2Compl (default: MerchantCancel)",
+                "  --status-service-id <value>  ServiceID of the transaction to query status for",
                 "  --abort-service-id <value>   ServiceID of the in-progress payment to abort",
                 "  -h, --help                   Show this help"
         );
