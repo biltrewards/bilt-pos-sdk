@@ -9,7 +9,7 @@ fun Project.configurePublishing() {
     version = findProperty("VERSION") as String
 
     extensions.configure<MavenPublishBaseExtension> {
-        publishToMavenCentral(validateDeployment = false)
+        publishToMavenCentral()
         signAllPublications()
 
         coordinates(project.group.toString(), "pos-lib-${project.name}", project.version.toString())
