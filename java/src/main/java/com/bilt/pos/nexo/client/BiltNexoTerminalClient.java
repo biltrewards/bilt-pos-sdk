@@ -48,7 +48,7 @@ import java.util.concurrent.TimeUnit;
  * {@link NexoTerminalAPI} containing a {@link SaleToPOIRequest} and receives
  * a {@link NexoTerminalAPI} containing a {@link SaleToPOIResponse}.</p>
  *
- * <h3>Unencrypted (development/testing)</h3>
+ * <h2>Unencrypted (development/testing)</h2>
  * <pre>{@code
  * BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
  *     .endpoint("https://192.168.1.100:8443/nexo")
@@ -59,10 +59,12 @@ import java.util.concurrent.TimeUnit;
  *     .saleToPOIRequest(myRequest)
  *     .build();
  * NexoTerminalAPI response = client.request(request);
- * SaleToPOIResponse poiResponse = response.getSaleToPOIResponse();
+ * if (response != null) {
+ *     SaleToPOIResponse poiResponse = response.getSaleToPOIResponse();
+ * }
  * }</pre>
  *
- * <h3>Encrypted (production)</h3>
+ * <h2>Encrypted (production)</h2>
  * <pre>{@code
  * SecurityKey key = SecurityKey.builder()
  *     .passphrase("sharedSecret")
@@ -76,7 +78,9 @@ import java.util.concurrent.TimeUnit;
  *     .build();
  *
  * NexoTerminalAPI response = client.request(request);
- * SaleToPOIResponse poiResponse = response.getSaleToPOIResponse();
+ * if (response != null) {
+ *     SaleToPOIResponse poiResponse = response.getSaleToPOIResponse();
+ * }
  * }</pre>
  */
 public final class BiltNexoTerminalClient {
@@ -112,7 +116,8 @@ public final class BiltNexoTerminalClient {
      * automatically encrypted and the response is decrypted.</p>
      *
      * @param request the request envelope; must have {@code saleToPOIRequest} set
-     * @return the terminal's response envelope containing {@code saleToPOIResponse}
+     * @return the terminal's response envelope containing {@code saleToPOIResponse},
+     *         or {@code null} if the terminal returns an empty body (e.g. abort requests)
      * @throws BiltNexoClientException if serialization, encryption, HTTP transport,
      *         decryption, or deserialization fails
      */
@@ -125,7 +130,8 @@ public final class BiltNexoTerminalClient {
      *
      * @param request the request envelope; must have {@code saleToPOIRequest} set
      * @param timeout per-request timeout, or {@code null} to use the client default
-     * @return the terminal's response envelope containing {@code saleToPOIResponse}
+     * @return the terminal's response envelope containing {@code saleToPOIResponse},
+     *         or {@code null} if the terminal returns an empty body (e.g. abort requests)
      * @throws BiltNexoClientException if any step in the request/response pipeline fails
      */
     public NexoTerminalAPI request(NexoTerminalAPI request, Duration timeout)
@@ -167,11 +173,16 @@ public final class BiltNexoTerminalClient {
                 }
             }
 
+            if (responseJson.isEmpty()) {
+                return null;
+            }
+
+            NexoTerminalAPI responseApi;
             try {
                 if (encryptor != null) {
-                    return decryptResponse(responseJson);
+                    responseApi = decryptResponse(responseJson);
                 } else {
-                    return objectMapper.readValue(responseJson, NexoTerminalAPI.class);
+                    responseApi = objectMapper.readValue(responseJson, NexoTerminalAPI.class);
                 }
             } catch (EncryptionException e) {
                 throw e;
@@ -179,6 +190,8 @@ public final class BiltNexoTerminalClient {
                 throw new BiltNexoClientException(
                         "Failed to parse terminal response: " + responseJson, e);
             }
+
+            return responseApi;
         } catch (BiltNexoClientException e) {
             throw e;
         } catch (EncryptionException e) {
