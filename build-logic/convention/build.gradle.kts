@@ -17,6 +17,10 @@ gradlePlugin {
             id = "com.bilt.pos.kotlin.library"
             implementationClass = "KotlinLibraryConventionPlugin"
         }
+        register("mavenPublish") {
+            id = "com.bilt.pos.maven.publish"
+            implementationClass = "MavenPublishConventionPlugin"
+        }
     }
 }
 

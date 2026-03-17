@@ -22,7 +22,6 @@ class JavaLibraryConventionPlugin : Plugin<Project> {
         }
 
         configureTests()
-        configurePublishing()
     }
 }
 

@@ -1,5 +1,6 @@
 plugins {
     id("com.bilt.pos.java.library")
+    id("com.bilt.pos.maven.publish")
 }
 
 dependencies {
