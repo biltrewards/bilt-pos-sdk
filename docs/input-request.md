@@ -39,10 +39,8 @@ Every input request uses `MessageCategory: Input` and `MessageClass: Device`. Th
 - **`InfoQualify`** — `Input`.
 - **`InputCommand`** — The type of input to collect. See the table above.
 - **`MaxInputTime`** — *(optional)* Maximum seconds to wait for the user to respond. When the timeout expires, the terminal displays a "Please wait…" overlay and returns an `InputResponse` with `ErrorCondition: Cancel`. A visual countdown progress bar is displayed while the timer is active.
-- **`DefaultInputString`** — *(optional)* Pre-fills the input field with a default value. The value is displayed as a placeholder until the user starts typing. If the user confirms without typing, the placeholder value is submitted. For `GetConfirmation`, use `"Y"` or `"N"` to pre-select yes or no.
+- **`DefaultInputString`** — *(optional)* Displays a placeholder value in the input field. The placeholder is shown until the user starts typing. The user must type their own input to enable the confirm button — confirming without typing is not allowed. For `GetConfirmation`, use `"Y"` or `"N"` to pre-select yes or no.
 - **`DisableCancelFlag`** — *(optional)* When `true`, the Cancel button is hidden and the user cannot cancel the input. Default `false`.
-- **`DisableValidFlag`** — *(optional)* When `true`, the Confirm/Valid button is hidden. Use this when input should be confirmed via another mechanism (e.g., automatic submission on reaching `MaxLength`). Default `false`.
-- **`WaitUserValidationFlag`** — *(optional)* When `false` (default) and `MaxLength` is set, the input automatically submits once the user reaches `MaxLength`. When `true`, the user must explicitly press confirm even after reaching `MaxLength`.
 
 `DisplayOutput` fields (common to all commands):
 
@@ -186,7 +184,7 @@ Collect a 5-digit ZIP code that auto-submits when complete:
 }
 ```
 
-With `WaitUserValidationFlag` absent (defaults to `false`), the input auto-submits when the user enters 5 digits. To require explicit confirmation, set `"WaitUserValidationFlag": true`.
+The user must press confirm to submit the input. Auto-submission is not supported.
 
 ---
 
@@ -294,7 +292,7 @@ Edit a ZIP code with a pre-filled default value:
 }
 ```
 
-The terminal shows "90210" as a placeholder. If the user presses confirm without typing, "90210" is submitted. If they start typing, the placeholder clears.
+The terminal shows "90210" as a placeholder. The user must type to enable the confirm button — the placeholder value cannot be submitted directly. When the user starts typing, the placeholder clears.
 
 ---
 

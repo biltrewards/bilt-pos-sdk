@@ -56,7 +56,6 @@ Send a Terminal API input request with `InputCommand` set to `GetConfirmation`. 
 - **`InputCommand`** — `GetConfirmation`
 - **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
 - **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
-- **`DisableValidFlag`** — *(optional)* When `true`, hides the Confirm button.
 
 `DisplayOutput` fields:
 

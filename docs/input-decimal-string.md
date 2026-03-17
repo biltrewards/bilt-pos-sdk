@@ -44,14 +44,11 @@ Send a Terminal API input request with `InputCommand` set to `DecimalString`. Th
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `DecimalString`
 - **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
-- **`MinLength`** — *(optional)* Minimum total number of digits.
+- **`MinLength`** — *(optional)* Minimum total number of digits. The confirm button is disabled until the minimum is met.
 - **`MaxLength`** — *(optional)* Maximum total number of digits.
-- **`MaxDecimalLength`** — *(optional)* Maximum number of digits after the decimal point. Must be between `MinLength` and `MaxLength`.
-- **`FromRightToLeftFlag`** — *(optional)* When `true`, digits are entered right-to-left (useful for amount entry where the decimal point is fixed). Default `false`.
-- **`DefaultInputString`** — *(optional)* Pre-filled value displayed as a placeholder until the user starts typing.
+- **`MaskCharactersFlag`** — *(optional)* When `true`, entered digits are masked with `•`. Default `false`.
+- **`DefaultInputString`** — *(optional)* Placeholder digits displayed until the user starts typing. The user must type to enable the confirm button.
 - **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
-- **`DisableValidFlag`** — *(optional)* When `true`, hides the Confirm button.
-- **`WaitUserValidationFlag`** — *(optional)* When `false` (default) and `MaxLength` is set, auto-submits when `MaxLength` is reached. When `true`, requires explicit confirmation.
 
 `DisplayOutput` fields:
 
@@ -176,8 +173,7 @@ Collect a tip amount with simple text prompt:
         "Device": "CustomerInput",
         "InfoQualify": "Input",
         "InputCommand": "DecimalString",
-        "MaxLength": 6,
-        "MaxDecimalLength": 2
+        "MaxLength": 6
       }
     }
   }
@@ -216,7 +212,6 @@ Collect amount with 30-second countdown:
         "InfoQualify": "Input",
         "InputCommand": "DecimalString",
         "MaxLength": 6,
-        "MaxDecimalLength": 2,
         "MaxInputTime": 30
       }
     }

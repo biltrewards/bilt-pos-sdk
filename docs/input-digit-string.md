@@ -44,13 +44,12 @@ Send a Terminal API input request with `InputCommand` set to `DigitString`. The 
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `DigitString`
 - **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
-- **`MinLength`** — *(optional)* Minimum number of digits the user must enter.
+- **`MinLength`** — *(optional)* Minimum number of digits the user must enter. The confirm button is disabled until the minimum is met.
 - **`MaxLength`** — *(optional)* Maximum number of digits the user can enter.
-- **`StringMask`** — *(optional)* Format mask for the input. Use `d` for a required digit position (e.g. `ddddd` for a 5-digit zip code).
-- **`DefaultInputString`** — *(optional)* Pre-filled digits displayed as a placeholder until the user starts typing.
+- **`StringMask`** — *(optional)* Format mask for the input display. When the mask contains 10+ digit placeholders (`#`, `d`, or `9`) with parentheses or hyphens (e.g., `(###) ###-####`), the terminal displays the input with phone number formatting.
+- **`MaskCharactersFlag`** — *(optional)* When `true`, entered digits are masked with `•` (for PIN entry). Default `false`.
+- **`DefaultInputString`** — *(optional)* Placeholder digits displayed until the user starts typing. The user must type to enable the confirm button.
 - **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
-- **`DisableValidFlag`** — *(optional)* When `true`, hides the Confirm button.
-- **`WaitUserValidationFlag`** — *(optional)* When `false` (default) and `MaxLength` is set, auto-submits when `MaxLength` is reached. When `true`, requires explicit confirmation.
 
 `DisplayOutput` fields:
 

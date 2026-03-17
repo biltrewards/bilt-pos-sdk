@@ -44,11 +44,9 @@ Send a Terminal API input request with `InputCommand` set to `GetMenuEntry`. The
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `GetMenuEntry`
 - **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
-- **`MinLength`** — *(optional)* Minimum number of entries the user must select. Default `1`.
-- **`MaxLength`** — *(optional)* Maximum number of entries the user can select. Set to `1` for single selection, or higher for multiple selection.
-- **`MenuBackFlag`** — *(optional)* When `true`, enables Back (returns `-1`) and Home (returns `0`) navigation keys. Default `false`.
+- **`MinLength`** — *(optional)* Minimum number of entries the user must select. Default `0`.
+- **`MaxLength`** — *(optional)* Maximum number of entries the user can select. Set to `1` for single selection (default), or higher for multiple selection.
 - **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
-- **`DisableValidFlag`** — *(optional)* When `true`, hides the Confirm button (for multiple selection mode).
 
 `DisplayOutput` fields:
 
@@ -59,8 +57,6 @@ Send a Terminal API input request with `InputCommand` set to `GetMenuEntry`. The
 - **`MenuEntry`** — Array of menu entries. Each entry has:
   - **`OutputFormat`** — `Text`.
   - **`OutputText`** — Array with a `Text` field containing the label for this entry.
-  - **`MenuEntryTag`** — *(optional)* `Selectable` (default), `NonSelectable` (header/separator), `SubMenu`, or `NonSelectableSubMenu`.
-  - **`DefaultSelectedFlag`** — *(optional)* When `true`, this entry is pre-selected. Default `false`.
 
 ---
 
@@ -379,7 +375,7 @@ Select receipt options without allowing cancel:
 
 ## Response
 
-The response includes **`Input.MenuEntryNumber`** — an array of 1-based indexes of the selected entries. If `MenuBackFlag` is enabled, `-1` means Back and `0` means Home.
+The response includes **`Input.MenuEntryNumber`** — an array of 1-based indexes of the selected entries.
 
 ### Failed input
 

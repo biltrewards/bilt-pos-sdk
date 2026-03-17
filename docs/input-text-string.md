@@ -44,13 +44,11 @@ Send a Terminal API input request with `InputCommand` set to `TextString`. The d
 - **`InfoQualify`** — `Input`
 - **`InputCommand`** — `TextString`
 - **`MaxInputTime`** — *(optional)* Maximum seconds to wait before automatic cancellation. A visual countdown is displayed.
-- **`MinLength`** — *(optional)* Minimum number of characters the user must enter.
+- **`MinLength`** — *(optional)* Minimum number of characters the user must enter. The confirm button is disabled until the minimum is met.
 - **`MaxLength`** — *(optional)* Maximum number of characters the user can enter.
-- **`DefaultInputString`** — *(optional)* Pre-filled text displayed as a placeholder until the user starts typing.
+- **`DefaultInputString`** — *(optional)* Placeholder text displayed until the user starts typing. The user must type to enable the confirm button.
 - **`MaskCharactersFlag`** — *(optional)* When `true`, entered characters are masked with `•`. Default `false`.
 - **`DisableCancelFlag`** — *(optional)* When `true`, hides the Cancel button.
-- **`DisableValidFlag`** — *(optional)* When `true`, hides the Confirm button.
-- **`WaitUserValidationFlag`** — *(optional)* When `false` (default) and `MaxLength` is set, auto-submits when `MaxLength` is reached. When `true`, requires explicit confirmation.
 
 `DisplayOutput` fields:
 
@@ -167,7 +165,7 @@ Edit a name with a default value:
 }
 ```
 
-The terminal shows "John Doe" as a placeholder. If confirmed without typing, "John Doe" is submitted.
+The terminal shows "John Doe" as a placeholder. The user must type to enable the confirm button — the placeholder value cannot be submitted directly.
 
 ---
 
