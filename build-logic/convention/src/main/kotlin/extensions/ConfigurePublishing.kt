@@ -1,26 +1,45 @@
+import com.vanniktech.maven.publish.MavenPublishBaseExtension
 import org.gradle.api.Project
-import org.gradle.api.publish.PublishingExtension
-import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.kotlin.dsl.configure
-import org.gradle.kotlin.dsl.create
-import org.gradle.kotlin.dsl.get
 
 fun Project.configurePublishing() {
-    pluginManager.apply("maven-publish")
+    pluginManager.apply("com.vanniktech.maven.publish")
 
     group = findProperty("GROUP") as String
     version = findProperty("VERSION") as String
 
-    afterEvaluate {
-        extensions.configure<PublishingExtension> {
-            publications {
-                create<MavenPublication>("maven") {
-                    from(components["java"])
+    extensions.configure<MavenPublishBaseExtension> {
+        publishToMavenCentral()
+        signAllPublications()
 
-                    groupId = project.group.toString()
-                    artifactId = project.name
-                    version = project.version.toString()
+        coordinates(project.group.toString(), "pos-lib-${project.name}", project.version.toString())
+
+        pom {
+            name.set("pos-lib-${project.name}")
+            description.set("Bilt POS SDK - ${project.name}")
+            url.set("https://github.com/biltpos/pretty-porpoise")
+            inceptionYear.set("2025")
+
+            licenses {
+                license {
+                    name.set("The Apache License, Version 2.0")
+                    url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                    distribution.set("repo")
                 }
+            }
+
+            developers {
+                developer {
+                    id.set("biltpos")
+                    name.set("Bilt POS")
+                    url.set("https://github.com/biltpos")
+                }
+            }
+
+            scm {
+                url.set("https://github.com/biltpos/pretty-porpoise")
+                connection.set("scm:git:git://github.com/biltpos/pretty-porpoise.git")
+                developerConnection.set("scm:git:ssh://git@github.com/biltpos/pretty-porpoise.git")
             }
         }
     }

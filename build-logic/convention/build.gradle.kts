@@ -4,6 +4,7 @@ plugins {
 
 dependencies {
     compileOnly(libs.plugins.kotlin.jvm.toDep())
+    compileOnly(libs.plugins.maven.publish.toDep())
 }
 
 gradlePlugin {
@@ -15,6 +16,10 @@ gradlePlugin {
         register("kotlinLibrary") {
             id = "com.bilt.pos.kotlin.library"
             implementationClass = "KotlinLibraryConventionPlugin"
+        }
+        register("mavenPublish") {
+            id = "com.bilt.pos.maven.publish"
+            implementationClass = "MavenPublishConventionPlugin"
         }
     }
 }
