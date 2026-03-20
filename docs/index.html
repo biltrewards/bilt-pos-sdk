@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bilt POS SDK — Documentation</title>
+  <style>
+    :root {
+      --primary: #1a73e8;
+      --text: #202124;
+      --muted: #5f6368;
+      --bg: #fff;
+      --card-bg: #f8f9fa;
+      --border: #dadce0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--text); background: var(--bg); line-height: 1.6; }
+    header { background: var(--primary); color: #fff; padding: 48px 24px; text-align: center; }
+    header h1 { font-size: 2rem; font-weight: 600; }
+    header p { margin-top: 8px; opacity: 0.9; font-size: 1.1rem; }
+    main { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+    h2 { font-size: 1.25rem; margin: 32px 0 12px; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 6px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .card { display: block; padding: 14px 18px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: var(--text); transition: box-shadow 0.15s, border-color 0.15s; }
+    .card:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(26,115,232,0.15); }
+    .card .title { font-weight: 600; color: var(--primary); }
+    .card .desc { font-size: 0.875rem; color: var(--muted); margin-top: 2px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Bilt POS SDK</h1>
+  <p>Nexo Sale to POI v3.0 — Developer Documentation</p>
+</header>
+
+<main>
+
+  <h2>Getting Started</h2>
+  <div class="grid">
+    <a class="card" href="integration.md">
+      <div class="title">Integration Guide</div>
+      <div class="desc">Installation, setup, and end-to-end usage of the SDK</div>
+    </a>
+    <a class="card" href="api-reference.html">
+      <div class="title">API Reference</div>
+      <div class="desc">Full OpenAPI schema reference (Redoc)</div>
+    </a>
+  </div>
+
+  <h2>Payments</h2>
+  <div class="grid">
+    <a class="card" href="make-payment.md">
+      <div class="title">Make Payment</div>
+      <div class="desc">Initiate a payment transaction</div>
+    </a>
+    <a class="card" href="cancel-payment.md">
+      <div class="title">Cancel Payment</div>
+      <div class="desc">Cancel an in-progress payment</div>
+    </a>
+    <a class="card" href="reverse-payment.md">
+      <div class="title">Reverse Payment</div>
+      <div class="desc">Reverse a completed payment</div>
+    </a>
+    <a class="card" href="undo-payment.md">
+      <div class="title">Undo Payment</div>
+      <div class="desc">Undo a payment transaction</div>
+    </a>
+    <a class="card" href="refund-referenced.md">
+      <div class="title">Referenced Refund</div>
+      <div class="desc">Refund linked to the original transaction</div>
+    </a>
+    <a class="card" href="refund-unreferenced.md">
+      <div class="title">Unreferenced Refund</div>
+      <div class="desc">Standalone refund without original reference</div>
+    </a>
+    <a class="card" href="verify-transaction-status.md">
+      <div class="title">Verify Transaction Status</div>
+      <div class="desc">Check the status of a transaction</div>
+    </a>
+    <a class="card" href="auth-response.md">
+      <div class="title">Auth Response</div>
+      <div class="desc">Authentication response handling</div>
+    </a>
+  </div>
+
+  <h2>Display</h2>
+  <div class="grid">
+    <a class="card" href="display-standby.md">
+      <div class="title">Standby Screen</div>
+      <div class="desc">Set the terminal standby display</div>
+    </a>
+    <a class="card" href="display-image.md">
+      <div class="title">Display Image</div>
+      <div class="desc">Show an image on the terminal</div>
+    </a>
+    <a class="card" href="display-qr.md">
+      <div class="title">Display QR Code</div>
+      <div class="desc">Show a QR code on the terminal</div>
+    </a>
+    <a class="card" href="display-receipt.md">
+      <div class="title">Display Receipt</div>
+      <div class="desc">Show a receipt on the terminal</div>
+    </a>
+  </div>
+
+  <h2>Input</h2>
+  <div class="grid">
+    <a class="card" href="input-request.md">
+      <div class="title">Input Request</div>
+      <div class="desc">Overview of input request handling</div>
+    </a>
+    <a class="card" href="input-get-confirmation.md">
+      <div class="title">Get Confirmation</div>
+      <div class="desc">Prompt the user for yes/no confirmation</div>
+    </a>
+    <a class="card" href="input-get-menu-entry.md">
+      <div class="title">Get Menu Entry</div>
+      <div class="desc">Let the user select from a menu</div>
+    </a>
+    <a class="card" href="input-text-string.md">
+      <div class="title">Text String</div>
+      <div class="desc">Capture free-form text input</div>
+    </a>
+    <a class="card" href="input-digit-string.md">
+      <div class="title">Digit String</div>
+      <div class="desc">Capture numeric digit input</div>
+    </a>
+    <a class="card" href="input-decimal-string.md">
+      <div class="title">Decimal String</div>
+      <div class="desc">Capture decimal number input</div>
+    </a>
+    <a class="card" href="input-signature.md">
+      <div class="title">Signature</div>
+      <div class="desc">Capture a signature on the terminal</div>
+    </a>
+    <a class="card" href="input-cancel.md">
+      <div class="title">Cancel Input</div>
+      <div class="desc">Cancel an in-progress input request</div>
+    </a>
+  </div>
+
+  <h2>Error Handling</h2>
+  <div class="grid">
+    <a class="card" href="error-scenarios.md">
+      <div class="title">Error Scenarios</div>
+      <div class="desc">Common error scenarios and how to handle them</div>
+    </a>
+    <a class="card" href="refusal-reasons.md">
+      <div class="title">Refusal Reasons</div>
+      <div class="desc">Terminal refusal codes and explanations</div>
+    </a>
+    <a class="card" href="timeout-handling.md">
+      <div class="title">Timeout Handling</div>
+      <div class="desc">Configuring and handling request timeouts</div>
+    </a>
+  </div>
+
+</main>
+
+</body>
+</html>
