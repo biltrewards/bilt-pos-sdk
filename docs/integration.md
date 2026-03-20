@@ -82,7 +82,7 @@ dependencies {
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 
 BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
-    .endpoint("https://192.168.1.100:8443/nexo")
+    .endpoint("https://<device-ip>:8443/nexo")
     .trustAllCertificates()
     .build();
 ```
@@ -94,13 +94,13 @@ import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.security.SecurityKey;
 
 SecurityKey key = SecurityKey.builder()
-    .passphrase("sharedSecret")
-    .keyIdentifier("myTerminal")
+    .passphrase("<your-passphrase>")
+    .keyIdentifier("<your-key-identifier>")
     .keyVersion(0)
     .build();
 
 BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
-    .endpoint("https://192.168.1.100:8443/nexo")
+    .endpoint("https://<device-ip>:8443/nexo")
     .securityKey(key)
     .build();
 ```
@@ -121,7 +121,7 @@ import com.bilt.pos.nexo.model.*;
 
 // Note, trusting all certificates is only allowed in development environments.
 // Note, not providing a security key is only allowed in development environments.
-String endpoint = "https://192.168.1.100:8443/nexo";
+String endpoint = "https://<device-ip>:8443/nexo";
 BiltNexoTerminalClient.Builder clientBuilder = BiltNexoTerminalClient.builder()
     .endpoint(endpoint)
     .trustAllCertificates();
