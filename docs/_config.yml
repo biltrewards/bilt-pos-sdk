@@ -7,7 +7,6 @@ baseurl: "/bilt-pos-sdk"
 url: ""
 
 # Build settings
-theme: minima
 plugins:
   - jekyll-feed
 
