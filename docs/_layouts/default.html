@@ -13,14 +13,14 @@
 <body>
   <nav class="site-nav">
     <a href="{{ '/' | relative_url }}" class="nav-brand">
-      <div class="nav-brand-logo">B</div>
+      <div class="nav-brand-logo"><svg width="20" height="20" viewBox="0 0 80 80" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M0 80V0H80V80H0ZM55.625 48.8542V31.1458H73.3333V48.8542H55.625ZM26.5625 24.4792V6.66667H73.3333V24.4792H26.5625ZM19.8958 6.66667V24.4792H6.66667V6.66667H19.8958ZM48.9583 31.1458V48.8542H6.66667V31.1458H48.9583ZM35.7292 55.5208V73.3333H73.3333V55.5208H35.7292ZM29.0625 55.5208V73.3333H6.66667V55.5208H29.0625Z"/></svg></div>
       <div class="nav-brand-text">Bilt <span>POS SDK</span></div>
     </a>
     <div class="nav-links">
       <a href="{{ '/integration.html' | relative_url }}">Docs</a>
       <a href="{{ '/make-payment.html' | relative_url }}">Payments</a>
       <a href="{{ '/error-scenarios.html' | relative_url }}">Reference</a>
-      <a href="https://github.com/niclas-bilt/bilt-pos-sdk" target="_blank">GitHub</a>
+      <a href="https://github.com/biltrewards/bilt-pos-sdk" target="_blank">GitHub</a>
     </div>
     <button class="nav-hamburger" onclick="toggleSidebar()" aria-label="Toggle menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -46,8 +46,53 @@
     document.querySelectorAll('.sidebar-section-title').forEach(function(title) {
       title.addEventListener('click', function() {
         this.parentElement.classList.toggle('collapsed');
+        saveSidebarState();
       });
     });
+
+    // Persist sidebar scroll position and expanded sections across page loads
+    function saveSidebarState() {
+      var sidebar = document.querySelector('.sidebar');
+      if (!sidebar) return;
+      var expanded = [];
+      sidebar.querySelectorAll('.sidebar-section:not(.collapsed) .sidebar-section-title').forEach(function(t) {
+        expanded.push(t.textContent.trim());
+      });
+      sessionStorage.setItem('sidebar-expanded', JSON.stringify(expanded));
+    }
+
+    function restoreSidebarState() {
+      var sidebar = document.querySelector('.sidebar');
+      if (!sidebar) return;
+
+      var saved = sessionStorage.getItem('sidebar-expanded');
+      if (saved) {
+        // Restore from saved state: expand only previously-expanded sections
+        var expanded = JSON.parse(saved);
+        sidebar.querySelectorAll('.sidebar-section-title').forEach(function(t) {
+          if (expanded.indexOf(t.textContent.trim()) !== -1) {
+            t.parentElement.classList.remove('collapsed');
+          }
+        });
+      } else {
+        // First visit: expand only the section containing the active page
+        var active = sidebar.querySelector('.sidebar-items a.active');
+        if (active) {
+          active.closest('.sidebar-section').classList.remove('collapsed');
+        }
+      }
+
+      // Restore scroll position
+      var scrollTop = sessionStorage.getItem('sidebar-scroll');
+      if (scrollTop) sidebar.scrollTop = parseInt(scrollTop, 10);
+
+      // Save scroll position on scroll
+      sidebar.addEventListener('scroll', function() {
+        sessionStorage.setItem('sidebar-scroll', sidebar.scrollTop);
+      });
+    }
+
+    restoreSidebarState();
   </script>
 </body>
 </html>

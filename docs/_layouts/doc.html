@@ -6,7 +6,7 @@ layout: default
   <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
   <aside class="sidebar">
     {% for section in site.data.navigation %}
-    <div class="sidebar-section">
+    <div class="sidebar-section collapsed">
       <div class="sidebar-section-title">
         {{ section.title }}
         <span class="chevron">&#9662;</span>
@@ -29,6 +29,4 @@ layout: default
   </main>
 </div>
 
-<footer class="site-footer">
-  <p>Bilt POS SDK &mdash; Built by <a href="https://www.bilt.com" target="_blank">Bilt</a></p>
-</footer>
+{% include footer.html %}
