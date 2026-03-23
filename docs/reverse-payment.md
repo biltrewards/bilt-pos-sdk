@@ -1,3 +1,6 @@
+---
+---
+
 # Reverse a payment
 
 Void a completed payment before the batch settles, using a `ReversalRequest`.

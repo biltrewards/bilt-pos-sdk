@@ -1,3 +1,6 @@
+---
+---
+
 # Payment Error Conditions
 
 When a payment fails, the `PaymentResponse.Response` includes an `ErrorCondition` that classifies the failure and an `AdditionalResponse` with details. This document describes each error condition, its causes, and recommended actions.

@@ -1,3 +1,6 @@
+---
+---
+
 # Unreferenced refund
 
 Issue a refund to any card presented to the terminal, without linking it to an original payment.

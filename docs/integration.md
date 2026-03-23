@@ -1,3 +1,6 @@
+---
+---
+
 # Nexo Terminal API Java Client — Integration Guide
 
 ## Overview

@@ -1,3 +1,6 @@
+---
+---
+
 # Show the standby screen
 
 Return the terminal to its idle/standby state. You can optionally specify a theme to display a seasonal or branded variant of the standby screen — for example during a holiday campaign.

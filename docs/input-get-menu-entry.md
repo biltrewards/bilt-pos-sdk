@@ -1,3 +1,6 @@
+---
+---
+
 # GetMenuEntry — Menu selection
 
 Present a menu of options for the user to select from on the terminal.

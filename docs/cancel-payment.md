@@ -1,3 +1,6 @@
+---
+---
+
 # Cancel a payment
 
 Cancel a payment that is currently in progress on the terminal. This stops the transaction before it completes, and is preferable to issuing a refund when possible as it generally results in fewer fees.

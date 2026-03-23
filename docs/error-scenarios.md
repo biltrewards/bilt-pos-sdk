@@ -1,3 +1,6 @@
+---
+---
+
 # Error scenarios
 
 How to handle errors and edge cases that can occur during payment processing.
