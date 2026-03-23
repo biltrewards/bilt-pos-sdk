@@ -40,6 +40,9 @@
       if (sidebar) {
         sidebar.classList.toggle('open');
         if (overlay) overlay.classList.toggle('active');
+      } else {
+        var navLinks = document.querySelector('.nav-links');
+        if (navLinks) navLinks.classList.toggle('nav-links-open');
       }
     }
 
