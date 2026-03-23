@@ -30,8 +30,12 @@ import com.bilt.pos.nexo.model.OriginalPOITransaction;
 import com.bilt.pos.nexo.model.ReversalReasonEnum;
 import com.bilt.pos.nexo.model.ReversalRequest;
 import com.bilt.pos.nexo.model.PaymentData;
+import com.bilt.pos.nexo.model.PaymentInstrumentData;
+import com.bilt.pos.nexo.model.PaymentInstrumentTypeEnum;
 import com.bilt.pos.nexo.model.PaymentTypeEnum;
 import com.bilt.pos.nexo.model.OutputContent;
+import com.bilt.pos.nexo.model.StoredValueAccountID;
+import com.bilt.pos.nexo.model.StoredValueAccountTypeEnum;
 import com.bilt.pos.nexo.model.OutputFormatEnum;
 import com.bilt.pos.nexo.model.PaymentRequest;
 import com.bilt.pos.nexo.model.PaymentTransaction;
@@ -176,6 +180,9 @@ public final class Main {
             case "payment":
                 request = buildPaymentRequest(serviceID, amount, currency);
                 break;
+            case "gift-card":
+                request = buildGiftCardPaymentRequest(serviceID, amount, currency);
+                break;
             case "refund":
                 if (originalServiceID != null) {
                     if (originalTimestamp == null) {
@@ -223,7 +230,7 @@ public final class Main {
                 break;
             default:
                 throw new IllegalArgumentException("Unknown request type: " + type
-                        + ". Supported: payment, refund, diagnosis, display-standby, display-receipt, confirmation, signature, reversal, transaction-status, abort");
+                        + ". Supported: payment, gift-card, refund, diagnosis, display-standby, display-receipt, confirmation, signature, reversal, transaction-status, abort");
         }
 
         ObjectMapper mapper = new ObjectMapper()
@@ -274,6 +281,42 @@ public final class Main {
                         .poiid("bilt-terminal")
                         .build())
                 .paymentRequest(PaymentRequest.builder()
+                        .saleData(SaleData.builder()
+                                .saleTransactionID(TransactionIdentificationType.builder()
+                                        .transactionID(UUID.randomUUID().toString())
+                                        .timeStamp(OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                                        .build())
+                                .build())
+                        .paymentTransaction(PaymentTransaction.builder()
+                                .amountsReq(AmountsReq.builder()
+                                        .currency(currency)
+                                        .requestedAmount(amount)
+                                        .build())
+                                .build())
+                        .build())
+                .build();
+    }
+
+    private static SaleToPOIRequest buildGiftCardPaymentRequest(String serviceID, double amount, String currency) {
+        return SaleToPOIRequest.builder()
+                .messageHeader(MessageHeader.builder()
+                        .protocolVersion("3.0")
+                        .messageClass(MessageClassType.SERVICE)
+                        .messageCategory(MessageCategoryType.PAYMENT)
+                        .messageType(MessageTypeType.REQUEST)
+                        .serviceID(serviceID)
+                        .saleID("bilt-cli")
+                        .poiid("bilt-terminal")
+                        .build())
+                .paymentRequest(PaymentRequest.builder()
+                        .paymentData(PaymentData.builder()
+                                .paymentInstrumentData(PaymentInstrumentData.builder()
+                                        .paymentInstrumentType(PaymentInstrumentTypeEnum.STORED_VALUE)
+                                        .storedValueAccountID(StoredValueAccountID.builder()
+                                                .storedValueAccountType(StoredValueAccountTypeEnum.GIFT_CARD)
+                                                .build())
+                                        .build())
+                                .build())
                         .saleData(SaleData.builder()
                                 .saleTransactionID(TransactionIdentificationType.builder()
                                         .transactionID(UUID.randomUUID().toString())
@@ -643,7 +686,7 @@ public final class Main {
                 "Usage: bilt-cli <ip> [options]",
                 "",
                 "Options:",
-                "  --type <payment|refund|diagnosis|display-standby|display-receipt|confirmation|signature|reversal|transaction-status|abort>",
+                "  --type <payment|gift-card|refund|diagnosis|display-standby|display-receipt|confirmation|signature|reversal|transaction-status|abort>",
                 "  --no-encryption              Disable message encryption",
                 "  --passphrase <value>         Encryption passphrase",
                 "  --key-id <value>             Encryption key identifier",

@@ -18,7 +18,7 @@ Command-line tool for sending Nexo Sale to POI requests to a Bilt payment termin
 
 | Option | Description | Default |
 |---|---|---|
-| `--type <payment\|refund\|diagnosis\|display-standby\|display-receipt\|confirmation\|signature\|reversal\|transaction-status\|abort>` | Request type | `payment` |
+| `--type <payment\|gift-card\|refund\|diagnosis\|display-standby\|display-receipt\|confirmation\|signature\|reversal\|transaction-status\|abort>` | Request type | `payment` |
 | `--no-encryption` | Disable message encryption | encryption enabled |
 | `--passphrase <value>` | Encryption passphrase | — |
 | `--key-id <value>` | Encryption key identifier | — |
@@ -45,6 +45,12 @@ Command-line tool for sending Nexo Sale to POI requests to a Bilt payment termin
 
 ```bash
 ./gradlew :cli:run --args="192.168.1.100 --no-encryption --amount 10.00"
+```
+
+**Gift card payment:**
+
+```bash
+./gradlew :cli:run --args="192.168.1.100 --no-encryption --type gift-card --amount 25.00"
 ```
 
 **Encrypted payment:**
