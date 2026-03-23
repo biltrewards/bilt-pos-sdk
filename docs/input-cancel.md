@@ -1,3 +1,6 @@
+---
+---
+
 # Cancel an input request
 
 Cancel an in-progress input request on the terminal from your POS app.

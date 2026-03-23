@@ -1,3 +1,6 @@
+---
+---
+
 # DecimalString — Decimal number input
 
 Collect a decimal number from the user on the terminal.

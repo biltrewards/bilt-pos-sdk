@@ -1,3 +1,6 @@
+---
+---
+
 # GetConfirmation — Yes/No confirmation
 
 Ask the user a yes/no question on the terminal.

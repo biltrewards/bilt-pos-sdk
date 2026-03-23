@@ -1,3 +1,6 @@
+---
+---
+
 # Signature — Signature capture
 
 Capture a handwritten signature from the user on the terminal.

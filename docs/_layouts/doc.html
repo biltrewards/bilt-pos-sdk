@@ -1,0 +1,32 @@
+---
+layout: default
+---
+
+<div class="doc-wrapper">
+  <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+  <aside class="sidebar">
+    {% for section in site.data.navigation %}
+    <div class="sidebar-section collapsed">
+      <div class="sidebar-section-title">
+        {{ section.title }}
+        <span class="chevron">&#9662;</span>
+      </div>
+      <ul class="sidebar-items">
+        {% for item in section.items %}
+        <li>
+          <a href="{{ item.url | relative_url }}"{% if page.url == item.url %} class="active"{% endif %}>
+            {{ item.name }}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </aside>
+
+  <main class="doc-content">
+    {{ content }}
+  </main>
+</div>
+
+{% include footer.html %}

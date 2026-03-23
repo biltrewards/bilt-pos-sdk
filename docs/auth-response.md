@@ -1,3 +1,6 @@
+---
+---
+
 # Authorization Response
 
 When the terminal processes a payment, the response includes an *authorization result* and an optional *authorization response* string. These values must be mapped to `Response.Result` and `Response.ErrorCondition` fields as well as included in the `Response.AdditionalResponse` field.

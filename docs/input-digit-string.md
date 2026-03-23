@@ -1,3 +1,6 @@
+---
+---
+
 # DigitString — Numeric input
 
 Collect numeric-only input from the user on the terminal.

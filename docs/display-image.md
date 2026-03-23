@@ -1,3 +1,6 @@
+---
+---
+
 # Show an image on the terminal
 
 Display a full-screen image on the customer-facing terminal screen. This can be used standalone — for example to show a promotional banner, a thank-you screen, or a brand graphic — or embedded as a header image inside a receipt. This page covers the standalone use case; for embedding inside a receipt see [Show a virtual receipt](./display-receipt.md).

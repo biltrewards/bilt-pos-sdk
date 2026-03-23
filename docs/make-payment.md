@@ -1,3 +1,6 @@
+---
+---
+
 # Make a payment
 
 Make an in-person card payment on a Bilt-connected terminal.

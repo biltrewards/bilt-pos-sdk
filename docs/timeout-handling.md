@@ -1,3 +1,6 @@
+---
+---
+
 # Timeout handling
 
 How to handle the different timeout scenarios that can occur during payment processing.

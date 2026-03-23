@@ -1,3 +1,6 @@
+---
+---
+
 # Show a virtual receipt on the terminal
 
 Display an itemised purchase summary on the customer-facing terminal screen before the payment transaction begins. You can also embed a QR code or a banner image in the receipt.

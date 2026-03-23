@@ -1,3 +1,6 @@
+---
+---
+
 # TextString — Free-text input
 
 Collect free-text alphanumeric input from the user on the terminal.

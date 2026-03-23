@@ -1,3 +1,6 @@
+---
+---
+
 # Show a QR code or barcode on the terminal
 
 Display a QR code or barcode on the customer-facing terminal screen. This can be used standalone — for example to present a loyalty card, a download link, or a sign-up prompt — or embedded inside a receipt. This page covers the standalone use case; for embedding inside a receipt see [Show a virtual receipt](./display-receipt.md).

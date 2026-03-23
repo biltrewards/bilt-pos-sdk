@@ -1,3 +1,6 @@
+---
+---
+
 # Cancel, reverse, or refund a payment
 
 Choose the right method for undoing a payment based on its current state.

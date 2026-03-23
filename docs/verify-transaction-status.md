@@ -1,3 +1,6 @@
+---
+---
+
 # Verify payment status
 
 Check the outcome of a transaction when your POS app does not receive a response.

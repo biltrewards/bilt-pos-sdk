@@ -1,3 +1,6 @@
+---
+---
+
 # Collect input from the terminal
 
 Prompt the shopper or cashier for input on the terminal using an `InputRequest`.
