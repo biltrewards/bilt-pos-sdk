@@ -141,8 +141,11 @@ public final class DisplayPayloadHelper {
         xml = xml.replaceAll(" xmlns:ns\\d+=\"[^\"]*\"", "");
         // Add the correct default namespace to inputPayload
         xml = xml.replace("<inputPayload", "<inputPayload xmlns=\"urn:bilt:input:v1\"");
-        // Remove standalone="yes" for cleaner output
-        xml = xml.replace(" standalone=\"yes\"", "");
+        // Remove standalone="yes" from XML declaration only (not from element content)
+        xml = xml.replace(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        );
         return xml;
     }
 
