@@ -68,7 +68,11 @@ public final class DisplayPayloadHelper {
         marshaller.setProperty(Marshaller.JAXB_FRAGMENT, Boolean.FALSE);
         StringWriter writer = new StringWriter();
         marshaller.marshal(payload, writer);
-        return writer.toString();
+        // Remove standalone="yes" for consistency with old hand-crafted XML format
+        return writer.toString().replace(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        );
     }
 
     /**
