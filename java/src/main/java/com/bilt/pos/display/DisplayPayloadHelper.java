@@ -357,7 +357,8 @@ public final class DisplayPayloadHelper {
      */
     public static MoneyType money(String currency, double value) {
         // Use String constructor to preserve 2 decimal places for monetary values
-        return money(currency, new BigDecimal(String.format("%.2f", value)));
+        // Locale.US ensures "." decimal separator regardless of system locale
+        return money(currency, new BigDecimal(String.format(java.util.Locale.US, "%.2f", value)));
     }
 
     /**
@@ -385,7 +386,8 @@ public final class DisplayPayloadHelper {
      */
     public static LabeledAmountType labeledAmount(String description, String currency, double value) {
         // Use String constructor to preserve 2 decimal places for monetary values
-        return labeledAmount(description, currency, new BigDecimal(String.format("%.2f", value)));
+        // Locale.US ensures "." decimal separator regardless of system locale
+        return labeledAmount(description, currency, new BigDecimal(String.format(java.util.Locale.US, "%.2f", value)));
     }
 
     /**
