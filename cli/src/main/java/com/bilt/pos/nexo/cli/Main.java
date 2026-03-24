@@ -9,6 +9,16 @@
  */
 package com.bilt.pos.nexo.cli;
 
+import com.bilt.pos.display.DisplayPayload;
+import com.bilt.pos.display.DisplayPayloadHelper;
+import com.bilt.pos.display.HeaderFooterType;
+import com.bilt.pos.display.InputPayload;
+import com.bilt.pos.display.LabeledAmountType;
+import com.bilt.pos.display.LineItemKindType;
+import com.bilt.pos.display.LineItemType;
+import com.bilt.pos.display.LineItemsType;
+import com.bilt.pos.display.ReceiptType;
+import com.bilt.pos.display.TaxType;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.AbortRequest;
 import com.bilt.pos.nexo.model.AmountsReq;
@@ -48,10 +58,11 @@ import com.bilt.pos.nexo.security.SecurityKey;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import jakarta.xml.bind.JAXBException;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Base64;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -419,12 +430,9 @@ public final class Main {
                 .build();
     }
 
-    private static SaleToPOIRequest buildDisplayStandbyRequest(String serviceID) {
-        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                + "<displayPayload xmlns=\"urn:bilt:display:v1\" layout=\"standby.xslt\" version=\"1.0\">\n"
-                + "  <standby/>\n"
-                + "</displayPayload>";
-        String encoded = Base64.getEncoder().encodeToString(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    private static SaleToPOIRequest buildDisplayStandbyRequest(String serviceID) throws JAXBException {
+        DisplayPayload payload = DisplayPayloadHelper.standby("standby.xslt");
+        String encoded = DisplayPayloadHelper.toBase64(payload);
 
         return SaleToPOIRequest.builder()
                 .messageHeader(MessageHeader.builder()
@@ -451,47 +459,48 @@ public final class Main {
                 .build();
     }
 
-    private static SaleToPOIRequest buildDisplayReceiptRequest(String serviceID) {
-        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                + "<displayPayload xmlns=\"urn:bilt:display:v1\" layout=\"receipt.xslt\" version=\"1.0\">\n"
-                + "  <receipt>\n"
-                + "    <header><text>Your items</text></header>\n"
-                + "    <lineItems>\n"
-                + "      <lineItem kind=\"item\">\n"
-                + "        <description>Running shoes</description>\n"
-                + "        <quantity>1</quantity>\n"
-                + "        <unitPrice><currency>$</currency><value>79.99</value></unitPrice>\n"
-                + "        <amount><currency>$</currency><value>79.99</value></amount>\n"
-                + "      </lineItem>\n"
-                + "      <lineItem kind=\"item\">\n"
-                + "        <description>Green T-shirt</description>\n"
-                + "        <quantity>2</quantity>\n"
-                + "        <unitPrice><currency>$</currency><value>9.89</value></unitPrice>\n"
-                + "        <amount><currency>$</currency><value>19.78</value></amount>\n"
-                + "      </lineItem>\n"
-                + "    </lineItems>\n"
-                + "    <subtotal>\n"
-                + "      <description>Subtotal</description>\n"
-                + "      <amount><currency>$</currency><value>99.77</value></amount>\n"
-                + "    </subtotal>\n"
-                + "    <tax>\n"
-                + "      <taxItem>\n"
-                + "        <description>State tax</description>\n"
-                + "        <amount><currency>$</currency><value>7.23</value></amount>\n"
-                + "      </taxItem>\n"
-                + "      <taxTotal>\n"
-                + "        <description>Total tax</description>\n"
-                + "        <amount><currency>$</currency><value>7.23</value></amount>\n"
-                + "      </taxTotal>\n"
-                + "    </tax>\n"
-                + "    <total>\n"
-                + "      <description>Total amount</description>\n"
-                + "      <amount><currency>$</currency><value>107.00</value></amount>\n"
-                + "    </total>\n"
-                + "    <footer><text>Thank you for your purchase!</text></footer>\n"
-                + "  </receipt>\n"
-                + "</displayPayload>";
-        String encoded = Base64.getEncoder().encodeToString(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    private static SaleToPOIRequest buildDisplayReceiptRequest(String serviceID) throws JAXBException {
+        // Build receipt using generated classes
+        ReceiptType receipt = new ReceiptType();
+        receipt.setHeader(DisplayPayloadHelper.header("Your items"));
+
+        // Line items
+        LineItemsType lineItems = new LineItemsType();
+        lineItems.getLineItem().add(DisplayPayloadHelper.productItem(
+                "Running shoes",
+                BigDecimal.ONE,
+                "$",
+                new BigDecimal("79.99"),
+                new BigDecimal("79.99")
+        ));
+        lineItems.getLineItem().add(DisplayPayloadHelper.productItem(
+                "Green T-shirt",
+                new BigDecimal("2"),
+                "$",
+                new BigDecimal("9.89"),
+                new BigDecimal("19.78")
+        ));
+        receipt.setLineItems(lineItems);
+
+        // Subtotal
+        receipt.setSubtotal(DisplayPayloadHelper.labeledAmount("Subtotal", "$", 99.77));
+
+        // Tax
+        TaxType tax = new TaxType();
+        tax.getTaxItem().add(DisplayPayloadHelper.labeledAmount("State tax", "$", 7.23));
+        tax.setTaxTotal(DisplayPayloadHelper.labeledAmount("Total tax", "$", 7.23));
+        receipt.setTax(tax);
+
+        // Total
+        receipt.setTotal(DisplayPayloadHelper.labeledAmount("Total amount", "$", 107.00));
+        receipt.setFooter(DisplayPayloadHelper.footer("Thank you for your purchase!"));
+
+        // Build payload
+        DisplayPayload payload = new DisplayPayload();
+        payload.setLayout("receipt.xslt");
+        payload.setReceipt(receipt);
+
+        String encoded = DisplayPayloadHelper.toBase64(payload);
 
         return SaleToPOIRequest.builder()
                 .messageHeader(MessageHeader.builder()
@@ -518,9 +527,8 @@ public final class Main {
                 .build();
     }
 
-    private static SaleToPOIRequest buildInputRequest(String serviceID, String xmlPayload) {
-        String encoded = Base64.getEncoder().encodeToString(
-                xmlPayload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    private static SaleToPOIRequest buildInputRequest(String serviceID, InputPayload inputPayload) throws JAXBException {
+        String encoded = DisplayPayloadHelper.toBase64(inputPayload);
 
         return SaleToPOIRequest.builder()
                 .messageHeader(MessageHeader.builder()
@@ -551,31 +559,14 @@ public final class Main {
                 .build();
     }
 
-    private static SaleToPOIRequest buildConfirmationRequest(String serviceID, String prompt) {
-        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                + "<inputPayload xmlns=\"urn:bilt:input:v1\" version=\"1.0\">\n"
-                + "  <display>\n"
-                + "    <title>" + escapeXml(prompt) + "</title>\n"
-                + "  </display>\n"
-                + "  <confirmation/>\n"
-                + "</inputPayload>";
-        return buildInputRequest(serviceID, xml);
+    private static SaleToPOIRequest buildConfirmationRequest(String serviceID, String prompt) throws JAXBException {
+        InputPayload payload = DisplayPayloadHelper.confirmation(prompt);
+        return buildInputRequest(serviceID, payload);
     }
 
-    private static SaleToPOIRequest buildSignatureRequest(String serviceID, String prompt) {
-        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                + "<inputPayload xmlns=\"urn:bilt:input:v1\" version=\"1.0\">\n"
-                + "  <display>\n"
-                + "    <title>" + escapeXml(prompt) + "</title>\n"
-                + "  </display>\n"
-                + "  <signature/>\n"
-                + "</inputPayload>";
-        return buildInputRequest(serviceID, xml);
-    }
-
-    private static String escapeXml(String s) {
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                .replace("\"", "&quot;").replace("'", "&apos;");
+    private static SaleToPOIRequest buildSignatureRequest(String serviceID, String prompt) throws JAXBException {
+        InputPayload payload = DisplayPayloadHelper.signature(prompt);
+        return buildInputRequest(serviceID, payload);
     }
 
     private static SaleToPOIRequest buildTransactionStatusRequest(String serviceID, String statusServiceID) {

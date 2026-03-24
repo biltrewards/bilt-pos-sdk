@@ -356,14 +356,24 @@ public final class DisplayPayloadHelper {
     }
 
     /**
-     * Creates a header/footer with text.
+     * Creates a header with text.
      *
      * @param text the text content
      * @return a new HeaderFooterType instance
      */
-    public static HeaderFooterType headerFooter(String text) {
+    public static HeaderFooterType header(String text) {
         HeaderFooterType hf = new HeaderFooterType();
         hf.setText(text);
         return hf;
+    }
+
+    /**
+     * Creates a footer with text.
+     *
+     * @param text the text content
+     * @return a new HeaderFooterType instance
+     */
+    public static HeaderFooterType footer(String text) {
+        return header(text);
     }
 }

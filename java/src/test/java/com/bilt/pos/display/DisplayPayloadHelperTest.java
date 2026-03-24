@@ -224,8 +224,15 @@ class DisplayPayloadHelperTest {
     }
 
     @Test
-    void headerFooterShouldCreateCorrectType() {
-        HeaderFooterType hf = DisplayPayloadHelper.headerFooter("Thank you!");
+    void headerShouldCreateCorrectType() {
+        HeaderFooterType hf = DisplayPayloadHelper.header("Your items");
+
+        assertEquals("Your items", hf.getText());
+    }
+
+    @Test
+    void footerShouldCreateCorrectType() {
+        HeaderFooterType hf = DisplayPayloadHelper.footer("Thank you!");
 
         assertEquals("Thank you!", hf.getText());
     }
@@ -240,7 +247,7 @@ class DisplayPayloadHelperTest {
         payload.setLayout("receipt.xslt");
 
         ReceiptType receipt = new ReceiptType();
-        receipt.setHeader(DisplayPayloadHelper.headerFooter("Your items"));
+        receipt.setHeader(DisplayPayloadHelper.header("Your items"));
 
         LineItemsType lineItems = new LineItemsType();
         lineItems.getLineItem().add(DisplayPayloadHelper.lineItem(LineItemKindType.HEADING, "SALES"));
@@ -256,7 +263,7 @@ class DisplayPayloadHelperTest {
         receipt.setTax(tax);
 
         receipt.setTotal(DisplayPayloadHelper.labeledAmount("Total", "$", 86.39));
-        receipt.setFooter(DisplayPayloadHelper.headerFooter("Thank you!"));
+        receipt.setFooter(DisplayPayloadHelper.footer("Thank you!"));
 
         payload.setReceipt(receipt);
 
