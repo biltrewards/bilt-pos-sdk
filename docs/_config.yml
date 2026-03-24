@@ -18,6 +18,10 @@ defaults:
     values:
       layout: "doc"
   - scope:
+      path: "api-reference.html"
+    values:
+      layout: none
+  - scope:
       path: "index.markdown"
     values:
       layout: "home"

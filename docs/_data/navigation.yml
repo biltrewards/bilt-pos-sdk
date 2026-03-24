@@ -62,3 +62,7 @@
       url: /timeout-handling.html
     - name: Auth Response
       url: /auth-response.html
+    - name: Payment Brands
+      url: /payment-brands.html
+    - name: API Reference
+      url: /api-reference.html
