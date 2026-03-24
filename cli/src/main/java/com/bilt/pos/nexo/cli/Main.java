@@ -497,6 +497,7 @@ public final class Main {
 
         // Build payload
         DisplayPayload payload = new DisplayPayload();
+        payload.setVersion("1.0");
         payload.setLayout("receipt.xslt");
         payload.setReceipt(receipt);
 

@@ -171,6 +171,7 @@ public final class DisplayPayloadHelper {
      */
     public static DisplayPayload standby(String layout) {
         DisplayPayload payload = new DisplayPayload();
+        payload.setVersion("1.0");
         payload.setLayout(layout);
         payload.setStandby(new StandbyType());
         return payload;
@@ -185,6 +186,7 @@ public final class DisplayPayloadHelper {
      */
     public static DisplayPayload standby(String layout, String theme) {
         DisplayPayload payload = new DisplayPayload();
+        payload.setVersion("1.0");
         payload.setLayout(layout);
         StandbyType standby = new StandbyType();
         standby.setTheme(theme);
@@ -201,6 +203,7 @@ public final class DisplayPayloadHelper {
      */
     public static DisplayPayload qrCode(String layout, String data) {
         DisplayPayload payload = new DisplayPayload();
+        payload.setVersion("1.0");
         payload.setLayout(layout);
         QrCodeType qrCode = new QrCodeType();
         qrCode.setData(data);
@@ -219,6 +222,7 @@ public final class DisplayPayloadHelper {
      */
     public static DisplayPayload qrCode(String layout, String data, String headerText, String callToAction) {
         DisplayPayload payload = new DisplayPayload();
+        payload.setVersion("1.0");
         payload.setLayout(layout);
         QrCodeType qrCode = new QrCodeType();
         qrCode.setData(data);
@@ -242,6 +246,7 @@ public final class DisplayPayloadHelper {
      */
     public static InputPayload confirmation(String title) {
         InputPayload payload = new InputPayload();
+        payload.setVersion("1.0");
         DisplayType display = new DisplayType();
         display.setTitle(title);
         payload.setDisplay(display);
@@ -257,6 +262,7 @@ public final class DisplayPayloadHelper {
      */
     public static InputPayload signature(String title) {
         InputPayload payload = new InputPayload();
+        payload.setVersion("1.0");
         DisplayType display = new DisplayType();
         display.setTitle(title);
         payload.setDisplay(display);

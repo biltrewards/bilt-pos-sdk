@@ -40,6 +40,24 @@ class DisplayPayloadHelperTest {
     }
 
     @Test
+    void toXmlShouldIncludeVersionAttribute() throws JAXBException {
+        DisplayPayload payload = DisplayPayloadHelper.standby("standby.xslt");
+
+        String xml = DisplayPayloadHelper.toXml(payload);
+
+        assertTrue(xml.contains("version=\"1.0\""), "XML should contain version attribute");
+    }
+
+    @Test
+    void inputPayloadToXmlShouldIncludeVersionAttribute() throws JAXBException {
+        InputPayload payload = DisplayPayloadHelper.confirmation("Test");
+
+        String xml = DisplayPayloadHelper.toXml(payload);
+
+        assertTrue(xml.contains("version=\"1.0\""), "XML should contain version attribute");
+    }
+
+    @Test
     void encodeAndDecodeShouldRoundTripCorrectly() throws JAXBException {
         DisplayPayload original = createSampleReceipt();
 
