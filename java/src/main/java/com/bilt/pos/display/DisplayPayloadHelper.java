@@ -303,6 +303,48 @@ public final class DisplayPayloadHelper {
     }
 
     /**
+     * Creates a display-only input payload for use with nexo native input commands
+     * (DigitString, DecimalString, TextString, GetMenuEntry).
+     * <p>
+     * Selection behavior for GetMenuEntry (single vs multi-select) is controlled
+     * by {@code InputData.minLength/maxLength} in the nexo request, not the XML payload.
+     *
+     * @param title the title/prompt to display
+     * @return a new input payload with display block only
+     */
+    public static InputPayload display(String title) {
+        InputPayload payload = new InputPayload();
+        payload.setVersion("1.0");
+        DisplayType display = new DisplayType();
+        display.setTitle(title);
+        payload.setDisplay(display);
+        return payload;
+    }
+
+    /**
+     * Creates a display-only input payload with title and additional text lines.
+     * <p>
+     * For use with nexo native input commands (DigitString, DecimalString, TextString, GetMenuEntry).
+     *
+     * @param title the title/prompt to display
+     * @param text  additional text lines shown below the title
+     * @return a new input payload with display block only
+     */
+    public static InputPayload display(String title, String... text) {
+        InputPayload payload = new InputPayload();
+        payload.setVersion("1.0");
+        DisplayType display = new DisplayType();
+        display.setTitle(title);
+        if (text != null) {
+            for (String line : text) {
+                display.getText().add(line);
+            }
+        }
+        payload.setDisplay(display);
+        return payload;
+    }
+
+    /**
      * Creates a confirmation input payload.
      *
      * @param title the title/prompt to display

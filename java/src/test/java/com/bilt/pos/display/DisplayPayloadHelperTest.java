@@ -199,6 +199,29 @@ class DisplayPayloadHelperTest {
     }
 
     @Test
+    void displayShouldCreateDisplayOnlyInputPayload() throws JAXBException {
+        InputPayload payload = DisplayPayloadHelper.display("Enter your zip code");
+
+        assertNotNull(payload.getDisplay());
+        assertEquals("Enter your zip code", payload.getDisplay().getTitle());
+        assertNull(payload.getConfirmation());
+        assertNull(payload.getSignature());
+    }
+
+    @Test
+    void displayWithTextShouldIncludeAdditionalLines() throws JAXBException {
+        InputPayload payload = DisplayPayloadHelper.display("Select a tip amount", "Line 1", "Line 2");
+
+        assertNotNull(payload.getDisplay());
+        assertEquals("Select a tip amount", payload.getDisplay().getTitle());
+        assertEquals(2, payload.getDisplay().getText().size());
+        assertEquals("Line 1", payload.getDisplay().getText().get(0));
+        assertEquals("Line 2", payload.getDisplay().getText().get(1));
+        assertNull(payload.getConfirmation());
+        assertNull(payload.getSignature());
+    }
+
+    @Test
     void confirmationShouldCreateValidInputPayload() throws JAXBException {
         InputPayload payload = DisplayPayloadHelper.confirmation("Confirm?");
 
