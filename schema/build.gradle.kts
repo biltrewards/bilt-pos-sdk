@@ -13,6 +13,94 @@ node {
 
 val schemaFile = layout.projectDirectory.file("nexo_sale_to_poi_v3_0_schema.json")
 
+// ═══════════════════════════════════════════════════════════════════
+// XSD Code Generation (JAXB)
+// ═══════════════════════════════════════════════════════════════════
+
+val xsdDir = rootProject.layout.projectDirectory.dir("docs")
+val displayXsd = xsdDir.file("display.xsd")
+val inputXsd = xsdDir.file("input.xsd")
+val commonXsd = xsdDir.file("common.xsd")
+
+val displayJavaOutputDir = rootProject.layout.projectDirectory.dir(
+    "java/src/main/java",
+)
+
+// Repository needed for xjc dependencies
+repositories {
+    mavenCentral()
+}
+
+val xjcClasspath: Configuration by configurations.creating {
+    isCanBeResolved = true
+    isCanBeConsumed = false
+}
+
+dependencies {
+    xjcClasspath("org.glassfish.jaxb:jaxb-xjc:4.0.5")
+    xjcClasspath("org.glassfish.jaxb:jaxb-runtime:4.0.5")
+}
+
+val generateDisplayJavaRaw = tasks.register<JavaExec>("generateDisplayJavaRaw") {
+    group = "codegen"
+    description = "Generate Java classes from display.xsd and input.xsd using JAXB xjc (without headers)."
+
+    inputs.files(displayXsd, inputXsd, commonXsd)
+    outputs.dir(displayJavaOutputDir.dir("com/bilt/pos/display"))
+
+    // Use provider to defer resolution for configuration cache compatibility
+    classpath(xjcClasspath)
+    mainClass.set("com.sun.tools.xjc.XJCFacade")
+
+    args = listOf(
+        "-d", displayJavaOutputDir.asFile.absolutePath,
+        "-p", "com.bilt.pos.display",
+        "-encoding", "UTF-8",
+        "-no-header",
+        displayXsd.asFile.absolutePath,
+        inputXsd.asFile.absolutePath,
+    )
+
+    doFirst {
+        displayJavaOutputDir.dir("com/bilt/pos/display").asFile.mkdirs()
+    }
+
+    // Mark as not compatible with configuration cache due to xjc tool
+    notCompatibleWithConfigurationCache("JAXB xjc tool is not configuration cache compatible")
+}
+
+tasks.register("generateDisplayJava") {
+    group = "codegen"
+    description = "Generate Java classes from display.xsd and input.xsd using JAXB xjc. Commit the result."
+    dependsOn(generateDisplayJavaRaw)
+
+    val outputDir = displayJavaOutputDir.dir("com/bilt/pos/display").asFile
+    val header = """
+        |/*
+        | *    ____  _ _ _
+        | *   | __ )(_) | |_
+        | *   |  _ \| | | __|
+        | *   | |_) | | | |_
+        | *   |____/|_|_|\__|
+        | *
+        | *   Bilt POS SDK
+        | *
+        | *   This file is auto-generated from the display.xsd and input.xsd schemas.
+        | *   Do not modify manually — re-run code generation instead.
+        | */
+        |
+    """.trimMargin()
+
+    doLast {
+        outputDir.listFiles()?.filter { it.extension == "java" }?.forEach { file ->
+            val content = file.readText()
+            if (!content.startsWith("/*")) {
+                file.writeText(header + content)
+            }
+        }
+    }
+}
+
 val kotlinRawOutputFile = layout.buildDirectory.file("generated/NexoTerminalAPI.kt")
 val kotlinOutputFile = rootProject.layout.projectDirectory.file(
     "kotlin/src/main/kotlin/com/bilt/pos/nexo/model/NexoTerminalAPI.kt",
@@ -72,6 +160,12 @@ tasks.register("generateNexo") {
     group = "codegen"
     description = "Regenerate both Kotlin and Java types from the Nexo JSON Schema. Commit the result."
     dependsOn("generateNexoKotlin", "generateNexoJava")
+}
+
+tasks.register("generateAll") {
+    group = "codegen"
+    description = "Regenerate all code from all schemas (Nexo JSON Schema + Display/Input XSD). Commit the result."
+    dependsOn("generateNexo", "generateDisplayJava")
 }
 
 @CacheableTask
