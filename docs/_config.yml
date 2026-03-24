@@ -28,5 +28,4 @@ exclude:
   - Gemfile.lock
   - openapi.yaml
   - "*.txt"
-  - api-reference.html
   - .gitignore
