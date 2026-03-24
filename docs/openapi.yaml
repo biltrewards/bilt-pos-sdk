@@ -2299,8 +2299,10 @@ components:
         - DocumentQualifier
         - OutputContent
       description: >-
-        Customer or merchant payment receipt, included in the response when the POI does not implement the Print message
-        exchange (Basic profile).
+        Customer or merchant payment receipt. The OutputContent.OutputXHTML field contains an XML document conforming to
+        the receipt.xsd schema (namespace urn:bilt:receipt:v1) with up to three representations: Base64-encoded HTML
+        (htmlReceipt), pre-formatted plain text (plainTextReceipt), and structured key-value fields (receiptData).
+        The root element carries type (CUSTOMER or MERCHANT) and version attributes.
       properties:
         DocumentQualifier:
           $ref: '#/components/schemas/DocumentQualifierEnum'

@@ -91,7 +91,7 @@ When a payment succeeds:
     - **`POIData.POITransactionID.TransactionID`** — the transaction identifier.
     - **`PaymentResponse.Response.Result`** — `Success`. Other possible values are `Partial` for a successful partial payment, or `Failure` for a declined payment.
     - **`PaymentResponse.Response.AdditionalResponse`** — additional transaction data, such as shopper recognition or shopper input details.
-    - **`PaymentReceipt`** — data you can use to generate a receipt.
+    - **`PaymentReceipt`** — receipt data in XML format containing HTML, plain text, and structured fields. See [Receipt format](./receipt-format.md) for details.
 
   Example response:
 
@@ -181,14 +181,14 @@ When a payment fails, the result includes `Result: Failure` along with informati
             "DocumentQualifier": "SaleReceipt",
             "OutputContent": {
               "OutputFormat": "XHTML",
-              "OutputXHTML": "..."
+              "OutputXHTML": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><r:receipt xmlns:r=\"urn:bilt:receipt:v1\" type=\"MERCHANT\" version=\"1.0\"><r:htmlReceipt>...</r:htmlReceipt><r:plainTextReceipt>...</r:plainTextReceipt><r:receiptData>...</r:receiptData></r:receipt>"
             }
           },
           {
             "DocumentQualifier": "CustomerReceipt",
             "OutputContent": {
               "OutputFormat": "XHTML",
-              "OutputXHTML": "..."
+              "OutputXHTML": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><r:receipt xmlns:r=\"urn:bilt:receipt:v1\" type=\"CUSTOMER\" version=\"1.0\"><r:htmlReceipt>...</r:htmlReceipt><r:plainTextReceipt>...</r:plainTextReceipt><r:receiptData>...</r:receiptData></r:receipt>"
             }
           }
         ]

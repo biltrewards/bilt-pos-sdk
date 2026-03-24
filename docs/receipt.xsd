@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:r="urn:bilt:receipt:v1"
+           targetNamespace="urn:bilt:receipt:v1"
+           elementFormDefault="qualified"
+           version="1.0">
+
+  <!-- Root element -->
+  <xs:element name="receipt" type="r:ReceiptType"/>
+
+  <xs:complexType name="ReceiptType">
+    <xs:all>
+      <xs:element name="htmlReceipt"      type="xs:base64Binary" minOccurs="0"/>
+      <xs:element name="plainTextReceipt" type="xs:string"       minOccurs="0"/>
+      <xs:element name="receiptData"      type="r:ReceiptDataType" minOccurs="0"/>
+    </xs:all>
+    <xs:attribute name="type"    type="r:ReceiptCopyEnum" use="required"/>
+    <xs:attribute name="version" type="xs:string"         use="required"/>
+  </xs:complexType>
+
+  <xs:simpleType name="ReceiptCopyEnum">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="CUSTOMER"/>
+      <xs:enumeration value="MERCHANT"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="ReceiptDataType">
+    <xs:all>
+      <!-- Receipt metadata -->
+      <xs:element name="receiptCopy"             type="xs:string" minOccurs="0"/>
+      <xs:element name="offlineDeletedReceipt"   type="xs:string" minOccurs="0"/>
+      <xs:element name="offlineDeletedTimeStamp" type="xs:string" minOccurs="0"/>
+
+      <!-- Transaction -->
+      <xs:element name="transactionType"       type="xs:string" minOccurs="0"/>
+      <xs:element name="transactionTimeStamp"  type="xs:string" minOccurs="0"/>
+      <xs:element name="transactionResult"     type="xs:string" minOccurs="0"/>
+      <xs:element name="transactionResultCode" type="xs:string" minOccurs="0"/>
+      <xs:element name="rejectionReason"       type="xs:string" minOccurs="0"/>
+
+      <!-- Merchant -->
+      <xs:element name="merchantName"        type="xs:string" minOccurs="0"/>
+      <xs:element name="merchantAddress1"    type="xs:string" minOccurs="0"/>
+      <xs:element name="merchantAddress2"    type="xs:string" minOccurs="0"/>
+      <xs:element name="merchantAddress3"    type="xs:string" minOccurs="0"/>
+      <xs:element name="merchantAddress4"    type="xs:string" minOccurs="0"/>
+      <xs:element name="merchantPhoneNumber" type="xs:string" minOccurs="0"/>
+      <xs:element name="merchantRegNumber"   type="xs:string" minOccurs="0"/>
+      <xs:element name="merchantID"          type="xs:string" minOccurs="0"/>
+
+      <!-- Amounts -->
+      <xs:element name="currency"          type="xs:string" minOccurs="0"/>
+      <xs:element name="transactionAmount" type="xs:string" minOccurs="0"/>
+      <xs:element name="totalAmount"       type="xs:string" minOccurs="0"/>
+      <xs:element name="taxAmount"         type="xs:string" minOccurs="0"/>
+      <xs:element name="cashbackAmount"    type="xs:string" minOccurs="0"/>
+      <xs:element name="surchargeAmount"   type="xs:string" minOccurs="0"/>
+      <xs:element name="tipsAmount"        type="xs:string" minOccurs="0"/>
+
+      <!-- Card / Payment -->
+      <xs:element name="cardBrand"          type="xs:string" minOccurs="0"/>
+      <xs:element name="maskedPAN"          type="xs:string" minOccurs="0"/>
+      <xs:element name="psn"                type="xs:string" minOccurs="0"/>
+      <xs:element name="expiryDate"         type="xs:string" minOccurs="0"/>
+      <xs:element name="paymentInstrument"  type="xs:string" minOccurs="0"/>
+      <xs:element name="apmName"            type="xs:string" minOccurs="0"/>
+      <xs:element name="cvmType"            type="xs:string" minOccurs="0"/>
+      <xs:element name="encryptedPan"       type="xs:string" minOccurs="0"/>
+      <xs:element name="encryptedKsn"       type="xs:string" minOccurs="0"/>
+
+      <!-- Terminal / Acquirer -->
+      <xs:element name="terminalID"       type="xs:string" minOccurs="0"/>
+      <xs:element name="poiSerialNumber"  type="xs:string" minOccurs="0"/>
+      <xs:element name="acquirerName"     type="xs:string" minOccurs="0"/>
+      <xs:element name="acquirerID"       type="xs:string" minOccurs="0"/>
+
+      <!-- Authorization -->
+      <xs:element name="authCode"   type="xs:string" minOccurs="0"/>
+      <xs:element name="authSource" type="xs:string" minOccurs="0"/>
+      <xs:element name="refNumber"  type="xs:string" minOccurs="0"/>
+
+      <!-- EMV tags -->
+      <xs:element name="atc"     type="xs:string" minOccurs="0"/>
+      <xs:element name="aed"     type="xs:string" minOccurs="0"/>
+      <xs:element name="aid"     type="xs:string" minOccurs="0"/>
+      <xs:element name="acType"  type="xs:string" minOccurs="0"/>
+      <xs:element name="acValue" type="xs:string" minOccurs="0"/>
+      <xs:element name="arc"     type="xs:string" minOccurs="0"/>
+      <xs:element name="tvr"     type="xs:string" minOccurs="0"/>
+      <xs:element name="tsi"     type="xs:string" minOccurs="0"/>
+    </xs:all>
+  </xs:complexType>
+
+</xs:schema>

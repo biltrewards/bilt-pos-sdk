@@ -19,6 +19,8 @@
       url: /refund-unreferenced.html
     - name: Verify Transaction
       url: /verify-transaction-status.html
+    - name: Receipt Format
+      url: /receipt-format.html
 
 - title: Display
   items:
