@@ -27,7 +27,5 @@ exclude:
   - Gemfile
   - Gemfile.lock
   - openapi.yaml
-  - "*.xsd"
   - "*.txt"
-  - api-reference.html
   - .gitignore

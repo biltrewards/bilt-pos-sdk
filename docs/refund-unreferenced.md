@@ -80,7 +80,7 @@ When a refund succeeds, your integration receives a result containing:
 
 - **`PaymentResponse.Response.Result`** — `Success`.
 - **`POIData.POITransactionID.TransactionID`** — the transaction identifier for this refund.
-- **`PaymentReceipt`** — receipt data for the refund transaction.
+- **`PaymentReceipt`** — receipt data in XML format. See [Receipt format](./receipt-format.md) for details.
 
 Example response:
 
