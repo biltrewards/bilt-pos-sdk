@@ -109,6 +109,9 @@ public final class DisplayPayloadHelper {
 
     /**
      * Serializes an {@link InputPayload} to an XML string.
+     * <p>
+     * The output uses a single default namespace declaration ({@code xmlns="urn:bilt:input:v1"})
+     * for backward compatibility with terminals that expect all elements in the input namespace.
      *
      * @param payload the input payload to serialize
      * @return the XML string representation
@@ -120,7 +123,27 @@ public final class DisplayPayloadHelper {
         marshaller.setProperty(Marshaller.JAXB_FRAGMENT, Boolean.FALSE);
         StringWriter writer = new StringWriter();
         marshaller.marshal(payload, writer);
-        return writer.toString();
+        // Post-process to use single default namespace for backward compatibility
+        return normalizeInputPayloadXml(writer.toString());
+    }
+
+    /**
+     * Normalizes InputPayload XML to use a single default namespace declaration.
+     * This ensures backward compatibility with the old hand-crafted XML format
+     * where all elements were in urn:bilt:input:v1.
+     */
+    private static String normalizeInputPayloadXml(String xml) {
+        // Remove namespace prefixes (e.g., ns2:inputPayload -> inputPayload)
+        xml = xml.replaceAll("<ns\\d+:", "<");
+        xml = xml.replaceAll("</ns\\d+:", "</");
+        // Replace namespace declarations with single default namespace
+        xml = xml.replaceAll(" xmlns=\"[^\"]*\"", "");
+        xml = xml.replaceAll(" xmlns:ns\\d+=\"[^\"]*\"", "");
+        // Add the correct default namespace to inputPayload
+        xml = xml.replace("<inputPayload", "<inputPayload xmlns=\"urn:bilt:input:v1\"");
+        // Remove standalone="yes" for cleaner output
+        xml = xml.replace(" standalone=\"yes\"", "");
+        return xml;
     }
 
     /**

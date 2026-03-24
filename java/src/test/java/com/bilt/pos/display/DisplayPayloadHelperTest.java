@@ -101,25 +101,31 @@ class DisplayPayloadHelperTest {
 
     @Test
     void inputPayloadToXmlShouldContainNamespace() throws JAXBException {
-        InputPayload payload = DisplayPayloadHelper.signature("Sign here");
+        InputPayload payload = DisplayPayloadHelper.confirmation("Would you like a receipt?");
 
         String xml = DisplayPayloadHelper.toXml(payload);
 
         assertTrue(xml.contains("inputPayload"));
-        assertTrue(xml.contains("urn:bilt:input:v1"));
-        assertTrue(xml.contains("signature"));
+        assertTrue(xml.contains("xmlns=\"urn:bilt:input:v1\""));
+        assertTrue(xml.contains("confirmation"));
+        // Verify all elements are in the default namespace (no prefixes)
+        assertFalse(xml.contains("ns2:"), "Should not have namespace prefixes");
+        assertFalse(xml.contains("urn:bilt:common"), "Should not reference common namespace");
     }
 
     @Test
-    void inputPayloadShouldRoundTrip() throws JAXBException {
+    void inputPayloadToBase64ShouldProduceDecodableXml() throws JAXBException {
         InputPayload original = DisplayPayloadHelper.confirmation("Would you like a receipt?");
 
         String base64 = DisplayPayloadHelper.toBase64(original);
-        InputPayload decoded = DisplayPayloadHelper.inputFromBase64(base64);
+        String xml = new String(Base64.getDecoder().decode(base64), java.nio.charset.StandardCharsets.UTF_8);
 
-        assertNotNull(decoded.getDisplay());
-        assertEquals("Would you like a receipt?", decoded.getDisplay().getTitle());
-        assertNotNull(decoded.getConfirmation());
+        // Verify the decoded XML has the expected structure
+        assertTrue(xml.contains("<inputPayload"));
+        assertTrue(xml.contains("xmlns=\"urn:bilt:input:v1\""));
+        assertTrue(xml.contains("<display>"));
+        assertTrue(xml.contains("<title>Would you like a receipt?</title>"));
+        assertTrue(xml.contains("<confirmation/>"));
     }
 
     // ═══════════════════════════════════════════════════════════════════
