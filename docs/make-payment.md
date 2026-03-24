@@ -130,6 +130,8 @@ When a payment succeeds:
   }
   ```
 
+The `PaymentResult` includes `PaymentInstrumentData.CardData.PaymentBrand`, which identifies the card network used. See [Payment brands](./payment-brands.md) for the full list of possible values.
+
 You can also view the payment details in the Bilt dashboard under **Transactions > Payments**.
 
 ### Failed payment
