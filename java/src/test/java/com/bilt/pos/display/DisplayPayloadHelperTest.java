@@ -128,6 +128,30 @@ class DisplayPayloadHelperTest {
         assertTrue(xml.contains("<confirmation/>"));
     }
 
+    @Test
+    void inputPayloadRoundTripShouldPreserveData() throws JAXBException {
+        InputPayload original = DisplayPayloadHelper.confirmation("Confirm purchase?");
+
+        String xml = DisplayPayloadHelper.toXml(original);
+        InputPayload parsed = DisplayPayloadHelper.inputFromXml(xml);
+
+        assertNotNull(parsed.getDisplay(), "Display should not be null after round-trip");
+        assertEquals("Confirm purchase?", parsed.getDisplay().getTitle());
+        assertNotNull(parsed.getConfirmation());
+    }
+
+    @Test
+    void inputPayloadBase64RoundTripShouldPreserveData() throws JAXBException {
+        InputPayload original = DisplayPayloadHelper.signature("Please sign below");
+
+        String base64 = DisplayPayloadHelper.toBase64(original);
+        InputPayload parsed = DisplayPayloadHelper.inputFromBase64(base64);
+
+        assertNotNull(parsed.getDisplay(), "Display should not be null after round-trip");
+        assertEquals("Please sign below", parsed.getDisplay().getTitle());
+        assertNotNull(parsed.getSignature());
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // Factory Methods
     // ═══════════════════════════════════════════════════════════════════
@@ -214,12 +238,21 @@ class DisplayPayloadHelperTest {
     }
 
     @Test
+    void moneyFromDoubleShouldPreserveTrailingZeros() {
+        MoneyType money = DisplayPayloadHelper.money("$", 107.00);
+
+        // Should be "107.00" not "107.0" for proper monetary display
+        assertEquals(new BigDecimal("107.00"), money.getValue());
+        assertEquals(2, money.getValue().scale());
+    }
+
+    @Test
     void labeledAmountShouldCreateCorrectType() {
         LabeledAmountType amount = DisplayPayloadHelper.labeledAmount("Total", "$", 50.00);
 
         assertEquals("Total", amount.getDescription());
         assertEquals("$", amount.getAmount().getCurrency());
-        assertEquals(new BigDecimal("50.0"), amount.getAmount().getValue());
+        assertEquals(new BigDecimal("50.00"), amount.getAmount().getValue());
     }
 
     @Test

@@ -160,6 +160,9 @@ public final class DisplayPayloadHelper {
 
     /**
      * Deserializes an {@link InputPayload} from an XML string.
+     * <p>
+     * This method can parse both the normalized XML format (all elements in urn:bilt:input:v1)
+     * produced by {@link #toXml(InputPayload)} and the raw JAXB format with separate namespaces.
      *
      * @param xml the XML string to deserialize
      * @return the deserialized input payload
@@ -167,7 +170,38 @@ public final class DisplayPayloadHelper {
      */
     public static InputPayload inputFromXml(String xml) throws JAXBException {
         Unmarshaller unmarshaller = INPUT_CONTEXT.createUnmarshaller();
+        // Reverse normalization: restore urn:bilt:common:v1 namespace for display element
+        // if the XML was produced by toXml(InputPayload) with single namespace
+        xml = denormalizeInputPayloadXml(xml);
         return (InputPayload) unmarshaller.unmarshal(new StringReader(xml));
+    }
+
+    /**
+     * Restores proper namespace declarations for InputPayload XML that was normalized
+     * to use a single default namespace.
+     * <p>
+     * JAXB expects DisplayType's children (title, text) to be in urn:bilt:common:v1,
+     * but our normalized output puts everything in urn:bilt:input:v1 for terminal compatibility.
+     * The display element itself stays in urn:bilt:input:v1 per InputPayload's @XmlElement annotation.
+     * This method adds the common namespace back for proper unmarshalling.
+     */
+    private static String denormalizeInputPayloadXml(String xml) {
+        // Only process if it's a normalized XML (single namespace, no common namespace)
+        if (xml.contains("urn:bilt:common:v1") || !xml.contains("xmlns=\"urn:bilt:input:v1\"")) {
+            return xml;
+        }
+        // Add common namespace declaration
+        xml = xml.replace(
+                "xmlns=\"urn:bilt:input:v1\"",
+                "xmlns=\"urn:bilt:input:v1\" xmlns:c=\"urn:bilt:common:v1\""
+        );
+        // Only prefix DisplayType's children (title, text), NOT display element itself
+        // because display is in urn:bilt:input:v1 per InputPayload's @XmlElement annotation
+        xml = xml.replace("<title>", "<c:title>");
+        xml = xml.replace("</title>", "</c:title>");
+        xml = xml.replace("<text>", "<c:text>");
+        xml = xml.replace("</text>", "</c:text>");
+        return xml;
     }
 
     /**
@@ -313,13 +347,17 @@ public final class DisplayPayloadHelper {
 
     /**
      * Creates a money amount from a double value.
+     * <p>
+     * The value is formatted with 2 decimal places to preserve cents precision
+     * (e.g., 107.00 stays as "107.00", not "107.0").
      *
      * @param currency the currency symbol or code (e.g., "$" or "USD")
      * @param value    the monetary value
      * @return a new MoneyType instance
      */
     public static MoneyType money(String currency, double value) {
-        return money(currency, BigDecimal.valueOf(value));
+        // Use String constructor to preserve 2 decimal places for monetary values
+        return money(currency, new BigDecimal(String.format("%.2f", value)));
     }
 
     /**
@@ -346,7 +384,8 @@ public final class DisplayPayloadHelper {
      * @return a new LabeledAmountType instance
      */
     public static LabeledAmountType labeledAmount(String description, String currency, double value) {
-        return labeledAmount(description, currency, BigDecimal.valueOf(value));
+        // Use String constructor to preserve 2 decimal places for monetary values
+        return labeledAmount(description, currency, new BigDecimal(String.format("%.2f", value)));
     }
 
     /**
