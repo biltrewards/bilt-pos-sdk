@@ -13,13 +13,15 @@ You can also use the `AllowedPaymentBrand` array in `TransactionConditions` to r
 
 | Value | Description |
 |---|---|
-| `UNSET_PAYMENT_BRAND` | Default value when no brand is set (instead of null). |
-| `UNKNOWN_PAYMENT_BRAND` | Brand is present but not recognized. |
-| `AMEX` | American Express |
-| `DISCOVER` | Discover |
-| `MASTER_CARD` | MasterCard |
+| `""` (empty string) | Default value when no brand is set (instead of null). |
+| `Unknown` | Brand is present but not recognized. |
+| `American Express` | American Express |
+| `Discover` | Discover |
+| `MASTERCARD` | MasterCard |
 | `VISA` | Visa |
 | `JCB` | JCB |
-| `UPI` | UnionPay International |
-| `INTERAC` | Interac |
-| `DINERS_CLUB` | Diners Club |
+| `Union Pay International` | UnionPay International |
+| `Interac` | Interac |
+| `Diners Club` | Diners Club |
+| `Dankort` | Dankort |
+| `BankAxept` | BankAxept |
