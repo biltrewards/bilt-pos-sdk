@@ -8,5 +8,9 @@ dependencies {
     api(libs.jackson.annotations)
     api(libs.okhttp)
 
+    // JAXB for XML serialization (display/input payloads)
+    api(libs.jaxb.api)
+    runtimeOnly(libs.jaxb.runtime)
+
     testImplementation(libs.okhttp.mockwebserver)
 }
