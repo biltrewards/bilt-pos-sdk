@@ -21,6 +21,7 @@ val xsdDir = rootProject.layout.projectDirectory.dir("docs")
 val displayXsd = xsdDir.file("display.xsd")
 val inputXsd = xsdDir.file("input.xsd")
 val commonXsd = xsdDir.file("common.xsd")
+val receiptXsd = xsdDir.file("receipt.xsd")
 
 val displayJavaOutputDir = rootProject.layout.projectDirectory.dir(
     "java/src/main/java",
@@ -101,6 +102,67 @@ tasks.register("generateDisplayJava") {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Receipt XSD Code Generation (JAXB)
+// ═══════════════════════════════════════════════════════════════════
+
+val generateReceiptJavaRaw = tasks.register<JavaExec>("generateReceiptJavaRaw") {
+    group = "codegen"
+    description = "Generate Java classes from receipt.xsd using JAXB xjc (without headers)."
+
+    inputs.files(receiptXsd)
+    outputs.dir(displayJavaOutputDir.dir("com/bilt/pos/receipt"))
+
+    classpath(xjcClasspath)
+    mainClass.set("com.sun.tools.xjc.XJCFacade")
+
+    args = listOf(
+        "-d", displayJavaOutputDir.asFile.absolutePath,
+        "-p", "com.bilt.pos.receipt",
+        "-encoding", "UTF-8",
+        "-no-header",
+        receiptXsd.asFile.absolutePath,
+    )
+
+    doFirst {
+        displayJavaOutputDir.dir("com/bilt/pos/receipt").asFile.mkdirs()
+    }
+
+    notCompatibleWithConfigurationCache("JAXB xjc tool is not configuration cache compatible")
+}
+
+tasks.register("generateReceiptJava") {
+    group = "codegen"
+    description = "Generate Java classes from receipt.xsd using JAXB xjc. Commit the result."
+    dependsOn(generateReceiptJavaRaw)
+
+    val outputDir = displayJavaOutputDir.dir("com/bilt/pos/receipt").asFile
+    val header = """
+        |/*
+        | *    ____  _ _ _
+        | *   | __ )(_) | |_
+        | *   |  _ \| | | __|
+        | *   | |_) | | | |_
+        | *   |____/|_|_|\__|
+        | *
+        | *   Bilt POS SDK
+        | *
+        | *   This file is auto-generated from the receipt.xsd schema.
+        | *   Do not modify manually — re-run code generation instead.
+        | */
+        |
+    """.trimMargin()
+
+    doLast {
+        outputDir.listFiles()?.filter { it.extension == "java" }?.forEach { file ->
+            val content = file.readText()
+            if (!content.startsWith("/*")) {
+                file.writeText(header + content)
+            }
+        }
+    }
+}
+
 val kotlinRawOutputFile = layout.buildDirectory.file("generated/NexoTerminalAPI.kt")
 val kotlinOutputFile = rootProject.layout.projectDirectory.file(
     "kotlin/src/main/kotlin/com/bilt/pos/nexo/model/NexoTerminalAPI.kt",
@@ -164,8 +226,8 @@ tasks.register("generateNexo") {
 
 tasks.register("generateAll") {
     group = "codegen"
-    description = "Regenerate all code from all schemas (Nexo JSON Schema + Display/Input XSD). Commit the result."
-    dependsOn("generateNexo", "generateDisplayJava")
+    description = "Regenerate all code from all schemas (Nexo JSON Schema + Display/Input XSD + Receipt XSD). Commit the result."
+    dependsOn("generateNexo", "generateDisplayJava", "generateReceiptJava")
 }
 
 @CacheableTask
