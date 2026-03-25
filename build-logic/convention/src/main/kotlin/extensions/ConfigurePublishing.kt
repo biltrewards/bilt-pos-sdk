@@ -17,13 +17,13 @@ fun Project.configurePublishing() {
         pom {
             name.set("pos-lib-${project.name}")
             description.set("Bilt POS SDK - ${project.name}")
-            url.set("https://github.com/biltpos/pretty-porpoise")
+            url.set("https://github.com/biltrewards/bilt-pos-sdk")
             inceptionYear.set("2025")
 
             licenses {
                 license {
-                    name.set("The Apache License, Version 2.0")
-                    url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                    name.set("MIT License")
+                    url.set("https://opensource.org/licenses/MIT")
                     distribution.set("repo")
                 }
             }
@@ -37,9 +37,9 @@ fun Project.configurePublishing() {
             }
 
             scm {
-                url.set("https://github.com/biltpos/pretty-porpoise")
-                connection.set("scm:git:git://github.com/biltpos/pretty-porpoise.git")
-                developerConnection.set("scm:git:ssh://git@github.com/biltpos/pretty-porpoise.git")
+                url.set("https://github.com/biltrewards/bilt-pos-sdk")
+                connection.set("scm:git:git://github.com/biltrewards/bilt-pos-sdk.git")
+                developerConnection.set("scm:git:ssh://git@github.com/biltrewards/bilt-pos-sdk.git")
             }
         }
     }
