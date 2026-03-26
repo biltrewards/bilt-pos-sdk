@@ -16,13 +16,13 @@ Add the dependency to your project:
 **Gradle (Kotlin DSL):**
 
 ```kotlin
-implementation("com.bilt:bilt-pos-sdk:0.5.5")
+implementation("com.bilt:bilt-pos-sdk:0.5.6")
 ```
 
 **Gradle (Groovy):**
 
 ```groovy
-implementation 'com.bilt:bilt-pos-sdk:0.5.5'
+implementation 'com.bilt:bilt-pos-sdk:0.5.6'
 ```
 
 **Maven:**
@@ -31,7 +31,7 @@ implementation 'com.bilt:bilt-pos-sdk:0.5.5'
 <dependency>
     <groupId>com.bilt</groupId>
     <artifactId>bilt-pos-sdk</artifactId>
-    <version>0.5.5</version>
+    <version>0.5.6</version>
 </dependency>
 ```
 
