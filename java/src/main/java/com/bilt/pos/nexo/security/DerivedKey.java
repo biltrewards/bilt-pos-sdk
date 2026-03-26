@@ -9,6 +9,10 @@
  */
 package com.bilt.pos.nexo.security;
 
+import java.nio.charset.StandardCharsets;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+
 /**
  * Container for key material derived from a passphrase via PBKDF2.
  *
@@ -44,14 +48,14 @@ final class DerivedKey {
      */
     static DerivedKey derive(String passphrase) throws EncryptionException {
         try {
-            byte[] salt = "BiltNexoSalt".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            byte[] salt = "BiltNexoSalt".getBytes(StandardCharsets.UTF_8);
             int iterations = 4000;
             int totalLength = HMAC_KEY_LENGTH + CIPHER_KEY_LENGTH + IV_LENGTH;
 
-            javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(
+            PBEKeySpec spec = new PBEKeySpec(
                     passphrase.toCharArray(), salt, iterations, totalLength * 8);
-            javax.crypto.SecretKeyFactory skf =
-                    javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
+            SecretKeyFactory skf =
+                    SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
             byte[] raw = skf.generateSecret(spec).getEncoded();
 
             byte[] hmacKey = new byte[HMAC_KEY_LENGTH];

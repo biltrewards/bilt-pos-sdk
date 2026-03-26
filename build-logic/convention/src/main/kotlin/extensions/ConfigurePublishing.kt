@@ -32,7 +32,7 @@ fun Project.configurePublishing() {
                 developer {
                     id.set("biltpos")
                     name.set("Bilt POS")
-                    url.set("https://github.com/biltpos")
+                    url.set("https://github.com/biltrewards")
                 }
             }
 
