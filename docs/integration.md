@@ -34,10 +34,10 @@ The SDK is published to Maven Central under the `com.bilt` group. Two artifacts 
 ```kotlin
 dependencies {
     // Java library
-    implementation("com.bilt:pos-lib-java:0.5.2")
+    implementation("com.bilt:pos-lib-java:0.5.8")
 
     // Kotlin library
-    implementation("com.bilt:pos-lib-kotlin:0.5.2")
+    implementation("com.bilt:pos-lib-kotlin:0.5.8")
 }
 ```
 
@@ -46,10 +46,10 @@ dependencies {
 ```groovy
 dependencies {
     // Java library
-    implementation 'com.bilt:pos-lib-java:0.5.2'
+    implementation 'com.bilt:pos-lib-java:0.5.8'
 
     // Kotlin library
-    implementation 'com.bilt:pos-lib-kotlin:0.5.2'
+    implementation 'com.bilt:pos-lib-kotlin:0.5.8'
 }
 ```
 
@@ -60,14 +60,14 @@ dependencies {
 <dependency>
     <groupId>com.bilt</groupId>
     <artifactId>pos-lib-java</artifactId>
-    <version>0.5.2</version>
+    <version>0.5.8</version>
 </dependency>
 
 <!-- Kotlin library -->
 <dependency>
     <groupId>com.bilt</groupId>
     <artifactId>pos-lib-kotlin</artifactId>
-    <version>0.5.2</version>
+    <version>0.5.8</version>
 </dependency>
 ```
 
