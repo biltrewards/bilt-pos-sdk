@@ -52,6 +52,11 @@
     - name: Text String
       url: /input-text-string.html
 
+- title: SDK Helpers
+  items:
+    - name: Receipt Parsing
+      url: /java-receipt-helpers.html
+
 - title: Reference
   items:
     - name: Error Scenarios

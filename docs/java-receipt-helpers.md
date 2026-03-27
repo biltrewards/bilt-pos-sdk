@@ -9,34 +9,6 @@ The `Receipts` and `ReceiptHelper` classes extract and deserialize receipt XML f
 
 ---
 
-## Installation
-
-Add the dependency to your project:
-
-**Gradle (Kotlin DSL):**
-
-```kotlin
-implementation("com.bilt:bilt-pos-sdk:0.5.6")
-```
-
-**Gradle (Groovy):**
-
-```groovy
-implementation 'com.bilt:bilt-pos-sdk:0.5.6'
-```
-
-**Maven:**
-
-```xml
-<dependency>
-    <groupId>com.bilt</groupId>
-    <artifactId>bilt-pos-sdk</artifactId>
-    <version>0.5.6</version>
-</dependency>
-```
-
----
-
 ## Extract receipts from a payment response
 
 The `Receipts` class provides a high-level API to extract parsed receipts directly from a `NexoTerminalAPI` response:
@@ -165,7 +137,7 @@ data.getTvr();                   // "0000000000"
 data.getAcValue();               // "FD68D343F5BE92CC"
 ```
 
-For the full list of fields, see [Receipt format — receiptData fields](./receipt-format.md#receiptdata-fields).
+For the full list of fields, see [Receipt format — receiptData fields](./receipt-format.html#receiptdata-fields).
 
 ---
 
@@ -227,7 +199,5 @@ receipts.customerReceipt()?.let { customer ->
 
 ## See also
 
-- [Receipt format](./receipt-format.md) — receipt XML structure and field reference
-- [Receipt XML schema](./receipt.xsd) — the full XSD
-- [Make a payment](./make-payment.md) — payment request/response flow
-- [Java SDK — Display and Input Payload Helpers](./java-display-helpers.md) — building display payloads
+- [Receipt format](./receipt-format.html) — receipt XML structure and field reference
+- [Make a payment](./make-payment.html) — payment request/response flow
