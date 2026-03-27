@@ -290,9 +290,8 @@
          ═══════════════════════════════════════════ -->
     <xs:complexType name="DiscountsType">
         <xs:sequence>
-            <xs:element name="discountItem"   type="d:LabeledAmountType"
+            <xs:element name="discountItem" type="d:LabeledAmountType"
                         minOccurs="0" maxOccurs="unbounded"/>
-            <xs:element name="totalDiscount"  type="d:LabeledAmountType" minOccurs="0"/>
         </xs:sequence>
     </xs:complexType>
 

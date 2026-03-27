@@ -143,10 +143,6 @@ Order-level discounts appear in a dedicated `<discounts>` block between `<subtot
     <description>Coupon: SAVE10</description>
     <amount><currency>$</currency><value>-10.00</value></amount>
   </discountItem>
-  <totalDiscount>
-    <description>Total savings</description>
-    <amount><currency>$</currency><value>-15.00</value></amount>
-  </totalDiscount>
 </discounts>
 ```
 
@@ -159,7 +155,6 @@ The `<discounts>` element contains order-level discounts:
 | Element | Occurrences | Description |
 |---|---|---|
 | `<discountItem>` | 0 or more | Individual order-level discount (e.g. loyalty reward, coupon) |
-| `<totalDiscount>` | 0 or 1 | Sum of all order-level discounts |
 
 ### Tax block
 
@@ -285,10 +280,6 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
         <description>Loyalty reward</description>
         <amount><currency>$</currency><value>-5.00</value></amount>
       </discountItem>
-      <totalDiscount>
-        <description>Total savings</description>
-        <amount><currency>$</currency><value>-70.98</value></amount>
-      </totalDiscount>
     </discounts>
 
     <tax>

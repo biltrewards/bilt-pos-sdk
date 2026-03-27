@@ -31,7 +31,6 @@ import jakarta.xml.bind.annotation.XmlType;
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
  *         <element name="discountItem" type="{urn:bilt:display:v1}LabeledAmountType" maxOccurs="unbounded" minOccurs="0"/>
- *         <element name="totalDiscount" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
  *       </sequence>
  *     </restriction>
  *   </complexContent>
@@ -42,13 +41,11 @@ import jakarta.xml.bind.annotation.XmlType;
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "DiscountsType", propOrder = {
-    "discountItem",
-    "totalDiscount"
+    "discountItem"
 })
 public class DiscountsType {
 
     protected List<LabeledAmountType> discountItem;
-    protected LabeledAmountType totalDiscount;
 
     /**
      * Gets the value of the discountItem property.
@@ -80,30 +77,6 @@ public class DiscountsType {
             discountItem = new ArrayList<>();
         }
         return this.discountItem;
-    }
-
-    /**
-     * Gets the value of the totalDiscount property.
-     * 
-     * @return
-     *     possible object is
-     *     {@link LabeledAmountType }
-     *     
-     */
-    public LabeledAmountType getTotalDiscount() {
-        return totalDiscount;
-    }
-
-    /**
-     * Sets the value of the totalDiscount property.
-     * 
-     * @param value
-     *     allowed object is
-     *     {@link LabeledAmountType }
-     *     
-     */
-    public void setTotalDiscount(LabeledAmountType value) {
-        this.totalDiscount = value;
     }
 
 }
