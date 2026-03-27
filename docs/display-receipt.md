@@ -80,7 +80,7 @@ Each `<lineItem>` has a `kind` attribute that controls how the row is rendered:
 | `heading` | `description` | A section label (e.g. SALES, RETURNS). _Accepted but not rendered on terminal._ |
 | `discount` | `description`, `amount` (negative) | An applied discount |
 | `return` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A returned item |
-| `void` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A voided/cancelled item. Rendered with red text and "Voided from transaction" label. |
+| `void` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A voided/cancelled item. Rendered with red text and "Voided from transaction" label. See [Voided items](#voided-items) for usage. |
 | `separator` | _(none)_ | A horizontal rule. _Accepted but not rendered on terminal._ |
 | `spacer` | _(none)_ | A blank line. _Accepted but not rendered on terminal._ |
 
@@ -147,6 +147,67 @@ Order-level discounts appear in a dedicated `<discounts>` block between `<subtot
 ```
 
 > **Design decision:** Item-level discounts are displayed inline with the product they apply to (showing original price struck through and the discount badge). Order-level discounts appear in a separate `<discounts>` block below the subtotal, keeping them distinct from the `<tax>` block which contains only tax-related items. This separation makes the XML structure clearer and helps customers understand which discounts are product-specific vs. cart-wide.
+
+### Voided items
+
+When an item is voided (removed from the transaction), the POS must send **both** the original item line **and** a void line. This approach provides a clear audit trail showing what the customer originally added and what was subsequently voided.
+
+#### Example: Single item voided
+
+Customer adds a jacket, then decides they don't want it:
+
+```xml
+<lineItems>
+  <!-- Original item as it was added -->
+  <lineItem kind="item">
+    <description>The North Face Jacket</description>
+    <quantity>1</quantity>
+    <unitPrice><currency>$</currency><value>230.00</value></unitPrice>
+    <amount><currency>$</currency><value>230.00</value></amount>
+  </lineItem>
+
+  <!-- Void entry with negative amount -->
+  <lineItem kind="void">
+    <description>The North Face Jacket</description>
+    <subtitle>Wrong size</subtitle>
+    <quantity>1</quantity>
+    <unitPrice><currency>$</currency><value>230.00</value></unitPrice>
+    <amount><currency>$</currency><value>-230.00</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+The void line is rendered with red text and a "Voided from transaction" label. The `subtitle` field can optionally explain the reason for voiding.
+
+#### Example: One of three items voided
+
+Customer adds 3 t-shirts, then removes 1:
+
+```xml
+<lineItems>
+  <!-- Original item showing full quantity added -->
+  <lineItem kind="item">
+    <description>Blue T-shirt</description>
+    <quantity>3</quantity>
+    <unitPrice><currency>$</currency><value>19.99</value></unitPrice>
+    <amount><currency>$</currency><value>59.97</value></amount>
+  </lineItem>
+
+  <!-- Void entry for 1 item -->
+  <lineItem kind="void">
+    <description>Blue T-shirt</description>
+    <subtitle>Customer changed mind</subtitle>
+    <quantity>1</quantity>
+    <unitPrice><currency>$</currency><value>19.99</value></unitPrice>
+    <amount><currency>$</currency><value>-19.99</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+> **Important for POS implementers:** Do NOT simply reduce the quantity on the original item when voiding. Always send the original item as it was added, plus a separate void line. This pattern:
+> - Shows customers a clear history of what happened
+> - Provides an audit trail for the transaction
+> - Matches standard retail receipt conventions
 
 ### Discounts block
 
