@@ -23,6 +23,8 @@
       url: /receipt-format.html
     - name: Display Helpers
       url: /display-helpers.html
+    - name: Receipt Helpers
+      url: /receipt-helpers.html
 
 - title: Display
   items:
