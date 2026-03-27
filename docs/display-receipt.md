@@ -79,7 +79,7 @@ Each `<lineItem>` has a `kind` attribute that controls how the row is rendered:
 | `item` (default) | `description`, `quantity`, `unitPrice`, `amount`, optionally `image`, `subtitle`, `originalAmount`, `discount` | A purchasable item |
 | `heading` | `description` | A section label (e.g. SALES, RETURNS). _Accepted but not rendered on terminal._ |
 | `discount` | `description`, `amount` (negative) | An applied discount |
-| `return` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A returned item |
+| `return` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A returned item from a previous transaction. See [Returned items](#returned-items). |
 | `void` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A voided/cancelled item. Rendered with red text and "Voided from transaction" label. See [Voided items](#voided-items) for usage. |
 | `separator` | _(none)_ | A horizontal rule. _Accepted but not rendered on terminal._ |
 | `spacer` | _(none)_ | A blank line. _Accepted but not rendered on terminal._ |
@@ -208,6 +208,28 @@ Customer adds 3 t-shirts, then removes 1:
 > - Shows customers a clear history of what happened
 > - Provides an audit trail for the transaction
 > - Matches standard retail receipt conventions
+
+### Returned items
+
+Returns are items from a **previous transaction** being returned for a refund. Returns and purchases are always separate transactions — you cannot mix returns with new purchases in the same transaction.
+
+```xml
+<!-- Return transaction (separate from any purchase) -->
+<lineItems>
+  <lineItem kind="return">
+    <description>Blue T-shirt</description>
+    <subtitle>Original purchase: Mar 15, 2024</subtitle>
+    <quantity>1</quantity>
+    <unitPrice><currency>$</currency><value>19.99</value></unitPrice>
+    <amount><currency>$</currency><value>-19.99</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+> **Void vs Return:**
+> - Use `void` when an item is removed from the **current** transaction before checkout
+> - Use `return` when an item from a **previous** transaction is being returned for refund
+> - These are always separate transactions — never combine purchases and returns
 
 ### Discounts block
 
