@@ -186,6 +186,7 @@
             <xs:element name="lineItems" type="d:LineItemsType"     minOccurs="0"/>
             <!-- Totals block -->
             <xs:element name="subtotal"  type="d:LabeledAmountType" minOccurs="0"/>
+            <xs:element name="discounts" type="d:DiscountsType"     minOccurs="0"/>
             <xs:element name="tax"       type="d:TaxType"           minOccurs="0"/>
             <xs:element name="total"     type="d:LabeledAmountType" minOccurs="0"/>
             <!-- Optional closing message -->
@@ -206,6 +207,31 @@
 
 
     <!-- ═══════════════════════════════════════════
+         ItemDiscountType  —  discount group applied to an item
+         Groups one or more discount descriptions under a
+         shared label (e.g., "Discount", "CLEARANCE").
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="ItemDiscountType">
+        <xs:sequence>
+            <xs:element name="label" type="xs:string"/>
+            <xs:element name="items" type="d:DiscountItemsType"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="DiscountItemsType">
+        <xs:sequence>
+            <xs:element name="item" maxOccurs="unbounded" type="d:DiscountItemDetailType"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="DiscountItemDetailType">
+        <xs:sequence>
+            <xs:element name="description" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+
+    <!-- ═══════════════════════════════════════════
          LineItemType  —  single row
          ═══════════════════════════════════════════ -->
     <xs:complexType name="LineItemType">
@@ -215,23 +241,30 @@
               depend on `kind`:
 
               kind="item"      — description, subtitle, image,
-                                 quantity, unitPrice, amount
-              kind="heading"   — description only
+                                 quantity, unitPrice, amount,
+                                 originalAmount, discount(s)
+              kind="heading"   — description only (accepted but
+                                 not rendered on terminal)
               kind="discount"  — description, amount (negative)
               kind="return"    — description, quantity, unitPrice,
                                  amount (negative)
-              kind="void"      — description only; XSLT renders as
-                                 "*** Removed", paired with the
-                                 original item line above it
-              kind="separator" — no children (horizontal rule)
-              kind="spacer"    — no children (blank line)
+              kind="void"      — description, quantity, unitPrice,
+                                 amount (negative); rendered with
+                                 red text and "Voided from
+                                 transaction" label
+              kind="separator" — no children (accepted but not
+                                 rendered on terminal)
+              kind="spacer"    — no children (accepted but not
+                                 rendered on terminal)
             -->
-            <xs:element name="image"       type="d:ImageType" minOccurs="0"/>
-            <xs:element name="description" type="xs:string"   minOccurs="0"/>
-            <xs:element name="subtitle"    type="xs:string"   minOccurs="0"/>
-            <xs:element name="quantity"    type="xs:decimal"  minOccurs="0"/>
-            <xs:element name="unitPrice"   type="d:MoneyType" minOccurs="0"/>
-            <xs:element name="amount"      type="d:MoneyType" minOccurs="0"/>
+            <xs:element name="image"          type="d:ImageType"        minOccurs="0"/>
+            <xs:element name="description"    type="xs:string"          minOccurs="0"/>
+            <xs:element name="subtitle"       type="xs:string"          minOccurs="0"/>
+            <xs:element name="quantity"       type="xs:decimal"         minOccurs="0"/>
+            <xs:element name="unitPrice"      type="d:MoneyType"        minOccurs="0"/>
+            <xs:element name="amount"         type="d:MoneyType"        minOccurs="0"/>
+            <xs:element name="originalAmount" type="d:MoneyType"        minOccurs="0"/>
+            <xs:element name="discount"       type="d:ItemDiscountType" minOccurs="0" maxOccurs="unbounded"/>
         </xs:sequence>
         <xs:attribute name="kind" type="d:LineItemKindType" default="item"/>
     </xs:complexType>
@@ -250,14 +283,29 @@
 
 
     <!-- ═══════════════════════════════════════════
-         TaxType
+         DiscountsType  —  order-level discounts
+         Contains discounts that apply to the entire
+         order (loyalty rewards, coupons, etc.) rather
+         than individual items.
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="DiscountsType">
+        <xs:sequence>
+            <xs:element name="discountItem"   type="d:LabeledAmountType"
+                        minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="totalDiscount"  type="d:LabeledAmountType" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+
+    <!-- ═══════════════════════════════════════════
+         TaxType  —  tax breakdown
+         Contains only tax-related items.
          ═══════════════════════════════════════════ -->
     <xs:complexType name="TaxType">
         <xs:sequence>
-            <xs:element name="totalDiscount" type="d:LabeledAmountType" minOccurs="0"/>
-            <xs:element name="taxItem"       type="d:LabeledAmountType"
+            <xs:element name="taxItem"  type="d:LabeledAmountType"
                         minOccurs="0" maxOccurs="unbounded"/>
-            <xs:element name="taxTotal"      type="d:LabeledAmountType" minOccurs="0"/>
+            <xs:element name="taxTotal" type="d:LabeledAmountType" minOccurs="0"/>
         </xs:sequence>
     </xs:complexType>
 

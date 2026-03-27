@@ -65,6 +65,7 @@ A `<receipt>` can contain the following elements, all optional:
 | `<header><text>` | Section heading displayed above the line items. |
 | `<lineItems>` | Container for one or more `<lineItem>` rows. |
 | `<subtotal>` | Amount before taxes and discounts. |
+| `<discounts>` | Order-level discounts (loyalty rewards, coupons, etc.). |
 | `<tax>` | Tax breakdown block. |
 | `<total>` | Final amount due. |
 | `<footer><text>` | Closing message displayed at the bottom of the receipt. |
@@ -75,20 +76,97 @@ Each `<lineItem>` has a `kind` attribute that controls how the row is rendered:
 
 | `kind` | Typical children | Description |
 |---|---|---|
-| `item` (default) | `description`, `quantity`, `unitPrice`, `amount`, optionally `image`, `subtitle` | A purchasable item |
-| `heading` | `description` | A section label (e.g. SALES, RETURNS) |
+| `item` (default) | `description`, `quantity`, `unitPrice`, `amount`, optionally `image`, `subtitle`, `originalAmount`, `discount` | A purchasable item |
+| `heading` | `description` | A section label (e.g. SALES, RETURNS). _Accepted but not rendered on terminal._ |
 | `discount` | `description`, `amount` (negative) | An applied discount |
 | `return` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A returned item |
-| `separator` | _(none)_ | A horizontal rule |
-| `spacer` | _(none)_ | A blank line |
+| `void` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A voided/cancelled item. Rendered with red text and "Voided from transaction" label. |
+| `separator` | _(none)_ | A horizontal rule. _Accepted but not rendered on terminal._ |
+| `spacer` | _(none)_ | A blank line. _Accepted but not rendered on terminal._ |
 
-### Tax block
+### Discounts
 
-The `<tax>` element can contain:
+Discounts can be applied at two levels:
+
+#### Item-level discounts
+
+Item-level discounts are attached directly to individual line items. Use these when a discount applies to a specific product (e.g., "20% off this item", "Buy one get one free").
+
+For `kind="item"` line items, you can include:
+
+| Element | Description |
+|---|---|
+| `<originalAmount>` | The price before the discount was applied (displayed with strikethrough) |
+| `<discount>` | One or more discount groups, each with a `<label>` and `<items>` containing individual discount descriptions |
+
+Each `<discount>` groups related discounts under a shared label:
+
+```xml
+<lineItem kind="item">
+  <description>Merrell Moab 3 Mid WP Boot</description>
+  <subtitle>Size 10 / Walnut</subtitle>
+  <quantity>1</quantity>
+  <unitPrice><currency>$</currency><value>144.95</value></unitPrice>
+  <amount><currency>$</currency><value>78.97</value></amount>
+  <originalAmount><currency>$</currency><value>144.95</value></originalAmount>
+  <discount>
+    <label>Discount</label>
+    <items>
+      <item><description>20% Off Footwear Sale -$28.99</description></item>
+      <item><description>Member discount -$14.50</description></item>
+    </items>
+  </discount>
+  <discount>
+    <label>CLEARANCE</label>
+    <items>
+      <item><description>End of season -$22.49</description></item>
+    </items>
+  </discount>
+</lineItem>
+```
+
+Multiple `<discount>` elements can be included when an item has different types of discounts (e.g., regular discounts + clearance). Discounts with the same label are grouped together under a single `<discount>` element with multiple `<item>` entries.
+
+#### Order-level discounts
+
+Order-level discounts apply to the entire order rather than specific items. Use these for loyalty rewards, coupon codes, or store-wide promotions that aren't tied to individual products.
+
+Order-level discounts appear in a dedicated `<discounts>` block between `<subtotal>` and `<tax>`:
+
+```xml
+<discounts>
+  <discountItem>
+    <description>Loyalty reward</description>
+    <amount><currency>$</currency><value>-5.00</value></amount>
+  </discountItem>
+  <discountItem>
+    <description>Coupon: SAVE10</description>
+    <amount><currency>$</currency><value>-10.00</value></amount>
+  </discountItem>
+  <totalDiscount>
+    <description>Total savings</description>
+    <amount><currency>$</currency><value>-15.00</value></amount>
+  </totalDiscount>
+</discounts>
+```
+
+> **Design decision:** Item-level discounts are displayed inline with the product they apply to (showing original price struck through and the discount badge). Order-level discounts appear in a separate `<discounts>` block below the subtotal, keeping them distinct from the `<tax>` block which contains only tax-related items. This separation makes the XML structure clearer and helps customers understand which discounts are product-specific vs. cart-wide.
+
+### Discounts block
+
+The `<discounts>` element contains order-level discounts:
 
 | Element | Occurrences | Description |
 |---|---|---|
-| `<totalDiscount>` | 0 or 1 | Sum of all discounts |
+| `<discountItem>` | 0 or more | Individual order-level discount (e.g. loyalty reward, coupon) |
+| `<totalDiscount>` | 0 or 1 | Sum of all order-level discounts |
+
+### Tax block
+
+The `<tax>` element contains only tax-related items:
+
+| Element | Occurrences | Description |
+|---|---|---|
 | `<taxItem>` | 0 or more | Individual tax line (e.g. state tax, county tax) |
 | `<taxTotal>` | 0 or 1 | Total tax amount |
 
@@ -153,12 +231,26 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
       </lineItem>
 
       <lineItem kind="item">
-        <image mediaType="image/png" altText="Running shoes">iVBORw0KGgoAAAANS...</image>
-        <description>Running shoes</description>
-        <subtitle>Size 10 / Blue</subtitle>
+        <image mediaType="image/png" altText="Merrell hiking boot">iVBORw0KGgoAAAANS...</image>
+        <description>Merrell Moab 3 Mid WP Boot</description>
+        <subtitle>Size 10 / Walnut</subtitle>
         <quantity>1</quantity>
-        <unitPrice><currency>$</currency><value>79.99</value></unitPrice>
-        <amount><currency>$</currency><value>79.99</value></amount>
+        <unitPrice><currency>$</currency><value>144.95</value></unitPrice>
+        <amount><currency>$</currency><value>78.97</value></amount>
+        <originalAmount><currency>$</currency><value>144.95</value></originalAmount>
+        <discount>
+          <label>Discount</label>
+          <items>
+            <item><description>20% Off Footwear Sale -$28.99</description></item>
+            <item><description>Member discount -$14.50</description></item>
+          </items>
+        </discount>
+        <discount>
+          <label>CLEARANCE</label>
+          <items>
+            <item><description>End of season -$22.49</description></item>
+          </items>
+        </discount>
       </lineItem>
 
       <lineItem kind="item">
@@ -181,19 +273,6 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
         <amount><currency>$</currency><value>-12.99</value></amount>
       </lineItem>
 
-      <lineItem kind="spacer"/>
-
-      <lineItem kind="heading">
-        <description>DISCOUNTS</description>
-      </lineItem>
-
-      <lineItem kind="discount">
-        <description>Loyalty discount</description>
-        <amount><currency>$</currency><value>-4.48</value></amount>
-      </lineItem>
-
-      <lineItem kind="separator"/>
-
     </lineItems>
 
     <subtotal>
@@ -201,11 +280,18 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
       <amount><currency>$</currency><value>86.78</value></amount>
     </subtotal>
 
-    <tax>
+    <discounts>
+      <discountItem>
+        <description>Loyalty reward</description>
+        <amount><currency>$</currency><value>-5.00</value></amount>
+      </discountItem>
       <totalDiscount>
-        <description>Total discount</description>
-        <amount><currency>$</currency><value>-4.48</value></amount>
+        <description>Total savings</description>
+        <amount><currency>$</currency><value>-70.98</value></amount>
       </totalDiscount>
+    </discounts>
+
+    <tax>
       <taxItem>
         <description>State tax</description>
         <amount><currency>$</currency><value>5.97</value></amount>
