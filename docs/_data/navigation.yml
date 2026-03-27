@@ -1,0 +1,70 @@
+- title: Getting Started
+  items:
+    - name: Integration Guide
+      url: /integration.html
+
+- title: Payments
+  items:
+    - name: Make Payment
+      url: /make-payment.html
+    - name: Cancel Payment
+      url: /cancel-payment.html
+    - name: Reverse Payment
+      url: /reverse-payment.html
+    - name: Undo Payment
+      url: /undo-payment.html
+    - name: Referenced Refund
+      url: /refund-referenced.html
+    - name: Unreferenced Refund
+      url: /refund-unreferenced.html
+    - name: Verify Transaction
+      url: /verify-transaction-status.html
+    - name: Receipt Format
+      url: /receipt-format.html
+    - name: Display Helpers
+      url: /display-helpers.html
+
+- title: Display
+  items:
+    - name: Standby Screen
+      url: /display-standby.html
+    - name: Receipt
+      url: /display-receipt.html
+    - name: QR Code
+      url: /display-qr.html
+    - name: Image
+      url: /display-image.html
+
+- title: Input
+  items:
+    - name: Input Request
+      url: /input-request.html
+    - name: Cancel Input
+      url: /input-cancel.html
+    - name: Decimal String
+      url: /input-decimal-string.html
+    - name: Digit String
+      url: /input-digit-string.html
+    - name: Get Confirmation
+      url: /input-get-confirmation.html
+    - name: Menu Entry
+      url: /input-get-menu-entry.html
+    - name: Signature
+      url: /input-signature.html
+    - name: Text String
+      url: /input-text-string.html
+
+- title: Reference
+  items:
+    - name: Error Scenarios
+      url: /error-scenarios.html
+    - name: Refusal Reasons
+      url: /refusal-reasons.html
+    - name: Timeout Handling
+      url: /timeout-handling.html
+    - name: Auth Response
+      url: /auth-response.html
+    - name: Payment Brands
+      url: /payment-brands.html
+    - name: API Reference
+      url: /api-reference.html

@@ -1,0 +1,15 @@
+{
+  "name": "nexo-codegen",
+  "private": true,
+  "scripts": {
+    "generate:java": "node generate-nexo-java.js",
+    "generate:openapi": "node generate-openapi.js",
+    "generate:api-reference": "node generate-openapi.js && npx @redocly/cli build-docs ../docs/openapi.yaml -o ../docs/api-reference.html --theme.openapi.schemaDefinitionsTagName=Schemas --theme.openapi.hideDownloadButton=true"
+  },
+  "devDependencies": {
+    "@openapi-contrib/json-schema-to-openapi-schema": "^4.3.1",
+    "@redocly/cli": "^2.20.4",
+    "js-yaml": "^4.1.1",
+    "quicktype": "23.0.170"
+  }
+}

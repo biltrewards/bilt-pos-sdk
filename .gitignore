@@ -1,0 +1,25 @@
+# Gradle
+build/
+.gradle/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node.js (codegen tooling)
+node_modules/
+
+# Kotlin
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.war
+*.ear
+local.properties

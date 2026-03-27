@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  EXAMPLE 1 — Receipt with embedded QR code and header image
+  ═══════════════════════════════════════════════════════════════════
+-->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="receipt-qr.xslt"
+    version="1.0">
+
+  <receipt>
+
+    <image mediaType="image/png" altText="Store logo">iVBORw0KGgoAAAANS...</image>
+
+    <qrCode type="qr">
+      <header><text>Scan to access your member card</text></header>
+      <data>https://example.com/signup?store=Store42&amp;pos=REG0042&amp;hash=AAhbcd=</data>
+      <callToAction>Scan now</callToAction>
+      <footer><text>Don't have the app yet? Scan to download</text></footer>
+    </qrCode>
+
+    <header><text>Your items</text></header>
+
+    <lineItems>
+
+      <lineItem kind="heading">
+        <description>SALES</description>
+      </lineItem>
+
+      <lineItem kind="item">
+        <image mediaType="image/png" altText="Running shoes">iVBORw0KGgoAAAANS...</image>
+        <description>Running shoes</description>
+        <subtitle>Size 10 / Blue</subtitle>
+        <quantity>1</quantity>
+        <unitPrice><currency>$</currency><value>79.99</value></unitPrice>
+        <amount><currency>$</currency><value>79.99</value></amount>
+      </lineItem>
+
+      <lineItem kind="item">
+        <description>Green T-shirt</description>
+        <quantity>2</quantity>
+        <unitPrice><currency>$</currency><value>9.89</value></unitPrice>
+        <amount><currency>$</currency><value>19.78</value></amount>
+      </lineItem>
+
+      <lineItem kind="separator"/>
+
+      <lineItem kind="heading">
+        <description>RETURNS</description>
+      </lineItem>
+
+      <lineItem kind="return">
+        <description>Grey T-shirt</description>
+        <quantity>1</quantity>
+        <unitPrice><currency>$</currency><value>12.99</value></unitPrice>
+        <amount><currency>$</currency><value>-12.99</value></amount>
+      </lineItem>
+
+      <lineItem kind="spacer"/>
+
+      <lineItem kind="heading">
+        <description>DISCOUNTS</description>
+      </lineItem>
+
+      <lineItem kind="discount">
+        <description>Loyalty discount</description>
+        <amount><currency>$</currency><value>-4.48</value></amount>
+      </lineItem>
+
+      <lineItem kind="separator"/>
+
+    </lineItems>
+
+    <subtotal>
+      <description>Subtotal</description>
+      <amount><currency>$</currency><value>86.78</value></amount>
+    </subtotal>
+
+    <tax>
+      <totalDiscount>
+        <description>Total discount</description>
+        <amount><currency>$</currency><value>-4.48</value></amount>
+      </totalDiscount>
+      <taxItem>
+        <description>State tax</description>
+        <amount><currency>$</currency><value>5.97</value></amount>
+      </taxItem>
+      <taxItem>
+        <description>County tax</description>
+        <amount><currency>$</currency><value>1.85</value></amount>
+      </taxItem>
+      <taxTotal>
+        <description>Total tax</description>
+        <amount><currency>$</currency><value>7.82</value></amount>
+      </taxTotal>
+    </tax>
+
+    <total>
+      <description>Total amount</description>
+      <amount><currency>$</currency><value>90.12</value></amount>
+    </total>
+
+    <footer><text>Thank you! Returns accepted within 30 days.</text></footer>
+
+  </receipt>
+
+</displayPayload>
+
+
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  EXAMPLE 2 — Standalone QR code screen
+  ═══════════════════════════════════════════════════════════════════
+-->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="qr.xslt"
+    version="1.0">
+
+  <qrCode type="qr">
+    <header><text>Scan to join our loyalty programme</text></header>
+    <data>https://example.com/loyalty?store=Store42</data>
+    <callToAction>Scan now</callToAction>
+    <footer><text>Earn points on every purchase</text></footer>
+  </qrCode>
+
+</displayPayload>
+
+
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  EXAMPLE 3 — Standalone barcode screen
+  ═══════════════════════════════════════════════════════════════════
+-->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="barcode.xslt"
+    version="1.0">
+
+  <qrCode type="barcode128">
+    <header><text>Your loyalty card</text></header>
+    <data>1234567890128</data>
+    <callToAction>Present to cashier</callToAction>
+  </qrCode>
+
+</displayPayload>
+
+
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  EXAMPLE 4 — Standalone image screen
+  ═══════════════════════════════════════════════════════════════════
+-->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="image.xslt"
+    version="1.0">
+
+  <image mediaType="image/png" altText="Thank you for your purchase!">
+    iVBORw0KGgoAAAANS...
+  </image>
+
+</displayPayload>
+
+
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  EXAMPLE 5 — Standby screen (default)
+  ═══════════════════════════════════════════════════════════════════
+-->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="standby.xslt"
+    version="1.0">
+
+  <standby/>
+
+</displayPayload>
+
+
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  EXAMPLE 6 — Standby screen (themed)
+  ═══════════════════════════════════════════════════════════════════
+-->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="standby.xslt"
+    version="1.0">
+
+  <standby theme="christmas"/>
+
+</displayPayload>
+
+!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 7 — Standby screen with title and text
+     ═══════════════════════════════════════════════════════════════ -->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="standby.xslt"
+    version="1.0">
+
+  <standby>
+    <display>
+      <title>Welcome to Store42</title>
+      <text>Present your card to the cashier to get started.</text>
+      <text>Earn Bilt points on every purchase.</text>
+    </display>
+  </standby>
+
+</displayPayload>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 8 — Standby screen, themed with title and text
+     ═══════════════════════════════════════════════════════════════ -->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="standby.xslt"
+    version="1.0">
+
+  <standby theme="christmas">
+    <display>
+      <title>Happy Holidays!</title>
+      <text>Wishing you a wonderful festive season.</text>
+    </display>
+  </standby>
+
+</displayPayload>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 9 — Standalone waiting screen
+     ═══════════════════════════════════════════════════════════════ -->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="waiting.xslt"
+    version="1.0">
+
+  <waiting>
+    <display>
+      <title>Processing your payment...</title>
+      <text>Please do not remove your card.</text>
+    </display>
+  </waiting>
+
+</displayPayload>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 10 — Standalone waiting screen, minimal
+     ═══════════════════════════════════════════════════════════════ -->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="waiting.xslt"
+    version="1.0">
+
+  <waiting/>
+
+</displayPayload>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     EXAMPLE 11 — Receipt with embedded waiting block
+     (e.g. order submitted, waiting for kitchen confirmation)
+     ═══════════════════════════════════════════════════════════════ -->
+<displayPayload
+    xmlns="urn:bilt:display:v1"
+    layout="receipt.xslt"
+    version="1.0">
+
+  <receipt>
+
+    <waiting>
+      <display>
+        <title>Waiting for order to complete...</title>
+      </display>
+    </waiting>
+
+    <header><text>Your items</text></header>
+
+    <lineItems>
+
+      <lineItem kind="item">
+        <description>Running shoes</description>
+        <quantity>1</quantity>
+        <unitPrice><currency>$</currency><value>79.99</value></unitPrice>
+        <amount><currency>$</currency><value>79.99</value></amount>
+      </lineItem>
+
+      <lineItem kind="item">
+        <description>Green T-shirt</description>
+        <quantity>2</quantity>
+        <unitPrice><currency>$</currency><value>9.89</value></unitPrice>
+        <amount><currency>$</currency><value>19.78</value></amount>
+      </lineItem>
+
+      <lineItem kind="void">
+        <description>Green T-shirt</description>
+      </lineItem>
+
+    </lineItems>
+
+    <total>
+      <description>Total amount</description>
+      <amount><currency>$</currency><value>79.99</value></amount>
+    </total>
+
+  </receipt>
+
+</displayPayload>

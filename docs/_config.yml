@@ -1,0 +1,35 @@
+# Site settings
+title: Bilt POS SDK
+description: >-
+  Developer documentation for the Bilt POS SDK — a Java/Kotlin client library
+  for communicating with Bilt payment terminals via the Nexo Sale to POI protocol.
+baseurl: ""
+url: ""
+
+# Build settings
+plugins:
+  - jekyll-feed
+
+# Default front matter
+defaults:
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: "doc"
+  - scope:
+      path: "api-reference.html"
+    values:
+      layout: none
+  - scope:
+      path: "index.markdown"
+    values:
+      layout: "home"
+
+# Exclude from processing
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - openapi.yaml
+  - "*.txt"
+  - .gitignore
