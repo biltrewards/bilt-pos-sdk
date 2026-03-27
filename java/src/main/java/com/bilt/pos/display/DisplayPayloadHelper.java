@@ -475,6 +475,129 @@ public final class DisplayPayloadHelper {
     }
 
     /**
+     * Creates a heading line item for a receipt (e.g., "SALES", "RETURNS").
+     *
+     * @param description the heading text
+     * @return a new LineItemType instance with kind=HEADING
+     */
+    public static LineItemType headingItem(String description) {
+        return lineItem(LineItemKindType.HEADING, description);
+    }
+
+    /**
+     * Creates a discount line item for a receipt.
+     * <p>
+     * Note: The amount should be negative to indicate a discount.
+     *
+     * @param description the discount description
+     * @param currency    the currency symbol or code
+     * @param amount      the discount amount (typically negative)
+     * @return a new LineItemType instance with kind=DISCOUNT
+     */
+    public static LineItemType discountItem(String description, String currency, BigDecimal amount) {
+        LineItemType item = new LineItemType();
+        item.setKind(LineItemKindType.DISCOUNT);
+        item.setDescription(description);
+        item.setAmount(money(currency, amount));
+        return item;
+    }
+
+    /**
+     * Creates a discount line item for a receipt from a double value.
+     *
+     * @param description the discount description
+     * @param currency    the currency symbol or code
+     * @param amount      the discount amount (typically negative)
+     * @return a new LineItemType instance with kind=DISCOUNT
+     */
+    public static LineItemType discountItem(String description, String currency, double amount) {
+        return discountItem(description, currency, new BigDecimal(String.format(java.util.Locale.US, "%.2f", amount)));
+    }
+
+    /**
+     * Creates a return line item for a receipt.
+     * <p>
+     * Note: The amount should be negative to indicate a return.
+     *
+     * @param description the item description
+     * @param quantity    the quantity returned
+     * @param currency    the currency symbol or code
+     * @param unitPrice   the unit price
+     * @param amount      the total amount (typically negative)
+     * @return a new LineItemType instance with kind=RETURN
+     */
+    public static LineItemType returnItem(String description, BigDecimal quantity,
+                                          String currency, BigDecimal unitPrice, BigDecimal amount) {
+        LineItemType item = new LineItemType();
+        item.setKind(LineItemKindType.RETURN);
+        item.setDescription(description);
+        item.setQuantity(quantity);
+        item.setUnitPrice(money(currency, unitPrice));
+        item.setAmount(money(currency, amount));
+        return item;
+    }
+
+    /**
+     * Creates a void line item for a receipt.
+     * <p>
+     * Void items indicate removed/cancelled items and are rendered with red text
+     * and a "Voided from transaction" label on the terminal.
+     *
+     * @param description the voided item description
+     * @return a new LineItemType instance with kind=VOID
+     */
+    public static LineItemType voidItem(String description) {
+        return lineItem(LineItemKindType.VOID, description);
+    }
+
+    /**
+     * Creates a void line item for a receipt with full pricing details.
+     * <p>
+     * Void items indicate removed/cancelled items and are rendered with red text
+     * and a "Voided from transaction" label on the terminal. This overload allows
+     * specifying the quantity and price of the voided item for display purposes.
+     *
+     * @param description the voided item description
+     * @param quantity    the quantity that was voided
+     * @param currency    the currency symbol or code
+     * @param unitPrice   the unit price of the voided item
+     * @param amount      the total amount (typically negative)
+     * @return a new LineItemType instance with kind=VOID
+     */
+    public static LineItemType voidItem(String description, BigDecimal quantity,
+                                        String currency, BigDecimal unitPrice, BigDecimal amount) {
+        LineItemType item = new LineItemType();
+        item.setKind(LineItemKindType.VOID);
+        item.setDescription(description);
+        item.setQuantity(quantity);
+        item.setUnitPrice(money(currency, unitPrice));
+        item.setAmount(money(currency, amount));
+        return item;
+    }
+
+    /**
+     * Creates a separator line item (horizontal rule) for a receipt.
+     *
+     * @return a new LineItemType instance with kind=SEPARATOR
+     */
+    public static LineItemType separatorItem() {
+        LineItemType item = new LineItemType();
+        item.setKind(LineItemKindType.SEPARATOR);
+        return item;
+    }
+
+    /**
+     * Creates a spacer line item (blank line) for a receipt.
+     *
+     * @return a new LineItemType instance with kind=SPACER
+     */
+    public static LineItemType spacerItem() {
+        LineItemType item = new LineItemType();
+        item.setKind(LineItemKindType.SPACER);
+        return item;
+    }
+
+    /**
      * Creates a header with text.
      *
      * @param text the text content

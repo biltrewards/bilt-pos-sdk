@@ -76,11 +76,12 @@ Each `<lineItem>` has a `kind` attribute that controls how the row is rendered:
 | `kind` | Typical children | Description |
 |---|---|---|
 | `item` (default) | `description`, `quantity`, `unitPrice`, `amount`, optionally `image`, `subtitle` | A purchasable item |
-| `heading` | `description` | A section label (e.g. SALES, RETURNS) |
+| `heading` | `description` | A section label (e.g. SALES, RETURNS). _Accepted but not rendered on terminal._ |
 | `discount` | `description`, `amount` (negative) | An applied discount |
 | `return` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A returned item |
-| `separator` | _(none)_ | A horizontal rule |
-| `spacer` | _(none)_ | A blank line |
+| `void` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A voided/cancelled item. Rendered with red text and "Voided from transaction" label. |
+| `separator` | _(none)_ | A horizontal rule. _Accepted but not rendered on terminal._ |
+| `spacer` | _(none)_ | A blank line. _Accepted but not rendered on terminal._ |
 
 ### Tax block
 
@@ -231,6 +232,90 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
 
 </displayPayload>
 ```
+
+---
+
+## Using the Java SDK
+
+The `DisplayPayloadHelper` class provides convenience methods for building receipt payloads programmatically:
+
+```java
+import com.bilt.pos.display.*;
+import java.math.BigDecimal;
+
+// Build a receipt with line items
+DisplayPayload payload = new DisplayPayload();
+payload.setLayout("receipt.xslt");
+payload.setVersion("1.0");
+
+ReceiptType receipt = new ReceiptType();
+receipt.setHeader(DisplayPayloadHelper.header("Your items"));
+
+LineItemsType lineItems = new LineItemsType();
+
+// Add a heading
+lineItems.getLineItem().add(DisplayPayloadHelper.headingItem("SALES"));
+
+// Add product items
+lineItems.getLineItem().add(DisplayPayloadHelper.productItem(
+    "Running shoes",
+    BigDecimal.ONE,
+    "$",
+    new BigDecimal("79.99"),
+    new BigDecimal("79.99")
+));
+
+// Add a separator
+lineItems.getLineItem().add(DisplayPayloadHelper.separatorItem());
+
+// Add a heading for returns
+lineItems.getLineItem().add(DisplayPayloadHelper.headingItem("RETURNS"));
+
+// Add a return item
+lineItems.getLineItem().add(DisplayPayloadHelper.returnItem(
+    "Grey T-shirt",
+    BigDecimal.ONE,
+    "$",
+    new BigDecimal("12.99"),
+    new BigDecimal("-12.99")
+));
+
+// Add a spacer
+lineItems.getLineItem().add(DisplayPayloadHelper.spacerItem());
+
+// Add a discount
+lineItems.getLineItem().add(DisplayPayloadHelper.discountItem(
+    "Loyalty discount",
+    "$",
+    -4.48
+));
+
+receipt.setLineItems(lineItems);
+
+// Add totals
+receipt.setSubtotal(DisplayPayloadHelper.labeledAmount("Subtotal", "$", 82.30));
+receipt.setTotal(DisplayPayloadHelper.labeledAmount("Total", "$", 90.12));
+receipt.setFooter(DisplayPayloadHelper.footer("Thank you!"));
+
+payload.setReceipt(receipt);
+
+// Serialize to Base64 for use in OutputXHTML
+String base64 = DisplayPayloadHelper.toBase64(payload);
+```
+
+### Available line item helpers
+
+| Method | Kind | Description |
+|---|---|---|
+| `productItem(description, quantity, currency, unitPrice, amount)` | `item` | Standard product with pricing |
+| `headingItem(description)` | `heading` | Section label _(not rendered)_ |
+| `discountItem(description, currency, amount)` | `discount` | Applied discount |
+| `returnItem(description, quantity, currency, unitPrice, amount)` | `return` | Returned item |
+| `voidItem(description)` | `void` | Cancelled item (description only) |
+| `voidItem(description, quantity, currency, unitPrice, amount)` | `void` | Cancelled item with pricing |
+| `separatorItem()` | `separator` | Horizontal rule _(not rendered)_ |
+| `spacerItem()` | `spacer` | Blank line _(not rendered)_ |
+| `lineItem(kind, description)` | _(any)_ | Generic line item |
 
 ---
 

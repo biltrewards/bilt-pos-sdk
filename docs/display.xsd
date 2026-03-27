@@ -216,15 +216,19 @@
 
               kind="item"      — description, subtitle, image,
                                  quantity, unitPrice, amount
-              kind="heading"   — description only
+              kind="heading"   — description only (accepted but
+                                 not rendered on terminal)
               kind="discount"  — description, amount (negative)
               kind="return"    — description, quantity, unitPrice,
                                  amount (negative)
-              kind="void"      — description only; XSLT renders as
-                                 "*** Removed", paired with the
-                                 original item line above it
-              kind="separator" — no children (horizontal rule)
-              kind="spacer"    — no children (blank line)
+              kind="void"      — description, quantity, unitPrice,
+                                 amount (negative); rendered with
+                                 red text and "Voided from
+                                 transaction" label
+              kind="separator" — no children (accepted but not
+                                 rendered on terminal)
+              kind="spacer"    — no children (accepted but not
+                                 rendered on terminal)
             -->
             <xs:element name="image"       type="d:ImageType" minOccurs="0"/>
             <xs:element name="description" type="xs:string"   minOccurs="0"/>
