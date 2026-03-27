@@ -9,34 +9,6 @@ The `DisplayPayloadHelper` class provides factory methods and builders to create
 
 ---
 
-## Installation
-
-Add the dependency to your project:
-
-**Gradle (Kotlin DSL):**
-
-```kotlin
-implementation("com.bilt:bilt-pos-sdk:0.5.6")
-```
-
-**Gradle (Groovy):**
-
-```groovy
-implementation 'com.bilt:bilt-pos-sdk:0.5.6'
-```
-
-**Maven:**
-
-```xml
-<dependency>
-    <groupId>com.bilt</groupId>
-    <artifactId>bilt-pos-sdk</artifactId>
-    <version>0.5.6</version>
-</dependency>
-```
-
----
-
 ## Display payloads
 
 ### Standby screen

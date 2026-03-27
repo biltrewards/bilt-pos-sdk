@@ -21,6 +21,8 @@
       url: /verify-transaction-status.html
     - name: Receipt Format
       url: /receipt-format.html
+    - name: Display Helpers
+      url: /display-helpers.html
 
 - title: Display
   items:
