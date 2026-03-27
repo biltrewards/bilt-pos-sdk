@@ -126,7 +126,7 @@
     <!-- ═══════════════════════════════════════════
          Shared: LabeledAmountType
          A description + optional amount pair.
-         Used by: <subtotal>, <total>, <totalDiscount>,
+         Used by: <subtotal>, <total>,
          <taxItem>, <taxTotal>.
          ═══════════════════════════════════════════ -->
     <xs:complexType name="LabeledAmountType">
@@ -305,7 +305,7 @@
          ═══════════════════════════════════════════ -->
     <xs:complexType name="TaxType">
         <xs:sequence>
-            <xs:element name="taxItem"  type="d:LabeledAmountType"
+            <xs:element name="taxItem"       type="d:LabeledAmountType"
                         minOccurs="0" maxOccurs="unbounded"/>
             <xs:element name="taxTotal" type="d:LabeledAmountType" minOccurs="0"/>
         </xs:sequence>

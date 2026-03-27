@@ -78,10 +78,6 @@
     </subtotal>
 
     <tax>
-      <totalDiscount>
-        <description>Total discount</description>
-        <amount><currency>$</currency><value>-4.48</value></amount>
-      </totalDiscount>
       <taxItem>
         <description>State tax</description>
         <amount><currency>$</currency><value>5.97</value></amount>
