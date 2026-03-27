@@ -142,6 +142,36 @@ public class ObjectFactory {
     }
 
     /**
+     * Create an instance of {@link ItemDiscountType }
+     * 
+     * @return
+     *     the new instance of {@link ItemDiscountType }
+     */
+    public ItemDiscountType createItemDiscountType() {
+        return new ItemDiscountType();
+    }
+
+    /**
+     * Create an instance of {@link DiscountItemsType }
+     * 
+     * @return
+     *     the new instance of {@link DiscountItemsType }
+     */
+    public DiscountItemsType createDiscountItemsType() {
+        return new DiscountItemsType();
+    }
+
+    /**
+     * Create an instance of {@link DiscountItemDetailType }
+     * 
+     * @return
+     *     the new instance of {@link DiscountItemDetailType }
+     */
+    public DiscountItemDetailType createDiscountItemDetailType() {
+        return new DiscountItemDetailType();
+    }
+
+    /**
      * Create an instance of {@link LineItemType }
      * 
      * @return
@@ -149,6 +179,16 @@ public class ObjectFactory {
      */
     public LineItemType createLineItemType() {
         return new LineItemType();
+    }
+
+    /**
+     * Create an instance of {@link DiscountsType }
+     * 
+     * @return
+     *     the new instance of {@link DiscountsType }
+     */
+    public DiscountsType createDiscountsType() {
+        return new DiscountsType();
     }
 
     /**

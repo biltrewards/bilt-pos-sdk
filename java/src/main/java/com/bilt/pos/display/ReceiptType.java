@@ -34,6 +34,7 @@ import jakarta.xml.bind.annotation.XmlType;
  *         <element name="header" type="{urn:bilt:display:v1}HeaderFooterType" minOccurs="0"/>
  *         <element name="lineItems" type="{urn:bilt:display:v1}LineItemsType" minOccurs="0"/>
  *         <element name="subtotal" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
+ *         <element name="discounts" type="{urn:bilt:display:v1}DiscountsType" minOccurs="0"/>
  *         <element name="tax" type="{urn:bilt:display:v1}TaxType" minOccurs="0"/>
  *         <element name="total" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
  *         <element name="footer" type="{urn:bilt:display:v1}HeaderFooterType" minOccurs="0"/>
@@ -53,6 +54,7 @@ import jakarta.xml.bind.annotation.XmlType;
     "header",
     "lineItems",
     "subtotal",
+    "discounts",
     "tax",
     "total",
     "footer"
@@ -65,6 +67,7 @@ public class ReceiptType {
     protected HeaderFooterType header;
     protected LineItemsType lineItems;
     protected LabeledAmountType subtotal;
+    protected DiscountsType discounts;
     protected TaxType tax;
     protected LabeledAmountType total;
     protected HeaderFooterType footer;
@@ -211,6 +214,30 @@ public class ReceiptType {
      */
     public void setSubtotal(LabeledAmountType value) {
         this.subtotal = value;
+    }
+
+    /**
+     * Gets the value of the discounts property.
+     * 
+     * @return
+     *     possible object is
+     *     {@link DiscountsType }
+     *     
+     */
+    public DiscountsType getDiscounts() {
+        return discounts;
+    }
+
+    /**
+     * Sets the value of the discounts property.
+     * 
+     * @param value
+     *     allowed object is
+     *     {@link DiscountsType }
+     *     
+     */
+    public void setDiscounts(DiscountsType value) {
+        this.discounts = value;
     }
 
     /**

@@ -21,17 +21,17 @@ import jakarta.xml.bind.annotation.XmlType;
 
 
 /**
- * <p>Java class for TaxType complex type</p>.
+ * <p>Java class for DiscountsType complex type</p>.
  * 
  * <p>The following schema fragment specifies the expected content contained within this class.</p>
  * 
  * <pre>{@code
- * <complexType name="TaxType">
+ * <complexType name="DiscountsType">
  *   <complexContent>
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
- *         <element name="taxItem" type="{urn:bilt:display:v1}LabeledAmountType" maxOccurs="unbounded" minOccurs="0"/>
- *         <element name="taxTotal" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
+ *         <element name="discountItem" type="{urn:bilt:display:v1}LabeledAmountType" maxOccurs="unbounded" minOccurs="0"/>
+ *         <element name="totalDiscount" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
  *       </sequence>
  *     </restriction>
  *   </complexContent>
@@ -41,28 +41,28 @@ import jakarta.xml.bind.annotation.XmlType;
  * 
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "TaxType", propOrder = {
-    "taxItem",
-    "taxTotal"
+@XmlType(name = "DiscountsType", propOrder = {
+    "discountItem",
+    "totalDiscount"
 })
-public class TaxType {
+public class DiscountsType {
 
-    protected List<LabeledAmountType> taxItem;
-    protected LabeledAmountType taxTotal;
+    protected List<LabeledAmountType> discountItem;
+    protected LabeledAmountType totalDiscount;
 
     /**
-     * Gets the value of the taxItem property.
+     * Gets the value of the discountItem property.
      * 
      * <p>This accessor method returns a reference to the live list,
      * not a snapshot. Therefore any modification you make to the
      * returned list will be present inside the JAXB object.
-     * This is why there is not a <CODE>set</CODE> method for the taxItem property.</p>
+     * This is why there is not a <CODE>set</CODE> method for the discountItem property.</p>
      * 
      * <p>
      * For example, to add a new item, do as follows:
      * </p>
      * <pre>
-     * getTaxItem().add(newItem);
+     * getDiscountItem().add(newItem);
      * </pre>
      * 
      * 
@@ -73,37 +73,37 @@ public class TaxType {
      * 
      * 
      * @return
-     *     The value of the taxItem property.
+     *     The value of the discountItem property.
      */
-    public List<LabeledAmountType> getTaxItem() {
-        if (taxItem == null) {
-            taxItem = new ArrayList<>();
+    public List<LabeledAmountType> getDiscountItem() {
+        if (discountItem == null) {
+            discountItem = new ArrayList<>();
         }
-        return this.taxItem;
+        return this.discountItem;
     }
 
     /**
-     * Gets the value of the taxTotal property.
+     * Gets the value of the totalDiscount property.
      * 
      * @return
      *     possible object is
      *     {@link LabeledAmountType }
      *     
      */
-    public LabeledAmountType getTaxTotal() {
-        return taxTotal;
+    public LabeledAmountType getTotalDiscount() {
+        return totalDiscount;
     }
 
     /**
-     * Sets the value of the taxTotal property.
+     * Sets the value of the totalDiscount property.
      * 
      * @param value
      *     allowed object is
      *     {@link LabeledAmountType }
      *     
      */
-    public void setTaxTotal(LabeledAmountType value) {
-        this.taxTotal = value;
+    public void setTotalDiscount(LabeledAmountType value) {
+        this.totalDiscount = value;
     }
 
 }

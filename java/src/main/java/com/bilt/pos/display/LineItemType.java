@@ -14,6 +14,8 @@
 package com.bilt.pos.display;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlAttribute;
@@ -36,6 +38,8 @@ import jakarta.xml.bind.annotation.XmlType;
  *         <element name="quantity" type="{http://www.w3.org/2001/XMLSchema}decimal" minOccurs="0"/>
  *         <element name="unitPrice" type="{urn:bilt:display:v1}MoneyType" minOccurs="0"/>
  *         <element name="amount" type="{urn:bilt:display:v1}MoneyType" minOccurs="0"/>
+ *         <element name="originalAmount" type="{urn:bilt:display:v1}MoneyType" minOccurs="0"/>
+ *         <element name="discount" type="{urn:bilt:display:v1}ItemDiscountType" maxOccurs="unbounded" minOccurs="0"/>
  *       </sequence>
  *       <attribute name="kind" type="{urn:bilt:display:v1}LineItemKindType" default="item" />
  *     </restriction>
@@ -52,7 +56,9 @@ import jakarta.xml.bind.annotation.XmlType;
     "subtitle",
     "quantity",
     "unitPrice",
-    "amount"
+    "amount",
+    "originalAmount",
+    "discount"
 })
 public class LineItemType {
 
@@ -62,6 +68,8 @@ public class LineItemType {
     protected BigDecimal quantity;
     protected MoneyType unitPrice;
     protected MoneyType amount;
+    protected MoneyType originalAmount;
+    protected List<ItemDiscountType> discount;
     @XmlAttribute(name = "kind")
     protected LineItemKindType kind;
 
@@ -207,6 +215,62 @@ public class LineItemType {
      */
     public void setAmount(MoneyType value) {
         this.amount = value;
+    }
+
+    /**
+     * Gets the value of the originalAmount property.
+     * 
+     * @return
+     *     possible object is
+     *     {@link MoneyType }
+     *     
+     */
+    public MoneyType getOriginalAmount() {
+        return originalAmount;
+    }
+
+    /**
+     * Sets the value of the originalAmount property.
+     * 
+     * @param value
+     *     allowed object is
+     *     {@link MoneyType }
+     *     
+     */
+    public void setOriginalAmount(MoneyType value) {
+        this.originalAmount = value;
+    }
+
+    /**
+     * Gets the value of the discount property.
+     * 
+     * <p>This accessor method returns a reference to the live list,
+     * not a snapshot. Therefore any modification you make to the
+     * returned list will be present inside the JAXB object.
+     * This is why there is not a <CODE>set</CODE> method for the discount property.</p>
+     * 
+     * <p>
+     * For example, to add a new item, do as follows:
+     * </p>
+     * <pre>
+     * getDiscount().add(newItem);
+     * </pre>
+     * 
+     * 
+     * <p>
+     * Objects of the following type(s) are allowed in the list
+     * {@link ItemDiscountType }
+     * </p>
+     * 
+     * 
+     * @return
+     *     The value of the discount property.
+     */
+    public List<ItemDiscountType> getDiscount() {
+        if (discount == null) {
+            discount = new ArrayList<>();
+        }
+        return this.discount;
     }
 
     /**
