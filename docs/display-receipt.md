@@ -153,15 +153,16 @@ When an item is voided (removed from the transaction), the POS must send **both*
 
 #### How void items are rendered
 
-| Element | Rendering |
-|---|---|
-| `description` | Red text |
-| `quantity` | **Always displayed as negative** (e.g., "-1 @ $19.99") |
-| `amount` | Red text, negative value |
-| Label | "Voided from transaction" label shown below |
-| `subtitle` | Optional (e.g., SKU or product details) |
+| Element | XML Value | Rendering |
+|---|---|---|
+| `quantity` | Negative (e.g., `-1`) | Displayed as negative (e.g., "-1 @ $19.99") |
+| `unitPrice` | Positive (e.g., `19.99`) | Displayed as positive |
+| `amount` | Negative (e.g., `-19.99`) | Red text, negative value |
+| `description` | — | Red text |
+| `subtitle` | — | Optional (e.g., SKU or product details) |
+| Label | — | "Voided from transaction" label shown below |
 
-**Key difference from regular items:** Regular items only show quantity when > 1. Void items **always** show quantity (displayed as negative) to clearly indicate the removal.
+**Key difference from regular items:** Regular items only show quantity when > 1. Void items **always** show quantity to clearly indicate the removal.
 
 #### Example 1: Single item voided
 
@@ -177,10 +178,10 @@ Customer adds a jacket, then decides they don't want it:
     <amount><currency>$</currency><value>230.00</value></amount>
   </lineItem>
 
-  <!-- Void entry - quantity always shown as negative -->
+  <!-- Void entry - negative quantity and amount -->
   <lineItem kind="void">
     <description>The North Face Jacket</description>
-    <quantity>1</quantity>
+    <quantity>-1</quantity>
     <unitPrice><currency>$</currency><value>230.00</value></unitPrice>
     <amount><currency>$</currency><value>-230.00</value></amount>
   </lineItem>
@@ -188,7 +189,7 @@ Customer adds a jacket, then decides they don't want it:
 ```
 
 **Rendered as:**
-- Original: "The North Face Jacket" — $230.00 (no quantity shown for qty=1)
+- Original: "The North Face Jacket" — $230.00
 - Void: "The North Face Jacket" — -$230.00, "-1 @ $230.00", "Voided from transaction" (red text)
 
 #### Example 2: Multiple quantity item, one voided
@@ -205,10 +206,10 @@ Customer adds 3 t-shirts, then removes 1:
     <amount><currency>$</currency><value>59.97</value></amount>
   </lineItem>
 
-  <!-- Void entry for 1 item -->
+  <!-- Void entry for 1 item - negative quantity and amount -->
   <lineItem kind="void">
     <description>Blue T-shirt</description>
-    <quantity>1</quantity>
+    <quantity>-1</quantity>
     <unitPrice><currency>$</currency><value>19.99</value></unitPrice>
     <amount><currency>$</currency><value>-19.99</value></amount>
   </lineItem>
@@ -233,10 +234,10 @@ Customer adds 3 hiking socks, then removes 2:
     <amount><currency>$</currency><value>77.97</value></amount>
   </lineItem>
 
-  <!-- Void entry for 2 items -->
+  <!-- Void entry for 2 items - negative quantity and amount -->
   <lineItem kind="void">
     <description>Darn Tough Hiking Socks</description>
-    <quantity>2</quantity>
+    <quantity>-2</quantity>
     <unitPrice><currency>$</currency><value>25.99</value></unitPrice>
     <amount><currency>$</currency><value>-51.98</value></amount>
   </lineItem>
@@ -271,7 +272,7 @@ A more complex transaction showing various void scenarios:
 
   <lineItem kind="void">
     <description>Patagonia Fleece Jacket</description>
-    <quantity>1</quantity>
+    <quantity>-1</quantity>
     <unitPrice><currency>$</currency><value>139.00</value></unitPrice>
     <amount><currency>$</currency><value>-139.00</value></amount>
   </lineItem>
@@ -286,7 +287,7 @@ A more complex transaction showing various void scenarios:
 
   <lineItem kind="void">
     <description>Smartwool Hiking Socks</description>
-    <quantity>2</quantity>
+    <quantity>-2</quantity>
     <unitPrice><currency>$</currency><value>22.99</value></unitPrice>
     <amount><currency>$</currency><value>-45.98</value></amount>
   </lineItem>
@@ -295,8 +296,8 @@ A more complex transaction showing various void scenarios:
 
 > **Important for POS implementers:**
 > - Do NOT reduce the quantity on the original item when voiding — always send the original item as it was added, plus a separate void line
-> - The `quantity` in the void line should be positive in the XML; the terminal renders it as negative
-> - The `amount` in the void line should be negative
+> - For the void line, send **negative** values for `quantity` and `amount` (e.g., `<quantity>-1</quantity>`, `<amount>...<value>-230.00</value></amount>`)
+> - The `unitPrice` should remain **positive** (it's the price per unit, not a refund)
 > - This pattern shows customers a clear history, provides an audit trail, and matches standard retail receipt conventions
 
 ### Returned items

@@ -287,8 +287,8 @@
 
       <lineItem kind="void">
         <description>Green T-shirt</description>
-        <quantity>2</quantity>
-        <unitPrice><currency>$</currency><value>-9.89</value></unitPrice>
+        <quantity>-2</quantity>
+        <unitPrice><currency>$</currency><value>9.89</value></unitPrice>
         <amount><currency>$</currency><value>-19.78</value></amount>
       </lineItem>
 
