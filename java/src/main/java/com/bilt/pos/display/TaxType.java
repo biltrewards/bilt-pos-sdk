@@ -31,6 +31,7 @@ import jakarta.xml.bind.annotation.XmlType;
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
  *         <element name="taxItem" type="{urn:bilt:display:v1}LabeledAmountType" maxOccurs="unbounded" minOccurs="0"/>
+ *         <element name="totalDiscount" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
  *         <element name="taxTotal" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
  *       </sequence>
  *     </restriction>
@@ -43,11 +44,18 @@ import jakarta.xml.bind.annotation.XmlType;
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "TaxType", propOrder = {
     "taxItem",
+    "totalDiscount",
     "taxTotal"
 })
 public class TaxType {
 
     protected List<LabeledAmountType> taxItem;
+    /**
+     * @deprecated Use {@code <adjustments><adjustmentItem>} instead for order-level discounts.
+     *             Retained for backwards compatibility only.
+     */
+    @Deprecated
+    protected LabeledAmountType totalDiscount;
     protected LabeledAmountType taxTotal;
 
     /**
@@ -83,12 +91,42 @@ public class TaxType {
     }
 
     /**
-     * Gets the value of the taxTotal property.
-     * 
+     * Gets the value of the totalDiscount property.
+     *
      * @return
      *     possible object is
      *     {@link LabeledAmountType }
-     *     
+     *
+     * @deprecated Use {@code <adjustments><adjustmentItem>} instead for order-level discounts.
+     *             Retained for backwards compatibility only.
+     */
+    @Deprecated
+    public LabeledAmountType getTotalDiscount() {
+        return totalDiscount;
+    }
+
+    /**
+     * Sets the value of the totalDiscount property.
+     *
+     * @param value
+     *     allowed object is
+     *     {@link LabeledAmountType }
+     *
+     * @deprecated Use {@code <adjustments><adjustmentItem>} instead for order-level discounts.
+     *             Retained for backwards compatibility only.
+     */
+    @Deprecated
+    public void setTotalDiscount(LabeledAmountType value) {
+        this.totalDiscount = value;
+    }
+
+    /**
+     * Gets the value of the taxTotal property.
+     *
+     * @return
+     *     possible object is
+     *     {@link LabeledAmountType }
+     *
      */
     public LabeledAmountType getTaxTotal() {
         return taxTotal;

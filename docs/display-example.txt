@@ -64,10 +64,10 @@
     </subtotal>
 
     <adjustments>
-      <adjustment>
+      <adjustmentItem>
         <description>Total discount</description>
         <amount><currency>$</currency><value>-4.48</value></amount>
-      </adjustment>
+      </adjustmentItem>
     </adjustments>
 
     <tax>

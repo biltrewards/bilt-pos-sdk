@@ -32,7 +32,6 @@ import jakarta.xml.bind.annotation.XmlType;
  *       <sequence>
  *         <element name="currency" type="{http://www.w3.org/2001/XMLSchema}string"/>
  *         <element name="value" type="{http://www.w3.org/2001/XMLSchema}decimal"/>
- *         <element name="unit" type="{http://www.w3.org/2001/XMLSchema}string" minOccurs="0"/>
  *       </sequence>
  *     </restriction>
  *   </complexContent>
@@ -44,8 +43,7 @@ import jakarta.xml.bind.annotation.XmlType;
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "MoneyType", propOrder = {
     "currency",
-    "value",
-    "unit"
+    "value"
 })
 public class MoneyType {
 
@@ -53,7 +51,6 @@ public class MoneyType {
     protected String currency;
     @XmlElement(required = true)
     protected BigDecimal value;
-    protected String unit;
 
     /**
      * Gets the value of the currency property.
@@ -93,38 +90,14 @@ public class MoneyType {
 
     /**
      * Sets the value of the value property.
-     * 
+     *
      * @param value
      *     allowed object is
      *     {@link BigDecimal }
-     *     
+     *
      */
     public void setValue(BigDecimal value) {
         this.value = value;
-    }
-
-    /**
-     * Gets the value of the unit property.
-     *
-     * @return
-     *     possible object is
-     *     {@link String }
-     *
-     */
-    public String getUnit() {
-        return unit;
-    }
-
-    /**
-     * Sets the value of the unit property.
-     *
-     * @param value
-     *     allowed object is
-     *     {@link String }
-     *
-     */
-    public void setUnit(String value) {
-        this.unit = value;
     }
 
 }
