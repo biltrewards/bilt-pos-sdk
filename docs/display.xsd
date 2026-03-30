@@ -111,11 +111,14 @@
          Used by: <unitPrice>, <amount> throughout.
          Currency can be ISO 4217 code or display
          symbol (e.g. "USD" or "$").
+         Optional <unit> for items sold by weight/volume
+         (e.g. "lb", "kg", "oz", "ea", "gal").
          ═══════════════════════════════════════════ -->
     <xs:complexType name="MoneyType">
         <xs:sequence>
             <xs:element name="currency" type="xs:string"/>
             <xs:element name="value"    type="xs:decimal"/>
+            <xs:element name="unit"     type="xs:string" minOccurs="0"/>
         </xs:sequence>
     </xs:complexType>
 

@@ -152,7 +152,19 @@ Order-level discounts appear in a dedicated `<adjustments>` block between `<subt
 
 When an item is voided (removed from the transaction), the POS must send **both** the original item line **and** a void line. This approach provides a clear audit trail showing what the customer originally added and what was subsequently voided.
 
-#### Example: Single item voided
+#### How void items are rendered
+
+| Element | Rendering |
+|---|---|
+| `description` | Red text |
+| `quantity` | **Always displayed as negative** (e.g., "-1 @ $19.99") |
+| `amount` | Red text, negative value |
+| Label | "Voided from transaction" label shown below |
+| `subtitle` | Optional reason for voiding |
+
+**Key difference from regular items:** Regular items only show quantity when > 1. Void items **always** show quantity (displayed as negative) to clearly indicate the removal.
+
+#### Example 1: Single item voided
 
 Customer adds a jacket, then decides they don't want it:
 
@@ -166,7 +178,7 @@ Customer adds a jacket, then decides they don't want it:
     <amount><currency>$</currency><value>230.00</value></amount>
   </lineItem>
 
-  <!-- Void entry with negative amount -->
+  <!-- Void entry - quantity always shown as negative -->
   <lineItem kind="void">
     <description>The North Face Jacket</description>
     <subtitle>Wrong size</subtitle>
@@ -177,9 +189,11 @@ Customer adds a jacket, then decides they don't want it:
 </lineItems>
 ```
 
-The void line is rendered with red text and a "Voided from transaction" label. The `subtitle` field can optionally explain the reason for voiding.
+**Rendered as:**
+- Original: "The North Face Jacket" — $230.00 (no quantity shown for qty=1)
+- Void: "The North Face Jacket" — -$230.00, "-1 @ $230.00", "Voided from transaction" (red text)
 
-#### Example: One of three items voided
+#### Example 2: Multiple quantity item, one voided
 
 Customer adds 3 t-shirts, then removes 1:
 
@@ -204,14 +218,106 @@ Customer adds 3 t-shirts, then removes 1:
 </lineItems>
 ```
 
-> **Important for POS implementers:** Do NOT simply reduce the quantity on the original item when voiding. Always send the original item as it was added, plus a separate void line. This pattern:
-> - Shows customers a clear history of what happened
-> - Provides an audit trail for the transaction
-> - Matches standard retail receipt conventions
+**Rendered as:**
+- Original: "Blue T-shirt" — $59.97, "3 @ $19.99"
+- Void: "Blue T-shirt" — -$19.99, "-1 @ $19.99", "Voided from transaction" (red text)
+
+#### Example 3: Multiple quantity item, two voided
+
+Customer adds 3 hiking socks, then removes 2:
+
+```xml
+<lineItems>
+  <!-- Original item showing full quantity added -->
+  <lineItem kind="item">
+    <description>Darn Tough Hiking Socks</description>
+    <quantity>3</quantity>
+    <unitPrice><currency>$</currency><value>25.99</value></unitPrice>
+    <amount><currency>$</currency><value>77.97</value></amount>
+  </lineItem>
+
+  <!-- Void entry for 2 items -->
+  <lineItem kind="void">
+    <description>Darn Tough Hiking Socks</description>
+    <subtitle>Only need one pair</subtitle>
+    <quantity>2</quantity>
+    <unitPrice><currency>$</currency><value>25.99</value></unitPrice>
+    <amount><currency>$</currency><value>-51.98</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+**Rendered as:**
+- Original: "Darn Tough Hiking Socks" — $77.97, "3 @ $25.99"
+- Void: "Darn Tough Hiking Socks" — -$51.98, "-2 @ $25.99", "Voided from transaction" (red text)
+
+#### Example 4: Mixed transaction with multiple voids
+
+A more complex transaction showing various void scenarios:
+
+```xml
+<lineItems>
+  <!-- Item 1: No void -->
+  <lineItem kind="item">
+    <description>Columbia FlexROC Pants</description>
+    <quantity>1</quantity>
+    <unitPrice><currency>$</currency><value>74.99</value></unitPrice>
+    <amount><currency>$</currency><value>74.99</value></amount>
+  </lineItem>
+
+  <!-- Item 2: Single item, fully voided -->
+  <lineItem kind="item">
+    <description>Patagonia Fleece Jacket</description>
+    <quantity>1</quantity>
+    <unitPrice><currency>$</currency><value>139.00</value></unitPrice>
+    <amount><currency>$</currency><value>139.00</value></amount>
+  </lineItem>
+
+  <lineItem kind="void">
+    <description>Patagonia Fleece Jacket</description>
+    <subtitle>Found cheaper online</subtitle>
+    <quantity>1</quantity>
+    <unitPrice><currency>$</currency><value>139.00</value></unitPrice>
+    <amount><currency>$</currency><value>-139.00</value></amount>
+  </lineItem>
+
+  <!-- Item 3: Multiple quantity, partial void -->
+  <lineItem kind="item">
+    <description>Smartwool Hiking Socks</description>
+    <quantity>4</quantity>
+    <unitPrice><currency>$</currency><value>22.99</value></unitPrice>
+    <amount><currency>$</currency><value>91.96</value></amount>
+  </lineItem>
+
+  <lineItem kind="void">
+    <description>Smartwool Hiking Socks</description>
+    <quantity>2</quantity>
+    <unitPrice><currency>$</currency><value>22.99</value></unitPrice>
+    <amount><currency>$</currency><value>-45.98</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+> **Important for POS implementers:**
+> - Do NOT reduce the quantity on the original item when voiding — always send the original item as it was added, plus a separate void line
+> - The `quantity` in the void line should be positive in the XML; the terminal renders it as negative
+> - The `amount` in the void line should be negative
+> - This pattern shows customers a clear history, provides an audit trail, and matches standard retail receipt conventions
 
 ### Returned items
 
 Returns are items from a **previous transaction** being returned for a refund. Returns and purchases are always separate transactions — you cannot mix returns with new purchases in the same transaction.
+
+#### How return items are rendered
+
+| Element | Rendering |
+|---|---|
+| `description` | Standard text |
+| `quantity` | Displayed with unit price (e.g., "2 @ $19.99") |
+| `amount` | Negative value (refund amount) |
+| `subtitle` | Optional - typically shows original purchase date |
+
+#### Example 1: Single item return
 
 ```xml
 <!-- Return transaction (separate from any purchase) -->
@@ -224,6 +330,61 @@ Returns are items from a **previous transaction** being returned for a refund. R
     <amount><currency>$</currency><value>-19.99</value></amount>
   </lineItem>
 </lineItems>
+```
+
+#### Example 2: Multiple items return
+
+```xml
+<lineItems>
+  <lineItem kind="return">
+    <description>Smartwool Hiking Socks</description>
+    <subtitle>Original purchase: Mar 10, 2024</subtitle>
+    <quantity>2</quantity>
+    <unitPrice><currency>$</currency><value>22.99</value></unitPrice>
+    <amount><currency>$</currency><value>-45.98</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+#### Example 3: Complete return transaction
+
+A full return transaction showing multiple items with totals:
+
+```xml
+<receipt>
+  <header><text>Return - #RET-12345</text></header>
+  <lineItems>
+    <lineItem kind="return">
+      <description>The North Face Jacket</description>
+      <subtitle>Original purchase: Mar 5, 2024</subtitle>
+      <quantity>1</quantity>
+      <unitPrice><currency>$</currency><value>230.00</value></unitPrice>
+      <amount><currency>$</currency><value>-230.00</value></amount>
+    </lineItem>
+    <lineItem kind="return">
+      <description>Columbia Hiking Pants</description>
+      <subtitle>Original purchase: Mar 5, 2024</subtitle>
+      <quantity>1</quantity>
+      <unitPrice><currency>$</currency><value>74.99</value></unitPrice>
+      <amount><currency>$</currency><value>-74.99</value></amount>
+    </lineItem>
+  </lineItems>
+  <subtotal>
+    <description>Subtotal</description>
+    <amount><currency>$</currency><value>-304.99</value></amount>
+  </subtotal>
+  <tax>
+    <taxTotal>
+      <description>Tax Refund</description>
+      <amount><currency>$</currency><value>-27.07</value></amount>
+    </taxTotal>
+  </tax>
+  <total>
+    <description>Refund Total</description>
+    <amount><currency>$</currency><value>-332.06</value></amount>
+  </total>
+  <footer><text>Refund will be credited to original payment method</text></footer>
+</receipt>
 ```
 
 > **Void vs Return:**
@@ -260,6 +421,28 @@ All monetary values use the `<currency>` + `<value>` pair:
   <value>79.99</value>
 </amount>
 ```
+
+### Unit prices with units
+
+For items sold by weight or volume (e.g., grocery), `<unitPrice>` supports an optional `<unit>` element:
+
+```xml
+<lineItem kind="item">
+  <description>Boneless Chicken Breast</description>
+  <subtitle>Organic, free-range</subtitle>
+  <quantity>2.35</quantity>
+  <unitPrice>
+    <currency>$</currency>
+    <value>4.99</value>
+    <unit>lb</unit>
+  </unitPrice>
+  <amount><currency>$</currency><value>11.73</value></amount>
+</lineItem>
+```
+
+Common unit values: `lb`, `kg`, `oz`, `g`, `ea`, `gal`, `L`
+
+**Rendered as:** "Boneless Chicken Breast" — $11.73, "Organic, free-range", "2.35 @ $4.99/lb"
 
 ---
 
