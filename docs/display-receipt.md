@@ -60,7 +60,6 @@ A `<receipt>` can contain the following elements, all optional:
 
 | Element | Description |
 |---|---|
-| `<image>` | Banner image at the top of the receipt (Base64-encoded). |
 | `<qrCode>` | QR code or barcode embedded in the receipt. |
 | `<header><text>` | Section heading displayed above the line items. |
 | `<lineItems>` | Container for one or more `<lineItem>` rows. |
@@ -76,9 +75,7 @@ Each `<lineItem>` has a `kind` attribute that controls how the row is rendered:
 
 | `kind` | Typical children | Description |
 |---|---|---|
-| `item` (default) | `description`, `quantity`, `unitPrice`, `amount`, optionally `image`, `subtitle`, `originalAmount`, `discount` | A purchasable item |
-| `heading` | `description` | A section label (e.g. SALES, RETURNS). _Accepted but not rendered on terminal._ |
-| `discount` | `description`, `amount` (negative) | An applied discount |
+| `item` (default) | `description`, `quantity`, `unitPrice`, `amount`, optionally `subtitle`, `originalAmount`, `section` | A purchasable item |
 | `return` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A returned item from a previous transaction. See [Returned items](#returned-items). |
 | `void` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A voided/cancelled item. Rendered with red text and "Voided from transaction" label. See [Voided items](#voided-items) for usage. |
 | `separator` | _(none)_ | A horizontal rule. _Accepted but not rendered on terminal._ |
@@ -405,6 +402,7 @@ The `<tax>` element contains only tax-related items:
 | Element | Occurrences | Description |
 |---|---|---|
 | `<taxItem>` | 0 or more | Individual tax line (e.g. state tax, county tax) |
+| `<totalDiscount>` | 0 or 1 | **DEPRECATED.** Use `<adjustments><adjustmentItem>` instead. Retained for backwards compatibility only. |
 | `<taxTotal>` | 0 or 1 | Total tax amount |
 
 Each of these uses a `<description>` and `<amount>` child.
@@ -419,28 +417,6 @@ All monetary values use the `<currency>` + `<value>` pair:
   <value>79.99</value>
 </amount>
 ```
-
-### Unit prices with units
-
-For items sold by weight or volume (e.g., grocery), `<unitPrice>` supports an optional `<unit>` element:
-
-```xml
-<lineItem kind="item">
-  <description>Boneless Chicken Breast</description>
-  <subtitle>Organic, free-range</subtitle>
-  <quantity>2.35</quantity>
-  <unitPrice>
-    <currency>$</currency>
-    <value>4.99</value>
-    <unit>lb</unit>
-  </unitPrice>
-  <amount><currency>$</currency><value>11.73</value></amount>
-</lineItem>
-```
-
-Common unit values: `lb`, `kg`, `oz`, `g`, `ea`, `gal`, `L`
-
-**Rendered as:** "Boneless Chicken Breast" — $11.73, "Organic, free-range", "2.35 @ $4.99/lb"
 
 ---
 
@@ -472,8 +448,6 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
 
   <receipt>
 
-    <image mediaType="image/png" altText="Store logo">iVBORw0KGgoAAAANS...</image>
-
     <qrCode type="qr">
       <header><text>Scan to access your member card</text></header>
       <data>https://example.com/signup?store=Store42&amp;pos=REG0042&amp;hash=AAhbcd=</data>
@@ -485,12 +459,7 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
 
     <lineItems>
 
-      <lineItem kind="heading">
-        <description>SALES</description>
-      </lineItem>
-
       <lineItem kind="item">
-        <image mediaType="image/png" altText="Merrell hiking boot">iVBORw0KGgoAAAANS...</image>
         <description>Merrell Moab 3 Mid WP Boot</description>
         <subtitle>Size 10 / Walnut</subtitle>
         <quantity>1</quantity>
@@ -520,10 +489,6 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
       </lineItem>
 
       <lineItem kind="separator"/>
-
-      <lineItem kind="heading">
-        <description>RETURNS</description>
-      </lineItem>
 
       <lineItem kind="return">
         <description>Grey T-shirt</description>

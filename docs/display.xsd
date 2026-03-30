@@ -111,14 +111,11 @@
          Used by: <unitPrice>, <amount> throughout.
          Currency can be ISO 4217 code or display
          symbol (e.g. "USD" or "$").
-         Optional <unit> for items sold by weight/volume
-         (e.g. "lb", "kg", "oz", "ea", "gal").
          ═══════════════════════════════════════════ -->
     <xs:complexType name="MoneyType">
         <xs:sequence>
             <xs:element name="currency" type="xs:string"/>
             <xs:element name="value"    type="xs:decimal"/>
-            <xs:element name="unit"     type="xs:string" minOccurs="0"/>
         </xs:sequence>
     </xs:complexType>
 
@@ -177,8 +174,6 @@
          ═══════════════════════════════════════════ -->
     <xs:complexType name="ReceiptType">
         <xs:sequence>
-            <!-- Optional banner image at the top of the receipt -->
-            <xs:element name="image"     type="d:ImageType"         minOccurs="0"/>
             <!-- Optional QR/barcode embedded within the receipt -->
             <xs:element name="qrCode"    type="d:QrCodeType"        minOccurs="0"/>
             <!-- Optional waiting block embedded within the receipt -->
@@ -243,12 +238,9 @@
               All child elements are optional; meaningful ones
               depend on `kind`:
 
-              kind="item"      — description, subtitle, image,
-                                 quantity, unitPrice, amount,
-                                 originalAmount, discount(s)
-              kind="heading"   — description only (accepted but
-                                 not rendered on terminal)
-              kind="discount"  — description, amount (negative)
+              kind="item"      — description, subtitle, quantity,
+                                 unitPrice, amount, originalAmount,
+                                 section(s)
               kind="return"    — description, quantity, unitPrice,
                                  amount (negative)
               kind="void"      — description, quantity, unitPrice,
@@ -260,7 +252,6 @@
               kind="spacer"    — no children (accepted but not
                                  rendered on terminal)
             -->
-            <xs:element name="image"          type="d:ImageType"        minOccurs="0"/>
             <xs:element name="description"    type="xs:string"          minOccurs="0"/>
             <xs:element name="subtitle"       type="xs:string"          minOccurs="0"/>
             <xs:element name="quantity"       type="xs:decimal"         minOccurs="0"/>
@@ -275,8 +266,6 @@
     <xs:simpleType name="LineItemKindType">
         <xs:restriction base="xs:string">
             <xs:enumeration value="item"/>
-            <xs:enumeration value="heading"/>
-            <xs:enumeration value="discount"/>
             <xs:enumeration value="return"/>
             <xs:enumeration value="void"/>
             <xs:enumeration value="separator"/>
@@ -307,6 +296,13 @@
         <xs:sequence>
             <xs:element name="taxItem"       type="d:LabeledAmountType"
                         minOccurs="0" maxOccurs="unbounded"/>
+            <!--
+              DEPRECATED: totalDiscount inside <tax> is deprecated.
+              Use <adjustments><adjustmentItem> instead for order-level
+              discounts. This element is retained for backwards
+              compatibility only and may be removed in a future version.
+            -->
+            <xs:element name="totalDiscount" type="d:LabeledAmountType" minOccurs="0"/>
             <xs:element name="taxTotal" type="d:LabeledAmountType" minOccurs="0"/>
         </xs:sequence>
     </xs:complexType>
