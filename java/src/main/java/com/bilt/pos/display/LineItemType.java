@@ -32,7 +32,6 @@ import jakarta.xml.bind.annotation.XmlType;
  *   <complexContent>
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
- *         <element name="image" type="{urn:bilt:display:v1}ImageType" minOccurs="0"/>
  *         <element name="description" type="{http://www.w3.org/2001/XMLSchema}string" minOccurs="0"/>
  *         <element name="subtitle" type="{http://www.w3.org/2001/XMLSchema}string" minOccurs="0"/>
  *         <element name="quantity" type="{http://www.w3.org/2001/XMLSchema}decimal" minOccurs="0"/>
@@ -51,7 +50,6 @@ import jakarta.xml.bind.annotation.XmlType;
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "LineItemType", propOrder = {
-    "image",
     "description",
     "subtitle",
     "quantity",
@@ -62,7 +60,6 @@ import jakarta.xml.bind.annotation.XmlType;
 })
 public class LineItemType {
 
-    protected ImageType image;
     protected String description;
     protected String subtitle;
     protected BigDecimal quantity;
@@ -72,30 +69,6 @@ public class LineItemType {
     protected List<SectionType> section;
     @XmlAttribute(name = "kind")
     protected LineItemKindType kind;
-
-    /**
-     * Gets the value of the image property.
-     * 
-     * @return
-     *     possible object is
-     *     {@link ImageType }
-     *     
-     */
-    public ImageType getImage() {
-        return image;
-    }
-
-    /**
-     * Sets the value of the image property.
-     * 
-     * @param value
-     *     allowed object is
-     *     {@link ImageType }
-     *     
-     */
-    public void setImage(ImageType value) {
-        this.image = value;
-    }
 
     /**
      * Gets the value of the description property.

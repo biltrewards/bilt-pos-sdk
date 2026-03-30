@@ -28,7 +28,6 @@ import jakarta.xml.bind.annotation.XmlType;
  *   <complexContent>
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
- *         <element name="image" type="{urn:bilt:display:v1}ImageType" minOccurs="0"/>
  *         <element name="qrCode" type="{urn:bilt:display:v1}QrCodeType" minOccurs="0"/>
  *         <element name="waiting" type="{urn:bilt:display:v1}WaitingType" minOccurs="0"/>
  *         <element name="header" type="{urn:bilt:display:v1}HeaderFooterType" minOccurs="0"/>
@@ -48,7 +47,6 @@ import jakarta.xml.bind.annotation.XmlType;
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "ReceiptType", propOrder = {
-    "image",
     "qrCode",
     "waiting",
     "header",
@@ -61,7 +59,6 @@ import jakarta.xml.bind.annotation.XmlType;
 })
 public class ReceiptType {
 
-    protected ImageType image;
     protected QrCodeType qrCode;
     protected WaitingType waiting;
     protected HeaderFooterType header;
@@ -71,30 +68,6 @@ public class ReceiptType {
     protected TaxType tax;
     protected LabeledAmountType total;
     protected HeaderFooterType footer;
-
-    /**
-     * Gets the value of the image property.
-     * 
-     * @return
-     *     possible object is
-     *     {@link ImageType }
-     *     
-     */
-    public ImageType getImage() {
-        return image;
-    }
-
-    /**
-     * Sets the value of the image property.
-     * 
-     * @param value
-     *     allowed object is
-     *     {@link ImageType }
-     *     
-     */
-    public void setImage(ImageType value) {
-        this.image = value;
-    }
 
     /**
      * Gets the value of the qrCode property.
