@@ -20,12 +20,12 @@ import jakarta.xml.bind.annotation.XmlType;
 
 
 /**
- * <p>Java class for DiscountItemDetailType complex type</p>.
- * 
+ * <p>Java class for SectionItemType complex type</p>.
+ *
  * <p>The following schema fragment specifies the expected content contained within this class.</p>
- * 
+ *
  * <pre>{@code
- * <complexType name="DiscountItemDetailType">
+ * <complexType name="SectionItemType">
  *   <complexContent>
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
@@ -35,25 +35,25 @@ import jakarta.xml.bind.annotation.XmlType;
  *   </complexContent>
  * </complexType>
  * }</pre>
- * 
- * 
+ *
+ *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "DiscountItemDetailType", propOrder = {
+@XmlType(name = "SectionItemType", propOrder = {
     "description"
 })
-public class DiscountItemDetailType {
+public class SectionItemType {
 
     @XmlElement(required = true)
     protected String description;
 
     /**
      * Gets the value of the description property.
-     * 
+     *
      * @return
      *     possible object is
      *     {@link String }
-     *     
+     *
      */
     public String getDescription() {
         return description;
@@ -61,11 +61,11 @@ public class DiscountItemDetailType {
 
     /**
      * Sets the value of the description property.
-     * 
+     *
      * @param value
      *     allowed object is
      *     {@link String }
-     *     
+     *
      */
     public void setDescription(String value) {
         this.description = value;

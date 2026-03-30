@@ -142,33 +142,33 @@ public class ObjectFactory {
     }
 
     /**
-     * Create an instance of {@link ItemDiscountType }
-     * 
+     * Create an instance of {@link SectionType }
+     *
      * @return
-     *     the new instance of {@link ItemDiscountType }
+     *     the new instance of {@link SectionType }
      */
-    public ItemDiscountType createItemDiscountType() {
-        return new ItemDiscountType();
+    public SectionType createSectionType() {
+        return new SectionType();
     }
 
     /**
-     * Create an instance of {@link DiscountItemsType }
-     * 
+     * Create an instance of {@link SectionItemsType }
+     *
      * @return
-     *     the new instance of {@link DiscountItemsType }
+     *     the new instance of {@link SectionItemsType }
      */
-    public DiscountItemsType createDiscountItemsType() {
-        return new DiscountItemsType();
+    public SectionItemsType createSectionItemsType() {
+        return new SectionItemsType();
     }
 
     /**
-     * Create an instance of {@link DiscountItemDetailType }
-     * 
+     * Create an instance of {@link SectionItemType }
+     *
      * @return
-     *     the new instance of {@link DiscountItemDetailType }
+     *     the new instance of {@link SectionItemType }
      */
-    public DiscountItemDetailType createDiscountItemDetailType() {
-        return new DiscountItemDetailType();
+    public SectionItemType createSectionItemType() {
+        return new SectionItemType();
     }
 
     /**

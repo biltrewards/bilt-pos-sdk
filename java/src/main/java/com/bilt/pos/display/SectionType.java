@@ -20,44 +20,44 @@ import jakarta.xml.bind.annotation.XmlType;
 
 
 /**
- * <p>Java class for ItemDiscountType complex type</p>.
- * 
+ * <p>Java class for SectionType complex type</p>.
+ *
  * <p>The following schema fragment specifies the expected content contained within this class.</p>
- * 
+ *
  * <pre>{@code
- * <complexType name="ItemDiscountType">
+ * <complexType name="SectionType">
  *   <complexContent>
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
  *         <element name="label" type="{http://www.w3.org/2001/XMLSchema}string"/>
- *         <element name="items" type="{urn:bilt:display:v1}DiscountItemsType"/>
+ *         <element name="items" type="{urn:bilt:display:v1}SectionItemsType"/>
  *       </sequence>
  *     </restriction>
  *   </complexContent>
  * </complexType>
  * }</pre>
- * 
- * 
+ *
+ *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "ItemDiscountType", propOrder = {
+@XmlType(name = "SectionType", propOrder = {
     "label",
     "items"
 })
-public class ItemDiscountType {
+public class SectionType {
 
     @XmlElement(required = true)
     protected String label;
     @XmlElement(required = true)
-    protected DiscountItemsType items;
+    protected SectionItemsType items;
 
     /**
      * Gets the value of the label property.
-     * 
+     *
      * @return
      *     possible object is
      *     {@link String }
-     *     
+     *
      */
     public String getLabel() {
         return label;
@@ -65,11 +65,11 @@ public class ItemDiscountType {
 
     /**
      * Sets the value of the label property.
-     * 
+     *
      * @param value
      *     allowed object is
      *     {@link String }
-     *     
+     *
      */
     public void setLabel(String value) {
         this.label = value;
@@ -77,25 +77,25 @@ public class ItemDiscountType {
 
     /**
      * Gets the value of the items property.
-     * 
+     *
      * @return
      *     possible object is
-     *     {@link DiscountItemsType }
-     *     
+     *     {@link SectionItemsType }
+     *
      */
-    public DiscountItemsType getItems() {
+    public SectionItemsType getItems() {
         return items;
     }
 
     /**
      * Sets the value of the items property.
-     * 
+     *
      * @param value
      *     allowed object is
-     *     {@link DiscountItemsType }
-     *     
+     *     {@link SectionItemsType }
+     *
      */
-    public void setItems(DiscountItemsType value) {
+    public void setItems(SectionItemsType value) {
         this.items = value;
     }
 

@@ -39,7 +39,7 @@ import jakarta.xml.bind.annotation.XmlType;
  *         <element name="unitPrice" type="{urn:bilt:display:v1}MoneyType" minOccurs="0"/>
  *         <element name="amount" type="{urn:bilt:display:v1}MoneyType" minOccurs="0"/>
  *         <element name="originalAmount" type="{urn:bilt:display:v1}MoneyType" minOccurs="0"/>
- *         <element name="discount" type="{urn:bilt:display:v1}ItemDiscountType" maxOccurs="unbounded" minOccurs="0"/>
+ *         <element name="section" type="{urn:bilt:display:v1}SectionType" maxOccurs="unbounded" minOccurs="0"/>
  *       </sequence>
  *       <attribute name="kind" type="{urn:bilt:display:v1}LineItemKindType" default="item" />
  *     </restriction>
@@ -58,7 +58,7 @@ import jakarta.xml.bind.annotation.XmlType;
     "unitPrice",
     "amount",
     "originalAmount",
-    "discount"
+    "section"
 })
 public class LineItemType {
 
@@ -69,7 +69,7 @@ public class LineItemType {
     protected MoneyType unitPrice;
     protected MoneyType amount;
     protected MoneyType originalAmount;
-    protected List<ItemDiscountType> discount;
+    protected List<SectionType> section;
     @XmlAttribute(name = "kind")
     protected LineItemKindType kind;
 
@@ -242,35 +242,35 @@ public class LineItemType {
     }
 
     /**
-     * Gets the value of the discount property.
-     * 
+     * Gets the value of the section property.
+     *
      * <p>This accessor method returns a reference to the live list,
      * not a snapshot. Therefore any modification you make to the
      * returned list will be present inside the JAXB object.
-     * This is why there is not a <CODE>set</CODE> method for the discount property.</p>
-     * 
+     * This is why there is not a <CODE>set</CODE> method for the section property.</p>
+     *
      * <p>
      * For example, to add a new item, do as follows:
      * </p>
      * <pre>
-     * getDiscount().add(newItem);
+     * getSection().add(newItem);
      * </pre>
-     * 
-     * 
+     *
+     *
      * <p>
      * Objects of the following type(s) are allowed in the list
-     * {@link ItemDiscountType }
+     * {@link SectionType }
      * </p>
-     * 
-     * 
+     *
+     *
      * @return
-     *     The value of the discount property.
+     *     The value of the section property.
      */
-    public List<ItemDiscountType> getDiscount() {
-        if (discount == null) {
-            discount = new ArrayList<>();
+    public List<SectionType> getSection() {
+        if (section == null) {
+            section = new ArrayList<>();
         }
-        return this.discount;
+        return this.section;
     }
 
     /**
