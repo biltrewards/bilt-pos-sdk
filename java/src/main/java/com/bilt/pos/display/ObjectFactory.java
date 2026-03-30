@@ -182,13 +182,13 @@ public class ObjectFactory {
     }
 
     /**
-     * Create an instance of {@link DiscountsType }
-     * 
+     * Create an instance of {@link AdjustmentsType }
+     *
      * @return
-     *     the new instance of {@link DiscountsType }
+     *     the new instance of {@link AdjustmentsType }
      */
-    public DiscountsType createDiscountsType() {
-        return new DiscountsType();
+    public AdjustmentsType createAdjustmentsType() {
+        return new AdjustmentsType();
     }
 
     /**

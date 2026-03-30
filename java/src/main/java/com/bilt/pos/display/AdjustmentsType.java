@@ -21,62 +21,62 @@ import jakarta.xml.bind.annotation.XmlType;
 
 
 /**
- * <p>Java class for DiscountsType complex type</p>.
- * 
+ * <p>Java class for AdjustmentsType complex type</p>.
+ *
  * <p>The following schema fragment specifies the expected content contained within this class.</p>
- * 
+ *
  * <pre>{@code
- * <complexType name="DiscountsType">
+ * <complexType name="AdjustmentsType">
  *   <complexContent>
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
- *         <element name="discountItem" type="{urn:bilt:display:v1}LabeledAmountType" maxOccurs="unbounded" minOccurs="0"/>
+ *         <element name="adjustmentItem" type="{urn:bilt:display:v1}LabeledAmountType" maxOccurs="unbounded" minOccurs="0"/>
  *       </sequence>
  *     </restriction>
  *   </complexContent>
  * </complexType>
  * }</pre>
- * 
- * 
+ *
+ *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "DiscountsType", propOrder = {
-    "discountItem"
+@XmlType(name = "AdjustmentsType", propOrder = {
+    "adjustmentItem"
 })
-public class DiscountsType {
+public class AdjustmentsType {
 
-    protected List<LabeledAmountType> discountItem;
+    protected List<LabeledAmountType> adjustmentItem;
 
     /**
-     * Gets the value of the discountItem property.
-     * 
+     * Gets the value of the adjustmentItem property.
+     *
      * <p>This accessor method returns a reference to the live list,
      * not a snapshot. Therefore any modification you make to the
      * returned list will be present inside the JAXB object.
-     * This is why there is not a <CODE>set</CODE> method for the discountItem property.</p>
-     * 
+     * This is why there is not a <CODE>set</CODE> method for the adjustmentItem property.</p>
+     *
      * <p>
      * For example, to add a new item, do as follows:
      * </p>
      * <pre>
-     * getDiscountItem().add(newItem);
+     * getAdjustmentItem().add(newItem);
      * </pre>
-     * 
-     * 
+     *
+     *
      * <p>
      * Objects of the following type(s) are allowed in the list
      * {@link LabeledAmountType }
      * </p>
-     * 
-     * 
+     *
+     *
      * @return
-     *     The value of the discountItem property.
+     *     The value of the adjustmentItem property.
      */
-    public List<LabeledAmountType> getDiscountItem() {
-        if (discountItem == null) {
-            discountItem = new ArrayList<>();
+    public List<LabeledAmountType> getAdjustmentItem() {
+        if (adjustmentItem == null) {
+            adjustmentItem = new ArrayList<>();
         }
-        return this.discountItem;
+        return this.adjustmentItem;
     }
 
 }
