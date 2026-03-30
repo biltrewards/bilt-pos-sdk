@@ -294,8 +294,6 @@
          ═══════════════════════════════════════════ -->
     <xs:complexType name="TaxType">
         <xs:sequence>
-            <xs:element name="taxItem"       type="d:LabeledAmountType"
-                        minOccurs="0" maxOccurs="unbounded"/>
             <!--
               DEPRECATED: totalDiscount inside <tax> is deprecated.
               Use <adjustments><adjustmentItem> instead for order-level
@@ -303,6 +301,8 @@
               compatibility only and may be removed in a future version.
             -->
             <xs:element name="totalDiscount" type="d:LabeledAmountType" minOccurs="0"/>
+            <xs:element name="taxItem"       type="d:LabeledAmountType"
+                        minOccurs="0" maxOccurs="unbounded"/>
             <xs:element name="taxTotal" type="d:LabeledAmountType" minOccurs="0"/>
         </xs:sequence>
     </xs:complexType>

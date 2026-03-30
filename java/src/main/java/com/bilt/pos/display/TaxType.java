@@ -30,8 +30,8 @@ import jakarta.xml.bind.annotation.XmlType;
  *   <complexContent>
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
- *         <element name="taxItem" type="{urn:bilt:display:v1}LabeledAmountType" maxOccurs="unbounded" minOccurs="0"/>
  *         <element name="totalDiscount" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
+ *         <element name="taxItem" type="{urn:bilt:display:v1}LabeledAmountType" maxOccurs="unbounded" minOccurs="0"/>
  *         <element name="taxTotal" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
  *       </sequence>
  *     </restriction>
@@ -43,19 +43,19 @@ import jakarta.xml.bind.annotation.XmlType;
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "TaxType", propOrder = {
-    "taxItem",
     "totalDiscount",
+    "taxItem",
     "taxTotal"
 })
 public class TaxType {
 
-    protected List<LabeledAmountType> taxItem;
     /**
      * @deprecated Use {@code <adjustments><adjustmentItem>} instead for order-level discounts.
      *             Retained for backwards compatibility only.
      */
     @Deprecated
     protected LabeledAmountType totalDiscount;
+    protected List<LabeledAmountType> taxItem;
     protected LabeledAmountType taxTotal;
 
     /**

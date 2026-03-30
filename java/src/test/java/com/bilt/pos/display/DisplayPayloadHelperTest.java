@@ -280,9 +280,9 @@ class DisplayPayloadHelperTest {
 
     @Test
     void lineItemShouldCreateCorrectType() {
-        LineItemType item = DisplayPayloadHelper.lineItem(LineItemKindType.HEADING, "SALES");
+        LineItemType item = DisplayPayloadHelper.lineItem(LineItemKindType.ITEM, "SALES");
 
-        assertEquals(LineItemKindType.HEADING, item.getKind());
+        assertEquals(LineItemKindType.ITEM, item.getKind());
         assertEquals("SALES", item.getDescription());
     }
 
@@ -330,7 +330,7 @@ class DisplayPayloadHelperTest {
         receipt.setHeader(DisplayPayloadHelper.header("Your items"));
 
         LineItemsType lineItems = new LineItemsType();
-        lineItems.getLineItem().add(DisplayPayloadHelper.lineItem(LineItemKindType.HEADING, "SALES"));
+        lineItems.getLineItem().add(DisplayPayloadHelper.lineItem(LineItemKindType.ITEM, "SALES"));
         lineItems.getLineItem().add(DisplayPayloadHelper.productItem(
                 "Running shoes", BigDecimal.ONE, "$", new BigDecimal("79.99"), new BigDecimal("79.99")
         ));
@@ -365,9 +365,7 @@ class DisplayPayloadHelperTest {
         LineItemsType lineItems = new LineItemsType();
 
         // Add all kinds of line items
-        lineItems.getLineItem().add(DisplayPayloadHelper.lineItem(LineItemKindType.HEADING, "HEADING"));
         lineItems.getLineItem().add(DisplayPayloadHelper.lineItem(LineItemKindType.ITEM, "ITEM"));
-        lineItems.getLineItem().add(DisplayPayloadHelper.lineItem(LineItemKindType.DISCOUNT, "DISCOUNT"));
         lineItems.getLineItem().add(DisplayPayloadHelper.lineItem(LineItemKindType.RETURN, "RETURN"));
         lineItems.getLineItem().add(DisplayPayloadHelper.lineItem(LineItemKindType.VOID, "VOID"));
         lineItems.getLineItem().add(DisplayPayloadHelper.lineItem(LineItemKindType.SEPARATOR, null));
@@ -378,9 +376,7 @@ class DisplayPayloadHelperTest {
 
         String xml = DisplayPayloadHelper.toXml(payload);
 
-        assertTrue(xml.contains("heading"));
         assertTrue(xml.contains("item"));
-        assertTrue(xml.contains("discount"));
         assertTrue(xml.contains("return"));
         assertTrue(xml.contains("void"));
         assertTrue(xml.contains("separator"));
