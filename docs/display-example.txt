@@ -37,11 +37,19 @@
         <amount><currency>$</currency><value>79.99</value></amount>
       </lineItem>
 
+      <!-- Item with item-level discount (section) -->
       <lineItem kind="item">
         <description>Green T-shirt</description>
         <quantity>2</quantity>
         <unitPrice><currency>$</currency><value>9.89</value></unitPrice>
-        <amount><currency>$</currency><value>19.78</value></amount>
+        <amount><currency>$</currency><value>17.80</value></amount>
+        <originalAmount><currency>$</currency><value>19.78</value></originalAmount>
+        <section>
+          <label>Discount</label>
+          <items>
+            <item><description>10% Off -$1.98</description></item>
+          </items>
+        </section>
       </lineItem>
 
       <lineItem kind="separator"/>
@@ -57,17 +65,6 @@
         <amount><currency>$</currency><value>-12.99</value></amount>
       </lineItem>
 
-      <lineItem kind="spacer"/>
-
-      <lineItem kind="heading">
-        <description>DISCOUNTS</description>
-      </lineItem>
-
-      <lineItem kind="discount">
-        <description>Loyalty discount</description>
-        <amount><currency>$</currency><value>-4.48</value></amount>
-      </lineItem>
-
       <lineItem kind="separator"/>
 
     </lineItems>
@@ -76,6 +73,13 @@
       <description>Subtotal</description>
       <amount><currency>$</currency><value>86.78</value></amount>
     </subtotal>
+
+    <adjustments>
+      <adjustment>
+        <description>Total discount</description>
+        <amount><currency>$</currency><value>-4.48</value></amount>
+      </adjustment>
+    </adjustments>
 
     <tax>
       <taxItem>
@@ -294,6 +298,9 @@
 
       <lineItem kind="void">
         <description>Green T-shirt</description>
+        <quantity>2</quantity>
+        <unitPrice><currency>$</currency><value>-9.89</value></unitPrice>
+        <amount><currency>$</currency><value>-19.78</value></amount>
       </lineItem>
 
     </lineItems>
