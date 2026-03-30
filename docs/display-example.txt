@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  EXAMPLE 1 — Receipt with embedded QR code and header image
+  EXAMPLE 1 — Receipt with embedded QR code
   ═══════════════════════════════════════════════════════════════════
 -->
 <displayPayload
@@ -10,8 +10,6 @@
     version="1.0">
 
   <receipt>
-
-    <image mediaType="image/png" altText="Store logo">iVBORw0KGgoAAAANS...</image>
 
     <qrCode type="qr">
       <header><text>Scan to access your member card</text></header>
@@ -24,12 +22,7 @@
 
     <lineItems>
 
-      <lineItem kind="heading">
-        <description>SALES</description>
-      </lineItem>
-
       <lineItem kind="item">
-        <image mediaType="image/png" altText="Running shoes">iVBORw0KGgoAAAANS...</image>
         <description>Running shoes</description>
         <subtitle>Size 10 / Blue</subtitle>
         <quantity>1</quantity>
@@ -37,35 +30,28 @@
         <amount><currency>$</currency><value>79.99</value></amount>
       </lineItem>
 
+      <!-- Item with item-level discount (section) -->
       <lineItem kind="item">
         <description>Green T-shirt</description>
         <quantity>2</quantity>
         <unitPrice><currency>$</currency><value>9.89</value></unitPrice>
-        <amount><currency>$</currency><value>19.78</value></amount>
+        <amount><currency>$</currency><value>17.80</value></amount>
+        <originalAmount><currency>$</currency><value>19.78</value></originalAmount>
+        <section>
+          <label>Discount</label>
+          <items>
+            <item><description>10% Off -$1.98</description></item>
+          </items>
+        </section>
       </lineItem>
 
       <lineItem kind="separator"/>
-
-      <lineItem kind="heading">
-        <description>RETURNS</description>
-      </lineItem>
 
       <lineItem kind="return">
         <description>Grey T-shirt</description>
         <quantity>1</quantity>
         <unitPrice><currency>$</currency><value>12.99</value></unitPrice>
         <amount><currency>$</currency><value>-12.99</value></amount>
-      </lineItem>
-
-      <lineItem kind="spacer"/>
-
-      <lineItem kind="heading">
-        <description>DISCOUNTS</description>
-      </lineItem>
-
-      <lineItem kind="discount">
-        <description>Loyalty discount</description>
-        <amount><currency>$</currency><value>-4.48</value></amount>
       </lineItem>
 
       <lineItem kind="separator"/>
@@ -77,11 +63,14 @@
       <amount><currency>$</currency><value>86.78</value></amount>
     </subtotal>
 
-    <tax>
-      <totalDiscount>
+    <adjustments>
+      <adjustmentItem>
         <description>Total discount</description>
         <amount><currency>$</currency><value>-4.48</value></amount>
-      </totalDiscount>
+      </adjustmentItem>
+    </adjustments>
+
+    <tax>
       <taxItem>
         <description>State tax</description>
         <amount><currency>$</currency><value>5.97</value></amount>
@@ -298,6 +287,9 @@
 
       <lineItem kind="void">
         <description>Green T-shirt</description>
+        <quantity>-2</quantity>
+        <unitPrice><currency>$</currency><value>9.89</value></unitPrice>
+        <amount><currency>$</currency><value>-19.78</value></amount>
       </lineItem>
 
     </lineItems>

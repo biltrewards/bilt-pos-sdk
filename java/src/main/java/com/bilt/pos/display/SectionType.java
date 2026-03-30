@@ -13,7 +13,6 @@
 
 package com.bilt.pos.display;
 
-import java.math.BigDecimal;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
@@ -21,83 +20,83 @@ import jakarta.xml.bind.annotation.XmlType;
 
 
 /**
- * <p>Java class for MoneyType complex type</p>.
- * 
+ * <p>Java class for SectionType complex type</p>.
+ *
  * <p>The following schema fragment specifies the expected content contained within this class.</p>
- * 
+ *
  * <pre>{@code
- * <complexType name="MoneyType">
+ * <complexType name="SectionType">
  *   <complexContent>
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
- *         <element name="currency" type="{http://www.w3.org/2001/XMLSchema}string"/>
- *         <element name="value" type="{http://www.w3.org/2001/XMLSchema}decimal"/>
+ *         <element name="label" type="{http://www.w3.org/2001/XMLSchema}string"/>
+ *         <element name="items" type="{urn:bilt:display:v1}SectionItemsType"/>
  *       </sequence>
  *     </restriction>
  *   </complexContent>
  * </complexType>
  * }</pre>
- * 
- * 
+ *
+ *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "MoneyType", propOrder = {
-    "currency",
-    "value"
+@XmlType(name = "SectionType", propOrder = {
+    "label",
+    "items"
 })
-public class MoneyType {
+public class SectionType {
 
     @XmlElement(required = true)
-    protected String currency;
+    protected String label;
     @XmlElement(required = true)
-    protected BigDecimal value;
+    protected SectionItemsType items;
 
     /**
-     * Gets the value of the currency property.
-     * 
+     * Gets the value of the label property.
+     *
      * @return
      *     possible object is
      *     {@link String }
-     *     
+     *
      */
-    public String getCurrency() {
-        return currency;
+    public String getLabel() {
+        return label;
     }
 
     /**
-     * Sets the value of the currency property.
-     * 
+     * Sets the value of the label property.
+     *
      * @param value
      *     allowed object is
      *     {@link String }
-     *     
+     *
      */
-    public void setCurrency(String value) {
-        this.currency = value;
+    public void setLabel(String value) {
+        this.label = value;
     }
 
     /**
-     * Gets the value of the value property.
-     * 
+     * Gets the value of the items property.
+     *
      * @return
      *     possible object is
-     *     {@link BigDecimal }
-     *     
+     *     {@link SectionItemsType }
+     *
      */
-    public BigDecimal getValue() {
-        return value;
+    public SectionItemsType getItems() {
+        return items;
     }
 
     /**
-     * Sets the value of the value property.
+     * Sets the value of the items property.
      *
      * @param value
      *     allowed object is
-     *     {@link BigDecimal }
+     *     {@link SectionItemsType }
      *
      */
-    public void setValue(BigDecimal value) {
-        this.value = value;
+    public void setItems(SectionItemsType value) {
+        this.items = value;
     }
 
 }

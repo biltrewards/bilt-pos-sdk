@@ -63,9 +63,6 @@ receipt.setHeader(DisplayPayloadHelper.header("Your purchase"));
 // Line items
 LineItemsType lineItems = new LineItemsType();
 lineItems.getLineItem().add(
-    DisplayPayloadHelper.lineItem(LineItemKindType.HEADING, "ITEMS")
-);
-lineItems.getLineItem().add(
     DisplayPayloadHelper.productItem(
         "Running shoes",
         BigDecimal.ONE,           // quantity
@@ -173,9 +170,7 @@ MoneyType precise = DisplayPayloadHelper.money("USD", new BigDecimal("29.99"));
 LabeledAmountType subtotal = DisplayPayloadHelper.labeledAmount("Subtotal", "$", 105.97);
 
 // Line item
-LineItemType heading = DisplayPayloadHelper.lineItem(LineItemKindType.HEADING, "ITEMS");
 LineItemType separator = DisplayPayloadHelper.lineItem(LineItemKindType.SEPARATOR, null);
-LineItemType discount = DisplayPayloadHelper.lineItem(LineItemKindType.DISCOUNT, "Member discount");
 
 // Product line item (with quantity and prices)
 LineItemType product = DisplayPayloadHelper.productItem(
@@ -195,9 +190,7 @@ HeaderFooterType footer = DisplayPayloadHelper.footer("Thank you!");
 
 | Kind | Use case |
 |------|----------|
-| `HEADING` | Section headers (e.g., "ITEMS", "DISCOUNTS") |
 | `ITEM` | Regular product line |
-| `DISCOUNT` | Discount line (typically negative amount) |
 | `RETURN` | Returned item |
 | `VOID` | Voided item |
 | `SEPARATOR` | Visual separator line |

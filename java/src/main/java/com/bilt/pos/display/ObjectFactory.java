@@ -142,6 +142,36 @@ public class ObjectFactory {
     }
 
     /**
+     * Create an instance of {@link SectionType }
+     *
+     * @return
+     *     the new instance of {@link SectionType }
+     */
+    public SectionType createSectionType() {
+        return new SectionType();
+    }
+
+    /**
+     * Create an instance of {@link SectionItemsType }
+     *
+     * @return
+     *     the new instance of {@link SectionItemsType }
+     */
+    public SectionItemsType createSectionItemsType() {
+        return new SectionItemsType();
+    }
+
+    /**
+     * Create an instance of {@link SectionItemType }
+     *
+     * @return
+     *     the new instance of {@link SectionItemType }
+     */
+    public SectionItemType createSectionItemType() {
+        return new SectionItemType();
+    }
+
+    /**
      * Create an instance of {@link LineItemType }
      * 
      * @return
@@ -149,6 +179,16 @@ public class ObjectFactory {
      */
     public LineItemType createLineItemType() {
         return new LineItemType();
+    }
+
+    /**
+     * Create an instance of {@link AdjustmentsType }
+     *
+     * @return
+     *     the new instance of {@link AdjustmentsType }
+     */
+    public AdjustmentsType createAdjustmentsType() {
+        return new AdjustmentsType();
     }
 
     /**

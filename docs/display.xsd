@@ -123,7 +123,7 @@
     <!-- ═══════════════════════════════════════════
          Shared: LabeledAmountType
          A description + optional amount pair.
-         Used by: <subtotal>, <total>, <totalDiscount>,
+         Used by: <subtotal>, <total>,
          <taxItem>, <taxTotal>.
          ═══════════════════════════════════════════ -->
     <xs:complexType name="LabeledAmountType">
@@ -174,8 +174,6 @@
          ═══════════════════════════════════════════ -->
     <xs:complexType name="ReceiptType">
         <xs:sequence>
-            <!-- Optional banner image at the top of the receipt -->
-            <xs:element name="image"     type="d:ImageType"         minOccurs="0"/>
             <!-- Optional QR/barcode embedded within the receipt -->
             <xs:element name="qrCode"    type="d:QrCodeType"        minOccurs="0"/>
             <!-- Optional waiting block embedded within the receipt -->
@@ -186,6 +184,7 @@
             <xs:element name="lineItems" type="d:LineItemsType"     minOccurs="0"/>
             <!-- Totals block -->
             <xs:element name="subtotal"  type="d:LabeledAmountType" minOccurs="0"/>
+            <xs:element name="adjustments" type="d:AdjustmentsType"     minOccurs="0"/>
             <xs:element name="tax"       type="d:TaxType"           minOccurs="0"/>
             <xs:element name="total"     type="d:LabeledAmountType" minOccurs="0"/>
             <!-- Optional closing message -->
@@ -206,6 +205,31 @@
 
 
     <!-- ═══════════════════════════════════════════
+         SectionType  —  discount group applied to an item
+         Groups one or more discount descriptions under a
+         shared label (e.g., "Discount", "CLEARANCE").
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="SectionType">
+        <xs:sequence>
+            <xs:element name="label" type="xs:string"/>
+            <xs:element name="items" type="d:SectionItemsType"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="SectionItemsType">
+        <xs:sequence>
+            <xs:element name="item" maxOccurs="unbounded" type="d:SectionItemType"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="SectionItemType">
+        <xs:sequence>
+            <xs:element name="description" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+
+    <!-- ═══════════════════════════════════════════
          LineItemType  —  single row
          ═══════════════════════════════════════════ -->
     <xs:complexType name="LineItemType">
@@ -214,24 +238,27 @@
               All child elements are optional; meaningful ones
               depend on `kind`:
 
-              kind="item"      — description, subtitle, image,
-                                 quantity, unitPrice, amount
-              kind="heading"   — description only
-              kind="discount"  — description, amount (negative)
+              kind="item"      — description, subtitle, quantity,
+                                 unitPrice, amount, originalAmount,
+                                 section(s)
               kind="return"    — description, quantity, unitPrice,
                                  amount (negative)
-              kind="void"      — description only; XSLT renders as
-                                 "*** Removed", paired with the
-                                 original item line above it
-              kind="separator" — no children (horizontal rule)
-              kind="spacer"    — no children (blank line)
+              kind="void"      — description, quantity, unitPrice,
+                                 amount (negative); rendered with
+                                 red text and "Voided from
+                                 transaction" label
+              kind="separator" — no children (accepted but not
+                                 rendered on terminal)
+              kind="spacer"    — no children (accepted but not
+                                 rendered on terminal)
             -->
-            <xs:element name="image"       type="d:ImageType" minOccurs="0"/>
-            <xs:element name="description" type="xs:string"   minOccurs="0"/>
-            <xs:element name="subtitle"    type="xs:string"   minOccurs="0"/>
-            <xs:element name="quantity"    type="xs:decimal"  minOccurs="0"/>
-            <xs:element name="unitPrice"   type="d:MoneyType" minOccurs="0"/>
-            <xs:element name="amount"      type="d:MoneyType" minOccurs="0"/>
+            <xs:element name="description"    type="xs:string"          minOccurs="0"/>
+            <xs:element name="subtitle"       type="xs:string"          minOccurs="0"/>
+            <xs:element name="quantity"       type="xs:decimal"         minOccurs="0"/>
+            <xs:element name="unitPrice"      type="d:MoneyType"        minOccurs="0"/>
+            <xs:element name="amount"         type="d:MoneyType"        minOccurs="0"/>
+            <xs:element name="originalAmount" type="d:MoneyType"        minOccurs="0"/>
+            <xs:element name="section"       type="d:SectionType" minOccurs="0" maxOccurs="unbounded"/>
         </xs:sequence>
         <xs:attribute name="kind" type="d:LineItemKindType" default="item"/>
     </xs:complexType>
@@ -239,8 +266,6 @@
     <xs:simpleType name="LineItemKindType">
         <xs:restriction base="xs:string">
             <xs:enumeration value="item"/>
-            <xs:enumeration value="heading"/>
-            <xs:enumeration value="discount"/>
             <xs:enumeration value="return"/>
             <xs:enumeration value="void"/>
             <xs:enumeration value="separator"/>
@@ -250,14 +275,35 @@
 
 
     <!-- ═══════════════════════════════════════════
-         TaxType
+         AdjustmentsType  —  order-level discounts
+         Contains discounts that apply to the entire
+         order (loyalty rewards, coupons, etc.) rather
+         than individual items.
+         ═══════════════════════════════════════════ -->
+    <xs:complexType name="AdjustmentsType">
+        <xs:sequence>
+            <xs:element name="adjustmentItem" type="d:LabeledAmountType"
+                        minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+
+    <!-- ═══════════════════════════════════════════
+         TaxType  —  tax breakdown
+         Contains only tax-related items.
          ═══════════════════════════════════════════ -->
     <xs:complexType name="TaxType">
         <xs:sequence>
+            <!--
+              DEPRECATED: totalDiscount inside <tax> is deprecated.
+              Use <adjustments><adjustmentItem> instead for order-level
+              discounts. This element is retained for backwards
+              compatibility only and may be removed in a future version.
+            -->
             <xs:element name="totalDiscount" type="d:LabeledAmountType" minOccurs="0"/>
             <xs:element name="taxItem"       type="d:LabeledAmountType"
                         minOccurs="0" maxOccurs="unbounded"/>
-            <xs:element name="taxTotal"      type="d:LabeledAmountType" minOccurs="0"/>
+            <xs:element name="taxTotal" type="d:LabeledAmountType" minOccurs="0"/>
         </xs:sequence>
     </xs:complexType>
 

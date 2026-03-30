@@ -49,33 +49,14 @@ import jakarta.xml.bind.annotation.XmlType;
 })
 public class TaxType {
 
+    /**
+     * @deprecated Use {@code <adjustments><adjustmentItem>} instead for order-level discounts.
+     *             Retained for backwards compatibility only.
+     */
+    @Deprecated
     protected LabeledAmountType totalDiscount;
     protected List<LabeledAmountType> taxItem;
     protected LabeledAmountType taxTotal;
-
-    /**
-     * Gets the value of the totalDiscount property.
-     * 
-     * @return
-     *     possible object is
-     *     {@link LabeledAmountType }
-     *     
-     */
-    public LabeledAmountType getTotalDiscount() {
-        return totalDiscount;
-    }
-
-    /**
-     * Sets the value of the totalDiscount property.
-     * 
-     * @param value
-     *     allowed object is
-     *     {@link LabeledAmountType }
-     *     
-     */
-    public void setTotalDiscount(LabeledAmountType value) {
-        this.totalDiscount = value;
-    }
 
     /**
      * Gets the value of the taxItem property.
@@ -110,12 +91,42 @@ public class TaxType {
     }
 
     /**
-     * Gets the value of the taxTotal property.
-     * 
+     * Gets the value of the totalDiscount property.
+     *
      * @return
      *     possible object is
      *     {@link LabeledAmountType }
-     *     
+     *
+     * @deprecated Use {@code <adjustments><adjustmentItem>} instead for order-level discounts.
+     *             Retained for backwards compatibility only.
+     */
+    @Deprecated
+    public LabeledAmountType getTotalDiscount() {
+        return totalDiscount;
+    }
+
+    /**
+     * Sets the value of the totalDiscount property.
+     *
+     * @param value
+     *     allowed object is
+     *     {@link LabeledAmountType }
+     *
+     * @deprecated Use {@code <adjustments><adjustmentItem>} instead for order-level discounts.
+     *             Retained for backwards compatibility only.
+     */
+    @Deprecated
+    public void setTotalDiscount(LabeledAmountType value) {
+        this.totalDiscount = value;
+    }
+
+    /**
+     * Gets the value of the taxTotal property.
+     *
+     * @return
+     *     possible object is
+     *     {@link LabeledAmountType }
+     *
      */
     public LabeledAmountType getTaxTotal() {
         return taxTotal;

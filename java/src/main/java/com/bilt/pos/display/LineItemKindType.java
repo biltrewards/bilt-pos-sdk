@@ -28,8 +28,6 @@ import jakarta.xml.bind.annotation.XmlType;
  * <simpleType name="LineItemKindType">
  *   <restriction base="{http://www.w3.org/2001/XMLSchema}string">
  *     <enumeration value="item"/>
- *     <enumeration value="heading"/>
- *     <enumeration value="discount"/>
  *     <enumeration value="return"/>
  *     <enumeration value="void"/>
  *     <enumeration value="separator"/>
@@ -45,10 +43,6 @@ public enum LineItemKindType {
 
     @XmlEnumValue("item")
     ITEM("item"),
-    @XmlEnumValue("heading")
-    HEADING("heading"),
-    @XmlEnumValue("discount")
-    DISCOUNT("discount"),
     @XmlEnumValue("return")
     RETURN("return"),
     @XmlEnumValue("void")

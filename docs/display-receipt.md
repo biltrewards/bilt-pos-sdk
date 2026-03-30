@@ -60,11 +60,11 @@ A `<receipt>` can contain the following elements, all optional:
 
 | Element | Description |
 |---|---|
-| `<image>` | Banner image at the top of the receipt (Base64-encoded). |
 | `<qrCode>` | QR code or barcode embedded in the receipt. |
 | `<header><text>` | Section heading displayed above the line items. |
 | `<lineItems>` | Container for one or more `<lineItem>` rows. |
 | `<subtotal>` | Amount before taxes and discounts. |
+| `<adjustments>` | Order-level discounts (loyalty rewards, coupons, etc.). |
 | `<tax>` | Tax breakdown block. |
 | `<total>` | Final amount due. |
 | `<footer><text>` | Closing message displayed at the bottom of the receipt. |
@@ -75,21 +75,335 @@ Each `<lineItem>` has a `kind` attribute that controls how the row is rendered:
 
 | `kind` | Typical children | Description |
 |---|---|---|
-| `item` (default) | `description`, `quantity`, `unitPrice`, `amount`, optionally `image`, `subtitle` | A purchasable item |
-| `heading` | `description` | A section label (e.g. SALES, RETURNS) |
-| `discount` | `description`, `amount` (negative) | An applied discount |
-| `return` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A returned item |
-| `separator` | _(none)_ | A horizontal rule |
-| `spacer` | _(none)_ | A blank line |
+| `item` (default) | `description`, `quantity`, `unitPrice`, `amount`, optionally `subtitle`, `originalAmount`, `section` | A purchasable item |
+| `return` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A returned item from a previous transaction. See [Returned items](#returned-items). |
+| `void` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A voided/cancelled item. Rendered with red text and "Voided from transaction" label. See [Voided items](#voided-items) for usage. |
+| `separator` | _(none)_ | A horizontal rule. _Accepted but not rendered on terminal._ |
+| `spacer` | _(none)_ | A blank line. _Accepted but not rendered on terminal._ |
 
-### Tax block
+### Discounts
 
-The `<tax>` element can contain:
+Discounts can be applied at two levels:
+
+#### Item-level discounts
+
+Item-level discounts are attached directly to individual line items. Use these when a discount applies to a specific product (e.g., "20% off this item", "Buy one get one free").
+
+For `kind="item"` line items, you can include:
+
+| Element | Description |
+|---|---|
+| `<originalAmount>` | The price before the discount was applied (displayed with strikethrough) |
+| `<section>` | One or more discount groups, each with a `<label>` and `<items>` containing individual discount descriptions |
+
+Each `<section>` groups related discounts under a shared label:
+
+```xml
+<lineItem kind="item">
+  <description>Merrell Moab 3 Mid WP Boot</description>
+  <subtitle>Size 10 / Walnut</subtitle>
+  <quantity>1</quantity>
+  <unitPrice><currency>$</currency><value>144.95</value></unitPrice>
+  <amount><currency>$</currency><value>78.97</value></amount>
+  <originalAmount><currency>$</currency><value>144.95</value></originalAmount>
+  <section>
+    <label>Discount</label>
+    <items>
+      <item><description>20% Off Footwear Sale -$28.99</description></item>
+      <item><description>Member discount -$14.50</description></item>
+    </items>
+  </section>
+  <section>
+    <label>CLEARANCE</label>
+    <items>
+      <item><description>End of season -$22.49</description></item>
+    </items>
+  </section>
+</lineItem>
+```
+
+Multiple `<section>` elements can be included when an item has different types of discounts (e.g., regular discounts + clearance). Discounts with the same label are grouped together under a single `<section>` element with multiple `<item>` entries.
+
+#### Order-level discounts
+
+Order-level discounts apply to the entire order rather than specific items. Use these for loyalty rewards, coupon codes, or store-wide promotions that aren't tied to individual products.
+
+Order-level discounts appear in a dedicated `<adjustments>` block between `<subtotal>` and `<tax>`:
+
+```xml
+<adjustments>
+  <adjustmentItem>
+    <description>Loyalty reward</description>
+    <amount><currency>$</currency><value>-5.00</value></amount>
+  </adjustmentItem>
+  <adjustmentItem>
+    <description>Coupon: SAVE10</description>
+    <amount><currency>$</currency><value>-10.00</value></amount>
+  </adjustmentItem>
+</adjustments>
+```
+
+> **Design decision:** Item-level discounts are displayed inline with the product they apply to (showing original price struck through and the discount badge). Order-level discounts appear in a separate `<adjustments>` block below the subtotal, keeping them distinct from the `<tax>` block which contains only tax-related items. This separation makes the XML structure clearer and helps customers understand which discounts are product-specific vs. cart-wide.
+
+### Voided items
+
+When an item is voided (removed from the transaction), the POS must send **both** the original item line **and** a void line. This approach provides a clear audit trail showing what the customer originally added and what was subsequently voided.
+
+> ⚠️ **IMPORTANT:** A void line item (`kind="void"`) must ALWAYS be immediately preceded by its corresponding original item (`kind="item"`). The original and void must be consecutive — never send a void line item without its original item directly before it. The customer display needs both to show the complete transaction history. The subtotal/total should reflect the net amount after accounting for the void.
+
+#### How void items are rendered
+
+| Element | XML Value | Rendering |
+|---|---|---|
+| `quantity` | Negative (e.g., `-1`) | Displayed as negative (e.g., "-1 @ $19.99") |
+| `unitPrice` | Positive (e.g., `19.99`) | Displayed as positive |
+| `amount` | Negative (e.g., `-19.99`) | Red text, negative value |
+| `description` | — | Red text |
+| `subtitle` | — | Optional (e.g., SKU or product details) |
+| Label | — | "Voided from transaction" label shown below |
+
+**Key difference from regular items:** Regular items only show quantity when > 1. Void items **always** show quantity to clearly indicate the removal.
+
+#### Example 1: Single item voided
+
+Customer adds a jacket, then decides they don't want it:
+
+```xml
+<lineItems>
+  <!-- Original item as it was added -->
+  <lineItem kind="item">
+    <description>The North Face Jacket</description>
+    <quantity>1</quantity>
+    <unitPrice><currency>$</currency><value>230.00</value></unitPrice>
+    <amount><currency>$</currency><value>230.00</value></amount>
+  </lineItem>
+
+  <!-- Void entry - negative quantity and amount -->
+  <lineItem kind="void">
+    <description>The North Face Jacket</description>
+    <quantity>-1</quantity>
+    <unitPrice><currency>$</currency><value>230.00</value></unitPrice>
+    <amount><currency>$</currency><value>-230.00</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+**Rendered as:**
+- Original: "The North Face Jacket" — $230.00
+- Void: "The North Face Jacket" — -$230.00, "-1 @ $230.00", "Voided from transaction" (red text)
+
+#### Example 2: Multiple quantity item, one voided
+
+Customer adds 3 t-shirts, then removes 1:
+
+```xml
+<lineItems>
+  <!-- Original item showing full quantity added -->
+  <lineItem kind="item">
+    <description>Blue T-shirt</description>
+    <quantity>3</quantity>
+    <unitPrice><currency>$</currency><value>19.99</value></unitPrice>
+    <amount><currency>$</currency><value>59.97</value></amount>
+  </lineItem>
+
+  <!-- Void entry for 1 item - negative quantity and amount -->
+  <lineItem kind="void">
+    <description>Blue T-shirt</description>
+    <quantity>-1</quantity>
+    <unitPrice><currency>$</currency><value>19.99</value></unitPrice>
+    <amount><currency>$</currency><value>-19.99</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+**Rendered as:**
+- Original: "Blue T-shirt" — $59.97, "3 @ $19.99"
+- Void: "Blue T-shirt" — -$19.99, "-1 @ $19.99", "Voided from transaction" (red text)
+
+#### Example 3: Multiple quantity item, two voided
+
+Customer adds 3 hiking socks, then removes 2:
+
+```xml
+<lineItems>
+  <!-- Original item showing full quantity added -->
+  <lineItem kind="item">
+    <description>Darn Tough Hiking Socks</description>
+    <quantity>3</quantity>
+    <unitPrice><currency>$</currency><value>25.99</value></unitPrice>
+    <amount><currency>$</currency><value>77.97</value></amount>
+  </lineItem>
+
+  <!-- Void entry for 2 items - negative quantity and amount -->
+  <lineItem kind="void">
+    <description>Darn Tough Hiking Socks</description>
+    <quantity>-2</quantity>
+    <unitPrice><currency>$</currency><value>25.99</value></unitPrice>
+    <amount><currency>$</currency><value>-51.98</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+**Rendered as:**
+- Original: "Darn Tough Hiking Socks" — $77.97, "3 @ $25.99"
+- Void: "Darn Tough Hiking Socks" — -$51.98, "-2 @ $25.99", "Voided from transaction" (red text)
+
+#### Example 4: Mixed transaction with multiple voids
+
+A more complex transaction showing various void scenarios:
+
+```xml
+<lineItems>
+  <!-- Item 1: No void -->
+  <lineItem kind="item">
+    <description>Columbia FlexROC Pants</description>
+    <quantity>1</quantity>
+    <unitPrice><currency>$</currency><value>74.99</value></unitPrice>
+    <amount><currency>$</currency><value>74.99</value></amount>
+  </lineItem>
+
+  <!-- Item 2: Single item, fully voided -->
+  <lineItem kind="item">
+    <description>Patagonia Fleece Jacket</description>
+    <quantity>1</quantity>
+    <unitPrice><currency>$</currency><value>139.00</value></unitPrice>
+    <amount><currency>$</currency><value>139.00</value></amount>
+  </lineItem>
+
+  <lineItem kind="void">
+    <description>Patagonia Fleece Jacket</description>
+    <quantity>-1</quantity>
+    <unitPrice><currency>$</currency><value>139.00</value></unitPrice>
+    <amount><currency>$</currency><value>-139.00</value></amount>
+  </lineItem>
+
+  <!-- Item 3: Multiple quantity, partial void -->
+  <lineItem kind="item">
+    <description>Smartwool Hiking Socks</description>
+    <quantity>4</quantity>
+    <unitPrice><currency>$</currency><value>22.99</value></unitPrice>
+    <amount><currency>$</currency><value>91.96</value></amount>
+  </lineItem>
+
+  <lineItem kind="void">
+    <description>Smartwool Hiking Socks</description>
+    <quantity>-2</quantity>
+    <unitPrice><currency>$</currency><value>22.99</value></unitPrice>
+    <amount><currency>$</currency><value>-45.98</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+> **Important for POS implementers:**
+> - Do NOT reduce the quantity on the original item when voiding — always send the original item as it was added, plus a separate void line
+> - For the void line, send **negative** values for `quantity` and `amount` (e.g., `<quantity>-1</quantity>`, `<amount>...<value>-230.00</value></amount>`)
+> - The `unitPrice` should remain **positive** (it's the price per unit, not a refund)
+> - This pattern shows customers a clear history, provides an audit trail, and matches standard retail receipt conventions
+
+### Returned items
+
+Returns are items from a **previous transaction** being returned for a refund. Returns and purchases are always separate transactions — you cannot mix returns with new purchases in the same transaction.
+
+#### How return items are rendered
+
+| Element | Rendering |
+|---|---|
+| `description` | Standard text |
+| `quantity` | Displayed with unit price (e.g., "2 @ $19.99") |
+| `amount` | Negative value (refund amount) |
+| `subtitle` | Optional - typically shows original purchase date |
+
+#### Example 1: Single item return
+
+```xml
+<!-- Return transaction (separate from any purchase) -->
+<lineItems>
+  <lineItem kind="return">
+    <description>Blue T-shirt</description>
+    <subtitle>Original purchase: Mar 15, 2024</subtitle>
+    <quantity>1</quantity>
+    <unitPrice><currency>$</currency><value>19.99</value></unitPrice>
+    <amount><currency>$</currency><value>-19.99</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+#### Example 2: Multiple items return
+
+```xml
+<lineItems>
+  <lineItem kind="return">
+    <description>Smartwool Hiking Socks</description>
+    <subtitle>Original purchase: Mar 10, 2024</subtitle>
+    <quantity>2</quantity>
+    <unitPrice><currency>$</currency><value>22.99</value></unitPrice>
+    <amount><currency>$</currency><value>-45.98</value></amount>
+  </lineItem>
+</lineItems>
+```
+
+#### Example 3: Complete return transaction
+
+A full return transaction showing multiple items with totals:
+
+```xml
+<receipt>
+  <header><text>Return - #RET-12345</text></header>
+  <lineItems>
+    <lineItem kind="return">
+      <description>The North Face Jacket</description>
+      <subtitle>Original purchase: Mar 5, 2024</subtitle>
+      <quantity>1</quantity>
+      <unitPrice><currency>$</currency><value>230.00</value></unitPrice>
+      <amount><currency>$</currency><value>-230.00</value></amount>
+    </lineItem>
+    <lineItem kind="return">
+      <description>Columbia Hiking Pants</description>
+      <subtitle>Original purchase: Mar 5, 2024</subtitle>
+      <quantity>1</quantity>
+      <unitPrice><currency>$</currency><value>74.99</value></unitPrice>
+      <amount><currency>$</currency><value>-74.99</value></amount>
+    </lineItem>
+  </lineItems>
+  <subtotal>
+    <description>Subtotal</description>
+    <amount><currency>$</currency><value>-304.99</value></amount>
+  </subtotal>
+  <tax>
+    <taxTotal>
+      <description>Tax Refund</description>
+      <amount><currency>$</currency><value>-27.07</value></amount>
+    </taxTotal>
+  </tax>
+  <total>
+    <description>Refund Total</description>
+    <amount><currency>$</currency><value>-332.06</value></amount>
+  </total>
+  <footer><text>Refund will be credited to original payment method</text></footer>
+</receipt>
+```
+
+> **Void vs Return:**
+> - Use `void` when an item is removed from the **current** transaction before checkout
+> - Use `return` when an item from a **previous** transaction is being returned for refund
+> - These are always separate transactions — never combine purchases and returns
+
+### Adjustments block
+
+The `<adjustments>` element contains order-level discounts:
 
 | Element | Occurrences | Description |
 |---|---|---|
-| `<totalDiscount>` | 0 or 1 | Sum of all discounts |
+| `<adjustmentItem>` | 0 or more | Individual order-level discount (e.g. loyalty reward, coupon) |
+
+### Tax block
+
+The `<tax>` element contains only tax-related items:
+
+| Element | Occurrences | Description |
+|---|---|---|
 | `<taxItem>` | 0 or more | Individual tax line (e.g. state tax, county tax) |
+| `<totalDiscount>` | 0 or 1 | **DEPRECATED.** Use `<adjustments><adjustmentItem>` instead. Retained for backwards compatibility only. |
 | `<taxTotal>` | 0 or 1 | Total tax amount |
 
 Each of these uses a `<description>` and `<amount>` child.
@@ -135,8 +449,6 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
 
   <receipt>
 
-    <image mediaType="image/png" altText="Store logo">iVBORw0KGgoAAAANS...</image>
-
     <qrCode type="qr">
       <header><text>Scan to access your member card</text></header>
       <data>https://example.com/signup?store=Store42&amp;pos=REG0042&amp;hash=AAhbcd=</data>
@@ -148,17 +460,26 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
 
     <lineItems>
 
-      <lineItem kind="heading">
-        <description>SALES</description>
-      </lineItem>
-
       <lineItem kind="item">
-        <image mediaType="image/png" altText="Running shoes">iVBORw0KGgoAAAANS...</image>
-        <description>Running shoes</description>
-        <subtitle>Size 10 / Blue</subtitle>
+        <description>Merrell Moab 3 Mid WP Boot</description>
+        <subtitle>Size 10 / Walnut</subtitle>
         <quantity>1</quantity>
-        <unitPrice><currency>$</currency><value>79.99</value></unitPrice>
-        <amount><currency>$</currency><value>79.99</value></amount>
+        <unitPrice><currency>$</currency><value>144.95</value></unitPrice>
+        <amount><currency>$</currency><value>78.97</value></amount>
+        <originalAmount><currency>$</currency><value>144.95</value></originalAmount>
+        <section>
+          <label>Discount</label>
+          <items>
+            <item><description>20% Off Footwear Sale -$28.99</description></item>
+            <item><description>Member discount -$14.50</description></item>
+          </items>
+        </section>
+        <section>
+          <label>CLEARANCE</label>
+          <items>
+            <item><description>End of season -$22.49</description></item>
+          </items>
+        </section>
       </lineItem>
 
       <lineItem kind="item">
@@ -170,29 +491,12 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
 
       <lineItem kind="separator"/>
 
-      <lineItem kind="heading">
-        <description>RETURNS</description>
-      </lineItem>
-
       <lineItem kind="return">
         <description>Grey T-shirt</description>
         <quantity>1</quantity>
         <unitPrice><currency>$</currency><value>12.99</value></unitPrice>
         <amount><currency>$</currency><value>-12.99</value></amount>
       </lineItem>
-
-      <lineItem kind="spacer"/>
-
-      <lineItem kind="heading">
-        <description>DISCOUNTS</description>
-      </lineItem>
-
-      <lineItem kind="discount">
-        <description>Loyalty discount</description>
-        <amount><currency>$</currency><value>-4.48</value></amount>
-      </lineItem>
-
-      <lineItem kind="separator"/>
 
     </lineItems>
 
@@ -201,11 +505,14 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
       <amount><currency>$</currency><value>86.78</value></amount>
     </subtotal>
 
+    <adjustments>
+      <adjustmentItem>
+        <description>Loyalty reward</description>
+        <amount><currency>$</currency><value>-5.00</value></amount>
+      </adjustmentItem>
+    </adjustments>
+
     <tax>
-      <totalDiscount>
-        <description>Total discount</description>
-        <amount><currency>$</currency><value>-4.48</value></amount>
-      </totalDiscount>
       <taxItem>
         <description>State tax</description>
         <amount><currency>$</currency><value>5.97</value></amount>

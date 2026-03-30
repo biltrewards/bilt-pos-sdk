@@ -28,12 +28,12 @@ import jakarta.xml.bind.annotation.XmlType;
  *   <complexContent>
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
- *         <element name="image" type="{urn:bilt:display:v1}ImageType" minOccurs="0"/>
  *         <element name="qrCode" type="{urn:bilt:display:v1}QrCodeType" minOccurs="0"/>
  *         <element name="waiting" type="{urn:bilt:display:v1}WaitingType" minOccurs="0"/>
  *         <element name="header" type="{urn:bilt:display:v1}HeaderFooterType" minOccurs="0"/>
  *         <element name="lineItems" type="{urn:bilt:display:v1}LineItemsType" minOccurs="0"/>
  *         <element name="subtotal" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
+ *         <element name="adjustments" type="{urn:bilt:display:v1}AdjustmentsType" minOccurs="0"/>
  *         <element name="tax" type="{urn:bilt:display:v1}TaxType" minOccurs="0"/>
  *         <element name="total" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
  *         <element name="footer" type="{urn:bilt:display:v1}HeaderFooterType" minOccurs="0"/>
@@ -47,51 +47,27 @@ import jakarta.xml.bind.annotation.XmlType;
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "ReceiptType", propOrder = {
-    "image",
     "qrCode",
     "waiting",
     "header",
     "lineItems",
     "subtotal",
+    "adjustments",
     "tax",
     "total",
     "footer"
 })
 public class ReceiptType {
 
-    protected ImageType image;
     protected QrCodeType qrCode;
     protected WaitingType waiting;
     protected HeaderFooterType header;
     protected LineItemsType lineItems;
     protected LabeledAmountType subtotal;
+    protected AdjustmentsType adjustments;
     protected TaxType tax;
     protected LabeledAmountType total;
     protected HeaderFooterType footer;
-
-    /**
-     * Gets the value of the image property.
-     * 
-     * @return
-     *     possible object is
-     *     {@link ImageType }
-     *     
-     */
-    public ImageType getImage() {
-        return image;
-    }
-
-    /**
-     * Sets the value of the image property.
-     * 
-     * @param value
-     *     allowed object is
-     *     {@link ImageType }
-     *     
-     */
-    public void setImage(ImageType value) {
-        this.image = value;
-    }
 
     /**
      * Gets the value of the qrCode property.
@@ -211,6 +187,30 @@ public class ReceiptType {
      */
     public void setSubtotal(LabeledAmountType value) {
         this.subtotal = value;
+    }
+
+    /**
+     * Gets the value of the adjustments property.
+     *
+     * @return
+     *     possible object is
+     *     {@link AdjustmentsType }
+     *
+     */
+    public AdjustmentsType getAdjustments() {
+        return adjustments;
+    }
+
+    /**
+     * Sets the value of the adjustments property.
+     *
+     * @param value
+     *     allowed object is
+     *     {@link AdjustmentsType }
+     *
+     */
+    public void setAdjustments(AdjustmentsType value) {
+        this.adjustments = value;
     }
 
     /**
