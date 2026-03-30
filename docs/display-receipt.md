@@ -152,6 +152,8 @@ Order-level discounts appear in a dedicated `<adjustments>` block between `<subt
 
 When an item is voided (removed from the transaction), the POS must send **both** the original item line **and** a void line. This approach provides a clear audit trail showing what the customer originally added and what was subsequently voided.
 
+> ⚠️ **IMPORTANT:** A void line item (`kind="void"`) must ALWAYS be immediately preceded by its corresponding original item (`kind="item"`). The original and void must be consecutive — never send a void line item without its original item directly before it. The customer display needs both to show the complete transaction history. The subtotal/total should reflect the net amount after accounting for the void.
+
 #### How void items are rendered
 
 | Element | Rendering |
@@ -160,7 +162,7 @@ When an item is voided (removed from the transaction), the POS must send **both*
 | `quantity` | **Always displayed as negative** (e.g., "-1 @ $19.99") |
 | `amount` | Red text, negative value |
 | Label | "Voided from transaction" label shown below |
-| `subtitle` | Optional reason for voiding |
+| `subtitle` | Optional (e.g., SKU or product details) |
 
 **Key difference from regular items:** Regular items only show quantity when > 1. Void items **always** show quantity (displayed as negative) to clearly indicate the removal.
 
@@ -181,7 +183,6 @@ Customer adds a jacket, then decides they don't want it:
   <!-- Void entry - quantity always shown as negative -->
   <lineItem kind="void">
     <description>The North Face Jacket</description>
-    <subtitle>Wrong size</subtitle>
     <quantity>1</quantity>
     <unitPrice><currency>$</currency><value>230.00</value></unitPrice>
     <amount><currency>$</currency><value>-230.00</value></amount>
@@ -210,7 +211,6 @@ Customer adds 3 t-shirts, then removes 1:
   <!-- Void entry for 1 item -->
   <lineItem kind="void">
     <description>Blue T-shirt</description>
-    <subtitle>Customer changed mind</subtitle>
     <quantity>1</quantity>
     <unitPrice><currency>$</currency><value>19.99</value></unitPrice>
     <amount><currency>$</currency><value>-19.99</value></amount>
@@ -239,7 +239,6 @@ Customer adds 3 hiking socks, then removes 2:
   <!-- Void entry for 2 items -->
   <lineItem kind="void">
     <description>Darn Tough Hiking Socks</description>
-    <subtitle>Only need one pair</subtitle>
     <quantity>2</quantity>
     <unitPrice><currency>$</currency><value>25.99</value></unitPrice>
     <amount><currency>$</currency><value>-51.98</value></amount>
@@ -275,7 +274,6 @@ A more complex transaction showing various void scenarios:
 
   <lineItem kind="void">
     <description>Patagonia Fleece Jacket</description>
-    <subtitle>Found cheaper online</subtitle>
     <quantity>1</quantity>
     <unitPrice><currency>$</currency><value>139.00</value></unitPrice>
     <amount><currency>$</currency><value>-139.00</value></amount>
