@@ -186,7 +186,7 @@
             <xs:element name="lineItems" type="d:LineItemsType"     minOccurs="0"/>
             <!-- Totals block -->
             <xs:element name="subtotal"  type="d:LabeledAmountType" minOccurs="0"/>
-            <xs:element name="discounts" type="d:DiscountsType"     minOccurs="0"/>
+            <xs:element name="adjustments" type="d:AdjustmentsType"     minOccurs="0"/>
             <xs:element name="tax"       type="d:TaxType"           minOccurs="0"/>
             <xs:element name="total"     type="d:LabeledAmountType" minOccurs="0"/>
             <!-- Optional closing message -->
@@ -207,24 +207,24 @@
 
 
     <!-- ═══════════════════════════════════════════
-         ItemDiscountType  —  discount group applied to an item
+         SectionType  —  discount group applied to an item
          Groups one or more discount descriptions under a
          shared label (e.g., "Discount", "CLEARANCE").
          ═══════════════════════════════════════════ -->
-    <xs:complexType name="ItemDiscountType">
+    <xs:complexType name="SectionType">
         <xs:sequence>
             <xs:element name="label" type="xs:string"/>
-            <xs:element name="items" type="d:DiscountItemsType"/>
+            <xs:element name="items" type="d:SectionItemsType"/>
         </xs:sequence>
     </xs:complexType>
 
-    <xs:complexType name="DiscountItemsType">
+    <xs:complexType name="SectionItemsType">
         <xs:sequence>
-            <xs:element name="item" maxOccurs="unbounded" type="d:DiscountItemDetailType"/>
+            <xs:element name="item" maxOccurs="unbounded" type="d:SectionItemType"/>
         </xs:sequence>
     </xs:complexType>
 
-    <xs:complexType name="DiscountItemDetailType">
+    <xs:complexType name="SectionItemType">
         <xs:sequence>
             <xs:element name="description" type="xs:string"/>
         </xs:sequence>
@@ -264,7 +264,7 @@
             <xs:element name="unitPrice"      type="d:MoneyType"        minOccurs="0"/>
             <xs:element name="amount"         type="d:MoneyType"        minOccurs="0"/>
             <xs:element name="originalAmount" type="d:MoneyType"        minOccurs="0"/>
-            <xs:element name="discount"       type="d:ItemDiscountType" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="section"       type="d:SectionType" minOccurs="0" maxOccurs="unbounded"/>
         </xs:sequence>
         <xs:attribute name="kind" type="d:LineItemKindType" default="item"/>
     </xs:complexType>
@@ -283,14 +283,14 @@
 
 
     <!-- ═══════════════════════════════════════════
-         DiscountsType  —  order-level discounts
+         AdjustmentsType  —  order-level discounts
          Contains discounts that apply to the entire
          order (loyalty rewards, coupons, etc.) rather
          than individual items.
          ═══════════════════════════════════════════ -->
-    <xs:complexType name="DiscountsType">
+    <xs:complexType name="AdjustmentsType">
         <xs:sequence>
-            <xs:element name="discountItem" type="d:LabeledAmountType"
+            <xs:element name="adjustmentItem" type="d:LabeledAmountType"
                         minOccurs="0" maxOccurs="unbounded"/>
         </xs:sequence>
     </xs:complexType>

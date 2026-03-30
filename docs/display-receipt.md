@@ -65,7 +65,7 @@ A `<receipt>` can contain the following elements, all optional:
 | `<header><text>` | Section heading displayed above the line items. |
 | `<lineItems>` | Container for one or more `<lineItem>` rows. |
 | `<subtotal>` | Amount before taxes and discounts. |
-| `<discounts>` | Order-level discounts (loyalty rewards, coupons, etc.). |
+| `<adjustments>` | Order-level discounts (loyalty rewards, coupons, etc.). |
 | `<tax>` | Tax breakdown block. |
 | `<total>` | Final amount due. |
 | `<footer><text>` | Closing message displayed at the bottom of the receipt. |
@@ -97,9 +97,9 @@ For `kind="item"` line items, you can include:
 | Element | Description |
 |---|---|
 | `<originalAmount>` | The price before the discount was applied (displayed with strikethrough) |
-| `<discount>` | One or more discount groups, each with a `<label>` and `<items>` containing individual discount descriptions |
+| `<section>` | One or more discount groups, each with a `<label>` and `<items>` containing individual discount descriptions |
 
-Each `<discount>` groups related discounts under a shared label:
+Each `<section>` groups related discounts under a shared label:
 
 ```xml
 <lineItem kind="item">
@@ -109,44 +109,44 @@ Each `<discount>` groups related discounts under a shared label:
   <unitPrice><currency>$</currency><value>144.95</value></unitPrice>
   <amount><currency>$</currency><value>78.97</value></amount>
   <originalAmount><currency>$</currency><value>144.95</value></originalAmount>
-  <discount>
+  <section>
     <label>Discount</label>
     <items>
       <item><description>20% Off Footwear Sale -$28.99</description></item>
       <item><description>Member discount -$14.50</description></item>
     </items>
-  </discount>
-  <discount>
+  </section>
+  <section>
     <label>CLEARANCE</label>
     <items>
       <item><description>End of season -$22.49</description></item>
     </items>
-  </discount>
+  </section>
 </lineItem>
 ```
 
-Multiple `<discount>` elements can be included when an item has different types of discounts (e.g., regular discounts + clearance). Discounts with the same label are grouped together under a single `<discount>` element with multiple `<item>` entries.
+Multiple `<section>` elements can be included when an item has different types of discounts (e.g., regular discounts + clearance). Discounts with the same label are grouped together under a single `<section>` element with multiple `<item>` entries.
 
 #### Order-level discounts
 
 Order-level discounts apply to the entire order rather than specific items. Use these for loyalty rewards, coupon codes, or store-wide promotions that aren't tied to individual products.
 
-Order-level discounts appear in a dedicated `<discounts>` block between `<subtotal>` and `<tax>`:
+Order-level discounts appear in a dedicated `<adjustments>` block between `<subtotal>` and `<tax>`:
 
 ```xml
-<discounts>
-  <discountItem>
+<adjustments>
+  <adjustmentItem>
     <description>Loyalty reward</description>
     <amount><currency>$</currency><value>-5.00</value></amount>
-  </discountItem>
-  <discountItem>
+  </adjustmentItem>
+  <adjustmentItem>
     <description>Coupon: SAVE10</description>
     <amount><currency>$</currency><value>-10.00</value></amount>
-  </discountItem>
-</discounts>
+  </adjustmentItem>
+</adjustments>
 ```
 
-> **Design decision:** Item-level discounts are displayed inline with the product they apply to (showing original price struck through and the discount badge). Order-level discounts appear in a separate `<discounts>` block below the subtotal, keeping them distinct from the `<tax>` block which contains only tax-related items. This separation makes the XML structure clearer and helps customers understand which discounts are product-specific vs. cart-wide.
+> **Design decision:** Item-level discounts are displayed inline with the product they apply to (showing original price struck through and the discount badge). Order-level discounts appear in a separate `<adjustments>` block below the subtotal, keeping them distinct from the `<tax>` block which contains only tax-related items. This separation makes the XML structure clearer and helps customers understand which discounts are product-specific vs. cart-wide.
 
 ### Voided items
 
@@ -231,13 +231,13 @@ Returns are items from a **previous transaction** being returned for a refund. R
 > - Use `return` when an item from a **previous** transaction is being returned for refund
 > - These are always separate transactions — never combine purchases and returns
 
-### Discounts block
+### Adjustments block
 
-The `<discounts>` element contains order-level discounts:
+The `<adjustments>` element contains order-level discounts:
 
 | Element | Occurrences | Description |
 |---|---|---|
-| `<discountItem>` | 0 or more | Individual order-level discount (e.g. loyalty reward, coupon) |
+| `<adjustmentItem>` | 0 or more | Individual order-level discount (e.g. loyalty reward, coupon) |
 
 ### Tax block
 
@@ -316,19 +316,19 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
         <unitPrice><currency>$</currency><value>144.95</value></unitPrice>
         <amount><currency>$</currency><value>78.97</value></amount>
         <originalAmount><currency>$</currency><value>144.95</value></originalAmount>
-        <discount>
+        <section>
           <label>Discount</label>
           <items>
             <item><description>20% Off Footwear Sale -$28.99</description></item>
             <item><description>Member discount -$14.50</description></item>
           </items>
-        </discount>
-        <discount>
+        </section>
+        <section>
           <label>CLEARANCE</label>
           <items>
             <item><description>End of season -$22.49</description></item>
           </items>
-        </discount>
+        </section>
       </lineItem>
 
       <lineItem kind="item">
@@ -358,12 +358,12 @@ The `type` attribute controls the symbology. Supported values: `qr`, `barcode128
       <amount><currency>$</currency><value>86.78</value></amount>
     </subtotal>
 
-    <discounts>
-      <discountItem>
+    <adjustments>
+      <adjustmentItem>
         <description>Loyalty reward</description>
         <amount><currency>$</currency><value>-5.00</value></amount>
-      </discountItem>
-    </discounts>
+      </adjustmentItem>
+    </adjustments>
 
     <tax>
       <taxItem>
