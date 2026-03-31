@@ -68,7 +68,7 @@ A `<receipt>` can contain the following elements, all optional:
 | `<adjustments>` | Order-level discounts (loyalty rewards, coupons, etc.). |
 | `<tax>` | Tax breakdown block. |
 | `<total>` | Final amount due. |
-| `<footer><text>` | Closing message displayed at the bottom of the receipt. |
+| `<footer><text>` | Closing message displayed at the bottom of the receipt. _Accepted but not rendered on terminal._ |
 
 ### Line items
 
