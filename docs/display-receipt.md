@@ -3,7 +3,7 @@
 
 # Show a virtual receipt on the terminal
 
-Display an itemised purchase summary on the customer-facing terminal screen before the payment transaction begins. You can also embed a QR code or a banner image in the receipt.
+Display an itemised purchase summary on the customer-facing terminal screen before the payment transaction begins. You can also embed a QR code in the receipt.
 
 A display request does not time out. The terminal continues to show the receipt until you send a new request — for example, a payment request or a request to show the standby screen.
 
@@ -48,9 +48,9 @@ Exactly one content element is allowed per payload.
 
 | Element | Description |
 |---|---|
-| `<receipt>` | Itemised purchase summary. Can optionally embed a `<qrCode>` and/or an `<image>`. |
+| `<receipt>` | Itemised purchase summary. Can optionally embed a `<qrCode>`. |
 | `<qrCode>` | A QR code or barcode. Used standalone or embedded in a `<receipt>`. |
-| `<image>` | A Base64-encoded image. Used standalone or embedded in a `<receipt>`. |
+| `<image>` | A Base64-encoded image. Used standalone. |
 
 ---
 
@@ -75,7 +75,7 @@ Each `<lineItem>` has a `kind` attribute that controls how the row is rendered:
 
 | `kind` | Typical children | Description |
 |---|---|---|
-| `item` (default) | `description`, `quantity`, `unitPrice`, `amount`, optionally `subtitle`, `originalAmount`, `section` | A purchasable item |
+| `item` (default) | `description`, `quantity`, `unitPrice`, `amount`, optionally `image`, `subtitle`, `originalAmount`, `section` | A purchasable item |
 | `return` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A returned item from a previous transaction. See [Returned items](#returned-items). |
 | `void` | `description`, `quantity`, `unitPrice`, `amount` (negative) | A voided/cancelled item. Rendered with red text and "Voided from transaction" label. See [Voided items](#voided-items) for usage. |
 | `separator` | _(none)_ | A horizontal rule. _Accepted but not rendered on terminal._ |

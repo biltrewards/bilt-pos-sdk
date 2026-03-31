@@ -73,8 +73,8 @@
 
     <!-- ═══════════════════════════════════════════
          Shared: ImageType
-         Used by: standalone <image>, <receipt> banner,
-         and <lineItem> thumbnail.
+         Used by: standalone <image> and <lineItem>
+         thumbnail.
          Content: base64-encoded binary (PNG, JPEG, etc.)
          ═══════════════════════════════════════════ -->
     <xs:complexType name="ImageType">
@@ -238,9 +238,9 @@
               All child elements are optional; meaningful ones
               depend on `kind`:
 
-              kind="item"      — description, subtitle, quantity,
-                                 unitPrice, amount, originalAmount,
-                                 section(s)
+              kind="item"      — description, subtitle, image,
+                                 quantity, unitPrice, amount,
+                                 originalAmount, section(s)
               kind="return"    — description, quantity, unitPrice,
                                  amount (negative)
               kind="void"      — description, quantity, unitPrice,
@@ -252,6 +252,7 @@
               kind="spacer"    — no children (accepted but not
                                  rendered on terminal)
             -->
+            <xs:element name="image"          type="d:ImageType"        minOccurs="0"/>
             <xs:element name="description"    type="xs:string"          minOccurs="0"/>
             <xs:element name="subtitle"       type="xs:string"          minOccurs="0"/>
             <xs:element name="quantity"       type="xs:decimal"         minOccurs="0"/>
