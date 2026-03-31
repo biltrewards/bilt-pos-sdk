@@ -3,8 +3,8 @@ title: Bilt POS SDK
 description: >-
   Developer documentation for the Bilt POS SDK — a Java/Kotlin client library
   for communicating with Bilt payment terminals via the Nexo Sale to POI protocol.
-baseurl: ""
-url: ""
+baseurl: "/bilt-pos-sdk"
+url: "https://biltrewards.github.io"
 
 # Build settings
 plugins:
