@@ -176,8 +176,14 @@
         <xs:sequence>
             <!-- Optional QR/barcode embedded within the receipt -->
             <xs:element name="qrCode"    type="d:QrCodeType"        minOccurs="0"/>
-            <!-- Optional waiting block embedded within the receipt -->
-            <xs:element name="waiting"   type="d:WaitingType"       minOccurs="0"/>
+            <!--
+              Optional waiting message shown while the transaction
+              is being processed. The text content is the message
+              displayed to the shopper (e.g. "Processing payment…").
+              An empty <waiting/> element falls back to a default
+              "Waiting for cashier" message.
+            -->
+            <xs:element name="waiting"   type="xs:string"           minOccurs="0"/>
             <!-- Section heading shown above the line items -->
             <xs:element name="header"    type="d:HeaderFooterType"  minOccurs="0"/>
             <!-- Line items -->

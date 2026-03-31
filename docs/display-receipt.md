@@ -61,6 +61,7 @@ A `<receipt>` can contain the following elements, all optional:
 | Element | Description |
 |---|---|
 | `<qrCode>` | QR code or barcode embedded in the receipt. |
+| `<waiting>` | Status message shown during processing (e.g. `<waiting>Processing payment…</waiting>`). Empty `<waiting/>` defaults to "Waiting for cashier". |
 | `<header><text>` | Section heading displayed above the line items. |
 | `<lineItems>` | Container for one or more `<lineItem>` rows. |
 | `<subtotal>` | Amount before taxes and discounts. |
