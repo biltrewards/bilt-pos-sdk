@@ -52,6 +52,7 @@ import jakarta.xml.bind.annotation.XmlType;
 @XmlType(name = "LineItemType", propOrder = {
     "description",
     "subtitle",
+    "image",
     "quantity",
     "unitPrice",
     "amount",
@@ -62,6 +63,7 @@ public class LineItemType {
 
     protected String description;
     protected String subtitle;
+    protected ImageType image;
     protected BigDecimal quantity;
     protected MoneyType unitPrice;
     protected MoneyType amount;
@@ -116,6 +118,30 @@ public class LineItemType {
      */
     public void setSubtitle(String value) {
         this.subtitle = value;
+    }
+
+    /**
+     * Gets the value of the image property.
+     *
+     * @return
+     *     possible object is
+     *     {@link ImageType }
+     *
+     */
+    public ImageType getImage() {
+        return image;
+    }
+
+    /**
+     * Sets the value of the image property.
+     *
+     * @param value
+     *     allowed object is
+     *     {@link ImageType }
+     *
+     */
+    public void setImage(ImageType value) {
+        this.image = value;
     }
 
     /**

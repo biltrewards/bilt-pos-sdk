@@ -73,8 +73,8 @@
 
     <!-- ═══════════════════════════════════════════
          Shared: ImageType
-         Used by: standalone <image>, <receipt> banner,
-         and <lineItem> thumbnail.
+         Used by: standalone <image> and <lineItem>
+         thumbnail.
          Content: base64-encoded binary (PNG, JPEG, etc.)
          ═══════════════════════════════════════════ -->
     <xs:complexType name="ImageType">
@@ -155,12 +155,11 @@
 
     <!-- ═══════════════════════════════════════════
          WaitingType
-         Shows a waiting/progress screen.
-         Can be used standalone or embedded inside
-         <receipt> (same pattern as <qrCode> and
-         <image>).
+         Shows a waiting/progress screen (standalone).
          Uses the shared DisplayType from common.xsd
          for title and text lines.
+         Note: the receipt's embedded <waiting> uses
+         xs:string, not this type.
          ═══════════════════════════════════════════ -->
     <xs:complexType name="WaitingType">
         <xs:sequence>
@@ -176,8 +175,14 @@
         <xs:sequence>
             <!-- Optional QR/barcode embedded within the receipt -->
             <xs:element name="qrCode"    type="d:QrCodeType"        minOccurs="0"/>
-            <!-- Optional waiting block embedded within the receipt -->
-            <xs:element name="waiting"   type="d:WaitingType"       minOccurs="0"/>
+            <!--
+              Optional waiting message shown while the transaction
+              is being processed. The text content is the message
+              displayed to the shopper (e.g. "Processing payment…").
+              An empty <waiting/> element falls back to a default
+              "Waiting for cashier" message.
+            -->
+            <xs:element name="waiting"   type="xs:string"           minOccurs="0"/>
             <!-- Section heading shown above the line items -->
             <xs:element name="header"    type="d:HeaderFooterType"  minOccurs="0"/>
             <!-- Line items -->
@@ -240,7 +245,7 @@
 
               kind="item"      — description, subtitle, quantity,
                                  unitPrice, amount, originalAmount,
-                                 section(s)
+                                 optionally image, section(s)
               kind="return"    — description, quantity, unitPrice,
                                  amount (negative)
               kind="void"      — description, quantity, unitPrice,
@@ -254,6 +259,7 @@
             -->
             <xs:element name="description"    type="xs:string"          minOccurs="0"/>
             <xs:element name="subtitle"       type="xs:string"          minOccurs="0"/>
+            <xs:element name="image"          type="d:ImageType"        minOccurs="0"/>
             <xs:element name="quantity"       type="xs:decimal"         minOccurs="0"/>
             <xs:element name="unitPrice"      type="d:MoneyType"        minOccurs="0"/>
             <xs:element name="amount"         type="d:MoneyType"        minOccurs="0"/>

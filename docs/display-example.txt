@@ -261,11 +261,7 @@
 
   <receipt>
 
-    <waiting>
-      <display>
-        <title>Waiting for order to complete...</title>
-      </display>
-    </waiting>
+    <waiting>Waiting for order to complete...</waiting>
 
     <header><text>Your items</text></header>
 
