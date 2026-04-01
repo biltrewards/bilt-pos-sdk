@@ -29,7 +29,7 @@ import jakarta.xml.bind.annotation.XmlType;
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
  *         <element name="qrCode" type="{urn:bilt:display:v1}QrCodeType" minOccurs="0"/>
- *         <element name="waiting" type="{urn:bilt:display:v1}WaitingType" minOccurs="0"/>
+ *         <element name="waiting" type="{http://www.w3.org/2001/XMLSchema}string" minOccurs="0"/>
  *         <element name="header" type="{urn:bilt:display:v1}HeaderFooterType" minOccurs="0"/>
  *         <element name="lineItems" type="{urn:bilt:display:v1}LineItemsType" minOccurs="0"/>
  *         <element name="subtotal" type="{urn:bilt:display:v1}LabeledAmountType" minOccurs="0"/>
@@ -60,7 +60,7 @@ import jakarta.xml.bind.annotation.XmlType;
 public class ReceiptType {
 
     protected QrCodeType qrCode;
-    protected WaitingType waiting;
+    protected String waiting;
     protected HeaderFooterType header;
     protected LineItemsType lineItems;
     protected LabeledAmountType subtotal;
@@ -98,22 +98,22 @@ public class ReceiptType {
      * 
      * @return
      *     possible object is
-     *     {@link WaitingType }
-     *     
+     *     {@link String }
+     *
      */
-    public WaitingType getWaiting() {
+    public String getWaiting() {
         return waiting;
     }
 
     /**
      * Sets the value of the waiting property.
-     * 
+     *
      * @param value
      *     allowed object is
-     *     {@link WaitingType }
-     *     
+     *     {@link String }
+     *
      */
-    public void setWaiting(WaitingType value) {
+    public void setWaiting(String value) {
         this.waiting = value;
     }
 
