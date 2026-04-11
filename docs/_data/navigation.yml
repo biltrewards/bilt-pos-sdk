@@ -25,6 +25,23 @@
       url: /display-helpers.html
     - name: Receipt Helpers
       url: /receipt-helpers.html
+    - name: Card Acquisition
+      url: /card-acquisition-request.html
+
+- title: Gift Cards
+  items:
+    - name: Activate
+      url: /gift-card-activate.html
+    - name: Load Balance
+      url: /gift-card-load.html
+    - name: Make Payment
+      url: /gift-card-payment.html
+    - name: Balance Inquiry
+      url: /gift-card-balance-inquiry.html
+    - name: Void Load
+      url: /gift-card-void.html
+    - name: Deactivate
+      url: /gift-card-deactivate.html
 
 - title: Display
   items:
