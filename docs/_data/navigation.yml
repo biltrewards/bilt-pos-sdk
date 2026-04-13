@@ -43,6 +43,11 @@
     - name: Deactivate
       url: /gift-card-deactivate.html
 
+- title: Receipt Requirements
+  items:
+    - name: Overview
+      url: /receipt-requirements.html
+
 - title: Display
   items:
     - name: Standby Screen
