@@ -128,7 +128,7 @@ When a deactivation succeeds, your integration receives:
         },
         "POIData": {
           "POITransactionID": {
-            "TransactionID": "f94a6eb3-c5d0-4d84-ae31-7g8c9e1b2d45",
+            "TransactionID": "f94a6eb3-c5d0-4d84-ae31-7a8c9e1b2d45",
             "TimeStamp": "2026-04-10T15:00:06+00:00"
           }
         },
