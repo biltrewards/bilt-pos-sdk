@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.10] - 2025
+
+### Added
+
+- Documentation for `ForceEntryMode` in unreferenced refunds to restrict card entry methods
+
 ## [0.5.9] - 2025
 
 ### Fixed

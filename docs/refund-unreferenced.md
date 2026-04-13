@@ -31,6 +31,11 @@ Send a Terminal API payment request with `PaymentType` set to `Refund`, without 
 - **`SaleData.SaleTransactionID.TimeStamp`** — Date and time of the request in UTC format.
 - **`PaymentTransaction.AmountsReq.Currency`** — The transaction currency code (e.g. `USD`).
 - **`PaymentTransaction.AmountsReq.RequestedAmount`** — The amount to refund. This field is required for unreferenced refunds.
+- **`PaymentTransaction.ForceEntryMode`** — *(Optional)* Array of allowed card entry methods. If omitted, the terminal uses its default configuration. Supported values:
+  - `ICC` — Chip card (insert)
+  - `MagStripe` — Magnetic stripe (swipe)
+  - `Contactless` — Tap to pay (NFC)
+  - `Keyed` — Manual card entry
 - **`PaymentData.PaymentType`** — `Refund`
 
 Example request:
@@ -59,6 +64,42 @@ Example request:
           "Currency": "USD",
           "RequestedAmount": 45.00
         }
+      },
+      "PaymentData": {
+        "PaymentType": "Refund"
+      }
+    }
+  }
+}
+```
+
+Example — restrict to chip, swipe, and tap only (no manual entry):
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "ProtocolVersion": "3.0",
+      "MessageClass": "Service",
+      "MessageCategory": "Payment",
+      "MessageType": "Request",
+      "ServiceID": "SVC-00862",
+      "SaleID": "BiltPOS-Lane3",
+      "POIID": "VictaLane-275839164"
+    },
+    "PaymentRequest": {
+      "SaleData": {
+        "SaleTransactionID": {
+          "TransactionID": "UREF-20260302-00106",
+          "TimeStamp": "2026-03-02T15:35:00+00:00"
+        }
+      },
+      "PaymentTransaction": {
+        "AmountsReq": {
+          "Currency": "USD",
+          "RequestedAmount": 45.00
+        },
+        "ForceEntryMode": ["ICC", "MagStripe", "Contactless"]
       },
       "PaymentData": {
         "PaymentType": "Refund"
