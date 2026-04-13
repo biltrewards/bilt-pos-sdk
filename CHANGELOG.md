@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.11] - 2025-04-13
-
 ### Added
 
 - Receipt Requirements documentation with Fiserv EMV guidelines and Bilt Platform fields

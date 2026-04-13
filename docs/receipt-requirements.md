@@ -1,6 +1,4 @@
 ---
-layout: default
-title: Receipt Requirements
 ---
 
 # Receipt Requirements
