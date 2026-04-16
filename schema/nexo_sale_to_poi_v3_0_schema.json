@@ -380,8 +380,8 @@
     },
     "StoredValueTransactionTypeEnum": {
       "type": "string",
-      "description": "Type of operation to perform on a stored value account: Reserve, Activate, Load, Unload, Reverse, or Duplicate.",
-      "enum": ["Reserve","Activate","Load","Unload","Reverse","Duplicate"]
+      "description": "Type of operation to perform on a stored value account: Reserve, Activate, Load, Unload, Reverse, Duplicate, or Deactivate.",
+      "enum": ["Reserve","Activate","Load","Unload","Reverse","Duplicate","Deactivate"]
     },
     "IdentificationTypeEnum": {
       "type": "string",

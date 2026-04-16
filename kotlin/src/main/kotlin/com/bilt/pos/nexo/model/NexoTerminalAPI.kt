@@ -3374,11 +3374,12 @@ data class StoredValueData (
 
 /**
  * Type of operation to perform on a stored value account: Reserve, Activate, Load, Unload,
- * Reverse, or Duplicate.
+ * Reverse, Duplicate, or Deactivate.
  */
 @Serializable
 enum class StoredValueTransactionTypeEnum(val value: String) {
     @SerialName("Activate") Activate("Activate"),
+    @SerialName("Deactivate") Deactivate("Deactivate"),
     @SerialName("Duplicate") Duplicate("Duplicate"),
     @SerialName("Load") Load("Load"),
     @SerialName("Reserve") Reserve("Reserve"),

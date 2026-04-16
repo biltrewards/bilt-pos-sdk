@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Receipt Requirements documentation with Fiserv EMV guidelines and Bilt Platform fields
 
+## [0.5.11] - 2025
+
+### Added
+
+- `Deactivate` value to `StoredValueTransactionTypeEnum` for gift card deactivation operations
+
 ## [0.5.10] - 2025
 
 ### Added
