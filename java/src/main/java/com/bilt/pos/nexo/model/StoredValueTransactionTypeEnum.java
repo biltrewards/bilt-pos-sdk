@@ -17,15 +17,16 @@ import com.fasterxml.jackson.annotation.*;
 
 /**
  * Type of operation to perform on a stored value account: Reserve, Activate, Load, Unload,
- * Reverse, or Duplicate.
+ * Reverse, Duplicate, or Deactivate.
  */
 public enum StoredValueTransactionTypeEnum {
-    ACTIVATE, DUPLICATE, LOAD, RESERVE, REVERSE, UNLOAD;
+    ACTIVATE, DEACTIVATE, DUPLICATE, LOAD, RESERVE, REVERSE, UNLOAD;
 
     @JsonValue
     public String toValue() {
         switch (this) {
             case ACTIVATE: return "Activate";
+            case DEACTIVATE: return "Deactivate";
             case DUPLICATE: return "Duplicate";
             case LOAD: return "Load";
             case RESERVE: return "Reserve";
@@ -38,6 +39,7 @@ public enum StoredValueTransactionTypeEnum {
     @JsonCreator
     public static StoredValueTransactionTypeEnum forValue(String value) throws IOException {
         if (value.equals("Activate")) return ACTIVATE;
+        if (value.equals("Deactivate")) return DEACTIVATE;
         if (value.equals("Duplicate")) return DUPLICATE;
         if (value.equals("Load")) return LOAD;
         if (value.equals("Reserve")) return RESERVE;
