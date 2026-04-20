@@ -23,7 +23,7 @@ package com.bilt.pos.nexo.security
  * )
  * ```
  */
-data class SecurityKey(
+class SecurityKey(
     val passphrase: String,
     val keyIdentifier: String,
     val keyVersion: Int = 0
@@ -32,4 +32,7 @@ data class SecurityKey(
         require(passphrase.isNotBlank()) { "passphrase is required" }
         require(keyIdentifier.isNotBlank()) { "keyIdentifier is required" }
     }
+
+    override fun toString(): String =
+        "SecurityKey(keyIdentifier=$keyIdentifier, keyVersion=$keyVersion)"
 }
