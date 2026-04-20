@@ -9,7 +9,6 @@
  */
 package com.bilt.pos.nexo.client
 
-import com.bilt.pos.nexo.model.MessageHeader
 import com.bilt.pos.nexo.model.NexoTerminalAPI
 import com.bilt.pos.nexo.model.SaleToPOIRequest
 import com.bilt.pos.nexo.model.SaleToPOIResponse
@@ -20,6 +19,7 @@ import com.bilt.pos.nexo.security.SecurityKey
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -187,9 +187,15 @@ class BiltNexoTerminalClient(
                     "Received encrypted response but no SecurityKey is configured"
                 )
             }
-            val rawHeaderBytes = json.encodeToString(
-                MessageHeader.serializer(), secured.messageHeader
-            ).toByteArray(Charsets.UTF_8)
+            // Extract raw header bytes from the parsed JSON tree to preserve
+            // wire field ordering for HMAC verification. Re-serializing the
+            // deserialized MessageHeader could produce different byte output
+            // if the terminal's JSON library uses a different field ordering.
+            val responseNode = json.parseToJsonElement(responseJson)
+                .jsonObject["SaleToPOIResponse"]!!.jsonObject
+            val rawHeaderBytes = (responseNode["MessageHeader"]
+                ?: throw EncryptionException("Missing MessageHeader in encrypted response"))
+                .toString().toByteArray(Charsets.UTF_8)
             val plainJson = encryptor.decrypt(secured, rawHeaderBytes)
             val saleToPOIResponse = json.decodeFromString(
                 SaleToPOIResponse.serializer(), plainJson
