@@ -19,6 +19,7 @@ import com.bilt.pos.nexo.security.SecurityKey;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import okhttp3.MediaType;
@@ -179,11 +180,7 @@ public final class BiltNexoTerminalClient {
 
             NexoTerminalAPI responseApi;
             try {
-                if (encryptor != null) {
-                    responseApi = decryptResponse(responseJson);
-                } else {
-                    responseApi = objectMapper.readValue(responseJson, NexoTerminalAPI.class);
-                }
+                responseApi = parseResponse(responseJson);
             } catch (EncryptionException e) {
                 throw e;
             } catch (Exception e) {
@@ -243,14 +240,31 @@ public final class BiltNexoTerminalClient {
         return objectMapper.writeValueAsString(envelope);
     }
 
-    private NexoTerminalAPI decryptResponse(String responseJson) throws IOException, EncryptionException {
-        SecuredResponseEnvelope envelope =
-                objectMapper.readValue(responseJson, SecuredResponseEnvelope.class);
-        String plainJson = encryptor.decrypt(envelope.saleToPOIResponse);
-        SaleToPOIResponse saleToPOIResponse = objectMapper.readValue(plainJson, SaleToPOIResponse.class);
-        return NexoTerminalAPI.builder()
-                .saleToPOIResponse(saleToPOIResponse)
-                .build();
+    private NexoTerminalAPI parseResponse(String responseJson) throws IOException, EncryptionException {
+        JsonNode root = objectMapper.readTree(responseJson);
+        JsonNode responseNode = root.get("SaleToPOIResponse");
+
+        if (responseNode != null && responseNode.has("EnvelopedData")) {
+            if (encryptor == null) {
+                throw new EncryptionException(
+                        "Received encrypted response but no SecurityKey is configured");
+            }
+            // Extract raw header bytes from the JSON tree before deserialization,
+            // so the HMAC is verified against the wire bytes, not a re-serialized
+            // Java object (which could differ in field ordering).
+            byte[] rawHeaderBytes = objectMapper.writeValueAsBytes(
+                    responseNode.get("MessageHeader"));
+            SecuredResponseEnvelope envelope =
+                    objectMapper.treeToValue(root, SecuredResponseEnvelope.class);
+            String plainJson = encryptor.decrypt(envelope.saleToPOIResponse, rawHeaderBytes);
+            SaleToPOIResponse saleToPOIResponse =
+                    objectMapper.readValue(plainJson, SaleToPOIResponse.class);
+            return NexoTerminalAPI.builder()
+                    .saleToPOIResponse(saleToPOIResponse)
+                    .build();
+        } else {
+            return objectMapper.treeToValue(root, NexoTerminalAPI.class);
+        }
     }
 
     /** Wire envelope: {@code {"SaleToPOIRequest": <secured message>}} */

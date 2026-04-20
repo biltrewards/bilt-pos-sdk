@@ -21,7 +21,6 @@ package com.bilt.pos.nexo.security;
  *     .passphrase("mySharedSecret")
  *     .keyIdentifier("myTerminal")
  *     .keyVersion(0)
- *     .cryptoVersion(1)
  *     .build();
  * }</pre>
  */
@@ -30,19 +29,16 @@ public final class SecurityKey {
     private final String passphrase;
     private final String keyIdentifier;
     private final int keyVersion;
-    private final int cryptoVersion;
 
     private SecurityKey(Builder builder) {
         this.passphrase = builder.passphrase;
         this.keyIdentifier = builder.keyIdentifier;
         this.keyVersion = builder.keyVersion;
-        this.cryptoVersion = builder.cryptoVersion;
     }
 
     public String getPassphrase() { return passphrase; }
     public String getKeyIdentifier() { return keyIdentifier; }
     public int getKeyVersion() { return keyVersion; }
-    public int getCryptoVersion() { return cryptoVersion; }
 
     public static Builder builder() { return new Builder(); }
 
@@ -50,7 +46,6 @@ public final class SecurityKey {
         private String passphrase;
         private String keyIdentifier;
         private int keyVersion;
-        private int cryptoVersion = 1;
 
         private Builder() {}
 
@@ -66,11 +61,6 @@ public final class SecurityKey {
 
         public Builder keyVersion(int keyVersion) {
             this.keyVersion = keyVersion;
-            return this;
-        }
-
-        public Builder cryptoVersion(int cryptoVersion) {
-            this.cryptoVersion = cryptoVersion;
             return this;
         }
 
