@@ -4,7 +4,6 @@ import com.bilt.pos.nexo.model.*;
 import com.bilt.pos.nexo.security.MessageEncryptor;
 import com.bilt.pos.nexo.security.SaleToPOISecuredMessage;
 import com.bilt.pos.nexo.security.SecurityKey;
-import com.bilt.pos.nexo.client.BiltNexoClientException;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -266,11 +265,55 @@ class BiltNexoTerminalClientTest {
         NexoTerminalAPI response = encryptedClient.request(request);
         assertEquals(ResultType.SUCCESS, response.getSaleToPOIResponse().getPaymentResponse().getResponse().getResult());
 
-        // Verify the request was sent encrypted (contains NexoBlob, not plaintext)
+        // Verify the request was sent encrypted (contains EnvelopedData, not plaintext)
         RecordedRequest recorded = server.takeRequest();
         String sentJson = recorded.getBody().readUtf8();
-        assertTrue(sentJson.contains("NexoBlob"));
+        assertTrue(sentJson.contains("EnvelopedData"));
         assertFalse(sentJson.contains("RequestedAmount"));
+    }
+
+    @Test
+    void encryptedClientHandlesUnencryptedErrorResponse() throws Exception {
+        SecurityKey key = SecurityKey.builder()
+                .passphrase("testPassphrase")
+                .keyIdentifier("testTerminal")
+                .keyVersion(0)
+                .build();
+
+        BiltNexoTerminalClient encryptedClient = BiltNexoTerminalClient.builder()
+                .endpoint(server.url("/nexo").toString())
+                .securityKey(key)
+                .build();
+
+        // Server sends back plaintext error (no encryption key configured on terminal)
+        String errorJson = "{\"SaleToPOIResponse\":{"
+                + "\"MessageHeader\":{\"ProtocolVersion\":\"3.0\"},"
+                + "\"PaymentResponse\":{\"Response\":{"
+                + "\"Result\":\"Failure\","
+                + "\"ErrorCondition\":\"Refusal\","
+                + "\"AdditionalResponse\":\"Encryption not configured\"}}}}";
+        server.enqueue(new MockResponse().setBody(errorJson));
+
+        NexoTerminalAPI request = NexoTerminalAPI.builder()
+                .saleToPOIRequest(SaleToPOIRequest.builder()
+                        .messageHeader(MessageHeader.builder()
+                                .protocolVersion("3.0")
+                                .messageClass(MessageClassType.SERVICE)
+                                .messageCategory(MessageCategoryType.PAYMENT)
+                                .messageType(MessageTypeType.REQUEST)
+                                .serviceID("txn-001")
+                                .saleID("POS-1")
+                                .poiid("TERM-1")
+                                .build())
+                        .paymentRequest(PaymentRequest.builder().build())
+                        .build())
+                .build();
+
+        NexoTerminalAPI response = encryptedClient.request(request);
+        assertEquals(ResultType.FAILURE,
+                response.getSaleToPOIResponse().getPaymentResponse().getResponse().getResult());
+        assertEquals("Encryption not configured",
+                response.getSaleToPOIResponse().getPaymentResponse().getResponse().getAdditionalResponse());
     }
 
     /** Test helper to serialize the secured response envelope */

@@ -108,7 +108,7 @@ BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
     .build();
 ```
 
-When a `SecurityKey` is provided, all requests are AES-encrypted and all responses are decrypted transparently.
+When a `SecurityKey` is provided, all requests are encrypted using CMS `EnvelopedData` (AES-256-CBC with per-message session keys wrapped via AES Key Wrap) and authenticated with HMAC-SHA256 via a CMS `SecurityTrailer`. Responses are detected and decrypted automatically — if the terminal responds with an unencrypted message (e.g. an error), the client handles it gracefully.
 
 ---
 
