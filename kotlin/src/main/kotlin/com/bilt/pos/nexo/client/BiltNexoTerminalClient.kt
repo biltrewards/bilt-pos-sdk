@@ -190,8 +190,9 @@ class BiltNexoTerminalClient(
             }
             // Extract raw header bytes from the JSON tree before deserialization,
             // so the HMAC is verified against the wire bytes, not a re-serialized object.
-            val rawHeaderBytes = responseNode["MessageHeader"].toString()
-                .toByteArray(Charsets.UTF_8)
+            val rawHeaderBytes = (responseNode["MessageHeader"]
+                ?: throw EncryptionException("Missing MessageHeader in encrypted response"))
+                .toString().toByteArray(Charsets.UTF_8)
             val envelope = json.decodeFromString(
                 SecuredResponseEnvelope.serializer(), responseJson
             )
