@@ -244,7 +244,11 @@ public final class BiltNexoTerminalClient {
         JsonNode root = objectMapper.readTree(responseJson);
         JsonNode responseNode = root.get("SaleToPOIResponse");
 
-        if (responseNode != null && responseNode.has("EnvelopedData") && encryptor != null) {
+        if (responseNode != null && responseNode.has("EnvelopedData")) {
+            if (encryptor == null) {
+                throw new EncryptionException(
+                        "Received encrypted response but no SecurityKey is configured");
+            }
             // Extract raw header bytes from the JSON tree before deserialization,
             // so the HMAC is verified against the wire bytes, not a re-serialized
             // Java object (which could differ in field ordering).
