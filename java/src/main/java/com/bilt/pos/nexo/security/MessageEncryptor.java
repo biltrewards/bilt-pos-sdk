@@ -128,12 +128,8 @@ public final class MessageEncryptor {
             // EnvelopedData — encrypted body
             EnvelopedData envelopedData = EnvelopedData.builder()
                     .version(AuthenticatedDataVersion.V0)
-                    .kek(Kek.builder()
-                            .version(KEKVersion.V4)
-                            .kekIdentifier(kekId)
-                            .keyEncryptionAlgorithm(keyWrapAlg)
-                            .encryptedKey(Base64.getEncoder().encodeToString(wrappedSessionKey))
-                            .build())
+                    .kek(buildKek(kekId, keyWrapAlg,
+                            Base64.getEncoder().encodeToString(wrappedSessionKey)))
                     .encryptedContent(EncryptedContent.builder()
                             .contentType(EncapsulatedContentContentType.ID_DATA)
                             .contentEncryptionAlgorithm(AlgorithmIdentifier.builder()
@@ -152,12 +148,7 @@ public final class MessageEncryptor {
                     .contentType(SecurityTrailerContentType.ID_CT_AUTH_DATA)
                     .authenticatedData(AuthenticatedData.builder()
                             .version(AuthenticatedDataVersion.V0)
-                            .kek(Kek.builder()
-                                    .version(KEKVersion.V4)
-                                    .kekIdentifier(kekId)
-                                    .keyEncryptionAlgorithm(keyWrapAlg)
-                                    .encryptedKey("")
-                                    .build())
+                            .kek(buildKek(kekId, keyWrapAlg, ""))
                             .macAlgorithm(AlgorithmIdentifier.builder()
                                     .algorithm(ALG_HMAC_SHA256)
                                     .build())
@@ -234,6 +225,20 @@ public final class MessageEncryptor {
         } catch (Exception e) {
             throw new EncryptionException("Decryption failed", e);
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // CMS structure helpers
+    // -----------------------------------------------------------------------
+
+    private static Kek buildKek(KEKIdentifier kekId, AlgorithmIdentifier keyWrapAlg,
+                                String encryptedKey) {
+        return Kek.builder()
+                .version(KEKVersion.V4)
+                .kekIdentifier(kekId)
+                .keyEncryptionAlgorithm(keyWrapAlg)
+                .encryptedKey(encryptedKey)
+                .build();
     }
 
     // -----------------------------------------------------------------------
