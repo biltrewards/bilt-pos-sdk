@@ -289,15 +289,20 @@ public final class MessageEncryptor {
         return result;
     }
 
-    private byte[] generateRandom(int length) {
-        byte[] bytes = new byte[length];
-        SecureRandom random;
+    private static final SecureRandom SECURE_RANDOM;
+    static {
+        SecureRandom sr;
         try {
-            random = SecureRandom.getInstance("NativePRNGNonBlocking");
+            sr = SecureRandom.getInstance("NativePRNGNonBlocking");
         } catch (Exception e) {
-            random = new SecureRandom();
+            sr = new SecureRandom();
         }
-        random.nextBytes(bytes);
+        SECURE_RANDOM = sr;
+    }
+
+    private static byte[] generateRandom(int length) {
+        byte[] bytes = new byte[length];
+        SECURE_RANDOM.nextBytes(bytes);
         return bytes;
     }
 
