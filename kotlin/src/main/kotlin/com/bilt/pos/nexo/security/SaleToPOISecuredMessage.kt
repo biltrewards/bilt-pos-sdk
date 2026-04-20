@@ -28,7 +28,7 @@ data class SaleToPOISecuredMessage(
     @SerialName("MessageHeader")
     val messageHeader: MessageHeader,
     @SerialName("EnvelopedData")
-    val envelopedData: EnvelopedData,
+    val envelopedData: EnvelopedData? = null,
     @SerialName("SecurityTrailer")
-    val securityTrailer: ContentInformationType
+    val securityTrailer: ContentInformationType? = null
 )

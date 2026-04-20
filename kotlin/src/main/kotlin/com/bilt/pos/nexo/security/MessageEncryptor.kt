@@ -159,6 +159,7 @@ class MessageEncryptor(private val securityKey: SecurityKey) {
         try {
             val dk = getDerivedKey()
             val envelopedData = message.envelopedData
+                ?: throw EncryptionException("Message has no EnvelopedData")
 
             // Unwrap session key
             val wrappedSessionKey = decode64(envelopedData.kek.encryptedKey)
@@ -176,7 +177,9 @@ class MessageEncryptor(private val securityKey: SecurityKey) {
 
             // Verify HMAC over raw header bytes + decrypted body
             val computedHmac = hmac(rawHeaderBytes, plaintext, dk.hmacKey)
-            val receivedHmac = decode64(message.securityTrailer.authenticatedData!!.mac)
+            val securityTrailer = message.securityTrailer
+                ?: throw EncryptionException("Message has no SecurityTrailer")
+            val receivedHmac = decode64(securityTrailer.authenticatedData!!.mac)
 
             if (!MessageDigest.isEqual(computedHmac, receivedHmac)) {
                 throw EncryptionException("HMAC validation failed — message may be tampered")

@@ -63,7 +63,7 @@ class MessageEncryptorTest {
         message.messageHeader.protocolVersion shouldBe "3.0"
 
         // EnvelopedData present with encrypted body
-        val enveloped = message.envelopedData
+        val enveloped = message.envelopedData.shouldNotBeNull()
         enveloped.encryptedContent.encryptedData.shouldNotBeEmpty()
 
         // Algorithm identifiers
@@ -80,7 +80,7 @@ class MessageEncryptorTest {
         enveloped.kek.encryptedKey.shouldNotBeEmpty()
 
         // SecurityTrailer with AuthenticatedData
-        val authData = message.securityTrailer.authenticatedData.shouldNotBeNull()
+        val authData = message.securityTrailer.shouldNotBeNull().authenticatedData.shouldNotBeNull()
         authData.macAlgorithm.algorithm shouldBe MessageEncryptor.ALG_HMAC_SHA256
         authData.mac.length shouldBe 44 // HMAC-SHA256 = 32 bytes = 44 Base64 chars
     }
@@ -92,8 +92,8 @@ class MessageEncryptorTest {
         val first = encryptor.encrypt(payload, header)
         val second = encryptor.encrypt(payload, header)
 
-        first.envelopedData.encryptedContent.encryptedData shouldNotBe
-            second.envelopedData.encryptedContent.encryptedData
+        first.envelopedData!!.encryptedContent.encryptedData shouldNotBe
+            second.envelopedData!!.encryptedContent.encryptedData
     }
 
     @Test
@@ -102,11 +102,11 @@ class MessageEncryptorTest {
         val message = encryptor.encrypt(payload, header)
 
         val ciphertext = java.util.Base64.getDecoder()
-            .decode(message.envelopedData.encryptedContent.encryptedData)
+            .decode(message.envelopedData!!.encryptedContent.encryptedData)
         ciphertext[0] = (ciphertext[0].toInt() xor 0xFF).toByte()
         val tampered = message.copy(
-            envelopedData = message.envelopedData.copy(
-                encryptedContent = message.envelopedData.encryptedContent.copy(
+            envelopedData = message.envelopedData!!.copy(
+                encryptedContent = message.envelopedData!!.encryptedContent.copy(
                     encryptedData = java.util.Base64.getEncoder().encodeToString(ciphertext)
                 )
             )
@@ -120,11 +120,11 @@ class MessageEncryptorTest {
         val payload = """{"test":"data"}"""
         val message = encryptor.encrypt(payload, header)
 
-        val authData = message.securityTrailer.authenticatedData!!
+        val authData = message.securityTrailer!!.authenticatedData!!
         val hmac = java.util.Base64.getDecoder().decode(authData.mac)
         hmac[0] = (hmac[0].toInt() xor 0xFF).toByte()
         val tampered = message.copy(
-            securityTrailer = message.securityTrailer.copy(
+            securityTrailer = message.securityTrailer!!.copy(
                 authenticatedData = authData.copy(
                     mac = java.util.Base64.getEncoder().encodeToString(hmac)
                 )

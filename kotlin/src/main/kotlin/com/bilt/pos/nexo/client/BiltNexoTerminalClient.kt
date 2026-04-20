@@ -9,7 +9,9 @@
  */
 package com.bilt.pos.nexo.client
 
+import com.bilt.pos.nexo.model.MessageHeader
 import com.bilt.pos.nexo.model.NexoTerminalAPI
+import com.bilt.pos.nexo.model.SaleToPOIRequest
 import com.bilt.pos.nexo.model.SaleToPOIResponse
 import com.bilt.pos.nexo.security.EncryptionException
 import com.bilt.pos.nexo.security.MessageEncryptor
@@ -18,8 +20,6 @@ import com.bilt.pos.nexo.security.SecurityKey
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -111,12 +111,9 @@ class BiltNexoTerminalClient(
 
         try {
             val jsonBody = if (encryptor != null) {
-                val plainJson = json.encodeToString(
-                    NexoTerminalAPI.serializer(), request
+                val requestContent = json.encodeToString(
+                    SaleToPOIRequest.serializer(), saleToPOIRequest
                 )
-                // Extract just the SaleToPOIRequest content for encryption
-                val requestContent = json.parseToJsonElement(plainJson)
-                    .jsonObject["SaleToPOIRequest"]!!.toString()
                 val secured = encryptor.encrypt(requestContent, saleToPOIRequest.messageHeader)
                 json.encodeToString(
                     SecuredRequestEnvelope.serializer(),
@@ -179,24 +176,21 @@ class BiltNexoTerminalClient(
     // -----------------------------------------------------------------------
 
     private fun parseResponse(responseJson: String): NexoTerminalAPI {
-        val root = json.parseToJsonElement(responseJson).jsonObject
-        val responseNode = root["SaleToPOIResponse"]?.jsonObject
+        val envelope = json.decodeFromString(
+            SecuredResponseEnvelope.serializer(), responseJson
+        )
+        val secured = envelope.saleToPOIResponse
 
-        if (responseNode != null && "EnvelopedData" in responseNode) {
+        if (secured.envelopedData != null) {
             if (encryptor == null) {
                 throw EncryptionException(
                     "Received encrypted response but no SecurityKey is configured"
                 )
             }
-            // Extract raw header bytes from the JSON tree before deserialization,
-            // so the HMAC is verified against the wire bytes, not a re-serialized object.
-            val rawHeaderBytes = (responseNode["MessageHeader"]
-                ?: throw EncryptionException("Missing MessageHeader in encrypted response"))
-                .toString().toByteArray(Charsets.UTF_8)
-            val envelope = json.decodeFromString(
-                SecuredResponseEnvelope.serializer(), responseJson
-            )
-            val plainJson = encryptor.decrypt(envelope.saleToPOIResponse, rawHeaderBytes)
+            val rawHeaderBytes = json.encodeToString(
+                MessageHeader.serializer(), secured.messageHeader
+            ).toByteArray(Charsets.UTF_8)
+            val plainJson = encryptor.decrypt(secured, rawHeaderBytes)
             val saleToPOIResponse = json.decodeFromString(
                 SaleToPOIResponse.serializer(), plainJson
             )
