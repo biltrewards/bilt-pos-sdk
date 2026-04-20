@@ -245,9 +245,14 @@ public final class BiltNexoTerminalClient {
         JsonNode responseNode = root.get("SaleToPOIResponse");
 
         if (responseNode != null && responseNode.has("EnvelopedData") && encryptor != null) {
+            // Extract raw header bytes from the JSON tree before deserialization,
+            // so the HMAC is verified against the wire bytes, not a re-serialized
+            // Java object (which could differ in field ordering).
+            byte[] rawHeaderBytes = objectMapper.writeValueAsBytes(
+                    responseNode.get("MessageHeader"));
             SecuredResponseEnvelope envelope =
                     objectMapper.treeToValue(root, SecuredResponseEnvelope.class);
-            String plainJson = encryptor.decrypt(envelope.saleToPOIResponse);
+            String plainJson = encryptor.decrypt(envelope.saleToPOIResponse, rawHeaderBytes);
             SaleToPOIResponse saleToPOIResponse =
                     objectMapper.readValue(plainJson, SaleToPOIResponse.class);
             return NexoTerminalAPI.builder()

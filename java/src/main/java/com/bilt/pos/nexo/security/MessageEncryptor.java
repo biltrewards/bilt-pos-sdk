@@ -184,11 +184,20 @@ public final class MessageEncryptor {
     /**
      * Decrypt a secured Nexo message back to its JSON payload.
      *
+     * <p>The {@code rawHeaderBytes} must be the exact bytes of the
+     * {@code MessageHeader} JSON as received on the wire (before deserialization),
+     * since the HMAC is computed over the raw header bytes concatenated with the
+     * plaintext body. Re-serializing the deserialized Java object could produce
+     * different byte output if the sender's JSON library uses a different field
+     * ordering, which would cause HMAC verification to fail.</p>
+     *
      * @param message the encrypted message
+     * @param rawHeaderBytes the raw MessageHeader JSON bytes from the wire
      * @return the decrypted JSON string
      * @throws EncryptionException if decryption or HMAC validation fails
      */
-    public String decrypt(SaleToPOISecuredMessage message) throws EncryptionException {
+    public String decrypt(SaleToPOISecuredMessage message, byte[] rawHeaderBytes)
+            throws EncryptionException {
         try {
             DerivedKey dk = getDerivedKey();
             EnvelopedData envelopedData = message.getEnvelopedData();
@@ -210,9 +219,8 @@ public final class MessageEncryptor {
             // Decrypt
             byte[] plaintext = decrypt(ciphertext, sessionKeyBytes, iv);
 
-            // Verify HMAC over header + body
-            byte[] headerBytes = objectMapper.writeValueAsBytes(message.getMessageHeader());
-            byte[] computedHmac = hmac(headerBytes, plaintext, dk.getHmacKey());
+            // Verify HMAC over raw header bytes + decrypted body
+            byte[] computedHmac = hmac(rawHeaderBytes, plaintext, dk.getHmacKey());
             byte[] receivedHmac = Base64.getDecoder().decode(
                     message.getSecurityTrailer().getAuthenticatedData().getMAC());
 

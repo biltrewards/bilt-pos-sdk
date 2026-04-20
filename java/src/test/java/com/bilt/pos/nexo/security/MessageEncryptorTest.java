@@ -6,6 +6,8 @@ import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
 import com.bilt.pos.nexo.model.MessageHeader;
 import com.bilt.pos.nexo.model.MessageTypeType;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -15,11 +17,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class MessageEncryptorTest {
 
+    private final ObjectMapper mapper = new ObjectMapper()
+            .setSerializationInclusion(JsonInclude.Include.NON_NULL);
+
     private MessageEncryptor encryptor;
     private MessageHeader header;
+    private byte[] headerBytes;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         SecurityKey key = SecurityKey.builder()
                 .passphrase("testPassphrase123")
                 .keyIdentifier("testTerminal")
@@ -36,6 +42,7 @@ class MessageEncryptorTest {
                 .saleID("POS-1")
                 .poiid("TERM-1")
                 .build();
+        headerBytes = mapper.writeValueAsBytes(header);
     }
 
     @Test
@@ -43,7 +50,7 @@ class MessageEncryptorTest {
         String original = "{\"MessageHeader\":{\"ProtocolVersion\":\"3.0\"},\"PaymentRequest\":{}}";
 
         SaleToPOISecuredMessage encrypted = encryptor.encrypt(original, header);
-        String decrypted = encryptor.decrypt(encrypted);
+        String decrypted = encryptor.decrypt(encrypted, headerBytes);
 
         assertEquals(original, decrypted);
     }
@@ -116,7 +123,8 @@ class MessageEncryptorTest {
         message.getEnvelopedData().getEncryptedContent()
                 .setEncryptedData(Base64.getEncoder().encodeToString(ciphertext));
 
-        assertThrows(EncryptionException.class, () -> encryptor.decrypt(message));
+        assertThrows(EncryptionException.class,
+                () -> encryptor.decrypt(message, headerBytes));
     }
 
     @Test
@@ -131,7 +139,8 @@ class MessageEncryptorTest {
         message.getSecurityTrailer().getAuthenticatedData()
                 .setMAC(Base64.getEncoder().encodeToString(hmac));
 
-        assertThrows(EncryptionException.class, () -> encryptor.decrypt(message));
+        assertThrows(EncryptionException.class,
+                () -> encryptor.decrypt(message, headerBytes));
     }
 
     @Test
@@ -139,10 +148,20 @@ class MessageEncryptorTest {
         String payload = "{\"test\":\"data\"}";
         SaleToPOISecuredMessage message = encryptor.encrypt(payload, header);
 
-        // Tamper with the header — HMAC should catch this
-        message.getMessageHeader().setServiceID("tampered");
+        // Pass tampered header bytes — HMAC should catch this
+        MessageHeader tampered = MessageHeader.builder()
+                .protocolVersion("3.0")
+                .messageClass(MessageClassType.SERVICE)
+                .messageCategory(MessageCategoryType.PAYMENT)
+                .messageType(MessageTypeType.REQUEST)
+                .serviceID("tampered")
+                .saleID("POS-1")
+                .poiid("TERM-1")
+                .build();
+        byte[] tamperedHeaderBytes = mapper.writeValueAsBytes(tampered);
 
-        assertThrows(EncryptionException.class, () -> encryptor.decrypt(message));
+        assertThrows(EncryptionException.class,
+                () -> encryptor.decrypt(message, tamperedHeaderBytes));
     }
 
     @Test
@@ -157,7 +176,8 @@ class MessageEncryptorTest {
                 .build();
         MessageEncryptor otherEncryptor = new MessageEncryptor(otherKey);
 
-        assertThrows(EncryptionException.class, () -> otherEncryptor.decrypt(message));
+        assertThrows(EncryptionException.class,
+                () -> otherEncryptor.decrypt(message, headerBytes));
     }
 
     @Test
@@ -168,7 +188,7 @@ class MessageEncryptorTest {
         String payload = sb.toString();
 
         SaleToPOISecuredMessage message = encryptor.encrypt(payload, header);
-        String decrypted = encryptor.decrypt(message);
+        String decrypted = encryptor.decrypt(message, headerBytes);
 
         assertEquals(payload, decrypted);
     }
