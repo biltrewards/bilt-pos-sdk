@@ -28,7 +28,7 @@
     - name: Card Acquisition
       url: /card-acquisition-request.html
 
-- title: Gift Cards
+- title: Stored Value Cards
   items:
     - name: Activate
       url: /gift-card-activate.html
