@@ -7,6 +7,8 @@ Add funds to an activated gift card.
 
 A load operation increases the balance on an existing, activated gift card. The card must already be activated — to activate a new card, see [Activate a gift card](./gift-card-activate.md). The terminal handles the card interaction and sends the load request to the stored value provider for processing.
 
+> **Note:** These docs use "gift card" terminology, but all operations apply to any stored value card type — including phone cards and other prepaid instruments. Set `StoredValueAccountType` to `GiftCard`, `PhoneCard`, or `Other` as appropriate.
+
 ---
 
 ## Before you begin
@@ -14,7 +16,7 @@ A load operation increases the balance on an existing, activated gift card. The 
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 3. [Activated the gift card](./gift-card-activate.md) — only activated cards can receive funds.
 
 ---
@@ -40,9 +42,9 @@ To load funds onto a gift card, send a Terminal API request with `MessageCategor
     - **`StoredValueData.StoredValueTransactionType`** — `Load`
     - **`StoredValueData.ItemAmount`** — The amount of funds to add to the card.
     - **`StoredValueData.Currency`** — The transaction currency code (e.g. `USD`).
-    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — `GiftCard`
+    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — The type of stored value card: `GiftCard`, `PhoneCard`, or `Other`.
     - **`StoredValueData.StoredValueAccountID.StoredValueProvider`** — The stored value provider (e.g. `givex`, `svs`, `valuelink`).
-    - **`StoredValueData.StoredValueAccountID.IdentificationType`** — `PAN` for a card number, or `BarCode` for a barcode identifier.
+    - **`StoredValueData.StoredValueAccountID.IdentificationType`** — How the card is identified: `PAN` (card number), `BarCode` (barcode), `PhoneNumber` (for phone cards), or `AccountNumber` (account-based).
     - **`StoredValueData.StoredValueAccountID.EntryMode`** — How the card is identified: `Scanned`, `MagStripe`, `Keyed`, or `Contactless`.
     - **`StoredValueData.StoredValueAccountID.StoredValueID`** *(conditional)* — The card number or barcode. Required when `EntryMode` is `Scanned` or `Keyed`.
     - **`StoredValueData.StoredValueAccountID.ExpiryDate`** *(optional)* — Card expiration date, if available.
@@ -101,7 +103,7 @@ The result is returned in the API response in a `StoredValueResponse` body. The 
 When a load succeeds, your integration receives:
 
 - **`StoredValueResponse.Response.Result`** — `Success`.
-- **`POIData.POITransactionID.TransactionID`** — the transaction identifier for this load. Store this value — you will need it to [void the load](./gift-card-void.md) if necessary.
+- **`POIData.POITransactionID.TransactionID`** — the transaction identifier for this load.
 - **`POIData.POITransactionID.TimeStamp`** — the timestamp of the transaction.
 - **`StoredValueResult.StoredValueTransactionType`** — `Load`.
 - **`StoredValueResult.ItemAmount`** — the total balance on the card after the load.
@@ -158,6 +160,5 @@ For general guidance on handling failed requests, see [Handle responses](./error
 
 ## Next steps
 
-- [Void a gift card load](./gift-card-void.md) — reverse a recent load if it was made in error.
 - [Query a gift card balance](./gift-card-balance-inquiry.md) — verify the balance after loading.
 - [Make a gift card payment](./gift-card-payment.md) — process a payment using a gift card.

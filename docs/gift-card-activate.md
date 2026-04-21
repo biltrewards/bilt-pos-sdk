@@ -7,6 +7,8 @@ Enable a new gift card and optionally load an initial balance onto it.
 
 Activation is the first step in a gift card's lifecycle. An inactive card cannot be used for payments — activation registers the card with the stored value provider and, if an amount is specified, loads an initial balance. The terminal handles the card interaction (swipe, scan, or manual entry) and sends the activation to the provider for processing.
 
+> **Note:** These docs use "gift card" terminology, but all operations apply to any stored value card type — including phone cards and other prepaid instruments. Set `StoredValueAccountType` to `GiftCard`, `PhoneCard`, or `Other` as appropriate.
+
 ---
 
 ## Before you begin
@@ -14,7 +16,7 @@ Activation is the first step in a gift card's lifecycle. An inactive card cannot
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 
 ---
 
@@ -39,9 +41,9 @@ To activate a gift card, send a Terminal API request with `MessageCategory` set 
     - **`StoredValueData.StoredValueTransactionType`** — `Activate`
     - **`StoredValueData.ItemAmount`** — The initial balance to load onto the card. Use `0` to activate the card without loading funds.
     - **`StoredValueData.Currency`** — The transaction currency code (e.g. `USD`).
-    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — `GiftCard`
+    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — The type of stored value card: `GiftCard`, `PhoneCard`, or `Other`.
     - **`StoredValueData.StoredValueAccountID.StoredValueProvider`** — The stored value provider (e.g. `givex`, `svs`, `valuelink`).
-    - **`StoredValueData.StoredValueAccountID.IdentificationType`** — `PAN` for a card number, or `BarCode` for a barcode identifier.
+    - **`StoredValueData.StoredValueAccountID.IdentificationType`** — How the card is identified: `PAN` (card number), `BarCode` (barcode), `PhoneNumber` (for phone cards), or `AccountNumber` (account-based).
     - **`StoredValueData.StoredValueAccountID.EntryMode`** — How the card is identified: `Scanned`, `MagStripe`, `Keyed`, or `Contactless`.
     - **`StoredValueData.StoredValueAccountID.StoredValueID`** *(conditional)* — The card number or barcode. Required when `EntryMode` is `Scanned` or `Keyed`; omit when `MagStripe` (the terminal reads the card).
     - **`StoredValueData.StoredValueAccountID.ExpiryDate`** *(optional)* — Card expiration date, if available.

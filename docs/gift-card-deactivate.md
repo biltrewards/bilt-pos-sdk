@@ -7,6 +7,8 @@ Disable an activated gift card so it can no longer be used for payments or balan
 
 Deactivation permanently disables a gift card by unloading any remaining balance and marking the card as inactive with the stored value provider. Once deactivated, the card cannot be reactivated. This is typically used for damaged cards, return-to-stock scenarios, or fraud prevention.
 
+> **Note:** These docs use "gift card" terminology, but all operations apply to any stored value card type — including phone cards and other prepaid instruments. Set `StoredValueAccountType` to `GiftCard`, `PhoneCard`, or `Other` as appropriate.
+
 > **Important:** Not all stored value providers support deactivation. Check with your provider before implementing this operation.
 
 ---
@@ -16,7 +18,7 @@ Deactivation permanently disables a gift card by unloading any remaining balance
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 3. Confirmed that your stored value provider supports the deactivation operation.
 
 ---
@@ -42,9 +44,9 @@ To deactivate a gift card, send a Terminal API request with `MessageCategory` se
     - **`StoredValueData.StoredValueTransactionType`** — `Unload`
     - **`StoredValueData.ItemAmount`** — `0` (required — setting the amount to zero signals a deactivation rather than a balance unload).
     - **`StoredValueData.Currency`** — The transaction currency code (e.g. `USD`).
-    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — `GiftCard`
+    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — The type of stored value card: `GiftCard`, `PhoneCard`, or `Other`.
     - **`StoredValueData.StoredValueAccountID.StoredValueProvider`** — The stored value provider (e.g. `givex`, `svs`, `valuelink`).
-    - **`StoredValueData.StoredValueAccountID.IdentificationType`** — `PAN` for a card number, or `BarCode` for a barcode identifier.
+    - **`StoredValueData.StoredValueAccountID.IdentificationType`** — How the card is identified: `PAN` (card number), `BarCode` (barcode), `PhoneNumber` (for phone cards), or `AccountNumber` (account-based).
     - **`StoredValueData.StoredValueAccountID.EntryMode`** — How the card is identified: `Scanned`, `MagStripe`, `Keyed`, or `Contactless`.
     - **`StoredValueData.StoredValueAccountID.StoredValueID`** *(conditional)* — The card number or barcode. Required when `EntryMode` is `Scanned` or `Keyed`.
     - **`StoredValueData.StoredValueAccountID.ExpiryDate`** *(optional)* — Card expiration date, if available.

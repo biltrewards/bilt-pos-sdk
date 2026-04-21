@@ -7,6 +7,8 @@ Check the remaining funds on an activated gift card.
 
 A balance inquiry lets your POS app verify a card's available balance before or after a transaction. This is useful for displaying the balance to the cashier, deciding whether a single gift card can cover a purchase, or confirming that a load or activation was applied correctly. No funds are moved during a balance inquiry.
 
+> **Note:** These docs use "gift card" terminology, but all operations apply to any stored value card type — including phone cards and other prepaid instruments. Set `StoredValueAccountType` to `GiftCard`, `PhoneCard`, or `Other` as appropriate.
+
 ---
 
 ## Before you begin
@@ -14,7 +16,7 @@ A balance inquiry lets your POS app verify a card's available balance before or 
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 
 ---
 
@@ -35,9 +37,9 @@ To query a gift card balance, send a Terminal API request with `MessageCategory`
    And the following `BalanceInquiryRequest` fields:
 
     - **`PaymentAccountReq.PaymentInstrumentData.PaymentInstrumentType`** — `StoredValue`
-    - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.StoredValueAccountType`** — `GiftCard`
+    - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.StoredValueAccountType`** — The type of stored value card: `GiftCard`, `PhoneCard`, or `Other`.
     - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.StoredValueProvider`** — The stored value provider (e.g. `givex`, `svs`, `valuelink`).
-    - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.IdentificationType`** — `PAN` for a card number, or `BarCode` for a barcode identifier.
+    - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.IdentificationType`** — How the card is identified: `PAN` (card number), `BarCode` (barcode), `PhoneNumber` (for phone cards), or `AccountNumber` (account-based).
     - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.EntryMode`** — How the card is identified: `Scanned`, `MagStripe`, `Keyed`, or `Contactless`.
     - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.StoredValueID`** *(conditional)* — The card number or barcode. Required when `EntryMode` is `Scanned` or `Keyed`.
     - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.ExpiryDate`** *(optional)* — Card expiration date, if available.

@@ -7,6 +7,8 @@ Process an in-person payment using a gift card on a Bilt-connected terminal.
 
 A gift card payment works like a standard card payment, but uses a stored value card as the payment instrument. When the card's balance is less than the requested amount, a partial authorization is returned — your POS app can then collect the remainder using a second gift card or another payment method.
 
+> **Note:** These docs use "gift card" terminology, but all operations apply to any stored value card type — including phone cards and other prepaid instruments. Set `StoredValueAccountType` to `GiftCard`, `PhoneCard`, or `Other` as appropriate.
+
 ---
 
 ## Before you begin
@@ -14,7 +16,7 @@ A gift card payment works like a standard card payment, but uses a stored value 
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 3. [Activated the gift card](./gift-card-activate.md) if it has not already been activated.
 
 ---
@@ -40,9 +42,9 @@ To process a gift card payment, send a Terminal API payment request with `Paymen
     - **`PaymentTransaction.AmountsReq.Currency`** — The transaction currency code (e.g. `USD`).
     - **`PaymentTransaction.AmountsReq.RequestedAmount`** — The payment amount.
     - **`PaymentData.PaymentInstrumentData.PaymentInstrumentType`** — `StoredValue`
-    - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.StoredValueAccountType`** — `GiftCard`
+    - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.StoredValueAccountType`** — The type of stored value card: `GiftCard`, `PhoneCard`, or `Other`.
     - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.StoredValueProvider`** — The stored value provider (e.g. `givex`, `svs`, `valuelink`).
-    - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.IdentificationType`** — `PAN` for a card number, or `BarCode` for a barcode identifier.
+    - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.IdentificationType`** — How the card is identified: `PAN` (card number), `BarCode` (barcode), `PhoneNumber` (for phone cards), or `AccountNumber` (account-based).
     - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.EntryMode`** — How the card is identified: `Scanned`, `MagStripe`, `Keyed`, or `Contactless`.
     - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.StoredValueID`** *(conditional)* — The card number or barcode. Required when `EntryMode` is `Scanned` or `Keyed`.
     - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.ExpiryDate`** *(optional)* — Card expiration date, if available.
@@ -209,5 +211,4 @@ For a full list of failure reasons and what they mean, see [Refusal reasons](./r
 ## Next steps
 
 - [Query a gift card balance](./gift-card-balance-inquiry.md) — check the remaining balance before or after a payment.
-- [Void a gift card load](./gift-card-void.md) — reverse a recent load operation.
 - [Cancel, reverse, or refund a payment](./undo-payment.md) — options for undoing a payment.
