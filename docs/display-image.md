@@ -108,6 +108,6 @@ Optionally, XSD validation against `display.xsd` can be enabled. When active, an
 ## See also
 
 - [Show a virtual receipt](./display-receipt.md)
-- [Show a QR code or barcode](./display-qr-code.md)
-- [Show the standby screen](./idle-display.md)
+- [Show a QR code or barcode](./display-qr.md)
+- [Show the standby screen](./display-standby.md)
 - [Display payload XML schema](./display.xsd)

@@ -16,7 +16,7 @@ Common use cases include loyalty lookups, tax-free eligibility checks based on i
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 
 ---
 

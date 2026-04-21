@@ -139,5 +139,5 @@ Optionally, XSD validation against `display.xsd` can be enabled. When active, an
 
 - [Show a virtual receipt](./display-receipt.md)
 - [Show an image on the terminal](./display-image.md)
-- [Show the standby screen](./idle-display.md)
+- [Show the standby screen](./display-standby.md)
 - [Display payload XML schema](./display.xsd)

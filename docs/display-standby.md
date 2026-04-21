@@ -102,6 +102,6 @@ The content is validated before displaying. Any element that is missing, misname
 ## See also
 
 - [Show a virtual receipt](./display-receipt.md)
-- [Show a QR code or barcode](./display-qr-code.md)
+- [Show a QR code or barcode](./display-qr.md)
 - [Show an image on the terminal](./display-image.md)
 - [Display payload XML schema](./display.xsd)

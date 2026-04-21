@@ -14,7 +14,7 @@ When your POS app initiates a payment request, it is routed to the terminal, whi
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 
 ---
 

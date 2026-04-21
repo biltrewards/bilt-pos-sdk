@@ -585,7 +585,7 @@ The Adyen virtual receipt XML format is also accepted, to ease migration from an
 
 ## See also
 
-- [Show a QR code on the terminal](./display-qr-code.md)
+- [Show a QR code on the terminal](./display-qr.md)
 - [Show an image on the terminal](./display-image.md)
-- [Show the standby screen](./idle-display.md)
+- [Show the standby screen](./display-standby.md)
 - [Display payload XML schema](./display.xsd)
