@@ -7,6 +7,8 @@ Enable a new gift card and optionally load an initial balance onto it.
 
 Activation is the first step in a gift card's lifecycle. An inactive card cannot be used for payments — activation registers the card with the stored value provider and, if an amount is specified, loads an initial balance. The terminal handles the card interaction (swipe, scan, or manual entry) and sends the activation to the provider for processing.
 
+> **Note:** These docs use "gift card" terminology, but all operations apply to any stored value card type — including phone cards and other prepaid instruments. Set `StoredValueAccountType` to `GiftCard`, `PhoneCard`, or `Other` as appropriate.
+
 ---
 
 ## Before you begin

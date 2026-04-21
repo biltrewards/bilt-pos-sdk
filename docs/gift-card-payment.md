@@ -7,6 +7,8 @@ Process an in-person payment using a gift card on a Bilt-connected terminal.
 
 A gift card payment works like a standard card payment, but uses a stored value card as the payment instrument. When the card's balance is less than the requested amount, a partial authorization is returned — your POS app can then collect the remainder using a second gift card or another payment method.
 
+> **Note:** These docs use "gift card" terminology, but all operations apply to any stored value card type — including phone cards and other prepaid instruments. Set `StoredValueAccountType` to `GiftCard`, `PhoneCard`, or `Other` as appropriate.
+
 ---
 
 ## Before you begin

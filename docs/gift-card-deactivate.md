@@ -7,6 +7,8 @@ Disable an activated gift card so it can no longer be used for payments or balan
 
 Deactivation permanently disables a gift card by unloading any remaining balance and marking the card as inactive with the stored value provider. Once deactivated, the card cannot be reactivated. This is typically used for damaged cards, return-to-stock scenarios, or fraud prevention.
 
+> **Note:** These docs use "gift card" terminology, but all operations apply to any stored value card type — including phone cards and other prepaid instruments. Set `StoredValueAccountType` to `GiftCard`, `PhoneCard`, or `Other` as appropriate.
+
 > **Important:** Not all stored value providers support deactivation. Check with your provider before implementing this operation.
 
 ---

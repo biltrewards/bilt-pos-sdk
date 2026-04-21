@@ -7,6 +7,8 @@ Add funds to an activated gift card.
 
 A load operation increases the balance on an existing, activated gift card. The card must already be activated — to activate a new card, see [Activate a gift card](./gift-card-activate.md). The terminal handles the card interaction and sends the load request to the stored value provider for processing.
 
+> **Note:** These docs use "gift card" terminology, but all operations apply to any stored value card type — including phone cards and other prepaid instruments. Set `StoredValueAccountType` to `GiftCard`, `PhoneCard`, or `Other` as appropriate.
+
 ---
 
 ## Before you begin

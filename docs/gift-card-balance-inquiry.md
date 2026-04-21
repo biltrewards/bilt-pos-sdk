@@ -7,6 +7,8 @@ Check the remaining funds on an activated gift card.
 
 A balance inquiry lets your POS app verify a card's available balance before or after a transaction. This is useful for displaying the balance to the cashier, deciding whether a single gift card can cover a purchase, or confirming that a load or activation was applied correctly. No funds are moved during a balance inquiry.
 
+> **Note:** These docs use "gift card" terminology, but all operations apply to any stored value card type — including phone cards and other prepaid instruments. Set `StoredValueAccountType` to `GiftCard`, `PhoneCard`, or `Other` as appropriate.
+
 ---
 
 ## Before you begin
