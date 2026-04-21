@@ -209,5 +209,4 @@ For a full list of failure reasons and what they mean, see [Refusal reasons](./r
 ## Next steps
 
 - [Query a gift card balance](./gift-card-balance-inquiry.md) — check the remaining balance before or after a payment.
-- [Void a gift card load](./gift-card-void.md) — reverse a recent load operation.
 - [Cancel, reverse, or refund a payment](./undo-payment.md) — options for undoing a payment.

@@ -38,8 +38,6 @@
       url: /gift-card-payment.html
     - name: Balance Inquiry
       url: /gift-card-balance-inquiry.html
-    - name: Void Load
-      url: /gift-card-void.html
     - name: Deactivate
       url: /gift-card-deactivate.html
 

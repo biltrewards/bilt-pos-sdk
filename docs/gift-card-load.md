@@ -101,7 +101,7 @@ The result is returned in the API response in a `StoredValueResponse` body. The 
 When a load succeeds, your integration receives:
 
 - **`StoredValueResponse.Response.Result`** — `Success`.
-- **`POIData.POITransactionID.TransactionID`** — the transaction identifier for this load. Store this value — you will need it to [void the load](./gift-card-void.md) if necessary.
+- **`POIData.POITransactionID.TransactionID`** — the transaction identifier for this load.
 - **`POIData.POITransactionID.TimeStamp`** — the timestamp of the transaction.
 - **`StoredValueResult.StoredValueTransactionType`** — `Load`.
 - **`StoredValueResult.ItemAmount`** — the total balance on the card after the load.
@@ -158,6 +158,5 @@ For general guidance on handling failed requests, see [Handle responses](./error
 
 ## Next steps
 
-- [Void a gift card load](./gift-card-void.md) — reverse a recent load if it was made in error.
 - [Query a gift card balance](./gift-card-balance-inquiry.md) — verify the balance after loading.
 - [Make a gift card payment](./gift-card-payment.md) — process a payment using a gift card.
