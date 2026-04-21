@@ -16,7 +16,7 @@ Deactivation permanently disables a gift card by unloading any remaining balance
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 3. Confirmed that your stored value provider supports the deactivation operation.
 
 ---
@@ -42,7 +42,7 @@ To deactivate a gift card, send a Terminal API request with `MessageCategory` se
     - **`StoredValueData.StoredValueTransactionType`** — `Unload`
     - **`StoredValueData.ItemAmount`** — `0` (required — setting the amount to zero signals a deactivation rather than a balance unload).
     - **`StoredValueData.Currency`** — The transaction currency code (e.g. `USD`).
-    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — `GiftCard`
+    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — The type of stored value card: `GiftCard`, `PhoneCard`, or `Other`.
     - **`StoredValueData.StoredValueAccountID.StoredValueProvider`** — The stored value provider (e.g. `givex`, `svs`, `valuelink`).
     - **`StoredValueData.StoredValueAccountID.IdentificationType`** — `PAN` for a card number, or `BarCode` for a barcode identifier.
     - **`StoredValueData.StoredValueAccountID.EntryMode`** — How the card is identified: `Scanned`, `MagStripe`, `Keyed`, or `Contactless`.

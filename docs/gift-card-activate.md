@@ -14,7 +14,7 @@ Activation is the first step in a gift card's lifecycle. An inactive card cannot
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 
 ---
 
@@ -39,7 +39,7 @@ To activate a gift card, send a Terminal API request with `MessageCategory` set 
     - **`StoredValueData.StoredValueTransactionType`** — `Activate`
     - **`StoredValueData.ItemAmount`** — The initial balance to load onto the card. Use `0` to activate the card without loading funds.
     - **`StoredValueData.Currency`** — The transaction currency code (e.g. `USD`).
-    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — `GiftCard`
+    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — The type of stored value card: `GiftCard`, `PhoneCard`, or `Other`.
     - **`StoredValueData.StoredValueAccountID.StoredValueProvider`** — The stored value provider (e.g. `givex`, `svs`, `valuelink`).
     - **`StoredValueData.StoredValueAccountID.IdentificationType`** — `PAN` for a card number, or `BarCode` for a barcode identifier.
     - **`StoredValueData.StoredValueAccountID.EntryMode`** — How the card is identified: `Scanned`, `MagStripe`, `Keyed`, or `Contactless`.

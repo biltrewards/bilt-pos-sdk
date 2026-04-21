@@ -14,7 +14,7 @@ A balance inquiry lets your POS app verify a card's available balance before or 
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 
 ---
 
@@ -35,7 +35,7 @@ To query a gift card balance, send a Terminal API request with `MessageCategory`
    And the following `BalanceInquiryRequest` fields:
 
     - **`PaymentAccountReq.PaymentInstrumentData.PaymentInstrumentType`** — `StoredValue`
-    - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.StoredValueAccountType`** — `GiftCard`
+    - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.StoredValueAccountType`** — The type of stored value card: `GiftCard`, `PhoneCard`, or `Other`.
     - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.StoredValueProvider`** — The stored value provider (e.g. `givex`, `svs`, `valuelink`).
     - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.IdentificationType`** — `PAN` for a card number, or `BarCode` for a barcode identifier.
     - **`PaymentAccountReq.PaymentInstrumentData.StoredValueAccountID.EntryMode`** — How the card is identified: `Scanned`, `MagStripe`, `Keyed`, or `Contactless`.

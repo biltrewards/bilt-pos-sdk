@@ -14,7 +14,7 @@ A load operation increases the balance on an existing, activated gift card. The 
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 3. [Activated the gift card](./gift-card-activate.md) — only activated cards can receive funds.
 
 ---
@@ -40,7 +40,7 @@ To load funds onto a gift card, send a Terminal API request with `MessageCategor
     - **`StoredValueData.StoredValueTransactionType`** — `Load`
     - **`StoredValueData.ItemAmount`** — The amount of funds to add to the card.
     - **`StoredValueData.Currency`** — The transaction currency code (e.g. `USD`).
-    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — `GiftCard`
+    - **`StoredValueData.StoredValueAccountID.StoredValueAccountType`** — The type of stored value card: `GiftCard`, `PhoneCard`, or `Other`.
     - **`StoredValueData.StoredValueAccountID.StoredValueProvider`** — The stored value provider (e.g. `givex`, `svs`, `valuelink`).
     - **`StoredValueData.StoredValueAccountID.IdentificationType`** — `PAN` for a card number, or `BarCode` for a barcode identifier.
     - **`StoredValueData.StoredValueAccountID.EntryMode`** — How the card is identified: `Scanned`, `MagStripe`, `Keyed`, or `Contactless`.

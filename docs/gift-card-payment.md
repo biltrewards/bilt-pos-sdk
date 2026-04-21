@@ -14,7 +14,7 @@ A gift card payment works like a standard card payment, but uses a stored value 
 Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
-2. Read and understood the [Terminal API fundamentals](./terminal-api.md).
+2. Read and understood the [Integration Guide](./integration.md).
 3. [Activated the gift card](./gift-card-activate.md) if it has not already been activated.
 
 ---
@@ -40,7 +40,7 @@ To process a gift card payment, send a Terminal API payment request with `Paymen
     - **`PaymentTransaction.AmountsReq.Currency`** — The transaction currency code (e.g. `USD`).
     - **`PaymentTransaction.AmountsReq.RequestedAmount`** — The payment amount.
     - **`PaymentData.PaymentInstrumentData.PaymentInstrumentType`** — `StoredValue`
-    - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.StoredValueAccountType`** — `GiftCard`
+    - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.StoredValueAccountType`** — The type of stored value card: `GiftCard`, `PhoneCard`, or `Other`.
     - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.StoredValueProvider`** — The stored value provider (e.g. `givex`, `svs`, `valuelink`).
     - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.IdentificationType`** — `PAN` for a card number, or `BarCode` for a barcode identifier.
     - **`PaymentData.PaymentInstrumentData.StoredValueAccountID.EntryMode`** — How the card is identified: `Scanned`, `MagStripe`, `Keyed`, or `Contactless`.
