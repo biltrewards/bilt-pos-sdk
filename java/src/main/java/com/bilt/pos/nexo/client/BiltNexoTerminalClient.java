@@ -241,29 +241,34 @@ public final class BiltNexoTerminalClient {
     }
 
     private NexoTerminalAPI parseResponse(String responseJson) throws IOException, EncryptionException {
-        JsonNode root = objectMapper.readTree(responseJson);
-        JsonNode responseNode = root.get("SaleToPOIResponse");
+        SecuredResponseEnvelope envelope =
+                objectMapper.readValue(responseJson, SecuredResponseEnvelope.class);
+        SaleToPOISecuredMessage secured = envelope.saleToPOIResponse;
 
-        if (responseNode != null && responseNode.has("EnvelopedData")) {
+        if (secured != null && secured.getEnvelopedData() != null) {
             if (encryptor == null) {
                 throw new EncryptionException(
                         "Received encrypted response but no SecurityKey is configured");
             }
-            // Extract raw header bytes from the JSON tree before deserialization,
-            // so the HMAC is verified against the wire bytes, not a re-serialized
-            // Java object (which could differ in field ordering).
-            byte[] rawHeaderBytes = objectMapper.writeValueAsBytes(
-                    responseNode.get("MessageHeader"));
-            SecuredResponseEnvelope envelope =
-                    objectMapper.treeToValue(root, SecuredResponseEnvelope.class);
-            String plainJson = encryptor.decrypt(envelope.saleToPOIResponse, rawHeaderBytes);
+            // Extract raw header bytes from the JSON tree to preserve wire field
+            // ordering for HMAC verification. Re-serializing the deserialized
+            // MessageHeader could produce different byte output if the terminal's
+            // JSON library uses a different field ordering.
+            JsonNode responseNode = objectMapper.readTree(responseJson)
+                    .get("SaleToPOIResponse");
+            JsonNode headerNode = responseNode != null ? responseNode.get("MessageHeader") : null;
+            if (headerNode == null) {
+                throw new EncryptionException("Missing MessageHeader in encrypted response");
+            }
+            byte[] rawHeaderBytes = objectMapper.writeValueAsBytes(headerNode);
+            String plainJson = encryptor.decrypt(secured, rawHeaderBytes);
             SaleToPOIResponse saleToPOIResponse =
                     objectMapper.readValue(plainJson, SaleToPOIResponse.class);
             return NexoTerminalAPI.builder()
                     .saleToPOIResponse(saleToPOIResponse)
                     .build();
         } else {
-            return objectMapper.treeToValue(root, NexoTerminalAPI.class);
+            return objectMapper.readValue(responseJson, NexoTerminalAPI.class);
         }
     }
 
