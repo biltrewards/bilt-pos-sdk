@@ -16,7 +16,8 @@ import com.fasterxml.jackson.annotation.*;
 
 /**
  * Result of a stored value card operation, including account identification and current
- * balance.
+ * balance. StoredValueAccountID is [0..1] per Nexo spec section 4.3.5.3 — a successful
+ * Reverse typically omits it.
  */
 public class StoredValueAccountStatus {
     private Double currentBalance;

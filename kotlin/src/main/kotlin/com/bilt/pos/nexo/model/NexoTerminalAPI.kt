@@ -4963,7 +4963,8 @@ data class StoredValueResult (
 
 /**
  * Result of a stored value card operation, including account identification and current
- * balance.
+ * balance. StoredValueAccountID is [0..1] per Nexo spec section 4.3.5.3 — a successful
+ * Reverse typically omits it.
  */
 @Serializable
 data class StoredValueAccountStatus (
@@ -4974,7 +4975,7 @@ data class StoredValueAccountStatus (
     val currentBalance: Double? = null,
 
     @SerialName("StoredValueAccountID")
-    val storedValueAccountID: StoredValueAccountID
+    val storedValueAccountID: StoredValueAccountID? = null
 )
 
 /**

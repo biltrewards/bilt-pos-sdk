@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Receipt Requirements documentation with Fiserv EMV guidelines and Bilt Platform fields
 
+### Fixed
+
+- `StoredValueAccountStatus.StoredValueAccountID` is now optional per Nexo spec section 4.3.5.3 (marked `[0..1]`). Previously it was required, forcing consumers to synthesize a placeholder when returning successful `Reverse` responses (which legitimately omit card identity).
+
 ## [0.5.10] - 2025
 
 ### Added
