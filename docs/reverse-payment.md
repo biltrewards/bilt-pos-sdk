@@ -78,6 +78,7 @@ When a reversal is accepted, your integration receives:
 
 - **`ReversalResponse.Response.Result`** — `Success`.
 - **`POIData.POITransactionID.TransactionID`** — the transaction identifier for this reversal.
+- **`ReversalResponse.Response.AdditionalResponse`** *(gift cards only, optional)* — URL-encoded string containing `currentBalance`, the gift card's balance after the reversal (e.g. `currentBalance=100.00`). Only included when reversing a gift card payment and the stored value provider returns balance information.
 
 Example response:
 
@@ -107,6 +108,38 @@ Example response:
   }
 }
 ```
+
+Example response — gift card reversal (includes balance):
+
+```json
+{
+  "SaleToPOIResponse": {
+    "MessageHeader": {
+      "ProtocolVersion": "3.0",
+      "MessageClass": "Service",
+      "MessageCategory": "Reversal",
+      "MessageType": "Response",
+      "ServiceID": "SVC-00852",
+      "SaleID": "BiltPOS-Lane3",
+      "POIID": "VictaLane-275839164"
+    },
+    "ReversalResponse": {
+      "Response": {
+        "Result": "Success",
+        "AdditionalResponse": "currentBalance=100.00"
+      },
+      "POIData": {
+        "POITransactionID": {
+          "TransactionID": "b927c1ba-9b22-5ed1-ca9e-6be2f9d8f1e7",
+          "TimeStamp": "2026-03-02T15:12:14+00:00"
+        }
+      }
+    }
+  }
+}
+```
+
+> **Note:** The `currentBalance` field is only included when reversing a gift card payment. For standard card reversals, `AdditionalResponse` is not included.
 
 ### Failed reversal
 
