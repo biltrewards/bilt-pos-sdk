@@ -160,7 +160,7 @@ When the gift card balance is less than the requested amount, the provider may a
 
 - **`PaymentResponse.Response.Result`** — `Partial`.
 - **`PaymentResult.AmountsResp.AuthorizedAmount`** — the amount actually authorized (the card's available balance).
-- **`PaymentResponse.Response.AdditionalResponse`** *(optional)* — URL-encoded string containing `currentBalance=0.00` (since the card was fully depleted). Only included when the stored value provider returns balance information.
+- **`PaymentResponse.Response.AdditionalResponse`** *(optional)* — URL-encoded string containing `currentBalance`, the remaining balance on the gift card after the transaction (e.g. `currentBalance=0.00` when the card is fully depleted). Only included when the stored value provider returns balance information.
 
 The remaining balance must be collected through another payment method — either a second gift card or a standard card payment.
 
