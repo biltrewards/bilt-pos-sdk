@@ -112,7 +112,8 @@ When the full amount is authorized, your integration receives:
 - **`POIData.POITransactionID.TransactionID`** — the transaction identifier.
 - **`PaymentResult.AmountsResp.AuthorizedAmount`** — the amount authorized, equal to the requested amount.
 - **`PaymentResult.AmountsResp.Currency`** — the currency code.
-- **`PaymentReceipt`** — receipt data in XML format. See [Receipt format](./receipt-format.md) for details.
+- **`PaymentResponse.Response.AdditionalResponse`** *(optional)* — URL-encoded string containing `currentBalance`, the remaining balance on the gift card after the transaction (e.g. `currentBalance=65.00`). Only included when the stored value provider returns balance information.
+- **`PaymentReceipt`** — receipt data in XML format. For gift card transactions, the `receiptData` section may include `availableBalance` with the remaining card balance. See [Receipt format](./receipt-format.md) for details.
 
   Example response:
 
@@ -130,7 +131,8 @@ When the full amount is authorized, your integration receives:
       },
       "PaymentResponse": {
         "Response": {
-          "Result": "Success"
+          "Result": "Success",
+          "AdditionalResponse": "currentBalance=65.00"
         },
         "POIData": {
           "POITransactionID": {
@@ -150,12 +152,15 @@ When the full amount is authorized, your integration receives:
   }
   ```
 
+> **Note:** The `currentBalance` in `AdditionalResponse` shows the gift card's remaining balance after the payment. Use this to display the balance to the customer or for reconciliation purposes.
+
 ### Partial payment
 
 When the gift card balance is less than the requested amount, the provider may authorize a partial payment. Your integration receives:
 
 - **`PaymentResponse.Response.Result`** — `Partial`.
 - **`PaymentResult.AmountsResp.AuthorizedAmount`** — the amount actually authorized (the card's available balance).
+- **`PaymentResponse.Response.AdditionalResponse`** *(optional)* — URL-encoded string containing `currentBalance`, the remaining balance on the gift card after the transaction (e.g. `currentBalance=0.00` when the card is fully depleted). Only included when the stored value provider returns balance information.
 
 The remaining balance must be collected through another payment method — either a second gift card or a standard card payment.
 
@@ -175,7 +180,8 @@ The remaining balance must be collected through another payment method — eithe
       },
       "PaymentResponse": {
         "Response": {
-          "Result": "Partial"
+          "Result": "Partial",
+          "AdditionalResponse": "currentBalance=0.00"
         },
         "POIData": {
           "POITransactionID": {

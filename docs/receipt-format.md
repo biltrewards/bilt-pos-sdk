@@ -184,6 +184,12 @@ All fields inside `<r:receiptData>` are optional. Only fields with values are in
 | `tvr`     | Terminal Verification Results.         |
 | `tsi`     | Transaction Status Information.        |
 
+### Stored value / Gift card
+
+| Field              | Description                                              |
+|--------------------|----------------------------------------------------------|
+| `availableBalance` | Remaining balance on the gift card after the transaction, formatted as a decimal string (e.g. `65.00`). Only included when the stored value provider returns balance information. |
+
 ---
 
 ## Choosing a receipt format
