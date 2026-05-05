@@ -5,11 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - 2026-05-05
 
 ### Added
 
-- Receipt Requirements documentation with Fiserv EMV guidelines and Bilt Platform fields
+- Kotlin SDK encryption support and `BiltNexoTerminalClient` with AES-256-CBC + HMAC-SHA256 message protection ([#54](https://github.com/biltrewards/bilt-pos-sdk/pull/54))
+- Documentation for Stored Value Cards (gift card balance, activation, deactivation, reload) ([#55](https://github.com/biltrewards/bilt-pos-sdk/pull/55))
+- Documentation for card acquisition and gift card flows ([#47](https://github.com/biltrewards/bilt-pos-sdk/pull/47))
+- Receipt Requirements documentation with Fiserv EMV guidelines and Bilt Platform fields ([#48](https://github.com/biltrewards/bilt-pos-sdk/pull/48), [#49](https://github.com/biltrewards/bilt-pos-sdk/pull/49))
+- Documentation for `ForceEntryMode` in unreferenced refunds ([#44](https://github.com/biltrewards/bilt-pos-sdk/pull/44))
+- Documentation for gift card balance fields in payment responses ([#60](https://github.com/biltrewards/bilt-pos-sdk/pull/60))
+- Payment status display documentation and home page card ([#61](https://github.com/biltrewards/bilt-pos-sdk/pull/61), [#62](https://github.com/biltrewards/bilt-pos-sdk/pull/62))
+- Image element on `LineItem` and Discount support in Display schema ([#36](https://github.com/biltrewards/bilt-pos-sdk/pull/36), [#43](https://github.com/biltrewards/bilt-pos-sdk/pull/43))
+
+### Changed
+
+- Replaced legacy NexoBlob encryption with CMS EnvelopedData for stronger interoperability and key handling ([#53](https://github.com/biltrewards/bilt-pos-sdk/pull/53))
+- XSD cleanup: removed banner image element and simplified waiting handling ([#43](https://github.com/biltrewards/bilt-pos-sdk/pull/43))
 
 ## [0.5.10] - 2025
 
