@@ -56,7 +56,7 @@ BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
 
 ## Payload Encryption
 
-In addition to (or instead of) TLS, the Nexo message payload is encrypted and authenticated using the `SecurityKey` mechanism. **This is required for all production terminals** — production devices will reject unencrypted requests (with the exception of `DiagnosticRequest`)
+In addition to (or instead of) TLS, the Nexo message payload is encrypted and authenticated using the `SecurityKey` mechanism. **This is required for all production terminals** — production devices will reject unencrypted requests (with the exception of `DiagnosisRequest`)
 
 ### How It Works
 
@@ -64,7 +64,7 @@ When a `SecurityKey` is configured on the client, the SDK:
 
 - **Encrypts** every outgoing request using **CMS EnvelopedData** with **AES-256-CBC**. A fresh session key is generated per message and wrapped using **AES Key Wrap**.
 - **Authenticates** the message with **HMAC-SHA256** via a CMS `SecurityTrailer`, ensuring integrity and preventing tampering.
-- **Decrypts** incoming responses automatically. If the terminal responds with an unencrypted message (e.g., certain error conditions), the SDK handles it gracefully. Note, however, that unencrypted responses will not be accepted unless they are errors or response to `DiagnoticRequest`.
+- **Decrypts** incoming responses automatically. If the terminal responds with an unencrypted message (e.g., certain error conditions), the SDK handles it gracefully. Note, however, that unencrypted responses will not be accepted unless they are errors or response to `DiagnosisRequest`.
 
 ### SecurityKey Configuration
 
@@ -164,7 +164,7 @@ The register can communicate with the terminal over two channels. The security i
 
 - **Transport:** None — USB serial is a direct physical connection with no TLS.
 - **Payload:** CMS encryption + HMAC (via `SecurityKey`).
-- **Payload encryption is the only security layer.** This encryption is enforced in production, the device responds with error for any messages not encrypted with then exception of `DiagnosticRequest`.
+- **Payload encryption is the only security layer.** This encryption is enforced in production, the device responds with error for any messages not encrypted with the exception of `DiagnosisRequest`.
 
 
 ---
