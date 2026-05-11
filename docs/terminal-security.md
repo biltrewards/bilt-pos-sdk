@@ -1,3 +1,6 @@
+---
+---
+
 # Bilt Terminal Security
 
 This document describes the security architecture for communication between a POS register (Sale System) and a Bilt Terminal Application (BTA). It covers transport-layer security (TLS), payload-level encryption, card data handling, and the differences between communication channels.
