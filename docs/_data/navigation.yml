@@ -78,6 +78,15 @@
     - name: Text String
       url: /input-text-string.html
 
+- title: Security
+  items:
+    - name: Overview
+      url: /terminal-security.html
+    - name: Payload Encryption Setup
+      url: /payload-encryption-setup.html
+    - name: Certificate Validation Setup
+      url: /certificate-validation-setup.html
+
 - title: Reference
   items:
     - name: Error Scenarios
