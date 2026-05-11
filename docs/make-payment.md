@@ -90,7 +90,7 @@ When a payment succeeds:
 
     - **`POIData.POITransactionID.TransactionID`** — the transaction identifier.
     - **`PaymentResponse.Response.Result`** — `Success`. Other possible values are `Partial` for a successful partial payment, or `Failure` for a declined payment.
-    - **`PaymentResponse.Response.AdditionalResponse`** — additional transaction data, such as shopper recognition or shopper input details.
+    - **`PaymentResponse.Response.AdditionalResponse`** — URL-encoded key-value pairs containing additional transaction data. See [AdditionalResponse fields](#additionalresponse-fields) below.
     - **`PaymentReceipt`** — receipt data in XML format containing HTML, plain text, and structured fields. See [Receipt format](./receipt-format.md) for details.
 
   Example response:
@@ -201,6 +201,28 @@ When a payment fails, the result includes `Result: Failure` along with informati
 
 For a full list of failure reasons and what they mean, see [Refusal reasons](./refusal-reasons.md). For general guidance on handling failed requests, see [Handle responses](./error-scenarios.md).
 > **Testing tip:** while building a test integration you can simulate a declined payment by setting the last three digits of `RequestedAmount` to `123` — for example `41.23` or `101.23`.
+
+---
+
+## AdditionalResponse fields
+
+The `AdditionalResponse` field contains URL-encoded key-value pairs with additional transaction data. Parse it by splitting on `&` and then on `=` for each pair.
+
+| Field | Description | Example values |
+|-------|-------------|----------------|
+| `authorizationResult` | The authorization result from the payment processor. | `Approved`, `Declined`, `PartialApproval` |
+| `accountType` | The card account type used for the transaction. Useful for determining if a credit or debit card was used. | `CREDIT`, `DEBIT`, `PINLESS_DEBIT`, `PLCC`, `ALTERNATE_TYPE` |
+| `currentBalance` | For stored value cards, the remaining balance after the transaction. | `45.00` |
+| `signatureBase64` | Base64-encoded signature image if the transaction required signature capture. | `iVBORw0KGgoAAAANSUhEUgAA...` |
+| `failureReason` | Human-readable description of why the transaction failed (only present on failures). | `Card declined`, `Insufficient funds` |
+
+Example parsing in JavaScript:
+
+```javascript
+const additionalResponse = "authorizationResult=Approved&accountType=CREDIT";
+const params = new URLSearchParams(additionalResponse);
+const accountType = params.get("accountType"); // "CREDIT"
+```
 
 ---
 
