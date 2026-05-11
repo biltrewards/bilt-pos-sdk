@@ -3,6 +3,8 @@
 
 # Configuring Certificate Validation
 
+> **Note:** The `BiltTerminalCertificate` API described in this guide is not yet implemented in the SDK. This page documents the planned interface; implementation will follow in a future release. Until then, the only supported options on the client builder are `.trustAllCertificates()` (development) and a custom `OkHttpClient` configured by your application.
+
 This guide shows how to load the Bilt intermediate CA certificate and configure the client to validate the terminal's TLS certificate against it. For the broader security model — TLS, payload encryption, and card data handling — see [Terminal Security](./terminal-security.md).
 
 The terminal presents a leaf certificate issued by a Bilt-operated private Certificate Authority. Because public CAs are not in play, your client must be configured with the **Bilt intermediate CA certificate** so it can validate the chain. In development you can bypass this with `trustAllCertificates()`, but production deployments must validate.
