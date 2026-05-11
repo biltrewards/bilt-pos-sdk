@@ -21,7 +21,7 @@ Send a Terminal API input request with `InputCommand` set to `GetConfirmation`. 
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<inputPayload xmlns="urn:bilt:input:v1" version="1.0">
+<inputPayload version="1.0">
   <amountConfirmation>
     <amount>94.50</amount>
     <currency>USD</currency>
@@ -324,9 +324,9 @@ A successful response includes:
 
 - **`Input.ConfirmedFlag`** — `true` if the user confirmed the amount, `false` if they cancelled.
 
-### Failed input
+### Timeout
 
-If the user does not respond within `MaxInputTime` or presses Cancel, the response includes `Result: Failure` with `ErrorCondition: Cancel`. For general guidance on handling failed requests, see [Handle responses](./error-scenarios.md).
+If the user does not respond within `MaxInputTime`, the response includes `Result: Failure` with `ErrorCondition: Cancel`. For general guidance on handling failed requests, see [Handle responses](./error-scenarios.md).
 
 ---
 
