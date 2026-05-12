@@ -75,6 +75,8 @@
       url: /input-get-menu-entry.html
     - name: Signature
       url: /input-signature.html
+    - name: Amount Confirmation
+      url: /input-amount-confirmation.html
     - name: Text String
       url: /input-text-string.html
 
