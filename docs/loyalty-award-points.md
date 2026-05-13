@@ -192,7 +192,7 @@ When the award succeeds, your integration receives:
 When the award fails, the result includes:
 
 - **`LoyaltyResponse.Response.Result`** — `Failure`.
-- **`LoyaltyResponse.Response.ErrorCondition`** — the reason for failure. For example, `NotFound` if the member ID is unknown, `NotAllowed` if the member is suspended, or `DuplicateTransaction` if the same `TransactionID` was already awarded.
+- **`LoyaltyResponse.Response.ErrorCondition`** — the reason for failure. For example, `NotFound` if the member ID is unknown, `NotAllowed` if the member is suspended, or `Refusal` if the same `TransactionID` was already awarded (the specific reason is carried in `AdditionalResponse`).
 
   Example response:
 
@@ -211,7 +211,7 @@ When the award fails, the result includes:
       "LoyaltyResponse": {
         "Response": {
           "Result": "Failure",
-          "ErrorCondition": "DuplicateTransaction",
+          "ErrorCondition": "Refusal",
           "AdditionalResponse": "Transaction TXN-20260430-00847 has already been awarded."
         }
       }

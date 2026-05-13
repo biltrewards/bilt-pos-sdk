@@ -129,8 +129,8 @@ When enrollment succeeds, your integration receives:
 When enrollment fails, the result includes:
 
 - **`AdminResponse.Response.Result`** — `Failure`.
-- **`AdminResponse.Response.ErrorCondition`** — the reason for failure. The most common is `DuplicateTransaction` when a member with the same email already exists; `MessageFormat` when a required profile field is missing.
-- **`AdminResponse.Response.AdditionalResponse`** *(optional)* — when the failure is a duplicate email, the existing member's ID is returned as a URL-encoded field (e.g. `existingMemberId=98234`). Use this to recover by switching the flow to [identify](./loyalty-identify-member.md) the existing member instead of enrolling.
+- **`AdminResponse.Response.ErrorCondition`** — the reason for failure. The most common is `Refusal` when a member with the same email already exists; `MessageFormat` when a required profile field is missing.
+- **`AdminResponse.Response.AdditionalResponse`** *(optional)* — when the failure is a duplicate email, the existing member's ID is returned as a URL-encoded field (e.g. `reason=DUPLICATE_EMAIL&existingMemberId=98234`). Use this to recover by switching the flow to [identify](./loyalty-identify-member.md) the existing member instead of enrolling.
 
   Example response:
 
@@ -149,8 +149,8 @@ When enrollment fails, the result includes:
       "AdminResponse": {
         "Response": {
           "Result": "Failure",
-          "ErrorCondition": "DuplicateTransaction",
-          "AdditionalResponse": "existingMemberId=98234&reason=DUPLICATE_EMAIL"
+          "ErrorCondition": "Refusal",
+          "AdditionalResponse": "reason=DUPLICATE_EMAIL&existingMemberId=98234"
         }
       }
     }

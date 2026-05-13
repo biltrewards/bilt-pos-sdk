@@ -239,7 +239,7 @@ When some rewards redeem and others fail, the result includes:
 When no rewards redeem, the result includes:
 
 - **`LoyaltyResponse.Response.Result`** — `Failure`.
-- **`LoyaltyResponse.Response.ErrorCondition`** — the reason for failure. For example, `NotFound` if a `rewardRef` is unknown, `DuplicateTransaction` if the reward is already redeemed, or `InvalidCard` if the reward has expired.
+- **`LoyaltyResponse.Response.ErrorCondition`** — the reason for failure. For example, `NotFound` if a `rewardRef` is unknown, `Refusal` if the reward is already redeemed (the specific reason is carried in `AdditionalResponse`), or `InvalidCard` if the reward has expired.
 
   Example response:
 
@@ -258,7 +258,7 @@ When no rewards redeem, the result includes:
       "LoyaltyResponse": {
         "Response": {
           "Result": "Failure",
-          "ErrorCondition": "DuplicateTransaction",
+          "ErrorCondition": "Refusal",
           "AdditionalResponse": "Reward rwd:RWD-44021 has already been redeemed."
         }
       }

@@ -240,7 +240,7 @@ Your integration receives a `ReversalResponse` with:
 For either form, a failed reversal includes:
 
 - **`Response.Result`** — `Failure`.
-- **`Response.ErrorCondition`** — the reason for failure. For example, `NotFound` if the original transaction cannot be located, or `DuplicateTransaction` if the award was already reversed.
+- **`Response.ErrorCondition`** — the reason for failure. For example, `NotFound` if the original transaction cannot be located, or `Refusal` if the award was already reversed (the specific reason is carried in `AdditionalResponse`).
 
   Example response (Option A):
 
@@ -259,7 +259,7 @@ For either form, a failed reversal includes:
       "LoyaltyResponse": {
         "Response": {
           "Result": "Failure",
-          "ErrorCondition": "DuplicateTransaction",
+          "ErrorCondition": "Refusal",
           "AdditionalResponse": "Award POI-LYL-702 has already been reversed."
         }
       }
