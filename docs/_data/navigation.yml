@@ -28,6 +28,25 @@
     - name: Card Acquisition
       url: /card-acquisition-request.html
 
+- title: Loyalty
+  items:
+    - name: Identify Member
+      url: /loyalty-identify-member.html
+    - name: Award Points
+      url: /loyalty-award-points.html
+    - name: Redeem Rewards
+      url: /loyalty-redeem-rewards.html
+    - name: Reverse Redemption
+      url: /loyalty-reverse-redemption.html
+    - name: Reverse Award
+      url: /loyalty-reverse-award.html
+    - name: Balance Inquiry & Lookup
+      url: /loyalty-balance-inquiry.html
+    - name: Enroll Member
+      url: /loyalty-enroll-member.html
+    - name: Member Status
+      url: /loyalty-member-status.html
+
 - title: Stored Value Cards
   items:
     - name: Activate
