@@ -39,6 +39,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 /**
  * Client for communicating with a Bilt payment terminal over the local Nexo
@@ -85,6 +86,8 @@ import java.util.concurrent.TimeUnit;
  * }</pre>
  */
 public final class BiltNexoTerminalClient {
+
+    private static final Logger LOG = Logger.getLogger(BiltNexoTerminalClient.class.getName());
 
     private static final String DEFAULT_PATH = "/nexo";
     private static final int DEFAULT_PORT = 8443;
@@ -146,6 +149,7 @@ public final class BiltNexoTerminalClient {
             String jsonBody;
 
             if (encryptor != null) {
+                LOG.fine("Encrypting Sale to POI request payload");
                 jsonBody = encryptRequest(saleToPOIRequest);
             } else {
                 jsonBody = objectMapper.writeValueAsString(request);
@@ -250,6 +254,7 @@ public final class BiltNexoTerminalClient {
                 throw new EncryptionException(
                         "Received encrypted response but no SecurityKey is configured");
             }
+            LOG.fine("Decrypting Sale to POI response payload");
             // Extract raw header bytes from the JSON tree to preserve wire field
             // ordering for HMAC verification. Re-serializing the deserialized
             // MessageHeader could produce different byte output if the terminal's

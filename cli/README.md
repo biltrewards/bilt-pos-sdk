@@ -20,6 +20,7 @@ Command-line tool for sending Nexo Sale to POI requests to a Bilt payment termin
 |---|---|---|
 | `--type <payment\|gift-card\|refund\|diagnosis\|display-standby\|display-receipt\|confirmation\|signature\|reversal\|transaction-status\|abort>` | Request type | `payment` |
 | `--no-encryption` | Disable message encryption | encryption enabled |
+| `--verbose` | Log when requests are encrypted / responses decrypted | off |
 | `--passphrase <value>` | Encryption passphrase | — |
 | `--key-id <value>` | Encryption key identifier | — |
 | `--key-version <number>` | Encryption key version | `0` |
@@ -138,3 +139,15 @@ Command-line tool for sending Nexo Sale to POI requests to a Bilt payment termin
 ```
 
 The CLI connects to `https://<ip>:8443/nexo` and prints the terminal's JSON response to stdout.
+
+## Running against a real terminal (macOS)
+
+On macOS 15+ (Sequoia/Tahoe), `./gradlew :cli:run` connects from inside a Gradle daemon — a detached background process that is **not** covered by your terminal's Local Network privacy grant. Connecting to a LAN terminal then fails with `java.net.NoRouteToHostException: No route to host`, even though `ping`/`nc` to the device succeed.
+
+Use the wrapper script instead — it builds the `application` launcher and runs `java` as a direct child of your shell, so the connection inherits your terminal's Local Network permission:
+
+```bash
+scripts/terminal-cli.sh 192.168.4.108 --type diagnosis --no-encryption
+```
+
+It takes the same arguments as the CLI. Set `SKIP_BUILD=1` to skip the Gradle build and re-run the existing launcher. If macOS prompts to allow local network access on first connect, click **Allow**.
