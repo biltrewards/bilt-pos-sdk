@@ -23,11 +23,22 @@ package com.bilt.pos.nexo.client;
  */
 public enum BiltTerminalEnvironment {
 
-    /** Production terminals: {@code {Model}-{Serial}.live.pos.bilt.com}. */
+    /**
+     * Production terminals.
+     *
+     * <p><strong>Unverified:</strong> this pattern comes from the original
+     * design doc and has not been confirmed against a live production
+     * certificate. Staging certificates were found to use
+     * {@code pos.staging.bilt.dev} rather than the doc's
+     * {@code staging.pos.bilt.com}, so the production domain likely differs
+     * from the value below too. Confirm against a real production cert (and
+     * update this) before relying on it; until then, pass the exact pattern
+     * via {@link BiltNexoTerminalClient.Builder#expectedHostnamePattern(String)}.</p>
+     */
     PRODUCTION("*.live.pos.bilt.com"),
 
-    /** Staging terminals: {@code {Model}-{Serial}.staging.pos.bilt.com}. */
-    STAGING("*.staging.pos.bilt.com");
+    /** Staging terminals: {@code {Model}-{Serial}.pos.staging.bilt.dev}. */
+    STAGING("*.pos.staging.bilt.dev");
 
     private final String hostnamePattern;
 

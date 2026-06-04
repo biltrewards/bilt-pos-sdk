@@ -750,7 +750,7 @@ public final class Main {
                 "  --no-encryption              Disable message encryption",
                 "  --cacert <path>              Verify TLS against this CA/public cert file (PEM or DER).",
                 "                               When omitted, all certificates are trusted (testing only).",
-                "  --hostname-pattern <pattern> Expected cert hostname pattern, e.g. '*.live.pos.bilt.com'",
+                "  --hostname-pattern <pattern> Expected cert hostname pattern, e.g. '*.pos.staging.bilt.dev'",
                 "                               (requires --cacert; matches the cert SAN, not the IP)",
                 "  --environment <prod|staging> Shorthand for the standard --hostname-pattern of that env",
                 "  --verbose                    Log when requests are encrypted / responses decrypted",
