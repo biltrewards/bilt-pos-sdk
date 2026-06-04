@@ -587,6 +587,18 @@ public final class BiltNexoTerminalClient {
                         + "environment(BiltTerminalEnvironment.PRODUCTION)), or use "
                         + "trustAllCertificates() for testing.");
             }
+            if (hostnamePattern != null && trustedCertificates.isEmpty() && !trustAllCertificates) {
+                // A hostname pattern only checks identity; it does not validate the
+                // chain. Without a trust anchor the chain is validated against the
+                // JVM default trust store, which does not contain the private Bilt
+                // CA — so the CA-anchored model is bypassed. Require the anchor.
+                throw new IllegalStateException(
+                        "expectedHostnamePattern(...) or environment(...) was set without a trust "
+                        + "anchor. Hostname verification alone does not validate the certificate "
+                        + "chain, and the terminal's private CA is not in the JVM default trust "
+                        + "store. Add the CA with trustCertificate(...), or use "
+                        + "trustAllCertificates() for testing.");
+            }
             return new BiltNexoTerminalClient(this);
         }
     }

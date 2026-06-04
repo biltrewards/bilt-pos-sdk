@@ -193,6 +193,17 @@ class BiltNexoTerminalClientTlsTest {
     }
 
     @Test
+    fun `construction fails when hostname pattern set without trust anchor`() {
+        val ex = shouldThrow<IllegalArgumentException> {
+            BiltNexoTerminalClient(
+                endpoint = "https://192.168.1.50:8443/nexo",
+                expectedHostnamePattern = PROD_PATTERN
+            )
+        }
+        ex.message.shouldNotBeNull() shouldContain "trust"
+    }
+
+    @Test
     fun `construction fails when trustAll combined with trust anchor`() {
         val ca = merchantCa()
 
