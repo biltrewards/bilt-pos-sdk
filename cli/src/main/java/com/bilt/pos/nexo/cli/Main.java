@@ -211,7 +211,19 @@ public final class Main {
         BiltNexoTerminalClient.Builder clientBuilder = BiltNexoTerminalClient.builder()
                 .endpoint(endpoint);
 
-        if (cacert != null) {
+        // --cacert and a hostname pattern (--hostname-pattern/--environment) must
+        // be provided together to verify TLS. If either is present without the
+        // other, fail rather than silently falling back to trustAllCertificates()
+        // — an operator who passes --environment must not believe verified TLS is
+        // active when it is not. With neither flag, all certificates are trusted
+        // (testing only).
+        if (cacert != null || hostnamePattern != null) {
+            if (cacert == null) {
+                throw new IllegalArgumentException(
+                        "--environment/--hostname-pattern requires --cacert so the certificate "
+                        + "chain can be verified against the Bilt CA. Without it, TLS verification "
+                        + "would be disabled despite the hostname pattern.");
+            }
             if (hostnamePattern == null) {
                 throw new IllegalArgumentException(
                         "--cacert requires --hostname-pattern or --environment so the terminal's "
@@ -222,9 +234,6 @@ public final class Main {
             clientBuilder.trustCertificate(Path.of(cacert))
                     .expectedHostnamePattern(hostnamePattern);
         } else {
-            if (hostnamePattern != null) {
-                LOG.warning("--hostname-pattern is ignored without --cacert; TLS verification is disabled");
-            }
             clientBuilder.trustAllCertificates();
         }
 
