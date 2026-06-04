@@ -208,6 +208,19 @@ class BiltNexoTerminalClientTlsTest {
     }
 
     @Test
+    void buildFailsWhenTrustAnchorSetWithoutHostnamePattern() {
+        HeldCertificate ca = merchantCa();
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                BiltNexoTerminalClient.builder()
+                        .endpoint("https://192.168.1.50:8443/nexo")
+                        .trustCertificate(pemStream(ca))
+                        .build());
+
+        assertTrue(ex.getMessage().contains("expectedHostnamePattern"));
+    }
+
+    @Test
     void throwsOnUnparseableCertificate() {
         ByteArrayInputStream garbage =
                 new ByteArrayInputStream("not a certificate".getBytes(StandardCharsets.UTF_8));

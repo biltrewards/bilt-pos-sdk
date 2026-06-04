@@ -561,6 +561,22 @@ public final class BiltNexoTerminalClient {
             if (endpoint == null) {
                 throw new IllegalStateException("endpoint is required");
             }
+            if (!trustedCertificates.isEmpty() && hostnamePattern == null) {
+                // A trust anchor verifies the chain, but OkHttp's default verifier
+                // would still match the connection IP against the certificate.
+                // Bilt terminals are reached by IP yet present a synthetic-hostname
+                // SAN, so that check can never pass — fail fast rather than emit a
+                // confusing handshake error at request time.
+                throw new IllegalStateException(
+                        "A trust anchor was set via trustCertificate(...) but no "
+                        + "expectedHostnamePattern(...) or environment(...) was configured. "
+                        + "Bilt terminals are reached by IP while presenting a certificate "
+                        + "whose SAN is a synthetic hostname, so default hostname verification "
+                        + "would reject the connection. Set the expected hostname pattern "
+                        + "(e.g. expectedHostnamePattern(\"*.live.pos.bilt.com\") or "
+                        + "environment(BiltTerminalEnvironment.PRODUCTION)), or use "
+                        + "trustAllCertificates() for testing.");
+            }
             return new BiltNexoTerminalClient(this);
         }
     }

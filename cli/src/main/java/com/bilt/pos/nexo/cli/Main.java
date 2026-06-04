@@ -212,12 +212,15 @@ public final class Main {
                 .endpoint(endpoint);
 
         if (cacert != null) {
-            LOG.info("Verifying TLS against CA certificate: " + cacert);
-            clientBuilder.trustCertificate(Path.of(cacert));
-            if (hostnamePattern != null) {
-                LOG.info("Expecting certificate hostname pattern: " + hostnamePattern);
-                clientBuilder.expectedHostnamePattern(hostnamePattern);
+            if (hostnamePattern == null) {
+                throw new IllegalArgumentException(
+                        "--cacert requires --hostname-pattern or --environment so the terminal's "
+                        + "certificate hostname (a synthetic SAN) is verified instead of the IP.");
             }
+            LOG.info("Verifying TLS against CA certificate: " + cacert);
+            LOG.info("Expecting certificate hostname pattern: " + hostnamePattern);
+            clientBuilder.trustCertificate(Path.of(cacert))
+                    .expectedHostnamePattern(hostnamePattern);
         } else {
             if (hostnamePattern != null) {
                 LOG.warning("--hostname-pattern is ignored without --cacert; TLS verification is disabled");
