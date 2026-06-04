@@ -20,6 +20,7 @@ import com.bilt.pos.display.LineItemsType;
 import com.bilt.pos.display.ReceiptType;
 import com.bilt.pos.display.TaxType;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.client.BiltTerminalEnvironment;
 import com.bilt.pos.nexo.model.AbortRequest;
 import com.bilt.pos.nexo.model.AmountsReq;
 import com.bilt.pos.nexo.model.DeviceEnum;
@@ -61,6 +62,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import jakarta.xml.bind.JAXBException;
 
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
@@ -96,6 +98,8 @@ public final class Main {
         String prompt = null;
         double amount = 2.50;
         String currency = "USD";
+        String cacert = null;
+        String hostnamePattern = null;
 
         for (int i = 1; i < args.length; i++) {
             switch (args[i]) {
@@ -141,6 +145,29 @@ public final class Main {
                 case "--prompt":
                     prompt = requireArg(args, ++i, "--prompt");
                     break;
+                case "--cacert":
+                    cacert = requireArg(args, ++i, "--cacert");
+                    break;
+                case "--hostname-pattern":
+                    hostnamePattern = requireArg(args, ++i, "--hostname-pattern");
+                    break;
+                case "--environment": {
+                    String env = requireArg(args, ++i, "--environment");
+                    switch (env) {
+                        case "prod":
+                        case "production":
+                            hostnamePattern = BiltTerminalEnvironment.PRODUCTION.hostnamePattern();
+                            break;
+                        case "staging":
+                            hostnamePattern = BiltTerminalEnvironment.STAGING.hostnamePattern();
+                            break;
+                        default:
+                            LOG.severe("Unknown environment: " + env + ". Supported: prod, staging");
+                            System.exit(1);
+                            return;
+                    }
+                    break;
+                }
                 default:
                     LOG.severe("Unknown option: " + args[i]);
                     printUsage();
@@ -161,7 +188,8 @@ public final class Main {
 
         try {
             run(ip, type, encryption, passphrase, keyId, keyVersion, amount, currency, abortServiceID,
-                    originalServiceID, originalTimestamp, reversalReason, statusServiceID, prompt);
+                    originalServiceID, originalTimestamp, reversalReason, statusServiceID, prompt,
+                    cacert, hostnamePattern);
         } catch (Exception e) {
             LOG.log(Level.SEVERE, "Request failed", e);
             System.exit(1);
@@ -173,7 +201,7 @@ public final class Main {
                             double amount, String currency, String abortServiceID,
                             String originalServiceID, String originalTimestamp,
                             String reversalReason, String statusServiceID,
-                            String prompt) throws Exception {
+                            String prompt, String cacert, String hostnamePattern) throws Exception {
 
         String endpoint = "https://" + ip + ":8443/nexo";
         String serviceID = UUID.randomUUID().toString().substring(0, 8);
@@ -181,8 +209,33 @@ public final class Main {
         LOG.info("Sending " + type + " request to " + endpoint + " (encryption=" + encryption + ")");
 
         BiltNexoTerminalClient.Builder clientBuilder = BiltNexoTerminalClient.builder()
-                .endpoint(endpoint)
-                .trustAllCertificates();
+                .endpoint(endpoint);
+
+        // --cacert and a hostname pattern (--hostname-pattern/--environment) must
+        // be provided together to verify TLS. If either is present without the
+        // other, fail rather than silently falling back to trustAllCertificates()
+        // — an operator who passes --environment must not believe verified TLS is
+        // active when it is not. With neither flag, all certificates are trusted
+        // (testing only).
+        if (cacert != null || hostnamePattern != null) {
+            if (cacert == null) {
+                throw new IllegalArgumentException(
+                        "--environment/--hostname-pattern requires --cacert so the certificate "
+                        + "chain can be verified against the Bilt CA. Without it, TLS verification "
+                        + "would be disabled despite the hostname pattern.");
+            }
+            if (hostnamePattern == null) {
+                throw new IllegalArgumentException(
+                        "--cacert requires --hostname-pattern or --environment so the terminal's "
+                        + "certificate hostname (a synthetic SAN) is verified instead of the IP.");
+            }
+            LOG.info("Verifying TLS against CA certificate: " + cacert);
+            LOG.info("Expecting certificate hostname pattern: " + hostnamePattern);
+            clientBuilder.trustCertificate(Path.of(cacert))
+                    .expectedHostnamePattern(hostnamePattern);
+        } else {
+            clientBuilder.trustAllCertificates();
+        }
 
         if (encryption) {
             SecurityKey key = SecurityKey.builder()
@@ -704,6 +757,11 @@ public final class Main {
                 "Options:",
                 "  --type <payment|gift-card|refund|diagnosis|display-standby|display-receipt|confirmation|signature|reversal|transaction-status|abort>",
                 "  --no-encryption              Disable message encryption",
+                "  --cacert <path>              Verify TLS against this CA/public cert file (PEM or DER).",
+                "                               When omitted, all certificates are trusted (testing only).",
+                "  --hostname-pattern <pattern> Expected cert hostname pattern, e.g. '*.pos.staging.bilt.dev'",
+                "                               (requires --cacert; matches the cert SAN, not the IP)",
+                "  --environment <prod|staging> Shorthand for the standard --hostname-pattern of that env",
                 "  --verbose                    Log when requests are encrypted / responses decrypted",
                 "  --passphrase <value>         Encryption passphrase",
                 "  --key-id <value>             Encryption key identifier",
