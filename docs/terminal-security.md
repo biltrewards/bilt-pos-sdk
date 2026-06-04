@@ -27,10 +27,11 @@ The terminal runs an HTTPS server on **port 8443**. Because POS terminals operat
 Each terminal certificate uses a synthetic hostname as its Subject Alternative Name (SAN):
 
 ```
-{Model}-{Serial}.live.pos.bilt.com
+{Model}-{Serial}.live.pos.bilt.com       (production)
+{Model}-{Serial}.pos.staging.bilt.dev    (staging)
 ```
 
-For example: `V240m-ABC123.live.pos.bilt.com`. This hostname does not resolve in DNS — it serves as a device identifier.
+For example: `V240m-ABC123.live.pos.bilt.com`. This hostname does not resolve in DNS — it serves as a device identifier. Production and staging use distinct domains (and separate CA hierarchies), so a certificate from one environment is never trusted in the other.
 
 ### Configuring Your Trust Store
 
@@ -38,8 +39,8 @@ During onboarding, Bilt provides your integration with the appropriate **interme
 
 1. Connect to the terminal's local IP over HTTPS (e.g., `https://192.168.1.50:8443`).
 2. The terminal presents its leaf certificate.
-3. Your client validates the certificate chain against the trusted intermediate CA.
-4. Optionally, validate the SAN matches the expected `{Model}-{Serial}.live.pos.bilt.com` pattern.
+3. Your client validates the certificate chain against the trusted CA.
+4. Your client validates the SAN matches the expected `{Model}-{Serial}.{domain}` pattern. The SDK does this for you via `environment(...)` or `expectedHostnamePattern(...)`.
 5. The TLS handshake completes and the connection is established.
 
 For a full walkthrough — including Kotlin examples and supported certificate loading sources — see [Configuring Certificate Validation](./certificate-validation-setup.md).
