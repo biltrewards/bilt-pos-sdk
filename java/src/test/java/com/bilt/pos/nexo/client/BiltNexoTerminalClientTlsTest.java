@@ -65,7 +65,7 @@ class BiltNexoTerminalClientTlsTest {
     private static HeldCertificate merchantCa() {
         return new HeldCertificate.Builder()
                 .certificateAuthority(0)
-                .commonName("merchant-acme-123")
+                .commonName("test-merchant-ca")
                 .build();
     }
 
@@ -151,7 +151,7 @@ class BiltNexoTerminalClientTlsTest {
         // Client trusts a different CA; the SAN matches but the chain does not.
         HeldCertificate otherCa = new HeldCertificate.Builder()
                 .certificateAuthority(0)
-                .commonName("merchant-globex-456")
+                .commonName("other-test-ca")
                 .build();
 
         BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
