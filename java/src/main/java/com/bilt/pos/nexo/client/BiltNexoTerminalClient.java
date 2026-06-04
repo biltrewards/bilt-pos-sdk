@@ -561,6 +561,16 @@ public final class BiltNexoTerminalClient {
             if (endpoint == null) {
                 throw new IllegalStateException("endpoint is required");
             }
+            if (trustAllCertificates && (!trustedCertificates.isEmpty() || hostnamePattern != null)) {
+                // Contradictory intent: trustAllCertificates() disables all
+                // verification, which would silently override the configured CA
+                // anchor and hostname pattern. Fail rather than downgrade security.
+                throw new IllegalStateException(
+                        "trustAllCertificates() cannot be combined with trustCertificate(...) "
+                        + "or expectedHostnamePattern(...)/environment(...). trustAllCertificates() "
+                        + "disables all TLS verification; remove it to verify against the trust "
+                        + "anchor, or remove the trust anchor to skip verification (testing only).");
+            }
             if (!trustedCertificates.isEmpty() && hostnamePattern == null) {
                 // A trust anchor verifies the chain, but OkHttp's default verifier
                 // would still match the connection IP against the certificate.
