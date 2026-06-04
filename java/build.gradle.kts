@@ -13,4 +13,5 @@ dependencies {
     runtimeOnly(libs.jaxb.runtime)
 
     testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.okhttp.tls)
 }
