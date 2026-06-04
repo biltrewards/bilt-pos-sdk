@@ -64,6 +64,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
+import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -83,6 +84,7 @@ public final class Main {
         String ip = args[0];
         String type = "payment";
         boolean encryption = true;
+        boolean verbose = false;
         String passphrase = null;
         String keyId = null;
         int keyVersion = 0;
@@ -102,6 +104,9 @@ public final class Main {
                     break;
                 case "--no-encryption":
                     encryption = false;
+                    break;
+                case "--verbose":
+                    verbose = true;
                     break;
                 case "--passphrase":
                     passphrase = requireArg(args, ++i, "--passphrase");
@@ -148,6 +153,10 @@ public final class Main {
             LOG.severe("Encryption is enabled by default. Provide --passphrase and --key-id, or use --no-encryption.");
             System.exit(1);
             return;
+        }
+
+        if (verbose) {
+            enableVerboseLogging();
         }
 
         try {
@@ -665,6 +674,21 @@ public final class Main {
                 .build();
     }
 
+    /**
+     * Raise the SDK client logger to {@code FINE} so its encrypt/decrypt trace
+     * messages are printed. The SDK logs these at {@code FINE}, which the default
+     * JUL configuration suppresses, so attach a dedicated console handler at that
+     * level rather than relying on the (INFO-level) root handler.
+     */
+    private static void enableVerboseLogging() {
+        Logger sdkLogger = Logger.getLogger("com.bilt.pos.nexo.client");
+        sdkLogger.setLevel(Level.FINE);
+        ConsoleHandler handler = new ConsoleHandler();
+        handler.setLevel(Level.FINE);
+        sdkLogger.addHandler(handler);
+        sdkLogger.setUseParentHandlers(false);
+    }
+
     private static String requireArg(String[] args, int index, String flag) {
         if (index >= args.length) {
             LOG.severe("Missing value for " + flag);
@@ -680,6 +704,7 @@ public final class Main {
                 "Options:",
                 "  --type <payment|gift-card|refund|diagnosis|display-standby|display-receipt|confirmation|signature|reversal|transaction-status|abort>",
                 "  --no-encryption              Disable message encryption",
+                "  --verbose                    Log when requests are encrypted / responses decrypted",
                 "  --passphrase <value>         Encryption passphrase",
                 "  --key-id <value>             Encryption key identifier",
                 "  --key-version <number>       Encryption key version (default: 0)",

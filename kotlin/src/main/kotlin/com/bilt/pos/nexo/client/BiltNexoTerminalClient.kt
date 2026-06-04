@@ -30,6 +30,7 @@ import java.security.NoSuchAlgorithmException
 import java.security.cert.X509Certificate
 import java.time.Duration
 import java.util.concurrent.TimeUnit
+import java.util.logging.Logger
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 
@@ -82,6 +83,8 @@ class BiltNexoTerminalClient(
         encodeDefaults = false
     }
 
+    private val logger = Logger.getLogger(BiltNexoTerminalClient::class.java.name)
+
     private val encryptor: MessageEncryptor? = securityKey?.let { MessageEncryptor(it) }
 
     private val httpClient: OkHttpClient = httpClient ?: buildDefaultHttpClient(
@@ -111,6 +114,7 @@ class BiltNexoTerminalClient(
 
         try {
             val jsonBody = if (encryptor != null) {
+                logger.fine("Encrypting Sale to POI request payload")
                 val requestContent = json.encodeToString(
                     SaleToPOIRequest.serializer(), saleToPOIRequest
                 )
@@ -187,6 +191,7 @@ class BiltNexoTerminalClient(
                     "Received encrypted response but no SecurityKey is configured"
                 )
             }
+            logger.fine("Decrypting Sale to POI response payload")
             // Extract raw header bytes from the parsed JSON tree to preserve
             // wire field ordering for HMAC verification. Re-serializing the
             // deserialized MessageHeader could produce different byte output

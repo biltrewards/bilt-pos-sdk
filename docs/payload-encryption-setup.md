@@ -5,7 +5,7 @@
 
 This guide shows how to provision the encryption passphrase and attach a `SecurityKey` to the client. For the broader security model — TLS, payload encryption, and card data handling — see [Terminal Security](./terminal-security.md).
 
-The terminal and the Sale System must be provisioned with the **same passphrase**. The passphrase is used to derive AES-256 and HMAC-SHA256 keys via PBKDF2, which encrypt and authenticate every Nexo message exchanged with the terminal.
+The terminal and the Sale System must be provisioned with the **same passphrase**. The passphrase is used to derive a key-encryption key (KEK) and an HMAC-SHA256 key via PBKDF2. Each Nexo message is then encrypted with a fresh per-message AES-256 session key — wrapped by the KEK using AES Key Wrap (RFC 3394) — and authenticated with HMAC-SHA256, packaged as CMS `EnvelopedData` and a `SecurityTrailer`.
 
 ---
 
