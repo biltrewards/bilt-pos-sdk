@@ -99,7 +99,7 @@ class BiltNexoTerminalClient(
     securityKey: SecurityKey? = null,
     connectTimeout: Duration = DEFAULT_CONNECT_TIMEOUT,
     readTimeout: Duration = DEFAULT_READ_TIMEOUT,
-    pingInterval: Duration = DEFAULT_PING_INTERVAL,
+    pingInterval: Duration? = null,
     recoverOnNetworkError: Boolean = true,
     trustAllCertificates: Boolean = false,
     trustedCertificates: List<X509Certificate> = emptyList(),
@@ -155,16 +155,14 @@ class BiltNexoTerminalClient(
     private val encryptor: MessageEncryptor? = securityKey?.let { MessageEncryptor(it) }
 
     private val httpClient: OkHttpClient = run {
-        // Enabling recovery also turns on a keep-alive ping (unless one was set),
-        // so a dropped connection is detected quickly instead of waiting out the
-        // read timeout. A false-positive disconnect is harmless: the re-sent
-        // request is deduped by the terminal.
-        val effectivePingInterval =
-            if (recoverOnNetworkError && pingInterval == DEFAULT_PING_INTERVAL) {
-                DEFAULT_RECOVERY_PING_INTERVAL
-            } else {
-                pingInterval
-            }
+        // A null pingInterval means "not specified": enabling recovery turns on a
+        // keep-alive ping (so a dropped connection is detected quickly instead of
+        // waiting out the read timeout), otherwise pinging stays disabled. An
+        // explicit value is always honored — including Duration.ZERO to disable
+        // pinging while recovery is on. A false-positive disconnect is harmless:
+        // the re-sent request is deduped by the terminal.
+        val effectivePingInterval = pingInterval
+            ?: if (recoverOnNetworkError) DEFAULT_RECOVERY_PING_INTERVAL else DEFAULT_PING_INTERVAL
         val base = httpClient ?: buildDefaultHttpClient(
             connectTimeout, readTimeout, effectivePingInterval, trustAllCertificates, trustedCertificates, hostnamePattern
         )
