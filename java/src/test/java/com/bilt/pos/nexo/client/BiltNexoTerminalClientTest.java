@@ -166,10 +166,17 @@ class BiltNexoTerminalClientTest {
 
     @Test
     void requestThrowsOnConnectionFailure() throws Exception {
+        // Recovery is on by default and would retry a connection failure for the
+        // whole read-timeout budget; disable it so this exercises the immediate
+        // transport-error path.
+        BiltNexoTerminalClient noRecovery = BiltNexoTerminalClient.builder()
+                .endpoint(server.url("/nexo").toString())
+                .disableRecoveryOnNetworkError()
+                .build();
         server.shutdown();
 
         BiltNexoClientException ex = assertThrows(BiltNexoClientException.class, () ->
-                client.request(NexoTerminalAPI.builder()
+                noRecovery.request(NexoTerminalAPI.builder()
                         .saleToPOIRequest(SaleToPOIRequest.builder()
                                 .messageHeader(MessageHeader.builder().build())
                                 .build())

@@ -20,6 +20,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import okhttp3.Call
+import okhttp3.Connection
+import okhttp3.EventListener
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -36,6 +39,7 @@ import java.security.cert.X509Certificate
 import java.time.Duration
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.logging.Level
 import java.util.logging.Logger
 import javax.naming.ldap.LdapName
 import javax.net.ssl.HostnameVerifier
@@ -95,6 +99,8 @@ class BiltNexoTerminalClient(
     securityKey: SecurityKey? = null,
     connectTimeout: Duration = DEFAULT_CONNECT_TIMEOUT,
     readTimeout: Duration = DEFAULT_READ_TIMEOUT,
+    pingInterval: Duration = DEFAULT_PING_INTERVAL,
+    recoverOnNetworkError: Boolean = true,
     trustAllCertificates: Boolean = false,
     trustedCertificates: List<X509Certificate> = emptyList(),
     expectedHostnamePattern: String? = null,
@@ -148,9 +154,28 @@ class BiltNexoTerminalClient(
 
     private val encryptor: MessageEncryptor? = securityKey?.let { MessageEncryptor(it) }
 
-    private val httpClient: OkHttpClient = httpClient ?: buildDefaultHttpClient(
-        connectTimeout, readTimeout, trustAllCertificates, trustedCertificates, hostnamePattern
-    )
+    private val httpClient: OkHttpClient = run {
+        // Enabling recovery also turns on a keep-alive ping (unless one was set),
+        // so a dropped connection is detected quickly instead of waiting out the
+        // read timeout. A false-positive disconnect is harmless: the re-sent
+        // request is deduped by the terminal.
+        val effectivePingInterval =
+            if (recoverOnNetworkError && pingInterval == DEFAULT_PING_INTERVAL) {
+                DEFAULT_RECOVERY_PING_INTERVAL
+            } else {
+                pingInterval
+            }
+        val base = httpClient ?: buildDefaultHttpClient(
+            connectTimeout, readTimeout, effectivePingInterval, trustAllCertificates, trustedCertificates, hostnamePattern
+        )
+        if (recoverOnNetworkError) {
+            base.newBuilder()
+                .addInterceptor(NetworkErrorRecoveryInterceptor())
+                .build()
+        } else {
+            base
+        }
+    }
 
     /**
      * Returns `true` if this client encrypts requests.
@@ -289,10 +314,28 @@ class BiltNexoTerminalClient(
     )
 
     companion object {
+        private val LOG = Logger.getLogger(BiltNexoTerminalClient::class.java.name)
+
         private const val DEFAULT_PATH = "/nexo"
         private const val DEFAULT_PORT = 8443
         private val DEFAULT_CONNECT_TIMEOUT: Duration = Duration.ofSeconds(10)
         private val DEFAULT_READ_TIMEOUT: Duration = Duration.ofSeconds(120)
+
+        /** Keep-alive ping applied when recovery is enabled and no ping was set. */
+        private val DEFAULT_RECOVERY_PING_INTERVAL: Duration = Duration.ofSeconds(5)
+
+        /**
+         * Default keep-alive ping interval: [Duration.ZERO] disables pinging.
+         *
+         * When set to a positive value, the client sends HTTP/2 PING frames at
+         * that interval while a connection is held open, to detect a dead
+         * terminal during long waits (e.g. cardholder interaction) instead of
+         * blocking until the read timeout elapses. Pings only take effect on an
+         * HTTP/2 connection (negotiated via ALPN); on HTTP/1.1 the interval is
+         * ignored. If a ping is not acknowledged within the interval, the
+         * in-flight request fails with a [BiltNexoClientException].
+         */
+        private val DEFAULT_PING_INTERVAL: Duration = Duration.ZERO
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
 
         /**
@@ -362,6 +405,7 @@ class BiltNexoTerminalClient(
         private fun buildDefaultHttpClient(
             connectTimeout: Duration,
             readTimeout: Duration,
+            pingInterval: Duration,
             trustAllCertificates: Boolean,
             trustedCertificates: List<X509Certificate>,
             hostnamePattern: String?
@@ -369,6 +413,8 @@ class BiltNexoTerminalClient(
             val builder = OkHttpClient.Builder()
                 .connectTimeout(connectTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 .readTimeout(readTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                .pingInterval(pingInterval.toMillis(), TimeUnit.MILLISECONDS)
+                .eventListener(protocolLoggingEventListener())
 
             if (trustAllCertificates) {
                 val trustManager = object : X509TrustManager {
@@ -390,6 +436,24 @@ class BiltNexoTerminalClient(
             }
 
             return builder.build()
+        }
+
+        /**
+         * An [EventListener] that logs the negotiated application protocol
+         * (HTTP/2 vs HTTP/1.1) once a connection is acquired. The protocol is
+         * chosen by the terminal via ALPN during the TLS handshake; this makes
+         * the outcome visible at `FINE` (e.g. under the CLI's `--verbose` flag)
+         * without changing the request/response API.
+         */
+        private fun protocolLoggingEventListener(): EventListener = object : EventListener() {
+            override fun connectionAcquired(call: Call, connection: Connection) {
+                if (LOG.isLoggable(Level.FINE)) {
+                    LOG.fine(
+                        "Terminal connection negotiated ${connection.protocol()} " +
+                            "with ${connection.socket().inetAddress}"
+                    )
+                }
+            }
         }
 
         /**

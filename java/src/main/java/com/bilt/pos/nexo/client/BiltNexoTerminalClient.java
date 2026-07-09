@@ -22,6 +22,9 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import okhttp3.Call;
+import okhttp3.Connection;
+import okhttp3.EventListener;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -59,6 +62,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -126,6 +130,8 @@ public final class BiltNexoTerminalClient {
     private static final int DEFAULT_PORT = 8443;
     private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration DEFAULT_READ_TIMEOUT = Duration.ofSeconds(120);
+    private static final Duration DEFAULT_PING_INTERVAL = Duration.ZERO;
+    private static final Duration DEFAULT_RECOVERY_PING_INTERVAL = Duration.ofSeconds(5);
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json");
 
     private final String endpoint;
@@ -138,9 +144,14 @@ public final class BiltNexoTerminalClient {
         this.objectMapper = builder.objectMapper != null
                 ? builder.objectMapper
                 : createDefaultObjectMapper();
-        this.httpClient = builder.httpClient != null
+        OkHttpClient baseHttpClient = builder.httpClient != null
                 ? builder.httpClient
                 : createDefaultHttpClient(builder);
+        this.httpClient = builder.recoverOnNetworkError
+                ? baseHttpClient.newBuilder()
+                        .addInterceptor(new NetworkErrorRecoveryInterceptor())
+                        .build()
+                : baseHttpClient;
         this.encryptor = builder.securityKey != null
                 ? new MessageEncryptor(builder.securityKey)
                 : null;
@@ -331,6 +342,9 @@ public final class BiltNexoTerminalClient {
         private String endpoint;
         private Duration connectTimeout = DEFAULT_CONNECT_TIMEOUT;
         private Duration readTimeout = DEFAULT_READ_TIMEOUT;
+        private Duration pingInterval = DEFAULT_PING_INTERVAL;
+        private boolean pingIntervalSet;
+        private boolean recoverOnNetworkError = true;
         private OkHttpClient httpClient;
         private ObjectMapper objectMapper;
         private boolean trustAllCertificates;
@@ -364,6 +378,59 @@ public final class BiltNexoTerminalClient {
          */
         public Builder readTimeout(Duration readTimeout) {
             this.readTimeout = readTimeout;
+            return this;
+        }
+
+        /**
+         * Set the interval at which the client sends keep-alive pings to the
+         * terminal while a connection is held open. Use this to detect a dead
+         * terminal during long waits (e.g. cardholder interaction) rather than
+         * blocking until the read timeout elapses.
+         *
+         * <p>Pings are HTTP/2 PING frames, so this only has an effect when the
+         * connection is negotiated as HTTP/2 via ALPN; on an HTTP/1.1 connection
+         * the interval is ignored. {@link Duration#ZERO} (the default) disables
+         * pinging.</p>
+         *
+         * <p>If the terminal does not acknowledge a ping within the interval, the
+         * connection is considered failed and the in-flight request fails with an
+         * {@code IOException} (surfaced as a {@link BiltNexoClientException}).</p>
+         *
+         * @param pingInterval the ping interval, e.g. {@code Duration.ofSeconds(1)};
+         *                     {@code Duration.ZERO} disables pinging
+         */
+        public Builder pingInterval(Duration pingInterval) {
+            this.pingInterval = pingInterval;
+            this.pingIntervalSet = true;
+            return this;
+        }
+
+        /**
+         * Disable recovery of a request across transient network failures.
+         *
+         * <p>Recovery is <strong>on by default</strong>. While on, each request is
+         * tagged with a stable {@code X-Bilt-Request-Id} correlation UUID; if the
+         * connection is torn down by a transient network error while the request is
+         * in flight, the client re-sends the identical request (same id) with
+         * backoff until it obtains the response or the operation (read) timeout
+         * elapses. The terminal keys execution on the id and treats an already-seen
+         * id as a recovery rather than a new operation, so the underlying operation
+         * runs at most once no matter how many times the client re-attempts. (Only
+         * transient failures are retried; deterministic ones such as a TLS trust
+         * failure are surfaced immediately.)</p>
+         *
+         * <p><strong>Recovery requires terminal-side support for the correlation
+         * protocol</strong> (see {@code docs/network-error-recovery.md}). Against a
+         * terminal that does not implement it, a re-send is treated as a new
+         * operation, which for a long-running request risks executing it more than
+         * once — call this to turn recovery off in that case.</p>
+         *
+         * <p>Turning recovery off also removes the keep-alive
+         * {@link #pingInterval(Duration)} that recovery otherwise enables (unless a
+         * ping interval was set explicitly).</p>
+         */
+        public Builder disableRecoveryOnNetworkError() {
+            this.recoverOnNetworkError = false;
             return this;
         }
 
@@ -587,6 +654,13 @@ public final class BiltNexoTerminalClient {
                         + "environment(BiltTerminalEnvironment.PRODUCTION)), or use "
                         + "trustAllCertificates() for testing.");
             }
+            if (recoverOnNetworkError && !pingIntervalSet) {
+                // Recovery reacts to detected network errors; a keep-alive ping
+                // surfaces a dead connection quickly (especially on HTTP/2) instead
+                // of waiting out the read timeout. A false-positive disconnect is
+                // harmless because the re-sent request is deduped by the terminal.
+                pingInterval = DEFAULT_RECOVERY_PING_INTERVAL;
+            }
             if (hostnamePattern != null && trustedCertificates.isEmpty() && !trustAllCertificates) {
                 // A hostname pattern only checks identity; it does not validate the
                 // chain. Without a trust anchor the chain is validated against the
@@ -616,7 +690,9 @@ public final class BiltNexoTerminalClient {
     private static OkHttpClient createDefaultHttpClient(Builder builder) {
         OkHttpClient.Builder httpBuilder = new OkHttpClient.Builder()
                 .connectTimeout(builder.connectTimeout.toMillis(), TimeUnit.MILLISECONDS)
-                .readTimeout(builder.readTimeout.toMillis(), TimeUnit.MILLISECONDS);
+                .readTimeout(builder.readTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                .pingInterval(builder.pingInterval.toMillis(), TimeUnit.MILLISECONDS)
+                .eventListener(protocolLoggingEventListener());
 
         if (builder.trustAllCertificates) {
             X509TrustManager trustManager = createTrustAllManager();
@@ -634,6 +710,25 @@ public final class BiltNexoTerminalClient {
         }
 
         return httpBuilder.build();
+    }
+
+    /**
+     * Build an {@link EventListener} that logs the negotiated application
+     * protocol (HTTP/2 vs HTTP/1.1) once a connection is acquired. The protocol
+     * is chosen by the terminal via ALPN during the TLS handshake; this makes
+     * the outcome visible at {@code FINE} (e.g. under the CLI's {@code --verbose}
+     * flag) without changing the request/response API.
+     */
+    private static EventListener protocolLoggingEventListener() {
+        return new EventListener() {
+            @Override
+            public void connectionAcquired(Call call, Connection connection) {
+                if (LOG.isLoggable(Level.FINE)) {
+                    LOG.fine("Terminal connection negotiated " + connection.protocol()
+                            + " with " + connection.socket().getInetAddress());
+                }
+            }
+        };
     }
 
     /**
