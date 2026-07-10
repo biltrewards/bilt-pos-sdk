@@ -8,7 +8,7 @@
   },
   "devDependencies": {
     "@openapi-contrib/json-schema-to-openapi-schema": "^4.3.1",
-    "@redocly/cli": "^2.20.4",
+    "@redocly/cli": "^2.38.0",
     "js-yaml": "^4.1.1",
     "quicktype": "23.0.170"
   }
