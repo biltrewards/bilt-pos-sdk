@@ -150,10 +150,17 @@ class BiltNexoTerminalClientTest {
 
     @Test
     fun `request throws on connection failure`() {
+        // Recovery is on by default and would retry a connection failure for the
+        // whole read-timeout budget; disable it so this exercises the immediate
+        // transport-error path.
+        val noRecovery = BiltNexoTerminalClient(
+            endpoint = server.url("/nexo").toString(),
+            recoverOnNetworkError = false
+        )
         server.shutdown()
 
         val ex = assertThrows<BiltNexoClientException> {
-            client.request(paymentRequest())
+            noRecovery.request(paymentRequest())
         }
 
         ex.message!! shouldContain "Failed to communicate"

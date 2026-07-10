@@ -116,6 +116,8 @@
       url: /refusal-reasons.html
     - name: Timeout Handling
       url: /timeout-handling.html
+    - name: Network Error Recovery
+      url: /network-error-recovery.html
     - name: Auth Response
       url: /auth-response.html
     - name: Payment Brands
