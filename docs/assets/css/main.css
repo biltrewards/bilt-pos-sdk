@@ -614,6 +614,77 @@ pre code {
   font-size: 0.85rem;
 }
 
+/* --- Code Tabs --- */
+.code-tabs {
+  margin: 1.5rem 0;
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+  overflow: hidden;
+}
+
+.code-tabs-nav {
+  display: flex;
+  gap: 0;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--code-border);
+}
+
+.code-tab-button {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.65rem 1.1rem;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.code-tab-button:hover {
+  color: var(--text-secondary);
+  background: var(--bg-surface-hover);
+}
+
+.code-tab-button.active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+}
+
+.code-tab-panel {
+  display: none;
+}
+
+.code-tab-panel.active {
+  display: block;
+}
+
+.code-tabs .code-tab-panel > pre {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--code-bg);
+}
+
+.code-tabs .code-tab-panel > div.highlighter-rouge,
+.code-tabs .code-tab-panel > figure.highlight {
+  margin: 0;
+}
+
+.code-tabs .code-tab-panel > div.highlighter-rouge pre,
+.code-tabs .code-tab-panel > figure.highlight pre {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+
+.code-tabs .code-tab-panel > p {
+  margin: 0.75rem 1.25rem 1rem;
+}
+
 /* --- Tables --- */
 table {
   width: 100%;

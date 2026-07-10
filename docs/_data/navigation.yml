@@ -28,6 +28,25 @@
     - name: Card Acquisition
       url: /card-acquisition-request.html
 
+- title: Loyalty
+  items:
+    - name: Identify Member
+      url: /loyalty-identify-member.html
+    - name: Award Points
+      url: /loyalty-award-points.html
+    - name: Redeem Rewards
+      url: /loyalty-redeem-rewards.html
+    - name: Reverse Redemption
+      url: /loyalty-reverse-redemption.html
+    - name: Reverse Award
+      url: /loyalty-reverse-award.html
+    - name: Balance Inquiry & Lookup
+      url: /loyalty-balance-inquiry.html
+    - name: Enroll Member
+      url: /loyalty-enroll-member.html
+    - name: Member Status
+      url: /loyalty-member-status.html
+
 - title: Stored Value Cards
   items:
     - name: Activate
@@ -75,8 +94,19 @@
       url: /input-get-menu-entry.html
     - name: Signature
       url: /input-signature.html
+    - name: Amount Confirmation
+      url: /input-amount-confirmation.html
     - name: Text String
       url: /input-text-string.html
+
+- title: Security
+  items:
+    - name: Overview
+      url: /terminal-security.html
+    - name: Payload Encryption Setup
+      url: /payload-encryption-setup.html
+    - name: Certificate Validation Setup
+      url: /certificate-validation-setup.html
 
 - title: Reference
   items:
@@ -86,6 +116,8 @@
       url: /refusal-reasons.html
     - name: Timeout Handling
       url: /timeout-handling.html
+    - name: Network Error Recovery
+      url: /network-error-recovery.html
     - name: Auth Response
       url: /auth-response.html
     - name: Payment Brands

@@ -20,6 +20,7 @@ import com.bilt.pos.display.LineItemsType;
 import com.bilt.pos.display.ReceiptType;
 import com.bilt.pos.display.TaxType;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.client.BiltTerminalEnvironment;
 import com.bilt.pos.nexo.model.AbortRequest;
 import com.bilt.pos.nexo.model.AmountsReq;
 import com.bilt.pos.nexo.model.DeviceEnum;
@@ -61,15 +62,29 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import jakarta.xml.bind.JAXBException;
 
 import java.math.BigDecimal;
+import java.nio.file.Path;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Handler;
 import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
 public final class Main {
 
     private static final Logger LOG = Logger.getLogger(Main.class.getName());
+
+    /**
+     * Strong reference to OkHttp's HTTP/2 frame logger, retained so JUL's
+     * (weak-referencing) LogManager cannot garbage-collect the configuration we
+     * install in {@link #enablePongLogging()} before OkHttp lazily creates the
+     * logger. See that method for details.
+     */
+    @SuppressWarnings("unused")
+    private static Logger http2FrameLogger;
 
     private Main() {}
 
@@ -83,6 +98,7 @@ public final class Main {
         String ip = args[0];
         String type = "payment";
         boolean encryption = true;
+        boolean verbose = false;
         String passphrase = null;
         String keyId = null;
         int keyVersion = 0;
@@ -94,6 +110,10 @@ public final class Main {
         String prompt = null;
         double amount = 2.50;
         String currency = "USD";
+        String cacert = null;
+        String hostnamePattern = null;
+        Double pingIntervalSeconds = null;
+        boolean recoverOnNetworkError = true;
 
         for (int i = 1; i < args.length; i++) {
             switch (args[i]) {
@@ -102,6 +122,9 @@ public final class Main {
                     break;
                 case "--no-encryption":
                     encryption = false;
+                    break;
+                case "--verbose":
+                    verbose = true;
                     break;
                 case "--passphrase":
                     passphrase = requireArg(args, ++i, "--passphrase");
@@ -136,6 +159,35 @@ public final class Main {
                 case "--prompt":
                     prompt = requireArg(args, ++i, "--prompt");
                     break;
+                case "--cacert":
+                    cacert = requireArg(args, ++i, "--cacert");
+                    break;
+                case "--hostname-pattern":
+                    hostnamePattern = requireArg(args, ++i, "--hostname-pattern");
+                    break;
+                case "--ping-interval":
+                    pingIntervalSeconds = Double.parseDouble(requireArg(args, ++i, "--ping-interval"));
+                    break;
+                case "--no-recover-on-network-error":
+                    recoverOnNetworkError = false;
+                    break;
+                case "--environment": {
+                    String env = requireArg(args, ++i, "--environment");
+                    switch (env) {
+                        case "prod":
+                        case "production":
+                            hostnamePattern = BiltTerminalEnvironment.PRODUCTION.hostnamePattern();
+                            break;
+                        case "staging":
+                            hostnamePattern = BiltTerminalEnvironment.STAGING.hostnamePattern();
+                            break;
+                        default:
+                            LOG.severe("Unknown environment: " + env + ". Supported: prod, staging");
+                            System.exit(1);
+                            return;
+                    }
+                    break;
+                }
                 default:
                     LOG.severe("Unknown option: " + args[i]);
                     printUsage();
@@ -150,9 +202,14 @@ public final class Main {
             return;
         }
 
+        if (verbose) {
+            enableVerboseLogging();
+        }
+
         try {
             run(ip, type, encryption, passphrase, keyId, keyVersion, amount, currency, abortServiceID,
-                    originalServiceID, originalTimestamp, reversalReason, statusServiceID, prompt);
+                    originalServiceID, originalTimestamp, reversalReason, statusServiceID, prompt,
+                    cacert, hostnamePattern, pingIntervalSeconds, recoverOnNetworkError);
         } catch (Exception e) {
             LOG.log(Level.SEVERE, "Request failed", e);
             System.exit(1);
@@ -164,7 +221,8 @@ public final class Main {
                             double amount, String currency, String abortServiceID,
                             String originalServiceID, String originalTimestamp,
                             String reversalReason, String statusServiceID,
-                            String prompt) throws Exception {
+                            String prompt, String cacert, String hostnamePattern,
+                            Double pingIntervalSeconds, boolean recoverOnNetworkError) throws Exception {
 
         String endpoint = "https://" + ip + ":8443/nexo";
         String serviceID = UUID.randomUUID().toString().substring(0, 8);
@@ -172,8 +230,47 @@ public final class Main {
         LOG.info("Sending " + type + " request to " + endpoint + " (encryption=" + encryption + ")");
 
         BiltNexoTerminalClient.Builder clientBuilder = BiltNexoTerminalClient.builder()
-                .endpoint(endpoint)
-                .trustAllCertificates();
+                .endpoint(endpoint);
+
+        if (pingIntervalSeconds != null) {
+            Duration pingInterval = Duration.ofMillis((long) (pingIntervalSeconds * 1000));
+            LOG.info("Sending keep-alive pings every " + pingIntervalSeconds
+                    + "s (HTTP/2 only; ignored on HTTP/1.1)");
+            clientBuilder.pingInterval(pingInterval);
+        }
+
+        if (recoverOnNetworkError) {
+            LOG.info("Recovery on network error active (default; requires terminal-side support)");
+        } else {
+            LOG.info("Recovery on network error disabled");
+            clientBuilder.disableRecoveryOnNetworkError();
+        }
+
+        // --cacert and a hostname pattern (--hostname-pattern/--environment) must
+        // be provided together to verify TLS. If either is present without the
+        // other, fail rather than silently falling back to trustAllCertificates()
+        // — an operator who passes --environment must not believe verified TLS is
+        // active when it is not. With neither flag, all certificates are trusted
+        // (testing only).
+        if (cacert != null || hostnamePattern != null) {
+            if (cacert == null) {
+                throw new IllegalArgumentException(
+                        "--environment/--hostname-pattern requires --cacert so the certificate "
+                        + "chain can be verified against the Bilt CA. Without it, TLS verification "
+                        + "would be disabled despite the hostname pattern.");
+            }
+            if (hostnamePattern == null) {
+                throw new IllegalArgumentException(
+                        "--cacert requires --hostname-pattern or --environment so the terminal's "
+                        + "certificate hostname (a synthetic SAN) is verified instead of the IP.");
+            }
+            LOG.info("Verifying TLS against CA certificate: " + cacert);
+            LOG.info("Expecting certificate hostname pattern: " + hostnamePattern);
+            clientBuilder.trustCertificate(Path.of(cacert))
+                    .expectedHostnamePattern(hostnamePattern);
+        } else {
+            clientBuilder.trustAllCertificates();
+        }
 
         if (encryption) {
             SecurityKey key = SecurityKey.builder()
@@ -665,6 +762,63 @@ public final class Main {
                 .build();
     }
 
+    /**
+     * Raise the SDK client logger to {@code FINE} so its encrypt/decrypt trace
+     * messages are printed. The SDK logs these at {@code FINE}, which the default
+     * JUL configuration suppresses, so attach a dedicated console handler at that
+     * level rather than relying on the (INFO-level) root handler.
+     */
+    private static void enableVerboseLogging() {
+        Logger sdkLogger = Logger.getLogger("com.bilt.pos.nexo.client");
+        sdkLogger.setLevel(Level.FINE);
+        ConsoleHandler handler = new ConsoleHandler();
+        handler.setLevel(Level.FINE);
+        sdkLogger.addHandler(handler);
+        sdkLogger.setUseParentHandlers(false);
+
+        enablePongLogging();
+    }
+
+    /**
+     * Print a message whenever the terminal answers a keep-alive ping.
+     *
+     * <p>OkHttp exposes no public callback for HTTP/2 pongs, so the only place a
+     * received pong is observable is its internal frame logger
+     * ({@code okhttp3.internal.http2.Http2}), which logs every frame at
+     * {@code FINE} in the form {@code "<< 0x%08x %5d %-13s %s"}. We raise that
+     * logger to {@code FINE} but suppress its own output
+     * ({@code setUseParentHandlers(false)}) and attach a handler that forwards
+     * only inbound {@code PING} frames carrying the {@code ACK} flag — the pong
+     * the terminal sends in reply to our ping. Our outbound ping, a
+     * server-initiated ping request, and our ACK reply to it are all excluded,
+     * so exactly the pongs answering our keep-alive pings are printed.</p>
+     */
+    private static void enablePongLogging() {
+        // Pin the logger in a static field. java.util.logging's LogManager holds
+        // loggers only weakly, and OkHttp does not create this logger until it
+        // loads Http2Reader during the h2 handshake — after this method returns.
+        // Without a strong reference the logger we configure here can be
+        // garbage-collected first, so OkHttp would then create a fresh one at the
+        // default level, discarding our FINE level and handler and silently
+        // dropping the pong output.
+        http2FrameLogger = Logger.getLogger("okhttp3.internal.http2.Http2");
+        http2FrameLogger.setLevel(Level.FINE);
+        http2FrameLogger.setUseParentHandlers(false);
+        Handler pongHandler = new Handler() {
+            @Override public void publish(LogRecord record) {
+                String message = record.getMessage();
+                if (message != null && message.startsWith("<<")
+                        && message.contains("PING") && message.contains("ACK")) {
+                    LOG.info("Pong received from terminal");
+                }
+            }
+            @Override public void flush() {}
+            @Override public void close() {}
+        };
+        pongHandler.setLevel(Level.FINE);
+        http2FrameLogger.addHandler(pongHandler);
+    }
+
     private static String requireArg(String[] args, int index, String flag) {
         if (index >= args.length) {
             LOG.severe("Missing value for " + flag);
@@ -680,6 +834,16 @@ public final class Main {
                 "Options:",
                 "  --type <payment|gift-card|refund|diagnosis|display-standby|display-receipt|confirmation|signature|reversal|transaction-status|abort>",
                 "  --no-encryption              Disable message encryption",
+                "  --cacert <path>              Verify TLS against this CA/public cert file (PEM or DER).",
+                "                               When omitted, all certificates are trusted (testing only).",
+                "  --hostname-pattern <pattern> Expected cert hostname pattern, e.g. '*.pos.staging.bilt.dev'",
+                "                               (requires --cacert; matches the cert SAN, not the IP)",
+                "  --environment <prod|staging> Shorthand for the standard --hostname-pattern of that env",
+                "  --verbose                    Log encryption/decryption traces and the negotiated HTTP protocol (HTTP/2 vs HTTP/1.1)",
+                "  --ping-interval <seconds>    Send keep-alive pings at this interval while connected, e.g. '1'",
+                "                               (HTTP/2 only; ignored on HTTP/1.1). Default: disabled",
+                "  --no-recover-on-network-error  Disable network-error recovery (on by default: re-sends the",
+                "                               request under a correlation id after a transient drop; needs terminal support)",
                 "  --passphrase <value>         Encryption passphrase",
                 "  --key-id <value>             Encryption key identifier",
                 "  --key-version <number>       Encryption key version (default: 0)",

@@ -75,6 +75,8 @@ BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
         .build();
 ```
 
+`trustAllCertificates()` is for development only. In production, validate the terminal's TLS certificate against the Bilt CA — see [Configuring Certificate Validation](docs/certificate-validation-setup.md).
+
 ## Build
 
 ```bash

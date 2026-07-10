@@ -112,7 +112,7 @@ When the full amount is authorized, your integration receives:
 - **`POIData.POITransactionID.TransactionID`** — the transaction identifier.
 - **`PaymentResult.AmountsResp.AuthorizedAmount`** — the amount authorized, equal to the requested amount.
 - **`PaymentResult.AmountsResp.Currency`** — the currency code.
-- **`PaymentResponse.Response.AdditionalResponse`** *(optional)* — URL-encoded string containing `currentBalance`, the remaining balance on the gift card after the transaction (e.g. `currentBalance=65.00`). Only included when the stored value provider returns balance information.
+- **`PaymentResponse.Response.AdditionalResponse`** *(optional)* — URL-encoded string containing `currentBalance`, the remaining balance on the gift card after the transaction (e.g. `currentBalance=65.00`). Only included when the stored value provider returns balance information. May also include `accountType` if returned by the payment processor — see [AdditionalResponse fields](./make-payment.md#additionalresponse-fields) for details.
 - **`PaymentReceipt`** — receipt data in XML format. For gift card transactions, the `receiptData` section may include `availableBalance` with the remaining card balance. See [Receipt format](./receipt-format.md) for details.
 
   Example response:
@@ -160,7 +160,7 @@ When the gift card balance is less than the requested amount, the provider may a
 
 - **`PaymentResponse.Response.Result`** — `Partial`.
 - **`PaymentResult.AmountsResp.AuthorizedAmount`** — the amount actually authorized (the card's available balance).
-- **`PaymentResponse.Response.AdditionalResponse`** *(optional)* — URL-encoded string containing `currentBalance`, the remaining balance on the gift card after the transaction (e.g. `currentBalance=0.00` when the card is fully depleted). Only included when the stored value provider returns balance information.
+- **`PaymentResponse.Response.AdditionalResponse`** *(optional)* — URL-encoded string containing `currentBalance` (the remaining balance, e.g. `currentBalance=0.00` when fully depleted) and `accountType`. See successful payment above for details.
 
 The remaining balance must be collected through another payment method — either a second gift card or a standard card payment.
 

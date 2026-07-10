@@ -97,6 +97,25 @@
     }
 
     restoreSidebarState();
+
+    // Code tabs: switch panels within each .code-tabs container
+    document.querySelectorAll('.code-tabs[data-tabs]').forEach(function(group) {
+      var buttons = group.querySelectorAll('.code-tab-button');
+      var panels = group.querySelectorAll('.code-tab-panel');
+      buttons.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var target = btn.getAttribute('data-tab');
+          buttons.forEach(function(b) {
+            var active = b.getAttribute('data-tab') === target;
+            b.classList.toggle('active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          panels.forEach(function(p) {
+            p.classList.toggle('active', p.getAttribute('data-tab-panel') === target);
+          });
+        });
+      });
+    });
   </script>
 </body>
 </html>
