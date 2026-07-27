@@ -472,6 +472,10 @@ class CheckoutSessionPaymentTest {
         PaymentFlow flow = session.pay()
                 .onPointsRedeemed(points -> {
                     session.abort();  // customer walked away
+                    // abort() defers to the payment thread while PAYING: the
+                    // state must not flip mid-run (that would race the
+                    // COMPLETED/ABORTED decision after orchestration returns)
+                    assertEquals(SessionState.PAYING, session.getState());
                     return points.getSuggestedTotal();
                 })
                 .onError(error -> {
