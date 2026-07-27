@@ -117,6 +117,13 @@ public final class InputManager {
                     .build();
         }
         InputData.Builder menuData = InputData.builder();
+        // for GetMenuEntry, MinLength/MaxLength bound how many entries the
+        // customer may select
+        if (options.isMultiSelect()) {
+            menuData.minLength(1L).maxLength((long) entries.size());
+        } else {
+            menuData.maxLength(1L);
+        }
         if (options.getTimeout() != null) {
             menuData.maxInputTime(options.getTimeout().getSeconds());
         }

@@ -149,18 +149,26 @@ class CheckoutSessionInputTest {
         assertEquals(3, sent.getInputRequest().getDisplayOutput().getMenuEntry().length);
         assertEquals("18%", sent.getInputRequest().getDisplayOutput()
                 .getMenuEntry()[1].getOutputText()[0].getText());
+        assertEquals(1L, sent.getInputRequest().getInputData().getMaxLength(),
+                "single-select limits the selection to one entry");
     }
 
     @Test
-    void menuEntryMultiSelectReturnsAllEntries() {
+    void menuEntryMultiSelectReturnsAllEntries() throws Exception {
         server.enqueue(new MockResponse().setBody(
                 inputResponse("\"InputCommand\":\"GetMenuEntry\",\"MenuEntryNumber\":[1,3]")));
 
         MenuSelection selection = session.requestMenuEntry("Pick",
-                List.of("A", "B", "C")).get();
+                List.of("A", "B", "C"),
+                com.bilt.pos.session.input.MenuOptions.builder().multiSelect(true).build()).get();
 
         assertEquals(List.of(0, 2), selection.getIndices());
         assertEquals(List.of("A", "C"), selection.getValues());
+
+        SaleToPOIRequest sent = recordedRequest();
+        assertEquals(1L, sent.getInputRequest().getInputData().getMinLength());
+        assertEquals(3L, sent.getInputRequest().getInputData().getMaxLength(),
+                "multi-select allows selecting up to every entry");
     }
 
     @Test
