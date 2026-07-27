@@ -154,6 +154,65 @@ class CheckoutSessionIdentityTest {
     }
 
     @Test
+    void reIdentifyWithoutMemberClearsThePreviousMember() {
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
+        session.identifyMember().execute();
+        assertNotNull(session.getMember());
+        assertEquals(SessionState.IDENTIFIED, session.getState());
+
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
+        session.identifyMember().execute();
+
+        assertNull(session.getMember(), "a NOT_FOUND re-identify must detach the old member");
+        assertEquals(SessionState.IDLE, session.getState());
+    }
+
+    @Test
+    void reIdentifySuspendedClearsMemberButKeepsActiveBasket() {
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
+        session.identifyMember().execute();
+        session.addItem(com.bilt.pos.session.basket.BasketItem.of("SKU-1", "Item", 1, "10.00"));
+
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotAllowed\"}}}}"));
+        session.identifyMember().execute();
+
+        assertNull(session.getMember());
+        assertEquals(SessionState.ACTIVE, session.getState());
+
+        // emptying the basket now returns to IDLE, not IDENTIFIED
+        session.removeItemBySku("SKU-1");
+        assertEquals(SessionState.IDLE, session.getState());
+    }
+
+    @Test
+    void cancelledReIdentifyKeepsThePreviousMember() {
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
+        session.identifyMember().execute();
+
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Cancel\"}}}}"));
+        session.identifyMember().execute();
+
+        assertNotNull(session.getMember(), "a dismissed prompt must not drop the identified member");
+        assertEquals("98234", session.getMember().getMemberId());
+        assertEquals(SessionState.IDENTIFIED, session.getState());
+    }
+
+    @Test
     void identifyMemberRealFailureGoesToErrorChannel() {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"

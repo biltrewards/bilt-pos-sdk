@@ -42,7 +42,7 @@ public final class SessionStateMachine {
 
     static {
         TRANSITIONS.put(IDLE, EnumSet.of(IDENTIFIED, ACTIVE, VOIDING, ABORTED));
-        TRANSITIONS.put(IDENTIFIED, EnumSet.of(ACTIVE, ABORTED));
+        TRANSITIONS.put(IDENTIFIED, EnumSet.of(ACTIVE, IDLE, ABORTED));
         TRANSITIONS.put(ACTIVE, EnumSet.of(PAYING, IDLE, IDENTIFIED, ABORTED));
         TRANSITIONS.put(PAYING, EnumSet.of(COMPLETED, FAILED, ABORTED));
         TRANSITIONS.put(COMPLETED, EnumSet.of(VOIDING));

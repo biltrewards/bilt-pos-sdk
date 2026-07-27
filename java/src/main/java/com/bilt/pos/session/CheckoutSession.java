@@ -393,18 +393,32 @@ public final class CheckoutSession {
         return lookup.get();
     }
 
+    /**
+     * Applies an identification outcome to the session. The latest completed
+     * attempt wins: {@code FOUND} attaches the member; {@code NOT_FOUND} and
+     * {@code SUSPENDED} are affirmative "no usable member" outcomes and
+     * detach any previously identified member (so a re-identify cannot leave
+     * loyalty running against a stale account). {@code CANCELLED} only means
+     * the customer dismissed this prompt — a prior identification stands.
+     */
     private IdentifyResult completeIdentify(IdentifyResult result) {
-        if (result.getStatus() == IdentifyStatus.FOUND) {
-            lock.lock();
-            try {
+        lock.lock();
+        try {
+            if (result.getStatus() == IdentifyStatus.FOUND) {
                 this.member = result;
                 this.memberIdentified = true;
                 if (stateMachine.current() == SessionState.IDLE) {
                     stateMachine.transitionTo(SessionState.IDENTIFIED);
                 }
-            } finally {
-                lock.unlock();
+            } else if (result.getStatus() != IdentifyStatus.CANCELLED) {
+                this.member = null;
+                this.memberIdentified = false;
+                if (stateMachine.current() == SessionState.IDENTIFIED) {
+                    stateMachine.transitionTo(SessionState.IDLE);
+                }
             }
+        } finally {
+            lock.unlock();
         }
         return result;
     }
