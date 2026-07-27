@@ -90,6 +90,12 @@ public final class IdentityManager {
         LoyaltyAccount account = body.getLoyaltyAccount() != null
                 && body.getLoyaltyAccount().length > 0 ? body.getLoyaltyAccount()[0] : null;
         if (account == null || account.getLoyaltyAccountID() == null) {
+            if (!options.isRequireMember()) {
+                // LoyaltyHandling=Proposed: a successful acquisition without a
+                // loyalty account means the customer declined the loyalty
+                // prompt — a guest outcome, not a protocol error
+                return IdentifyResult.withoutMember(IdentifyStatus.CANCELLED);
+            }
             throw Wire.missing("LoyaltyAccount");
         }
         return IdentifyResult.found(

@@ -127,6 +127,34 @@ class CheckoutSessionIdentityTest {
     }
 
     @Test
+    void proposedIdentifyDeclinedByCustomerIsAGuestOutcome() {
+        // LoyaltyHandling=Proposed: Success with no LoyaltyAccount means the
+        // customer declined the loyalty prompt
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"}}}}"));
+
+        IdentifyResult result = session.identifyMember(IdentifyOptions.builder()
+                .requireMember(false)
+                .build()).get();
+
+        assertEquals(IdentifyStatus.CANCELLED, result.getStatus());
+        assertNull(session.getMember());
+        assertEquals(SessionState.IDLE, session.getState());
+    }
+
+    @Test
+    void requiredIdentifySuccessWithoutAccountIsATerminalError() {
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"}}}}"));
+
+        SessionException e = assertThrows(SessionException.class,
+                () -> session.identifyMember().get());
+        assertEquals(SessionErrorCode.TERMINAL_ERROR, e.getError().getCode());
+    }
+
+    @Test
     void identifyMemberNotFoundIsSuccessWithoutMember() {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
