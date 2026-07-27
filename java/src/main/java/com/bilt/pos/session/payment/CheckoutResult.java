@@ -59,6 +59,8 @@ public final class CheckoutResult {
     private final Instant poiTransactionTimestamp;
     private final String storedValuePoiTransactionId;
     private final Instant storedValuePoiTransactionTimestamp;
+    private final String awardPoiTransactionId;
+    private final Instant awardPoiTransactionTimestamp;
 
     private final List<String> warnings;
 
@@ -85,6 +87,8 @@ public final class CheckoutResult {
         this.poiTransactionTimestamp = builder.poiTransactionTimestamp;
         this.storedValuePoiTransactionId = builder.storedValuePoiTransactionId;
         this.storedValuePoiTransactionTimestamp = builder.storedValuePoiTransactionTimestamp;
+        this.awardPoiTransactionId = builder.awardPoiTransactionId;
+        this.awardPoiTransactionTimestamp = builder.awardPoiTransactionTimestamp;
         this.warnings = Collections.unmodifiableList(new ArrayList<>(builder.warnings));
     }
 
@@ -192,6 +196,18 @@ public final class CheckoutResult {
         return storedValuePoiTransactionTimestamp;
     }
 
+    /**
+     * Terminal reference of the loyalty award, or {@code null} when no award
+     * was submitted. The award-reversal contract references this ID.
+     */
+    public String getAwardPoiTransactionId() {
+        return awardPoiTransactionId;
+    }
+
+    public Instant getAwardPoiTransactionTimestamp() {
+        return awardPoiTransactionTimestamp;
+    }
+
     /** Non-fatal problems, e.g. a failed loyalty award. */
     public List<String> getWarnings() {
         return warnings;
@@ -222,6 +238,8 @@ public final class CheckoutResult {
         private Instant poiTransactionTimestamp;
         private String storedValuePoiTransactionId;
         private Instant storedValuePoiTransactionTimestamp;
+        private String awardPoiTransactionId;
+        private Instant awardPoiTransactionTimestamp;
         private List<String> warnings = new ArrayList<>();
 
         private Builder() {
@@ -334,6 +352,16 @@ public final class CheckoutResult {
 
         public Builder storedValuePoiTransactionTimestamp(Instant storedValuePoiTransactionTimestamp) {
             this.storedValuePoiTransactionTimestamp = storedValuePoiTransactionTimestamp;
+            return this;
+        }
+
+        public Builder awardPoiTransactionId(String awardPoiTransactionId) {
+            this.awardPoiTransactionId = awardPoiTransactionId;
+            return this;
+        }
+
+        public Builder awardPoiTransactionTimestamp(Instant awardPoiTransactionTimestamp) {
+            this.awardPoiTransactionTimestamp = awardPoiTransactionTimestamp;
             return this;
         }
 

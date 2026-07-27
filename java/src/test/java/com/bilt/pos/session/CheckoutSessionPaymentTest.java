@@ -630,6 +630,8 @@ class CheckoutSessionPaymentTest {
                 "points credited by the award must be reversed with the tender");
         assertEquals("POI-AW-1", requests.get(4).getLoyaltyRequest().getLoyaltyTransaction()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals("98234", requests.get(4).getLoyaltyRequest().getLoyaltyData()[0]
+                .getLoyaltyAccountID().getLoyaltyID());
         assertEquals("POI-PAY-1", requests.get(5).getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
         assertEquals("RedemptionRefund", requests.get(6).getLoyaltyRequest()
@@ -766,6 +768,32 @@ class CheckoutSessionPaymentTest {
         assertTrue(e.getError().getMessage().contains("POI-GC-1 was not"));
         assertEquals(SessionState.COMPLETED, session.getState(),
                 "the void failed; the session returns to its pre-void state");
+    }
+
+    @Test
+    void voidAfterLoyaltyCheckoutReversesTheAwardByItsOwnReference() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));  // POI-AW-1
+        session.pay(PaymentOptions.builder()
+                .disableRebates(true).disablePoints(true).build()).execute();
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        session.voidTransaction().execute();
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        SaleToPOIRequest awardRefund = requests.get(1);
+        assertEquals("AwardRefund", awardRefund.getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("POI-AW-1", awardRefund.getLoyaltyRequest().getLoyaltyTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID(),
+                "the reversal must reference the award, not the payment");
+        assertEquals("98234", awardRefund.getLoyaltyRequest().getLoyaltyData()[0]
+                .getLoyaltyAccountID().getLoyaltyID(),
+                "the reversal must carry the member's LoyaltyData");
     }
 
     @Test

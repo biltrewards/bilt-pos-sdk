@@ -319,7 +319,7 @@ public final class PaymentOrchestrator {
         commit(committed, TransactionStep.REBATE, saleTxnId, body.getPoiData(),
                 totalRebate.signum() > 0
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REBATE_REFUND,
-                                poiRef(body.getPoiData()))
+                                poiRef(body.getPoiData()), request.member.getMemberId())
                         : null);
 
         RebateOutcome outcome = new RebateOutcome();
@@ -366,7 +366,7 @@ public final class PaymentOrchestrator {
         commit(committed, TransactionStep.POINTS, saleTxnId, body.getPoiData(),
                 monetaryValue.signum() > 0
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
-                                poiRef(body.getPoiData()))
+                                poiRef(body.getPoiData()), request.member.getMemberId())
                         : null);
 
         return new PointRedemptionResult(pointsUsed, monetaryValue, currentTotal,
@@ -525,8 +525,15 @@ public final class PaymentOrchestrator {
             TransactionIdentificationType awardPoiTxn = poiRef(body.getPoiData());
             commit(committed, TransactionStep.AWARD, saleTxnId, body.getPoiData(),
                     awardPoiTxn != null
-                            ? loyaltyRollback(LoyaltyTransactionTypeEnum.AWARD_REFUND, awardPoiTxn)
+                            ? loyaltyRollback(LoyaltyTransactionTypeEnum.AWARD_REFUND,
+                                    awardPoiTxn, request.member.getMemberId())
                             : null);
+            if (awardPoiTxn != null) {
+                // kept on the result so a later void/refund can reverse the
+                // award by its own reference, per the reverse-award contract
+                result.awardPoiTransactionId(awardPoiTxn.getTransactionID());
+                result.awardPoiTransactionTimestamp(Wire.instant(awardPoiTxn.getTimeStamp()));
+            }
             LoyaltyResult first = firstResult(body);
             if (first != null && first.getLoyaltyAmount() != null) {
                 result.totalPointsEarned((int) Math.round(
@@ -683,18 +690,28 @@ public final class PaymentOrchestrator {
     }
 
     private Runnable loyaltyRollback(LoyaltyTransactionTypeEnum refundType,
-                                     TransactionIdentificationType originalPoiTxn) {
+                                     TransactionIdentificationType originalPoiTxn,
+                                     String memberId) {
         return () -> {
+            LoyaltyRequest.Builder loyaltyRequest = LoyaltyRequest.builder()
+                    .saleData(exchange.factory().saleData())
+                    .loyaltyTransaction(LoyaltyTransaction.builder()
+                            .loyaltyTransactionType(refundType)
+                            .originalPOITransaction(original(originalPoiTxn))
+                            .build());
+            if (memberId != null) {
+                loyaltyRequest.loyaltyData(new LoyaltyData[] {LoyaltyData.builder()
+                        .loyaltyAccountID(LoyaltyAccountID.builder()
+                                .loyaltyID(memberId)
+                                .identificationType(IdentificationTypeEnum.PAN)
+                                .entryMode(new EntryModeType[] {EntryModeType.KEYED})
+                                .build())
+                        .build()});
+            }
             SaleToPOIRequest wireRequest = SaleToPOIRequest.builder()
                     .messageHeader(exchange.factory().header(
                             MessageClassType.SERVICE, MessageCategoryType.LOYALTY))
-                    .loyaltyRequest(LoyaltyRequest.builder()
-                            .saleData(exchange.factory().saleData())
-                            .loyaltyTransaction(LoyaltyTransaction.builder()
-                                    .loyaltyTransactionType(refundType)
-                                    .originalPOITransaction(original(originalPoiTxn))
-                                    .build())
-                            .build())
+                    .loyaltyRequest(loyaltyRequest.build())
                     .build();
             SaleToPOIResponse response = exchange.sendExpectingBody(
                     MessageCategoryType.LOYALTY, wireRequest);

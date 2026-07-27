@@ -12,6 +12,10 @@
 package com.bilt.pos.session.internal;
 
 import com.bilt.pos.nexo.model.AmountsReq;
+import com.bilt.pos.nexo.model.EntryModeType;
+import com.bilt.pos.nexo.model.IdentificationTypeEnum;
+import com.bilt.pos.nexo.model.LoyaltyAccountID;
+import com.bilt.pos.nexo.model.LoyaltyData;
 import com.bilt.pos.nexo.model.LoyaltyRequest;
 import com.bilt.pos.nexo.model.LoyaltyResponse;
 import com.bilt.pos.nexo.model.LoyaltyResult;
@@ -63,6 +67,26 @@ public final class RefundManager {
 
     private static final LoyaltyReversal NO_REVERSAL = new LoyaltyReversal(0, 0);
 
+    /**
+     * What the caller knows about the loyalty side of the original sale:
+     * the award's own POI reference (preferred by the reverse-award
+     * contract) and the member, both optional.
+     */
+    public static final class LoyaltyRef {
+        final String awardPoiTransactionId;
+        final Instant awardPoiTransactionTimestamp;
+        final String memberId;
+
+        public LoyaltyRef(String awardPoiTransactionId, Instant awardPoiTransactionTimestamp,
+                          String memberId) {
+            this.awardPoiTransactionId = awardPoiTransactionId;
+            this.awardPoiTransactionTimestamp = awardPoiTransactionTimestamp;
+            this.memberId = memberId;
+        }
+
+        public static final LoyaltyRef NONE = new LoyaltyRef(null, null, null);
+    }
+
     private final NexoExchange exchange;
     private final String currency;
 
@@ -80,7 +104,7 @@ public final class RefundManager {
      *                         for an unlinked refund
      */
     public RefundResult refund(BigDecimal amount, String originalPoiTxnId,
-                               Instant originalPoiTimestamp) {
+                               Instant originalPoiTimestamp, LoyaltyRef loyaltyRef) {
         AmountsReq.Builder amounts = AmountsReq.builder().currency(currency);
         if (amount != null) {
             amounts.requestedAmount(amount.doubleValue());
@@ -113,7 +137,7 @@ public final class RefundManager {
 
         // linked refunds also reverse loyalty points, best-effort
         LoyaltyReversal loyalty = originalPoiTxnId != null
-                ? awardRefund(originalPoiTxnId, originalPoiTimestamp)
+                ? awardRefund(loyaltyRef, originalPoiTxnId, originalPoiTimestamp)
                 : NO_REVERSAL;
 
         Double authorized = body.getPaymentResult() != null
@@ -139,7 +163,8 @@ public final class RefundManager {
 
     /** Reverses a completed transaction ({@code ReversalRequest} + award refund). */
     public VoidResult voidTransaction(String originalPoiTxnId, Instant originalPoiTimestamp) {
-        return voidTransaction(originalPoiTxnId, originalPoiTimestamp, null, null);
+        return voidTransaction(originalPoiTxnId, originalPoiTimestamp, null, null,
+                LoyaltyRef.NONE);
     }
 
     /**
@@ -149,7 +174,8 @@ public final class RefundManager {
      */
     public VoidResult voidTransaction(String originalPoiTxnId, Instant originalPoiTimestamp,
                                       String storedValuePoiTxnId,
-                                      Instant storedValuePoiTimestamp) {
+                                      Instant storedValuePoiTimestamp,
+                                      LoyaltyRef loyaltyRef) {
         ReversalResponse cardLeg = reverse(originalPoiTxnId, originalPoiTimestamp);
 
         ReversalResponse storedValueLeg = null;
@@ -167,7 +193,8 @@ public final class RefundManager {
             }
         }
 
-        LoyaltyReversal loyalty = awardRefund(originalPoiTxnId, originalPoiTimestamp);
+        LoyaltyReversal loyalty = awardRefund(loyaltyRef, originalPoiTxnId,
+                originalPoiTimestamp);
 
         BigDecimal reversedAmount = sumReversedAmounts(cardLeg, storedValueLeg);
         TransactionIdentificationType poiTxn = cardLeg.getPoiData() == null
@@ -223,18 +250,36 @@ public final class RefundManager {
      * Best-effort: failures are logged, never thrown — the money movement
      * already succeeded and the terminal can retry loyalty via SAF.
      */
-    private LoyaltyReversal awardRefund(String originalPoiTxnId, Instant originalPoiTimestamp) {
+    private LoyaltyReversal awardRefund(LoyaltyRef loyaltyRef, String paymentPoiTxnId,
+                                        Instant paymentPoiTimestamp) {
+        LoyaltyRef ref = loyaltyRef == null ? LoyaltyRef.NONE : loyaltyRef;
+        // the reverse-award contract references the AWARD's own transaction;
+        // fall back to the payment reference (terminal-side resolution) only
+        // when the caller does not have the award reference
+        String originalPoiTxnId = ref.awardPoiTransactionId != null
+                ? ref.awardPoiTransactionId : paymentPoiTxnId;
+        Instant originalPoiTimestamp = ref.awardPoiTransactionId != null
+                ? ref.awardPoiTransactionTimestamp : paymentPoiTimestamp;
+        LoyaltyRequest.Builder loyaltyRequest = LoyaltyRequest.builder()
+                .saleData(exchange.factory().saleData())
+                .loyaltyTransaction(LoyaltyTransaction.builder()
+                        .loyaltyTransactionType(LoyaltyTransactionTypeEnum.AWARD_REFUND)
+                        .originalPOITransaction(originalTransaction(
+                                originalPoiTxnId, originalPoiTimestamp))
+                        .build());
+        if (ref.memberId != null) {
+            loyaltyRequest.loyaltyData(new LoyaltyData[] {LoyaltyData.builder()
+                    .loyaltyAccountID(LoyaltyAccountID.builder()
+                            .loyaltyID(ref.memberId)
+                            .identificationType(IdentificationTypeEnum.PAN)
+                            .entryMode(new EntryModeType[] {EntryModeType.KEYED})
+                            .build())
+                    .build()});
+        }
         SaleToPOIRequest request = SaleToPOIRequest.builder()
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.LOYALTY))
-                .loyaltyRequest(LoyaltyRequest.builder()
-                        .saleData(exchange.factory().saleData())
-                        .loyaltyTransaction(LoyaltyTransaction.builder()
-                                .loyaltyTransactionType(LoyaltyTransactionTypeEnum.AWARD_REFUND)
-                                .originalPOITransaction(originalTransaction(
-                                        originalPoiTxnId, originalPoiTimestamp))
-                                .build())
-                        .build())
+                .loyaltyRequest(loyaltyRequest.build())
                 .build();
         try {
             SaleToPOIResponse response = exchange.sendExpectingBody(

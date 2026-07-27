@@ -113,6 +113,24 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
+    void builderAwardReferenceIsUsedForTheLoyaltyReversal() throws Exception {
+        server.enqueue(new MockResponse().setBody(REFUND_OK));
+        server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
+
+        sessionBuilder()
+                .poiTransactionId(ORIGINAL_POI_TXN)
+                .poiTransactionTimestamp(ORIGINAL_TS)
+                .awardPoiTransactionId("POI-AW-9")
+                .build()
+                .refund(new BigDecimal("10.00")).execute();
+
+        recordedRequest();  // the refund itself
+        SaleToPOIRequest awardRefund = recordedRequest();
+        assertEquals("POI-AW-9", awardRefund.getLoyaltyRequest().getLoyaltyTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
     void fullLinkedRefundOmitsAmount() throws Exception {
         server.enqueue(new MockResponse().setBody(REFUND_OK));
         server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));

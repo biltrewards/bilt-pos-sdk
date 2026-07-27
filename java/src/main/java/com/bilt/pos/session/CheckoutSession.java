@@ -148,6 +148,8 @@ public final class CheckoutSession {
     private final String storeLocation;
     private final String poiTransactionId;
     private final Instant poiTransactionTimestamp;
+    private final String awardPoiTransactionId;
+    private final Instant awardPoiTransactionTimestamp;
     private final boolean autoDisplay;
 
     private final IdentityManager identityManager;
@@ -164,6 +166,8 @@ public final class CheckoutSession {
     private volatile Instant lastPoiTransactionTimestamp;
     private volatile String lastStoredValuePoiTransactionId;
     private volatile Instant lastStoredValuePoiTransactionTimestamp;
+    private volatile String lastAwardPoiTransactionId;
+    private volatile Instant lastAwardPoiTransactionTimestamp;
 
     private CheckoutSession(Builder builder) {
         this.client = builder.client;
@@ -171,6 +175,8 @@ public final class CheckoutSession {
         this.storeLocation = builder.storeLocation;
         this.poiTransactionId = builder.poiTransactionId;
         this.poiTransactionTimestamp = builder.poiTransactionTimestamp;
+        this.awardPoiTransactionId = builder.awardPoiTransactionId;
+        this.awardPoiTransactionTimestamp = builder.awardPoiTransactionTimestamp;
         this.autoDisplay = builder.autoDisplay;
         this.displayRenderer = builder.displayRenderer != null
                 ? builder.displayRenderer : new BasketDisplayRenderer();
@@ -763,6 +769,8 @@ public final class CheckoutSession {
                 lastStoredValuePoiTransactionId = result.getStoredValuePoiTransactionId();
                 lastStoredValuePoiTransactionTimestamp =
                         result.getStoredValuePoiTransactionTimestamp();
+                lastAwardPoiTransactionId = result.getAwardPoiTransactionId();
+                lastAwardPoiTransactionTimestamp = result.getAwardPoiTransactionTimestamp();
             } finally {
                 lock.unlock();
             }
@@ -828,7 +836,7 @@ public final class CheckoutSession {
         requirePositive(amount);
         return operation("refundUnlinked", () -> {
             requireRefundable("refundUnlinked");
-            return refundManager.refund(amount, null, null);
+            return refundManager.refund(amount, null, null, RefundManager.LoyaltyRef.NONE);
         });
     }
 
@@ -841,8 +849,24 @@ public final class CheckoutSession {
                         "a linked refund requires poiTransactionId on the session builder "
                                 + "or a completed payment in this session"));
             }
-            return refundManager.refund(amount, originalId, effectivePoiTransactionTimestamp());
+            return refundManager.refund(amount, originalId,
+                    effectivePoiTransactionTimestamp(), loyaltyRef());
         });
+    }
+
+    /**
+     * The award reference and member for loyalty reversals: builder-supplied
+     * for external transactions, else this session's completed payment.
+     */
+    private RefundManager.LoyaltyRef loyaltyRef() {
+        if (poiTransactionId != null) {
+            return new RefundManager.LoyaltyRef(
+                    awardPoiTransactionId, awardPoiTransactionTimestamp, null);
+        }
+        IdentifyResult currentMember = getMember();
+        return new RefundManager.LoyaltyRef(
+                lastAwardPoiTransactionId, lastAwardPoiTransactionTimestamp,
+                currentMember == null ? null : currentMember.getMemberId());
     }
 
     /** Builder-supplied prior transaction, else the last completed payment. */
@@ -913,7 +937,8 @@ public final class CheckoutSession {
                         ? lastStoredValuePoiTransactionId : null;
                 VoidResult result = refundManager.voidTransaction(
                         originalId, effectivePoiTransactionTimestamp(),
-                        storedValueLeg, lastStoredValuePoiTransactionTimestamp);
+                        storedValueLeg, lastStoredValuePoiTransactionTimestamp,
+                        loyaltyRef());
                 transitionLocked(SessionState.VOIDED);
                 return result;
             } catch (SessionException e) {
@@ -1383,6 +1408,8 @@ public final class CheckoutSession {
         private String storeLocation;
         private String poiTransactionId;
         private Instant poiTransactionTimestamp;
+        private String awardPoiTransactionId;
+        private Instant awardPoiTransactionTimestamp;
         private boolean autoDisplay = true;
         private BiltNexoTerminalClient externalDisplayClient;
         private DisplayRenderer displayRenderer;
@@ -1433,6 +1460,24 @@ public final class CheckoutSession {
         /** Timestamp of the prior transaction referenced by {@link #poiTransactionId}. */
         public Builder poiTransactionTimestamp(Instant poiTransactionTimestamp) {
             this.poiTransactionTimestamp = poiTransactionTimestamp;
+            return this;
+        }
+
+        /**
+         * Terminal reference of the prior transaction's loyalty award (from
+         * {@code CheckoutResult.getAwardPoiTransactionId()}). Lets linked
+         * refunds and voids on this session reverse the award by its own
+         * reference, per the reverse-award contract; without it the payment
+         * reference is sent and the terminal resolves the award.
+         */
+        public Builder awardPoiTransactionId(String awardPoiTransactionId) {
+            this.awardPoiTransactionId = awardPoiTransactionId;
+            return this;
+        }
+
+        /** Timestamp of the award referenced by {@link #awardPoiTransactionId}. */
+        public Builder awardPoiTransactionTimestamp(Instant awardPoiTransactionTimestamp) {
+            this.awardPoiTransactionTimestamp = awardPoiTransactionTimestamp;
             return this;
         }
 
