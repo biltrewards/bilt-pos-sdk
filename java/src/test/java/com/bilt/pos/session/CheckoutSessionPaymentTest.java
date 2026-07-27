@@ -441,6 +441,42 @@ class CheckoutSessionPaymentTest {
         assertEquals(SessionState.COMPLETED, session.getState());
     }
 
+    @Test
+    void throwingHandlerUnwindsCommittedStepsAndFailsTheSession() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));  // rebate refund
+
+        AtomicReference<SessionError> seen = new AtomicReference<>();
+        PaymentFlow flow = session.pay()
+                .onRebatesRedeemed(rebates -> {
+                    throw new NullPointerException("register bug");
+                })
+                .onError(error -> {
+                    seen.set(error);
+                    return PaymentOptions.voidAndAbort();
+                });
+
+        assertNull(flow.getOrNull());
+        assertEquals(SessionErrorCode.UNKNOWN, seen.get().getCode());
+        assertTrue(seen.get().getCause() instanceof NullPointerException);
+        assertEquals(SessionState.FAILED, session.getState(),
+                "the session must not stay frozen in PAYING");
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size());
+        assertEquals("RebateRefund", requests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue(),
+                "the committed rebate must be unwound");
+
+        // and the register can retry once the bug is out of the way
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
+        assertTrue(session.pay(PaymentOptions.retryWithoutLoyalty()).get().isSuccess());
+        assertEquals(SessionState.COMPLETED, session.getState());
+    }
+
     // ─── Award failure is non-fatal ───
 
     @Test

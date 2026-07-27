@@ -763,15 +763,23 @@ public final class CheckoutSession {
             }
             return result;
         } catch (SessionException e) {
-            lock.lock();
-            try {
-                stateMachine.transitionTo(
-                        e.getError().getCode() == SessionErrorCode.ABORTED
-                                ? SessionState.ABORTED : SessionState.FAILED);
-            } finally {
-                lock.unlock();
-            }
+            settlePaymentFailure(e.getError().getCode() == SessionErrorCode.ABORTED
+                    ? SessionState.ABORTED : SessionState.FAILED);
             throw e;
+        } catch (RuntimeException e) {
+            // defense in depth: whatever escapes, the session must not stay
+            // frozen in PAYING with the basket locked
+            settlePaymentFailure(SessionState.FAILED);
+            throw e;
+        }
+    }
+
+    private void settlePaymentFailure(SessionState target) {
+        lock.lock();
+        try {
+            stateMachine.transitionTo(target);
+        } finally {
+            lock.unlock();
         }
     }
 

@@ -144,7 +144,14 @@ public final class PaymentOrchestrator {
             List<Commit> committed = new ArrayList<>();
             try {
                 return runSequence(request, options, committed);
-            } catch (StepFailure failure) {
+            } catch (RuntimeException e) {
+                // a register handler (or other bug) throwing must not leave
+                // committed tender/loyalty steps standing: treat it like a
+                // step failure — unwind, then let onError decide
+                StepFailure failure = e instanceof StepFailure
+                        ? (StepFailure) e
+                        : new StepFailure(new SessionError(SessionErrorCode.UNKNOWN,
+                                "unexpected error during payment: " + e, null, e), false);
                 unwind(committed);
                 if (failure.aborted) {
                     throw new SessionException(failure.error);
