@@ -99,6 +99,12 @@ public final class BasketEngine implements BasketMutation {
             existing.quantity += item.getQuantity();
             if (item.getTaxRate() != null) {
                 existing.taxRate = item.getTaxRate();
+                if (item.getTaxAmount() == null) {
+                    // same last-write-wins rule as setTaxRate: a rate-only
+                    // upsert makes the line rate-based again — a stale fixed
+                    // amount would otherwise outrank the new rate forever
+                    existing.taxAmount = null;
+                }
             }
             if (item.getTaxAmount() != null) {
                 existing.taxAmount = item.getTaxAmount();

@@ -160,6 +160,38 @@ class BasketEngineTest {
     }
 
     @Test
+    void rateOnlyUpsertClearsAPreviouslyFixedAmount() {
+        BasketEngine engine = new BasketEngine();
+        engine.addItem(BasketItem.builder()
+                .sku("KRK-CNDL-LRG-VAN").description("Large Vanilla Candle")
+                .quantity(1).unitPrice(new BigDecimal("24.99"))
+                .taxAmount(new BigDecimal("5.00"))
+                .build());
+        engine.addItem(BasketItem.builder()
+                .sku("KRK-CNDL-LRG-VAN").description("Large Vanilla Candle")
+                .quantity(1).unitPrice(new BigDecimal("24.99"))
+                .taxRate(new BigDecimal("0.08875"))
+                .build());
+
+        // qty 2 → 49.98 × 0.08875 = 4.44; the stale fixed amount is gone
+        assertEquals(new BigDecimal("4.44"), engine.snapshot().getItem("1").getTaxAmount());
+    }
+
+    @Test
+    void upsertWithBothRateAndAmountKeepsAmountPrecedence() {
+        BasketEngine engine = new BasketEngine();
+        engine.addItem(candle(1));
+        engine.addItem(BasketItem.builder()
+                .sku("KRK-CNDL-LRG-VAN").description("Large Vanilla Candle")
+                .quantity(1).unitPrice(new BigDecimal("24.99"))
+                .taxRate(new BigDecimal("0.08875"))
+                .taxAmount(new BigDecimal("3.00"))
+                .build());
+
+        assertEquals(new BigDecimal("3.00"), engine.snapshot().getItem("1").getTaxAmount());
+    }
+
+    @Test
     void setTaxRateClearsAPreviouslyFixedAmount() {
         BasketEngine engine = new BasketEngine();
         engine.addItem(candle(1));
