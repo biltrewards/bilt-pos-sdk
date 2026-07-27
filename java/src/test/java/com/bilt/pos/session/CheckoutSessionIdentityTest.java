@@ -251,6 +251,18 @@ class CheckoutSessionIdentityTest {
         assertEquals(SessionErrorCode.TERMINAL_ERROR, e.getError().getCode());
     }
 
+    @Test
+    void posDrivenLookupFailuresAreLabelledAsBalanceInquiry() {
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnavailableService\"}}}}"));
+
+        SessionException e = assertThrows(SessionException.class,
+                () -> session.identifyMember(MemberIdentifier.phoneNumber("555-867-5309")).get());
+        assertTrue(e.getError().getMessage().startsWith("BalanceInquiry"),
+                "the error must name the operation that failed: " + e.getError().getMessage());
+    }
+
     // ─── POS-driven identification ───
 
     @Test

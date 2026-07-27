@@ -83,7 +83,8 @@ public final class IdentityManager {
         if (body == null || body.getResponse() == null) {
             throw Wire.missing("CardAcquisitionResponse");
         }
-        IdentifyStatus lookupStatus = lookupStatus(body.getResponse());
+        IdentifyStatus lookupStatus = lookupStatus(
+                MessageCategoryType.CARD_ACQUISITION, body.getResponse());
         if (lookupStatus != IdentifyStatus.FOUND) {
             return IdentifyResult.withoutMember(lookupStatus);
         }
@@ -132,7 +133,8 @@ public final class IdentityManager {
         if (body == null || body.getResponse() == null) {
             throw Wire.missing("BalanceInquiryResponse");
         }
-        IdentifyStatus lookupStatus = lookupStatus(body.getResponse());
+        IdentifyStatus lookupStatus = lookupStatus(
+                MessageCategoryType.BALANCE_INQUIRY, body.getResponse());
         if (lookupStatus != IdentifyStatus.FOUND) {
             return IdentifyResult.withoutMember(lookupStatus);
         }
@@ -203,7 +205,7 @@ public final class IdentityManager {
      * found, suspended, and customer-cancelled become an
      * {@link IdentifyStatus}; anything else failing throws.
      */
-    private IdentifyStatus lookupStatus(Response response) {
+    private IdentifyStatus lookupStatus(MessageCategoryType category, Response response) {
         if (response.getResult() != ResultType.FAILURE) {
             return IdentifyStatus.FOUND;
         }
@@ -217,8 +219,7 @@ public final class IdentityManager {
         if (condition == ErrorConditionType.CANCEL || condition == ErrorConditionType.ABORTED) {
             return IdentifyStatus.CANCELLED;
         }
-        throw new SessionException(NexoExchange.toError(
-                MessageCategoryType.CARD_ACQUISITION, response));
+        throw new SessionException(NexoExchange.toError(category, response));
     }
 
     private static ForceEntryModeType[] toWire(List<ForceEntryMode> modes) {
