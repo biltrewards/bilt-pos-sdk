@@ -491,6 +491,46 @@ class CheckoutSessionPaymentTest {
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
     }
 
+    @Test
+    void abortDuringAwardStepReversesTheCardCharge() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 85.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));         // card reversal
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // rebate refund
+
+        PaymentFlow flow = session.pay()
+                .beforeStep(ctx -> {
+                    if (ctx.getStep() == TransactionStep.AWARD) {
+                        session.abort();  // lands while the award is being submitted
+                    }
+                    return ctx.getDefaultTransactionId();
+                })
+                .onSuccess(r -> fail("an aborted payment must not report success"))
+                .onError(e -> {
+                    fail("abort must not reach onError");
+                    return null;
+                });
+
+        SessionException e = assertThrows(SessionException.class, flow::get);
+        assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
+        assertEquals(SessionState.ABORTED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(7, requests.size());
+        assertEquals("POI-PAY-1", requests.get(4).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals("RedemptionRefund", requests.get(5).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("RebateRefund", requests.get(6).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
     // ─── Post-payment void uses the payment's references ───
 
     @Test

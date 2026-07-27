@@ -242,6 +242,11 @@ public final class PaymentOrchestrator {
                     saleTxnId, result);
         }
 
+        // An abort that landed during the award must still unwind the money
+        // movements — the award's own failures are non-fatal, but an abort is
+        // a rollback request, not an award failure.
+        checkAbort(request);
+
         Basket finalBasket = withPaymentTotals(workingBasket, rebateTotal, pointsValue,
                 storedValueCharged, cardCharged);
 
@@ -251,6 +256,10 @@ public final class PaymentOrchestrator {
         } catch (RuntimeException e) {
             LOGGER.log(Level.WARNING, "final display failed", e);
         }
+
+        // last look before success is declared; later aborts are too late
+        // and the completed payment stands (void it explicitly instead)
+        checkAbort(request);
 
         return result
                 .finalBasket(finalBasket)

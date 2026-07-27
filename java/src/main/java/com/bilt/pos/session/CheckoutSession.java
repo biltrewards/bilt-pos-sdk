@@ -748,24 +748,25 @@ public final class CheckoutSession {
             CheckoutResult result = paymentOrchestrator.run(request);
             lock.lock();
             try {
-                if (stateMachine.current() == SessionState.PAYING) {
-                    stateMachine.transitionTo(SessionState.COMPLETED);
-                }
+                // this thread is the sole writer of payment-final states;
+                // abort() defers to it while the session is PAYING
+                stateMachine.transitionTo(SessionState.COMPLETED);
                 lastPoiTransactionId = result.getPoiTransactionId();
                 lastPoiTransactionTimestamp = result.getPoiTransactionTimestamp();
             } finally {
                 lock.unlock();
             }
+            if (abortRequested) {
+                LOGGER.warning("abort() arrived after the payment completed; the transaction "
+                        + "stands — use voidTransaction() to reverse it");
+            }
             return result;
         } catch (SessionException e) {
             lock.lock();
             try {
-                // abort() may already have moved the session to ABORTED
-                if (stateMachine.current() == SessionState.PAYING) {
-                    stateMachine.transitionTo(
-                            e.getError().getCode() == SessionErrorCode.ABORTED
-                                    ? SessionState.ABORTED : SessionState.FAILED);
-                }
+                stateMachine.transitionTo(
+                        e.getError().getCode() == SessionErrorCode.ABORTED
+                                ? SessionState.ABORTED : SessionState.FAILED);
             } finally {
                 lock.unlock();
             }
@@ -964,7 +965,13 @@ public final class CheckoutSession {
         lock.lock();
         try {
             SessionState state = stateMachine.current();
-            if (!state.isTerminal() && state != SessionState.VOIDED) {
+            if (state == SessionState.PAYING) {
+                // the payment thread observes the abort flag between steps,
+                // unwinds what was committed, and settles the final state —
+                // transitioning here would race its COMPLETED/ABORTED decision
+                return;
+            }
+            if (!state.isTerminal()) {
                 if (stateMachine.canTransitionTo(SessionState.ABORTED)) {
                     stateMachine.transitionTo(SessionState.ABORTED);
                 } else {
