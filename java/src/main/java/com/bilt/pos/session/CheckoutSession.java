@@ -730,6 +730,10 @@ public final class CheckoutSession {
                 throw new SessionException(error);
             }
             stateMachine.transitionTo(SessionState.PAYING);
+            // the abort flag is scoped to a single payment run: a stale
+            // abort left over from an earlier decline or failed void must
+            // not kill a legitimate retry at its first checkAbort
+            abortRequested = false;
             request.basket = basketEngine.snapshot();
         } finally {
             lock.unlock();
@@ -984,21 +988,18 @@ public final class CheckoutSession {
      * <p>Safe to call from any thread.</p>
      */
     public void abort() {
-        abortRequested = true;
-        NexoExchange.InFlight inFlight = exchange.currentInFlight();
-        if (inFlight != null) {
-            sendAbort(inFlight);
-        }
         lock.lock();
         try {
+            // the flag is set under the lock so it cannot race the reset a
+            // starting payment performs when it enters PAYING: either this
+            // abort ends the session before the payment starts, or the
+            // payment starts with a fresh flag and observes a later abort
+            abortRequested = true;
             SessionState state = stateMachine.current();
-            if (state == SessionState.PAYING) {
-                // the payment thread observes the abort flag between steps,
-                // unwinds what was committed, and settles the final state —
-                // transitioning here would race its COMPLETED/ABORTED decision
-                return;
-            }
-            if (!state.isTerminal()) {
+            if (state != SessionState.PAYING && !state.isTerminal()) {
+                // during PAYING the payment thread observes the flag between
+                // steps, unwinds what was committed, and settles the final
+                // state — transitioning here would race that decision
                 if (stateMachine.canTransitionTo(SessionState.ABORTED)) {
                     stateMachine.transitionTo(SessionState.ABORTED);
                 } else {
@@ -1007,6 +1008,10 @@ public final class CheckoutSession {
             }
         } finally {
             lock.unlock();
+        }
+        NexoExchange.InFlight inFlight = exchange.currentInFlight();
+        if (inFlight != null) {
+            sendAbort(inFlight);
         }
     }
 

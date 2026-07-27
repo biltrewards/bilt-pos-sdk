@@ -428,6 +428,24 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void staleAbortFlagDoesNotKillAPaymentRetry() throws Exception {
+        addHundredDollarItem();
+
+        // abort() races a decline: the payment settles FAILED on its own
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        session.pay().onError(error -> {
+            session.abort();  // deferred: the payment thread owns the outcome
+            return PaymentOptions.voidAndAbort();
+        }).getOrNull();
+        assertEquals(SessionState.FAILED, session.getState());
+
+        // the leftover flag must not abort the legitimate retry
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
+        assertTrue(session.pay().get().isSuccess());
+        assertEquals(SessionState.COMPLETED, session.getState());
+    }
+
+    @Test
     void failedPaymentCanBeRetriedWithNewPayCall() throws Exception {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
