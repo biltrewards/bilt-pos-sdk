@@ -476,7 +476,11 @@ public final class PaymentOrchestrator {
             result.promotionMessages(parsePromotionMessages(
                     body.getResponse().getAdditionalResponse()));
         } catch (SessionException | StepFailure e) {
-            // decision: a failed award never reverses a completed payment
+            // decision: a failed award never reverses a completed payment.
+            // Only the award's own wire failure is swallowed here — a
+            // cross-thread abort() (which may be what killed the award) is
+            // observed by the checkAbort() right after this step and unwinds
+            // the committed payment/stored-value/loyalty steps.
             String detail = e instanceof SessionException
                     ? ((SessionException) e).getError().toString() : e.getMessage();
             LOGGER.log(Level.WARNING, "loyalty award failed (terminal may retry via SAF): "
