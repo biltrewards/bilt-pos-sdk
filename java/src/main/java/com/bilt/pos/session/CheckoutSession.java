@@ -865,6 +865,7 @@ public final class CheckoutSession {
                         "voidTransaction requires poiTransactionId on the session builder "
                                 + "or a completed payment in this session"));
             }
+            SessionState stateBeforeVoid;
             lock.lock();
             try {
                 SessionError error = stateMachine.requireState(
@@ -873,6 +874,7 @@ public final class CheckoutSession {
                 if (error != null) {
                     throw new SessionException(error);
                 }
+                stateBeforeVoid = stateMachine.current();
                 stateMachine.transitionTo(SessionState.VOIDING);
             } finally {
                 lock.unlock();
@@ -883,7 +885,11 @@ public final class CheckoutSession {
                 transitionLocked(SessionState.VOIDED);
                 return result;
             } catch (SessionException e) {
-                transitionLocked(SessionState.FAILED);
+                // a failed void leaves the referenced transaction standing, so
+                // the session returns to its pre-void state — a COMPLETED
+                // payment must not become FAILED, which would let pay() retry
+                // and authorize a second charge on top of the original
+                transitionLocked(stateBeforeVoid);
                 throw e;
             }
         });

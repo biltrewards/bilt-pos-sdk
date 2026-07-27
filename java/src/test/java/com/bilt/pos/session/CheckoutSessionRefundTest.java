@@ -215,14 +215,22 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
-    void failedVoidEndsInFailedState() {
+    void failedVoidRestoresThePreVoidState() {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
                         + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
 
         CheckoutSession session = refundSession();
         assertThrows(SessionException.class, () -> session.voidTransaction().get());
-        assertEquals(SessionState.FAILED, session.getState());
+
+        // the referenced transaction still stands; a fresh refund session
+        // returns to IDLE and the void can be retried
+        assertEquals(SessionState.IDLE, session.getState());
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
+        server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
     }
 
     @Test

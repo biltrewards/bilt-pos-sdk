@@ -47,7 +47,10 @@ public final class SessionStateMachine {
         TRANSITIONS.put(PAYING, EnumSet.of(COMPLETED, FAILED, ABORTED));
         TRANSITIONS.put(COMPLETED, EnumSet.of(VOIDING));
         TRANSITIONS.put(FAILED, EnumSet.of(PAYING, VOIDING, ABORTED));
-        TRANSITIONS.put(VOIDING, EnumSet.of(VOIDED, FAILED));
+        // a failed void restores the pre-void state (IDLE/COMPLETED/FAILED):
+        // the referenced transaction still stands, so e.g. a COMPLETED
+        // payment must not degrade to FAILED where pay() could re-charge
+        TRANSITIONS.put(VOIDING, EnumSet.of(VOIDED, IDLE, COMPLETED, FAILED));
         TRANSITIONS.put(ABORTED, EnumSet.noneOf(SessionState.class));
         TRANSITIONS.put(VOIDED, EnumSet.noneOf(SessionState.class));
     }

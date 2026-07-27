@@ -558,6 +558,29 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void failedVoidAfterPaymentDoesNotAllowRePayment() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        session.pay().execute();
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnreachableHost\"}}}}"));
+        assertThrows(SessionException.class, () -> session.voidTransaction().get());
+
+        // the payment still stands: no second charge may be authorized
+        assertEquals(SessionState.COMPLETED, session.getState());
+        assertThrows(IllegalStateException.class, () -> session.pay());
+
+        // but the void can be retried
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+    }
+
+    @Test
     void voidAfterPaymentUsesLastTransactionReference() throws Exception {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
