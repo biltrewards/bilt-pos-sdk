@@ -247,7 +247,7 @@ public final class PaymentOrchestrator {
             String saleTxnId = beforeStep(request, TransactionStep.AWARD,
                     workingBasket, storedValueCharged.add(cardCharged), committed);
             awardStep(request, workingBasket, storedValueCharged.add(cardCharged),
-                    saleTxnId, result);
+                    saleTxnId, committed, result);
         }
 
         // An abort that landed during the award must still unwind the money
@@ -502,10 +502,18 @@ public final class PaymentOrchestrator {
     }
 
     private void awardStep(Request request, Basket basket, BigDecimal totalPaid,
-                           String saleTxnId, CheckoutResult.Builder result) {
+                           String saleTxnId, List<Commit> committed,
+                           CheckoutResult.Builder result) {
         try {
             LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.AWARD, request, basket,
                     totalPaid, saleTxnId, null);
+            // an abort observed after this point unwinds the tender — the
+            // credited points must be reversed with it, like void does
+            TransactionIdentificationType awardPoiTxn = poiRef(body.getPoiData());
+            commit(committed, TransactionStep.AWARD, saleTxnId, body.getPoiData(),
+                    awardPoiTxn != null
+                            ? loyaltyRollback(LoyaltyTransactionTypeEnum.AWARD_REFUND, awardPoiTxn)
+                            : null);
             LoyaltyResult first = firstResult(body);
             if (first != null && first.getLoyaltyAmount() != null) {
                 result.totalPointsEarned((int) Math.round(

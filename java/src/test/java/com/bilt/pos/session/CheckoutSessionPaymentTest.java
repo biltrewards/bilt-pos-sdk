@@ -571,6 +571,7 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(REDEEM_OK));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 85.00)));
         server.enqueue(new MockResponse().setBody(AWARD_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // award refund
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));         // card reversal
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // redemption refund
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // rebate refund
@@ -593,12 +594,17 @@ class CheckoutSessionPaymentTest {
         assertEquals(SessionState.ABORTED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
-        assertEquals(7, requests.size());
-        assertEquals("POI-PAY-1", requests.get(4).getReversalRequest()
+        assertEquals(8, requests.size());
+        assertEquals("AwardRefund", requests.get(4).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue(),
+                "points credited by the award must be reversed with the tender");
+        assertEquals("POI-AW-1", requests.get(4).getLoyaltyRequest().getLoyaltyTransaction()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
-        assertEquals("RedemptionRefund", requests.get(5).getLoyaltyRequest()
+        assertEquals("POI-PAY-1", requests.get(5).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals("RedemptionRefund", requests.get(6).getLoyaltyRequest()
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
-        assertEquals("RebateRefund", requests.get(6).getLoyaltyRequest()
+        assertEquals("RebateRefund", requests.get(7).getLoyaltyRequest()
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
     }
 
