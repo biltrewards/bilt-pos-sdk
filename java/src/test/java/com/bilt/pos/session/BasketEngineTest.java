@@ -160,6 +160,18 @@ class BasketEngineTest {
     }
 
     @Test
+    void setTaxRateClearsAPreviouslyFixedAmount() {
+        BasketEngine engine = new BasketEngine();
+        engine.addItem(candle(1));
+        engine.setTaxAmount("1", new BigDecimal("5.00"));
+        engine.setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
+
+        // last write wins: the line is rate-based again (24.99 × 0.08875 = 2.22)
+        assertEquals(new BigDecimal("2.22"), engine.snapshot().getItem("1").getTaxAmount());
+        assertEquals(new BigDecimal("2.22"), engine.snapshot().getTaxTotal());
+    }
+
+    @Test
     void basketTaxTotalOverridesItemComputationAndCanBeCleared() {
         BasketEngine engine = new BasketEngine();
         engine.addItem(candle(1));

@@ -155,13 +155,19 @@ public final class BasketEngine implements BasketMutation {
 
     @Override
     public BasketEngine setTaxRate(String itemId, BigDecimal rate) {
-        requireByItemId(itemId).taxRate = rate;
-        return this;
+        return applyTaxRate(requireByItemId(itemId), rate);
     }
 
     @Override
     public BasketEngine setTaxRateBySku(String sku, BigDecimal rate) {
-        requireBySku(sku).taxRate = rate;
+        return applyTaxRate(requireBySku(sku), rate);
+    }
+
+    private BasketEngine applyTaxRate(Line line, BigDecimal rate) {
+        line.taxRate = rate;
+        // last write wins: an explicit fixed amount would otherwise take
+        // precedence forever, with no way back to rate-based tax
+        line.taxAmount = null;
         return this;
     }
 

@@ -43,7 +43,8 @@ public interface BasketMutation {
     /** Sets an absolute quantity by SKU; {@code 0} removes the line. */
     BasketMutation updateItemQuantityBySku(String sku, int quantity);
 
-    /** Sets the tax rate on a line ({@code taxAmount = adjustedTotal × rate}). */
+    /** Sets the tax rate on a line ({@code taxAmount = adjustedTotal × rate});
+     * clears any explicit fixed tax amount previously set on it. */
     BasketMutation setTaxRate(String itemId, BigDecimal rate);
 
     /** Sets the tax rate on a line by SKU. */

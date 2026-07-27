@@ -276,7 +276,8 @@ public final class CheckoutSession {
 
     // ─── Tax ───
 
-    /** Sets the tax rate on a line ({@code taxAmount = adjustedTotal × rate}). */
+    /** Sets the tax rate on a line ({@code taxAmount = adjustedTotal × rate});
+     * clears any explicit fixed tax amount previously set on it. */
     public Basket setTaxRate(String itemId, BigDecimal rate) {
         Objects.requireNonNull(itemId, "itemId");
         Objects.requireNonNull(rate, "rate");
