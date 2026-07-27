@@ -460,6 +460,36 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void underAuthorizedCardPaymentIsReversedAndFailsTheCheckout() throws Exception {
+        addHundredDollarItem();
+
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Partial\"},"
+                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-PAY-1\"}},"
+                        + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":60.00}}}}}"));
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));  // partial auth reversed
+
+        AtomicReference<SessionError> seen = new AtomicReference<>();
+        PaymentFlow flow = session.pay().onError(error -> {
+            seen.set(error);
+            return PaymentOptions.voidAndAbort();
+        });
+
+        assertNull(flow.getOrNull());
+        assertEquals(SessionErrorCode.DECLINED, seen.get().getCode());
+        assertTrue(seen.get().getMessage().contains("60.00"));
+        assertTrue(seen.get().getMessage().contains("100.00"));
+        assertEquals(SessionState.FAILED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size());
+        assertEquals("POI-PAY-1", requests.get(1).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID(),
+                "the partial authorization must be reversed");
+    }
+
+    @Test
     void throwingHandlerUnwindsCommittedStepsAndFailsTheSession() throws Exception {
         identifyMember();
         addHundredDollarItem();

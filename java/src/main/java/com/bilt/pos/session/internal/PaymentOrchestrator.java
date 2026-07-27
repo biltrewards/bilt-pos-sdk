@@ -453,8 +453,21 @@ public final class PaymentOrchestrator {
                 ? Wire.money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
                 : currentTotal;
 
+        // commit BEFORE validating the amount so an under-authorization is
+        // reversed by the unwind like any other committed step
         commit(committed, TransactionStep.CARD_PAYMENT, saleTxnId, body.getPoiData(),
                 reversalRollback(poiRef(body.getPoiData())));
+
+        // a partial authorization on the stored value step is the split
+        // tender mechanism, but the card step is the FINAL tender — an
+        // under-authorization here would complete a short-paid sale
+        if (charged.compareTo(currentTotal) < 0) {
+            throw new StepFailure(new SessionError(SessionErrorCode.DECLINED,
+                    "the card payment authorized only " + charged + " of the requested "
+                            + currentTotal + "; the partial authorization is reversed"),
+                    false);
+        }
+
         copyPaymentArtifacts(body, result);
         return charged;
     }
