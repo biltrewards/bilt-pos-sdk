@@ -2,6 +2,8 @@
   items:
     - name: Integration Guide
       url: /integration.html
+    - name: CheckoutSession API
+      url: /checkout-session.html
 
 - title: Payments
   items:

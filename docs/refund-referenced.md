@@ -36,8 +36,8 @@ And the following `PaymentRequest` fields:
 - **`SaleData.SaleTransactionID.TransactionID`** — Your unique reference for this refund. This appears as the merchant reference in reports.
 - **`SaleData.SaleTransactionID.TimeStamp`** — Date and time of the request in UTC format.
 - **`PaymentData.PaymentType`** — `Refund`
-- **`PaymentData.OriginalPOITransaction.POITransactionID.TransactionID`** — The transaction identifier from the original payment response.
-- **`PaymentData.OriginalPOITransaction.POITransactionID.TimeStamp`** — The timestamp from the original payment response.
+- **`PaymentTransaction.OriginalPOITransaction.POITransactionID.TransactionID`** — The transaction identifier from the original payment response.
+- **`PaymentTransaction.OriginalPOITransaction.POITransactionID.TimeStamp`** — The timestamp from the original payment response.
 - **`PaymentTransaction.AmountsReq.Currency`** — The transaction currency code (e.g. `USD`).
 - **`PaymentTransaction.AmountsReq.RequestedAmount`** — The amount to refund.
 
@@ -63,15 +63,15 @@ Example — full referenced refund:
         }
       },
       "PaymentData": {
-        "PaymentType": "Refund",
+        "PaymentType": "Refund"
+      },
+      "PaymentTransaction": {
         "OriginalPOITransaction": {
           "POITransactionID": {
             "TransactionID": "a816b0a9-8a11-4dc0-ba9d-5ad1e8c7e0d6",
             "TimeStamp": "2026-03-02T14:35:12+00:00"
           }
-        }
-      },
-      "PaymentTransaction": {
+        },
         "AmountsReq": {
           "Currency": "USD",
           "RequestedAmount": 94.50
@@ -104,15 +104,15 @@ Example — partial referenced refund:
         }
       },
       "PaymentData": {
-        "PaymentType": "Refund",
+        "PaymentType": "Refund"
+      },
+      "PaymentTransaction": {
         "OriginalPOITransaction": {
           "POITransactionID": {
             "TransactionID": "a816b0a9-8a11-4dc0-ba9d-5ad1e8c7e0d6",
             "TimeStamp": "2026-03-02T14:35:12+00:00"
           }
-        }
-      },
-      "PaymentTransaction": {
+        },
         "AmountsReq": {
           "Currency": "USD",
           "RequestedAmount": 29.99
