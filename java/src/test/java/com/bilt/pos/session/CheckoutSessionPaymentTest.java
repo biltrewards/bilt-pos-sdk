@@ -652,6 +652,87 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void voidOfSplitTenderReversesBothLegs() throws Exception {
+        addHundredDollarItem();
+        session.setStoredValueCard("GC-1234-5678");
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Partial\"},"
+                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-GC-1\"}},"
+                        + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":35.00}}}}}"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 65.00)));
+        session.pay().execute();
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},\"ReversedAmount\":65.00}}}"));
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},\"ReversedAmount\":35.00}}}"));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+
+        VoidResult voided = session.voidTransaction().get();
+
+        assertEquals(0, new BigDecimal("100.00").compareTo(voided.getReversedAmount()),
+                "both legs must be reversed");
+        assertEquals(SessionState.VOIDED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(3, requests.size());
+        assertEquals("POI-PAY-1", requests.get(0).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals("POI-GC-1", requests.get(1).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals("AwardRefund", requests.get(2).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
+    @Test
+    void voidOfGiftCardOnlyCheckoutSendsASingleReversal() throws Exception {
+        addHundredDollarItem();
+        session.setStoredValueCard("GC-1234-5678");
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-GC-1", 100.00)));
+        session.pay().execute();
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        session.voidTransaction().execute();
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size(), "one transaction, one reversal — no duplicate");
+        assertEquals("POI-GC-1", requests.get(0).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
+    void failedStoredValueLegReversalReportsThePartialVoid() throws Exception {
+        addHundredDollarItem();
+        session.setStoredValueCard("GC-1234-5678");
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Partial\"},"
+                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-GC-1\"}},"
+                        + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":35.00}}}}}"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 65.00)));
+        session.pay().execute();
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));  // card leg reversed
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnreachableHost\"}}}}"));
+
+        SessionException e = assertThrows(SessionException.class,
+                () -> session.voidTransaction().get());
+        assertTrue(e.getError().getMessage().contains("POI-PAY-1 was reversed"));
+        assertTrue(e.getError().getMessage().contains("POI-GC-1 was not"));
+        assertEquals(SessionState.COMPLETED, session.getState(),
+                "the void failed; the session returns to its pre-void state");
+    }
+
+    @Test
     void voidAfterPaymentUsesLastTransactionReference() throws Exception {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));

@@ -57,6 +57,8 @@ public final class CheckoutResult {
     // Transaction references (for void/refund)
     private final String poiTransactionId;
     private final Instant poiTransactionTimestamp;
+    private final String storedValuePoiTransactionId;
+    private final Instant storedValuePoiTransactionTimestamp;
 
     private final List<String> warnings;
 
@@ -81,6 +83,8 @@ public final class CheckoutResult {
         this.merchantReceipt = builder.merchantReceipt;
         this.poiTransactionId = builder.poiTransactionId;
         this.poiTransactionTimestamp = builder.poiTransactionTimestamp;
+        this.storedValuePoiTransactionId = builder.storedValuePoiTransactionId;
+        this.storedValuePoiTransactionTimestamp = builder.storedValuePoiTransactionTimestamp;
         this.warnings = Collections.unmodifiableList(new ArrayList<>(builder.warnings));
     }
 
@@ -175,6 +179,19 @@ public final class CheckoutResult {
         return poiTransactionTimestamp;
     }
 
+    /**
+     * Terminal reference of the stored value leg in a split tender, or
+     * {@code null} when no separate gift card charge was made. A same-session
+     * void reverses both legs.
+     */
+    public String getStoredValuePoiTransactionId() {
+        return storedValuePoiTransactionId;
+    }
+
+    public Instant getStoredValuePoiTransactionTimestamp() {
+        return storedValuePoiTransactionTimestamp;
+    }
+
     /** Non-fatal problems, e.g. a failed loyalty award. */
     public List<String> getWarnings() {
         return warnings;
@@ -203,6 +220,8 @@ public final class CheckoutResult {
         private Receipt merchantReceipt;
         private String poiTransactionId;
         private Instant poiTransactionTimestamp;
+        private String storedValuePoiTransactionId;
+        private Instant storedValuePoiTransactionTimestamp;
         private List<String> warnings = new ArrayList<>();
 
         private Builder() {
@@ -305,6 +324,16 @@ public final class CheckoutResult {
 
         public Builder poiTransactionTimestamp(Instant poiTransactionTimestamp) {
             this.poiTransactionTimestamp = poiTransactionTimestamp;
+            return this;
+        }
+
+        public Builder storedValuePoiTransactionId(String storedValuePoiTransactionId) {
+            this.storedValuePoiTransactionId = storedValuePoiTransactionId;
+            return this;
+        }
+
+        public Builder storedValuePoiTransactionTimestamp(Instant storedValuePoiTransactionTimestamp) {
+            this.storedValuePoiTransactionTimestamp = storedValuePoiTransactionTimestamp;
             return this;
         }
 

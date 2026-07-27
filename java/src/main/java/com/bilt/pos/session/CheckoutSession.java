@@ -162,6 +162,8 @@ public final class CheckoutSession {
     private volatile StoredValueCard storedValueCard;
     private volatile String lastPoiTransactionId;
     private volatile Instant lastPoiTransactionTimestamp;
+    private volatile String lastStoredValuePoiTransactionId;
+    private volatile Instant lastStoredValuePoiTransactionTimestamp;
 
     private CheckoutSession(Builder builder) {
         this.client = builder.client;
@@ -758,6 +760,9 @@ public final class CheckoutSession {
                 stateMachine.transitionTo(SessionState.COMPLETED);
                 lastPoiTransactionId = result.getPoiTransactionId();
                 lastPoiTransactionTimestamp = result.getPoiTransactionTimestamp();
+                lastStoredValuePoiTransactionId = result.getStoredValuePoiTransactionId();
+                lastStoredValuePoiTransactionTimestamp =
+                        result.getStoredValuePoiTransactionTimestamp();
             } finally {
                 lock.unlock();
             }
@@ -793,6 +798,11 @@ public final class CheckoutSession {
      * Full linked refund of the prior transaction referenced by the
      * builder's {@code poiTransactionId}. Also reverses loyalty points
      * awarded on the original transaction (best-effort).
+     *
+     * <p>Linked refunds reference a single transaction: after a split
+     * tender this is the card leg — use {@code voidTransaction()} to
+     * reverse both legs, or the stored value operations to return funds to
+     * the gift card.</p>
      */
     public SessionResult<RefundResult> refund() {
         return linkedRefund(null);
@@ -893,8 +903,17 @@ public final class CheckoutSession {
                 lock.unlock();
             }
             try {
+                // a session-fallback void of a split tender reverses both
+                // legs; a builder-referenced void stays single-leg (the
+                // caller controls the reference), and a gift-card-only
+                // checkout has one transaction, not two
+                String storedValueLeg = poiTransactionId == null
+                        && lastStoredValuePoiTransactionId != null
+                        && !lastStoredValuePoiTransactionId.equals(originalId)
+                        ? lastStoredValuePoiTransactionId : null;
                 VoidResult result = refundManager.voidTransaction(
-                        originalId, effectivePoiTransactionTimestamp());
+                        originalId, effectivePoiTransactionTimestamp(),
+                        storedValueLeg, lastStoredValuePoiTransactionTimestamp);
                 transitionLocked(SessionState.VOIDED);
                 return result;
             } catch (SessionException e) {

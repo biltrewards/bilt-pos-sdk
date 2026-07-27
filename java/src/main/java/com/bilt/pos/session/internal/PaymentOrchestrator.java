@@ -412,6 +412,14 @@ public final class PaymentOrchestrator {
         // references/receipts must reach the result so the session can void
         // or refund it (the card step overwrites them when it runs)
         copyPaymentArtifacts(body, result);
+        // the split-tender leg keeps its own reference so a session void can
+        // reverse BOTH legs, not just the card payment
+        TransactionIdentificationType storedValuePoiTxn = poiRef(body.getPoiData());
+        if (storedValuePoiTxn != null) {
+            result.storedValuePoiTransactionId(storedValuePoiTxn.getTransactionID());
+            result.storedValuePoiTransactionTimestamp(
+                    Wire.instant(storedValuePoiTxn.getTimeStamp()));
+        }
 
         return new GiftCardPaymentResult(charged, remainingBalance, currentTotal,
                 currentTotal.subtract(charged));
