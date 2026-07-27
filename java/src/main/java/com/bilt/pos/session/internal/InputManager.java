@@ -80,7 +80,7 @@ public final class InputManager {
                 displayPayload(prompt, options), inputData(options), options.getTimeout());
         String value = input.getDigitInput() != null ? input.getDigitInput() : input.getTextInput();
         if (value == null) {
-            throw missingField("decimal input");
+            throw Wire.missing("decimal input");
         }
         try {
             return new BigDecimal(value);
@@ -128,7 +128,7 @@ public final class InputManager {
                 MessageCategoryType.INPUT, request, httpTimeout));
         long[] selected = input.getMenuEntryNumber();
         if (selected == null || selected.length == 0) {
-            throw missingField("menu selection");
+            throw Wire.missing("menu selection");
         }
         List<Integer> indices = new ArrayList<>(selected.length);
         List<String> values = new ArrayList<>(selected.length);
@@ -159,7 +159,7 @@ public final class InputManager {
         String image = response.getInputResponse().getInputResult()
                 .getResponse().getAdditionalResponse();
         if (image == null) {
-            throw missingField("signature image");
+            throw Wire.missing("signature image");
         }
         return Signature.fromPng(Base64.getDecoder().decode(image), Instant.now());
     }
@@ -194,7 +194,7 @@ public final class InputManager {
         SaleToPOIResponse response = exchange.sendExpectingBody(MessageCategoryType.PIN, request);
         PINResponse body = response.getPinResponse();
         if (body == null) {
-            throw missingField("PINResponse");
+            throw Wire.missing("PINResponse");
         }
         exchange.requireSuccess(MessageCategoryType.PIN, body.getResponse());
         boolean verified = mode != PinMode.PIN_ENTER
@@ -296,19 +296,14 @@ public final class InputManager {
     private Input parseInput(SaleToPOIResponse response) {
         InputResponse body = response.getInputResponse();
         if (body == null || body.getInputResult() == null) {
-            throw missingField("InputResponse");
+            throw Wire.missing("InputResponse");
         }
         Response result = body.getInputResult().getResponse();
         exchange.requireSuccess(MessageCategoryType.INPUT, result);
         Input input = body.getInputResult().getInput();
         if (input == null) {
-            throw missingField("input value");
+            throw Wire.missing("input value");
         }
         return input;
-    }
-
-    private static SessionException missingField(String what) {
-        return new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
-                "terminal response is missing the " + what));
     }
 }

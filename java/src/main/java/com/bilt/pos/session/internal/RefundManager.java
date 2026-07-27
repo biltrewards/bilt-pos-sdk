@@ -28,19 +28,15 @@ import com.bilt.pos.nexo.model.PaymentTypeEnum;
 import com.bilt.pos.nexo.model.ReversalReasonEnum;
 import com.bilt.pos.nexo.model.ReversalRequest;
 import com.bilt.pos.nexo.model.ReversalResponse;
-import com.bilt.pos.nexo.model.SaleData;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.RefundResult;
-import com.bilt.pos.session.SessionError;
-import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.VoidResult;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -98,7 +94,7 @@ public final class RefundManager {
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.PAYMENT))
                 .paymentRequest(PaymentRequest.builder()
-                        .saleData(newSaleData())
+                        .saleData(exchange.factory().saleData())
                         .paymentData(PaymentData.builder()
                                 .paymentType(PaymentTypeEnum.REFUND)
                                 .build())
@@ -110,7 +106,7 @@ public final class RefundManager {
                 MessageCategoryType.PAYMENT, request);
         PaymentResponse body = response.getPaymentResponse();
         if (body == null) {
-            throw missing("PaymentResponse");
+            throw Wire.missing("PaymentResponse");
         }
         exchange.requireSuccess(MessageCategoryType.PAYMENT, body.getResponse());
 
@@ -131,7 +127,7 @@ public final class RefundManager {
                         : amount)
                 .approvalCode(approvalCode(body))
                 .poiTransactionId(poiTxn == null ? null : poiTxn.getTransactionID())
-                .poiTransactionTimestamp(parseInstant(
+                .poiTransactionTimestamp(Wire.instant(
                         poiTxn == null ? null : poiTxn.getTimeStamp()))
                 .customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()))
                 .merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()))
@@ -146,7 +142,7 @@ public final class RefundManager {
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.REVERSAL))
                 .reversalRequest(ReversalRequest.builder()
-                        .saleData(newSaleData())
+                        .saleData(exchange.factory().saleData())
                         .originalPOITransaction(originalTransaction(
                                 originalPoiTxnId, originalPoiTimestamp))
                         .reversalReason(ReversalReasonEnum.MERCHANT_CANCEL)
@@ -157,7 +153,7 @@ public final class RefundManager {
                 MessageCategoryType.REVERSAL, request);
         ReversalResponse body = response.getReversalResponse();
         if (body == null) {
-            throw missing("ReversalResponse");
+            throw Wire.missing("ReversalResponse");
         }
         exchange.requireSuccess(MessageCategoryType.REVERSAL, body.getResponse());
 
@@ -170,7 +166,7 @@ public final class RefundManager {
                 .reversedAmount(body.getReversedAmount() == null
                         ? null : BigDecimal.valueOf(body.getReversedAmount()))
                 .poiTransactionId(poiTxn == null ? null : poiTxn.getTransactionID())
-                .poiTransactionTimestamp(parseInstant(
+                .poiTransactionTimestamp(Wire.instant(
                         poiTxn == null ? null : poiTxn.getTimeStamp()))
                 .customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()))
                 .merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()))
@@ -189,7 +185,7 @@ public final class RefundManager {
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.LOYALTY))
                 .loyaltyRequest(LoyaltyRequest.builder()
-                        .saleData(newSaleData())
+                        .saleData(exchange.factory().saleData())
                         .loyaltyTransaction(LoyaltyTransaction.builder()
                                 .loyaltyTransactionType(LoyaltyTransactionTypeEnum.AWARD_REFUND)
                                 .originalPOITransaction(originalTransaction(
@@ -202,7 +198,7 @@ public final class RefundManager {
                     MessageCategoryType.LOYALTY, request);
             LoyaltyResponse body = response.getLoyaltyResponse();
             if (body == null) {
-                throw missing("LoyaltyResponse");
+                throw Wire.missing("LoyaltyResponse");
             }
             exchange.requireSuccess(MessageCategoryType.LOYALTY, body.getResponse());
             LoyaltyResult result = body.getLoyaltyResult() != null
@@ -234,40 +230,11 @@ public final class RefundManager {
                 .build();
     }
 
-    private static SaleData newSaleData() {
-        return SaleData.builder()
-                .saleTransactionID(TransactionIdentificationType.builder()
-                        .transactionID(UUID.randomUUID().toString())
-                        .timeStamp(Instant.now().toString())
-                        .build())
-                .build();
-    }
-
     private static String approvalCode(PaymentResponse body) {
         if (body.getPaymentResult() == null
                 || body.getPaymentResult().getPaymentAcquirerData() == null) {
             return null;
         }
         return body.getPaymentResult().getPaymentAcquirerData().getApprovalCode();
-    }
-
-    private static Instant parseInstant(String value) {
-        if (value == null) {
-            return null;
-        }
-        try {
-            return java.time.OffsetDateTime.parse(value).toInstant();
-        } catch (java.time.format.DateTimeParseException e) {
-            try {
-                return Instant.parse(value);
-            } catch (java.time.format.DateTimeParseException ignored) {
-                return null;
-            }
-        }
-    }
-
-    private static SessionException missing(String what) {
-        return new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
-                "terminal response is missing " + what));
     }
 }

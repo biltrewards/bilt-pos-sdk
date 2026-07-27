@@ -16,14 +16,10 @@ import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.AbortRequest;
 import com.bilt.pos.nexo.model.DiagnosisRequest;
 import com.bilt.pos.nexo.model.DiagnosisResponse;
-import com.bilt.pos.nexo.model.DisplayOutput;
-import com.bilt.pos.nexo.model.DisplayRequest;
-import com.bilt.pos.nexo.model.DeviceEnum;
 import com.bilt.pos.nexo.model.DocumentQualifierEnum;
 import com.bilt.pos.nexo.model.ErrorConditionType;
 import com.bilt.pos.nexo.model.GetTotalsRequest;
 import com.bilt.pos.nexo.model.GetTotalsResponse;
-import com.bilt.pos.nexo.model.InfoQualifyEnum;
 import com.bilt.pos.nexo.model.InputUpdate;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
@@ -81,6 +77,7 @@ import com.bilt.pos.session.internal.PaymentOrchestrator;
 import com.bilt.pos.session.internal.RefundManager;
 import com.bilt.pos.session.internal.SessionStateMachine;
 import com.bilt.pos.session.internal.StoredValueManager;
+import com.bilt.pos.session.internal.Wire;
 import com.bilt.pos.session.payment.CheckoutResult;
 import com.bilt.pos.session.payment.PaymentOptions;
 import com.bilt.pos.session.storedvalue.StoredValueBalance;
@@ -703,11 +700,7 @@ public final class CheckoutSession {
             throw new IllegalStateException(
                     "pay() requires items in the basket (state " + state + ")");
         }
-        String pending = unexecutedOperation.getAndSet("pay");
-        if (pending != null) {
-            LOGGER.warning("session operation '" + pending + "' was created but never executed; "
-                    + "did you forget to call execute(), get(), or getOrNull()?");
-        }
+        trackUnexecuted("pay");
         return new PaymentFlow(flow -> executePayment(flow, options));
     }
 
@@ -928,21 +921,8 @@ public final class CheckoutSession {
     }
 
     private void sendDisplay(String base64Xhtml) {
-        SaleToPOIRequest request = SaleToPOIRequest.builder()
-                .messageHeader(factory.header(MessageClassType.DEVICE, MessageCategoryType.DISPLAY))
-                .displayRequest(DisplayRequest.builder()
-                        .displayOutput(new DisplayOutput[] {DisplayOutput.builder()
-                                .device(DeviceEnum.CUSTOMER_DISPLAY)
-                                .infoQualify(InfoQualifyEnum.DISPLAY)
-                                .outputContent(OutputContent.builder()
-                                        .outputFormat(OutputFormatEnum.XHTML)
-                                        .outputXHTML(base64Xhtml)
-                                        .build())
-                                .build()})
-                        .build())
-                .build();
         try {
-            exchange.send(MessageCategoryType.DISPLAY, request);
+            exchange.send(MessageCategoryType.DISPLAY, factory.displayRequest(base64Xhtml));
         } catch (SessionException e) {
             LOGGER.log(Level.WARNING, "display update failed: " + e.getError(), e);
         }
@@ -1001,11 +981,6 @@ public final class CheckoutSession {
         }
     }
 
-    /** Whether {@link #abort()} has been requested on this session. */
-    boolean isAbortRequested() {
-        return abortRequested;
-    }
-
     // ─── Transaction Status ───
 
     /**
@@ -1048,8 +1023,7 @@ public final class CheckoutSession {
                     MessageCategoryType.TRANSACTION_STATUS, request);
             TransactionStatusResponse body = response.getTransactionStatusResponse();
             if (body == null) {
-                throw new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
-                        "terminal response is missing TransactionStatusResponse"));
+                throw Wire.missing("TransactionStatusResponse");
             }
             if (body.getResponse() != null
                     && body.getResponse().getResult() == ResultType.FAILURE
@@ -1208,8 +1182,7 @@ public final class CheckoutSession {
                     MessageCategoryType.GET_TOTALS, request);
             GetTotalsResponse body = response.getGetTotalsResponse();
             if (body == null) {
-                throw new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
-                        "terminal response is missing GetTotalsResponse"));
+                throw Wire.missing("GetTotalsResponse");
             }
             exchange.requireSuccess(MessageCategoryType.GET_TOTALS, body.getResponse());
             return new ReconciliationResult(body.getPoiReconciliationID(),
@@ -1230,8 +1203,7 @@ public final class CheckoutSession {
                     MessageCategoryType.DIAGNOSIS, request);
             DiagnosisResponse body = response.getDiagnosisResponse();
             if (body == null) {
-                throw new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
-                        "terminal response is missing DiagnosisResponse"));
+                throw Wire.missing("DiagnosisResponse");
             }
             exchange.requireSuccess(MessageCategoryType.DIAGNOSIS, body.getResponse());
             return new DiagnosisResult(body.getPoiStatus(),
@@ -1253,8 +1225,7 @@ public final class CheckoutSession {
                     MessageCategoryType.RECONCILIATION, request);
             ReconciliationResponse body = response.getReconciliationResponse();
             if (body == null) {
-                throw new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
-                        "terminal response is missing ReconciliationResponse"));
+                throw Wire.missing("ReconciliationResponse");
             }
             exchange.requireSuccess(MessageCategoryType.RECONCILIATION, body.getResponse());
             return new ReconciliationResult(body.getPoiReconciliationID(),
@@ -1292,8 +1263,7 @@ public final class CheckoutSession {
                     MessageCategoryType.PRINT, request);
             PrintResponse body = response.getPrintResponse();
             if (body == null) {
-                throw new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
-                        "terminal response is missing PrintResponse"));
+                throw Wire.missing("PrintResponse");
             }
             exchange.requireSuccess(MessageCategoryType.PRINT, body.getResponse());
             return null;
@@ -1315,15 +1285,20 @@ public final class CheckoutSession {
      * most common integration mistake with this API).
      */
     private <T> SessionResult<T> operation(String name, Supplier<T> body) {
+        trackUnexecuted(name);
+        return new SessionResult<>(name, () -> {
+            unexecutedOperation.compareAndSet(name, null);
+            return body.get();
+        });
+    }
+
+    /** Warns when a previously created operation was never executed. */
+    private void trackUnexecuted(String name) {
         String pending = unexecutedOperation.getAndSet(name);
         if (pending != null) {
             LOGGER.warning("session operation '" + pending + "' was created but never executed; "
                     + "did you forget to call execute(), get(), or getOrNull()?");
         }
-        return new SessionResult<>(name, () -> {
-            unexecutedOperation.compareAndSet(name, null);
-            return body.get();
-        });
     }
 
     /** Builder for {@link CheckoutSession}. */

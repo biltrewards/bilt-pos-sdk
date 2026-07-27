@@ -29,12 +29,8 @@ import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
 import com.bilt.pos.nexo.model.Response;
 import com.bilt.pos.nexo.model.ResultType;
-import com.bilt.pos.nexo.model.SaleData;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
-import com.bilt.pos.nexo.model.TransactionIdentificationType;
-import com.bilt.pos.session.SessionError;
-import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
 import com.bilt.pos.session.identity.CardAcquisitionResult;
@@ -45,11 +41,9 @@ import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
 import com.bilt.pos.session.identity.MemberIdentifier;
 
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Member identification and card acquisition flows.
@@ -78,7 +72,7 @@ public final class IdentityManager {
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.CARD_ACQUISITION))
                 .cardAcquisitionRequest(CardAcquisitionRequest.builder()
-                        .saleData(newSaleData())
+                        .saleData(exchange.factory().saleData())
                         .cardAcquisitionTransaction(transaction.build())
                         .build())
                 .build();
@@ -87,7 +81,7 @@ public final class IdentityManager {
                 MessageCategoryType.CARD_ACQUISITION, request, options.getTimeout());
         CardAcquisitionResponse body = response.getCardAcquisitionResponse();
         if (body == null || body.getResponse() == null) {
-            throw missing("CardAcquisitionResponse");
+            throw Wire.missing("CardAcquisitionResponse");
         }
         IdentifyStatus lookupStatus = lookupStatus(body.getResponse());
         if (lookupStatus != IdentifyStatus.FOUND) {
@@ -96,7 +90,7 @@ public final class IdentityManager {
         LoyaltyAccount account = body.getLoyaltyAccount() != null
                 && body.getLoyaltyAccount().length > 0 ? body.getLoyaltyAccount()[0] : null;
         if (account == null || account.getLoyaltyAccountID() == null) {
-            throw missing("LoyaltyAccount");
+            throw Wire.missing("LoyaltyAccount");
         }
         return IdentifyResult.found(
                 account.getLoyaltyAccountID().getLoyaltyID(),
@@ -130,7 +124,7 @@ public final class IdentityManager {
                 MessageCategoryType.BALANCE_INQUIRY, request);
         BalanceInquiryResponse body = response.getBalanceInquiryResponse();
         if (body == null || body.getResponse() == null) {
-            throw missing("BalanceInquiryResponse");
+            throw Wire.missing("BalanceInquiryResponse");
         }
         IdentifyStatus lookupStatus = lookupStatus(body.getResponse());
         if (lookupStatus != IdentifyStatus.FOUND) {
@@ -139,7 +133,7 @@ public final class IdentityManager {
         LoyaltyAccount account = body.getLoyaltyAccountStatus() == null
                 ? null : body.getLoyaltyAccountStatus().getLoyaltyAccount();
         if (account == null || account.getLoyaltyAccountID() == null) {
-            throw missing("LoyaltyAccountStatus");
+            throw Wire.missing("LoyaltyAccountStatus");
         }
         Double balance = body.getLoyaltyAccountStatus().getCurrentBalance();
         return IdentifyResult.found(
@@ -163,7 +157,7 @@ public final class IdentityManager {
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.CARD_ACQUISITION))
                 .cardAcquisitionRequest(CardAcquisitionRequest.builder()
-                        .saleData(newSaleData())
+                        .saleData(exchange.factory().saleData())
                         .cardAcquisitionTransaction(transaction.build())
                         .build())
                 .build();
@@ -172,13 +166,13 @@ public final class IdentityManager {
                 MessageCategoryType.CARD_ACQUISITION, request, options.getTimeout());
         CardAcquisitionResponse body = response.getCardAcquisitionResponse();
         if (body == null) {
-            throw missing("CardAcquisitionResponse");
+            throw Wire.missing("CardAcquisitionResponse");
         }
         exchange.requireSuccess(MessageCategoryType.CARD_ACQUISITION, body.getResponse());
         CardData card = body.getPaymentInstrumentData() == null
                 ? null : body.getPaymentInstrumentData().getCardData();
         if (card == null) {
-            throw missing("CardData");
+            throw Wire.missing("CardData");
         }
         return CardAcquisitionResult.builder()
                 .maskedPan(card.getMaskedPAN())
@@ -197,15 +191,6 @@ public final class IdentityManager {
     }
 
     // ─── Internals ───
-
-    private static SaleData newSaleData() {
-        return SaleData.builder()
-                .saleTransactionID(TransactionIdentificationType.builder()
-                        .transactionID(UUID.randomUUID().toString())
-                        .timeStamp(Instant.now().toString())
-                        .build())
-                .build();
-    }
 
     /**
      * Distinguishes "no member attached" outcomes from real errors: not
@@ -274,10 +259,5 @@ public final class IdentityManager {
         Map<String, String> fallback = new LinkedHashMap<>();
         fallback.put("raw", raw);
         return fallback;
-    }
-
-    private static SessionException missing(String what) {
-        return new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
-                "terminal response is missing " + what));
     }
 }

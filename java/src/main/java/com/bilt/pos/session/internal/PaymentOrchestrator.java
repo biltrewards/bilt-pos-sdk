@@ -59,7 +59,6 @@ import com.bilt.pos.session.payment.TransactionContext;
 import com.bilt.pos.session.payment.TransactionStep;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -226,13 +225,7 @@ public final class PaymentOrchestrator {
         if (currentTotal.signum() > 0) {
             checkAbort(request);
             if (options.getPaymentProcessingDisplay() != null) {
-                // best-effort processing screen while the cardholder pays
-                try {
-                    // routed like any display; failures must not stop the payment
-                    new DisplayManagerLite(exchange).show(options.getPaymentProcessingDisplay());
-                } catch (RuntimeException e) {
-                    LOGGER.log(Level.WARNING, "payment processing display failed", e);
-                }
+                showProcessingDisplay(options.getPaymentProcessingDisplay());
             }
             String saleTxnId = beforeStep(request, TransactionStep.CARD_PAYMENT,
                     workingBasket, currentTotal, committed);
@@ -293,7 +286,7 @@ public final class PaymentOrchestrator {
                 for (SaleItemRebate itemRebate : wireRebates.getSaleItemRebate()) {
                     String itemId = String.valueOf(itemRebate.getItemID());
                     BigDecimal amount = itemRebate.getItemAmount() == null
-                            ? BigDecimal.ZERO : money(itemRebate.getItemAmount());
+                            ? BigDecimal.ZERO : Wire.money(itemRebate.getItemAmount());
                     rebates.add(new RedeemedRebate(itemId, itemRebate.getProductCode(), amount,
                             itemRebate.getRebateLabel() != null
                                     ? itemRebate.getRebateLabel() : wireRebates.getRebateLabel(),
@@ -301,7 +294,7 @@ public final class PaymentOrchestrator {
                 }
             }
             totalRebate = wireRebates.getTotalRebate() != null
-                    ? money(wireRebates.getTotalRebate())
+                    ? Wire.money(wireRebates.getTotalRebate())
                     : rebates.stream().map(RedeemedRebate::getAmount)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
@@ -340,7 +333,7 @@ public final class PaymentOrchestrator {
         if (first != null) {
             LoyaltyAmount amount = first.getLoyaltyAmount();
             if (amount != null) {
-                monetaryValue = money(amount.getAmountValue());
+                monetaryValue = Wire.money(amount.getAmountValue());
                 if (amount.getLoyaltyUnit() == LoyaltyUnitEnum.POINT) {
                     pointsUsed = (int) Math.round(amount.getAmountValue());
                 }
@@ -369,7 +362,7 @@ public final class PaymentOrchestrator {
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.PAYMENT))
                 .paymentRequest(PaymentRequest.builder()
-                        .saleData(saleData(saleTxnId))
+                        .saleData(exchange.factory().saleData(saleTxnId))
                         .paymentTransaction(PaymentTransaction.builder()
                                 .amountsReq(AmountsReq.builder()
                                         .currency(currency)
@@ -389,7 +382,7 @@ public final class PaymentOrchestrator {
         PaymentResponse body = sendPayment(TransactionStep.STORED_VALUE, wireRequest);
         BigDecimal charged = body.getPaymentResult() != null
                 && body.getPaymentResult().getAmountsResp() != null
-                ? money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
+                ? Wire.money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
                 : currentTotal;
         BigDecimal remainingBalance = parseCardBalance(
                 body.getResponse().getAdditionalResponse());
@@ -414,7 +407,7 @@ public final class PaymentOrchestrator {
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.PAYMENT))
                 .paymentRequest(PaymentRequest.builder()
-                        .saleData(saleData(saleTxnId))
+                        .saleData(exchange.factory().saleData(saleTxnId))
                         .paymentTransaction(PaymentTransaction.builder()
                                 .amountsReq(amounts.build())
                                 .saleItem(SaleItemMapper.toAdjustedSaleItems(basket)
@@ -426,7 +419,7 @@ public final class PaymentOrchestrator {
         PaymentResponse body = sendPayment(TransactionStep.CARD_PAYMENT, wireRequest);
         BigDecimal charged = body.getPaymentResult() != null
                 && body.getPaymentResult().getAmountsResp() != null
-                ? money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
+                ? Wire.money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
                 : currentTotal;
 
         TransactionIdentificationType poiTxn = poiRef(body.getPoiData());
@@ -453,7 +446,7 @@ public final class PaymentOrchestrator {
         result.merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()));
         if (poiTxn != null) {
             result.poiTransactionId(poiTxn.getTransactionID());
-            result.poiTransactionTimestamp(parseInstant(poiTxn.getTimeStamp()));
+            result.poiTransactionTimestamp(Wire.instant(poiTxn.getTimeStamp()));
         }
         return charged;
     }
@@ -523,8 +516,7 @@ public final class PaymentOrchestrator {
                     MessageCategoryType.LOYALTY, wireRequest);
             LoyaltyResponse body = response.getLoyaltyResponse();
             if (body == null) {
-                throw new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
-                        "terminal response is missing LoyaltyResponse"));
+                throw Wire.missing("LoyaltyResponse");
             }
             exchange.requireSuccess(MessageCategoryType.LOYALTY, body.getResponse());
             return body;
@@ -539,8 +531,7 @@ public final class PaymentOrchestrator {
                     MessageCategoryType.PAYMENT, wireRequest);
             PaymentResponse body = response.getPaymentResponse();
             if (body == null) {
-                throw new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
-                        "terminal response is missing PaymentResponse"));
+                throw Wire.missing("PaymentResponse");
             }
             exchange.requireSuccess(MessageCategoryType.PAYMENT, body.getResponse());
             return body;
@@ -594,7 +585,7 @@ public final class PaymentOrchestrator {
         committed.add(new Commit(
                 new CommittedStep(step, saleTxnId,
                         poiTxn == null ? null : poiTxn.getTransactionID(),
-                        poiTxn == null ? null : parseInstant(poiTxn.getTimeStamp()),
+                        poiTxn == null ? null : Wire.instant(poiTxn.getTimeStamp()),
                         true),
                 rollback));
     }
@@ -623,7 +614,7 @@ public final class PaymentOrchestrator {
                     .messageHeader(exchange.factory().header(
                             MessageClassType.SERVICE, MessageCategoryType.LOYALTY))
                     .loyaltyRequest(LoyaltyRequest.builder()
-                            .saleData(saleData(UUID.randomUUID().toString()))
+                            .saleData(exchange.factory().saleData())
                             .loyaltyTransaction(LoyaltyTransaction.builder()
                                     .loyaltyTransactionType(refundType)
                                     .originalPOITransaction(original(originalPoiTxn))
@@ -645,7 +636,7 @@ public final class PaymentOrchestrator {
                     .messageHeader(exchange.factory().header(
                             MessageClassType.SERVICE, MessageCategoryType.REVERSAL))
                     .reversalRequest(ReversalRequest.builder()
-                            .saleData(saleData(UUID.randomUUID().toString()))
+                            .saleData(exchange.factory().saleData())
                             .originalPOITransaction(original(originalPoiTxn))
                             .reversalReason(ReversalReasonEnum.MERCHANT_CANCEL)
                             .build())
@@ -667,36 +658,13 @@ public final class PaymentOrchestrator {
 
     // ─── Helpers ───
 
-    /** Minimal display sender for the payment-processing screen. */
-    private static final class DisplayManagerLite {
-        private final NexoExchange exchange;
-
-        DisplayManagerLite(NexoExchange exchange) {
-            this.exchange = exchange;
-        }
-
-        void show(com.bilt.pos.display.DisplayPayload payload) {
-            try {
-                String base64 = com.bilt.pos.display.DisplayPayloadHelper.toBase64(payload);
-                SaleToPOIRequest request = SaleToPOIRequest.builder()
-                        .messageHeader(exchange.factory().header(
-                                MessageClassType.DEVICE, MessageCategoryType.DISPLAY))
-                        .displayRequest(com.bilt.pos.nexo.model.DisplayRequest.builder()
-                                .displayOutput(new com.bilt.pos.nexo.model.DisplayOutput[] {
-                                        com.bilt.pos.nexo.model.DisplayOutput.builder()
-                                                .device(com.bilt.pos.nexo.model.DeviceEnum.CUSTOMER_DISPLAY)
-                                                .infoQualify(com.bilt.pos.nexo.model.InfoQualifyEnum.DISPLAY)
-                                                .outputContent(com.bilt.pos.nexo.model.OutputContent.builder()
-                                                        .outputFormat(com.bilt.pos.nexo.model.OutputFormatEnum.XHTML)
-                                                        .outputXHTML(base64)
-                                                        .build())
-                                                .build()})
-                                .build())
-                        .build();
-                exchange.send(MessageCategoryType.DISPLAY, request);
-            } catch (jakarta.xml.bind.JAXBException e) {
-                throw new IllegalStateException("failed to serialize display payload", e);
-            }
+    /** Best-effort processing screen while the cardholder pays. */
+    private void showProcessingDisplay(com.bilt.pos.display.DisplayPayload payload) {
+        try {
+            exchange.send(MessageCategoryType.DISPLAY, exchange.factory().displayRequest(
+                    com.bilt.pos.display.DisplayPayloadHelper.toBase64(payload)));
+        } catch (jakarta.xml.bind.JAXBException | RuntimeException e) {
+            LOGGER.log(Level.WARNING, "payment processing display failed", e);
         }
     }
 
@@ -707,15 +675,6 @@ public final class PaymentOrchestrator {
 
     private static TransactionIdentificationType poiRef(com.bilt.pos.nexo.model.POIData poiData) {
         return poiData == null ? null : poiData.getPoiTransactionID();
-    }
-
-    private static SaleData saleData(String saleTxnId) {
-        return SaleData.builder()
-                .saleTransactionID(TransactionIdentificationType.builder()
-                        .transactionID(saleTxnId)
-                        .timeStamp(Instant.now().toString())
-                        .build())
-                .build();
     }
 
     private static Basket applyRebates(Basket basket, List<RedeemedRebate> rebates,
@@ -806,24 +765,5 @@ public final class PaymentOrchestrator {
             }
         }
         return messages;
-    }
-
-    private static BigDecimal money(double value) {
-        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private static Instant parseInstant(String value) {
-        if (value == null) {
-            return null;
-        }
-        try {
-            return java.time.OffsetDateTime.parse(value).toInstant();
-        } catch (java.time.format.DateTimeParseException e) {
-            try {
-                return Instant.parse(value);
-            } catch (java.time.format.DateTimeParseException ignored) {
-                return null;
-            }
-        }
     }
 }
