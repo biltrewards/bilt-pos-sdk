@@ -804,14 +804,14 @@ public final class CheckoutSession {
         Objects.requireNonNull(amount, "amount");
         requirePositive(amount);
         return operation("refundUnlinked", () -> {
-            requireNotEnded("refundUnlinked");
+            requireRefundable("refundUnlinked");
             return refundManager.refund(amount, null, null);
         });
     }
 
     private SessionResult<RefundResult> linkedRefund(BigDecimal amount) {
         return operation("refund", () -> {
-            requireNotEnded("refund");
+            requireRefundable("refund");
             String originalId = effectivePoiTransactionId();
             if (originalId == null) {
                 throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
@@ -829,6 +829,18 @@ public final class CheckoutSession {
 
     private Instant effectivePoiTransactionTimestamp() {
         return poiTransactionId != null ? poiTransactionTimestamp : lastPoiTransactionTimestamp;
+    }
+
+    /**
+     * Refunds are allowed on fresh sessions (builder-referenced) and on
+     * sessions whose payment has completed or failed — unlike
+     * {@link #requireNotEnded}, {@code COMPLETED} is a refundable state so a
+     * register can refund the payment it just took.
+     */
+    private void requireRefundable(String operationName) {
+        requireState(EnumSet.of(SessionState.IDLE, SessionState.IDENTIFIED,
+                SessionState.ACTIVE, SessionState.COMPLETED, SessionState.FAILED),
+                operationName);
     }
 
     private static void requirePositive(BigDecimal amount) {

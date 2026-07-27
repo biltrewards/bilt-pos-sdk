@@ -534,6 +534,30 @@ class CheckoutSessionPaymentTest {
     // ─── Post-payment void uses the payment's references ───
 
     @Test
+    void refundAfterCompletedPaymentUsesLastTransactionReference() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        session.pay().execute();
+        drainRequests();
+        assertEquals(SessionState.COMPLETED, session.getState());
+
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":25.00}}}}}"));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));  // award refund
+
+        RefundResult refund = session.refund(new BigDecimal("25.00")).get();
+
+        assertTrue(refund.isSuccess());
+        assertEquals(SessionState.COMPLETED, session.getState(), "refund leaves the state alone");
+        SaleToPOIRequest sent = nextRequest();
+        assertEquals("Refund", sent.getPaymentRequest().getPaymentData().getPaymentType().toValue());
+        assertEquals("POI-PAY-1", sent.getPaymentRequest().getPaymentTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
     void voidAfterPaymentUsesLastTransactionReference() throws Exception {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
