@@ -306,6 +306,8 @@ class CheckoutSessionPaymentTest {
         assertEquals(0, new BigDecimal("35.00").compareTo(result.getStoredValueAmountUsed()));
         assertEquals(0, new BigDecimal("50.00").compareTo(result.getCardAmountCharged()));
         assertEquals(0, new BigDecimal("85.00").compareTo(result.getAuthorizedAmount()));
+        assertEquals("POI-PAY-1", result.getPoiTransactionId(),
+                "in a split tender the card payment's reference wins");
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(5, requests.size());
@@ -328,7 +330,18 @@ class CheckoutSessionPaymentTest {
 
         assertEquals(0, new BigDecimal("100.00").compareTo(result.getStoredValueAmountUsed()));
         assertEquals(0, BigDecimal.ZERO.compareTo(result.getCardAmountCharged()));
+        assertEquals("POI-GC-1", result.getPoiTransactionId(),
+                "the gift card payment's reference must reach the result");
+        assertEquals("APPR7", result.getApprovalCode());
         assertEquals(1, drainRequests().size(), "no card payment when the gift card covers it");
+
+        // and the checkout is voidable via that reference
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        SaleToPOIRequest reversal = nextRequest();
+        assertEquals("POI-GC-1", reversal.getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
     }
 
     // ─── Rollback ───

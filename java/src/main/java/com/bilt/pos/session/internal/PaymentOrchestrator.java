@@ -41,6 +41,7 @@ import com.bilt.pos.nexo.model.SaleItemRebate;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
+import com.bilt.pos.session.Receipt;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
@@ -215,7 +216,7 @@ public final class PaymentOrchestrator {
             String saleTxnId = beforeStep(request, TransactionStep.STORED_VALUE,
                     workingBasket, currentTotal, committed);
             GiftCardPaymentResult giftCard = storedValueStep(request, currentTotal,
-                    saleTxnId, committed);
+                    saleTxnId, committed, result);
             storedValueCharged = giftCard.getAmountCharged();
             currentTotal = applyHandlerTotal(request.handlers.onGiftCardPayment,
                     giftCard, giftCard.getSuggestedTotal());
@@ -366,7 +367,8 @@ public final class PaymentOrchestrator {
     }
 
     private GiftCardPaymentResult storedValueStep(Request request, BigDecimal currentTotal,
-                                                  String saleTxnId, List<Commit> committed) {
+                                                  String saleTxnId, List<Commit> committed,
+                                                  CheckoutResult.Builder result) {
         SaleToPOIRequest wireRequest = SaleToPOIRequest.builder()
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.PAYMENT))
@@ -398,6 +400,11 @@ public final class PaymentOrchestrator {
 
         commit(committed, TransactionStep.STORED_VALUE, saleTxnId, body.getPoiData(),
                 reversalRollback(poiRef(body.getPoiData())));
+
+        // a gift-card-only checkout has no card step: this payment's
+        // references/receipts must reach the result so the session can void
+        // or refund it (the card step overwrites them when it runs)
+        copyPaymentArtifacts(body, result);
 
         return new GiftCardPaymentResult(charged, remainingBalance, currentTotal,
                 currentTotal.subtract(charged));
@@ -431,14 +438,25 @@ public final class PaymentOrchestrator {
                 ? Wire.money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
                 : currentTotal;
 
-        TransactionIdentificationType poiTxn = poiRef(body.getPoiData());
         commit(committed, TransactionStep.CARD_PAYMENT, saleTxnId, body.getPoiData(),
-                reversalRollback(poiTxn));
+                reversalRollback(poiRef(body.getPoiData())));
+        copyPaymentArtifacts(body, result);
+        return charged;
+    }
 
+    /**
+     * Copies transaction references, acquirer data, and receipts from a
+     * payment response onto the checkout result. Both the stored value and
+     * card steps are payments; the card step runs last, so in a split tender
+     * its (non-null) values take precedence.
+     */
+    private static void copyPaymentArtifacts(PaymentResponse body, CheckoutResult.Builder result) {
         if (body.getPaymentResult() != null
                 && body.getPaymentResult().getPaymentAcquirerData() != null) {
-            result.approvalCode(body.getPaymentResult()
-                    .getPaymentAcquirerData().getApprovalCode());
+            if (body.getPaymentResult().getPaymentAcquirerData().getApprovalCode() != null) {
+                result.approvalCode(body.getPaymentResult()
+                        .getPaymentAcquirerData().getApprovalCode());
+            }
             if (body.getPaymentResult().getPaymentAcquirerData()
                     .getAcquirerTransactionID() != null) {
                 result.acquirerTransactionId(body.getPaymentResult().getPaymentAcquirerData()
@@ -447,17 +465,25 @@ public final class PaymentOrchestrator {
         }
         if (body.getPaymentResult() != null
                 && body.getPaymentResult().getPaymentInstrumentData() != null
-                && body.getPaymentResult().getPaymentInstrumentData().getCardData() != null) {
+                && body.getPaymentResult().getPaymentInstrumentData().getCardData() != null
+                && body.getPaymentResult().getPaymentInstrumentData()
+                        .getCardData().getPaymentBrand() != null) {
             result.paymentBrand(body.getPaymentResult().getPaymentInstrumentData()
                     .getCardData().getPaymentBrand());
         }
-        result.customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()));
-        result.merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()));
+        Receipt customerReceipt = ReceiptMapper.customerReceipt(body.getPaymentReceipt());
+        if (customerReceipt != null) {
+            result.customerReceipt(customerReceipt);
+        }
+        Receipt merchantReceipt = ReceiptMapper.merchantReceipt(body.getPaymentReceipt());
+        if (merchantReceipt != null) {
+            result.merchantReceipt(merchantReceipt);
+        }
+        TransactionIdentificationType poiTxn = poiRef(body.getPoiData());
         if (poiTxn != null) {
             result.poiTransactionId(poiTxn.getTransactionID());
             result.poiTransactionTimestamp(Wire.instant(poiTxn.getTimeStamp()));
         }
-        return charged;
     }
 
     private void awardStep(Request request, Basket basket, BigDecimal totalPaid,
