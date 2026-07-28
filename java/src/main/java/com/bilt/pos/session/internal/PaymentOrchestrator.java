@@ -349,9 +349,15 @@ public final class PaymentOrchestrator {
         if (first != null) {
             LoyaltyAmount amount = first.getLoyaltyAmount();
             if (amount != null) {
-                monetaryValue = Wire.money(amount.getAmountValue());
                 if (amount.getLoyaltyUnit() == LoyaltyUnitEnum.POINT) {
+                    // a point count is not currency: never subtract it from
+                    // the running total as dollars. With no monetary value
+                    // reported, the discount stays zero — the safe outcome.
                     pointsUsed = (int) Math.round(amount.getAmountValue());
+                } else {
+                    // Monetary per the redemption contract (also the default
+                    // when the unit is omitted)
+                    monetaryValue = Wire.money(amount.getAmountValue());
                 }
             }
             balance = first.getCurrentBalance() == null

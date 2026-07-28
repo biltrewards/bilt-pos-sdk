@@ -288,6 +288,42 @@ class CheckoutSessionPaymentTest {
                 .getSaleData().getSaleTransactionID().getTransactionID());
     }
 
+    @Test
+    void pointUnitRedemptionIsNotSubtractedAsMoney() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        // off-contract response: the redemption reports a POINT count, not money
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-RD-1\"}},"
+                        + "\"LoyaltyResult\":[{\"CurrentBalance\":200,"
+                        + "\"LoyaltyAmount\":{\"AmountValue\":500,\"LoyaltyUnit\":\"Point\"}}]}}}"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 90.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+        CheckoutResult result = session.pay()
+                .onPointsRedeemed(points -> {
+                    assertEquals(500, points.getPointsUsed());
+                    assertEquals(0, BigDecimal.ZERO.compareTo(points.getMonetaryValue()),
+                            "a point count must not become a dollar discount");
+                    assertEquals(0, points.getPreviousTotal()
+                            .compareTo(points.getSuggestedTotal()));
+                    return points.getSuggestedTotal();
+                })
+                .get();
+
+        assertEquals(500, result.getPointsRedeemed());
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getPointsMonetaryValue()));
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        // rebate (-10) leaves 90; the 500 points must not have reduced it
+        assertEquals(90.00, requests.get(2).getPaymentRequest()
+                .getPaymentTransaction().getAmountsReq().getRequestedAmount());
+    }
+
     // ─── Gift card split tender ───
 
     @Test
