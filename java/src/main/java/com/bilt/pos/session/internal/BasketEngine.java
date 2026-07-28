@@ -23,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.UUID;
 
 /**
@@ -68,12 +69,47 @@ public final class BasketEngine implements BasketMutation {
             this.taxRate = item.getTaxRate();
             this.taxAmount = item.getTaxAmount();
         }
+
+        Line(Line other) {
+            this.itemId = other.itemId;
+            this.sku = other.sku;
+            this.description = other.description;
+            this.category = other.category;
+            this.unitPrice = other.unitPrice;
+            this.metadata = other.metadata;
+            this.quantity = other.quantity;
+            this.taxRate = other.taxRate;
+            this.taxAmount = other.taxAmount;
+        }
     }
 
     private final String cartId = UUID.randomUUID().toString();
     private final Map<String, Line> linesBySku = new LinkedHashMap<>();
     private int nextItemId = 1;
     private BigDecimal taxTotalOverride;
+
+    /**
+     * Applies a batch of mutations atomically: if any of them throws, the
+     * pre-batch state is restored and the exception rethrown — the basket
+     * is never left partially updated.
+     */
+    public void mutateAtomically(Consumer<BasketMutation> mutation) {
+        Map<String, Line> savedLines = new LinkedHashMap<>();
+        for (Map.Entry<String, Line> entry : linesBySku.entrySet()) {
+            savedLines.put(entry.getKey(), new Line(entry.getValue()));
+        }
+        int savedNextItemId = nextItemId;
+        BigDecimal savedTaxTotalOverride = taxTotalOverride;
+        try {
+            mutation.accept(this);
+        } catch (RuntimeException e) {
+            linesBySku.clear();
+            linesBySku.putAll(savedLines);
+            nextItemId = savedNextItemId;
+            taxTotalOverride = savedTaxTotalOverride;
+            throw e;
+        }
+    }
 
     // ─── Mutations ───
 

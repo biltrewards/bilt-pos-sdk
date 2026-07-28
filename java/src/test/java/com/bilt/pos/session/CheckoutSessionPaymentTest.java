@@ -399,6 +399,21 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void throwingMutationDoesNotResumeAFailedSession() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        assertThrows(SessionException.class, () -> session.pay().get());
+        assertEquals(SessionState.FAILED, session.getState());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> session.removeItemBySku("NO-SUCH-SKU"));
+
+        assertEquals(SessionState.FAILED, session.getState(),
+                "a mutation that failed must not flip FAILED to ACTIVE");
+        assertEquals(1, session.getBasket().getItemCount());
+    }
+
+    @Test
     void incompleteRollbackBlocksRetryAndSurfacesUnreversedMovements() throws Exception {
         identifyMember();
         addHundredDollarItem();

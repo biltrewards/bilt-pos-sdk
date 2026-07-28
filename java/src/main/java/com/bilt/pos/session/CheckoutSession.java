@@ -338,16 +338,19 @@ public final class CheckoutSession {
         lock.lock();
         try {
             SessionState state = stateMachine.current();
+            if (state != SessionState.IDLE && state != SessionState.IDENTIFIED
+                    && state != SessionState.ACTIVE && state != SessionState.FAILED) {
+                throw new IllegalStateException(
+                        "the basket cannot be modified in state " + state);
+            }
+            // atomic: a mutation (or batch) that throws restores the basket,
+            // and the state transitions below only run on success
+            basketEngine.mutateAtomically(mutation);
             if (state == SessionState.FAILED) {
                 // the failed payment was fully unwound; editing the basket
                 // resumes the checkout (e.g. dropping an item before a retry)
                 stateMachine.transitionTo(SessionState.ACTIVE);
-            } else if (state != SessionState.IDLE && state != SessionState.IDENTIFIED
-                    && state != SessionState.ACTIVE) {
-                throw new IllegalStateException(
-                        "the basket cannot be modified in state " + state);
             }
-            mutation.accept(basketEngine);
             syncStateWithBasket();
             snapshot = basketEngine.snapshot();
         } finally {

@@ -73,6 +73,21 @@ class CheckoutSessionBasketTest {
     // ─── State transitions ───
 
     @Test
+    void mutateIsAtomicWhenABatchOperationThrows() {
+        CheckoutSession session = sessionBuilder().autoDisplay(false).build();
+        session.addItem(BasketItem.of("SKU-1", "Item", 2, "10.00"));
+
+        assertThrows(IllegalArgumentException.class, () -> session.mutate(m -> m
+                .updateItemQuantityBySku("SKU-1", 5)      // applies...
+                .removeItemBySku("NO-SUCH-SKU")));        // ...then throws
+
+        Basket basket = session.getBasket();
+        assertEquals(2, basket.getItem("1").getQuantity(),
+                "a failed batch must leave the basket untouched");
+        assertEquals(SessionState.ACTIVE, session.getState());
+    }
+
+    @Test
     void basketDrivesIdleActiveTransitions() {
         CheckoutSession session = sessionBuilder().autoDisplay(false).build();
 
