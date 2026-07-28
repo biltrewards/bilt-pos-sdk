@@ -432,6 +432,20 @@ public final class CheckoutSession {
     private IdentifyResult completeIdentify(IdentifyResult result) {
         lock.lock();
         try {
+            SessionState state = stateMachine.current();
+            if (state != SessionState.IDLE && state != SessionState.IDENTIFIED
+                    && state != SessionState.ACTIVE) {
+                // abort() — the one documented cross-thread entry point —
+                // can end the session while the lookup is on the wire. An
+                // outcome that arrives after that must be discarded: it must
+                // not attach a member to, or fire onSuccess on, an ended
+                // session
+                throw new SessionException(new SessionError(
+                        state == SessionState.ABORTED
+                                ? SessionErrorCode.ABORTED : SessionErrorCode.INVALID_STATE,
+                        "identification completed after the session moved to " + state
+                                + "; the outcome was discarded"));
+            }
             if (result.getStatus() == IdentifyStatus.FOUND) {
                 this.member = result;
                 this.memberIdentified = true;

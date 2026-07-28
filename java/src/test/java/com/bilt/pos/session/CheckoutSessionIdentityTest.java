@@ -14,6 +14,7 @@ import com.bilt.pos.session.identity.MemberIdentifier;
 import com.bilt.pos.session.identity.RewardType;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -23,7 +24,9 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -72,6 +75,52 @@ class CheckoutSessionIdentityTest {
     }
 
     // ─── Terminal-prompted identification ───
+
+    @Test
+    void identifyOutcomeArrivingAfterAbortIsDiscarded() throws Exception {
+        String found =
+                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"},"
+                        + "\"LoyaltyBrand\":\"K-Club\"}]}}}";
+        CountDownLatch identifyOnTheWire = new CountDownLatch(1);
+        CountDownLatch aborted = new CountDownLatch(1);
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                if (request.getBody().readUtf8().contains("CardAcquisitionRequest")) {
+                    identifyOnTheWire.countDown();
+                    // hold the FOUND response until abort() has ended the session
+                    aborted.await(5, TimeUnit.SECONDS);
+                    return new MockResponse().setBody(found);
+                }
+                return new MockResponse();   // the AbortRequest, best-effort
+            }
+        });
+
+        AtomicReference<IdentifyResult> delivered = new AtomicReference<>();
+        AtomicReference<SessionException> failure = new AtomicReference<>();
+        Thread register = new Thread(() -> {
+            try {
+                delivered.set(session.identifyMember().get());
+            } catch (SessionException e) {
+                failure.set(e);
+            }
+        });
+        register.start();
+        assertTrue(identifyOnTheWire.await(5, TimeUnit.SECONDS));
+
+        session.abort();
+        aborted.countDown();
+        register.join(5_000);
+        assertFalse(register.isAlive());
+
+        assertNull(delivered.get(), "onSuccess must not fire on an aborted session");
+        assertNotNull(failure.get());
+        assertEquals(SessionErrorCode.ABORTED, failure.get().getError().getCode());
+        assertNull(session.getMember(), "no member may attach to an ended session");
+        assertEquals(SessionState.ABORTED, session.getState());
+    }
 
     @Test
     void identifyMemberFindsMemberAndTransitionsToIdentified() throws Exception {
