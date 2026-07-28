@@ -16,17 +16,17 @@ import java.time.Duration;
  *
  * <p>For the verify modes, the reference the terminal verifies against is
  * addressed by {@link #getKeyReference()} / {@link #getPinVerificationMethod()}
- * — PIN blocks themselves never travel in the clear.</p>
+ * — PIN blocks themselves never travel in the clear. PIN length constraints
+ * are terminal-side policy; the Nexo {@code PINRequest} cannot express
+ * them.</p>
  */
 public final class PinOptions {
 
-    private final Integer maxLength;
     private final Duration timeout;
     private final String keyReference;
     private final String pinVerificationMethod;
 
     private PinOptions(Builder builder) {
-        this.maxLength = builder.maxLength;
         this.timeout = builder.timeout;
         this.keyReference = builder.keyReference;
         this.pinVerificationMethod = builder.pinVerificationMethod;
@@ -38,10 +38,6 @@ public final class PinOptions {
 
     public static PinOptions defaults() {
         return builder().build();
-    }
-
-    public Integer getMaxLength() {
-        return maxLength;
     }
 
     public Duration getTimeout() {
@@ -61,17 +57,11 @@ public final class PinOptions {
     /** Builder for {@link PinOptions}. */
     public static final class Builder {
 
-        private Integer maxLength;
         private Duration timeout;
         private String keyReference;
         private String pinVerificationMethod;
 
         private Builder() {
-        }
-
-        public Builder maxLength(Integer maxLength) {
-            this.maxLength = maxLength;
-            return this;
         }
 
         public Builder timeout(Duration timeout) {
