@@ -114,6 +114,7 @@ public final class Main {
         String hostnamePattern = null;
         Double pingIntervalSeconds = null;
         boolean recoverOnNetworkError = true;
+        boolean identifyMember = false;
 
         for (int i = 1; i < args.length; i++) {
             switch (args[i]) {
@@ -122,6 +123,9 @@ public final class Main {
                     break;
                 case "--no-encryption":
                     encryption = false;
+                    break;
+                case "--identify":
+                    identifyMember = true;
                     break;
                 case "--verbose":
                     verbose = true;
@@ -209,7 +213,8 @@ public final class Main {
         try {
             run(ip, type, encryption, passphrase, keyId, keyVersion, amount, currency, abortServiceID,
                     originalServiceID, originalTimestamp, reversalReason, statusServiceID, prompt,
-                    cacert, hostnamePattern, pingIntervalSeconds, recoverOnNetworkError);
+                    cacert, hostnamePattern, pingIntervalSeconds, recoverOnNetworkError,
+                    identifyMember);
         } catch (Exception e) {
             LOG.log(Level.SEVERE, "Request failed", e);
             System.exit(1);
@@ -222,7 +227,8 @@ public final class Main {
                             String originalServiceID, String originalTimestamp,
                             String reversalReason, String statusServiceID,
                             String prompt, String cacert, String hostnamePattern,
-                            Double pingIntervalSeconds, boolean recoverOnNetworkError) throws Exception {
+                            Double pingIntervalSeconds, boolean recoverOnNetworkError,
+                            boolean identifyMember) throws Exception {
 
         String endpoint = "https://" + ip + ":8443/nexo";
         String serviceID = UUID.randomUUID().toString().substring(0, 8);
@@ -284,7 +290,7 @@ public final class Main {
         BiltNexoTerminalClient client = clientBuilder.build();
 
         if ("session".equals(type)) {
-            runCheckoutSessionDemo(client, amount, currency);
+            runCheckoutSessionDemo(client, amount, currency, identifyMember);
             return;
         }
 
@@ -855,7 +861,8 @@ public final class Main {
      * payment sequence with inline step handlers.
      */
     private static void runCheckoutSessionDemo(BiltNexoTerminalClient client,
-                                               double amount, String currency) {
+                                               double amount, String currency,
+                                               boolean identifyMember) {
         com.bilt.pos.session.CheckoutSession session =
                 com.bilt.pos.session.CheckoutSession.builder()
                         .client(client)
@@ -867,18 +874,28 @@ public final class Main {
         LOG.info("Session " + session.getSessionId() + " started (state "
                 + session.getState() + ")");
 
-        // 1. Identify the member (optional — guest checkout continues on any outcome)
-        session.identifyMember()
-                .onSuccess(member -> {
-                    if (member.getStatus() == com.bilt.pos.session.identity.IdentifyStatus.FOUND) {
-                        LOG.info("Member " + member.getMemberId() + " (" + member.getLoyaltyBrand()
-                                + "), " + member.getRewards().size() + " reward(s) available");
-                    } else {
-                        LOG.info("No member attached (" + member.getStatus() + "); guest checkout");
-                    }
-                })
-                .onError(error -> LOG.warning("Identification failed: " + error))
-                .execute();
+        // 1. Identify the member — opt-in via --identify: the terminal-side
+        // CardAcquisition prompt immediately asks for a card, which gets in
+        // the way when exercising the basket/display flow alone
+        if (identifyMember) {
+            session.identifyMember()
+                    .onSuccess(member -> {
+                        if (member.getStatus()
+                                == com.bilt.pos.session.identity.IdentifyStatus.FOUND) {
+                            LOG.info("Member " + member.getMemberId() + " ("
+                                    + member.getLoyaltyBrand() + "), "
+                                    + member.getRewards().size() + " reward(s) available");
+                        } else {
+                            LOG.info("No member attached (" + member.getStatus()
+                                    + "); guest checkout");
+                        }
+                    })
+                    .onError(error -> LOG.warning("Identification failed: " + error))
+                    .execute();
+        } else {
+            LOG.info("Skipping member identification (pass --identify to enable); "
+                    + "guest checkout");
+        }
 
         // 2. Scan items — each addItem refreshes the terminal display with
         // the itemised basket (a DisplayRequest); pause so it can be verified
@@ -931,7 +948,8 @@ public final class Main {
                 "",
                 "Options:",
                 "  --type <payment|gift-card|refund|diagnosis|display-standby|display-receipt|confirmation|signature|reversal|transaction-status|abort|session>",
-                "                               'session' runs a full CheckoutSession demo: identify, basket, tax, pay",
+                "                               'session' runs a full CheckoutSession demo: basket, display, pay",
+                "  --identify                   In the session demo, prompt for member identification first",
                 "  --no-encryption              Disable message encryption",
                 "  --cacert <path>              Verify TLS against this CA/public cert file (PEM or DER).",
                 "                               When omitted, all certificates are trusted (testing only).",
