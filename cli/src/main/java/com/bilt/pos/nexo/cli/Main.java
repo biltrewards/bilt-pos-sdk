@@ -833,6 +833,23 @@ public final class Main {
     }
 
     /**
+     * Waits for Enter so the operator can verify the terminal display
+     * before the demo moves on. Skipped silently when stdin is not
+     * interactive (piped input or EOF).
+     */
+    private static void pauseForDisplayCheck(String expectation) {
+        System.out.println(">> " + expectation + " — press Enter to continue...");
+        try {
+            int c;
+            do {
+                c = System.in.read();
+            } while (c != '\n' && c != -1);
+        } catch (java.io.IOException ignored) {
+            // no interactive stdin; continue without pausing
+        }
+    }
+
+    /**
      * End-to-end CheckoutSession demo: optional member identification, item
      * scanning with automatic terminal display, tax, and the orchestrated
      * payment sequence with inline step handlers.
@@ -863,16 +880,20 @@ public final class Main {
                 .onError(error -> LOG.warning("Identification failed: " + error))
                 .execute();
 
-        // 2. Scan items — the terminal display refreshes automatically
+        // 2. Scan items — each addItem refreshes the terminal display with
+        // the itemised basket (a DisplayRequest); pause so it can be verified
         BigDecimal half = BigDecimal.valueOf(amount / 2).setScale(2, java.math.RoundingMode.HALF_UP);
-        session.addItem(com.bilt.pos.session.basket.BasketItem.builder()
-                .sku("CLI-DEMO-1").description("Demo Item A").quantity(1)
-                .unitPrice(half).build());
         com.bilt.pos.session.basket.Basket basket =
                 session.addItem(com.bilt.pos.session.basket.BasketItem.builder()
-                        .sku("CLI-DEMO-2").description("Demo Item B").quantity(1)
-                        .unitPrice(BigDecimal.valueOf(amount).subtract(half)).build());
-        LOG.info("Basket total: " + basket.getGrandTotal() + " " + currency);
+                        .sku("CLI-DEMO-1").description("Demo Item A").quantity(1)
+                        .unitPrice(half).build());
+        LOG.info("Added Demo Item A — basket total " + basket.getGrandTotal() + " " + currency);
+        pauseForDisplayCheck("Demo Item A should now be on the terminal display");
+        basket = session.addItem(com.bilt.pos.session.basket.BasketItem.builder()
+                .sku("CLI-DEMO-2").description("Demo Item B").quantity(1)
+                .unitPrice(BigDecimal.valueOf(amount).subtract(half)).build());
+        LOG.info("Added Demo Item B — basket total " + basket.getGrandTotal() + " " + currency);
+        pauseForDisplayCheck("Demo Item B should now be on the terminal display");
 
         // 3. Pay — rebate/point steps run automatically for identified members
         session.pay()
