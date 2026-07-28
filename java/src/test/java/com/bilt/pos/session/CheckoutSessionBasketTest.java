@@ -73,6 +73,23 @@ class CheckoutSessionBasketTest {
     // ─── State transitions ───
 
     @Test
+    void negativeTaxValuesAreRejected() {
+        CheckoutSession session = sessionBuilder().autoDisplay(false).build();
+        session.addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> session.setTaxTotal(new BigDecimal("-100.00")));
+        assertThrows(IllegalArgumentException.class,
+                () -> session.setTaxRateBySku("SKU-1", new BigDecimal("-0.08")));
+        assertThrows(IllegalArgumentException.class,
+                () -> session.setTaxAmountBySku("SKU-1", new BigDecimal("-2.50")));
+
+        // the rejected values left no trace on the basket
+        assertEquals(0, new BigDecimal("100.00")
+                .compareTo(session.getBasket().getGrandTotal()));
+    }
+
+    @Test
     void mutateIsAtomicWhenABatchOperationThrows() {
         CheckoutSession session = sessionBuilder().autoDisplay(false).build();
         session.addItem(BasketItem.of("SKU-1", "Item", 2, "10.00"));

@@ -206,7 +206,7 @@ public final class BasketEngine implements BasketMutation {
     }
 
     private BasketEngine applyTaxRate(Line line, BigDecimal rate) {
-        line.taxRate = rate;
+        line.taxRate = requireNonNegative(rate, "taxRate");
         // last write wins: an explicit fixed amount would otherwise take
         // precedence forever, with no way back to rate-based tax
         line.taxAmount = null;
@@ -215,20 +215,30 @@ public final class BasketEngine implements BasketMutation {
 
     @Override
     public BasketEngine setTaxAmount(String itemId, BigDecimal amount) {
-        requireByItemId(itemId).taxAmount = amount;
+        requireByItemId(itemId).taxAmount = requireNonNegative(amount, "taxAmount");
         return this;
     }
 
     @Override
     public BasketEngine setTaxAmountBySku(String sku, BigDecimal amount) {
-        requireBySku(sku).taxAmount = amount;
+        requireBySku(sku).taxAmount = requireNonNegative(amount, "taxAmount");
         return this;
     }
 
     @Override
     public BasketEngine setTaxTotal(BigDecimal amount) {
-        this.taxTotalOverride = amount;
+        // a negative override could push the grand total to zero or below,
+        // letting a checkout complete without collecting any tender
+        this.taxTotalOverride = requireNonNegative(amount, "taxTotal");
         return this;
+    }
+
+    /** {@code null} clears the value; a present value must not be negative. */
+    private static BigDecimal requireNonNegative(BigDecimal value, String what) {
+        if (value != null && value.signum() < 0) {
+            throw new IllegalArgumentException(what + " must not be negative");
+        }
+        return value;
     }
 
     // ─── Queries ───

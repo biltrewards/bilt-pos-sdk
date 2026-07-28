@@ -228,6 +228,24 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void payRequiresAPositiveBasketTotal() {
+        // zero-priced items are allowed in the basket, but there is nothing
+        // to pay — a zero total must not mint a COMPLETED checkout
+        addHundredDollarItem();
+        PaymentFlow flow = session.pay();   // created while the total is positive
+        session.mutate(m -> m
+                .removeItemBySku("SKU-1")
+                .addItem(BasketItem.of("SKU-FREE", "Comped Item", 1, "0.00")));
+
+        assertThrows(IllegalStateException.class, () -> session.pay());
+
+        SessionException failure = assertThrows(SessionException.class, flow::get);
+        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
+        assertEquals(0, server.getRequestCount(), "nothing may reach the wire");
+        assertEquals(SessionState.ACTIVE, session.getState());
+    }
+
+    @Test
     void storeLocationIsSentAsTotalsGroupId() throws Exception {
         CheckoutSession storeSession = CheckoutSession.builder()
                 .client(BiltNexoTerminalClient.builder()

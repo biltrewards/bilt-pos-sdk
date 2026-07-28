@@ -843,6 +843,10 @@ public final class CheckoutSession {
         if (basketEngine.isEmpty()) {
             throw new IllegalStateException("pay() requires items in the basket");
         }
+        if (basketEngine.snapshot().getGrandTotal().signum() <= 0) {
+            throw new IllegalStateException(
+                    "pay() requires a positive basket total (zero-priced items only)");
+        }
         trackUnexecuted("pay");
         return new PaymentFlow(flow -> executePayment(flow, options));
     }
@@ -861,6 +865,11 @@ public final class CheckoutSession {
             // may have been emptied since pay() created it
             if (basketEngine.isEmpty()) {
                 throw invalidState("the basket is empty; a payment cannot start");
+            }
+            // a zero (or negative) total would sail through every tender
+            // step and mint a COMPLETED checkout with no money collected
+            if (basketEngine.snapshot().getGrandTotal().signum() <= 0) {
+                throw invalidState("the basket total is not positive; a payment cannot start");
             }
             stateMachine.transitionTo(SessionState.PAYING);
             // the abort flag is scoped to a single payment run: a stale
