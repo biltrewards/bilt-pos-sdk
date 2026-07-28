@@ -945,11 +945,14 @@ public final class CheckoutSession {
                         loyaltyRef());
                 transitionLocked(SessionState.VOIDED);
                 return result;
-            } catch (SessionException e) {
+            } catch (RuntimeException e) {
                 // a failed void leaves the referenced transaction standing, so
                 // the session returns to its pre-void state — a COMPLETED
                 // payment must not become FAILED, which would let pay() retry
-                // and authorize a second charge on top of the original
+                // and authorize a second charge on top of the original.
+                // Catching all RuntimeExceptions (not just SessionException)
+                // matters: VOIDING has no other exits, so an unexpected error
+                // must never leave the session stranded there.
                 transitionLocked(stateBeforeVoid);
                 throw e;
             }
