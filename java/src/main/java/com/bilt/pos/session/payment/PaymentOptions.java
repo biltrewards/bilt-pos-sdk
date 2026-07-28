@@ -108,7 +108,16 @@ public final class PaymentOptions {
             return this;
         }
 
+        /**
+         * Cashback to hand the customer, authorized on top of the sale
+         * amount. Must be positive — a negative value would reduce the
+         * amount charged and complete the checkout underpaid. Leave unset
+         * for no cashback.
+         */
         public Builder cashback(BigDecimal cashback) {
+            if (cashback != null && cashback.signum() <= 0) {
+                throw new IllegalArgumentException("cashback must be positive");
+            }
             this.cashback = cashback;
             return this;
         }

@@ -328,6 +328,14 @@ class CheckoutSessionPaymentTest {
     // ─── Cashback ───
 
     @Test
+    void nonPositiveCashbackIsRejected() {
+        assertThrows(IllegalArgumentException.class,
+                () -> PaymentOptions.builder().cashback(new BigDecimal("-20.00")));
+        assertThrows(IllegalArgumentException.class,
+                () -> PaymentOptions.builder().cashback(BigDecimal.ZERO));
+    }
+
+    @Test
     void cashbackIsIncludedInTheRequestedAmount() throws Exception {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 120.00)));
