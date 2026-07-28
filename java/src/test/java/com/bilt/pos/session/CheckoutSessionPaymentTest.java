@@ -537,6 +537,64 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void voidAfterIncompleteRollbackFinishesTheUnwind() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));             // rebate commits
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));             // redemption commits
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));      // card fails
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));     // redemption refund ok
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // rebate refund FAILS
+        assertThrows(SessionException.class, () -> session.pay().get());
+        assertEquals(SessionState.FAILED, session.getState());
+        drainRequests();
+
+        // voiding the failed session retries exactly the standing reversal
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(1, requests.size(), "only the movement still standing is reversed");
+        assertEquals("RebateRefund", requests.get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("POI-RB-1", requests.get(0).getLoyaltyRequest().getLoyaltyTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
+    void unwindResumeRetriesOnlyMovementsStillStanding() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // rebate refund
+        assertThrows(SessionException.class, () -> session.pay().get());
+        assertEquals(SessionState.FAILED, session.getState());
+        drainRequests();
+
+        // first void attempt: redemption refund succeeds, rebate refund fails
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));
+        assertThrows(SessionException.class, () -> session.voidTransaction().get());
+        assertEquals(SessionState.FAILED, session.getState(),
+                "a failed unwind resume restores the pre-void state");
+        assertEquals(2, drainRequests().size());
+
+        // retry resumes at the rebate leg — the redemption is not re-credited
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(1, requests.size(), "the reversed movement must not run again");
+        assertEquals("RebateRefund", requests.get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
+    @Test
     void pointRedemptionIsSkippedWhenRebatesCoverTheTotal() throws Exception {
         String rebateFull =
                 "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"

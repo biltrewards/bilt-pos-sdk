@@ -90,6 +90,7 @@ import jakarta.xml.bind.JAXBException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
@@ -167,6 +168,7 @@ public final class CheckoutSession {
     private volatile LastPayment lastPayment = LastPayment.NONE;
     private volatile boolean voidCardLegReversed;
     private volatile boolean voidRedemptionLegReversed;
+    private volatile List<PaymentOrchestrator.StandingMovement> standingMovements = List.of();
 
     private CheckoutSession(Builder builder) {
         this.client = builder.client;
@@ -834,6 +836,7 @@ public final class CheckoutSession {
             // abort left over from an earlier decline or failed void must
             // not kill a legitimate retry at its first checkAbort
             abortRequested = false;
+            standingMovements = List.of();
             request.basket = basketEngine.snapshot();
         } finally {
             lock.unlock();
@@ -842,6 +845,9 @@ public final class CheckoutSession {
         request.storedValueCard = storedValueCard;
         request.options = options;
         request.abortRequested = () -> abortRequested;
+        // movements an incomplete unwind left standing are kept so that
+        // voidTransaction() on the failed session can finish the reversal
+        request.onUnreversed = movements -> standingMovements = movements;
         request.finalDisplay = autoDisplay ? this::showBasket : basket -> { };
         request.handlers.beforeStep = flow.beforeStepHandler();
         request.handlers.onRebatesRedeemed = flow.rebatesHandler();
@@ -994,20 +1000,25 @@ public final class CheckoutSession {
      * completed payment also refunds its committed loyalty movements
      * (redemption, rebate) best-effort, and a completed checkout that had
      * no payment legs — rewards covered the whole basket — is voided by
-     * refunding those movements alone. The session moves to
-     * {@link SessionState#VOIDED} on success.
+     * refunding those movements alone. On a session whose payment failed
+     * with an incomplete rollback, {@code voidTransaction()} finishes the
+     * unwind by retrying the reversals that did not go through. The session
+     * moves to {@link SessionState#VOIDED} on success.
      */
     public SessionResult<VoidResult> voidTransaction() {
         return operation("voidTransaction", () -> {
             String originalId = effectivePoiTransactionId();
+            // a failed payment whose rollback was incomplete left movements
+            // standing; voiding that session means finishing the unwind
+            boolean resumeRollback = !standingMovements.isEmpty();
             // a checkout fully covered by rewards completes without a payment
             // leg: there is no transaction to reverse, so the void refunds
             // the committed loyalty movements instead
-            boolean loyaltyOnly = originalId == null
+            boolean loyaltyOnly = !resumeRollback && originalId == null
                     && (lastPayment.redemptionPoiTransactionId != null
                             || lastPayment.rebatePoiTransactionId != null
                             || lastPayment.awardPoiTransactionId != null);
-            if (originalId == null && !loyaltyOnly) {
+            if (originalId == null && !loyaltyOnly && !resumeRollback) {
                 throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
                         "voidTransaction requires poiTransactionId on the session builder "
                                 + "or a completed payment in this session"));
@@ -1027,8 +1038,8 @@ public final class CheckoutSession {
                 lock.unlock();
             }
             try {
-                VoidResult result = loyaltyOnly
-                        ? voidLoyaltyLegs() : voidPaymentLegs(originalId);
+                VoidResult result = resumeRollback ? finishUnwind()
+                        : loyaltyOnly ? voidLoyaltyLegs() : voidPaymentLegs(originalId);
                 transitionLocked(SessionState.VOIDED);
                 return result;
             } catch (RuntimeException e) {
@@ -1063,6 +1074,25 @@ public final class CheckoutSession {
     private VoidResult voidLoyaltyLegs() {
         return refundManager.voidLoyalty(loyaltyLegs(),
                 loyaltyRef(), () -> voidRedemptionLegReversed = true);
+    }
+
+    /**
+     * Finishes the unwind of a failed payment whose rollback was
+     * incomplete: re-runs each standing reversal in the unwind's own order,
+     * dropping movements as they succeed so a failed attempt can be retried
+     * from the first movement still standing.
+     */
+    private VoidResult finishUnwind() {
+        List<PaymentOrchestrator.StandingMovement> remaining =
+                new ArrayList<>(standingMovements);
+        while (!remaining.isEmpty()) {
+            remaining.get(0).reverse();
+            remaining.remove(0);
+            standingMovements = List.copyOf(remaining);
+        }
+        return VoidResult.builder()
+                .success(true)
+                .build();
     }
 
     /**

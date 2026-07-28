@@ -95,6 +95,34 @@ public final class PaymentOrchestrator {
         public Handlers handlers = new Handlers();
         public BooleanSupplier abortRequested = () -> false;
         public Consumer<Basket> finalDisplay = basket -> { };
+        /** Receives the movements an incomplete unwind left standing. */
+        public Consumer<List<StandingMovement>> onUnreversed = movements -> { };
+    }
+
+    /**
+     * A committed movement whose rollback failed and is still standing.
+     * Carries the exact reversal action, so the session can finish the
+     * unwind later ({@code voidTransaction()} on the failed session).
+     */
+    public static final class StandingMovement {
+        private final CommittedStep info;
+        private final Runnable rollback;
+
+        StandingMovement(CommittedStep info, Runnable rollback) {
+            this.info = info;
+            this.rollback = rollback;
+        }
+
+        /** Re-runs the reversal; throws {@link SessionException} on failure. */
+        public void reverse() {
+            rollback.run();
+        }
+
+        /** Step name plus POI reference, for error messages. */
+        public String describe() {
+            return info.getStep() + (info.getPoiTransactionId() != null
+                    ? " (" + info.getPoiTransactionId() + ")" : "");
+        }
     }
 
     /** A step failure that interrupts the sequence. */
@@ -149,7 +177,10 @@ public final class PaymentOrchestrator {
                         ? (StepFailure) e
                         : new StepFailure(new SessionError(SessionErrorCode.UNKNOWN,
                                 "unexpected error during payment: " + e, null, e), false);
-                List<String> unreversed = unwind(committed);
+                List<StandingMovement> unreversed = unwind(committed);
+                if (!unreversed.isEmpty()) {
+                    request.onUnreversed.accept(unreversed);
+                }
                 SessionError error = withRollbackFailures(failure.error, unreversed);
                 // the abort path bypasses onError. It is taken when checkAbort
                 // trips between steps, and also when our own abort() killed
@@ -760,12 +791,12 @@ public final class PaymentOrchestrator {
 
     /**
      * Reverses the committed steps in reverse order, best-effort — one leg
-     * failing to reverse never stops the others. Returns a descriptor for
-     * every movement that could NOT be reversed and is still standing; the
-     * caller must surface those and must not retry over them.
+     * failing to reverse never stops the others. Returns every movement
+     * that could NOT be reversed and is still standing, with its reversal
+     * action; the caller must surface those and must not retry over them.
      */
-    private List<String> unwind(List<Commit> committed) {
-        List<String> unreversed = new ArrayList<>();
+    private List<StandingMovement> unwind(List<Commit> committed) {
+        List<StandingMovement> unreversed = new ArrayList<>();
         for (int i = committed.size() - 1; i >= 0; i--) {
             Commit commit = committed.get(i);
             if (commit.rollback == null) {
@@ -776,9 +807,7 @@ public final class PaymentOrchestrator {
             } catch (RuntimeException e) {
                 LOGGER.log(Level.WARNING, "rollback of " + commit.info.getStep()
                         + " failed; manual reconciliation may be required", e);
-                unreversed.add(commit.info.getStep()
-                        + (commit.info.getPoiTransactionId() != null
-                                ? " (" + commit.info.getPoiTransactionId() + ")" : ""));
+                unreversed.add(new StandingMovement(commit.info, commit.rollback));
             }
         }
         return unreversed;
@@ -789,12 +818,16 @@ public final class PaymentOrchestrator {
      * reverse so the register sees the full reconciliation picture.
      */
     private static SessionError withRollbackFailures(SessionError error,
-                                                     List<String> unreversed) {
+                                                     List<StandingMovement> unreversed) {
         if (unreversed.isEmpty()) {
             return error;
         }
+        List<String> descriptions = new ArrayList<>(unreversed.size());
+        for (StandingMovement movement : unreversed) {
+            descriptions.add(movement.describe());
+        }
         return new SessionError(error.getCode(),
-                error.getMessage() + "; rollback incomplete — " + String.join(", ", unreversed)
+                error.getMessage() + "; rollback incomplete — " + String.join(", ", descriptions)
                         + (unreversed.size() == 1 ? " is" : " are")
                         + " still standing and may require manual reconciliation",
                 error.getNexoErrorCondition(), error.getCause());
