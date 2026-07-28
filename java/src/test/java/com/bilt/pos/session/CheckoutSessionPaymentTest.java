@@ -229,6 +229,37 @@ class CheckoutSessionPaymentTest {
                 .getSaleItem().length);
     }
 
+    @Test
+    void earnedRewardsFromTheAwardResponseReachTheResult() throws Exception {
+        String earnedB64 = java.util.Base64.getEncoder().encodeToString(
+                ("{\"pointsEarned\":89,\"earnedRewards\":[{\"rewardRef\":\"rwd:RWD-90001\","
+                        + "\"type\":\"reward\",\"name\":\"$5 Off Next Visit\",\"quantity\":2}]}")
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String awardWithRewards =
+                "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\","
+                        + "\"AdditionalResponse\":\"" + earnedB64 + "\"},"
+                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-AW-1\"}},"
+                        + "\"LoyaltyResult\":[{\"CurrentBalance\":789,"
+                        + "\"LoyaltyAmount\":{\"AmountValue\":89,\"LoyaltyUnit\":\"Point\"}}]}}}";
+
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 85.00)));
+        server.enqueue(new MockResponse().setBody(awardWithRewards));
+
+        CheckoutResult result = session.pay().get();
+
+        assertEquals(1, result.getEarnedRewards().size(),
+                "rewards earned by the award must reach the result");
+        assertEquals("$5 Off Next Visit", result.getEarnedRewards().get(0).getDescription());
+        assertEquals("rwd:RWD-90001", result.getEarnedRewards().get(0).getRewardRef());
+        assertEquals(2, result.getEarnedRewards().get(0).getQuantity());
+        assertEquals(89, result.getTotalPointsEarned());
+    }
+
     // ─── Cashback ───
 
     @Test

@@ -600,6 +600,8 @@ public final class PaymentOrchestrator {
             }
             result.promotionMessages(parsePromotionMessages(
                     body.getResponse().getAdditionalResponse()));
+            result.earnedRewards(LoyaltyPayloadCodec.parseEarnedRewards(
+                    body.getResponse().getAdditionalResponse()));
         } catch (SessionException | StepFailure e) {
             // decision: a failed award never reverses a completed payment.
             // Only the award's own wire failure is swallowed here — a

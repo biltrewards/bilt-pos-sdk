@@ -13,6 +13,7 @@ package com.bilt.pos.session.internal;
 
 import com.bilt.pos.session.identity.Reward;
 import com.bilt.pos.session.identity.RewardType;
+import com.bilt.pos.session.payment.EarnedReward;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -68,6 +69,33 @@ public final class LoyaltyPayloadCodec {
                     instant(text(node, "expirationDate"))));
         }
         return rewards;
+    }
+
+    /**
+     * Parses the earned-rewards list an award response may carry in its
+     * {@code AdditionalResponse} payload — {@code {"earnedRewards":[...]}},
+     * with the identification payload's {@code {"rewards":[...]}} accepted
+     * as a fallback shape. Returns an empty list when the payload is
+     * missing or malformed.
+     */
+    public static List<EarnedReward> parseEarnedRewards(String base64) {
+        JsonNode root = decode(base64);
+        JsonNode list = root == null ? null
+                : root.has("earnedRewards") ? root.get("earnedRewards") : root.get("rewards");
+        if (list == null) {
+            return Collections.emptyList();
+        }
+        List<EarnedReward> earned = new ArrayList<>();
+        for (JsonNode node : list) {
+            String description = text(node, "description") != null
+                    ? text(node, "description") : text(node, "name");
+            earned.add(new EarnedReward(
+                    RewardType.fromWire(text(node, "type")),
+                    description,
+                    node.path("quantity").asInt(1),
+                    text(node, "rewardRef")));
+        }
+        return earned;
     }
 
     /**
