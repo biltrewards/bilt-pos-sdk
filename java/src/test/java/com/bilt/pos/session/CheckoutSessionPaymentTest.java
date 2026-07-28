@@ -357,6 +357,44 @@ class CheckoutSessionPaymentTest {
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
     }
 
+    @Test
+    void storedValueDeclineWithLowBalanceIsLabelledInsufficient() throws Exception {
+        addHundredDollarItem();
+        session.setStoredValueCard("GC-1234-5678");
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\","
+                        + "\"AdditionalResponse\":\"currentBalance=5.00\"}}}}"));
+
+        AtomicReference<SessionError> seen = new AtomicReference<>();
+        session.pay().onError(error -> {
+            seen.set(error);
+            return PaymentOptions.voidAndAbort();
+        }).getOrNull();
+
+        assertEquals(SessionErrorCode.STORED_VALUE_INSUFFICIENT, seen.get().getCode());
+        assertTrue(seen.get().getMessage().contains("5.00"));
+    }
+
+    @Test
+    void storedValueHardDeclineStaysDeclined() throws Exception {
+        addHundredDollarItem();
+        session.setStoredValueCard("GC-1234-5678");
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\","
+                        + "\"AdditionalResponse\":\"Card+is+deactivated\"}}}}"));
+
+        AtomicReference<SessionError> seen = new AtomicReference<>();
+        session.pay().onError(error -> {
+            seen.set(error);
+            return PaymentOptions.voidAndAbort();
+        }).getOrNull();
+
+        assertEquals(SessionErrorCode.DECLINED, seen.get().getCode(),
+                "a hard decline must not masquerade as low balance");
+    }
+
     // ─── Rollback ───
 
     @Test

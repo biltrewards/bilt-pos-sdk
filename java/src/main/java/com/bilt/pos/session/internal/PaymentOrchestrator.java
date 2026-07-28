@@ -396,7 +396,8 @@ public final class PaymentOrchestrator {
                         .build())
                 .build();
 
-        PaymentResponse body = sendPayment(TransactionStep.STORED_VALUE, wireRequest);
+        PaymentResponse body = sendPayment(TransactionStep.STORED_VALUE, wireRequest,
+                currentTotal);
         BigDecimal charged = body.getPaymentResult() != null
                 && body.getPaymentResult().getAmountsResp() != null
                 ? Wire.money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
@@ -446,7 +447,8 @@ public final class PaymentOrchestrator {
                         .build())
                 .build();
 
-        PaymentResponse body = sendPayment(TransactionStep.CARD_PAYMENT, wireRequest);
+        PaymentResponse body = sendPayment(TransactionStep.CARD_PAYMENT, wireRequest,
+                currentTotal);
         BigDecimal charged = body.getPaymentResult() != null
                 && body.getPaymentResult().getAmountsResp() != null
                 ? Wire.money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
@@ -613,22 +615,40 @@ public final class PaymentOrchestrator {
         }
     }
 
-    private PaymentResponse sendPayment(TransactionStep step, SaleToPOIRequest wireRequest) {
+    private PaymentResponse sendPayment(TransactionStep step, SaleToPOIRequest wireRequest,
+                                        BigDecimal requestedAmount) {
+        PaymentResponse body;
         try {
             SaleToPOIResponse response = exchange.sendExpectingBody(
                     MessageCategoryType.PAYMENT, wireRequest);
-            PaymentResponse body = response.getPaymentResponse();
+            body = response.getPaymentResponse();
             if (body == null) {
                 throw Wire.missing("PaymentResponse");
             }
+        } catch (SessionException e) {
+            throw new StepFailure(e.getError(), false);
+        }
+        try {
             exchange.requireSuccess(MessageCategoryType.PAYMENT, body.getResponse());
             return body;
         } catch (SessionException e) {
             SessionError error = e.getError();
+            // insufficiency normally surfaces as a Partial authorization (the
+            // split-tender flow); a declined stored value payment is only
+            // relabelled when the response affirmatively reports a balance
+            // below the requested amount — hard declines (expired, blocked,
+            // invalid cards) stay DECLINED
             if (step == TransactionStep.STORED_VALUE
-                    && error.getCode() == SessionErrorCode.DECLINED) {
-                error = new SessionError(SessionErrorCode.STORED_VALUE_INSUFFICIENT,
-                        error.getMessage(), error.getNexoErrorCondition(), error.getCause());
+                    && error.getCode() == SessionErrorCode.DECLINED
+                    && requestedAmount != null) {
+                BigDecimal balance = parseCardBalance(
+                        body.getResponse().getAdditionalResponse());
+                if (balance != null && balance.compareTo(requestedAmount) < 0) {
+                    error = new SessionError(SessionErrorCode.STORED_VALUE_INSUFFICIENT,
+                            "the stored value card balance (" + balance
+                                    + ") does not cover the requested " + requestedAmount,
+                            error.getNexoErrorCondition(), error.getCause());
+                }
             }
             throw new StepFailure(error, false);
         }
