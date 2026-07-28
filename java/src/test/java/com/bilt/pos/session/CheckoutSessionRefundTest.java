@@ -5,6 +5,7 @@ import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -14,7 +15,9 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -80,6 +83,51 @@ class CheckoutSessionRefundTest {
     }
 
     // ─── Linked refunds ───
+
+    @Test
+    void refundOutcomeIsDeliveredEvenWhenAbortRacesIt() throws Exception {
+        CountDownLatch refundOnTheWire = new CountDownLatch(1);
+        CountDownLatch aborted = new CountDownLatch(1);
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                String body = request.getBody().readUtf8();
+                if (body.contains("\"PaymentRequest\"")) {
+                    refundOnTheWire.countDown();
+                    // hold the refund response until abort() has ended the session
+                    aborted.await(5, TimeUnit.SECONDS);
+                    return new MockResponse().setBody(REFUND_OK);
+                }
+                if (body.contains("\"LoyaltyRequest\"")) {
+                    return new MockResponse().setBody(AWARD_REFUND_OK);
+                }
+                return new MockResponse();   // the AbortRequest, best-effort
+            }
+        });
+
+        CheckoutSession session = refundSession();
+        AtomicReference<RefundResult> delivered = new AtomicReference<>();
+        AtomicReference<SessionError> failed = new AtomicReference<>();
+        Thread register = new Thread(() -> session.refund(new BigDecimal("24.99"))
+                .onSuccess(delivered::set)
+                .onError(failed::set)
+                .execute());
+        register.start();
+        assertTrue(refundOnTheWire.await(5, TimeUnit.SECONDS));
+
+        session.abort();
+        aborted.countDown();
+        register.join(5_000);
+        assertFalse(register.isAlive());
+
+        // money moved on the terminal: unlike read-only prompts, the outcome
+        // must be delivered even though the session has ended
+        assertNull(failed.get());
+        assertNotNull(delivered.get(),
+                "a completed refund is money moved — its outcome must not be discarded");
+        assertEquals(0, new BigDecimal("24.99").compareTo(delivered.get().getRefundedAmount()));
+        assertEquals(SessionState.ABORTED, session.getState());
+    }
 
     @Test
     void voidAfterLinkedRefundIsRejectedButFurtherRefundsWork() throws Exception {

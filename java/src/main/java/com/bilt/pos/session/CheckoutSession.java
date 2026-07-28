@@ -1247,6 +1247,15 @@ public final class CheckoutSession {
      * {@link #voidTransaction()} can finish reversing the movements still
      * standing.</p>
      *
+     * <p>Read-only prompts (input, PIN, card reads, identification) that
+     * complete after the abort are discarded. Money-moving operations
+     * (refunds, stored value) are NOT: the movement may have completed on
+     * the terminal despite the abort, and its outcome is always delivered —
+     * hiding a real money movement would be worse than reporting it on an
+     * ended session. Voids are unaffected: {@code VOIDING} has no
+     * transition to {@code ABORTED}, so an in-flight void always settles
+     * normally.</p>
+     *
      * <p>Safe to call from any thread.</p>
      */
     public void abort() {
