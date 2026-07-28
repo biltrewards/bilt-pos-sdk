@@ -991,6 +991,49 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void cartLevelProrationNeverProducesANegativeLineRebate() throws Exception {
+        // 7 equal lines sharing a 0.05 rebate: rounding each share against
+        // the FULL amount yields 6 x 0.01 = 0.06 and a -0.01 final share
+        String tinyGlobalRebate =
+                "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-RB-1\","
+                        + "\"TimeStamp\":\"2026-07-20T10:00:01Z\"}},"
+                        + "\"LoyaltyResult\":[{\"Rebates\":{\"TotalRebate\":0.05,"
+                        + "\"RebateLabel\":\"Nickel Off\"}}]}}}";
+
+        identifyMember();
+        for (int i = 1; i <= 7; i++) {
+            session.addItem(BasketItem.of("SKU-" + i, "Item " + i, 1, "10.00"));
+        }
+        server.enqueue(new MockResponse().setBody(tinyGlobalRebate));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));                     // -5.00
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 64.95)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+        CheckoutResult result = session.pay()
+                .onRebatesRedeemed(rebates -> {
+                    BigDecimal lineSum = BigDecimal.ZERO;
+                    for (var line : rebates.getUpdatedBasket().getItems()) {
+                        assertTrue(line.getRebateAmount().signum() >= 0,
+                                line.getItemId() + " got a negative rebate: "
+                                        + line.getRebateAmount());
+                        assertTrue(line.getAdjustedTotal()
+                                        .compareTo(line.getOriginalTotal()) <= 0,
+                                "a rebate must never raise a line's total");
+                        lineSum = lineSum.add(line.getRebateAmount());
+                    }
+                    assertEquals(0, new BigDecimal("0.05").compareTo(lineSum),
+                            "the line shares must sum exactly to the cart-level rebate");
+                    return rebates.getSuggestedTotal();  // 69.95
+                })
+                .get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(0, new BigDecimal("64.95").compareTo(result.getCardAmountCharged()));
+    }
+
+    @Test
     void voidOfLoyaltyPaidCheckoutRefundsRedemptionAndRebate() throws Exception {
         identifyMember();
         addHundredDollarItem();

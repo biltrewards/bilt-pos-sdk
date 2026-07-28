@@ -1007,17 +1007,26 @@ public final class PaymentOrchestrator {
             shares.set(basket.getItemCount() - 1, cartLevel);
             return shares;
         }
-        BigDecimal remaining = cartLevel;
+        // running-remainder allocation: each share is computed against the
+        // REMAINING amount and weight, never the full cart level — rounded
+        // pennies therefore cannot accumulate past the total (a share is
+        // capped by what remains, and the last weighted line's ratio is
+        // exactly 1, absorbing the exact remainder). Rounding against the
+        // full total instead can overshoot with many lines and push the
+        // last share negative.
+        BigDecimal remainingAmount = cartLevel;
+        BigDecimal remainingWeight = weightSum;
         for (int i = 0; i < basket.getItemCount(); i++) {
-            if (weights.get(i).signum() <= 0) {
+            BigDecimal weight = weights.get(i);
+            if (weight.signum() <= 0) {
                 continue;
             }
-            BigDecimal share = i == lastWeighted
-                    ? remaining
-                    : cartLevel.multiply(weights.get(i)).divide(weightSum, 2,
-                            RoundingMode.HALF_UP);
+            BigDecimal share = remainingAmount.multiply(weight)
+                    .divide(remainingWeight, 2, RoundingMode.HALF_UP)
+                    .min(remainingAmount);
             shares.set(i, share);
-            remaining = remaining.subtract(share);
+            remainingAmount = remainingAmount.subtract(share);
+            remainingWeight = remainingWeight.subtract(weight);
         }
         return shares;
     }
