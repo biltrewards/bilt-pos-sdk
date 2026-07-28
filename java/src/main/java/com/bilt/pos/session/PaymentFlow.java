@@ -62,6 +62,7 @@ public final class PaymentFlow {
     private SessionException failure;
     private RuntimeException unexpected;
     private boolean errorHandlerConsulted;
+    private boolean retryRequested;
 
     PaymentFlow(Function<PaymentFlow, CheckoutResult> executor) {
         this.executor = executor;
@@ -164,14 +165,18 @@ public final class PaymentFlow {
         } catch (SessionException e) {
             failure = e;
             // orchestration consults onError with the failure it throws,
-            // but failures before the sequence starts (a state rejection, a
-            // failed standing-movement drain) never reach it — execute()
-            // must still deliver those rather than return silently.
-            // Resolution is moot at this point, so the returned options are
-            // ignored. ABORTED outcomes stay bypassed by design: the
-            // register initiated the abort, and it must not surface as a
-            // failure to resolve.
-            if (errorHandler != null && !errorHandlerConsulted
+            // but two outcomes would otherwise end in silence for
+            // execute()-style registers: failures before the sequence
+            // starts (a state rejection, a failed standing-movement drain)
+            // never reach the handler at all, and a consultation whose
+            // RETRY resolution was refused (incomplete unwind, retry cap)
+            // leaves the register believing a retry is underway. Both are
+            // delivered here; the returned options are ignored — there is
+            // nothing left to resolve. ABORTED outcomes stay bypassed by
+            // design: the register initiated the abort, and it must not
+            // surface as a failure to resolve.
+            if (errorHandler != null
+                    && (!errorHandlerConsulted || retryRequested)
                     && e.getError().getCode() != SessionErrorCode.ABORTED) {
                 errorHandler.apply(e.getError());
             }
@@ -225,7 +230,11 @@ public final class PaymentFlow {
         }
         return error -> {
             errorHandlerConsulted = true;
-            return errorHandler.apply(error);
+            PaymentOptions resolution = errorHandler.apply(error);
+            // a retry answer obliges us to tell the register if the payment
+            // ends in failure anyway (see run()'s catch)
+            retryRequested = resolution != null && !resolution.isVoidAndAbort();
+            return resolution;
         };
     }
 }

@@ -209,11 +209,15 @@ public final class PaymentOrchestrator {
                 if (!unreversed.isEmpty()) {
                     LOGGER.warning("onError requested a retry, but the rollback was "
                             + "incomplete; failing the payment instead");
-                    throw new SessionException(error);
+                    throw new SessionException(Wire.annotated(error, error.getMessage()
+                            + "; the requested retry was refused — only a clean unwind "
+                            + "may retry", error.getCause()));
                 }
                 if (resolutions >= MAX_ERROR_RESOLUTIONS) {
                     LOGGER.warning("payment retry limit reached; failing the payment");
-                    throw new SessionException(error);
+                    throw new SessionException(Wire.annotated(error, error.getMessage()
+                            + "; the retry limit was reached and the payment failed",
+                            error.getCause()));
                 }
                 options = resolution;
             }

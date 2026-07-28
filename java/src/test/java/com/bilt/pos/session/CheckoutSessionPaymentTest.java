@@ -569,12 +569,15 @@ class CheckoutSessionPaymentTest {
                         })
                         .get());
 
-        assertEquals(1, errorCalls.get());
+        assertEquals(2, errorCalls.get(),
+                "the consultation, then the notification that the retry was refused");
         assertEquals(SessionState.FAILED, session.getState());
         assertTrue(failure.getError().getMessage().contains("REBATE"),
                 "the error must name the movement that is still standing: "
                         + failure.getError().getMessage());
         assertTrue(failure.getError().getMessage().contains("manual reconciliation"));
+        assertTrue(failure.getError().getMessage().contains("retry was refused"),
+                failure.getError().getMessage());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(5, requests.size(),
@@ -1359,8 +1362,11 @@ class CheckoutSessionPaymentTest {
             return PaymentOptions.defaults();  // always retry
         });
 
-        assertThrows(SessionException.class, flow::get);
-        assertEquals(3, errorCalls.get());
+        SessionException failure = assertThrows(SessionException.class, flow::get);
+        assertTrue(failure.getError().getMessage().contains("retry limit"),
+                failure.getError().getMessage());
+        assertEquals(4, errorCalls.get(),
+                "3 consultations plus the notification that the last retry was refused");
         assertEquals(3, server.getRequestCount(), "retry cap stops the loop");
         assertEquals(SessionState.FAILED, session.getState());
     }
