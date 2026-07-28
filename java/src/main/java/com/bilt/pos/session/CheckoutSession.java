@@ -1365,6 +1365,18 @@ public final class CheckoutSession {
             try {
                 drainStandingMovements();
             } catch (SessionException e) {
+                lock.lock();
+                try {
+                    // the drain may have failed as busy because a concurrent
+                    // retry's own drain owns the movements — and that retry
+                    // reset the flag when it entered PAYING. Re-assert it
+                    // (mirroring the success path below) so the running
+                    // payment still observes this abort at its next step
+                    // boundary; on a plain reversal failure this is a no-op.
+                    abortRequested = true;
+                } finally {
+                    lock.unlock();
+                }
                 LOGGER.log(Level.WARNING, "abort() did not finish the standing "
                         + "reversals (a reversal failed, or another recovery is in "
                         + "flight); the session stays FAILED so voidTransaction() can "
