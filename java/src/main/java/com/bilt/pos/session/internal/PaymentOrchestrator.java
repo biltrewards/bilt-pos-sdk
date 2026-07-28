@@ -211,8 +211,12 @@ public final class PaymentOrchestrator {
                     outcome.result, outcome.result.getSuggestedTotal());
         }
 
-        // 2. Point / reward redemption
-        if (loyalty && !options.isDisablePoints() && !request.member.getRewards().isEmpty()) {
+        // 2. Point / reward redemption — like the stored value and card
+        // steps, skipped once rebates (or the register's handler) have
+        // brought the running total to zero: there is nothing left to pay,
+        // so redeeming would take the member's points for no discount
+        if (loyalty && !options.isDisablePoints() && !request.member.getRewards().isEmpty()
+                && currentTotal.signum() > 0) {
             checkAbort(request);
             String saleTxnId = beforeStep(request, TransactionStep.POINTS,
                     workingBasket, currentTotal, committed);

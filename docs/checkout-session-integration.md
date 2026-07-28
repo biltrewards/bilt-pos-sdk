@@ -77,9 +77,9 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 `pay()` returns a `PaymentFlow` — a chainable builder where the register hooks into each step, executed when you call `.execute()` / `.get()` / `.getOrNull()`. `beforeStep` is called before every step with a `TransactionContext`; it is a chance to persist pending state and return the sale transaction ID to use for that step. The sequence is always:
 
 1. **Rebate redemption** (identified members, if enabled) — terminal commits applicable offers/coupons → `onRebatesRedeemed`
-2. **Point redemption** (identified members, if enabled) — terminal redeems points for monetary value → `onPointsRedeemed`
-3. **Stored value** (if a card was registered) — terminal charges the gift card → `onGiftCardPayment`
-4. **Card payment** (if remaining > 0) — terminal processes the card for the remaining amount
+2. **Point redemption** (identified members, if enabled and a balance remains) — terminal redeems points for monetary value → `onPointsRedeemed`
+3. **Stored value** (if a card was registered and a balance remains) — terminal charges the gift card → `onGiftCardPayment`
+4. **Card payment** (if a balance remains) — terminal processes the card for the remaining amount
 5. **Award** — terminal submits the loyalty award (Store-and-Forward if loyalty is down)
 6. `onSuccess` / `onError`
 

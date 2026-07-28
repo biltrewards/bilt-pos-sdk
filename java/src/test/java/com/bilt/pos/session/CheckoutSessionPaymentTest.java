@@ -399,6 +399,37 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void pointRedemptionIsSkippedWhenRebatesCoverTheTotal() throws Exception {
+        String rebateFull =
+                "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-RB-1\","
+                        + "\"TimeStamp\":\"2026-07-20T10:00:01Z\"}},"
+                        + "\"LoyaltyResult\":[{\"Rebates\":{\"TotalRebate\":100.00,"
+                        + "\"RebateLabel\":\"Full Cover\"}}]}}}";
+
+        identifyMember();                       // member HAS rewards
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(rebateFull));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+        CheckoutResult result = session.pay().get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(0, result.getPointsRedeemed());
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getPointsMonetaryValue()));
+        assertNull(result.getRedemptionPoiTransactionId());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size(),
+                "rebate and award only — a zeroed total must not trigger a redemption");
+        assertEquals("Rebate", requests.get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("Award", requests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
+    @Test
     void rewardOnlyCheckoutVoidsViaLoyaltyRefunds() throws Exception {
         completeRewardOnlyCheckout();
 
