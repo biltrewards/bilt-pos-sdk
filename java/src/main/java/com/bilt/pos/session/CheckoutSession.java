@@ -168,6 +168,7 @@ public final class CheckoutSession {
     private volatile LastPayment lastPayment = LastPayment.NONE;
     private volatile boolean voidCardLegReversed;
     private volatile boolean voidRedemptionLegReversed;
+    private volatile boolean linkedRefundIssued;
     private volatile List<PaymentOrchestrator.StandingMovement> standingMovements = List.of();
 
     private CheckoutSession(Builder builder) {
@@ -933,8 +934,13 @@ public final class CheckoutSession {
                         "a linked refund requires poiTransactionId on the session builder "
                                 + "or a completed payment in this session"));
             }
-            return refundManager.refund(amount, originalId,
+            RefundResult result = refundManager.refund(amount, originalId,
                     effectivePoiTransactionTimestamp(), loyaltyRef());
+            // once refunded, the payment must not also be voided: a reversal
+            // returns the FULL amount on top of what the refunds already
+            // returned. Further partial returns keep using refund().
+            linkedRefundIssued = true;
+            return result;
         });
     }
 
@@ -1002,8 +1008,11 @@ public final class CheckoutSession {
      * no payment legs — rewards covered the whole basket — is voided by
      * refunding those movements alone. On a session whose payment failed
      * with an incomplete rollback, {@code voidTransaction()} finishes the
-     * unwind by retrying the reversals that did not go through. The session
-     * moves to {@link SessionState#VOIDED} on success.
+     * unwind by retrying the reversals that did not go through. Not allowed
+     * once the payment has been refunded from this session — a void would
+     * return the full amount on top of the refund, so further returns must
+     * use {@link #refund(BigDecimal)}. The session moves to
+     * {@link SessionState#VOIDED} on success.
      */
     public SessionResult<VoidResult> voidTransaction() {
         return operation("voidTransaction", () -> {
@@ -1011,6 +1020,12 @@ public final class CheckoutSession {
             // a failed payment whose rollback was incomplete left movements
             // standing; voiding that session means finishing the unwind
             boolean resumeRollback = !standingMovements.isEmpty();
+            if (!resumeRollback && linkedRefundIssued) {
+                throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
+                        "the payment was already refunded from this session; a void would "
+                                + "return the full amount on top of the refund — use "
+                                + "refund(amount) for further returns"));
+            }
             // a checkout fully covered by rewards completes without a payment
             // leg: there is no transaction to reverse, so the void refunds
             // the committed loyalty movements instead

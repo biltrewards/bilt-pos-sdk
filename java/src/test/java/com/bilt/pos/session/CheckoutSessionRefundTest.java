@@ -82,6 +82,29 @@ class CheckoutSessionRefundTest {
     // ─── Linked refunds ───
 
     @Test
+    void voidAfterLinkedRefundIsRejectedButFurtherRefundsWork() throws Exception {
+        server.enqueue(new MockResponse().setBody(REFUND_OK));
+        server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
+        CheckoutSession session = refundSession();
+        assertTrue(session.refund(new BigDecimal("24.99")).get().isSuccess());
+        recordedRequest();
+        recordedRequest();
+
+        SessionException failure = assertThrows(SessionException.class,
+                () -> session.voidTransaction().get());
+        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
+        assertTrue(failure.getError().getMessage().contains("refund"),
+                "the error must steer the register to further refunds");
+        assertEquals(2, server.getRequestCount(),
+                "the rejected void must not reach the wire");
+
+        // further partial returns stay possible — that is the correct path
+        server.enqueue(new MockResponse().setBody(REFUND_OK));
+        server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
+        assertTrue(session.refund(new BigDecimal("10.00")).get().isSuccess());
+    }
+
+    @Test
     void partialLinkedRefundSendsRefundThenAwardRefund() throws Exception {
         server.enqueue(new MockResponse().setBody(REFUND_OK));
         server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
