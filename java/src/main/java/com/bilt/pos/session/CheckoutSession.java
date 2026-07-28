@@ -150,6 +150,7 @@ public final class CheckoutSession {
     private final Instant poiTransactionTimestamp;
     private final String awardPoiTransactionId;
     private final Instant awardPoiTransactionTimestamp;
+    private final String builderMemberId;
     private final boolean autoDisplay;
 
     private final IdentityManager identityManager;
@@ -178,6 +179,7 @@ public final class CheckoutSession {
         this.poiTransactionTimestamp = builder.poiTransactionTimestamp;
         this.awardPoiTransactionId = builder.awardPoiTransactionId;
         this.awardPoiTransactionTimestamp = builder.awardPoiTransactionTimestamp;
+        this.builderMemberId = builder.memberId;
         this.autoDisplay = builder.autoDisplay;
         this.displayRenderer = builder.displayRenderer != null
                 ? builder.displayRenderer : new BasketDisplayRenderer();
@@ -866,12 +868,12 @@ public final class CheckoutSession {
     private RefundManager.LoyaltyRef loyaltyRef() {
         if (poiTransactionId != null) {
             return new RefundManager.LoyaltyRef(
-                    awardPoiTransactionId, awardPoiTransactionTimestamp, null);
+                    awardPoiTransactionId, awardPoiTransactionTimestamp, builderMemberId);
         }
         IdentifyResult currentMember = getMember();
         return new RefundManager.LoyaltyRef(
                 lastAwardPoiTransactionId, lastAwardPoiTransactionTimestamp,
-                currentMember == null ? null : currentMember.getMemberId());
+                currentMember != null ? currentMember.getMemberId() : builderMemberId);
     }
 
     /** Builder-supplied prior transaction, else the last completed payment. */
@@ -1421,6 +1423,7 @@ public final class CheckoutSession {
         private Instant poiTransactionTimestamp;
         private String awardPoiTransactionId;
         private Instant awardPoiTransactionTimestamp;
+        private String memberId;
         private boolean autoDisplay = true;
         private BiltNexoTerminalClient externalDisplayClient;
         private DisplayRenderer displayRenderer;
@@ -1489,6 +1492,19 @@ public final class CheckoutSession {
         /** Timestamp of the award referenced by {@link #awardPoiTransactionId}. */
         public Builder awardPoiTransactionTimestamp(Instant awardPoiTransactionTimestamp) {
             this.awardPoiTransactionTimestamp = awardPoiTransactionTimestamp;
+            return this;
+        }
+
+        /**
+         * The member's loyalty account ID from the original sale (from
+         * {@code IdentifyResult.getMemberId()} or
+         * {@code CheckoutResult}/POS records). The reverse-award contract
+         * requires it in {@code LoyaltyData}, so supply it for linked
+         * refunds and voids on builder-referenced sessions — without it the
+         * loyalty reversal is attempted without member identification.
+         */
+        public Builder memberId(String memberId) {
+            this.memberId = memberId;
             return this;
         }
 

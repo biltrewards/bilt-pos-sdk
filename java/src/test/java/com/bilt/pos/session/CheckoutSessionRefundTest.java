@@ -121,6 +121,7 @@ class CheckoutSessionRefundTest {
                 .poiTransactionId(ORIGINAL_POI_TXN)
                 .poiTransactionTimestamp(ORIGINAL_TS)
                 .awardPoiTransactionId("POI-AW-9")
+                .memberId("98234")
                 .build()
                 .refund(new BigDecimal("10.00")).execute();
 
@@ -128,6 +129,28 @@ class CheckoutSessionRefundTest {
         SaleToPOIRequest awardRefund = recordedRequest();
         assertEquals("POI-AW-9", awardRefund.getLoyaltyRequest().getLoyaltyTransaction()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals("98234", awardRefund.getLoyaltyRequest().getLoyaltyData()[0]
+                .getLoyaltyAccountID().getLoyaltyID(),
+                "the builder-supplied member must reach the reversal's LoyaltyData");
+    }
+
+    @Test
+    void builderMemberIdReachesVoidLoyaltyReversal() throws Exception {
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
+        server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
+
+        sessionBuilder()
+                .poiTransactionId(ORIGINAL_POI_TXN)
+                .poiTransactionTimestamp(ORIGINAL_TS)
+                .memberId("98234")
+                .build()
+                .voidTransaction().execute();
+
+        recordedRequest();  // the reversal
+        SaleToPOIRequest awardRefund = recordedRequest();
+        assertEquals("98234", awardRefund.getLoyaltyRequest().getLoyaltyData()[0]
+                .getLoyaltyAccountID().getLoyaltyID());
     }
 
     @Test
