@@ -888,6 +888,15 @@ public final class CheckoutSession {
                 // abort() defers to it while the session is PAYING
                 stateMachine.transitionTo(SessionState.COMPLETED);
                 lastPayment = new LastPayment(result);
+                if (poiTransactionId == null) {
+                    // the refund guard belongs to the void target. For a
+                    // session-fallback void this new payment IS the target
+                    // now, so refunds issued against the earlier attempt no
+                    // longer block its void; a builder-referenced session
+                    // keeps voiding the builder's transaction, so its guard
+                    // must persist
+                    refundIssued = false;
+                }
             } finally {
                 lock.unlock();
             }

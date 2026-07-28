@@ -717,6 +717,34 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void refundDuringRecoveryDoesNotBlockVoidingANewPayment() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        assertThrows(SessionException.class, () -> session.pay().get());
+        assertEquals(SessionState.FAILED, session.getState());
+        drainRequests();
+
+        // a return processed while the checkout is in recovery
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-REF-1", 25.00)));
+        assertTrue(session.refundUnlinked(new BigDecimal("25.00")).get().isSuccess());
+        drainRequests();
+
+        // the retry completes a NEW payment — the session-fallback void
+        // target is replaced, so the earlier refund must not pin it
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
+        assertTrue(session.pay().get().isSuccess());
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+        assertEquals("POI-PAY-2", drainRequests().get(0).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID(),
+                "the void reverses the new payment, which no refund has touched");
+    }
+
+    @Test
     void basketEditKeepsFailedWhileTheRollbackIsIncomplete() throws Exception {
         failPaymentWithStandingRebate();
 
