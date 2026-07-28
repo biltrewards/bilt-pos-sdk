@@ -248,6 +248,15 @@ class CheckoutSessionPaymentTest {
                 "loyalty TotalAmount is the item sum (rebate-adjusted), not the running total");
         assertNotNull(requests.get(1).getLoyaltyRequest().getSaleData().getSaleToPOIData(),
                 "redemption must carry the rewardRefs payload");
+        assertEquals("Monetary", requests.get(1).getLoyaltyRequest().getLoyaltyData()[0]
+                .getLoyaltyAmount().getLoyaltyUnit().toValue(),
+                "redemption requires a Monetary LoyaltyAmount of 0.00");
+        assertEquals(0.0, requests.get(1).getLoyaltyRequest().getLoyaltyData()[0]
+                .getLoyaltyAmount().getAmountValue());
+        assertEquals("USD", requests.get(1).getLoyaltyRequest().getLoyaltyData()[0]
+                .getLoyaltyAmount().getCurrency());
+        assertNull(requests.get(0).getLoyaltyRequest().getLoyaltyData()[0].getLoyaltyAmount(),
+                "the rebate request carries no LoyaltyAmount");
         assertEquals(84.50, requests.get(2).getPaymentRequest()
                 .getPaymentTransaction().getAmountsReq().getRequestedAmount());
         assertEquals(90.00, requests.get(2).getPaymentRequest().getPaymentTransaction()

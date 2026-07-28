@@ -588,6 +588,22 @@ public final class PaymentOrchestrator {
         for (BasketLineItem line : basket.getItems()) {
             itemSum = itemSum.add(line.getAdjustedTotal());
         }
+        LoyaltyData.Builder loyaltyData = LoyaltyData.builder()
+                .loyaltyAccountID(LoyaltyAccountID.builder()
+                        .loyaltyID(request.member.getMemberId())
+                        .identificationType(IdentificationTypeEnum.PAN)
+                        .entryMode(new EntryModeType[] {EntryModeType.KEYED})
+                        .build());
+        if (type == LoyaltyTransactionTypeEnum.REDEMPTION) {
+            // the redemption contract requires a Monetary LoyaltyAmount of
+            // 0.00 — the provider determines the actual discount from the
+            // rewardRefs carried in SaleToPOIData
+            loyaltyData.loyaltyAmount(LoyaltyAmount.builder()
+                    .loyaltyUnit(LoyaltyUnitEnum.MONETARY)
+                    .currency(currency)
+                    .amountValue(0.0)
+                    .build());
+        }
         LoyaltyRequest.Builder loyaltyRequest = LoyaltyRequest.builder()
                 .saleData(saleData.build())
                 .loyaltyTransaction(LoyaltyTransaction.builder()
@@ -596,13 +612,7 @@ public final class PaymentOrchestrator {
                         .totalAmount(itemSum.doubleValue())
                         .saleItem(saleItems.toArray(new SaleItem[0]))
                         .build())
-                .loyaltyData(new LoyaltyData[] {LoyaltyData.builder()
-                        .loyaltyAccountID(LoyaltyAccountID.builder()
-                                .loyaltyID(request.member.getMemberId())
-                                .identificationType(IdentificationTypeEnum.PAN)
-                                .entryMode(new EntryModeType[] {EntryModeType.KEYED})
-                                .build())
-                        .build()});
+                .loyaltyData(new LoyaltyData[] {loyaltyData.build()});
 
         SaleToPOIRequest wireRequest = SaleToPOIRequest.builder()
                 .messageHeader(exchange.factory().header(
