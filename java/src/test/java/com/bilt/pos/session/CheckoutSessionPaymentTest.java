@@ -939,6 +939,22 @@ class CheckoutSessionPaymentTest {
         assertTrue(e.getError().getMessage().contains("POI-GC-1 was not"));
         assertEquals(SessionState.COMPLETED, session.getState(),
                 "the void failed; the session returns to its pre-void state");
+        drainRequests();
+
+        // the retry resumes at the outstanding gift card leg — the card
+        // payment must not be reversed a second time
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+
+        List<SaleToPOIRequest> retryRequests = drainRequests();
+        assertEquals(2, retryRequests.size());
+        assertEquals("POI-GC-1", retryRequests.get(0).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID(),
+                "only the stored value leg remains to reverse");
+        assertEquals("AwardRefund", retryRequests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
     }
 
     @Test

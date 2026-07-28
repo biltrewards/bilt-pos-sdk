@@ -168,6 +168,7 @@ public final class CheckoutSession {
     private volatile Instant lastStoredValuePoiTransactionTimestamp;
     private volatile String lastAwardPoiTransactionId;
     private volatile Instant lastAwardPoiTransactionTimestamp;
+    private volatile boolean voidCardLegReversed;
 
     private CheckoutSession(Builder builder) {
         this.client = builder.client;
@@ -939,10 +940,13 @@ public final class CheckoutSession {
                         && lastStoredValuePoiTransactionId != null
                         && !lastStoredValuePoiTransactionId.equals(originalId)
                         ? lastStoredValuePoiTransactionId : null;
+                // a retry after a partial void resumes at the leg that is
+                // still standing instead of re-reversing the card payment
+                String cardLeg = voidCardLegReversed ? null : originalId;
                 VoidResult result = refundManager.voidTransaction(
-                        originalId, effectivePoiTransactionTimestamp(),
+                        cardLeg, effectivePoiTransactionTimestamp(),
                         storedValueLeg, lastStoredValuePoiTransactionTimestamp,
-                        loyaltyRef());
+                        loyaltyRef(), () -> voidCardLegReversed = true);
                 transitionLocked(SessionState.VOIDED);
                 return result;
             } catch (RuntimeException e) {

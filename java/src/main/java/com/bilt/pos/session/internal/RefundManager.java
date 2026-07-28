@@ -176,37 +176,69 @@ public final class RefundManager {
                                       String storedValuePoiTxnId,
                                       Instant storedValuePoiTimestamp,
                                       LoyaltyRef loyaltyRef) {
-        ReversalResponse cardLeg = reverse(originalPoiTxnId, originalPoiTimestamp);
+        return voidTransaction(originalPoiTxnId, originalPoiTimestamp,
+                storedValuePoiTxnId, storedValuePoiTimestamp, loyaltyRef, null);
+    }
+
+    /**
+     * Reverses a completed transaction. {@code cardPoiTxnId} may be
+     * {@code null} on a retry whose card leg was already reversed — only the
+     * stored value leg and the award refund run then.
+     *
+     * @param onCardLegReversed invoked right after the card leg reversal
+     *        succeeds, so the caller can record progress before a later leg
+     *        fails and make its retry resumable
+     */
+    public VoidResult voidTransaction(String cardPoiTxnId, Instant cardPoiTimestamp,
+                                      String storedValuePoiTxnId,
+                                      Instant storedValuePoiTimestamp,
+                                      LoyaltyRef loyaltyRef, Runnable onCardLegReversed) {
+        if (cardPoiTxnId == null && storedValuePoiTxnId == null) {
+            throw new IllegalArgumentException("nothing to void: no leg references");
+        }
+        ReversalResponse cardLeg = null;
+        if (cardPoiTxnId != null) {
+            cardLeg = reverse(cardPoiTxnId, cardPoiTimestamp);
+            if (onCardLegReversed != null) {
+                onCardLegReversed.run();
+            }
+        }
 
         ReversalResponse storedValueLeg = null;
         if (storedValuePoiTxnId != null) {
             try {
                 storedValueLeg = reverse(storedValuePoiTxnId, storedValuePoiTimestamp);
             } catch (SessionException e) {
+                if (cardPoiTxnId == null) {
+                    // stored-value-only retry: nothing new was reversed
+                    throw e;
+                }
                 // the card leg is already reversed: surface exactly what
                 // remains standing so the register can retry or escalate
                 throw new SessionException(new SessionError(e.getError().getCode(),
-                        "the card leg " + originalPoiTxnId + " was reversed but the stored "
+                        "the card leg " + cardPoiTxnId + " was reversed but the stored "
                                 + "value leg " + storedValuePoiTxnId + " was not: "
                                 + e.getError().getMessage(),
                         e.getError().getNexoErrorCondition(), e));
             }
         }
 
-        LoyaltyReversal loyalty = awardRefund(loyaltyRef, originalPoiTxnId,
-                originalPoiTimestamp);
+        LoyaltyReversal loyalty = awardRefund(loyaltyRef,
+                cardPoiTxnId != null ? cardPoiTxnId : storedValuePoiTxnId,
+                cardPoiTxnId != null ? cardPoiTimestamp : storedValuePoiTimestamp);
 
+        ReversalResponse primary = cardLeg != null ? cardLeg : storedValueLeg;
         BigDecimal reversedAmount = sumReversedAmounts(cardLeg, storedValueLeg);
-        TransactionIdentificationType poiTxn = cardLeg.getPoiData() == null
-                ? null : cardLeg.getPoiData().getPoiTransactionID();
+        TransactionIdentificationType poiTxn = primary.getPoiData() == null
+                ? null : primary.getPoiData().getPoiTransactionID();
         return VoidResult.builder()
                 .success(true)
                 .reversedAmount(reversedAmount)
                 .poiTransactionId(poiTxn == null ? null : poiTxn.getTransactionID())
                 .poiTransactionTimestamp(Wire.instant(
                         poiTxn == null ? null : poiTxn.getTimeStamp()))
-                .customerReceipt(ReceiptMapper.customerReceipt(cardLeg.getPaymentReceipt()))
-                .merchantReceipt(ReceiptMapper.merchantReceipt(cardLeg.getPaymentReceipt()))
+                .customerReceipt(ReceiptMapper.customerReceipt(primary.getPaymentReceipt()))
+                .merchantReceipt(ReceiptMapper.merchantReceipt(primary.getPaymentReceipt()))
                 .pointsReversed(loyalty.pointsReversed)
                 .remainingPointBalance(loyalty.remainingBalance)
                 .build();
