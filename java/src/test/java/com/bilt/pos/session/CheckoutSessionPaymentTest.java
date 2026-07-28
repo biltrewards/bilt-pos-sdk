@@ -302,6 +302,65 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void globalRebateWithoutItemEntriesIsProratedOntoLines() throws Exception {
+        String globalRebate =
+                "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-RB-1\","
+                        + "\"TimeStamp\":\"2026-07-20T10:00:01Z\"}},"
+                        + "\"LoyaltyResult\":[{\"Rebates\":{\"TotalRebate\":10.00,"
+                        + "\"RebateLabel\":\"Fall Promo\"}}]}}}";
+
+        identifyMember();
+        session.addItem(BasketItem.of("SKU-1", "Item A", 1, "50.00"));
+        session.addItem(BasketItem.of("SKU-2", "Item B", 1, "25.00"));
+
+        server.enqueue(new MockResponse().setBody(globalRebate));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 60.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+        CheckoutResult result = session.pay()
+                .onRebatesRedeemed(rebates -> {
+                    assertEquals(0, new BigDecimal("10.00")
+                            .compareTo(rebates.getTotalRebateAmount()));
+                    assertEquals(1, rebates.getRebates().size());
+                    assertNull(rebates.getRebates().get(0).getItemId(),
+                            "an unattributed rebate surfaces as a cart-level entry");
+                    assertEquals(0, new BigDecimal("10.00")
+                            .compareTo(rebates.getRebates().get(0).getAmount()));
+                    assertEquals("Fall Promo", rebates.getRebates().get(0).getLabel());
+                    // 10.00 prorated by weight: 50→6.67, 25 (last) absorbs 3.33
+                    assertEquals(0, new BigDecimal("43.33").compareTo(rebates
+                            .getUpdatedBasket().getItem("1").getAdjustedTotal()));
+                    assertEquals(0, new BigDecimal("21.67").compareTo(rebates
+                            .getUpdatedBasket().getItem("2").getAdjustedTotal()));
+                    assertEquals("Fall Promo",
+                            rebates.getUpdatedBasket().getItem("1").getRebateLabel());
+                    return rebates.getSuggestedTotal();  // 65.00
+                })
+                .get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(0, new BigDecimal("60.00").compareTo(result.getCardAmountCharged()));
+        assertEquals(0, new BigDecimal("10.00").compareTo(
+                result.getFinalBasket().getRebateTotal()));
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(4, requests.size());
+        assertEquals(65.00, requests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getTotalAmount(), 0.001,
+                "redemption TotalAmount reflects the prorated global rebate");
+        assertEquals(60.00, requests.get(2).getPaymentRequest()
+                .getPaymentTransaction().getAmountsReq().getRequestedAmount());
+        assertEquals(43.33, requests.get(2).getPaymentRequest().getPaymentTransaction()
+                .getSaleItem()[0].getItemAmount(), 0.001,
+                "card step sale items carry the prorated discount");
+        assertEquals(21.67, requests.get(2).getPaymentRequest().getPaymentTransaction()
+                .getSaleItem()[1].getItemAmount(), 0.001);
+    }
+
+    @Test
     void finalBasketReflectsHandlerRecalculatedTax() throws Exception {
         identifyMember();
         session.addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));

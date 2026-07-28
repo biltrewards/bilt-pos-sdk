@@ -322,10 +322,20 @@ public final class PaymentOrchestrator {
                             null));
                 }
             }
+            BigDecimal attributed = rebates.stream().map(RedeemedRebate::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
             totalRebate = wireRebates.getTotalRebate() != null
                     ? Wire.money(wireRebates.getTotalRebate())
-                    : rebates.stream().map(RedeemedRebate::getAmount)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    : attributed;
+            // a TotalRebate exceeding the per-item entries is a cart-level
+            // discount (e.g. "$10 off purchase"); surface it as the
+            // documented cart-level RedeemedRebate (null itemId/sku) so the
+            // register sees it and applyRebates can prorate it onto lines
+            BigDecimal unattributed = totalRebate.subtract(attributed);
+            if (unattributed.signum() > 0) {
+                rebates.add(new RedeemedRebate(null, null, unattributed,
+                        wireRebates.getRebateLabel(), null));
+            }
         }
 
         commit(committed, TransactionStep.REBATE, saleTxnId, body.getPoiData(),
@@ -830,15 +840,43 @@ public final class PaymentOrchestrator {
 
     private static Basket applyRebates(Basket basket, List<RedeemedRebate> rebates,
                                        BigDecimal totalRebate) {
-        List<BasketLineItem> items = new ArrayList<>(basket.getItemCount());
+        // cart-level rebates (null itemId) are prorated across lines by
+        // weight so the adjusted sale items sent to the card and award steps
+        // reflect the discount; the last weighted line absorbs the rounding
+        // remainder so the shares sum exactly to the cart-level amount
+        BigDecimal cartLevel = BigDecimal.ZERO;
+        String cartLevelLabel = null;
+        for (RedeemedRebate rebate : rebates) {
+            if (rebate.getItemId() == null) {
+                cartLevel = cartLevel.add(rebate.getAmount());
+                cartLevelLabel = rebate.getLabel();
+            }
+        }
+        List<BigDecimal> itemAttributed = new ArrayList<>(basket.getItemCount());
         for (BasketLineItem line : basket.getItems()) {
-            BigDecimal rebateAmount = BigDecimal.ZERO;
+            BigDecimal attributed = BigDecimal.ZERO;
+            for (RedeemedRebate rebate : rebates) {
+                if (line.getItemId().equals(rebate.getItemId())) {
+                    attributed = attributed.add(rebate.getAmount());
+                }
+            }
+            itemAttributed.add(attributed);
+        }
+        List<BigDecimal> cartShares = prorate(basket, itemAttributed, cartLevel);
+
+        List<BasketLineItem> items = new ArrayList<>(basket.getItemCount());
+        int index = -1;
+        for (BasketLineItem line : basket.getItems()) {
+            index++;
+            BigDecimal rebateAmount = itemAttributed.get(index).add(cartShares.get(index));
             String rebateLabel = null;
             for (RedeemedRebate rebate : rebates) {
                 if (line.getItemId().equals(rebate.getItemId())) {
-                    rebateAmount = rebateAmount.add(rebate.getAmount());
                     rebateLabel = rebate.getLabel();
                 }
+            }
+            if (rebateLabel == null && cartShares.get(index).signum() > 0) {
+                rebateLabel = cartLevelLabel;
             }
             items.add(BasketLineItem.builder()
                     .itemId(line.getItemId())
@@ -864,6 +902,49 @@ public final class PaymentOrchestrator {
                 .grandTotal(basket.getGrandTotal())
                 .rebateTotal(totalRebate)
                 .build();
+    }
+
+    /** Weighted shares of {@code cartLevel} per line, summing exactly. */
+    private static List<BigDecimal> prorate(Basket basket, List<BigDecimal> itemAttributed,
+                                            BigDecimal cartLevel) {
+        List<BigDecimal> shares = new ArrayList<>(basket.getItemCount());
+        basket.getItems().forEach(line -> shares.add(BigDecimal.ZERO));
+        if (cartLevel.signum() <= 0 || basket.isEmpty()) {
+            return shares;
+        }
+        // weights are each line's remaining (post-item-rebate) total; lines
+        // already rebated to zero or below carry no share
+        BigDecimal weightSum = BigDecimal.ZERO;
+        int lastWeighted = -1;
+        for (int i = 0; i < basket.getItemCount(); i++) {
+            BigDecimal weight = basket.getItems().get(i).getOriginalTotal()
+                    .subtract(itemAttributed.get(i));
+            if (weight.signum() > 0) {
+                weightSum = weightSum.add(weight);
+                lastWeighted = i;
+            }
+        }
+        if (lastWeighted < 0) {
+            // nothing carries weight (all lines fully discounted): put the
+            // cart-level amount on the last line rather than dropping it
+            shares.set(basket.getItemCount() - 1, cartLevel);
+            return shares;
+        }
+        BigDecimal remaining = cartLevel;
+        for (int i = 0; i < basket.getItemCount(); i++) {
+            BigDecimal weight = basket.getItems().get(i).getOriginalTotal()
+                    .subtract(itemAttributed.get(i));
+            if (weight.signum() <= 0) {
+                continue;
+            }
+            BigDecimal share = i == lastWeighted
+                    ? remaining
+                    : cartLevel.multiply(weight).divide(weightSum, 2,
+                            java.math.RoundingMode.HALF_UP);
+            shares.set(i, share);
+            remaining = remaining.subtract(share);
+        }
+        return shares;
     }
 
     private static Basket withPaymentTotals(Basket basket, BigDecimal rebateTotal,
