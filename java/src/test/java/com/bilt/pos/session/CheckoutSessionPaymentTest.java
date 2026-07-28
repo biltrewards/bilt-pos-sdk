@@ -229,6 +229,50 @@ class CheckoutSessionPaymentTest {
                 .getSaleItem().length);
     }
 
+    // ─── Cashback ───
+
+    @Test
+    void cashbackIsIncludedInTheRequestedAmount() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 120.00)));
+
+        CheckoutResult result = session.pay(PaymentOptions.builder()
+                .cashback(new BigDecimal("20.00"))
+                .build()).get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(0, new BigDecimal("120.00").compareTo(result.getCardAmountCharged()));
+
+        SaleToPOIRequest sent = nextRequest();
+        assertEquals(120.00, sent.getPaymentRequest().getPaymentTransaction()
+                .getAmountsReq().getRequestedAmount(),
+                "RequestedAmount is the total INCLUDING cashback per the nexo contract");
+        assertEquals(20.00, sent.getPaymentRequest().getPaymentTransaction()
+                .getAmountsReq().getCashBackAmount());
+    }
+
+    @Test
+    void cashbackUnderAuthorizationFailsAndReverses() throws Exception {
+        addHundredDollarItem();
+        // terminal authorizes only the sale portion, not sale + cashback
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+
+        SessionException failure = assertThrows(SessionException.class, () ->
+                session.pay(PaymentOptions.builder()
+                        .cashback(new BigDecimal("20.00"))
+                        .build()).get());
+
+        assertEquals(SessionErrorCode.DECLINED, failure.getError().getCode());
+        assertEquals(SessionState.FAILED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size());
+        assertEquals("Reversal", requests.get(1).getMessageHeader()
+                .getMessageCategory().toValue(),
+                "the short authorization must be reversed, not kept");
+    }
+
     // ─── Full loyalty flow ───
 
     @Test

@@ -491,9 +491,14 @@ public final class PaymentOrchestrator {
     private BigDecimal cardStep(Request request, Basket basket, BigDecimal currentTotal,
                                 PaymentOptions options, String saleTxnId,
                                 List<Commit> committed, CheckoutResult.Builder result) {
+        // nexo contract: RequestedAmount is the TOTAL requested for payment
+        // INCLUDING cashback — the terminal authorizes sale + cashback as
+        // one amount, with CashBackAmount identifying the cash portion
+        BigDecimal grossTotal = options.getCashback() != null
+                ? currentTotal.add(options.getCashback()) : currentTotal;
         AmountsReq.Builder amounts = AmountsReq.builder()
                 .currency(currency)
-                .requestedAmount(currentTotal.doubleValue());
+                .requestedAmount(grossTotal.doubleValue());
         if (options.getCashback() != null) {
             amounts.cashBackAmount(options.getCashback().doubleValue());
         }
@@ -511,11 +516,11 @@ public final class PaymentOrchestrator {
                 .build();
 
         PaymentResponse body = sendPayment(TransactionStep.CARD_PAYMENT, wireRequest,
-                currentTotal);
+                grossTotal);
         BigDecimal charged = body.getPaymentResult() != null
                 && body.getPaymentResult().getAmountsResp() != null
                 ? Wire.money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
-                : currentTotal;
+                : grossTotal;
 
         // commit BEFORE validating the amount so an under-authorization is
         // reversed by the unwind like any other committed step
@@ -524,11 +529,12 @@ public final class PaymentOrchestrator {
 
         // a partial authorization on the stored value step is the split
         // tender mechanism, but the card step is the FINAL tender — an
-        // under-authorization here would complete a short-paid sale
-        if (charged.compareTo(currentTotal) < 0) {
+        // under-authorization here would complete a short-paid sale (or
+        // hand out cashback the sale never collected)
+        if (charged.compareTo(grossTotal) < 0) {
             throw new StepFailure(new SessionError(SessionErrorCode.DECLINED,
                     "the card payment authorized only " + charged + " of the requested "
-                            + currentTotal + "; the partial authorization is reversed"),
+                            + grossTotal + "; the partial authorization is reversed"),
                     false);
         }
 
