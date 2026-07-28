@@ -688,6 +688,35 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void emptyBasketCannotPayFromAFailedSessionWithStandingMovements() throws Exception {
+        failPaymentWithStandingRebate();
+
+        // create the flow while items exist, then empty the basket — the
+        // incomplete rollback keeps the session FAILED, not IDLE
+        PaymentFlow flow = session.pay();
+        session.removeItemBySku("SKU-1");
+        assertEquals(SessionState.FAILED, session.getState());
+        assertEquals(0, session.getBasket().getItemCount());
+
+        // creation-time: pay() must reject the empty basket outright
+        assertThrows(IllegalStateException.class, () -> session.pay());
+
+        // execute-time: the lazy flow must not run a zero-amount checkout
+        int requestsBefore = server.getRequestCount();
+        SessionException failure = assertThrows(SessionException.class, flow::get);
+        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
+        assertEquals(SessionState.FAILED, session.getState(),
+                "no zero-amount COMPLETED checkout may be minted");
+        assertEquals(requestsBefore, server.getRequestCount(),
+                "nothing may reach the wire");
+
+        // the standing movement is untouched and the void still finishes it
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+    }
+
+    @Test
     void basketEditKeepsFailedWhileTheRollbackIsIncomplete() throws Exception {
         failPaymentWithStandingRebate();
 

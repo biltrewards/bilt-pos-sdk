@@ -816,7 +816,11 @@ public final class CheckoutSession {
     public PaymentFlow pay(PaymentOptions options) {
         Objects.requireNonNull(options, "options");
         SessionState state = stateMachine.current();
-        if (state != SessionState.ACTIVE && state != SessionState.FAILED) {
+        // the state check alone is not enough: a FAILED session with an
+        // incomplete rollback keeps its state across edits, so the basket
+        // can be empty here even though the state says otherwise
+        if ((state != SessionState.ACTIVE && state != SessionState.FAILED)
+                || basketEngine.isEmpty()) {
             throw new IllegalStateException(
                     "pay() requires items in the basket (state " + state + ")");
         }
@@ -833,6 +837,12 @@ public final class CheckoutSession {
                     EnumSet.of(SessionState.ACTIVE, SessionState.FAILED), "pay");
             if (error != null) {
                 throw new SessionException(error);
+            }
+            // re-checked at execute time: the flow is lazy, and the basket
+            // may have been emptied since pay() created it
+            if (basketEngine.isEmpty()) {
+                throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
+                        "the basket is empty; a payment cannot start"));
             }
             stateMachine.transitionTo(SessionState.PAYING);
             // the abort flag is scoped to a single payment run: a stale
