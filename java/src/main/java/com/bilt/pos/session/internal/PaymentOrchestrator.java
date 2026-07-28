@@ -12,9 +12,6 @@
 package com.bilt.pos.session.internal;
 
 import com.bilt.pos.nexo.model.AmountsReq;
-import com.bilt.pos.nexo.model.EntryModeType;
-import com.bilt.pos.nexo.model.IdentificationTypeEnum;
-import com.bilt.pos.nexo.model.LoyaltyAccountID;
 import com.bilt.pos.nexo.model.LoyaltyAmount;
 import com.bilt.pos.nexo.model.LoyaltyData;
 import com.bilt.pos.nexo.model.LoyaltyRequest;
@@ -48,7 +45,6 @@ import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.identity.IdentifyResult;
-import com.bilt.pos.session.identity.Reward;
 import com.bilt.pos.session.payment.CheckoutResult;
 import com.bilt.pos.session.payment.CommittedStep;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
@@ -60,6 +56,7 @@ import com.bilt.pos.session.payment.TransactionContext;
 import com.bilt.pos.session.payment.TransactionStep;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -169,22 +166,21 @@ public final class PaymentOrchestrator {
                 PaymentOptions resolution = request.handlers.onError == null
                         ? PaymentOptions.voidAndAbort()
                         : request.handlers.onError.apply(error);
+                boolean wantsRetry = resolution != null && !resolution.isVoidAndAbort();
+                if (!wantsRetry) {
+                    throw new SessionException(error);
+                }
                 // a retry on top of an incomplete unwind would run the
                 // sequence again while a previous movement still stands —
                 // double-charging the tender or double-redeeming loyalty.
                 // Whatever onError asked for, only a clean unwind may retry.
-                if (!unreversed.isEmpty() && resolution != null
-                        && !resolution.isVoidAndAbort()) {
+                if (!unreversed.isEmpty()) {
                     LOGGER.warning("onError requested a retry, but the rollback was "
                             + "incomplete; failing the payment instead");
                     throw new SessionException(error);
                 }
-                if (resolution == null || resolution.isVoidAndAbort()
-                        || resolutions >= MAX_ERROR_RESOLUTIONS) {
-                    if (resolutions >= MAX_ERROR_RESOLUTIONS && resolution != null
-                            && !resolution.isVoidAndAbort()) {
-                        LOGGER.warning("payment retry limit reached; failing the payment");
-                    }
+                if (resolutions >= MAX_ERROR_RESOLUTIONS) {
+                    LOGGER.warning("payment retry limit reached; failing the payment");
                     throw new SessionException(error);
                 }
                 options = resolution;
@@ -277,13 +273,8 @@ public final class PaymentOrchestrator {
         // a rollback request, not an award failure.
         checkAbort(request);
 
-        // cashback rides on the card authorization but is not part of the sale
-        BigDecimal netCharged = storedValueCharged.add(cardCharged);
-        if (options.getCashback() != null) {
-            netCharged = netCharged.subtract(options.getCashback());
-        }
         Basket finalBasket = withPaymentTotals(workingBasket, rebateTotal, pointsValue,
-                storedValueCharged, cardCharged, netCharged);
+                storedValueCharged, cardCharged, options.getCashback());
 
         // 6. Final display (best-effort)
         try {
@@ -357,11 +348,11 @@ public final class PaymentOrchestrator {
         commit(committed, TransactionStep.REBATE, saleTxnId, body.getPoiData(),
                 totalRebate.signum() > 0
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REBATE_REFUND,
-                                poiRef(body.getPoiData()), request.member.getMemberId(), null)
+                                Wire.poiRef(body.getPoiData()), request.member.getMemberId(), null)
                         : null);
         // kept on the result so a checkout with no payment legs (rewards
         // covered everything) can still be voided by reversing this movement
-        TransactionIdentificationType rebatePoiTxn = poiRef(body.getPoiData());
+        TransactionIdentificationType rebatePoiTxn = Wire.poiRef(body.getPoiData());
         if (totalRebate.signum() > 0 && rebatePoiTxn != null) {
             result.rebatePoiTransactionId(rebatePoiTxn.getTransactionID());
             result.rebatePoiTransactionTimestamp(Wire.instant(rebatePoiTxn.getTimeStamp()));
@@ -380,13 +371,8 @@ public final class PaymentOrchestrator {
                                              BigDecimal currentTotal, String saleTxnId,
                                              List<Commit> committed,
                                              CheckoutResult.Builder result) {
-        List<String> rewardRefs = new ArrayList<>();
-        for (Reward reward : request.member.getRewards()) {
-            if (reward.getRewardRef() != null) {
-                rewardRefs.add(reward.getRewardRef());
-            }
-        }
-        String rewardRefsPayload = LoyaltyPayloadCodec.encodeRewardRefs(rewardRefs);
+        String rewardRefsPayload = LoyaltyPayloadCodec.memberRewardRefs(
+                request.member.getRewards());
         LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.REDEMPTION, request, basket,
                 saleTxnId, rewardRefsPayload);
 
@@ -419,12 +405,12 @@ public final class PaymentOrchestrator {
         commit(committed, TransactionStep.POINTS, saleTxnId, body.getPoiData(),
                 monetaryValue.signum() > 0
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
-                                poiRef(body.getPoiData()), request.member.getMemberId(),
+                                Wire.poiRef(body.getPoiData()), request.member.getMemberId(),
                                 rewardRefsPayload)
                         : null);
         // kept on the result so a checkout with no payment legs (rewards
         // covered everything) can still be voided by reversing this movement
-        TransactionIdentificationType redemptionPoiTxn = poiRef(body.getPoiData());
+        TransactionIdentificationType redemptionPoiTxn = Wire.poiRef(body.getPoiData());
         if (monetaryValue.signum() > 0 && redemptionPoiTxn != null) {
             result.redemptionPoiTransactionId(redemptionPoiTxn.getTransactionID());
             result.redemptionPoiTransactionTimestamp(
@@ -469,7 +455,7 @@ public final class PaymentOrchestrator {
                 body.getResponse().getAdditionalResponse());
 
         commit(committed, TransactionStep.STORED_VALUE, saleTxnId, body.getPoiData(),
-                reversalRollback(poiRef(body.getPoiData())));
+                reversalRollback(Wire.poiRef(body.getPoiData())));
 
         // a gift-card-only checkout has no card step: this payment's
         // references/receipts must reach the result so the session can void
@@ -477,7 +463,7 @@ public final class PaymentOrchestrator {
         copyPaymentArtifacts(body, result);
         // the split-tender leg keeps its own reference so a session void can
         // reverse BOTH legs, not just the card payment
-        TransactionIdentificationType storedValuePoiTxn = poiRef(body.getPoiData());
+        TransactionIdentificationType storedValuePoiTxn = Wire.poiRef(body.getPoiData());
         if (storedValuePoiTxn != null) {
             result.storedValuePoiTransactionId(storedValuePoiTxn.getTransactionID());
             result.storedValuePoiTransactionTimestamp(
@@ -525,7 +511,7 @@ public final class PaymentOrchestrator {
         // commit BEFORE validating the amount so an under-authorization is
         // reversed by the unwind like any other committed step
         commit(committed, TransactionStep.CARD_PAYMENT, saleTxnId, body.getPoiData(),
-                reversalRollback(poiRef(body.getPoiData())));
+                reversalRollback(Wire.poiRef(body.getPoiData())));
 
         // a partial authorization on the stored value step is the split
         // tender mechanism, but the card step is the FINAL tender — an
@@ -577,7 +563,7 @@ public final class PaymentOrchestrator {
         if (merchantReceipt != null) {
             result.merchantReceipt(merchantReceipt);
         }
-        TransactionIdentificationType poiTxn = poiRef(body.getPoiData());
+        TransactionIdentificationType poiTxn = Wire.poiRef(body.getPoiData());
         if (poiTxn != null) {
             result.poiTransactionId(poiTxn.getTransactionID());
             result.poiTransactionTimestamp(Wire.instant(poiTxn.getTimeStamp()));
@@ -592,7 +578,7 @@ public final class PaymentOrchestrator {
                     saleTxnId, null);
             // an abort observed after this point unwinds the tender — the
             // credited points must be reversed with it, like void does
-            TransactionIdentificationType awardPoiTxn = poiRef(body.getPoiData());
+            TransactionIdentificationType awardPoiTxn = Wire.poiRef(body.getPoiData());
             commit(committed, TransactionStep.AWARD, saleTxnId, body.getPoiData(),
                     awardPoiTxn != null
                             ? loyaltyRollback(LoyaltyTransactionTypeEnum.AWARD_REFUND,
@@ -646,11 +632,7 @@ public final class PaymentOrchestrator {
             itemSum = itemSum.add(line.getAdjustedTotal());
         }
         LoyaltyData.Builder loyaltyData = LoyaltyData.builder()
-                .loyaltyAccountID(LoyaltyAccountID.builder()
-                        .loyaltyID(request.member.getMemberId())
-                        .identificationType(IdentificationTypeEnum.PAN)
-                        .entryMode(new EntryModeType[] {EntryModeType.KEYED})
-                        .build());
+                .loyaltyAccountID(Wire.memberAccount(request.member.getMemberId()));
         if (type == LoyaltyTransactionTypeEnum.REDEMPTION) {
             // the redemption contract requires a Monetary LoyaltyAmount of
             // 0.00 — the provider determines the actual discount from the
@@ -714,8 +696,7 @@ public final class PaymentOrchestrator {
             // below the requested amount — hard declines (expired, blocked,
             // invalid cards) stay DECLINED
             if (step == TransactionStep.STORED_VALUE
-                    && error.getCode() == SessionErrorCode.DECLINED
-                    && requestedAmount != null) {
+                    && error.getCode() == SessionErrorCode.DECLINED) {
                 BigDecimal balance = parseCardBalance(
                         body.getResponse().getAdditionalResponse());
                 if (balance != null && balance.compareTo(requestedAmount) < 0) {
@@ -835,11 +816,7 @@ public final class PaymentOrchestrator {
                             .build());
             if (memberId != null) {
                 loyaltyRequest.loyaltyData(new LoyaltyData[] {LoyaltyData.builder()
-                        .loyaltyAccountID(LoyaltyAccountID.builder()
-                                .loyaltyID(memberId)
-                                .identificationType(IdentificationTypeEnum.PAN)
-                                .entryMode(new EntryModeType[] {EntryModeType.KEYED})
-                                .build())
+                        .loyaltyAccountID(Wire.memberAccount(memberId))
                         .build()});
             }
             SaleToPOIRequest wireRequest = SaleToPOIRequest.builder()
@@ -899,10 +876,6 @@ public final class PaymentOrchestrator {
                 ? body.getLoyaltyResult()[0] : null;
     }
 
-    private static TransactionIdentificationType poiRef(com.bilt.pos.nexo.model.POIData poiData) {
-        return poiData == null ? null : poiData.getPoiTransactionID();
-    }
-
     private static Basket applyRebates(Basket basket, List<RedeemedRebate> rebates,
                                        BigDecimal totalRebate) {
         // cart-level rebates (null itemId) are prorated across lines by
@@ -918,31 +891,27 @@ public final class PaymentOrchestrator {
             }
         }
         List<BigDecimal> itemAttributed = new ArrayList<>(basket.getItemCount());
+        List<String> itemLabels = new ArrayList<>(basket.getItemCount());
         for (BasketLineItem line : basket.getItems()) {
             BigDecimal attributed = BigDecimal.ZERO;
+            String label = null;
             for (RedeemedRebate rebate : rebates) {
                 if (line.getItemId().equals(rebate.getItemId())) {
                     attributed = attributed.add(rebate.getAmount());
+                    label = rebate.getLabel();
                 }
             }
             itemAttributed.add(attributed);
+            itemLabels.add(label);
         }
         List<BigDecimal> cartShares = prorate(basket, itemAttributed, cartLevel);
 
         List<BasketLineItem> items = new ArrayList<>(basket.getItemCount());
-        int index = -1;
-        for (BasketLineItem line : basket.getItems()) {
-            index++;
-            BigDecimal rebateAmount = itemAttributed.get(index).add(cartShares.get(index));
-            String rebateLabel = null;
-            for (RedeemedRebate rebate : rebates) {
-                if (line.getItemId().equals(rebate.getItemId())) {
-                    rebateLabel = rebate.getLabel();
-                }
-            }
-            if (rebateLabel == null && cartShares.get(index).signum() > 0) {
-                rebateLabel = cartLevelLabel;
-            }
+        for (int i = 0; i < basket.getItemCount(); i++) {
+            BasketLineItem line = basket.getItems().get(i);
+            BigDecimal rebateAmount = itemAttributed.get(i).add(cartShares.get(i));
+            String rebateLabel = itemLabels.get(i) != null || cartShares.get(i).signum() <= 0
+                    ? itemLabels.get(i) : cartLevelLabel;
             items.add(BasketLineItem.builder()
                     .itemId(line.getItemId())
                     .sku(line.getSku())
@@ -973,17 +942,21 @@ public final class PaymentOrchestrator {
     private static List<BigDecimal> prorate(Basket basket, List<BigDecimal> itemAttributed,
                                             BigDecimal cartLevel) {
         List<BigDecimal> shares = new ArrayList<>(basket.getItemCount());
-        basket.getItems().forEach(line -> shares.add(BigDecimal.ZERO));
+        for (int i = 0; i < basket.getItemCount(); i++) {
+            shares.add(BigDecimal.ZERO);
+        }
         if (cartLevel.signum() <= 0 || basket.isEmpty()) {
             return shares;
         }
         // weights are each line's remaining (post-item-rebate) total; lines
         // already rebated to zero or below carry no share
+        List<BigDecimal> weights = new ArrayList<>(basket.getItemCount());
         BigDecimal weightSum = BigDecimal.ZERO;
         int lastWeighted = -1;
         for (int i = 0; i < basket.getItemCount(); i++) {
             BigDecimal weight = basket.getItems().get(i).getOriginalTotal()
                     .subtract(itemAttributed.get(i));
+            weights.add(weight);
             if (weight.signum() > 0) {
                 weightSum = weightSum.add(weight);
                 lastWeighted = i;
@@ -997,15 +970,13 @@ public final class PaymentOrchestrator {
         }
         BigDecimal remaining = cartLevel;
         for (int i = 0; i < basket.getItemCount(); i++) {
-            BigDecimal weight = basket.getItems().get(i).getOriginalTotal()
-                    .subtract(itemAttributed.get(i));
-            if (weight.signum() <= 0) {
+            if (weights.get(i).signum() <= 0) {
                 continue;
             }
             BigDecimal share = i == lastWeighted
                     ? remaining
-                    : cartLevel.multiply(weight).divide(weightSum, 2,
-                            java.math.RoundingMode.HALF_UP);
+                    : cartLevel.multiply(weights.get(i)).divide(weightSum, 2,
+                            RoundingMode.HALF_UP);
             shares.set(i, share);
             remaining = remaining.subtract(share);
         }
@@ -1014,13 +985,18 @@ public final class PaymentOrchestrator {
 
     private static Basket withPaymentTotals(Basket basket, BigDecimal rebateTotal,
                                             BigDecimal pointsValue, BigDecimal storedValue,
-                                            BigDecimal cardPayment, BigDecimal netCharged) {
+                                            BigDecimal cardPayment, BigDecimal cashback) {
         // step handlers may recompute tax on discounted amounts, and that
         // recalculated total is what the tenders actually charged. The final
         // basket must reconcile with the money moved, so the effective tax is
         // derived from the charges: netCharged = (goods − rebates) + tax −
         // points. With no handler adjustments this is exactly the original
-        // taxTotal.
+        // taxTotal. Cashback rides on the card authorization but is not part
+        // of the sale.
+        BigDecimal netCharged = storedValue.add(cardPayment);
+        if (cashback != null) {
+            netCharged = netCharged.subtract(cashback);
+        }
         BigDecimal effectiveTax = netCharged
                 .subtract(basket.getOriginalTotal().subtract(rebateTotal))
                 .add(pointsValue);

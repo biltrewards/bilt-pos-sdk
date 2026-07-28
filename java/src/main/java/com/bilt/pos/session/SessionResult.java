@@ -110,7 +110,6 @@ public final class SessionResult<T> {
      */
     public T get() {
         runIfNeeded();
-        rethrowUnexpected();
         if (error != null) {
             throw new SessionException(error);
         }
@@ -123,14 +122,12 @@ public final class SessionResult<T> {
      */
     public T getOrNull() {
         runIfNeeded();
-        rethrowUnexpected();
         return error == null ? value : null;
     }
 
     /** Runs the operation if it has not run yet and reports whether it succeeded. */
     public boolean isSuccess() {
         runIfNeeded();
-        rethrowUnexpected();
         return error == null;
     }
 
@@ -138,6 +135,8 @@ public final class SessionResult<T> {
         if (started.compareAndSet(false, true)) {
             run();
         }
+        // a bug recorded by run() stays loud on every later accessor
+        rethrowUnexpected();
     }
 
     private void run() {

@@ -70,6 +70,20 @@ public final class LoyaltyPayloadCodec {
         return rewards;
     }
 
+    /**
+     * The {@code rewardRefs} payload for a member's rewards. A redemption
+     * and its refund must carry the same refs — both derive them here.
+     */
+    public static String memberRewardRefs(List<Reward> rewards) {
+        List<String> refs = new ArrayList<>();
+        for (Reward reward : rewards) {
+            if (reward.getRewardRef() != null) {
+                refs.add(reward.getRewardRef());
+            }
+        }
+        return encodeRewardRefs(refs);
+    }
+
     /** Encodes {@code {"rewardRefs":[...]}} for redemption requests. */
     public static String encodeRewardRefs(List<String> rewardRefs) {
         ObjectNode root = MAPPER.createObjectNode();

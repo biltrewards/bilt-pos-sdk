@@ -129,11 +129,6 @@ public final class NexoMessageFactory {
         return saleData.build();
     }
 
-    /** The configured totals group (store location), or {@code null}. */
-    public String getTotalsGroupId() {
-        return totalsGroupId;
-    }
-
     /**
      * A customer-display request carrying a Base64-encoded XHTML payload —
      * the shape used for both basket displays and custom payloads.

@@ -131,7 +131,6 @@ public final class PaymentFlow {
      */
     public CheckoutResult get() {
         runIfNeeded();
-        rethrowUnexpected();
         if (failure != null) {
             throw failure;
         }
@@ -141,7 +140,6 @@ public final class PaymentFlow {
     /** Like {@link #get()} but returns {@code null} on failure. */
     public CheckoutResult getOrNull() {
         runIfNeeded();
-        rethrowUnexpected();
         return failure == null ? result : null;
     }
 
@@ -149,6 +147,8 @@ public final class PaymentFlow {
         if (started.compareAndSet(false, true)) {
             run();
         }
+        // a bug recorded by run() stays loud on every later accessor
+        rethrowUnexpected();
     }
 
     private void rethrowUnexpected() {

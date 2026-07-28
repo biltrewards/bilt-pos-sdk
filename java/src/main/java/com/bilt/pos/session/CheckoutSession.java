@@ -58,7 +58,6 @@ import com.bilt.pos.session.identity.IdentifyOptions;
 import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
 import com.bilt.pos.session.identity.MemberIdentifier;
-import com.bilt.pos.session.identity.Reward;
 import com.bilt.pos.session.input.ConfirmationOptions;
 import com.bilt.pos.session.input.InputOptions;
 import com.bilt.pos.session.input.MenuOptions;
@@ -90,7 +89,6 @@ import jakarta.xml.bind.JAXBException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
@@ -166,16 +164,7 @@ public final class CheckoutSession {
     private boolean memberIdentified;
     private volatile IdentifyResult member;
     private volatile StoredValueCard storedValueCard;
-    private volatile String lastPoiTransactionId;
-    private volatile Instant lastPoiTransactionTimestamp;
-    private volatile String lastStoredValuePoiTransactionId;
-    private volatile Instant lastStoredValuePoiTransactionTimestamp;
-    private volatile String lastAwardPoiTransactionId;
-    private volatile Instant lastAwardPoiTransactionTimestamp;
-    private volatile String lastRebatePoiTransactionId;
-    private volatile Instant lastRebatePoiTransactionTimestamp;
-    private volatile String lastRedemptionPoiTransactionId;
-    private volatile Instant lastRedemptionPoiTransactionTimestamp;
+    private volatile LastPayment lastPayment = LastPayment.NONE;
     private volatile boolean voidCardLegReversed;
     private volatile boolean voidRedemptionLegReversed;
 
@@ -201,6 +190,47 @@ public final class CheckoutSession {
         this.refundManager = new RefundManager(exchange, builder.currency);
         this.paymentOrchestrator = new PaymentOrchestrator(exchange, builder.currency);
         this.storedValueManager = new StoredValueManager(exchange, builder.currency);
+    }
+
+    /**
+     * The transaction references of this session's completed payment, kept
+     * for void and refund. One immutable snapshot: written atomically when
+     * a payment completes, read as a group afterwards — deliberately just
+     * the references, so receipts and the final basket are not pinned for
+     * the session's lifetime.
+     */
+    private static final class LastPayment {
+        static final LastPayment NONE = new LastPayment(null);
+
+        final String poiTransactionId;
+        final Instant poiTransactionTimestamp;
+        final String storedValuePoiTransactionId;
+        final Instant storedValuePoiTransactionTimestamp;
+        final String awardPoiTransactionId;
+        final Instant awardPoiTransactionTimestamp;
+        final String rebatePoiTransactionId;
+        final Instant rebatePoiTransactionTimestamp;
+        final String redemptionPoiTransactionId;
+        final Instant redemptionPoiTransactionTimestamp;
+
+        LastPayment(CheckoutResult result) {
+            poiTransactionId = result == null ? null : result.getPoiTransactionId();
+            poiTransactionTimestamp = result == null ? null : result.getPoiTransactionTimestamp();
+            storedValuePoiTransactionId = result == null
+                    ? null : result.getStoredValuePoiTransactionId();
+            storedValuePoiTransactionTimestamp = result == null
+                    ? null : result.getStoredValuePoiTransactionTimestamp();
+            awardPoiTransactionId = result == null ? null : result.getAwardPoiTransactionId();
+            awardPoiTransactionTimestamp = result == null
+                    ? null : result.getAwardPoiTransactionTimestamp();
+            rebatePoiTransactionId = result == null ? null : result.getRebatePoiTransactionId();
+            rebatePoiTransactionTimestamp = result == null
+                    ? null : result.getRebatePoiTransactionTimestamp();
+            redemptionPoiTransactionId = result == null
+                    ? null : result.getRedemptionPoiTransactionId();
+            redemptionPoiTransactionTimestamp = result == null
+                    ? null : result.getRedemptionPoiTransactionTimestamp();
+        }
     }
 
     public static Builder builder() {
@@ -440,11 +470,7 @@ public final class CheckoutSession {
                 // outcome that arrives after that must be discarded: it must
                 // not attach a member to, or fire onSuccess on, an ended
                 // session
-                throw new SessionException(new SessionError(
-                        state == SessionState.ABORTED
-                                ? SessionErrorCode.ABORTED : SessionErrorCode.INVALID_STATE,
-                        "identification completed after the session moved to " + state
-                                + "; the outcome was discarded"));
+                throw discardedMidFlight("identifyMember", state);
             }
             if (result.getStatus() == IdentifyStatus.FOUND) {
                 this.member = result;
@@ -610,15 +636,21 @@ public final class CheckoutSession {
         try {
             SessionState state = stateMachine.current();
             if (state.isTerminal()) {
-                throw new SessionException(new SessionError(
-                        state == SessionState.ABORTED
-                                ? SessionErrorCode.ABORTED : SessionErrorCode.INVALID_STATE,
-                        operationName + " completed after the session moved to " + state
-                                + "; the result was discarded"));
+                throw discardedMidFlight(operationName, state);
             }
         } finally {
             lock.unlock();
         }
+    }
+
+    /** The discard error for an outcome that arrived after the session moved on. */
+    private static SessionException discardedMidFlight(String operationName,
+                                                       SessionState state) {
+        return new SessionException(new SessionError(
+                state == SessionState.ABORTED
+                        ? SessionErrorCode.ABORTED : SessionErrorCode.INVALID_STATE,
+                operationName + " completed after the session moved to " + state
+                        + "; the result was discarded"));
     }
 
     private void requireState(Set<SessionState> allowed, String operationName) {
@@ -824,18 +856,7 @@ public final class CheckoutSession {
                 // this thread is the sole writer of payment-final states;
                 // abort() defers to it while the session is PAYING
                 stateMachine.transitionTo(SessionState.COMPLETED);
-                lastPoiTransactionId = result.getPoiTransactionId();
-                lastPoiTransactionTimestamp = result.getPoiTransactionTimestamp();
-                lastStoredValuePoiTransactionId = result.getStoredValuePoiTransactionId();
-                lastStoredValuePoiTransactionTimestamp =
-                        result.getStoredValuePoiTransactionTimestamp();
-                lastAwardPoiTransactionId = result.getAwardPoiTransactionId();
-                lastAwardPoiTransactionTimestamp = result.getAwardPoiTransactionTimestamp();
-                lastRebatePoiTransactionId = result.getRebatePoiTransactionId();
-                lastRebatePoiTransactionTimestamp = result.getRebatePoiTransactionTimestamp();
-                lastRedemptionPoiTransactionId = result.getRedemptionPoiTransactionId();
-                lastRedemptionPoiTransactionTimestamp =
-                        result.getRedemptionPoiTransactionTimestamp();
+                lastPayment = new LastPayment(result);
             } finally {
                 lock.unlock();
             }
@@ -845,25 +866,17 @@ public final class CheckoutSession {
             }
             return result;
         } catch (SessionException e) {
-            settlePaymentFailure(e.getError().getCode() == SessionErrorCode.ABORTED
+            transitionLocked(e.getError().getCode() == SessionErrorCode.ABORTED
                     ? SessionState.ABORTED : SessionState.FAILED);
             throw e;
         } catch (RuntimeException e) {
             // defense in depth: whatever escapes, the session must not stay
             // frozen in PAYING with the basket locked
-            settlePaymentFailure(SessionState.FAILED);
+            transitionLocked(SessionState.FAILED);
             throw e;
         }
     }
 
-    private void settlePaymentFailure(SessionState target) {
-        lock.lock();
-        try {
-            stateMachine.transitionTo(target);
-        } finally {
-            lock.unlock();
-        }
-    }
 
     // ─── Refund ───
 
@@ -930,7 +943,7 @@ public final class CheckoutSession {
         }
         IdentifyResult currentMember = getMember();
         return new RefundManager.LoyaltyRef(
-                lastAwardPoiTransactionId, lastAwardPoiTransactionTimestamp,
+                lastPayment.awardPoiTransactionId, lastPayment.awardPoiTransactionTimestamp,
                 currentMember != null ? currentMember.getMemberId() : builderMemberId);
     }
 
@@ -940,25 +953,18 @@ public final class CheckoutSession {
      */
     private String memberRewardRefsPayload() {
         IdentifyResult currentMember = getMember();
-        if (currentMember == null) {
-            return null;
-        }
-        List<String> refs = new ArrayList<>();
-        for (Reward reward : currentMember.getRewards()) {
-            if (reward.getRewardRef() != null) {
-                refs.add(reward.getRewardRef());
-            }
-        }
-        return LoyaltyPayloadCodec.encodeRewardRefs(refs);
+        return currentMember == null
+                ? null : LoyaltyPayloadCodec.memberRewardRefs(currentMember.getRewards());
     }
 
     /** Builder-supplied prior transaction, else the last completed payment. */
     private String effectivePoiTransactionId() {
-        return poiTransactionId != null ? poiTransactionId : lastPoiTransactionId;
+        return poiTransactionId != null ? poiTransactionId : lastPayment.poiTransactionId;
     }
 
     private Instant effectivePoiTransactionTimestamp() {
-        return poiTransactionId != null ? poiTransactionTimestamp : lastPoiTransactionTimestamp;
+        return poiTransactionId != null
+                ? poiTransactionTimestamp : lastPayment.poiTransactionTimestamp;
     }
 
     /**
@@ -996,9 +1002,9 @@ public final class CheckoutSession {
             // leg: there is no transaction to reverse, so the void refunds
             // the committed loyalty movements instead
             boolean loyaltyOnly = originalId == null
-                    && (lastRedemptionPoiTransactionId != null
-                            || lastRebatePoiTransactionId != null
-                            || lastAwardPoiTransactionId != null);
+                    && (lastPayment.redemptionPoiTransactionId != null
+                            || lastPayment.rebatePoiTransactionId != null
+                            || lastPayment.awardPoiTransactionId != null);
             if (originalId == null && !loyaltyOnly) {
                 throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
                         "voidTransaction requires poiTransactionId on the session builder "
@@ -1019,33 +1025,8 @@ public final class CheckoutSession {
                 lock.unlock();
             }
             try {
-                VoidResult result;
-                if (loyaltyOnly) {
-                    // a retry after a partial void resumes at the rebate leg
-                    // instead of re-crediting the redemption
-                    result = refundManager.voidLoyalty(
-                            voidRedemptionLegReversed ? null : lastRedemptionPoiTransactionId,
-                            lastRedemptionPoiTransactionTimestamp,
-                            memberRewardRefsPayload(),
-                            lastRebatePoiTransactionId, lastRebatePoiTransactionTimestamp,
-                            loyaltyRef(), () -> voidRedemptionLegReversed = true);
-                } else {
-                    // a session-fallback void of a split tender reverses both
-                    // legs; a builder-referenced void stays single-leg (the
-                    // caller controls the reference), and a gift-card-only
-                    // checkout has one transaction, not two
-                    String storedValueLeg = poiTransactionId == null
-                            && lastStoredValuePoiTransactionId != null
-                            && !lastStoredValuePoiTransactionId.equals(originalId)
-                            ? lastStoredValuePoiTransactionId : null;
-                    // a retry after a partial void resumes at the leg that is
-                    // still standing instead of re-reversing the card payment
-                    String cardLeg = voidCardLegReversed ? null : originalId;
-                    result = refundManager.voidTransaction(
-                            cardLeg, effectivePoiTransactionTimestamp(),
-                            storedValueLeg, lastStoredValuePoiTransactionTimestamp,
-                            loyaltyRef(), () -> voidCardLegReversed = true);
-                }
+                VoidResult result = loyaltyOnly
+                        ? voidLoyaltyLegs() : voidPaymentLegs(originalId);
                 transitionLocked(SessionState.VOIDED);
                 return result;
             } catch (RuntimeException e) {
@@ -1069,6 +1050,42 @@ public final class CheckoutSession {
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * Voids a checkout whose rewards covered everything — no payment legs,
+     * so the committed loyalty movements are refunded instead. A retry
+     * after a partial void resumes at the rebate leg instead of
+     * re-crediting the redemption.
+     */
+    private VoidResult voidLoyaltyLegs() {
+        LastPayment paid = lastPayment;
+        return refundManager.voidLoyalty(
+                voidRedemptionLegReversed ? null : paid.redemptionPoiTransactionId,
+                paid.redemptionPoiTransactionTimestamp,
+                memberRewardRefsPayload(),
+                paid.rebatePoiTransactionId, paid.rebatePoiTransactionTimestamp,
+                loyaltyRef(), () -> voidRedemptionLegReversed = true);
+    }
+
+    /**
+     * Reverses the payment legs. A session-fallback void of a split tender
+     * reverses both legs; a builder-referenced void stays single-leg (the
+     * caller controls the reference), and a gift-card-only checkout has one
+     * transaction, not two. A retry after a partial void resumes at the leg
+     * that is still standing instead of re-reversing the card payment.
+     */
+    private VoidResult voidPaymentLegs(String originalId) {
+        LastPayment paid = lastPayment;
+        String storedValueLeg = poiTransactionId == null
+                && paid.storedValuePoiTransactionId != null
+                && !paid.storedValuePoiTransactionId.equals(originalId)
+                ? paid.storedValuePoiTransactionId : null;
+        String cardLeg = voidCardLegReversed ? null : originalId;
+        return refundManager.voidTransaction(
+                cardLeg, effectivePoiTransactionTimestamp(),
+                storedValueLeg, paid.storedValuePoiTransactionTimestamp,
+                loyaltyRef(), () -> voidCardLegReversed = true);
     }
 
     // ─── Display ───

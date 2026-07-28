@@ -11,6 +11,11 @@
  */
 package com.bilt.pos.session.internal;
 
+import com.bilt.pos.nexo.model.EntryModeType;
+import com.bilt.pos.nexo.model.IdentificationTypeEnum;
+import com.bilt.pos.nexo.model.LoyaltyAccountID;
+import com.bilt.pos.nexo.model.POIData;
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
@@ -58,5 +63,22 @@ public final class Wire {
     public static SessionException missing(String what) {
         return new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
                 "terminal response is missing " + what));
+    }
+
+    /** The POI transaction reference of a response, or {@code null}. */
+    public static TransactionIdentificationType poiRef(POIData poiData) {
+        return poiData == null ? null : poiData.getPoiTransactionID();
+    }
+
+    /**
+     * The loyalty account identification for a member id — the PAN/keyed
+     * convention every loyalty request and reversal uses on this wire.
+     */
+    public static LoyaltyAccountID memberAccount(String memberId) {
+        return LoyaltyAccountID.builder()
+                .loyaltyID(memberId)
+                .identificationType(IdentificationTypeEnum.PAN)
+                .entryMode(new EntryModeType[] {EntryModeType.KEYED})
+                .build();
     }
 }
