@@ -459,6 +459,34 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void basketCanBeAdjustedAfterAFailedPayment() throws Exception {
+        addHundredDollarItem();
+        session.addItem(BasketItem.of("SKU-2", "Expensive Item", 1, "50.00"));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        session.pay().getOrNull();
+        assertEquals(SessionState.FAILED, session.getState());
+
+        // the customer drops an item and the register retries
+        session.removeItemBySku("SKU-2");
+        assertEquals(SessionState.ACTIVE, session.getState());
+
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
+        CheckoutResult result = session.pay().get();
+        assertEquals(0, new BigDecimal("100.00").compareTo(result.getCardAmountCharged()));
+        assertEquals(SessionState.COMPLETED, session.getState());
+    }
+
+    @Test
+    void emptyingTheBasketAfterAFailedPaymentReturnsToIdle() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        session.pay().getOrNull();
+
+        session.removeItemBySku("SKU-1");
+        assertEquals(SessionState.IDLE, session.getState());
+    }
+
+    @Test
     void failedPaymentCanBeRetriedWithNewPayCall() throws Exception {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));

@@ -46,7 +46,9 @@ public final class SessionStateMachine {
         TRANSITIONS.put(ACTIVE, EnumSet.of(PAYING, IDLE, IDENTIFIED, ABORTED));
         TRANSITIONS.put(PAYING, EnumSet.of(COMPLETED, FAILED, ABORTED));
         TRANSITIONS.put(COMPLETED, EnumSet.of(VOIDING));
-        TRANSITIONS.put(FAILED, EnumSet.of(PAYING, VOIDING, ABORTED));
+        // FAILED -> ACTIVE: the tender was fully unwound, so the register
+        // may adjust the basket before retrying pay()
+        TRANSITIONS.put(FAILED, EnumSet.of(PAYING, ACTIVE, VOIDING, ABORTED));
         // a failed void restores the pre-void state (IDLE/COMPLETED/FAILED):
         // the referenced transaction still stands, so e.g. a COMPLETED
         // payment must not degrade to FAILED where pay() could re-charge
