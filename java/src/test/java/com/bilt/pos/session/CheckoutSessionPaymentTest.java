@@ -399,6 +399,40 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void incompleteRollbackBlocksRetryAndSurfacesUnreversedMovements() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+
+        server.enqueue(new MockResponse().setBody(REBATE_OK));             // rebate commits
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));             // redemption commits
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));      // card fails
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));     // redemption refund ok
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // rebate refund FAILS
+
+        AtomicInteger errorCalls = new AtomicInteger();
+        SessionException failure = assertThrows(SessionException.class, () ->
+                session.pay()
+                        .onError(error -> {
+                            errorCalls.incrementAndGet();
+                            return PaymentOptions.retryWithoutLoyalty();   // must be refused
+                        })
+                        .get());
+
+        assertEquals(1, errorCalls.get());
+        assertEquals(SessionState.FAILED, session.getState());
+        assertTrue(failure.getError().getMessage().contains("REBATE"),
+                "the error must name the movement that is still standing: "
+                        + failure.getError().getMessage());
+        assertTrue(failure.getError().getMessage().contains("manual reconciliation"));
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(5, requests.size(),
+                "no retry may run on top of an incomplete unwind");
+        assertEquals("RebateRefund", requests.get(4).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
+    @Test
     void pointRedemptionIsSkippedWhenRebatesCoverTheTotal() throws Exception {
         String rebateFull =
                 "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"

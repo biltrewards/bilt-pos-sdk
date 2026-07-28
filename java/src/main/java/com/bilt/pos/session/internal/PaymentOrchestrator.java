@@ -152,7 +152,8 @@ public final class PaymentOrchestrator {
                         ? (StepFailure) e
                         : new StepFailure(new SessionError(SessionErrorCode.UNKNOWN,
                                 "unexpected error during payment: " + e, null, e), false);
-                unwind(committed);
+                List<String> unreversed = unwind(committed);
+                SessionError error = withRollbackFailures(failure.error, unreversed);
                 // the abort path bypasses onError. It is taken when checkAbort
                 // trips between steps, and also when our own abort() killed
                 // the in-flight step (the terminal replies Aborted) — an
@@ -161,20 +162,30 @@ public final class PaymentOrchestrator {
                 // onError, since the register may want to retry it.
                 if (failure.aborted
                         || (request.abortRequested.getAsBoolean()
-                                && failure.error.getCode() == SessionErrorCode.ABORTED)) {
-                    throw new SessionException(failure.error);
+                                && error.getCode() == SessionErrorCode.ABORTED)) {
+                    throw new SessionException(error);
                 }
                 resolutions++;
                 PaymentOptions resolution = request.handlers.onError == null
                         ? PaymentOptions.voidAndAbort()
-                        : request.handlers.onError.apply(failure.error);
+                        : request.handlers.onError.apply(error);
+                // a retry on top of an incomplete unwind would run the
+                // sequence again while a previous movement still stands —
+                // double-charging the tender or double-redeeming loyalty.
+                // Whatever onError asked for, only a clean unwind may retry.
+                if (!unreversed.isEmpty() && resolution != null
+                        && !resolution.isVoidAndAbort()) {
+                    LOGGER.warning("onError requested a retry, but the rollback was "
+                            + "incomplete; failing the payment instead");
+                    throw new SessionException(error);
+                }
                 if (resolution == null || resolution.isVoidAndAbort()
                         || resolutions >= MAX_ERROR_RESOLUTIONS) {
                     if (resolutions >= MAX_ERROR_RESOLUTIONS && resolution != null
                             && !resolution.isVoidAndAbort()) {
                         LOGGER.warning("payment retry limit reached; failing the payment");
                     }
-                    throw new SessionException(failure.error);
+                    throw new SessionException(error);
                 }
                 options = resolution;
             }
@@ -758,7 +769,14 @@ public final class PaymentOrchestrator {
 
     // ─── Rollback ───
 
-    private void unwind(List<Commit> committed) {
+    /**
+     * Reverses the committed steps in reverse order, best-effort — one leg
+     * failing to reverse never stops the others. Returns a descriptor for
+     * every movement that could NOT be reversed and is still standing; the
+     * caller must surface those and must not retry over them.
+     */
+    private List<String> unwind(List<Commit> committed) {
+        List<String> unreversed = new ArrayList<>();
         for (int i = committed.size() - 1; i >= 0; i--) {
             Commit commit = committed.get(i);
             if (commit.rollback == null) {
@@ -769,8 +787,28 @@ public final class PaymentOrchestrator {
             } catch (RuntimeException e) {
                 LOGGER.log(Level.WARNING, "rollback of " + commit.info.getStep()
                         + " failed; manual reconciliation may be required", e);
+                unreversed.add(commit.info.getStep()
+                        + (commit.info.getPoiTransactionId() != null
+                                ? " (" + commit.info.getPoiTransactionId() + ")" : ""));
             }
         }
+        return unreversed;
+    }
+
+    /**
+     * The step failure, annotated with the movements the unwind could not
+     * reverse so the register sees the full reconciliation picture.
+     */
+    private static SessionError withRollbackFailures(SessionError error,
+                                                     List<String> unreversed) {
+        if (unreversed.isEmpty()) {
+            return error;
+        }
+        return new SessionError(error.getCode(),
+                error.getMessage() + "; rollback incomplete — " + String.join(", ", unreversed)
+                        + (unreversed.size() == 1 ? " is" : " are")
+                        + " still standing and may require manual reconciliation",
+                error.getNexoErrorCondition(), error.getCause());
     }
 
     private Runnable loyaltyRollback(LoyaltyTransactionTypeEnum refundType,
