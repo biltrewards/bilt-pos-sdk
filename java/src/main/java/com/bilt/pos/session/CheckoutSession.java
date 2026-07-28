@@ -184,6 +184,11 @@ public final class CheckoutSession {
     // callers). If this lifecycle grows further, promote it to an explicit
     // SessionState instead of adding a sixth guard.
     private volatile List<PaymentOrchestrator.StandingMovement> standingMovements = List.of();
+    // set while a drain has claimed the list and is reversing on the wire:
+    // an empty standingMovements alone is ambiguous between "nothing
+    // standing" and "claimed by an in-flight drain", and sealing the session
+    // on the latter would strand the movements if the drain then fails
+    private volatile boolean drainInFlight;
 
     private CheckoutSession(Builder builder) {
         this.client = builder.client;
@@ -1160,10 +1165,20 @@ public final class CheckoutSession {
         lock.lock();
         try {
             // take ownership atomically: concurrent drains (abort() vs a
-            // retried pay()) must not reverse the same movement twice — the
-            // second drainer sees an empty list and no-ops
+            // retried pay() vs a second abort()) must not reverse the same
+            // movement twice, and only ONE drain may be reversing at a time
+            // — a concurrent caller fails fast instead of concluding from
+            // the empty list that the rollback completed
+            if (drainInFlight) {
+                throw invalidState("another recovery attempt is already reversing the "
+                        + "standing movements; retry once it settles");
+            }
             remaining = new ArrayList<>(standingMovements);
+            if (remaining.isEmpty()) {
+                return;
+            }
             standingMovements = List.of();
+            drainInFlight = true;
         } finally {
             lock.unlock();
         }
@@ -1174,23 +1189,27 @@ public final class CheckoutSession {
                 it.remove();
             }
         } finally {
-            if (!remaining.isEmpty()) {
-                // a reversal failed: put the remainder back (under the same
-                // lock the claim used) so a retry resumes at the first
-                // movement still standing
-                lock.lock();
-                try {
+            // publish the outcome under the same lock the claim used: the
+            // remainder (if a reversal failed) and the end of the drain
+            lock.lock();
+            try {
+                if (!remaining.isEmpty()) {
                     standingMovements = List.copyOf(remaining);
-                } finally {
-                    lock.unlock();
                 }
+                drainInFlight = false;
+            } finally {
+                lock.unlock();
             }
         }
     }
 
-    /** The previous payment's unwind left movements standing. */
+    /**
+     * The previous payment's unwind left movements standing — or a drain
+     * has claimed them and is still reversing on the wire, which every
+     * guard must treat the same way: the rollback is not complete.
+     */
     private boolean rollbackIncomplete() {
-        return !standingMovements.isEmpty();
+        return !standingMovements.isEmpty() || drainInFlight;
     }
 
     /** The uniform guard failure for operations the session cannot honor. */
@@ -1346,8 +1365,9 @@ public final class CheckoutSession {
             try {
                 drainStandingMovements();
             } catch (SessionException e) {
-                LOGGER.log(Level.WARNING, "abort() could not reverse all standing "
-                        + "movements; the session stays FAILED so voidTransaction() can "
+                LOGGER.log(Level.WARNING, "abort() did not finish the standing "
+                        + "reversals (a reversal failed, or another recovery is in "
+                        + "flight); the session stays FAILED so voidTransaction() can "
                         + "finish the unwind: " + e.getError(), e);
                 return;
             }

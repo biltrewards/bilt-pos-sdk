@@ -774,6 +774,48 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void doubleAbortDoesNotSealWhileADrainIsInFlight() throws Exception {
+        failPaymentWithStandingRebate();
+
+        CountDownLatch drainOnTheWire = new CountDownLatch(1);
+        CountDownLatch releaseDrain = new CountDownLatch(1);
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                if (request.getBody().readUtf8().contains("\"RebateRefund\"")) {
+                    drainOnTheWire.countDown();
+                    releaseDrain.await(5, TimeUnit.SECONDS);
+                    return new MockResponse().setBody(LOYALTY_REFUND_FAILED);
+                }
+                return new MockResponse();
+            }
+        });
+
+        Thread firstAbort = new Thread(session::abort);
+        firstAbort.start();
+        assertTrue(drainOnTheWire.await(5, TimeUnit.SECONDS));
+
+        // second tap of the cancel button: the first abort's drain has
+        // claimed the list, so the empty list must NOT read as "rollback
+        // complete" — sealing ABORTED here would strand the movement when
+        // the in-flight reversal fails and puts it back
+        session.abort();
+        assertEquals(SessionState.FAILED, session.getState(),
+                "an in-flight drain must block sealing, not masquerade as done");
+
+        releaseDrain.countDown();
+        firstAbort.join(5_000);
+        assertFalse(firstAbort.isAlive());
+        assertEquals(SessionState.FAILED, session.getState());
+
+        // the movement survived both aborts and the void can still finish it
+        server.setDispatcher(new okhttp3.mockwebserver.QueueDispatcher());
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+    }
+
+    @Test
     void abortStaysFailedWhenAStandingReversalStillFails() throws Exception {
         failPaymentWithStandingRebate();
 
@@ -790,67 +832,44 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
-    void payRacingAnAbortMidDrainStillAborts() throws Exception {
+    void payRacingAnAbortMidDrainIsRefused() throws Exception {
         failPaymentWithStandingRebate();
 
         CountDownLatch abortDraining = new CountDownLatch(1);
         CountDownLatch releaseAbortDrain = new CountDownLatch(1);
-        CountDownLatch rebateStepArrived = new CountDownLatch(1);
-        CountDownLatch releaseRebateStep = new CountDownLatch(1);
-        AtomicInteger rebateRefunds = new AtomicInteger();
         server.setDispatcher(new Dispatcher() {
             @Override
             public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
-                String body = request.getBody().readUtf8();
-                if (body.contains("\"RebateRefund\"")) {
-                    if (rebateRefunds.incrementAndGet() == 1) {
-                        // abort()'s drain: hold it so a retry can sneak in
-                        abortDraining.countDown();
-                        releaseAbortDrain.await(5, TimeUnit.SECONDS);
-                    }
+                if (request.getBody().readUtf8().contains("\"RebateRefund\"")) {
+                    abortDraining.countDown();
+                    releaseAbortDrain.await(5, TimeUnit.SECONDS);
                     return new MockResponse().setBody(LOYALTY_REFUND_OK);
                 }
-                if (body.contains("\"LoyaltyTransactionType\":\"Rebate\"")) {
-                    // the retry's first step: hold it until abort() finished
-                    rebateStepArrived.countDown();
-                    releaseRebateStep.await(5, TimeUnit.SECONDS);
-                    return new MockResponse().setBody(REBATE_OK);
-                }
-                return new MockResponse();   // AbortRequest etc., best-effort
+                return new MockResponse();
             }
         });
 
+        int requestsBefore = server.getRequestCount();
         Thread aborter = new Thread(session::abort);
         aborter.start();
         assertTrue(abortDraining.await(5, TimeUnit.SECONDS));
 
-        // the abort is mid-drain: a retry slips into PAYING and resets the flag
-        AtomicReference<SessionException> payOutcome = new AtomicReference<>();
-        Thread register = new Thread(() -> {
-            try {
-                session.pay().get();
-            } catch (SessionException e) {
-                payOutcome.set(e);
-            }
-        });
-        register.start();
-        assertTrue(rebateStepArrived.await(5, TimeUnit.SECONDS));
+        // a retry cannot slip in while the abort's drain is reversing on
+        // the wire: it is refused outright rather than charging over the
+        // in-flight recovery
+        SessionException refused = assertThrows(SessionException.class,
+                () -> session.pay().get());
+        assertTrue(refused.getError().getMessage().contains("retry did not start"),
+                refused.getError().getMessage());
 
-        // abort completes: it must re-assert the flag it lost to the retry
         releaseAbortDrain.countDown();
         aborter.join(5_000);
         assertFalse(aborter.isAlive());
 
-        // the in-flight retry now proceeds — and must observe the abort
-        releaseRebateStep.countDown();
-        register.join(5_000);
-        assertFalse(register.isAlive());
-
-        assertNotNull(payOutcome.get(), "the raced retry must not charge through the abort");
-        assertEquals(SessionErrorCode.ABORTED, payOutcome.get().getError().getCode());
-        assertEquals(SessionState.ABORTED, session.getState());
-        assertEquals(2, rebateRefunds.get(),
-                "one drain of the standing movement, one unwind of the retry's rebate");
+        assertEquals(SessionState.ABORTED, session.getState(),
+                "the abort seals once its drain completed cleanly");
+        assertEquals(requestsBefore + 1, server.getRequestCount(),
+                "only the drain's reversal reached the wire — the refused retry sent nothing");
     }
 
     @Test
