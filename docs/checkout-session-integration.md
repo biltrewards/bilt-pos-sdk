@@ -119,7 +119,7 @@ Notes:
 
 - `identifyMember()` can be called from `IDLE` or `ACTIVE`. Called from `ACTIVE`, the terminal re-evaluates offers with member context. Identification is optional — the customer can identify themselves on the terminal, and they can always opt out.
 - Removing all items from `ACTIVE` returns to `IDLE` (or `IDENTIFIED` if a member was explicitly identified).
-- From `FAILED` the register can retry `pay()` directly, keep editing the basket (back to `ACTIVE`), or `voidTransaction()`.
+- From `FAILED` the register can retry `pay()` directly, keep editing the basket (back to `ACTIVE`), or `voidTransaction()`. While a failed payment's rollback is incomplete, edits keep the session in `FAILED` and `abort()` first reverses the standing movements — both preserve the path to finish the unwind.
 - `voidTransaction()` runs from `COMPLETED` (or `FAILED`); if the void itself fails, the session is restored to its pre-void state so it can be retried.
 - `COMPLETED`, `VOIDED`, and `ABORTED` are terminal. `getState()` reports the current `SessionState`; the basket is frozen while `PAYING`.
 

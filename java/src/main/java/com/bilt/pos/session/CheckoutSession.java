@@ -379,9 +379,11 @@ public final class CheckoutSession {
             // atomic: a mutation (or batch) that throws restores the basket,
             // and the state transitions below only run on success
             basketEngine.mutateAtomically(mutation);
-            if (state == SessionState.FAILED) {
-                // the failed payment was fully unwound; editing the basket
-                // resumes the checkout (e.g. dropping an item before a retry)
+            if (state == SessionState.FAILED && standingMovements.isEmpty()) {
+                // a fully-unwound failed payment resumes the checkout on an
+                // edit (e.g. dropping an item before a retry). While the
+                // rollback is incomplete the session stays FAILED — ACTIVE
+                // would cut off voidTransaction(), the path that finishes it
                 stateMachine.transitionTo(SessionState.ACTIVE);
             }
             syncStateWithBasket();
@@ -1248,6 +1250,7 @@ public final class CheckoutSession {
      * <p>Safe to call from any thread.</p>
      */
     public void abort() {
+        SessionState state;
         lock.lock();
         try {
             // the flag is set under the lock so it cannot race the reset a
@@ -1255,15 +1258,36 @@ public final class CheckoutSession {
             // abort ends the session before the payment starts, or the
             // payment starts with a fresh flag and observes a later abort
             abortRequested = true;
-            SessionState state = stateMachine.current();
-            if (state != SessionState.PAYING && !state.isTerminal()) {
+            state = stateMachine.current();
+        } finally {
+            lock.unlock();
+        }
+        // "reverses everything committed so far": a failed payment's
+        // standing movements are drained before the session seals —
+        // ABORTED is terminal and could never finish them. If a reversal
+        // still fails, the session stays FAILED so voidTransaction() (or
+        // a retried pay()) can finish the unwind.
+        if (state == SessionState.FAILED && !standingMovements.isEmpty()) {
+            try {
+                drainStandingMovements();
+            } catch (SessionException e) {
+                LOGGER.log(Level.WARNING, "abort() could not reverse all standing "
+                        + "movements; the session stays FAILED so voidTransaction() can "
+                        + "finish the unwind: " + e.getError(), e);
+                return;
+            }
+        }
+        lock.lock();
+        try {
+            SessionState current = stateMachine.current();
+            if (current != SessionState.PAYING && !current.isTerminal()) {
                 // during PAYING the payment thread observes the flag between
                 // steps, unwinds what was committed, and settles the final
                 // state — transitioning here would race that decision
                 if (stateMachine.canTransitionTo(SessionState.ABORTED)) {
                     stateMachine.transitionTo(SessionState.ABORTED);
                 } else {
-                    LOGGER.warning("abort() called in state " + state + "; state unchanged");
+                    LOGGER.warning("abort() called in state " + current + "; state unchanged");
                 }
             }
         } finally {

@@ -626,6 +626,65 @@ class CheckoutSessionPaymentTest {
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
     }
 
+    /** Fails a payment so that one rollback leg (the rebate refund) stands. */
+    private void failPaymentWithStandingRebate() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));     // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // rebate refund FAILS
+        assertThrows(SessionException.class, () -> session.pay().get());
+        assertEquals(SessionState.FAILED, session.getState());
+        drainRequests();
+    }
+
+    @Test
+    void basketEditKeepsFailedWhileTheRollbackIsIncomplete() throws Exception {
+        failPaymentWithStandingRebate();
+
+        session.updateItemQuantityBySku("SKU-1", 2);
+        assertEquals(SessionState.FAILED, session.getState(),
+                "an edit must not cut off the void path while a movement stands");
+
+        // the void still finishes the unwind
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+    }
+
+    @Test
+    void abortDrainsStandingMovementsBeforeSealing() throws Exception {
+        failPaymentWithStandingRebate();
+
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        session.abort();
+
+        assertEquals(SessionState.ABORTED, session.getState());
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(1, requests.size(),
+                "abort must reverse the standing movement before sealing the session");
+        assertEquals("RebateRefund", requests.get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
+    @Test
+    void abortStaysFailedWhenAStandingReversalStillFails() throws Exception {
+        failPaymentWithStandingRebate();
+
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));
+        session.abort();
+
+        assertEquals(SessionState.FAILED, session.getState(),
+                "sealing in ABORTED would make the standing movement unrecoverable");
+
+        // the movement is retained: the void can still finish the unwind
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+    }
+
     @Test
     void retriedPayFinishesStandingReversalsBeforeCharging() throws Exception {
         identifyMember();
