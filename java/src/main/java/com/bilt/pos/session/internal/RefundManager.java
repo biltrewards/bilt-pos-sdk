@@ -87,6 +87,31 @@ public final class RefundManager {
         public static final LoyaltyRef NONE = new LoyaltyRef(null, null, null);
     }
 
+    /**
+     * The committed loyalty movements of the original sale — redemption and
+     * rebate references plus the rewardRefs payload the redemption refund
+     * must carry. All fields optional.
+     */
+    public static final class LoyaltyLegs {
+        public static final LoyaltyLegs NONE = new LoyaltyLegs(null, null, null, null, null);
+
+        final String redemptionPoiTxnId;
+        final Instant redemptionPoiTimestamp;
+        final String rewardRefsPayload;
+        final String rebatePoiTxnId;
+        final Instant rebatePoiTimestamp;
+
+        public LoyaltyLegs(String redemptionPoiTxnId, Instant redemptionPoiTimestamp,
+                           String rewardRefsPayload,
+                           String rebatePoiTxnId, Instant rebatePoiTimestamp) {
+            this.redemptionPoiTxnId = redemptionPoiTxnId;
+            this.redemptionPoiTimestamp = redemptionPoiTimestamp;
+            this.rewardRefsPayload = rewardRefsPayload;
+            this.rebatePoiTxnId = rebatePoiTxnId;
+            this.rebatePoiTimestamp = rebatePoiTimestamp;
+        }
+    }
+
     private final NexoExchange exchange;
     private final String currency;
 
@@ -163,9 +188,10 @@ public final class RefundManager {
     /**
      * Reverses a completed transaction ({@code ReversalRequest} per tender
      * leg, card first — mirroring the orchestrator's reverse-commit unwind
-     * order — plus a best-effort award refund). {@code cardPoiTxnId} may be
-     * {@code null} on a retry whose card leg was already reversed — only the
-     * stored value leg and the award refund run then.
+     * order — then best-effort refunds of the sale's committed loyalty
+     * movements and the award). {@code cardPoiTxnId} may be {@code null} on
+     * a retry whose card leg was already reversed — only the stored value
+     * leg and the loyalty refunds run then.
      *
      * @param onCardLegReversed invoked right after the card leg reversal
      *        succeeds, so the caller can record progress before a later leg
@@ -174,6 +200,7 @@ public final class RefundManager {
     public VoidResult voidTransaction(String cardPoiTxnId, Instant cardPoiTimestamp,
                                       String storedValuePoiTxnId,
                                       Instant storedValuePoiTimestamp,
+                                      LoyaltyLegs loyaltyLegs,
                                       LoyaltyRef loyaltyRef, Runnable onCardLegReversed) {
         if (cardPoiTxnId == null && storedValuePoiTxnId == null) {
             throw new IllegalArgumentException("nothing to void: no leg references");
@@ -199,6 +226,18 @@ public final class RefundManager {
                         "the stored value leg", storedValuePoiTxnId, e);
             }
         }
+
+        // a full void also returns the sale's committed loyalty movements.
+        // Best-effort, like the award refund below: the tender reversal is
+        // the substance of the void, the terminal can retry loyalty via
+        // SAF, and a failed refund must not strand a half-voided tender
+        LoyaltyLegs legs = loyaltyLegs == null ? LoyaltyLegs.NONE : loyaltyLegs;
+        String memberId = loyaltyRef == null ? null : loyaltyRef.memberId;
+        bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
+                legs.redemptionPoiTxnId, legs.redemptionPoiTimestamp,
+                memberId, legs.rewardRefsPayload);
+        bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum.REBATE_REFUND,
+                legs.rebatePoiTxnId, legs.rebatePoiTimestamp, memberId, null);
 
         LoyaltyReversal loyalty = awardRefund(loyaltyRef,
                 cardPoiTxnId != null ? cardPoiTxnId : storedValuePoiTxnId,
@@ -230,37 +269,37 @@ public final class RefundManager {
      * reversing it IS the void, so unlike the payment-void paths it is
      * strict rather than best-effort.
      */
-    public VoidResult voidLoyalty(String redemptionPoiTxnId, Instant redemptionPoiTimestamp,
-                                  String rewardRefsPayload,
-                                  String rebatePoiTxnId, Instant rebatePoiTimestamp,
+    public VoidResult voidLoyalty(LoyaltyLegs loyaltyLegs,
                                   LoyaltyRef loyaltyRef, Runnable onRedemptionReversed) {
+        LoyaltyLegs legs = loyaltyLegs == null ? LoyaltyLegs.NONE : loyaltyLegs;
         LoyaltyRef ref = loyaltyRef == null ? LoyaltyRef.NONE : loyaltyRef;
-        if (redemptionPoiTxnId == null && rebatePoiTxnId == null
+        if (legs.redemptionPoiTxnId == null && legs.rebatePoiTxnId == null
                 && ref.awardPoiTransactionId == null) {
             throw new IllegalArgumentException("nothing to void: no loyalty movement references");
         }
 
         LoyaltyResponse redemptionLeg = null;
-        if (redemptionPoiTxnId != null) {
+        if (legs.redemptionPoiTxnId != null) {
             redemptionLeg = loyaltyRefund(LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
-                    redemptionPoiTxnId, redemptionPoiTimestamp, ref.memberId, rewardRefsPayload);
+                    legs.redemptionPoiTxnId, legs.redemptionPoiTimestamp,
+                    ref.memberId, legs.rewardRefsPayload);
             if (onRedemptionReversed != null) {
                 onRedemptionReversed.run();
             }
         }
 
         LoyaltyResponse rebateLeg = null;
-        if (rebatePoiTxnId != null) {
+        if (legs.rebatePoiTxnId != null) {
             try {
                 rebateLeg = loyaltyRefund(LoyaltyTransactionTypeEnum.REBATE_REFUND,
-                        rebatePoiTxnId, rebatePoiTimestamp, ref.memberId, null);
+                        legs.rebatePoiTxnId, legs.rebatePoiTimestamp, ref.memberId, null);
             } catch (SessionException e) {
                 if (redemptionLeg == null) {
                     // rebate-only (or resumed) void: nothing new was reversed
                     throw e;
                 }
-                throw partialUnwind("the redemption", redemptionPoiTxnId,
-                        "the rebate", rebatePoiTxnId, e);
+                throw partialUnwind("the redemption", legs.redemptionPoiTxnId,
+                        "the rebate", legs.rebatePoiTxnId, e);
             }
         }
 
@@ -273,8 +312,10 @@ public final class RefundManager {
             loyalty = parseReversal(awardLeg);
         } else {
             loyalty = awardRefund(ref,
-                    redemptionPoiTxnId != null ? redemptionPoiTxnId : rebatePoiTxnId,
-                    redemptionPoiTxnId != null ? redemptionPoiTimestamp : rebatePoiTimestamp);
+                    legs.redemptionPoiTxnId != null
+                            ? legs.redemptionPoiTxnId : legs.rebatePoiTxnId,
+                    legs.redemptionPoiTxnId != null
+                            ? legs.redemptionPoiTimestamp : legs.rebatePoiTimestamp);
         }
 
         LoyaltyResponse primary = redemptionLeg != null ? redemptionLeg
@@ -289,6 +330,26 @@ public final class RefundManager {
                 .pointsReversed(loyalty.pointsReversed)
                 .remainingPointBalance(loyalty.remainingBalance)
                 .build();
+    }
+
+    /**
+     * A loyalty-movement refund that accompanies a reversed tender: logged
+     * on failure, never thrown — the terminal can retry loyalty via SAF.
+     * No-op without a reference.
+     */
+    private void bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum refundType,
+                                         String originalPoiTxnId, Instant originalPoiTimestamp,
+                                         String memberId, String rewardRefsPayload) {
+        if (originalPoiTxnId == null) {
+            return;
+        }
+        try {
+            loyaltyRefund(refundType, originalPoiTxnId, originalPoiTimestamp,
+                    memberId, rewardRefsPayload);
+        } catch (SessionException e) {
+            LOGGER.log(Level.WARNING, refundType
+                    + " failed during void (terminal may retry via SAF): " + e.getError(), e);
+        }
     }
 
     /**

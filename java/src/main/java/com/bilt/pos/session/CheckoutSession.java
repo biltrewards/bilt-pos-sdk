@@ -990,10 +990,12 @@ public final class CheckoutSession {
     /**
      * Reverses the completed transaction referenced by the builder's
      * {@code poiTransactionId} (Nexo {@code ReversalRequest}), including a
-     * best-effort loyalty award reversal. A completed checkout that had no
-     * payment legs — rewards covered the whole basket — is voided by
-     * refunding its committed loyalty movements (redemption, rebate, award)
-     * instead. The session moves to {@link SessionState#VOIDED} on success.
+     * best-effort loyalty award reversal. Voiding this session's own
+     * completed payment also refunds its committed loyalty movements
+     * (redemption, rebate) best-effort, and a completed checkout that had
+     * no payment legs — rewards covered the whole basket — is voided by
+     * refunding those movements alone. The session moves to
+     * {@link SessionState#VOIDED} on success.
      */
     public SessionResult<VoidResult> voidTransaction() {
         return operation("voidTransaction", () -> {
@@ -1059,13 +1061,22 @@ public final class CheckoutSession {
      * re-crediting the redemption.
      */
     private VoidResult voidLoyaltyLegs() {
+        return refundManager.voidLoyalty(loyaltyLegs(),
+                loyaltyRef(), () -> voidRedemptionLegReversed = true);
+    }
+
+    /**
+     * The completed payment's committed loyalty movements, for the void
+     * paths. A leg already reversed by a partial void is omitted so a retry
+     * does not re-credit it.
+     */
+    private RefundManager.LoyaltyLegs loyaltyLegs() {
         LastPayment paid = lastPayment;
-        return refundManager.voidLoyalty(
+        return new RefundManager.LoyaltyLegs(
                 voidRedemptionLegReversed ? null : paid.redemptionPoiTransactionId,
                 paid.redemptionPoiTransactionTimestamp,
                 memberRewardRefsPayload(),
-                paid.rebatePoiTransactionId, paid.rebatePoiTransactionTimestamp,
-                loyaltyRef(), () -> voidRedemptionLegReversed = true);
+                paid.rebatePoiTransactionId, paid.rebatePoiTransactionTimestamp);
     }
 
     /**
@@ -1082,10 +1093,15 @@ public final class CheckoutSession {
                 && !paid.storedValuePoiTransactionId.equals(originalId)
                 ? paid.storedValuePoiTransactionId : null;
         String cardLeg = voidCardLegReversed ? null : originalId;
+        // like the stored value leg, the loyalty movements are known only
+        // for this session's own payment; a builder-referenced void stays
+        // tender + award (the caller controls the references)
+        RefundManager.LoyaltyLegs loyaltyLegs = poiTransactionId == null
+                ? loyaltyLegs() : RefundManager.LoyaltyLegs.NONE;
         return refundManager.voidTransaction(
                 cardLeg, effectivePoiTransactionTimestamp(),
                 storedValueLeg, paid.storedValuePoiTransactionTimestamp,
-                loyaltyRef(), () -> voidCardLegReversed = true);
+                loyaltyLegs, loyaltyRef(), () -> voidCardLegReversed = true);
     }
 
     // ─── Display ───
