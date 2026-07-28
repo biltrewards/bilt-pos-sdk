@@ -158,6 +158,51 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void executeDeliversPreOrchestrationFailuresToOnError() {
+        addHundredDollarItem();
+        PaymentFlow flow = session.pay();
+        AtomicReference<SessionError> seen = new AtomicReference<>();
+        flow.onError(error -> {
+            seen.set(error);
+            return PaymentOptions.voidAndAbort();
+        });
+
+        session.abort();   // the session ends before the flow executes
+        flow.execute();    // must not return silently
+
+        assertNotNull(seen.get(), "a failure before the sequence starts must reach onError");
+        assertEquals(SessionErrorCode.INVALID_STATE, seen.get().getCode());
+        assertEquals(0, server.getRequestCount());
+    }
+
+    @Test
+    void executeDeliversAFailedStandingDrainToOnError() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));
+        assertThrows(SessionException.class, () -> session.pay().get());
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // drain still fails
+        AtomicReference<SessionError> seen = new AtomicReference<>();
+        session.pay()
+                .onError(error -> {
+                    seen.set(error);
+                    return PaymentOptions.voidAndAbort();
+                })
+                .execute();
+
+        assertNotNull(seen.get(), "a failed standing-movement drain must reach onError");
+        assertTrue(seen.get().getMessage().contains("retry did not start"),
+                seen.get().getMessage());
+        assertEquals(SessionState.FAILED, session.getState());
+    }
+
+    @Test
     void payIsInertUntilExecuted() throws Exception {
         addHundredDollarItem();
 

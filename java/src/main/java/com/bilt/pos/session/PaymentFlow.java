@@ -61,6 +61,7 @@ public final class PaymentFlow {
     private CheckoutResult result;
     private SessionException failure;
     private RuntimeException unexpected;
+    private SessionError consultedError;
 
     PaymentFlow(Function<PaymentFlow, CheckoutResult> executor) {
         this.executor = executor;
@@ -161,8 +162,19 @@ public final class PaymentFlow {
         try {
             result = executor.apply(this);
         } catch (SessionException e) {
-            // the error handler was already consulted during orchestration
             failure = e;
+            // orchestration consults onError with the failure it throws,
+            // but failures before the sequence starts (a state rejection, a
+            // failed standing-movement drain) never reach it — execute()
+            // must still deliver those rather than return silently.
+            // Resolution is moot at this point, so the returned options are
+            // ignored. ABORTED outcomes stay bypassed by design: the
+            // register initiated the abort, and it must not surface as a
+            // failure to resolve.
+            if (errorHandler != null && consultedError != e.getError()
+                    && e.getError().getCode() != SessionErrorCode.ABORTED) {
+                errorHandler.apply(e.getError());
+            }
             return;
         } catch (RuntimeException e) {
             // an unexpected exception is a bug, not a terminal outcome:
@@ -208,6 +220,12 @@ public final class PaymentFlow {
     }
 
     Function<SessionError, PaymentOptions> errorHandler() {
-        return errorHandler;
+        if (errorHandler == null) {
+            return null;
+        }
+        return error -> {
+            consultedError = error;
+            return errorHandler.apply(error);
+        };
     }
 }
