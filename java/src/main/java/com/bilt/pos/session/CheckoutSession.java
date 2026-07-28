@@ -477,7 +477,9 @@ public final class CheckoutSession {
         Objects.requireNonNull(options, "options");
         return operation("acquireCard", () -> {
             requireNotEnded("acquireCard");
-            return identityManager.acquireCard(options);
+            CardAcquisitionResult acquired = identityManager.acquireCard(options);
+            discardIfEndedMidFlight("acquireCard");
+            return acquired;
         });
     }
 
@@ -590,8 +592,33 @@ public final class CheckoutSession {
     private <T> SessionResult<T> inputOperation(String name, Supplier<T> body) {
         return operation(name, () -> {
             requireNotEnded(name);
-            return body.get();
+            T value = body.get();
+            discardIfEndedMidFlight(name);
+            return value;
         });
+    }
+
+    /**
+     * Post-completion guard for read-only prompts: {@code abort()} — safe
+     * from any thread — can end the session while the request is on the
+     * wire. An outcome arriving after that is discarded rather than
+     * delivered: the register aborted, so stale customer input, PIN, or
+     * card data must not reach {@code onSuccess}.
+     */
+    private void discardIfEndedMidFlight(String operationName) {
+        lock.lock();
+        try {
+            SessionState state = stateMachine.current();
+            if (state.isTerminal()) {
+                throw new SessionException(new SessionError(
+                        state == SessionState.ABORTED
+                                ? SessionErrorCode.ABORTED : SessionErrorCode.INVALID_STATE,
+                        operationName + " completed after the session moved to " + state
+                                + "; the result was discarded"));
+            }
+        } finally {
+            lock.unlock();
+        }
     }
 
     private void requireState(Set<SessionState> allowed, String operationName) {

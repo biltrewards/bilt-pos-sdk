@@ -13,6 +13,7 @@ import com.bilt.pos.session.input.PinResult;
 import com.bilt.pos.session.input.Signature;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -24,7 +25,9 @@ import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -110,6 +113,47 @@ class CheckoutSessionInputTest {
                 inputResponse("\"InputCommand\":\"TextString\",\"TextInput\":\"a@b.com\"")));
 
         assertEquals("a@b.com", session.requestTextString("Enter your email").get());
+    }
+
+    @Test
+    void inputArrivingAfterAbortIsDiscarded() throws Exception {
+        CountDownLatch promptOnTheWire = new CountDownLatch(1);
+        CountDownLatch aborted = new CountDownLatch(1);
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                if (request.getBody().readUtf8().contains("InputRequest")) {
+                    promptOnTheWire.countDown();
+                    // hold the customer's answer until abort() has ended the session
+                    aborted.await(5, TimeUnit.SECONDS);
+                    return new MockResponse().setBody(inputResponse(
+                            "\"InputCommand\":\"GetConfirmation\",\"ConfirmedFlag\":true"));
+                }
+                return new MockResponse();   // the AbortRequest, best-effort
+            }
+        });
+
+        AtomicReference<Boolean> delivered = new AtomicReference<>();
+        AtomicReference<SessionException> failure = new AtomicReference<>();
+        Thread register = new Thread(() -> {
+            try {
+                delivered.set(session.requestConfirmation("Print receipt?").get());
+            } catch (SessionException e) {
+                failure.set(e);
+            }
+        });
+        register.start();
+        assertTrue(promptOnTheWire.await(5, TimeUnit.SECONDS));
+
+        session.abort();
+        aborted.countDown();
+        register.join(5_000);
+        assertFalse(register.isAlive());
+
+        assertNull(delivered.get(), "input after abort must not reach onSuccess");
+        assertNotNull(failure.get());
+        assertEquals(SessionErrorCode.ABORTED, failure.get().getError().getCode());
+        assertEquals(SessionState.ABORTED, session.getState());
     }
 
     @Test
