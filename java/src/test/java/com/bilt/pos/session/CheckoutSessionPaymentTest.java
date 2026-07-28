@@ -360,6 +360,104 @@ class CheckoutSessionPaymentTest {
                 .getSaleItem()[1].getItemAmount(), 0.001);
     }
 
+    // ─── Reward-only checkout (no payment legs) ───
+
+    private static final String REBATE_FULL_50 =
+            "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                    + "\"Response\":{\"Result\":\"Success\"},"
+                    + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-RB-1\","
+                    + "\"TimeStamp\":\"2026-07-20T10:00:01Z\"}},"
+                    + "\"LoyaltyResult\":[{\"Rebates\":{\"TotalRebate\":50.00,"
+                    + "\"RebateLabel\":\"Half Off\"}}]}}}";
+
+    private static final String REDEEM_50 =
+            "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                    + "\"Response\":{\"Result\":\"Success\"},"
+                    + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-RD-1\","
+                    + "\"TimeStamp\":\"2026-07-20T10:00:02Z\"}},"
+                    + "\"LoyaltyResult\":[{\"CurrentBalance\":100,"
+                    + "\"LoyaltyAmount\":{\"AmountValue\":50.00,\"LoyaltyUnit\":\"Monetary\"}}]}}}";
+
+    private static final String LOYALTY_REFUND_FAILED =
+            "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                    + "\"Response\":{\"Result\":\"Failure\","
+                    + "\"ErrorCondition\":\"UnavailableService\"}}}}";
+
+    /** Rewards cover the whole basket: rebate 50 + redemption 50 on a 100 item. */
+    private void completeRewardOnlyCheckout() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_FULL_50));
+        server.enqueue(new MockResponse().setBody(REDEEM_50));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+        CheckoutResult result = session.pay().get();
+        assertNull(result.getPoiTransactionId(), "no card payment was made");
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getCardAmountCharged()));
+        assertEquals("POI-RB-1", result.getRebatePoiTransactionId());
+        assertEquals("POI-RD-1", result.getRedemptionPoiTransactionId());
+        assertEquals(3, drainRequests().size(), "rebate, redemption, award — no payment");
+    }
+
+    @Test
+    void rewardOnlyCheckoutVoidsViaLoyaltyRefunds() throws Exception {
+        completeRewardOnlyCheckout();
+
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // rebate refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // award refund
+
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(3, requests.size());
+        assertEquals("RedemptionRefund", requests.get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("POI-RD-1", requests.get(0).getLoyaltyRequest().getLoyaltyTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertNotNull(requests.get(0).getLoyaltyRequest().getSaleData().getSaleToPOIData(),
+                "the redemption refund must carry the rewardRefs payload");
+        assertEquals("98234", requests.get(0).getLoyaltyRequest().getLoyaltyData()[0]
+                .getLoyaltyAccountID().getLoyaltyID());
+        assertEquals("RebateRefund", requests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("POI-RB-1", requests.get(1).getLoyaltyRequest().getLoyaltyTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals("AwardRefund", requests.get(2).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("POI-AW-1", requests.get(2).getLoyaltyRequest().getLoyaltyTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
+    void rewardOnlyVoidRetryResumesAtRebateLeg() throws Exception {
+        completeRewardOnlyCheckout();
+
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));       // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // rebate refund
+
+        SessionException failure = assertThrows(SessionException.class,
+                () -> session.voidTransaction().get());
+        assertTrue(failure.getError().getMessage().contains("POI-RD-1"),
+                "the error must say the redemption was already refunded");
+        assertEquals(SessionState.COMPLETED, session.getState(),
+                "a failed void restores the pre-void state");
+        assertEquals(2, drainRequests().size());
+
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // rebate refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // award refund
+
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size(), "the redemption leg must not be re-credited");
+        assertEquals("RebateRefund", requests.get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("AwardRefund", requests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
     @Test
     void finalBasketReflectsHandlerRecalculatedTax() throws Exception {
         identifyMember();

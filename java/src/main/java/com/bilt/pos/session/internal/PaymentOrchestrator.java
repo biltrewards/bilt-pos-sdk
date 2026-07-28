@@ -203,7 +203,7 @@ public final class PaymentOrchestrator {
             String saleTxnId = beforeStep(request, TransactionStep.REBATE,
                     workingBasket, currentTotal, committed);
             RebateOutcome outcome = rebateStep(request, workingBasket, currentTotal,
-                    saleTxnId, committed);
+                    saleTxnId, committed, result);
             redeemedRebates = outcome.rebates;
             rebateTotal = outcome.totalRebate;
             workingBasket = outcome.updatedBasket;
@@ -217,7 +217,7 @@ public final class PaymentOrchestrator {
             String saleTxnId = beforeStep(request, TransactionStep.POINTS,
                     workingBasket, currentTotal, committed);
             PointRedemptionResult points = pointsStep(request, workingBasket, currentTotal,
-                    saleTxnId, committed);
+                    saleTxnId, committed, result);
             pointsRedeemed = points.getPointsUsed();
             pointsValue = points.getMonetaryValue();
             result.pointsBalance(points.getRemainingPointBalance());
@@ -303,7 +303,8 @@ public final class PaymentOrchestrator {
     }
 
     private RebateOutcome rebateStep(Request request, Basket basket, BigDecimal currentTotal,
-                                     String saleTxnId, List<Commit> committed) {
+                                     String saleTxnId, List<Commit> committed,
+                                     CheckoutResult.Builder result) {
         LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.REBATE, request, basket,
                 saleTxnId, null);
 
@@ -343,6 +344,13 @@ public final class PaymentOrchestrator {
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REBATE_REFUND,
                                 poiRef(body.getPoiData()), request.member.getMemberId(), null)
                         : null);
+        // kept on the result so a checkout with no payment legs (rewards
+        // covered everything) can still be voided by reversing this movement
+        TransactionIdentificationType rebatePoiTxn = poiRef(body.getPoiData());
+        if (totalRebate.signum() > 0 && rebatePoiTxn != null) {
+            result.rebatePoiTransactionId(rebatePoiTxn.getTransactionID());
+            result.rebatePoiTransactionTimestamp(Wire.instant(rebatePoiTxn.getTimeStamp()));
+        }
 
         RebateOutcome outcome = new RebateOutcome();
         outcome.rebates = rebates;
@@ -355,7 +363,8 @@ public final class PaymentOrchestrator {
 
     private PointRedemptionResult pointsStep(Request request, Basket basket,
                                              BigDecimal currentTotal, String saleTxnId,
-                                             List<Commit> committed) {
+                                             List<Commit> committed,
+                                             CheckoutResult.Builder result) {
         List<String> rewardRefs = new ArrayList<>();
         for (Reward reward : request.member.getRewards()) {
             if (reward.getRewardRef() != null) {
@@ -398,6 +407,14 @@ public final class PaymentOrchestrator {
                                 poiRef(body.getPoiData()), request.member.getMemberId(),
                                 rewardRefsPayload)
                         : null);
+        // kept on the result so a checkout with no payment legs (rewards
+        // covered everything) can still be voided by reversing this movement
+        TransactionIdentificationType redemptionPoiTxn = poiRef(body.getPoiData());
+        if (monetaryValue.signum() > 0 && redemptionPoiTxn != null) {
+            result.redemptionPoiTransactionId(redemptionPoiTxn.getTransactionID());
+            result.redemptionPoiTransactionTimestamp(
+                    Wire.instant(redemptionPoiTxn.getTimeStamp()));
+        }
 
         return new PointRedemptionResult(pointsUsed, monetaryValue, currentTotal,
                 currentTotal.subtract(monetaryValue), balance);

@@ -61,6 +61,10 @@ public final class CheckoutResult {
     private final Instant storedValuePoiTransactionTimestamp;
     private final String awardPoiTransactionId;
     private final Instant awardPoiTransactionTimestamp;
+    private final String rebatePoiTransactionId;
+    private final Instant rebatePoiTransactionTimestamp;
+    private final String redemptionPoiTransactionId;
+    private final Instant redemptionPoiTransactionTimestamp;
 
     private final List<String> warnings;
 
@@ -89,6 +93,10 @@ public final class CheckoutResult {
         this.storedValuePoiTransactionTimestamp = builder.storedValuePoiTransactionTimestamp;
         this.awardPoiTransactionId = builder.awardPoiTransactionId;
         this.awardPoiTransactionTimestamp = builder.awardPoiTransactionTimestamp;
+        this.rebatePoiTransactionId = builder.rebatePoiTransactionId;
+        this.rebatePoiTransactionTimestamp = builder.rebatePoiTransactionTimestamp;
+        this.redemptionPoiTransactionId = builder.redemptionPoiTransactionId;
+        this.redemptionPoiTransactionTimestamp = builder.redemptionPoiTransactionTimestamp;
         this.warnings = Collections.unmodifiableList(new ArrayList<>(builder.warnings));
     }
 
@@ -208,6 +216,32 @@ public final class CheckoutResult {
         return awardPoiTransactionTimestamp;
     }
 
+    /**
+     * Terminal reference of the committed rebate redemption, or {@code null}
+     * when no rebates were applied. A void of a checkout with no payment
+     * legs reverses this movement.
+     */
+    public String getRebatePoiTransactionId() {
+        return rebatePoiTransactionId;
+    }
+
+    public Instant getRebatePoiTransactionTimestamp() {
+        return rebatePoiTransactionTimestamp;
+    }
+
+    /**
+     * Terminal reference of the committed point/reward redemption, or
+     * {@code null} when no points were redeemed. A void of a checkout with
+     * no payment legs reverses this movement.
+     */
+    public String getRedemptionPoiTransactionId() {
+        return redemptionPoiTransactionId;
+    }
+
+    public Instant getRedemptionPoiTransactionTimestamp() {
+        return redemptionPoiTransactionTimestamp;
+    }
+
     /** Non-fatal problems, e.g. a failed loyalty award. */
     public List<String> getWarnings() {
         return warnings;
@@ -240,6 +274,10 @@ public final class CheckoutResult {
         private Instant storedValuePoiTransactionTimestamp;
         private String awardPoiTransactionId;
         private Instant awardPoiTransactionTimestamp;
+        private String rebatePoiTransactionId;
+        private Instant rebatePoiTransactionTimestamp;
+        private String redemptionPoiTransactionId;
+        private Instant redemptionPoiTransactionTimestamp;
         private List<String> warnings = new ArrayList<>();
 
         private Builder() {
@@ -362,6 +400,26 @@ public final class CheckoutResult {
 
         public Builder awardPoiTransactionTimestamp(Instant awardPoiTransactionTimestamp) {
             this.awardPoiTransactionTimestamp = awardPoiTransactionTimestamp;
+            return this;
+        }
+
+        public Builder rebatePoiTransactionId(String rebatePoiTransactionId) {
+            this.rebatePoiTransactionId = rebatePoiTransactionId;
+            return this;
+        }
+
+        public Builder rebatePoiTransactionTimestamp(Instant rebatePoiTransactionTimestamp) {
+            this.rebatePoiTransactionTimestamp = rebatePoiTransactionTimestamp;
+            return this;
+        }
+
+        public Builder redemptionPoiTransactionId(String redemptionPoiTransactionId) {
+            this.redemptionPoiTransactionId = redemptionPoiTransactionId;
+            return this;
+        }
+
+        public Builder redemptionPoiTransactionTimestamp(Instant redemptionPoiTransactionTimestamp) {
+            this.redemptionPoiTransactionTimestamp = redemptionPoiTransactionTimestamp;
             return this;
         }
 

@@ -58,6 +58,7 @@ import com.bilt.pos.session.identity.IdentifyOptions;
 import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
 import com.bilt.pos.session.identity.MemberIdentifier;
+import com.bilt.pos.session.identity.Reward;
 import com.bilt.pos.session.input.ConfirmationOptions;
 import com.bilt.pos.session.input.InputOptions;
 import com.bilt.pos.session.input.MenuOptions;
@@ -71,6 +72,7 @@ import com.bilt.pos.session.internal.BasketEngine;
 import com.bilt.pos.session.internal.DisplayRouter;
 import com.bilt.pos.session.internal.IdentityManager;
 import com.bilt.pos.session.internal.InputManager;
+import com.bilt.pos.session.internal.LoyaltyPayloadCodec;
 import com.bilt.pos.session.internal.NexoExchange;
 import com.bilt.pos.session.internal.NexoMessageFactory;
 import com.bilt.pos.session.internal.PaymentOrchestrator;
@@ -88,6 +90,7 @@ import jakarta.xml.bind.JAXBException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
@@ -169,7 +172,12 @@ public final class CheckoutSession {
     private volatile Instant lastStoredValuePoiTransactionTimestamp;
     private volatile String lastAwardPoiTransactionId;
     private volatile Instant lastAwardPoiTransactionTimestamp;
+    private volatile String lastRebatePoiTransactionId;
+    private volatile Instant lastRebatePoiTransactionTimestamp;
+    private volatile String lastRedemptionPoiTransactionId;
+    private volatile Instant lastRedemptionPoiTransactionTimestamp;
     private volatile boolean voidCardLegReversed;
+    private volatile boolean voidRedemptionLegReversed;
 
     private CheckoutSession(Builder builder) {
         this.client = builder.client;
@@ -779,6 +787,11 @@ public final class CheckoutSession {
                         result.getStoredValuePoiTransactionTimestamp();
                 lastAwardPoiTransactionId = result.getAwardPoiTransactionId();
                 lastAwardPoiTransactionTimestamp = result.getAwardPoiTransactionTimestamp();
+                lastRebatePoiTransactionId = result.getRebatePoiTransactionId();
+                lastRebatePoiTransactionTimestamp = result.getRebatePoiTransactionTimestamp();
+                lastRedemptionPoiTransactionId = result.getRedemptionPoiTransactionId();
+                lastRedemptionPoiTransactionTimestamp =
+                        result.getRedemptionPoiTransactionTimestamp();
             } finally {
                 lock.unlock();
             }
@@ -877,6 +890,24 @@ public final class CheckoutSession {
                 currentMember != null ? currentMember.getMemberId() : builderMemberId);
     }
 
+    /**
+     * The rewardRefs payload a redemption refund must carry, rebuilt from
+     * the identified member's rewards — the same refs the redemption sent.
+     */
+    private String memberRewardRefsPayload() {
+        IdentifyResult currentMember = getMember();
+        if (currentMember == null) {
+            return null;
+        }
+        List<String> refs = new ArrayList<>();
+        for (Reward reward : currentMember.getRewards()) {
+            if (reward.getRewardRef() != null) {
+                refs.add(reward.getRewardRef());
+            }
+        }
+        return LoyaltyPayloadCodec.encodeRewardRefs(refs);
+    }
+
     /** Builder-supplied prior transaction, else the last completed payment. */
     private String effectivePoiTransactionId() {
         return poiTransactionId != null ? poiTransactionId : lastPoiTransactionId;
@@ -909,13 +940,22 @@ public final class CheckoutSession {
     /**
      * Reverses the completed transaction referenced by the builder's
      * {@code poiTransactionId} (Nexo {@code ReversalRequest}), including a
-     * best-effort loyalty award reversal. The session moves to
-     * {@link SessionState#VOIDED} on success.
+     * best-effort loyalty award reversal. A completed checkout that had no
+     * payment legs — rewards covered the whole basket — is voided by
+     * refunding its committed loyalty movements (redemption, rebate, award)
+     * instead. The session moves to {@link SessionState#VOIDED} on success.
      */
     public SessionResult<VoidResult> voidTransaction() {
         return operation("voidTransaction", () -> {
             String originalId = effectivePoiTransactionId();
-            if (originalId == null) {
+            // a checkout fully covered by rewards completes without a payment
+            // leg: there is no transaction to reverse, so the void refunds
+            // the committed loyalty movements instead
+            boolean loyaltyOnly = originalId == null
+                    && (lastRedemptionPoiTransactionId != null
+                            || lastRebatePoiTransactionId != null
+                            || lastAwardPoiTransactionId != null);
+            if (originalId == null && !loyaltyOnly) {
                 throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
                         "voidTransaction requires poiTransactionId on the session builder "
                                 + "or a completed payment in this session"));
@@ -935,21 +975,33 @@ public final class CheckoutSession {
                 lock.unlock();
             }
             try {
-                // a session-fallback void of a split tender reverses both
-                // legs; a builder-referenced void stays single-leg (the
-                // caller controls the reference), and a gift-card-only
-                // checkout has one transaction, not two
-                String storedValueLeg = poiTransactionId == null
-                        && lastStoredValuePoiTransactionId != null
-                        && !lastStoredValuePoiTransactionId.equals(originalId)
-                        ? lastStoredValuePoiTransactionId : null;
-                // a retry after a partial void resumes at the leg that is
-                // still standing instead of re-reversing the card payment
-                String cardLeg = voidCardLegReversed ? null : originalId;
-                VoidResult result = refundManager.voidTransaction(
-                        cardLeg, effectivePoiTransactionTimestamp(),
-                        storedValueLeg, lastStoredValuePoiTransactionTimestamp,
-                        loyaltyRef(), () -> voidCardLegReversed = true);
+                VoidResult result;
+                if (loyaltyOnly) {
+                    // a retry after a partial void resumes at the rebate leg
+                    // instead of re-crediting the redemption
+                    result = refundManager.voidLoyalty(
+                            voidRedemptionLegReversed ? null : lastRedemptionPoiTransactionId,
+                            lastRedemptionPoiTransactionTimestamp,
+                            memberRewardRefsPayload(),
+                            lastRebatePoiTransactionId, lastRebatePoiTransactionTimestamp,
+                            loyaltyRef(), () -> voidRedemptionLegReversed = true);
+                } else {
+                    // a session-fallback void of a split tender reverses both
+                    // legs; a builder-referenced void stays single-leg (the
+                    // caller controls the reference), and a gift-card-only
+                    // checkout has one transaction, not two
+                    String storedValueLeg = poiTransactionId == null
+                            && lastStoredValuePoiTransactionId != null
+                            && !lastStoredValuePoiTransactionId.equals(originalId)
+                            ? lastStoredValuePoiTransactionId : null;
+                    // a retry after a partial void resumes at the leg that is
+                    // still standing instead of re-reversing the card payment
+                    String cardLeg = voidCardLegReversed ? null : originalId;
+                    result = refundManager.voidTransaction(
+                            cardLeg, effectivePoiTransactionTimestamp(),
+                            storedValueLeg, lastStoredValuePoiTransactionTimestamp,
+                            loyaltyRef(), () -> voidCardLegReversed = true);
+                }
                 transitionLocked(SessionState.VOIDED);
                 return result;
             } catch (RuntimeException e) {

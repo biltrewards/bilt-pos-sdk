@@ -198,7 +198,7 @@ refundSession.refund(new BigDecimal("24.99"))     // partial linked refund
 
 - `refund()` / `refund(amount)` — linked refunds; also reverse loyalty points awarded on the original transaction (best-effort).
 - `refundUnlinked(amount)` — payment-only, no loyalty reversal.
-- `voidTransaction()` — reverses a completed transaction (nexo `ReversalRequest` + loyalty award reversal). On a session that just completed a payment, the transaction reference is remembered — no builder fields needed.
+- `voidTransaction()` — reverses a completed transaction (nexo `ReversalRequest` + loyalty award reversal). On a session that just completed a payment, the transaction reference is remembered — no builder fields needed. A checkout fully covered by rewards has no payment to reverse; voiding it refunds the committed loyalty movements (redemption, rebate, award) instead.
 
 ---
 
