@@ -318,7 +318,7 @@ public final class PaymentOrchestrator {
         commit(committed, TransactionStep.REBATE, saleTxnId, body.getPoiData(),
                 totalRebate.signum() > 0
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REBATE_REFUND,
-                                poiRef(body.getPoiData()), request.member.getMemberId())
+                                poiRef(body.getPoiData()), request.member.getMemberId(), null)
                         : null);
 
         RebateOutcome outcome = new RebateOutcome();
@@ -339,8 +339,9 @@ public final class PaymentOrchestrator {
                 rewardRefs.add(reward.getRewardRef());
             }
         }
+        String rewardRefsPayload = LoyaltyPayloadCodec.encodeRewardRefs(rewardRefs);
         LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.REDEMPTION, request, basket,
-                saleTxnId, LoyaltyPayloadCodec.encodeRewardRefs(rewardRefs));
+                saleTxnId, rewardRefsPayload);
 
         LoyaltyResult first = firstResult(body);
         BigDecimal monetaryValue = BigDecimal.ZERO;
@@ -371,7 +372,8 @@ public final class PaymentOrchestrator {
         commit(committed, TransactionStep.POINTS, saleTxnId, body.getPoiData(),
                 monetaryValue.signum() > 0
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
-                                poiRef(body.getPoiData()), request.member.getMemberId())
+                                poiRef(body.getPoiData()), request.member.getMemberId(),
+                                rewardRefsPayload)
                         : null);
 
         return new PointRedemptionResult(pointsUsed, monetaryValue, currentTotal,
@@ -533,7 +535,7 @@ public final class PaymentOrchestrator {
             commit(committed, TransactionStep.AWARD, saleTxnId, body.getPoiData(),
                     awardPoiTxn != null
                             ? loyaltyRollback(LoyaltyTransactionTypeEnum.AWARD_REFUND,
-                                    awardPoiTxn, request.member.getMemberId())
+                                    awardPoiTxn, request.member.getMemberId(), null)
                             : null);
             if (awardPoiTxn != null) {
                 // kept on the result so a later void/refund can reverse the
@@ -723,10 +725,16 @@ public final class PaymentOrchestrator {
 
     private Runnable loyaltyRollback(LoyaltyTransactionTypeEnum refundType,
                                      TransactionIdentificationType originalPoiTxn,
-                                     String memberId) {
+                                     String memberId, String saleToPoiData) {
         return () -> {
+            SaleData saleData = exchange.factory().saleData();
+            if (saleToPoiData != null) {
+                // the reverse-redemption contract carries the rewardRefs to
+                // re-credit in SaleToPOIData, mirroring the redemption
+                saleData.setSaleToPOIData(saleToPoiData);
+            }
             LoyaltyRequest.Builder loyaltyRequest = LoyaltyRequest.builder()
-                    .saleData(exchange.factory().saleData())
+                    .saleData(saleData)
                     .loyaltyTransaction(LoyaltyTransaction.builder()
                             .loyaltyTransactionType(refundType)
                             .originalPOITransaction(original(originalPoiTxn))

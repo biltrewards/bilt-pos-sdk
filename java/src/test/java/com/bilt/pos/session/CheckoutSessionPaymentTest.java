@@ -460,6 +460,11 @@ class CheckoutSessionPaymentTest {
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
         assertEquals("POI-RD-1", requests.get(3).getLoyaltyRequest().getLoyaltyTransaction()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        String reversedRefs = new String(java.util.Base64.getDecoder().decode(
+                requests.get(3).getLoyaltyRequest().getSaleData().getSaleToPOIData()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(reversedRefs.contains("rwd:RWD-44021"),
+                "the redemption reversal must carry the redeemed rewardRefs: " + reversedRefs);
         assertEquals("RebateRefund", requests.get(4).getLoyaltyRequest()
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
         assertEquals("POI-RB-1", requests.get(4).getLoyaltyRequest().getLoyaltyTransaction()
