@@ -58,6 +58,7 @@ public final class SessionResult<T> {
 
     private T value;
     private SessionError error;
+    private RuntimeException unexpected;
 
     SessionResult(String operationName, Supplier<T> body) {
         this.operationName = operationName;
@@ -109,6 +110,7 @@ public final class SessionResult<T> {
      */
     public T get() {
         runIfNeeded();
+        rethrowUnexpected();
         if (error != null) {
             throw new SessionException(error);
         }
@@ -121,12 +123,14 @@ public final class SessionResult<T> {
      */
     public T getOrNull() {
         runIfNeeded();
+        rethrowUnexpected();
         return error == null ? value : null;
     }
 
     /** Runs the operation if it has not run yet and reports whether it succeeded. */
     public boolean isSuccess() {
         runIfNeeded();
+        rethrowUnexpected();
         return error == null;
     }
 
@@ -141,6 +145,12 @@ public final class SessionResult<T> {
             value = body.get();
         } catch (SessionException e) {
             error = e.getError();
+        } catch (RuntimeException e) {
+            // an unexpected exception is a bug, not a terminal outcome:
+            // remember it so later accessors rethrow it instead of
+            // reporting a successful null result, then fail loudly
+            unexpected = e;
+            throw e;
         }
         if (error == null) {
             if (successHandler != null) {
@@ -148,6 +158,12 @@ public final class SessionResult<T> {
             }
         } else if (errorHandler != null) {
             errorHandler.accept(error);
+        }
+    }
+
+    private void rethrowUnexpected() {
+        if (unexpected != null) {
+            throw unexpected;
         }
     }
 

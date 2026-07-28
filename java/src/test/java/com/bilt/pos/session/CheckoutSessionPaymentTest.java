@@ -144,6 +144,20 @@ class CheckoutSessionPaymentTest {
     // ─── Laziness ───
 
     @Test
+    void unexpectedFlowExceptionIsNotMaskedAsSuccess() {
+        PaymentFlow flow = new PaymentFlow(f -> {
+            throw new IllegalStateException("boom");
+        });
+
+        IllegalStateException first =
+                assertThrows(IllegalStateException.class, flow::execute);
+
+        // later accessors must rethrow the failure, never report success
+        assertSame(first, assertThrows(IllegalStateException.class, flow::get));
+        assertSame(first, assertThrows(IllegalStateException.class, flow::getOrNull));
+    }
+
+    @Test
     void payIsInertUntilExecuted() throws Exception {
         addHundredDollarItem();
 

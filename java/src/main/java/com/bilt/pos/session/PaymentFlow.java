@@ -60,6 +60,7 @@ public final class PaymentFlow {
 
     private CheckoutResult result;
     private SessionException failure;
+    private RuntimeException unexpected;
 
     PaymentFlow(Function<PaymentFlow, CheckoutResult> executor) {
         this.executor = executor;
@@ -130,6 +131,7 @@ public final class PaymentFlow {
      */
     public CheckoutResult get() {
         runIfNeeded();
+        rethrowUnexpected();
         if (failure != null) {
             throw failure;
         }
@@ -139,12 +141,19 @@ public final class PaymentFlow {
     /** Like {@link #get()} but returns {@code null} on failure. */
     public CheckoutResult getOrNull() {
         runIfNeeded();
+        rethrowUnexpected();
         return failure == null ? result : null;
     }
 
     private void runIfNeeded() {
         if (started.compareAndSet(false, true)) {
             run();
+        }
+    }
+
+    private void rethrowUnexpected() {
+        if (unexpected != null) {
+            throw unexpected;
         }
     }
 
@@ -155,6 +164,12 @@ public final class PaymentFlow {
             // the error handler was already consulted during orchestration
             failure = e;
             return;
+        } catch (RuntimeException e) {
+            // an unexpected exception is a bug, not a terminal outcome:
+            // remember it so later accessors rethrow it instead of
+            // reporting a successful null result, then fail loudly
+            unexpected = e;
+            throw e;
         }
         if (successHandler != null) {
             successHandler.accept(result);

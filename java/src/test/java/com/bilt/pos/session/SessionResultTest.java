@@ -26,6 +26,21 @@ class SessionResultTest {
     }
 
     @Test
+    void unexpectedExceptionIsNotMaskedAsSuccess() {
+        SessionResult<String> result = result(() -> {
+            throw new IllegalStateException("boom");
+        });
+
+        IllegalStateException first =
+                assertThrows(IllegalStateException.class, result::execute);
+
+        // later accessors must rethrow the failure, never report success
+        assertSame(first, assertThrows(IllegalStateException.class, result::get));
+        assertSame(first, assertThrows(IllegalStateException.class, result::getOrNull));
+        assertSame(first, assertThrows(IllegalStateException.class, result::isSuccess));
+    }
+
+    @Test
     void nothingRunsUntilExecute() {
         AtomicInteger invocations = new AtomicInteger();
         SessionResult<String> result = result(() -> {
