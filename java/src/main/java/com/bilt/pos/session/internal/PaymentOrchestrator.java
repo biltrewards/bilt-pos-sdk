@@ -153,7 +153,15 @@ public final class PaymentOrchestrator {
                         : new StepFailure(new SessionError(SessionErrorCode.UNKNOWN,
                                 "unexpected error during payment: " + e, null, e), false);
                 unwind(committed);
-                if (failure.aborted) {
+                // the abort path bypasses onError. It is taken when checkAbort
+                // trips between steps, and also when our own abort() killed
+                // the in-flight step (the terminal replies Aborted) — an
+                // intentional abort must not surface as a recoverable failure.
+                // A terminal-initiated abort without our flag still reaches
+                // onError, since the register may want to retry it.
+                if (failure.aborted
+                        || (request.abortRequested.getAsBoolean()
+                                && failure.error.getCode() == SessionErrorCode.ABORTED)) {
                     throw new SessionException(failure.error);
                 }
                 resolutions++;

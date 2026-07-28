@@ -769,6 +769,48 @@ class CheckoutSessionPaymentTest {
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
     }
 
+    @Test
+    void abortKillingTheInFlightStepBypassesOnError() throws Exception {
+        addHundredDollarItem();
+        // the terminal aborts the in-flight card payment after our abort()
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Aborted\"}}}}"));
+
+        PaymentFlow flow = session.pay()
+                .beforeStep(ctx -> {
+                    session.abort();  // lands while the card request is in flight
+                    return ctx.getDefaultTransactionId();
+                })
+                .onError(error -> {
+                    fail("an intentional abort must not reach onError");
+                    return null;
+                });
+
+        SessionException e = assertThrows(SessionException.class, flow::get);
+        assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
+        assertEquals(SessionState.ABORTED, session.getState());
+    }
+
+    @Test
+    void terminalInitiatedAbortStillReachesOnError() throws Exception {
+        addHundredDollarItem();
+        // no abort() from us: the terminal aborted the payment on its own
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Aborted\"}}}}"));
+
+        AtomicReference<SessionError> seen = new AtomicReference<>();
+        session.pay().onError(error -> {
+            seen.set(error);
+            return PaymentOptions.voidAndAbort();
+        }).getOrNull();
+
+        assertEquals(SessionErrorCode.ABORTED, seen.get().getCode(),
+                "a spontaneous terminal abort is surfaced to the register via onError");
+        assertEquals(SessionState.ABORTED, session.getState());
+    }
+
     // ─── Post-payment void uses the payment's references ───
 
     @Test
