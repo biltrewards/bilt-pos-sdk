@@ -12,6 +12,7 @@
 package com.bilt.pos.session.internal;
 
 import com.bilt.pos.display.DisplayPayload;
+import com.bilt.pos.display.AdjustmentsType;
 import com.bilt.pos.display.DisplayPayloadHelper;
 import com.bilt.pos.display.LineItemsType;
 import com.bilt.pos.display.ReceiptType;
@@ -46,10 +47,26 @@ public final class BasketDisplayRenderer implements DisplayRenderer {
                     line.getAdjustedTotal()));
         }
 
+        // line items render at adjustedTotal (post-rebate), so the printed
+        // totals must add up on the same basis: subtotal is the discounted
+        // line sum, point redemptions show as an order-level adjustment, and
+        // the total is what the customer actually pays. During cart-building
+        // all breakdown fields are zero and this matches the raw totals.
+        BigDecimal subtotal = basket.getOriginalTotal().subtract(basket.getRebateTotal());
+        BigDecimal total = basket.getGrandTotal()
+                .subtract(basket.getRebateTotal())
+                .subtract(basket.getPointDiscountTotal());
+
         ReceiptType receipt = new ReceiptType();
         receipt.setLineItems(lineItems);
         receipt.setSubtotal(DisplayPayloadHelper.labeledAmount(
-                "Subtotal", currency, basket.getOriginalTotal()));
+                "Subtotal", currency, subtotal));
+        if (basket.getPointDiscountTotal().signum() != 0) {
+            AdjustmentsType adjustments = new AdjustmentsType();
+            adjustments.getAdjustmentItem().add(DisplayPayloadHelper.labeledAmount(
+                    "Points", currency, basket.getPointDiscountTotal().negate()));
+            receipt.setAdjustments(adjustments);
+        }
         if (basket.getTaxTotal().signum() != 0) {
             TaxType tax = new TaxType();
             tax.setTaxTotal(DisplayPayloadHelper.labeledAmount(
@@ -57,7 +74,7 @@ public final class BasketDisplayRenderer implements DisplayRenderer {
             receipt.setTax(tax);
         }
         receipt.setTotal(DisplayPayloadHelper.labeledAmount(
-                "Total", currency, basket.getGrandTotal()));
+                "Total", currency, total));
 
         DisplayPayload payload = new DisplayPayload();
         payload.setLayout(LAYOUT);
