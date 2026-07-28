@@ -1128,12 +1128,28 @@ public final class CheckoutSession {
      * first movement still standing.
      */
     private void drainStandingMovements() {
-        List<PaymentOrchestrator.StandingMovement> remaining =
-                new ArrayList<>(standingMovements);
-        while (!remaining.isEmpty()) {
-            remaining.get(0).reverse();
-            remaining.remove(0);
-            standingMovements = List.copyOf(remaining);
+        List<PaymentOrchestrator.StandingMovement> remaining;
+        lock.lock();
+        try {
+            // take ownership atomically: concurrent drains (abort() vs a
+            // retried pay()) must not reverse the same movement twice — the
+            // second drainer sees an empty list and no-ops
+            remaining = new ArrayList<>(standingMovements);
+            standingMovements = List.of();
+        } finally {
+            lock.unlock();
+        }
+        try {
+            while (!remaining.isEmpty()) {
+                remaining.get(0).reverse();
+                remaining.remove(0);
+            }
+        } finally {
+            if (!remaining.isEmpty()) {
+                // a reversal failed: put the remainder back so a retry
+                // resumes at the first movement still standing
+                standingMovements = List.copyOf(remaining);
+            }
         }
     }
 
@@ -1259,24 +1275,29 @@ public final class CheckoutSession {
      * <p>Safe to call from any thread.</p>
      */
     public void abort() {
-        SessionState state;
+        boolean needsDrain;
         lock.lock();
         try {
-            // the flag is set under the lock so it cannot race the reset a
-            // starting payment performs when it enters PAYING: either this
-            // abort ends the session before the payment starts, or the
-            // payment starts with a fresh flag and observes a later abort
+            // the flag and the state change are made in ONE critical
+            // section so the reset a starting payment performs when it
+            // enters PAYING can never eat a live abort: either this abort
+            // ends the session before the payment starts, or the payment
+            // starts with a fresh flag and observes a later abort
             abortRequested = true;
-            state = stateMachine.current();
+            SessionState state = stateMachine.current();
+            needsDrain = state == SessionState.FAILED && !standingMovements.isEmpty();
+            if (!needsDrain) {
+                transitionToAbortedIfAllowed(state);
+            }
         } finally {
             lock.unlock();
         }
-        // "reverses everything committed so far": a failed payment's
-        // standing movements are drained before the session seals —
-        // ABORTED is terminal and could never finish them. If a reversal
-        // still fails, the session stays FAILED so voidTransaction() (or
-        // a retried pay()) can finish the unwind.
-        if (state == SessionState.FAILED && !standingMovements.isEmpty()) {
+        if (needsDrain) {
+            // "reverses everything committed so far": a failed payment's
+            // standing movements are drained before the session seals —
+            // ABORTED is terminal and could never finish them. If a
+            // reversal still fails, the session stays FAILED so
+            // voidTransaction() (or a retried pay()) can finish the unwind.
             try {
                 drainStandingMovements();
             } catch (SessionException e) {
@@ -1285,26 +1306,36 @@ public final class CheckoutSession {
                         + "finish the unwind: " + e.getError(), e);
                 return;
             }
-        }
-        lock.lock();
-        try {
-            SessionState current = stateMachine.current();
-            if (current != SessionState.PAYING && !current.isTerminal()) {
-                // during PAYING the payment thread observes the flag between
-                // steps, unwinds what was committed, and settles the final
-                // state — transitioning here would race that decision
-                if (stateMachine.canTransitionTo(SessionState.ABORTED)) {
-                    stateMachine.transitionTo(SessionState.ABORTED);
-                } else {
-                    LOGGER.warning("abort() called in state " + current + "; state unchanged");
-                }
+            lock.lock();
+            try {
+                // a retry that entered PAYING during the drain has reset the
+                // flag; re-assert it so that payment observes the abort at
+                // its next step boundary instead of charging through
+                abortRequested = true;
+                transitionToAbortedIfAllowed(stateMachine.current());
+            } finally {
+                lock.unlock();
             }
-        } finally {
-            lock.unlock();
         }
         NexoExchange.InFlight inFlight = exchange.currentInFlight();
         if (inFlight != null) {
             sendAbort(inFlight);
+        }
+    }
+
+    /** Must be called under the lock. */
+    private void transitionToAbortedIfAllowed(SessionState state) {
+        if (state == SessionState.PAYING || state.isTerminal()) {
+            // during PAYING the payment thread observes the flag between
+            // steps, unwinds what was committed, and settles the final
+            // state — transitioning here would race that decision; a
+            // terminal session stays where it ended
+            return;
+        }
+        if (stateMachine.canTransitionTo(SessionState.ABORTED)) {
+            stateMachine.transitionTo(SessionState.ABORTED);
+        } else {
+            LOGGER.warning("abort() called in state " + state + "; state unchanged");
         }
     }
 

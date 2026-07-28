@@ -9,6 +9,7 @@ import com.bilt.pos.session.payment.PaymentOptions;
 import com.bilt.pos.session.payment.TransactionStep;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -728,6 +730,70 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
         assertEquals(SessionState.VOIDED, session.getState());
+    }
+
+    @Test
+    void payRacingAnAbortMidDrainStillAborts() throws Exception {
+        failPaymentWithStandingRebate();
+
+        CountDownLatch abortDraining = new CountDownLatch(1);
+        CountDownLatch releaseAbortDrain = new CountDownLatch(1);
+        CountDownLatch rebateStepArrived = new CountDownLatch(1);
+        CountDownLatch releaseRebateStep = new CountDownLatch(1);
+        AtomicInteger rebateRefunds = new AtomicInteger();
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                String body = request.getBody().readUtf8();
+                if (body.contains("\"RebateRefund\"")) {
+                    if (rebateRefunds.incrementAndGet() == 1) {
+                        // abort()'s drain: hold it so a retry can sneak in
+                        abortDraining.countDown();
+                        releaseAbortDrain.await(5, TimeUnit.SECONDS);
+                    }
+                    return new MockResponse().setBody(LOYALTY_REFUND_OK);
+                }
+                if (body.contains("\"LoyaltyTransactionType\":\"Rebate\"")) {
+                    // the retry's first step: hold it until abort() finished
+                    rebateStepArrived.countDown();
+                    releaseRebateStep.await(5, TimeUnit.SECONDS);
+                    return new MockResponse().setBody(REBATE_OK);
+                }
+                return new MockResponse();   // AbortRequest etc., best-effort
+            }
+        });
+
+        Thread aborter = new Thread(session::abort);
+        aborter.start();
+        assertTrue(abortDraining.await(5, TimeUnit.SECONDS));
+
+        // the abort is mid-drain: a retry slips into PAYING and resets the flag
+        AtomicReference<SessionException> payOutcome = new AtomicReference<>();
+        Thread register = new Thread(() -> {
+            try {
+                session.pay().get();
+            } catch (SessionException e) {
+                payOutcome.set(e);
+            }
+        });
+        register.start();
+        assertTrue(rebateStepArrived.await(5, TimeUnit.SECONDS));
+
+        // abort completes: it must re-assert the flag it lost to the retry
+        releaseAbortDrain.countDown();
+        aborter.join(5_000);
+        assertFalse(aborter.isAlive());
+
+        // the in-flight retry now proceeds — and must observe the abort
+        releaseRebateStep.countDown();
+        register.join(5_000);
+        assertFalse(register.isAlive());
+
+        assertNotNull(payOutcome.get(), "the raced retry must not charge through the abort");
+        assertEquals(SessionErrorCode.ABORTED, payOutcome.get().getError().getCode());
+        assertEquals(SessionState.ABORTED, session.getState());
+        assertEquals(2, rebateRefunds.get(),
+                "one drain of the standing movement, one unwind of the retry's rebate");
     }
 
     @Test
