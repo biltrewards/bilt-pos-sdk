@@ -168,7 +168,7 @@ public final class CheckoutSession {
     private volatile LastPayment lastPayment = LastPayment.NONE;
     private volatile boolean voidCardLegReversed;
     private volatile boolean voidRedemptionLegReversed;
-    private volatile boolean linkedRefundIssued;
+    private volatile boolean refundIssued;
     private volatile List<PaymentOrchestrator.StandingMovement> standingMovements = List.of();
 
     private CheckoutSession(Builder builder) {
@@ -951,7 +951,15 @@ public final class CheckoutSession {
         requirePositive(amount);
         return operation("refundUnlinked", () -> {
             requireRefundable("refundUnlinked");
-            return refundManager.refund(amount, null, null, RefundManager.LoyaltyRef.NONE);
+            RefundResult result = refundManager.refund(
+                    amount, null, null, RefundManager.LoyaltyRef.NONE);
+            // an unlinked refund issued through a checkout session is
+            // almost certainly returning this checkout's money (e.g. the
+            // original card is unavailable); a later void would return the
+            // full amount on top of it, so it blocks the void the same way
+            // a linked refund does — further returns keep using refunds
+            refundIssued = true;
+            return result;
         });
     }
 
@@ -969,7 +977,7 @@ public final class CheckoutSession {
             // once refunded, the payment must not also be voided: a reversal
             // returns the FULL amount on top of what the refunds already
             // returned. Further partial returns keep using refund().
-            linkedRefundIssued = true;
+            refundIssued = true;
             return result;
         });
     }
@@ -1050,7 +1058,7 @@ public final class CheckoutSession {
             // a failed payment whose rollback was incomplete left movements
             // standing; voiding that session means finishing the unwind
             boolean resumeRollback = !standingMovements.isEmpty();
-            if (!resumeRollback && linkedRefundIssued) {
+            if (!resumeRollback && refundIssued) {
                 throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
                         "the payment was already refunded from this session; a void would "
                                 + "return the full amount on top of the refund — use "

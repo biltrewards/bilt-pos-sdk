@@ -376,7 +376,7 @@ refundSession.refund(new BigDecimal("24.99"))     // partial linked refund
     .execute();
 ```
 
-- `refund()` / `refund(amount)` — linked refunds; also reverse loyalty points awarded on the original transaction (best-effort). Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once a payment has been refunded from a session it can no longer be voided from it — a void would return the full amount on top of the refund.
+- `refund()` / `refund(amount)` — linked refunds; also reverse loyalty points awarded on the original transaction (best-effort). Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once any refund — linked or unlinked — has been issued from a session, its payment can no longer be voided from it: a void would return the full amount on top of the refund.
 - `refundUnlinked(amount)` — payment-only, no loyalty reversal.
 - `voidTransaction()` — reverses a completed transaction (nexo `ReversalRequest` + loyalty award reversal). On a session that just completed a payment, the transaction reference is remembered — no builder fields needed — and its committed loyalty movements (redemption, rebate) are refunded as well, best-effort. A checkout fully covered by rewards has no payment to reverse; voiding it refunds the committed loyalty movements alone. And when a failed payment's rollback was incomplete (the error names the movements still standing), `voidTransaction()` on that session finishes the unwind by retrying the reversals that did not go through.
 

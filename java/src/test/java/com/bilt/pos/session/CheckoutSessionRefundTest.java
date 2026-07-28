@@ -130,6 +130,25 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
+    void voidAfterUnlinkedRefundIsRejected() throws Exception {
+        server.enqueue(new MockResponse().setBody(REFUND_OK));
+        CheckoutSession session = refundSession();
+        assertTrue(session.refundUnlinked(new BigDecimal("24.99")).get().isSuccess());
+        recordedRequest();
+
+        SessionException failure = assertThrows(SessionException.class,
+                () -> session.voidTransaction().get());
+        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
+        assertEquals(1, server.getRequestCount(),
+                "the rejected void must not reach the wire");
+
+        // further refunds remain the correct path for additional returns
+        server.enqueue(new MockResponse().setBody(REFUND_OK));
+        server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
+        assertTrue(session.refund(new BigDecimal("10.00")).get().isSuccess());
+    }
+
+    @Test
     void voidAfterLinkedRefundIsRejectedButFurtherRefundsWork() throws Exception {
         server.enqueue(new MockResponse().setBody(REFUND_OK));
         server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
