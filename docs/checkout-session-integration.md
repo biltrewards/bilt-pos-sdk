@@ -7,7 +7,15 @@
 
 You keep working with one object for the whole transaction instead of hand-assembling nexo messages. The raw nexo client is still available via `session.getClient()` as an escape hatch.
 
-This page explains the concepts and shows a complete integration. For the method-by-method walkthrough, see the [CheckoutSession API guide](./checkout-session.md).
+---
+
+## Before you begin
+
+Make sure you have:
+
+1. Ordered a terminal and boarded it to a store.
+2. Read and understood the [Integration Guide](./integration.md).
+3. Created a `BiltNexoTerminalClient` for your terminal.
 
 ---
 
@@ -17,7 +25,7 @@ A few principles explain most of the behavior:
 
 - **The session owns the basket.** Items, tax, and totals live in one place, and `Basket` is the single source of truth. Every mutation returns the updated basket.
 - **nexo underneath.** Every session operation maps to a standard nexo 3.0 message, but the SDK hides much more than message serialization: it manages the complexity of communicating with the terminal, and it orchestrates payment when the transaction is multi-tender — sequencing rebates, point redemption, stored value, and card, and handling loyalty award and reversal — so the register doesn't have to coordinate any of it.
-- **Terminal operations are lazy.** Methods returning a `SessionResult` or `PaymentFlow` send nothing until you call `.execute()`, `.get()`, or `.getOrNull()`. Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](./checkout-session.md#lazy-execution).
+- **Terminal operations are lazy.** Methods returning a `SessionResult` or `PaymentFlow` send nothing until you call `.execute()`, `.get()`, or `.getOrNull()`. Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
 - **Cart-building is local + auto-display.** `addItem` / `removeItem` / `updateItemQuantity` update the local basket and (with `autoDisplay=true`, the default) push a `DisplayRequest` to the terminal. The terminal may independently evaluate offers while items are scanned, but those offers are **only committed during `pay()`**.
 - **`pay()` is a fixed orchestration sequence,** with a blocking callback after each loyalty/stored-value step so the register can update its own model and recompute tax, then return the total that feeds the next step. The shape is fixed, but steps are conditional: loyalty (rebates + points) runs only for identified members and can be disabled via `PaymentOptions`, the stored-value step only runs when a gift card has been registered with `setStoredValueCard`, and card payment runs whenever an amount remains.
 - **Errors and aborts roll back cleanly.** If a step fails or `abort()` is called mid-sequence, everything already committed (rebates, points, stored value) is reversed in the opposite order before the session moves to `FAILED` / `ABORTED`.
@@ -88,7 +96,7 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 | `onSuccess` | No-op (the result is still available via `.get()`). |
 | `onError` | `PaymentOptions.voidAndAbort()` — roll back and fail the payment. |
 
-**Abort / error rollback.** If `abort()` fires mid-sequence (e.g. after rebates committed but before card payment), the session reverses everything committed so far — rebate refunds, redemption refunds, stored-value reversals — before moving to `ABORTED`. On error the `PaymentOptions` returned by `onError` decides what happens next:
+**Abort / error rollback.** If `abort()` fires mid-sequence (e.g. after rebates committed but before card payment), the session reverses everything committed so far — rebate refunds, redemption refunds, stored-value reversals — before moving to `ABORTED`. `abort()` is safe to call from any thread. On error the `PaymentOptions` returned by `onError` decides what happens next:
 
 - `PaymentOptions.voidAndAbort()` (the default) — roll back committed steps in reverse order and fail; the session moves to `FAILED`, from which `pay()` can be retried.
 - `PaymentOptions.retryWithoutLoyalty()` — roll back the loyalty steps and restart the sequence with rebates and points disabled.
@@ -114,6 +122,39 @@ Notes:
 - From `FAILED` the register can retry `pay()` directly, keep editing the basket (back to `ACTIVE`), or `voidTransaction()`.
 - `voidTransaction()` runs from `COMPLETED` (or `FAILED`); if the void itself fails, the session is restored to its pre-void state so it can be retried.
 - `COMPLETED`, `VOIDED`, and `ABORTED` are terminal. `getState()` reports the current `SessionState`; the basket is frozen while `PAYING`.
+
+---
+
+## Create a session
+
+```java
+CheckoutSession session = CheckoutSession.builder()
+    .client(client)                       // required
+    .saleId("POS-LANE-3")                 // required — your POS identifier (SaleID)
+    .poiId("VictaLane-275839164")         // required — target terminal (POIID)
+    .currency("USD")                      // required
+    .storeLocation("STR-0142")            // optional — sent as SaleTerminalData.TotalsGroupID
+    .build();
+```
+
+A session represents one checkout. Create a new session per transaction; sessions are intended for use from a single register thread (`abort()` may be called from any thread).
+
+### Lazy execution
+
+Every terminal operation is **lazy**: methods returning a `SessionResult` or `PaymentFlow` send nothing until you invoke one of the terminal methods:
+
+- `execute()` — run and deliver the outcome to the registered `onSuccess`/`onError` handlers;
+- `get()` — run and return the value, throwing `SessionException` on failure;
+- `getOrNull()` — like `get()`, but returns `null` on failure.
+
+Always end a fluent chain with one of these — a chain without them never reaches the terminal:
+
+```java
+session.requestConfirmation("Would you like a receipt?")
+    .onSuccess(confirmed -> { if (confirmed) register.printReceipt(); })
+    .onError(e -> register.showError(e.getMessage()))
+    .execute();
+```
 
 ---
 
@@ -223,6 +264,8 @@ session.pay()
 
 ```java
 session.setStoredValueCard("6006491260550218157");
+// or, for scanned/swiped cards and provider routing:
+session.setStoredValueCard(StoredValueCard.scanned("6006491260550218157").withProvider("givex"));
 session.pay()
     .onGiftCardPayment(gc -> {
         register.showMessage("Gift card: -$" + gc.getAmountCharged()
@@ -240,34 +283,7 @@ session.pay()
 
 When the gift card balance is insufficient, the charge is a partial authorization and the remainder flows to the card payment step.
 
-### Variant: refund
-
-Linked refunds require `poiTransactionId` / `poiTransactionTimestamp` on the builder and also reverse loyalty points awarded on the original transaction (best-effort). Unlinked refunds are payment-only — no loyalty reversal.
-
-```java
-CheckoutSession refundSession = CheckoutSession.builder()
-    .client(client)
-    .saleId("POS-LANE-3")
-    .poiId("VictaLane-275839164")
-    .currency("USD")
-    .storeLocation("STR-0142")
-    .poiTransactionId("POI-TXN-0099")
-    .poiTransactionTimestamp(Instant.parse("2026-04-30T14:15:05Z"))
-    .build();
-
-// Partial linked refund
-refundSession.refund(new BigDecimal("24.99"))
-    .onSuccess(result -> {
-        register.printRefundReceipt(result);
-        if (result.getPointsReversed() > 0) {
-            register.showMessage(result.getPointsReversed() + " points reversed");
-        }
-    })
-    .onError(error -> register.showError(error.getMessage()))
-    .execute();
-```
-
-### Variant: retry without loyalty, then void
+### Variant: retry without loyalty
 
 ```java
 session.pay()
@@ -281,6 +297,148 @@ session.pay()
         return PaymentOptions.voidAndAbort();
     })
     .execute();
+```
+
+---
+
+## Identify a member
+
+```java
+session.identifyMember()                     // terminal prompts the customer
+    .onSuccess(member -> {
+        if (member.getStatus() == IdentifyStatus.FOUND) {
+            register.showMember(member.getMemberId());
+            register.showRewards(member.getRewards());
+        }
+        // NOT_FOUND / CANCELLED / SUSPENDED → guest checkout, no action needed
+    })
+    .onError(error -> register.showError(error.getMessage()))
+    .execute();
+```
+
+Identification is optional — the flow works for guests. Outcomes that simply leave the checkout without a member (`NOT_FOUND`, `SUSPENDED`, `CANCELLED`) are delivered to `onSuccess` with the corresponding `IdentifyStatus`; `onError` fires only for real failures.
+
+For a POS-driven lookup without a terminal prompt (identifier already on file):
+
+```java
+session.identifyMember(MemberIdentifier.phoneNumber("555-867-5309")).execute();
+```
+
+---
+
+## Build the basket
+
+The session owns the basket. Adding an item whose SKU is already present increments its quantity (upsert). With `autoDisplay` (default on), every change refreshes the customer display with an itemised virtual receipt.
+
+```java
+Basket basket = session.addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+register.setTotal(basket.getGrandTotal());   // 49.98
+
+session.addItem(BasketItem.of("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99"));
+
+// Tax — item-level rate, item-level fixed amount, or basket-level override
+session.setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
+session.setTaxAmountBySku("KRK-FRAME-5X7-BLK", new BigDecimal("2.50"));
+// session.setTaxTotal(new BigDecimal("7.98"));   // overrides item-level computation
+
+// Batch changes with a single display update
+session.mutate(m -> m
+    .updateItemQuantityBySku("KRK-CNDL-LRG-VAN", 3)
+    .removeItemBySku("KRK-FRAME-5X7-BLK"));
+```
+
+**Tax computation rules:** explicit item `taxAmount` wins; else item `taxRate` × `originalTotal`; else $0. `basket.taxTotal` is the sum of item amounts unless `setTaxTotal()` overrides it. `grandTotal = originalTotal + taxTotal`.
+
+---
+
+## Refund and void
+
+Linked refunds require `poiTransactionId` / `poiTransactionTimestamp` on the builder (or a payment completed in the same session) and also reverse loyalty points awarded on the original transaction (best-effort). Unlinked refunds are payment-only — no loyalty reversal.
+
+```java
+CheckoutSession refundSession = CheckoutSession.builder()
+    .client(client)
+    .saleId("POS-LANE-3")
+    .poiId("VictaLane-275839164")
+    .currency("USD")
+    .poiTransactionId("POI-TXN-0099")                              // from the original payment
+    .poiTransactionTimestamp(Instant.parse("2026-04-30T14:15:05Z"))
+    .build();
+
+refundSession.refund(new BigDecimal("24.99"))     // partial linked refund
+    .onSuccess(result -> {
+        register.printRefundReceipt(result);
+        if (result.getPointsReversed() > 0) {
+            register.showMessage(result.getPointsReversed() + " points reversed");
+        }
+    })
+    .onError(error -> register.showError(error.getMessage()))
+    .execute();
+```
+
+- `refund()` / `refund(amount)` — linked refunds; also reverse loyalty points awarded on the original transaction (best-effort).
+- `refundUnlinked(amount)` — payment-only, no loyalty reversal.
+- `voidTransaction()` — reverses a completed transaction (nexo `ReversalRequest` + loyalty award reversal). On a session that just completed a payment, the transaction reference is remembered — no builder fields needed. A checkout fully covered by rewards has no payment to reverse; voiding it refunds the committed loyalty movements (redemption, rebate, award) instead.
+
+---
+
+## Stored value card operations
+
+Beyond split-tender payment, the session covers the full gift card lifecycle (see the wire-level guides: [activate](./gift-card-activate.md), [load](./gift-card-load.md), [deactivate](./gift-card-deactivate.md), [balance](./gift-card-balance-inquiry.md)):
+
+```java
+StoredValueCard card = StoredValueCard.scanned("6006491260550218157").withProvider("givex");
+
+session.storedValueBalance(card).onSuccess(b -> register.show(b.getBalance())).execute();
+session.storedValueActivate(card, new BigDecimal("25.00")).execute();  // ZERO activates empty
+session.storedValueLoad(card, new BigDecimal("10.00")).execute();
+session.storedValueUnload(card, new BigDecimal("5.00")).execute();     // cash-out
+session.storedValueDeactivate(card).execute();                         // permanent
+
+// Reverse a prior stored value operation by its terminal reference
+session.storedValueReverse(result.getPoiTransactionId(), result.getPoiTransactionTimestamp()).execute();
+```
+
+`storedValueReserve(...)` and `storedValueDuplicate(...)` complete the nexo verb set; provider support for reserve, duplicate, and deactivate varies — confirm with your stored value provider.
+
+---
+
+## Customer input and display
+
+The session wraps the nexo input operations (see [Collect input](./input-request.md) for the underlying messages):
+
+```java
+session.requestDigitString("Enter your zip code").onSuccess(zip -> ...).execute();
+session.requestDecimalString("Enter tip amount").onSuccess(tip -> ...).execute();
+session.requestConfirmation("Print receipt?", ConfirmationOptions.withButtons("Print", "No thanks")).execute();
+session.requestMenuEntry("Select tip", List.of("15%", "18%", "20%", "No tip")).execute();
+session.requestSignature("Please sign below").onSuccess(sig -> ...).execute();
+session.requestAmountConfirmation(basket.getGrandTotal(), "Confirm total").execute();
+session.requestPinEntry(PinOptions.builder().timeout(Duration.ofSeconds(30)).build()).execute();
+```
+
+`updateDisplay(basket)` refreshes the itemised receipt manually; `updateDisplay(payload)` sends a custom [display payload](./display-helpers.md). Display is best-effort and never interrupts a checkout.
+
+While an input prompt is awaiting a response, `updateInputDisplay(payload)` — safe from another thread, like `abort()` — replaces its display content (nexo `InputUpdate`). `playSound("chime-approved", 80)` / `stopSound()` drive the terminal speaker, and `getTotals()` returns the running totals since the last reconciliation without closing the period.
+
+---
+
+## External display
+
+Setting an external display client routes all display/input calls (`updateDisplay`, `requestConfirmation`, etc.) to a separate screen driven by its own client, while payment, card read, and PIN entry still go to the terminal. The external display client runs on the machine the display is attached to (the register or another device).
+
+```java
+CheckoutSession session = CheckoutSession.builder()
+    .client(client)
+    .saleId("POS-LANE-3")
+    .poiId("VictaLane-275839164")
+    .externalDisplayClient(externalDisplayClient)
+    .currency("USD")
+    .storeLocation("STR-0142")
+    .build();
+
+session.updateDisplay(basket);            // goes to the external display
+session.updateDisplay(promotionalPayload);
 ```
 
 ---
@@ -308,34 +466,13 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | Collect customer input | `requestConfirmation / requestDigitString / requestMenuEntry / ...` |
 | Drop to raw nexo | `session.getClient()` |
 
-**Tax computation rules:** explicit item `taxAmount` wins; else item `taxRate` × `originalTotal`; else $0. `basket.taxTotal` is the sum of item amounts unless `setTaxTotal()` overrides it. `grandTotal = originalTotal + taxTotal`.
-
 **Upsert:** `addItem` with a SKU already in the basket increments its quantity. Use `updateItemQuantityBySku` to set an absolute quantity.
-
----
-
-## External display
-
-Setting an external display client routes all display/input calls (`updateDisplay`, `requestConfirmation`, etc.) to a separate screen driven by its own client, while payment, card read, and PIN entry still go to the terminal. The external display client runs on the machine the display is attached to (the register or another device).
-
-```java
-CheckoutSession session = CheckoutSession.builder()
-    .client(client)
-    .saleId("POS-LANE-3")
-    .poiId("VictaLane-275839164")
-    .externalDisplayClient(externalDisplayClient)
-    .currency("USD")
-    .storeLocation("STR-0142")
-    .build();
-
-session.updateDisplay(basket);            // goes to the external display
-session.updateDisplay(promotionalPayload);
-```
 
 ---
 
 ## Next steps
 
-- [CheckoutSession API guide](./checkout-session.md) — method-by-method walkthrough: identification, basket, payment, refunds, stored value, input, and device operations.
 - [Integration Guide](./integration.md) — the underlying client, certificates, and raw nexo messages.
 - [Make a payment](./make-payment.md) — the wire-level payment exchange the session drives for you.
+- [Identify a loyalty member](./loyalty-identify-member.md) — wire-level identification details.
+- [Receipt helpers](./receipt-helpers.md) — working with the structured receipt data on results.
