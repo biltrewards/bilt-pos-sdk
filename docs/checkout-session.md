@@ -7,6 +7,8 @@ Drive a full loyalty-enabled checkout — member identification, basket manageme
 
 `CheckoutSession` sits on top of [`BiltNexoTerminalClient`](./integration.md). Every operation maps to standard nexo 3.0 messages, and the raw client stays available via `session.getClient()` for anything the session does not cover.
 
+This page is the method-by-method walkthrough. For the concepts, the end-to-end flow, and a complete register integration, start with the [CheckoutSession Integration Guide](./checkout-session-integration.md).
+
 ---
 
 ## Before you begin
@@ -271,6 +273,7 @@ abort() → ABORTED (from any non-terminal state)
 
 ## Next steps
 
+- [CheckoutSession Integration Guide](./checkout-session-integration.md) — concepts, payment sequence, state machine, and a full register integration example.
 - [Integration Guide](./integration.md) — the underlying client and raw nexo messages.
 - [Make a payment](./make-payment.md) — the wire-level payment exchange the session drives for you.
 - [Identify a loyalty member](./loyalty-identify-member.md) — wire-level identification details.

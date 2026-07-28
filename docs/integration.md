@@ -313,6 +313,7 @@ Each message category has a dedicated request and response type set on the `Sale
 
 ## Next steps
 
+- [CheckoutSession Integration Guide](./checkout-session-integration.md) — concepts, end-to-end flow, and a complete register integration using the high-level session API.
 - [CheckoutSession](./checkout-session.md) — high-level checkout API: basket, loyalty, split tender, and payment orchestration over this client.
 - [Make a payment](./make-payment.md) — full payment request/response details.
 - [Cancel, reverse, or refund a payment](./undo-payment.md) — overview of all options for undoing a payment.
