@@ -262,8 +262,13 @@ public final class PaymentOrchestrator {
         // a rollback request, not an award failure.
         checkAbort(request);
 
+        // cashback rides on the card authorization but is not part of the sale
+        BigDecimal netCharged = storedValueCharged.add(cardCharged);
+        if (options.getCashback() != null) {
+            netCharged = netCharged.subtract(options.getCashback());
+        }
         Basket finalBasket = withPaymentTotals(workingBasket, rebateTotal, pointsValue,
-                storedValueCharged, cardCharged);
+                storedValueCharged, cardCharged, netCharged);
 
         // 6. Final display (best-effort)
         try {
@@ -863,13 +868,22 @@ public final class PaymentOrchestrator {
 
     private static Basket withPaymentTotals(Basket basket, BigDecimal rebateTotal,
                                             BigDecimal pointsValue, BigDecimal storedValue,
-                                            BigDecimal cardPayment) {
+                                            BigDecimal cardPayment, BigDecimal netCharged) {
+        // step handlers may recompute tax on discounted amounts, and that
+        // recalculated total is what the tenders actually charged. The final
+        // basket must reconcile with the money moved, so the effective tax is
+        // derived from the charges: netCharged = (goods − rebates) + tax −
+        // points. With no handler adjustments this is exactly the original
+        // taxTotal.
+        BigDecimal effectiveTax = netCharged
+                .subtract(basket.getOriginalTotal().subtract(rebateTotal))
+                .add(pointsValue);
         return Basket.builder()
                 .cartId(basket.getCartId())
                 .items(basket.getItems())
                 .originalTotal(basket.getOriginalTotal())
-                .taxTotal(basket.getTaxTotal())
-                .grandTotal(basket.getGrandTotal())
+                .taxTotal(effectiveTax)
+                .grandTotal(basket.getOriginalTotal().add(effectiveTax))
                 .rebateTotal(rebateTotal)
                 .pointDiscountTotal(pointsValue)
                 .storedValueTotal(storedValue)

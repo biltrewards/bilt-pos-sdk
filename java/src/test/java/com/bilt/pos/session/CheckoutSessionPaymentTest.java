@@ -302,6 +302,38 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void finalBasketReflectsHandlerRecalculatedTax() throws Exception {
+        identifyMember();
+        session.addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
+        session.setTaxRateBySku("SKU-1", new BigDecimal("0.08"));  // grand 108.00
+
+        server.enqueue(new MockResponse().setBody(REBATE_OK));                    // -10.00
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));                    // -5.00
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 92.20)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+        CheckoutResult result = session.pay()
+                .onRebatesRedeemed(rebates -> {
+                    // tax-on-discounted-price jurisdiction: 90.00 × 0.08 = 7.20
+                    return new BigDecimal("90.00").add(new BigDecimal("7.20"));
+                })
+                .get();
+
+        assertEquals(0, new BigDecimal("92.20").compareTo(result.getCardAmountCharged()));
+        // the final basket must reconcile with the money actually moved
+        assertEquals(0, new BigDecimal("7.20").compareTo(
+                result.getFinalBasket().getTaxTotal()),
+                "the recalculated tax must reach the final basket");
+        assertEquals(0, new BigDecimal("107.20").compareTo(
+                result.getFinalBasket().getGrandTotal()));
+        // display identity: grand − rebates − points == amount charged
+        assertEquals(0, result.getFinalBasket().getGrandTotal()
+                .subtract(result.getFinalBasket().getRebateTotal())
+                .subtract(result.getFinalBasket().getPointDiscountTotal())
+                .compareTo(result.getCardAmountCharged()));
+    }
+
+    @Test
     void beforeStepControlsSaleTransactionIds() throws Exception {
         identifyMember();
         addHundredDollarItem();
