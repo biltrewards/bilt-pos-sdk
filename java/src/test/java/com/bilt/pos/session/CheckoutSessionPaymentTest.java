@@ -243,8 +243,9 @@ class CheckoutSessionPaymentTest {
                 .getLoyaltyTransaction().getTotalAmount());
         assertEquals("Redemption", requests.get(1).getLoyaltyRequest()
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
-        assertEquals(89.50, requests.get(1).getLoyaltyRequest()
-                .getLoyaltyTransaction().getTotalAmount());
+        assertEquals(90.00, requests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getTotalAmount(),
+                "loyalty TotalAmount is the item sum (rebate-adjusted), not the running total");
         assertNotNull(requests.get(1).getLoyaltyRequest().getSaleData().getSaleToPOIData(),
                 "redemption must carry the rewardRefs payload");
         assertEquals(84.50, requests.get(2).getPaymentRequest()
@@ -253,6 +254,18 @@ class CheckoutSessionPaymentTest {
                 .getSaleItem()[0].getItemAmount(), "card step sends rebate-adjusted items");
         assertEquals("Award", requests.get(3).getLoyaltyRequest()
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+
+        // contract: every loyalty request's TotalAmount equals its item sum
+        for (int i : new int[] {0, 1, 3}) {
+            double itemSum = 0;
+            for (com.bilt.pos.nexo.model.SaleItem item : requests.get(i)
+                    .getLoyaltyRequest().getLoyaltyTransaction().getSaleItem()) {
+                itemSum += item.getItemAmount();
+            }
+            assertEquals(itemSum, requests.get(i).getLoyaltyRequest()
+                    .getLoyaltyTransaction().getTotalAmount(), 0.001,
+                    "TotalAmount must equal the SaleItem sum (request " + i + ")");
+        }
     }
 
     @Test

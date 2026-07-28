@@ -246,8 +246,7 @@ public final class PaymentOrchestrator {
             checkAbort(request);
             String saleTxnId = beforeStep(request, TransactionStep.AWARD,
                     workingBasket, storedValueCharged.add(cardCharged), committed);
-            awardStep(request, workingBasket, storedValueCharged.add(cardCharged),
-                    saleTxnId, committed, result);
+            awardStep(request, workingBasket, saleTxnId, committed, result);
         }
 
         // An abort that landed during the award must still unwind the money
@@ -293,7 +292,7 @@ public final class PaymentOrchestrator {
     private RebateOutcome rebateStep(Request request, Basket basket, BigDecimal currentTotal,
                                      String saleTxnId, List<Commit> committed) {
         LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.REBATE, request, basket,
-                currentTotal, saleTxnId, null);
+                saleTxnId, null);
 
         List<RedeemedRebate> rebates = new ArrayList<>();
         BigDecimal totalRebate = BigDecimal.ZERO;
@@ -341,7 +340,7 @@ public final class PaymentOrchestrator {
             }
         }
         LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.REDEMPTION, request, basket,
-                currentTotal, saleTxnId, LoyaltyPayloadCodec.encodeRewardRefs(rewardRefs));
+                saleTxnId, LoyaltyPayloadCodec.encodeRewardRefs(rewardRefs));
 
         LoyaltyResult first = firstResult(body);
         BigDecimal monetaryValue = BigDecimal.ZERO;
@@ -514,12 +513,12 @@ public final class PaymentOrchestrator {
         }
     }
 
-    private void awardStep(Request request, Basket basket, BigDecimal totalPaid,
+    private void awardStep(Request request, Basket basket,
                            String saleTxnId, List<Commit> committed,
                            CheckoutResult.Builder result) {
         try {
             LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.AWARD, request, basket,
-                    totalPaid, saleTxnId, null);
+                    saleTxnId, null);
             // an abort observed after this point unwinds the tender — the
             // credited points must be reversed with it, like void does
             TransactionIdentificationType awardPoiTxn = poiRef(body.getPoiData());
@@ -561,7 +560,7 @@ public final class PaymentOrchestrator {
     // ─── Wire plumbing ───
 
     private LoyaltyResponse sendLoyalty(LoyaltyTransactionTypeEnum type, Request request,
-                                        Basket basket, BigDecimal totalAmount, String saleTxnId,
+                                        Basket basket, String saleTxnId,
                                         String saleToPoiData) {
         SaleData.Builder saleData = SaleData.builder()
                 .saleTransactionID(TransactionIdentificationType.builder()
@@ -571,14 +570,21 @@ public final class PaymentOrchestrator {
         if (saleToPoiData != null) {
             saleData.saleToPOIData(saleToPoiData);
         }
+        List<SaleItem> saleItems = SaleItemMapper.toAdjustedSaleItems(basket);
+        // contract: TotalAmount must equal the sum of SaleItem[].ItemAmount —
+        // derive it from the items sent rather than the tax-inclusive running
+        // total, which diverges once tax or point discounts apply
+        BigDecimal itemSum = BigDecimal.ZERO;
+        for (BasketLineItem line : basket.getItems()) {
+            itemSum = itemSum.add(line.getAdjustedTotal());
+        }
         LoyaltyRequest.Builder loyaltyRequest = LoyaltyRequest.builder()
                 .saleData(saleData.build())
                 .loyaltyTransaction(LoyaltyTransaction.builder()
                         .loyaltyTransactionType(type)
                         .currency(currency)
-                        .totalAmount(totalAmount.doubleValue())
-                        .saleItem(SaleItemMapper.toAdjustedSaleItems(basket)
-                                .toArray(new SaleItem[0]))
+                        .totalAmount(itemSum.doubleValue())
+                        .saleItem(saleItems.toArray(new SaleItem[0]))
                         .build())
                 .loyaltyData(new LoyaltyData[] {LoyaltyData.builder()
                         .loyaltyAccountID(LoyaltyAccountID.builder()
