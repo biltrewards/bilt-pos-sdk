@@ -87,8 +87,10 @@ public final class LoyaltyPayloadCodec {
         }
         List<EarnedReward> earned = new ArrayList<>();
         for (JsonNode node : list) {
-            String description = text(node, "description") != null
-                    ? text(node, "description") : text(node, "name");
+            String description = text(node, "description");
+            if (description == null) {
+                description = text(node, "name");
+            }
             earned.add(new EarnedReward(
                     RewardType.fromWire(text(node, "type")),
                     description,
@@ -155,7 +157,11 @@ public final class LoyaltyPayloadCodec {
     }
 
     private static JsonNode decode(String base64) {
-        if (base64 == null || base64.isEmpty()) {
+        if (base64 == null || base64.isEmpty() || !plausiblyBase64(base64)) {
+            // AdditionalResponse also legitimately carries the form-encoded
+            // convention (promotionalMessage=..., currentBalance=...); that
+            // shape is not an error and must not attempt a decode, which
+            // would log a warning on every response that uses it
             return null;
         }
         try {
@@ -165,6 +171,19 @@ public final class LoyaltyPayloadCodec {
             LOGGER.log(Level.WARNING, "unparseable loyalty payload", e);
             return null;
         }
+    }
+
+    /** Base64 alphabet throughout, with {@code =} only as trailing padding. */
+    private static boolean plausiblyBase64(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            boolean base64Char = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9') || c == '+' || c == '/';
+            if (!base64Char && !(c == '=' && i >= value.length() - 2)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static String encode(ObjectNode node) {

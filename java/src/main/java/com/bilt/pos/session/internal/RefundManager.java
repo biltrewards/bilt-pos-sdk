@@ -232,12 +232,12 @@ public final class RefundManager {
         // the substance of the void, the terminal can retry loyalty via
         // SAF, and a failed refund must not strand a half-voided tender
         LoyaltyLegs legs = loyaltyLegs == null ? LoyaltyLegs.NONE : loyaltyLegs;
-        String memberId = loyaltyRef == null ? null : loyaltyRef.memberId;
+        LoyaltyRef ref = loyaltyRef == null ? LoyaltyRef.NONE : loyaltyRef;
         bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
                 legs.redemptionPoiTxnId, legs.redemptionPoiTimestamp,
-                memberId, legs.rewardRefsPayload);
+                ref.memberId, legs.rewardRefsPayload);
         bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum.REBATE_REFUND,
-                legs.rebatePoiTxnId, legs.rebatePoiTimestamp, memberId, null);
+                legs.rebatePoiTxnId, legs.rebatePoiTimestamp, ref.memberId, null);
 
         LoyaltyReversal loyalty = awardRefund(loyaltyRef,
                 cardPoiTxnId != null ? cardPoiTxnId : storedValuePoiTxnId,
@@ -333,22 +333,25 @@ public final class RefundManager {
     }
 
     /**
-     * A loyalty-movement refund that accompanies a reversed tender: logged
-     * on failure, never thrown — the terminal can retry loyalty via SAF.
-     * No-op without a reference.
+     * A loyalty refund that accompanies a money movement: logged on
+     * failure, never thrown — the terminal can retry loyalty via SAF.
+     * No-op without a reference. Returns the response, or {@code null}
+     * when skipped or failed.
      */
-    private void bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum refundType,
-                                         String originalPoiTxnId, Instant originalPoiTimestamp,
-                                         String memberId, String rewardRefsPayload) {
+    private LoyaltyResponse bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum refundType,
+                                                    String originalPoiTxnId,
+                                                    Instant originalPoiTimestamp,
+                                                    String memberId, String rewardRefsPayload) {
         if (originalPoiTxnId == null) {
-            return;
+            return null;
         }
         try {
-            loyaltyRefund(refundType, originalPoiTxnId, originalPoiTimestamp,
+            return loyaltyRefund(refundType, originalPoiTxnId, originalPoiTimestamp,
                     memberId, rewardRefsPayload);
         } catch (SessionException e) {
             LOGGER.log(Level.WARNING, refundType
-                    + " failed during void (terminal may retry via SAF): " + e.getError(), e);
+                    + " failed (terminal may retry via SAF): " + e.getError(), e);
+            return null;
         }
     }
 
@@ -471,15 +474,9 @@ public final class RefundManager {
                 ? ref.awardPoiTransactionId : paymentPoiTxnId;
         Instant originalPoiTimestamp = ref.awardPoiTransactionId != null
                 ? ref.awardPoiTransactionTimestamp : paymentPoiTimestamp;
-        try {
-            return parseReversal(loyaltyRefund(LoyaltyTransactionTypeEnum.AWARD_REFUND,
-                    originalPoiTxnId, originalPoiTimestamp, ref.memberId, null));
-        } catch (SessionException e) {
-            LOGGER.log(Level.WARNING,
-                    "loyalty award reversal failed (terminal may retry via SAF): "
-                            + e.getError(), e);
-            return NO_REVERSAL;
-        }
+        LoyaltyResponse body = bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum.AWARD_REFUND,
+                originalPoiTxnId, originalPoiTimestamp, ref.memberId, null);
+        return body == null ? NO_REVERSAL : parseReversal(body);
     }
 
     // ─── Internals ───
@@ -492,10 +489,9 @@ public final class RefundManager {
     private static SessionException partialUnwind(String doneLabel, String doneId,
                                                   String pendingLabel, String pendingId,
                                                   SessionException cause) {
-        return new SessionException(new SessionError(cause.getError().getCode(),
+        return new SessionException(Wire.annotated(cause.getError(),
                 doneLabel + " " + doneId + " was reversed but " + pendingLabel + " "
-                        + pendingId + " was not: " + cause.getError().getMessage(),
-                cause.getError().getNexoErrorCondition(), cause));
+                        + pendingId + " was not: " + cause.getError().getMessage(), cause));
     }
 
     private static OriginalPOITransaction originalTransaction(String poiTxnId, Instant timestamp) {

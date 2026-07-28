@@ -89,9 +89,10 @@ import jakarta.xml.bind.JAXBException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -166,9 +167,22 @@ public final class CheckoutSession {
     private volatile IdentifyResult member;
     private volatile StoredValueCard storedValueCard;
     private volatile LastPayment lastPayment = LastPayment.NONE;
+    // Progress and guard flags scoped to the CURRENT VOID TARGET (the
+    // builder reference, or lastPayment for session-fallback voids):
+    //  - voidCardLegReversed / voidRedemptionLegReversed record partial-void
+    //    progress so a retry resumes at the leg still standing. They never
+    //    go stale across payments: a failed void restores COMPLETED, from
+    //    which pay() is blocked.
+    //  - refundIssued blocks voidTransaction() once a refund was issued
+    //    against the target; it is reset when a new completed payment
+    //    replaces the session-fallback target (see executePayment).
     private volatile boolean voidCardLegReversed;
     private volatile boolean voidRedemptionLegReversed;
     private volatile boolean refundIssued;
+    // Non-empty = "FAILED with an incomplete rollback", a substate that
+    // restricts FAILED's transitions at five sites (see rollbackIncomplete()
+    // callers). If this lifecycle grows further, promote it to an explicit
+    // SessionState instead of adding a sixth guard.
     private volatile List<PaymentOrchestrator.StandingMovement> standingMovements = List.of();
 
     private CheckoutSession(Builder builder) {
@@ -379,7 +393,7 @@ public final class CheckoutSession {
             // atomic: a mutation (or batch) that throws restores the basket,
             // and the state transitions below only run on success
             basketEngine.mutateAtomically(mutation);
-            if (state == SessionState.FAILED && standingMovements.isEmpty()) {
+            if (state == SessionState.FAILED && !rollbackIncomplete()) {
                 // a fully-unwound failed payment resumes the checkout on an
                 // edit (e.g. dropping an item before a retry). While the
                 // rollback is incomplete the session stays FAILED — ACTIVE
@@ -668,9 +682,8 @@ public final class CheckoutSession {
     private void requireNotEnded(String operationName) {
         SessionState state = stateMachine.current();
         if (state.isTerminal()) {
-            throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
-                    operationName + " is not allowed after the session has ended (state "
-                            + state + ")"));
+            throw invalidState(operationName
+                    + " is not allowed after the session has ended (state " + state + ")");
         }
     }
 
@@ -816,13 +829,14 @@ public final class CheckoutSession {
     public PaymentFlow pay(PaymentOptions options) {
         Objects.requireNonNull(options, "options");
         SessionState state = stateMachine.current();
-        // the state check alone is not enough: a FAILED session with an
+        if (state != SessionState.ACTIVE && state != SessionState.FAILED) {
+            throw new IllegalStateException("pay() is not allowed in state " + state);
+        }
+        // the state alone does not imply items: a FAILED session with an
         // incomplete rollback keeps its state across edits, so the basket
-        // can be empty here even though the state says otherwise
-        if ((state != SessionState.ACTIVE && state != SessionState.FAILED)
-                || basketEngine.isEmpty()) {
-            throw new IllegalStateException(
-                    "pay() requires items in the basket (state " + state + ")");
+        // can be empty here
+        if (basketEngine.isEmpty()) {
+            throw new IllegalStateException("pay() requires items in the basket");
         }
         trackUnexecuted("pay");
         return new PaymentFlow(flow -> executePayment(flow, options));
@@ -841,8 +855,7 @@ public final class CheckoutSession {
             // re-checked at execute time: the flow is lazy, and the basket
             // may have been emptied since pay() created it
             if (basketEngine.isEmpty()) {
-                throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
-                        "the basket is empty; a payment cannot start"));
+                throw invalidState("the basket is empty; a payment cannot start");
             }
             stateMachine.transitionTo(SessionState.PAYING);
             // the abort flag is scoped to a single payment run: a stale
@@ -859,7 +872,7 @@ public final class CheckoutSession {
         request.abortRequested = () -> abortRequested;
         // movements an incomplete unwind left standing are kept so that
         // voidTransaction() on the failed session can finish the reversal
-        request.onUnreversed = movements -> standingMovements = movements;
+        request.onUnreversed = movements -> standingMovements = List.copyOf(movements);
         request.finalDisplay = autoDisplay ? this::showBasket : basket -> { };
         request.handlers.beforeStep = flow.beforeStepHandler();
         request.handlers.onRebatesRedeemed = flow.rebatesHandler();
@@ -871,14 +884,13 @@ public final class CheckoutSession {
             // a previous run's incomplete rollback left movements standing:
             // finish that unwind before charging anew — a retry on top of
             // them would double-charge the tender or double-commit loyalty
-            if (!standingMovements.isEmpty()) {
+            if (rollbackIncomplete()) {
                 try {
                     drainStandingMovements();
                 } catch (SessionException e) {
-                    throw new SessionException(new SessionError(e.getError().getCode(),
+                    throw new SessionException(Wire.annotated(e.getError(),
                             "the previous payment's rollback is still incomplete; the "
-                                    + "retry did not start: " + e.getError().getMessage(),
-                            e.getError().getNexoErrorCondition(), e));
+                                    + "retry did not start: " + e.getError().getMessage(), e));
                 }
             }
             CheckoutResult result = paymentOrchestrator.run(request);
@@ -889,12 +901,11 @@ public final class CheckoutSession {
                 stateMachine.transitionTo(SessionState.COMPLETED);
                 lastPayment = new LastPayment(result);
                 if (poiTransactionId == null) {
-                    // the refund guard belongs to the void target. For a
-                    // session-fallback void this new payment IS the target
-                    // now, so refunds issued against the earlier attempt no
-                    // longer block its void; a builder-referenced session
-                    // keeps voiding the builder's transaction, so its guard
-                    // must persist
+                    // this payment replaced the session-fallback void
+                    // target, so the guard on the previous target lifts; a
+                    // builder-referenced target never changes, so its guard
+                    // persists (the leg-progress flags need no reset — see
+                    // the field declarations)
                     refundIssued = false;
                 }
             } finally {
@@ -912,7 +923,7 @@ public final class CheckoutSession {
             // voidTransaction() (and a draining retry) available; the error
             // still carries the ABORTED code and the movements standing.
             boolean cleanlyAborted = e.getError().getCode() == SessionErrorCode.ABORTED
-                    && standingMovements.isEmpty();
+                    && !rollbackIncomplete();
             transitionLocked(cleanlyAborted ? SessionState.ABORTED : SessionState.FAILED);
             throw e;
         } catch (RuntimeException e) {
@@ -962,11 +973,8 @@ public final class CheckoutSession {
             requireRefundable("refundUnlinked");
             RefundResult result = refundManager.refund(
                     amount, null, null, RefundManager.LoyaltyRef.NONE);
-            // an unlinked refund issued through a checkout session is
-            // almost certainly returning this checkout's money (e.g. the
-            // original card is unavailable); a later void would return the
-            // full amount on top of it, so it blocks the void the same way
-            // a linked refund does — further returns keep using refunds
+            // counts like a linked refund: through a checkout session it is
+            // almost certainly returning this checkout's money
             refundIssued = true;
             return result;
         });
@@ -977,15 +985,11 @@ public final class CheckoutSession {
             requireRefundable("refund");
             String originalId = effectivePoiTransactionId();
             if (originalId == null) {
-                throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
-                        "a linked refund requires poiTransactionId on the session builder "
-                                + "or a completed payment in this session"));
+                throw invalidState("a linked refund requires poiTransactionId on the "
+                        + "session builder or a completed payment in this session");
             }
             RefundResult result = refundManager.refund(amount, originalId,
                     effectivePoiTransactionTimestamp(), loyaltyRef());
-            // once refunded, the payment must not also be voided: a reversal
-            // returns the FULL amount on top of what the refunds already
-            // returned. Further partial returns keep using refund().
             refundIssued = true;
             return result;
         });
@@ -1066,24 +1070,27 @@ public final class CheckoutSession {
             String originalId = effectivePoiTransactionId();
             // a failed payment whose rollback was incomplete left movements
             // standing; voiding that session means finishing the unwind
-            boolean resumeRollback = !standingMovements.isEmpty();
-            if (!resumeRollback && refundIssued) {
-                throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
-                        "the payment was already refunded from this session; a void would "
-                                + "return the full amount on top of the refund — use "
-                                + "refund(amount) for further returns"));
-            }
-            // a checkout fully covered by rewards completes without a payment
-            // leg: there is no transaction to reverse, so the void refunds
-            // the committed loyalty movements instead
-            boolean loyaltyOnly = !resumeRollback && originalId == null
-                    && (lastPayment.redemptionPoiTransactionId != null
-                            || lastPayment.rebatePoiTransactionId != null
-                            || lastPayment.awardPoiTransactionId != null);
-            if (originalId == null && !loyaltyOnly && !resumeRollback) {
-                throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
-                        "voidTransaction requires poiTransactionId on the session builder "
-                                + "or a completed payment in this session"));
+            boolean resumeRollback = rollbackIncomplete();
+            boolean loyaltyOnly = false;
+            if (!resumeRollback) {
+                if (refundIssued) {
+                    throw invalidState(
+                            "the payment was already refunded from this session; a void "
+                                    + "would return the full amount on top of the refund — "
+                                    + "use refund(amount) for further returns");
+                }
+                // a checkout fully covered by rewards completes without a
+                // payment leg: there is no transaction to reverse, so the
+                // void refunds the committed loyalty movements instead
+                loyaltyOnly = originalId == null
+                        && (lastPayment.redemptionPoiTransactionId != null
+                                || lastPayment.rebatePoiTransactionId != null
+                                || lastPayment.awardPoiTransactionId != null);
+                if (originalId == null && !loyaltyOnly) {
+                    throw invalidState(
+                            "voidTransaction requires poiTransactionId on the session "
+                                    + "builder or a completed payment in this session");
+                }
             }
             SessionState stateBeforeVoid;
             lock.lock();
@@ -1100,8 +1107,13 @@ public final class CheckoutSession {
                 lock.unlock();
             }
             try {
-                VoidResult result = resumeRollback ? finishUnwind()
-                        : loyaltyOnly ? voidLoyaltyLegs() : voidPaymentLegs(originalId);
+                VoidResult result;
+                if (resumeRollback) {
+                    drainStandingMovements();
+                    result = VoidResult.builder().success(true).build();
+                } else {
+                    result = loyaltyOnly ? voidLoyaltyLegs() : voidPaymentLegs(originalId);
+                }
                 transitionLocked(SessionState.VOIDED);
                 return result;
             } catch (RuntimeException e) {
@@ -1139,17 +1151,6 @@ public final class CheckoutSession {
     }
 
     /**
-     * Finishes the unwind of a failed payment whose rollback was
-     * incomplete — the void form of {@link #drainStandingMovements()}.
-     */
-    private VoidResult finishUnwind() {
-        drainStandingMovements();
-        return VoidResult.builder()
-                .success(true)
-                .build();
-    }
-
-    /**
      * Re-runs each standing reversal in the unwind's own order, dropping
      * movements as they succeed so a failed attempt can be retried from the
      * first movement still standing.
@@ -1167,17 +1168,35 @@ public final class CheckoutSession {
             lock.unlock();
         }
         try {
-            while (!remaining.isEmpty()) {
-                remaining.get(0).reverse();
-                remaining.remove(0);
+            for (Iterator<PaymentOrchestrator.StandingMovement> it = remaining.iterator();
+                    it.hasNext(); ) {
+                it.next().reverse();
+                it.remove();
             }
         } finally {
             if (!remaining.isEmpty()) {
-                // a reversal failed: put the remainder back so a retry
-                // resumes at the first movement still standing
-                standingMovements = List.copyOf(remaining);
+                // a reversal failed: put the remainder back (under the same
+                // lock the claim used) so a retry resumes at the first
+                // movement still standing
+                lock.lock();
+                try {
+                    standingMovements = List.copyOf(remaining);
+                } finally {
+                    lock.unlock();
+                }
             }
         }
+    }
+
+    /** The previous payment's unwind left movements standing. */
+    private boolean rollbackIncomplete() {
+        return !standingMovements.isEmpty();
+    }
+
+    /** The uniform guard failure for operations the session cannot honor. */
+    private static SessionException invalidState(String message) {
+        return new SessionException(
+                new SessionError(SessionErrorCode.INVALID_STATE, message));
     }
 
     /**
@@ -1305,14 +1324,13 @@ public final class CheckoutSession {
         boolean needsDrain;
         lock.lock();
         try {
-            // the flag and the state change are made in ONE critical
-            // section so the reset a starting payment performs when it
-            // enters PAYING can never eat a live abort: either this abort
-            // ends the session before the payment starts, or the payment
-            // starts with a fresh flag and observes a later abort
+            // flag and state change share this critical section, so the
+            // reset a starting payment performs entering PAYING cannot eat
+            // a live abort. When a drain intervenes (below), the flag is
+            // re-asserted afterwards for the same reason.
             abortRequested = true;
             SessionState state = stateMachine.current();
-            needsDrain = state == SessionState.FAILED && !standingMovements.isEmpty();
+            needsDrain = state == SessionState.FAILED && rollbackIncomplete();
             if (!needsDrain) {
                 transitionToAbortedIfAllowed(state);
             }
@@ -1528,8 +1546,8 @@ public final class CheckoutSession {
         return operation("updateInputDisplay", () -> {
             NexoExchange.InFlight inFlight = exchange.currentInFlight();
             if (inFlight == null || inFlight.getCategory() != MessageCategoryType.INPUT) {
-                throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
-                        "updateInputDisplay requires an input request awaiting a response"));
+                throw invalidState(
+                        "updateInputDisplay requires an input request awaiting a response");
             }
             String base64;
             try {

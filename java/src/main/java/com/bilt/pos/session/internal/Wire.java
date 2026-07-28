@@ -65,6 +65,16 @@ public final class Wire {
                 "terminal response is missing " + what));
     }
 
+    /**
+     * The same error with more context: code and nexo condition are kept,
+     * only the message is replaced. Every annotation site must carry all
+     * error fields — this is the one place that knows which ones exist.
+     */
+    public static SessionError annotated(SessionError base, String message, Exception cause) {
+        return new SessionError(base.getCode(), message,
+                base.getNexoErrorCondition(), cause);
+    }
+
     /** The POI transaction reference of a response, or {@code null}. */
     public static TransactionIdentificationType poiRef(POIData poiData) {
         return poiData == null ? null : poiData.getPoiTransactionID();

@@ -61,7 +61,7 @@ public final class PaymentFlow {
     private CheckoutResult result;
     private SessionException failure;
     private RuntimeException unexpected;
-    private SessionError consultedError;
+    private boolean errorHandlerConsulted;
 
     PaymentFlow(Function<PaymentFlow, CheckoutResult> executor) {
         this.executor = executor;
@@ -171,7 +171,7 @@ public final class PaymentFlow {
             // ignored. ABORTED outcomes stay bypassed by design: the
             // register initiated the abort, and it must not surface as a
             // failure to resolve.
-            if (errorHandler != null && consultedError != e.getError()
+            if (errorHandler != null && !errorHandlerConsulted
                     && e.getError().getCode() != SessionErrorCode.ABORTED) {
                 errorHandler.apply(e.getError());
             }
@@ -224,7 +224,7 @@ public final class PaymentFlow {
             return null;
         }
         return error -> {
-            consultedError = error;
+            errorHandlerConsulted = true;
             return errorHandler.apply(error);
         };
     }

@@ -66,6 +66,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * Runs the payment sequence — rebate → points → stored value → card → award —
@@ -119,7 +120,7 @@ public final class PaymentOrchestrator {
         }
 
         /** Step name plus POI reference, for error messages. */
-        public String describe() {
+        String describe() {
             return info.getStep() + (info.getPoiTransactionId() != null
                     ? " (" + info.getPoiTransactionId() + ")" : "");
         }
@@ -822,15 +823,14 @@ public final class PaymentOrchestrator {
         if (unreversed.isEmpty()) {
             return error;
         }
-        List<String> descriptions = new ArrayList<>(unreversed.size());
-        for (StandingMovement movement : unreversed) {
-            descriptions.add(movement.describe());
-        }
-        return new SessionError(error.getCode(),
-                error.getMessage() + "; rollback incomplete — " + String.join(", ", descriptions)
+        String standing = unreversed.stream()
+                .map(StandingMovement::describe)
+                .collect(Collectors.joining(", "));
+        return Wire.annotated(error,
+                error.getMessage() + "; rollback incomplete — " + standing
                         + (unreversed.size() == 1 ? " is" : " are")
                         + " still standing and may require manual reconciliation",
-                error.getNexoErrorCondition(), error.getCause());
+                error.getCause());
     }
 
     private Runnable loyaltyRollback(LoyaltyTransactionTypeEnum refundType,
