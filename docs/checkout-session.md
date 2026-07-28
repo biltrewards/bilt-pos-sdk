@@ -27,7 +27,7 @@ CheckoutSession session = CheckoutSession.builder()
     .saleId("POS-LANE-3")                 // required — your POS identifier (SaleID)
     .poiId("VictaLane-275839164")         // required — target terminal (POIID)
     .currency("USD")                      // required
-    .storeLocation("STR-0142")            // optional
+    .storeLocation("STR-0142")            // optional — sent as SaleTerminalData.TotalsGroupID
     .build();
 ```
 

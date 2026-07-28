@@ -580,13 +580,9 @@ public final class PaymentOrchestrator {
     private LoyaltyResponse sendLoyalty(LoyaltyTransactionTypeEnum type, Request request,
                                         Basket basket, String saleTxnId,
                                         String saleToPoiData) {
-        SaleData.Builder saleData = SaleData.builder()
-                .saleTransactionID(TransactionIdentificationType.builder()
-                        .transactionID(saleTxnId)
-                        .timeStamp(Instant.now().toString())
-                        .build());
+        SaleData saleData = exchange.factory().saleData(saleTxnId);
         if (saleToPoiData != null) {
-            saleData.saleToPOIData(saleToPoiData);
+            saleData.setSaleToPOIData(saleToPoiData);
         }
         List<SaleItem> saleItems = SaleItemMapper.toAdjustedSaleItems(basket);
         // contract: TotalAmount must equal the sum of SaleItem[].ItemAmount —
@@ -613,7 +609,7 @@ public final class PaymentOrchestrator {
                     .build());
         }
         LoyaltyRequest.Builder loyaltyRequest = LoyaltyRequest.builder()
-                .saleData(saleData.build())
+                .saleData(saleData)
                 .loyaltyTransaction(LoyaltyTransaction.builder()
                         .loyaltyTransactionType(type)
                         .currency(currency)

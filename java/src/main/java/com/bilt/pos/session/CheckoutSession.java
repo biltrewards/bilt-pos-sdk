@@ -184,7 +184,8 @@ public final class CheckoutSession {
         this.displayRenderer = builder.displayRenderer != null
                 ? builder.displayRenderer : new BasketDisplayRenderer();
         this.onBasketUpdated = builder.onBasketUpdated;
-        this.factory = new NexoMessageFactory(builder.saleId, builder.poiId);
+        this.factory = new NexoMessageFactory(builder.saleId, builder.poiId,
+                builder.storeLocation);
         this.router = new DisplayRouter(builder.client, builder.externalDisplayClient);
         this.exchange = new NexoExchange(router, factory);
         this.identityManager = new IdentityManager(exchange);
@@ -1285,6 +1286,7 @@ public final class CheckoutSession {
                     .getTotalsRequest(GetTotalsRequest.builder()
                             .totalFilter(TotalFilter.builder()
                                     .saleID(factory.getSaleId())
+                                    .totalsGroupID(storeLocation)
                                     .build())
                             .build())
                     .build();
@@ -1456,7 +1458,12 @@ public final class CheckoutSession {
             return this;
         }
 
-        /** Store location identifier. Optional. */
+        /**
+         * Store location identifier, sent as
+         * {@code SaleTerminalData.TotalsGroupID} on every transaction this
+         * session creates — it groups the store's transactions for totals
+         * and reconciliation ({@code getTotals()} filters by it). Optional.
+         */
         public Builder storeLocation(String storeLocation) {
             this.storeLocation = storeLocation;
             return this;

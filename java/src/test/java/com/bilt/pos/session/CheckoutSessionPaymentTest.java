@@ -166,6 +166,30 @@ class CheckoutSessionPaymentTest {
         assertThrows(IllegalStateException.class, () -> session.pay());
     }
 
+    @Test
+    void storeLocationIsSentAsTotalsGroupId() throws Exception {
+        CheckoutSession storeSession = CheckoutSession.builder()
+                .client(BiltNexoTerminalClient.builder()
+                        .endpoint(server.url("/nexo").toString())
+                        .disableRecoveryOnNetworkError()
+                        .build())
+                .saleId("POS-LANE-3")
+                .poiId("VictaLane-275839164")
+                .currency("USD")
+                .storeLocation("STR-0142")
+                .autoDisplay(false)
+                .build();
+        storeSession.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 10.00)));
+
+        storeSession.pay().execute();
+
+        SaleToPOIRequest sent = nextRequest();
+        assertEquals("STR-0142", sent.getPaymentRequest().getSaleData()
+                .getSaleTerminalData().getTotalsGroupID(),
+                "the store location must reach the wire as TotalsGroupID");
+    }
+
     // ─── Guest checkout ───
 
     @Test

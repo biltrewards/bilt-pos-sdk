@@ -23,6 +23,7 @@ import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.OutputContent;
 import com.bilt.pos.nexo.model.OutputFormatEnum;
 import com.bilt.pos.nexo.model.SaleData;
+import com.bilt.pos.nexo.model.SaleTerminalData;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
 
@@ -48,11 +49,13 @@ public final class NexoMessageFactory {
 
     private final String saleId;
     private final String poiId;
+    private final String totalsGroupId;
     private final SecureRandom random = new SecureRandom();
 
-    public NexoMessageFactory(String saleId, String poiId) {
+    public NexoMessageFactory(String saleId, String poiId, String totalsGroupId) {
         this.saleId = saleId;
         this.poiId = poiId;
+        this.totalsGroupId = totalsGroupId;
     }
 
     public String getSaleId() {
@@ -106,14 +109,29 @@ public final class NexoMessageFactory {
         return saleData(UUID.randomUUID().toString());
     }
 
-    /** Sale data with the given {@code SaleTransactionID} and a current timestamp. */
+    /**
+     * Sale data with the given {@code SaleTransactionID} and a current
+     * timestamp. When a totals group (store location) is configured it is
+     * attached as {@code SaleTerminalData.TotalsGroupID}, grouping the
+     * session's transactions for totals and reconciliation.
+     */
     public SaleData saleData(String saleTransactionId) {
-        return SaleData.builder()
+        SaleData.Builder saleData = SaleData.builder()
                 .saleTransactionID(TransactionIdentificationType.builder()
                         .transactionID(saleTransactionId)
                         .timeStamp(Instant.now().toString())
-                        .build())
-                .build();
+                        .build());
+        if (totalsGroupId != null) {
+            saleData.saleTerminalData(SaleTerminalData.builder()
+                    .totalsGroupID(totalsGroupId)
+                    .build());
+        }
+        return saleData.build();
+    }
+
+    /** The configured totals group (store location), or {@code null}. */
+    public String getTotalsGroupId() {
+        return totalsGroupId;
     }
 
     /**
