@@ -885,8 +885,14 @@ public final class CheckoutSession {
             }
             return result;
         } catch (SessionException e) {
-            transitionLocked(e.getError().getCode() == SessionErrorCode.ABORTED
-                    ? SessionState.ABORTED : SessionState.FAILED);
+            // an abort whose unwind was incomplete must not seal the session
+            // in ABORTED — that state is terminal, and the standing
+            // movements could never be finished from it. FAILED keeps
+            // voidTransaction() (and a draining retry) available; the error
+            // still carries the ABORTED code and the movements standing.
+            boolean cleanlyAborted = e.getError().getCode() == SessionErrorCode.ABORTED
+                    && standingMovements.isEmpty();
+            transitionLocked(cleanlyAborted ? SessionState.ABORTED : SessionState.FAILED);
             throw e;
         } catch (RuntimeException e) {
             // defense in depth: whatever escapes, the session must not stay
@@ -1234,7 +1240,10 @@ public final class CheckoutSession {
      * {@code AbortRequest} referencing it is sent (best-effort) to the device
      * that is processing it. The session then moves to
      * {@link SessionState#ABORTED}; aborting a session already in a terminal
-     * state has no effect.</p>
+     * state has no effect. An aborted payment whose rollback was incomplete
+     * settles in {@link SessionState#FAILED} instead, so
+     * {@link #voidTransaction()} can finish reversing the movements still
+     * standing.</p>
      *
      * <p>Safe to call from any thread.</p>
      */

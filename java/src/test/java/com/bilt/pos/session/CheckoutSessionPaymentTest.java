@@ -595,6 +595,38 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void abortWithIncompleteRollbackSettlesFailedSoTheUnwindCanFinish() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));             // rebate commits
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));             // redemption commits
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));     // rebate refund
+
+        SessionException failure = assertThrows(SessionException.class, () ->
+                session.pay()
+                        .onPointsRedeemed(points -> {
+                            session.abort();               // customer cancelled mid-payment
+                            return points.getSuggestedTotal();
+                        })
+                        .get());
+
+        assertEquals(SessionErrorCode.ABORTED, failure.getError().getCode());
+        assertTrue(failure.getError().getMessage().contains("POINTS"),
+                failure.getError().getMessage());
+        assertEquals(SessionState.FAILED, session.getState(),
+                "an abort whose rollback is incomplete must stay recoverable, not ABORTED");
+        assertEquals(4, drainRequests().size());
+
+        // the session can finish the unwind, unlike a terminal ABORTED state
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+        assertEquals("RedemptionRefund", drainRequests().get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
+    @Test
     void retriedPayFinishesStandingReversalsBeforeCharging() throws Exception {
         identifyMember();
         addHundredDollarItem();
