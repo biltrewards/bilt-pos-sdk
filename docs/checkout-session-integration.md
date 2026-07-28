@@ -98,7 +98,7 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 
 **Abort / error rollback.** If `abort()` fires mid-sequence (e.g. after rebates committed but before card payment), the session reverses everything committed so far — rebate refunds, redemption refunds, stored-value reversals — before moving to `ABORTED`. `abort()` is safe to call from any thread. On error the `PaymentOptions` returned by `onError` decides what happens next:
 
-- `PaymentOptions.voidAndAbort()` (the default) — roll back committed steps in reverse order and fail; the session moves to `FAILED`, from which `pay()` can be retried.
+- `PaymentOptions.voidAndAbort()` (the default) — roll back committed steps in reverse order and fail; the session moves to `FAILED`, from which `pay()` can be retried. If the rollback itself was incomplete, a retried `pay()` first finishes the standing reversals — and refuses to start if one still cannot go through.
 - `PaymentOptions.retryWithoutLoyalty()` — roll back the loyalty steps and restart the sequence with rebates and points disabled.
 - Any other options — full rollback, then restart with those options. At most 3 recoveries per execution.
 

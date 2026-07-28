@@ -837,7 +837,6 @@ public final class CheckoutSession {
             // abort left over from an earlier decline or failed void must
             // not kill a legitimate retry at its first checkAbort
             abortRequested = false;
-            standingMovements = List.of();
             request.basket = basketEngine.snapshot();
         } finally {
             lock.unlock();
@@ -857,6 +856,19 @@ public final class CheckoutSession {
         request.handlers.onError = flow.errorHandler();
 
         try {
+            // a previous run's incomplete rollback left movements standing:
+            // finish that unwind before charging anew — a retry on top of
+            // them would double-charge the tender or double-commit loyalty
+            if (!standingMovements.isEmpty()) {
+                try {
+                    drainStandingMovements();
+                } catch (SessionException e) {
+                    throw new SessionException(new SessionError(e.getError().getCode(),
+                            "the previous payment's rollback is still incomplete; the "
+                                    + "retry did not start: " + e.getError().getMessage(),
+                            e.getError().getNexoErrorCondition(), e));
+                }
+            }
             CheckoutResult result = paymentOrchestrator.run(request);
             lock.lock();
             try {
@@ -1093,11 +1105,21 @@ public final class CheckoutSession {
 
     /**
      * Finishes the unwind of a failed payment whose rollback was
-     * incomplete: re-runs each standing reversal in the unwind's own order,
-     * dropping movements as they succeed so a failed attempt can be retried
-     * from the first movement still standing.
+     * incomplete — the void form of {@link #drainStandingMovements()}.
      */
     private VoidResult finishUnwind() {
+        drainStandingMovements();
+        return VoidResult.builder()
+                .success(true)
+                .build();
+    }
+
+    /**
+     * Re-runs each standing reversal in the unwind's own order, dropping
+     * movements as they succeed so a failed attempt can be retried from the
+     * first movement still standing.
+     */
+    private void drainStandingMovements() {
         List<PaymentOrchestrator.StandingMovement> remaining =
                 new ArrayList<>(standingMovements);
         while (!remaining.isEmpty()) {
@@ -1105,9 +1127,6 @@ public final class CheckoutSession {
             remaining.remove(0);
             standingMovements = List.copyOf(remaining);
         }
-        return VoidResult.builder()
-                .success(true)
-                .build();
     }
 
     /**

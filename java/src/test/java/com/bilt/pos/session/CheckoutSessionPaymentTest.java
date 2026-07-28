@@ -595,6 +595,64 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void retriedPayFinishesStandingReversalsBeforeCharging() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));     // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // rebate refund FAILS
+        assertThrows(SessionException.class, () -> session.pay().get());
+        assertEquals(SessionState.FAILED, session.getState());
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));     // standing rebate refund
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 85.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+        assertTrue(session.pay().get().isSuccess());
+        assertEquals(SessionState.COMPLETED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(5, requests.size());
+        assertEquals("RebateRefund", requests.get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue(),
+                "the retry must finish the standing reversal before charging anew");
+        assertEquals("Rebate", requests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
+    @Test
+    void retriedPayRefusesToStartOverAStillStandingMovement() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));
+        assertThrows(SessionException.class, () -> session.pay().get());
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // still failing
+        SessionException failure = assertThrows(SessionException.class,
+                () -> session.pay().get());
+        assertTrue(failure.getError().getMessage().contains("retry did not start"),
+                failure.getError().getMessage());
+        assertEquals(SessionState.FAILED, session.getState());
+        assertEquals(1, drainRequests().size(),
+                "no new charge may start over a standing movement");
+
+        // the standing movement is retained: the void can still finish it
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+    }
+
+    @Test
     void pointRedemptionIsSkippedWhenRebatesCoverTheTotal() throws Exception {
         String rebateFull =
                 "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
