@@ -114,6 +114,7 @@ public final class Main {
         String hostnamePattern = null;
         Double pingIntervalSeconds = null;
         boolean recoverOnNetworkError = true;
+        boolean identifyMember = false;
 
         for (int i = 1; i < args.length; i++) {
             switch (args[i]) {
@@ -122,6 +123,9 @@ public final class Main {
                     break;
                 case "--no-encryption":
                     encryption = false;
+                    break;
+                case "--identify":
+                    identifyMember = true;
                     break;
                 case "--verbose":
                     verbose = true;
@@ -209,7 +213,8 @@ public final class Main {
         try {
             run(ip, type, encryption, passphrase, keyId, keyVersion, amount, currency, abortServiceID,
                     originalServiceID, originalTimestamp, reversalReason, statusServiceID, prompt,
-                    cacert, hostnamePattern, pingIntervalSeconds, recoverOnNetworkError);
+                    cacert, hostnamePattern, pingIntervalSeconds, recoverOnNetworkError,
+                    identifyMember);
         } catch (Exception e) {
             LOG.log(Level.SEVERE, "Request failed", e);
             System.exit(1);
@@ -222,7 +227,8 @@ public final class Main {
                             String originalServiceID, String originalTimestamp,
                             String reversalReason, String statusServiceID,
                             String prompt, String cacert, String hostnamePattern,
-                            Double pingIntervalSeconds, boolean recoverOnNetworkError) throws Exception {
+                            Double pingIntervalSeconds, boolean recoverOnNetworkError,
+                            boolean identifyMember) throws Exception {
 
         String endpoint = "https://" + ip + ":8443/nexo";
         String serviceID = UUID.randomUUID().toString().substring(0, 8);
@@ -282,6 +288,11 @@ public final class Main {
         }
 
         BiltNexoTerminalClient client = clientBuilder.build();
+
+        if ("session".equals(type)) {
+            runCheckoutSessionDemo(client, amount, currency, identifyMember);
+            return;
+        }
 
         SaleToPOIRequest request;
         switch (type) {
@@ -827,12 +838,124 @@ public final class Main {
         return args[index];
     }
 
+    /**
+     * Waits for Enter so the operator can verify the terminal display
+     * before the demo moves on. Skipped silently when stdin is not
+     * interactive (piped input or EOF).
+     */
+    private static void pauseForDisplayCheck(String expectation) {
+        System.out.println(">> " + expectation + " — press Enter to continue...");
+        try {
+            int c;
+            do {
+                c = System.in.read();
+            } while (c != '\n' && c != -1);
+        } catch (java.io.IOException ignored) {
+            // no interactive stdin; continue without pausing
+        }
+    }
+
+    /**
+     * End-to-end CheckoutSession demo: optional member identification, item
+     * scanning with automatic terminal display, tax, and the orchestrated
+     * payment sequence with inline step handlers.
+     */
+    private static void runCheckoutSessionDemo(BiltNexoTerminalClient client,
+                                               double amount, String currency,
+                                               boolean identifyMember) {
+        com.bilt.pos.session.CheckoutSession session =
+                com.bilt.pos.session.CheckoutSession.builder()
+                        .client(client)
+                        .saleId("bilt-cli")
+                        .poiId("bilt-terminal")
+                        .currency(currency)
+                        .build();
+
+        LOG.info("Session " + session.getSessionId() + " started (state "
+                + session.getState() + ")");
+
+        // 1. Identify the member — opt-in via --identify: the terminal-side
+        // CardAcquisition prompt immediately asks for a card, which gets in
+        // the way when exercising the basket/display flow alone
+        if (identifyMember) {
+            session.identifyMember()
+                    .onSuccess(member -> {
+                        if (member.getStatus()
+                                == com.bilt.pos.session.identity.IdentifyStatus.FOUND) {
+                            LOG.info("Member " + member.getMemberId() + " ("
+                                    + member.getLoyaltyBrand() + "), "
+                                    + member.getRewards().size() + " reward(s) available");
+                        } else {
+                            LOG.info("No member attached (" + member.getStatus()
+                                    + "); guest checkout");
+                        }
+                    })
+                    .onError(error -> LOG.warning("Identification failed: " + error))
+                    .execute();
+        } else {
+            LOG.info("Skipping member identification (pass --identify to enable); "
+                    + "guest checkout");
+        }
+
+        // 2. Scan items — each addItem refreshes the terminal display with
+        // the itemised basket (a DisplayRequest); pause so it can be verified
+        BigDecimal half = BigDecimal.valueOf(amount / 2).setScale(2, java.math.RoundingMode.HALF_UP);
+        com.bilt.pos.session.basket.Basket basket =
+                session.addItem(com.bilt.pos.session.basket.BasketItem.builder()
+                        .sku("CLI-DEMO-1").description("Demo Item A").quantity(1)
+                        .unitPrice(half).build());
+        LOG.info("Added Demo Item A — basket total " + basket.getGrandTotal() + " " + currency);
+        pauseForDisplayCheck("Demo Item A should now be on the terminal display");
+        basket = session.addItem(com.bilt.pos.session.basket.BasketItem.builder()
+                .sku("CLI-DEMO-2").description("Demo Item B").quantity(1)
+                .unitPrice(BigDecimal.valueOf(amount).subtract(half)).build());
+        LOG.info("Added Demo Item B — basket total " + basket.getGrandTotal() + " " + currency);
+        pauseForDisplayCheck("Demo Item B should now be on the terminal display");
+
+        // 3. Pay — rebate/point steps run automatically for identified members
+        com.bilt.pos.session.payment.CheckoutResult checkout = session.pay()
+                .onRebatesRedeemed(rebates -> {
+                    LOG.info("Rebates committed: -" + rebates.getTotalRebateAmount());
+                    return rebates.getSuggestedTotal();
+                })
+                .onPointsRedeemed(points -> {
+                    LOG.info("Points redeemed: " + points.getPointsUsed()
+                            + " (-" + points.getMonetaryValue() + ")");
+                    return points.getSuggestedTotal();
+                })
+                .onSuccess(result -> {
+                    LOG.info("Payment approved: card " + result.getCardAmountCharged()
+                            + " " + currency + ", approval " + result.getApprovalCode()
+                            + ", POI txn " + result.getPoiTransactionId());
+                    if (result.getTotalPointsEarned() > 0) {
+                        LOG.info("Earned " + result.getTotalPointsEarned()
+                                + " points (balance " + result.getPointsBalance() + ")");
+                    }
+                    result.getWarnings().forEach(w -> LOG.warning("Warning: " + w));
+                })
+                .onError(error -> {
+                    LOG.severe("Payment failed: " + error);
+                    return com.bilt.pos.session.payment.PaymentOptions.voidAndAbort();
+                })
+                .getOrNull();
+
+        LOG.info("Session finished in state " + session.getState());
+        if (checkout == null) {
+            // this demo doubles as a smoke test: a failed checkout must
+            // fail the process (main exits 1 on any exception from run())
+            throw new IllegalStateException(
+                    "checkout did not complete (session state " + session.getState() + ")");
+        }
+    }
+
     private static void printUsage() {
         String usage = String.join("\n",
                 "Usage: bilt-cli <ip> [options]",
                 "",
                 "Options:",
-                "  --type <payment|gift-card|refund|diagnosis|display-standby|display-receipt|confirmation|signature|reversal|transaction-status|abort>",
+                "  --type <payment|gift-card|refund|diagnosis|display-standby|display-receipt|confirmation|signature|reversal|transaction-status|abort|session>",
+                "                               'session' runs a full CheckoutSession demo: basket, display, pay",
+                "  --identify                   In the session demo, prompt for member identification first",
                 "  --no-encryption              Disable message encryption",
                 "  --cacert <path>              Verify TLS against this CA/public cert file (PEM or DER).",
                 "                               When omitted, all certificates are trusted (testing only).",

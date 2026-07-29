@@ -2,6 +2,8 @@
   items:
     - name: Integration Guide
       url: /integration.html
+    - name: CheckoutSession
+      url: /checkout-session-integration.html
 
 - title: Payments
   items:
@@ -124,3 +126,5 @@
       url: /payment-brands.html
     - name: API Reference
       url: /api-reference.html
+    - name: SDK Javadoc
+      url: /javadoc/index.html
