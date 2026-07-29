@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 
 /**
@@ -59,10 +60,12 @@ private fun ConnectionPanel() {
     var terminalIp by remember { mutableStateOf("") }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        // Stack the controls when the window is narrow (phones, split screen)
-        // or font scaling shrinks the usable field width
+        // Stack the controls when the window is narrow (phones, split screen).
+        // The breakpoint scales with the font size so large accessibility
+        // fonts also get the stacked layout — dp widths alone don't grow
+        // with fontScale but the button's intrinsic width does.
         BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            val compact = maxWidth < 420.dp
+            val compact = maxWidth < 420.dp * LocalDensity.current.fontScale
             val ipField: @Composable (Modifier) -> Unit = { modifier ->
                 OutlinedTextField(
                     value = terminalIp,
