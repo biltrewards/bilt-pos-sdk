@@ -161,6 +161,7 @@ session.end().execute();          // or in a handler-style chain, or .get()
 - Allowed from any state except `PAYING` and `VOIDING` (money in flight).
 - Refused while a failed payment's rollback is incomplete — finish the unwind with `voidTransaction()` first.
 - If the end signal itself fails, the session keeps its state and `end()` can be retried.
+- A concurrent `abort()` never cancels an in-flight `end()` — like an in-flight void, the end exchange always settles (cancelling cleanup would only strand terminal-side session data).
 
 `CheckoutSession` is `AutoCloseable`: `close()` is a best-effort `end()` (failures are logged, an already-ended session is left alone), so try-with-resources guarantees the terminal is told to clean up even on exception paths:
 

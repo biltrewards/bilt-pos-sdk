@@ -7,6 +7,7 @@ import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.session.basket.BasketItem;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -14,7 +15,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -210,6 +213,46 @@ class CheckoutSessionLifecycleTest {
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
         session.end().execute();
         assertEquals(SessionState.ENDED, session.getState());
+    }
+
+    @Test
+    void abortDoesNotCancelAnInFlightEnd() throws Exception {
+        CountDownLatch endOnTheWire = new CountDownLatch(1);
+        CountDownLatch abortIssued = new CountDownLatch(1);
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                String body = request.getBody().readUtf8();
+                if (body.contains("BiltSession,End")) {
+                    endOnTheWire.countDown();
+                    // hold the end response until abort() has run
+                    abortIssued.await(5, TimeUnit.SECONDS);
+                    return new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK);
+                }
+                if (body.contains("\"AdminRequest\"")) {
+                    return new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK);
+                }
+                return new MockResponse();   // an AbortRequest would land here
+            }
+        });
+        CheckoutSession session = sessionBuilder().start().get();
+
+        AtomicReference<SessionError> failed = new AtomicReference<>();
+        Thread register = new Thread(() -> session.end().onError(failed::set).execute());
+        register.start();
+        assertTrue(endOnTheWire.await(5, TimeUnit.SECONDS));
+
+        session.abort();
+        abortIssued.countDown();
+        register.join(5_000);
+        assertFalse(register.isAlive());
+
+        // cancelling cleanup would only strand the terminal's session data:
+        // the end settles despite the abort, and the session lands in ENDED
+        assertNull(failed.get(), "the end exchange must settle despite the abort");
+        assertEquals(SessionState.ENDED, session.getState());
+        assertEquals(2, server.getRequestCount(),
+                "start and end only — no AbortRequest may target the end exchange");
     }
 
     // ─── Ended sessions are sealed ───

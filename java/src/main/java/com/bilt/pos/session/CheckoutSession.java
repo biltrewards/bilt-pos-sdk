@@ -1365,7 +1365,10 @@ public final class CheckoutSession implements AutoCloseable {
      * hiding a real money movement would be worse than reporting it on an
      * ended session. Voids are unaffected: {@code VOIDING} has no
      * transition to {@code ABORTED}, so an in-flight void always settles
-     * normally.</p>
+     * normally. The session lifecycle signals are likewise never aborted:
+     * cancelling an in-flight {@link #end()} would only strand the
+     * terminal's session-scoped data, so it always settles — succeeding
+     * into {@code ENDED} even when this abort sealed the session first.</p>
      *
      * <p>Safe to call from any thread.</p>
      */
@@ -1425,7 +1428,13 @@ public final class CheckoutSession implements AutoCloseable {
             }
         }
         NexoExchange.InFlight inFlight = exchange.currentInFlight();
-        if (inFlight != null) {
+        // the session lifecycle signals (the ADMIN category carries only
+        // start/end) are never the abort's target: cancelling the end
+        // exchange would buy nothing and could strand the terminal's
+        // session-scoped data — like VOIDING, an in-flight end() always
+        // settles, and the session still moves to ABORTED above when the
+        // end has not yet succeeded
+        if (inFlight != null && inFlight.getCategory() != MessageCategoryType.ADMIN) {
             sendAbort(inFlight);
         }
     }
@@ -1489,7 +1498,9 @@ public final class CheckoutSession implements AutoCloseable {
      * incomplete — finish the unwind with {@link #voidTransaction()} first,
      * or the terminal would discard state with reversals still standing. If
      * the end signal fails, the session keeps its current state so the call
-     * can be retried.</p>
+     * can be retried. A concurrent {@link #abort()} never cancels an
+     * in-flight end — the exchange always settles, and its success still
+     * moves the session to {@code ENDED}.</p>
      */
     public SessionResult<Void> end() {
         return operation("end", () -> {
