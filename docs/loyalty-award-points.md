@@ -227,4 +227,4 @@ For general guidance on handling failed requests, see [Handle responses](./error
 
 - [Reverse a points award](./loyalty-reverse-award.md) — cancel a previous award after a sale void or refund.
 - [Query a loyalty balance](./loyalty-balance-inquiry.md) — fetch the member's current point balance.
-- [Redeem loyalty rewards](./loyalty-redeem-rewards.md) — apply rewards earned over time.
+- [Redeem loyalty points](./loyalty-redeem-points.md) — spend points earned over time.

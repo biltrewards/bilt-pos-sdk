@@ -1,11 +1,11 @@
 ---
 ---
 
-# Reverse a loyalty redemption
+# Reverse a loyalty rebate
 
-Undo a previous point redemption so the points return to the member's account.
+Undo a previously committed rebate so the coupons and offers return to the member's account.
 
-A redemption reversal is used when a sale is abandoned or voided after points have already been redeemed — for example, when the customer rejects the final amount at payment. The loyalty provider re-credits the redeemed points to the member. Reversals reference the original redemption by its `POITransactionID` so the terminal can resolve the underlying loyalty provider transaction.
+A rebate reversal is used when a sale is abandoned or voided after rebates have already been committed — for example, when the customer rejects the final amount at payment. The loyalty provider cancels the rebate and re-credits any consumed coupons to the member, making them available for future use. Reversals reference the original rebate by its `POITransactionID` so the terminal can resolve the underlying loyalty provider transaction.
 
 ---
 
@@ -15,13 +15,13 @@ Make sure you have:
 
 1. Ordered a terminal and boarded it to a store.
 2. Read and understood the [Integration Guide](./integration.md).
-3. The `POITransactionID` and `TimeStamp` from the original [redemption](./loyalty-redeem-points.md) response.
+3. The `POITransactionID` and `TimeStamp` from the original [rebate](./loyalty-apply-rebates.md) response.
 
 ---
 
-## Make a redemption reversal request
+## Make a rebate reversal request
 
-To reverse a redemption, send a Terminal API request with `MessageCategory` set to `Loyalty` and `LoyaltyTransactionType` set to `RedemptionRefund`. Reference the original redemption via `OriginalPOITransaction`.
+To reverse a rebate, send a Terminal API request with `MessageCategory` set to `Loyalty` and `LoyaltyTransactionType` set to `RebateRefund`. Reference the original rebate via `OriginalPOITransaction`.
 
 1. Send a Terminal API request with the following `MessageHeader` fields:
 
@@ -37,11 +37,12 @@ To reverse a redemption, send a Terminal API request with `MessageCategory` set 
 
     - **`SaleData.SaleTransactionID.TransactionID`** — Your reference for this reversal. Each loyalty request is an independent transaction — use a unique value.
     - **`SaleData.SaleTransactionID.TimeStamp`** — Date and time of the request in UTC format.
-    - **`LoyaltyTransaction.LoyaltyTransactionType`** — `RedemptionRefund`.
-    - **`LoyaltyTransaction.OriginalPOITransaction.POITransactionID.TransactionID`** — `POITransactionID.TransactionID` of the original redemption.
-    - **`LoyaltyTransaction.OriginalPOITransaction.POITransactionID.TimeStamp`** — `POITransactionID.TimeStamp` of the original redemption.
+    - **`LoyaltyTransaction.LoyaltyTransactionType`** — `RebateRefund`.
+    - **`LoyaltyTransaction.OriginalPOITransaction.POITransactionID.TransactionID`** — `POITransactionID.TransactionID` of the original rebate.
+    - **`LoyaltyTransaction.OriginalPOITransaction.POITransactionID.TimeStamp`** — `POITransactionID.TimeStamp` of the original rebate.
     - **`LoyaltyData[].LoyaltyAccountID`** *(optional)* — The member's loyalty account. May be omitted — the original transaction reference is sufficient for the terminal to resolve the account.
-    - **`LoyaltyData[].LoyaltyAmount`** *(optional)* — The amount to re-credit, for a partial reversal (`LoyaltyUnit` `Point`, or `Monetary` with `Currency`). Omit to reverse the full redeemed amount.
+
+   A rebate reversal always reverses the original rebate in full.
 
    Example request:
 
@@ -53,23 +54,23 @@ To reverse a redemption, send a Terminal API request with `MessageCategory` set 
          "MessageClass": "Service",
          "MessageCategory": "Loyalty",
          "MessageType": "Request",
-         "ServiceID": "SVC-01130",
+         "ServiceID": "SVC-01150",
          "SaleID": "BiltPOS-Lane3",
          "POIID": "VictaLane-275839164"
        },
        "LoyaltyRequest": {
          "SaleData": {
            "SaleTransactionID": {
-             "TransactionID": "REV-20260430-00846",
+             "TransactionID": "REV-20260430-00845",
              "TimeStamp": "2026-04-30T15:30:00+00:00"
            }
          },
          "LoyaltyTransaction": {
-           "LoyaltyTransactionType": "RedemptionRefund",
+           "LoyaltyTransactionType": "RebateRefund",
            "OriginalPOITransaction": {
              "POITransactionID": {
-               "TransactionID": "POI-LYL-703",
-               "TimeStamp": "2026-04-30T14:22:08+00:00"
+               "TransactionID": "POI-LYL-701",
+               "TimeStamp": "2026-04-30T14:20:09+00:00"
              }
            }
          },
@@ -87,15 +88,15 @@ To reverse a redemption, send a Terminal API request with `MessageCategory` set 
    }
    ```
 
-2. The request is routed to the terminal. The terminal resolves the original redemption and submits the reversal to the loyalty provider.
+2. The request is routed to the terminal. The terminal resolves the original rebate and submits the reversal to the loyalty provider.
 
-3. The loyalty provider re-credits the points to the member's account and returns the result.
+3. The loyalty provider cancels the rebate, re-credits any consumed coupons, and returns the result.
 
 ---
 
-## Redemption reversal response
+## Rebate reversal response
 
-The result is returned in the API response in a `LoyaltyResponse` body. The main result is in `LoyaltyResponse.Response.Result`. The structure mirrors the [redemption response](./loyalty-redeem-points.md#redemption-response).
+The result is returned in the API response in a `LoyaltyResponse` body. The main result is in `LoyaltyResponse.Response.Result`.
 
 ### Successful reversal
 
@@ -104,7 +105,6 @@ When the reversal succeeds, your integration receives:
 - **`LoyaltyResponse.Response.Result`** — `Success`.
 - **`POIData.POITransactionID.TransactionID`** — terminal reference for this reversal.
 - **`LoyaltyResult[0].LoyaltyAccount.LoyaltyAccountID.LoyaltyID`** — echo of the member's loyalty ID.
-- **`LoyaltyResult[0].CurrentBalance`** — the member's point balance after the re-credit.
 
   Example response:
 
@@ -116,7 +116,7 @@ When the reversal succeeds, your integration receives:
         "MessageClass": "Service",
         "MessageCategory": "Loyalty",
         "MessageType": "Response",
-        "ServiceID": "SVC-01130",
+        "ServiceID": "SVC-01150",
         "SaleID": "BiltPOS-Lane3",
         "POIID": "VictaLane-275839164"
       },
@@ -126,13 +126,13 @@ When the reversal succeeds, your integration receives:
         },
         "SaleData": {
           "SaleTransactionID": {
-            "TransactionID": "REV-20260430-00846",
+            "TransactionID": "REV-20260430-00845",
             "TimeStamp": "2026-04-30T15:30:00+00:00"
           }
         },
         "POIData": {
           "POITransactionID": {
-            "TransactionID": "POI-LYL-704",
+            "TransactionID": "POI-LYL-705",
             "TimeStamp": "2026-04-30T15:30:02+00:00"
           }
         },
@@ -146,8 +146,7 @@ When the reversal succeeds, your integration receives:
                 "LoyaltyID": "98234"
               },
               "LoyaltyBrand": "K-Club"
-            },
-            "CurrentBalance": 1240
+            }
           }
         ]
       }
@@ -160,7 +159,7 @@ When the reversal succeeds, your integration receives:
 When the reversal fails, the result includes:
 
 - **`LoyaltyResponse.Response.Result`** — `Failure`.
-- **`LoyaltyResponse.Response.ErrorCondition`** — the reason for failure. For example, `NotFound` if the original transaction cannot be located, or `NotAllowed` if the redemption was already reversed.
+- **`LoyaltyResponse.Response.ErrorCondition`** — the reason for failure. For example, `NotFound` if the original transaction cannot be located, or `NotAllowed` if the rebate was already reversed.
 
   Example response:
 
@@ -172,7 +171,7 @@ When the reversal fails, the result includes:
         "MessageClass": "Service",
         "MessageCategory": "Loyalty",
         "MessageType": "Response",
-        "ServiceID": "SVC-01130",
+        "ServiceID": "SVC-01150",
         "SaleID": "BiltPOS-Lane3",
         "POIID": "VictaLane-275839164"
       },
@@ -180,7 +179,7 @@ When the reversal fails, the result includes:
         "Response": {
           "Result": "Failure",
           "ErrorCondition": "NotFound",
-          "AdditionalResponse": "Original loyalty transaction POI-LYL-703 not found."
+          "AdditionalResponse": "Original loyalty transaction POI-LYL-701 not found."
         }
       }
     }
@@ -193,6 +192,6 @@ For general guidance on handling failed requests, see [Handle responses](./error
 
 ## Next steps
 
-- [Reverse a rebate](./loyalty-reverse-rebate.md) — also undo any rebate committed for the same sale.
+- [Reverse a redemption](./loyalty-reverse-redemption.md) — also return any redeemed points for the same sale.
 - [Reverse a points award](./loyalty-reverse-award.md) — also cancel the points earned for the original sale.
-- [Query a loyalty balance](./loyalty-balance-inquiry.md) — confirm the points are back on the member's account.
+- [Identify a loyalty member](./loyalty-identify-member.md) — confirm the coupons are back on the member's account.

@@ -36,8 +36,12 @@
       url: /loyalty-identify-member.html
     - name: Award Points
       url: /loyalty-award-points.html
-    - name: Redeem Rewards
-      url: /loyalty-redeem-rewards.html
+    - name: Apply Rebates
+      url: /loyalty-apply-rebates.html
+    - name: Redeem Points
+      url: /loyalty-redeem-points.html
+    - name: Reverse Rebate
+      url: /loyalty-reverse-rebate.html
     - name: Reverse Redemption
       url: /loyalty-reverse-redemption.html
     - name: Reverse Award

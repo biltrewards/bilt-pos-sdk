@@ -220,7 +220,7 @@ When the lookup succeeds, your integration receives:
 - **`LoyaltyAccountStatus.LoyaltyAccount.LoyaltyAccountID.IdentificationType`** — flips to `PAN` to reflect the resolved member ID.
 - **`LoyaltyAccountStatus.LoyaltyAccount.LoyaltyBrand`** — the loyalty program (e.g. `K-Club`).
 - **`LoyaltyAccountStatus.LoyaltyAccount.CurrentBalance`** — the member's available point balance.
-- **`Response.AdditionalResponse`** — base64-encoded JSON containing the member's active rewards. Decode and parse to obtain a `rewards` array (each entry has `rewardRef`, `type`, `name`, `expirationDate`) and a `rewardCount`. The `rewardRef` values are required for [reward redemption](./loyalty-redeem-rewards.md).
+- **`Response.AdditionalResponse`** — base64-encoded JSON containing the member's active rewards. Decode and parse to obtain a `rewards` array (each entry has `rewardRef`, `type`, `name`, `expirationDate`) and a `rewardCount`. Use these to show the member's available rewards at the register; rewards and coupons are applied to the sale via a [rebate](./loyalty-apply-rebates.md).
 
   Example response:
 
@@ -321,6 +321,7 @@ For general guidance on handling failed requests, see [Handle responses](./error
 ## Next steps
 
 - [Identify a loyalty member](./loyalty-identify-member.md) — capture a `LoyaltyID` by prompting the shopper at the terminal.
-- [Redeem loyalty rewards](./loyalty-redeem-rewards.md) — apply rewards returned by a lookup.
+- [Apply loyalty rebates](./loyalty-apply-rebates.md) — apply rewards returned by a lookup.
+- [Redeem loyalty points](./loyalty-redeem-points.md) — apply the member's point balance as a discount.
 - [Check member status](./loyalty-member-status.md) — verify the member is active before transacting.
 - [Award loyalty points](./loyalty-award-points.md) — credit points for a new purchase.

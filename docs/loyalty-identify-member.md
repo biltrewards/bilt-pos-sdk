@@ -98,7 +98,7 @@ When the member is found, your integration receives:
     - **`LoyaltyAccountID.IdentificationType`** — type of identifier (`PAN`, `BarCode`, `PhoneNumber`, `AccountNumber`).
     - **`LoyaltyAccountID.IdentificationSupport`** — medium that supplied the identifier (`LoyaltyCard`, `MobileApplication`, `NoCard`, `HybridCard`, `LinkedCard`).
     - **`LoyaltyBrand`** *(optional)* — the loyalty program name (e.g. `K-Club`).
-- **`Response.AdditionalResponse`** — base64-encoded JSON containing the member's active rewards. Decode and parse to obtain a `rewards` array (each entry has `rewardRef`, `type`, `name`, `expirationDate`) and a `rewardCount`. The `rewardRef` values are required for [reward redemption](./loyalty-redeem-rewards.md).
+- **`Response.AdditionalResponse`** — base64-encoded JSON containing the member's active rewards. Decode and parse to obtain a `rewards` array (each entry has `rewardRef`, `type`, `name`, `expirationDate`) and a `rewardCount`. Use these to show the member's available rewards at the register; rewards and coupons are applied to the sale via a [rebate](./loyalty-apply-rebates.md).
 
   Example response:
 
@@ -209,7 +209,8 @@ For general guidance on handling failed requests, see [Handle responses](./error
 
 ## Next steps
 
-- [Redeem loyalty rewards](./loyalty-redeem-rewards.md) — apply rewards or coupons to the sale.
+- [Apply loyalty rebates](./loyalty-apply-rebates.md) — apply rewards or coupons to the sale.
+- [Redeem loyalty points](./loyalty-redeem-points.md) — apply the member's point balance as a discount.
 - [Award loyalty points](./loyalty-award-points.md) — credit points after payment completes.
 - [Query a loyalty balance](./loyalty-balance-inquiry.md) — fetch the member's current point balance.
 - [Enroll a new member](./loyalty-enroll-member.md) — sign up a shopper when no member is found.

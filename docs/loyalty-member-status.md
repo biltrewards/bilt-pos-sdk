@@ -161,4 +161,4 @@ For general guidance on handling failed requests, see [Handle responses](./error
 
 - [Query a loyalty balance](./loyalty-balance-inquiry.md) — read the member's current point balance.
 - [Award loyalty points](./loyalty-award-points.md) — credit points after a sale.
-- [Redeem loyalty rewards](./loyalty-redeem-rewards.md) — apply rewards or coupons.
+- [Apply loyalty rebates](./loyalty-apply-rebates.md) — apply rewards or coupons.
