@@ -81,9 +81,9 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
                         }
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            ProductGrid(products, controller, Modifier.weight(1.6f))
+                            ProductGrid(products, controller, Modifier.weight(1f))
                             Column(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(2f),
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
                             ) {
                                 BasketCard(state, Modifier.weight(1f))
