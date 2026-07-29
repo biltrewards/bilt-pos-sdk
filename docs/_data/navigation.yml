@@ -126,3 +126,5 @@
       url: /payment-brands.html
     - name: API Reference
       url: /api-reference.html
+    - name: SDK Javadoc
+      url: /javadoc/index.html
