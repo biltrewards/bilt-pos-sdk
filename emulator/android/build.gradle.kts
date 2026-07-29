@@ -35,7 +35,7 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        // duplicated across the jaxb-runtime dependency chain
+        // duplicated across the SDK's XML dependency chain
         resources.excludes += "/META-INF/{LICENSE.md,NOTICE.md}"
     }
 }

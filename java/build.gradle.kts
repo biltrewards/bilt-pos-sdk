@@ -8,9 +8,14 @@ dependencies {
     api(libs.jackson.annotations)
     api(libs.okhttp)
 
-    // JAXB for XML serialization (display/input payloads)
+    // jakarta.xml.bind-api provides the annotations on the generated display/
+    // receipt models and the JAXBException in public signatures. The JAXB
+    // *runtime* is gone — it doesn't run on Android — marshalling is done by
+    // jackson-dataformat-xml reading the same annotations.
     api(libs.jaxb.api)
-    runtimeOnly(libs.jaxb.runtime)
+    implementation(libs.jackson.dataformat.xml)
+    implementation(libs.jackson.module.jakarta.xmlbind)
+    implementation(libs.woodstox)
 
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.okhttp.tls)

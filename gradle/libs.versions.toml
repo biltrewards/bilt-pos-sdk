@@ -15,6 +15,9 @@ jaxb-runtime = "4.0.5"
 [libraries]
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
 jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations", version.ref = "jackson" }
+jackson-dataformat-xml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-xml", version.ref = "jackson" }
+jackson-module-jakarta-xmlbind = { module = "com.fasterxml.jackson.module:jackson-module-jakarta-xmlbind-annotations", version.ref = "jackson" }
+woodstox = { module = "com.fasterxml.woodstox:woodstox-core", version = "7.0.0" }
 jaxb-api = { module = "jakarta.xml.bind:jakarta.xml.bind-api", version.ref = "jaxb-api" }
 jaxb-runtime = { module = "org.glassfish.jaxb:jaxb-runtime", version.ref = "jaxb-runtime" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
