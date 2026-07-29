@@ -20,7 +20,8 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          # 21 for :emulator:desktop's bytecode target; the SDK still compiles to 11
+          java-version: 21
 
       - uses: gradle/actions/setup-gradle@v4
 

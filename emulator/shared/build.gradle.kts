@@ -13,9 +13,10 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
+    // desktop targets 21; the android target stays at 17 (the ART ceiling)
     jvm("desktop") {
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
+            jvmTarget.set(JvmTarget.JVM_21)
         }
     }
 
