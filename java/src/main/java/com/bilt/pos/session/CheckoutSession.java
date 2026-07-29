@@ -2050,6 +2050,12 @@ public final class CheckoutSession implements AutoCloseable {
          * for a fresh attempt (each attempt is a new session with a new
          * session ID).</p>
          *
+         * <p>If the registered {@code onSuccess} handler itself throws, the
+         * just-started session is ended on the terminal (best-effort) before
+         * the exception propagates: a {@code start()} whose execution threw
+         * never leaves a terminal-side session behind, and any session it
+         * may have delivered to the handler must be considered lost.</p>
+         *
          * @throws IllegalStateException if a required field is missing
          */
         public SessionResult<CheckoutSession> start() {
@@ -2066,7 +2072,11 @@ public final class CheckoutSession implements AutoCloseable {
                 throw new IllegalStateException("currency is required");
             }
             CheckoutSession session = new CheckoutSession(this);
-            return new SessionResult<>("start", session::started);
+            // the terminal has acknowledged Start by the time onSuccess
+            // runs; a handler that throws would strand that session-scoped
+            // context with no session object to end it, so it is released
+            return new SessionResult<>("start", session::started)
+                    .releasing(CheckoutSession::close);
         }
     }
 }

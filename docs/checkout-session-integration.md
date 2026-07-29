@@ -146,7 +146,7 @@ CheckoutSession session = CheckoutSession.builder()
     .get();                               // announces the session; throws if refused
 ```
 
-The builder's `start()` announces the session to the terminal (a nexo `Admin` session-start signal) and yields the `CheckoutSession` once the terminal acknowledged. It is lazy like every other operation — chain `onSuccess`/`onError` and finish with `execute()`, `get()`, or `getOrNull()`. A refused start hands out no session; call `start()` again for a fresh attempt.
+The builder's `start()` announces the session to the terminal (a nexo `Admin` session-start signal) and yields the `CheckoutSession` once the terminal acknowledged. It is lazy like every other operation — chain `onSuccess`/`onError` and finish with `execute()`, `get()`, or `getOrNull()`. A refused start hands out no session; call `start()` again for a fresh attempt. And if your `onSuccess` handler itself throws, the just-started session is ended on the terminal (best-effort) before the exception propagates — a `start()` whose execution threw never leaves a terminal-side session behind.
 
 A session represents one checkout. Create a new session per transaction; sessions are intended for use from a single register thread (`abort()` may be called from any thread).
 

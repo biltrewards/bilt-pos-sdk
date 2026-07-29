@@ -106,6 +106,48 @@ class CheckoutSessionLifecycleTest {
     }
 
     @Test
+    void throwingStartSuccessHandlerEndsTheJustStartedSession() throws Exception {
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));  // start
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));  // release end
+
+        java.util.concurrent.atomic.AtomicReference<CheckoutSession> delivered =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        SessionResult<CheckoutSession> start = sessionBuilder().start()
+                .onSuccess(session -> {
+                    delivered.set(session);
+                    throw new IllegalStateException("register bug");
+                });
+
+        IllegalStateException e = assertThrows(IllegalStateException.class, start::execute);
+        assertEquals("register bug", e.getMessage());
+
+        // the terminal had acknowledged Start; the escaping handler must not
+        // strand that session-scoped context — the session is ended for it
+        assertEquals(SessionState.ENDED, delivered.get().getState());
+        SaleToPOIRequest first = recordedRequest();
+        SaleToPOIRequest second = recordedRequest();
+        assertEquals("BiltSession,Start,v1," + delivered.get().getSessionId(),
+                first.getAdminRequest().getServiceIdentification());
+        assertEquals("BiltSession,End,v1," + delivered.get().getSessionId(),
+                second.getAdminRequest().getServiceIdentification());
+    }
+
+    @Test
+    void failedReleaseEndDoesNotMaskTheHandlerFailure() throws Exception {
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));  // start
+        server.enqueue(new MockResponse().setBody(ADMIN_FAILED));                  // release end fails
+
+        SessionResult<CheckoutSession> start = sessionBuilder().start()
+                .onSuccess(session -> {
+                    throw new IllegalStateException("register bug");
+                });
+
+        IllegalStateException e = assertThrows(IllegalStateException.class, start::execute);
+        assertEquals("register bug", e.getMessage(),
+                "the best-effort release must not replace the handler's exception");
+    }
+
+    @Test
     void failedStartThrowsFromGet() {
         server.enqueue(new MockResponse().setBody(ADMIN_FAILED));
 

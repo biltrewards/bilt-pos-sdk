@@ -55,6 +55,7 @@ public final class SessionResult<T> {
 
     private Consumer<T> successHandler;
     private Consumer<SessionError> errorHandler;
+    private Consumer<T> handlerFailureCleanup;
 
     private T value;
     private SessionError error;
@@ -153,10 +154,39 @@ public final class SessionResult<T> {
         }
         if (error == null) {
             if (successHandler != null) {
-                successHandler.accept(value);
+                try {
+                    successHandler.accept(value);
+                } catch (RuntimeException handlerFailure) {
+                    releaseOnHandlerFailure(handlerFailure);
+                    throw handlerFailure;
+                }
             }
         } else if (errorHandler != null) {
             errorHandler.accept(error);
+        }
+    }
+
+    /**
+     * Cleanup for operations that hand out a live resource: when the
+     * {@code onSuccess} handler throws, the resource it was given would
+     * otherwise be lost with the escaping exception (the builder's
+     * {@code start()} uses this to end the just-started session). A cleanup
+     * failure must not mask the handler's exception — it is attached as
+     * suppressed instead.
+     */
+    SessionResult<T> releasing(Consumer<T> cleanup) {
+        this.handlerFailureCleanup = cleanup;
+        return this;
+    }
+
+    private void releaseOnHandlerFailure(RuntimeException handlerFailure) {
+        if (handlerFailureCleanup == null) {
+            return;
+        }
+        try {
+            handlerFailureCleanup.accept(value);
+        } catch (RuntimeException cleanupFailure) {
+            handlerFailure.addSuppressed(cleanupFailure);
         }
     }
 
