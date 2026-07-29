@@ -39,7 +39,7 @@ To identify a loyalty member, send a Terminal API card acquisition request with 
 
    And the following `CardAcquisitionRequest` fields:
 
-    - **`SaleData.SaleTransactionID.TransactionID`** — Your reference for this acquisition. We recommend using a unique value per transaction. Use the same value when sending follow-up loyalty requests so the terminal can correlate them.
+    - **`SaleData.SaleTransactionID.TransactionID`** — Your reference for this acquisition. Use a unique value per transaction — follow-up loyalty requests are independent transactions with their own IDs. They correlate with this acquisition by carrying the returned `LoyaltyID` in `LoyaltyData[].LoyaltyAccountID`, or by referencing it via `LoyaltyData[].CardAcquisitionReference`.
     - **`SaleData.SaleTransactionID.TimeStamp`** — Date and time of the request in UTC format.
     - **`CardAcquisitionTransaction.LoyaltyHandling`** — `Required` to fail when no member is found, or `Proposed` to allow the flow to continue without a member.
     - **`CardAcquisitionTransaction.ForceEntryMode`** *(optional)* — Array restricting how the identifier is captured. Use `["Keyed"]` for email or phone entry, `["Scanned"]` for a loyalty card barcode. Omit to allow any method.
