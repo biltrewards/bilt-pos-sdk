@@ -157,6 +157,12 @@ public final class SessionResult<T> {
                 try {
                     successHandler.accept(value);
                 } catch (RuntimeException handlerFailure) {
+                    // a throwing success handler is a bug like any other
+                    // unexpected exception: record it so later accessors
+                    // rethrow it instead of reporting the value as a success
+                    // (for a releasing operation that value is a resource
+                    // the cleanup below has just rendered unusable)
+                    unexpected = handlerFailure;
                     releaseOnHandlerFailure(handlerFailure);
                     throw handlerFailure;
                 }
@@ -172,7 +178,9 @@ public final class SessionResult<T> {
      * otherwise be lost with the escaping exception (the builder's
      * {@code start()} uses this to end the just-started session). A cleanup
      * failure must not mask the handler's exception — it is attached as
-     * suppressed instead.
+     * suppressed instead. The handler's exception is also recorded, so
+     * {@code get()}/{@code getOrNull()}/{@code isSuccess()} rethrow it
+     * rather than handing back the released resource as a success.
      */
     SessionResult<T> releasing(Consumer<T> cleanup) {
         this.handlerFailureCleanup = cleanup;

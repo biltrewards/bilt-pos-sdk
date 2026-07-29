@@ -127,6 +127,12 @@ class CheckoutSessionLifecycleTest {
         // the terminal had acknowledged Start; the escaping handler must not
         // strand that session-scoped context — the session is ended for it
         assertEquals(SessionState.ENDED, delivered.get().getState());
+
+        // and later accessors must not report the released session as a
+        // success: the handler failure stays loud, the session is lost
+        assertSame(e, assertThrows(IllegalStateException.class, start::getOrNull));
+        assertSame(e, assertThrows(IllegalStateException.class, start::isSuccess));
+
         SaleToPOIRequest first = recordedRequest();
         SaleToPOIRequest second = recordedRequest();
         assertEquals("BiltSession,Start,v1," + delivered.get().getSessionId(),
