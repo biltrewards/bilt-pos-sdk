@@ -1,6 +1,13 @@
 pluginManagement {
     includeBuild("build-logic")
     repositories {
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
         mavenCentral()
         gradlePluginPortal()
         // Node.js binary distribution — required by the node-gradle plugin in :schema
@@ -17,6 +24,13 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
         mavenCentral()
     }
 }
@@ -29,3 +43,6 @@ include(":java")
 include(":kotlin")
 include(":schema")
 include(":cli")
+include(":emulator:shared")
+include(":emulator:android")
+include(":emulator:desktop")

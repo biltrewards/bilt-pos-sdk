@@ -11,13 +11,11 @@
  */
 package com.bilt.pos.display;
 
-import jakarta.xml.bind.JAXBContext;
+import com.bilt.pos.internal.XmlSupport;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import jakarta.xml.bind.JAXBException;
-import jakarta.xml.bind.Marshaller;
-import jakarta.xml.bind.Unmarshaller;
 
-import java.io.StringReader;
-import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -35,17 +33,7 @@ import java.util.Base64;
  */
 public final class DisplayPayloadHelper {
 
-    private static final JAXBContext DISPLAY_CONTEXT;
-    private static final JAXBContext INPUT_CONTEXT;
-
-    static {
-        try {
-            DISPLAY_CONTEXT = JAXBContext.newInstance(DisplayPayload.class);
-            INPUT_CONTEXT = JAXBContext.newInstance(InputPayload.class);
-        } catch (JAXBException e) {
-            throw new ExceptionInInitializerError(e);
-        }
-    }
+    private static final XmlMapper MAPPER = XmlSupport.newMapper();
 
     private DisplayPayloadHelper() {
         // Utility class
@@ -63,16 +51,12 @@ public final class DisplayPayloadHelper {
      * @throws JAXBException if serialization fails
      */
     public static String toXml(DisplayPayload payload) throws JAXBException {
-        Marshaller marshaller = DISPLAY_CONTEXT.createMarshaller();
-        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.FALSE);
-        marshaller.setProperty(Marshaller.JAXB_FRAGMENT, Boolean.FALSE);
-        StringWriter writer = new StringWriter();
-        marshaller.marshal(payload, writer);
-        // Remove standalone="yes" for consistency with old hand-crafted XML format
-        return writer.toString().replace(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-        );
+        try {
+            String xml = MAPPER.writeValueAsString(payload);
+            return XmlSupport.withDefaultNamespace(xml, "displayPayload", "urn:bilt:display:v1");
+        } catch (JsonProcessingException e) {
+            throw new JAXBException("Failed to serialize DisplayPayload", e);
+        }
     }
 
     /**
@@ -95,8 +79,11 @@ public final class DisplayPayloadHelper {
      * @throws JAXBException if deserialization fails
      */
     public static DisplayPayload fromXml(String xml) throws JAXBException {
-        Unmarshaller unmarshaller = DISPLAY_CONTEXT.createUnmarshaller();
-        return (DisplayPayload) unmarshaller.unmarshal(new StringReader(xml));
+        try {
+            return MAPPER.readValue(xml, DisplayPayload.class);
+        } catch (JsonProcessingException e) {
+            throw new JAXBException("Failed to deserialize DisplayPayload", e);
+        }
     }
 
     /**
@@ -122,35 +109,14 @@ public final class DisplayPayloadHelper {
      * @throws JAXBException if serialization fails
      */
     public static String toXml(InputPayload payload) throws JAXBException {
-        Marshaller marshaller = INPUT_CONTEXT.createMarshaller();
-        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.FALSE);
-        marshaller.setProperty(Marshaller.JAXB_FRAGMENT, Boolean.FALSE);
-        StringWriter writer = new StringWriter();
-        marshaller.marshal(payload, writer);
-        // Post-process to use single default namespace for backward compatibility
-        return normalizeInputPayloadXml(writer.toString());
-    }
-
-    /**
-     * Normalizes InputPayload XML to use a single default namespace declaration.
-     * This ensures backward compatibility with the old hand-crafted XML format
-     * where all elements were in urn:bilt:input:v1.
-     */
-    private static String normalizeInputPayloadXml(String xml) {
-        // Remove namespace prefixes (e.g., ns2:inputPayload -> inputPayload)
-        xml = xml.replaceAll("<ns\\d+:", "<");
-        xml = xml.replaceAll("</ns\\d+:", "</");
-        // Replace namespace declarations with single default namespace
-        xml = xml.replaceAll(" xmlns=\"[^\"]*\"", "");
-        xml = xml.replaceAll(" xmlns:ns\\d+=\"[^\"]*\"", "");
-        // Add the correct default namespace to inputPayload
-        xml = xml.replace("<inputPayload", "<inputPayload xmlns=\"urn:bilt:input:v1\"");
-        // Remove standalone="yes" from XML declaration only (not from element content)
-        xml = xml.replace(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-        );
-        return xml;
+        try {
+            String xml = MAPPER.writeValueAsString(payload);
+            // Single default namespace for backward compatibility with terminals
+            // that expect all elements in the input namespace
+            return XmlSupport.withDefaultNamespace(xml, "inputPayload", "urn:bilt:input:v1");
+        } catch (JsonProcessingException e) {
+            throw new JAXBException("Failed to serialize InputPayload", e);
+        }
     }
 
     /**
@@ -168,47 +134,20 @@ public final class DisplayPayloadHelper {
     /**
      * Deserializes an {@link InputPayload} from an XML string.
      * <p>
-     * This method can parse both the normalized XML format (all elements in urn:bilt:input:v1)
-     * produced by {@link #toXml(InputPayload)} and the raw JAXB format with separate namespaces.
+     * Parsing is namespace-agnostic: both the normalized XML format (all elements
+     * in urn:bilt:input:v1) produced by {@link #toXml(InputPayload)} and the raw
+     * JAXB format with separate namespaces are accepted.
      *
      * @param xml the XML string to deserialize
      * @return the deserialized input payload
      * @throws JAXBException if deserialization fails
      */
     public static InputPayload inputFromXml(String xml) throws JAXBException {
-        Unmarshaller unmarshaller = INPUT_CONTEXT.createUnmarshaller();
-        // Reverse normalization: restore urn:bilt:common:v1 namespace for display element
-        // if the XML was produced by toXml(InputPayload) with single namespace
-        xml = denormalizeInputPayloadXml(xml);
-        return (InputPayload) unmarshaller.unmarshal(new StringReader(xml));
-    }
-
-    /**
-     * Restores proper namespace declarations for InputPayload XML that was normalized
-     * to use a single default namespace.
-     * <p>
-     * JAXB expects DisplayType's children (title, text) to be in urn:bilt:common:v1,
-     * but our normalized output puts everything in urn:bilt:input:v1 for terminal compatibility.
-     * The display element itself stays in urn:bilt:input:v1 per InputPayload's @XmlElement annotation.
-     * This method adds the common namespace back for proper unmarshalling.
-     */
-    private static String denormalizeInputPayloadXml(String xml) {
-        // Only process if it's a normalized XML (single namespace, no common namespace)
-        if (xml.contains("urn:bilt:common:v1") || !xml.contains("xmlns=\"urn:bilt:input:v1\"")) {
-            return xml;
+        try {
+            return MAPPER.readValue(xml, InputPayload.class);
+        } catch (JsonProcessingException e) {
+            throw new JAXBException("Failed to deserialize InputPayload", e);
         }
-        // Add common namespace declaration
-        xml = xml.replace(
-                "xmlns=\"urn:bilt:input:v1\"",
-                "xmlns=\"urn:bilt:input:v1\" xmlns:c=\"urn:bilt:common:v1\""
-        );
-        // Only prefix DisplayType's children (title, text), NOT display element itself
-        // because display is in urn:bilt:input:v1 per InputPayload's @XmlElement annotation
-        xml = xml.replace("<title>", "<c:title>");
-        xml = xml.replace("</title>", "</c:title>");
-        xml = xml.replace("<text>", "<c:text>");
-        xml = xml.replace("</text>", "</c:text>");
-        return xml;
     }
 
     /**
