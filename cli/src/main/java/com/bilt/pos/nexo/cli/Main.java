@@ -913,7 +913,7 @@ public final class Main {
         pauseForDisplayCheck("Demo Item B should now be on the terminal display");
 
         // 3. Pay — rebate/point steps run automatically for identified members
-        session.pay()
+        com.bilt.pos.session.payment.CheckoutResult checkout = session.pay()
                 .onRebatesRedeemed(rebates -> {
                     LOG.info("Rebates committed: -" + rebates.getTotalRebateAmount());
                     return rebates.getSuggestedTotal();
@@ -937,9 +937,15 @@ public final class Main {
                     LOG.severe("Payment failed: " + error);
                     return com.bilt.pos.session.payment.PaymentOptions.voidAndAbort();
                 })
-                .execute();
+                .getOrNull();
 
         LOG.info("Session finished in state " + session.getState());
+        if (checkout == null) {
+            // this demo doubles as a smoke test: a failed checkout must
+            // fail the process (main exits 1 on any exception from run())
+            throw new IllegalStateException(
+                    "checkout did not complete (session state " + session.getState() + ")");
+        }
     }
 
     private static void printUsage() {
