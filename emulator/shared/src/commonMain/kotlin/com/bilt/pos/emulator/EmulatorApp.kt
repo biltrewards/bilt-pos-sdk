@@ -65,7 +65,7 @@ private fun ConnectionPanel() {
         // fonts also get the stacked layout — dp widths alone don't grow
         // with fontScale but the button's intrinsic width does.
         BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            val compact = maxWidth < 420.dp * LocalDensity.current.fontScale
+            val compact = maxWidth < 420.dp * maxOf(1f, LocalDensity.current.fontScale)
             val ipField: @Composable (Modifier) -> Unit = { modifier ->
                 OutlinedTextField(
                     value = terminalIp,
