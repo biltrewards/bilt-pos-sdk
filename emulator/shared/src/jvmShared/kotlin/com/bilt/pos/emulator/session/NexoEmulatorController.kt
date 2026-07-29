@@ -6,6 +6,7 @@ import com.bilt.pos.nexo.security.SecurityKey
 import com.bilt.pos.session.CheckoutSession
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketItem
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,14 +30,15 @@ import kotlin.time.Duration.Companion.seconds
  * [CheckoutSession], runs the periodic diagnostics loop, and projects
  * everything into [EmulatorState] for the UI.
  *
- * All SDK calls run on a single-threaded dispatcher — the session is a
- * stateful machine and the emulator has no need for concurrent operations.
+ * Each connection is a self-contained [Connection]: its own scope (child of
+ * the app scope, cancelled wholesale on disconnect), its own single-threaded
+ * dispatcher (the session is a stateful machine, so its SDK calls are
+ * serialized — but per connection, so a reconnect never queues behind the
+ * previous connection's in-flight blocking call), and its session once built.
  *
- * Every coroutine belonging to a connection (diagnostics, TLS probe, basket
- * work) runs in a per-connection scope that [disconnect] cancels wholesale.
  * Because the SDK calls block rather than suspend, cancellation alone can't
- * stop one mid-call — so each job re-checks that it is still the live
- * connection after a blocking call returns, before touching [state].
+ * stop one mid-call — so each job re-checks that it is still active after a
+ * blocking call returns, before touching [state].
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class NexoEmulatorController(
@@ -45,7 +47,11 @@ class NexoEmulatorController(
     private val diagnosticsInterval: Duration = 60.seconds,
 ) : EmulatorController {
 
-    private val sessionDispatcher = Dispatchers.IO.limitedParallelism(1)
+    private class Connection(
+        val scope: CoroutineScope,
+        val dispatcher: CoroutineDispatcher,
+        @Volatile var session: CheckoutSession? = null,
+    )
 
     private val _state = MutableStateFlow(
         EmulatorState(
@@ -55,12 +61,8 @@ class NexoEmulatorController(
     )
     override val state: StateFlow<EmulatorState> = _state.asStateFlow()
 
-    /** Scope owning all coroutines of the active connection; child of [scope]. */
     @Volatile
-    private var connection: CoroutineScope? = null
-
-    @Volatile
-    private var session: CheckoutSession? = null
+    private var connection: Connection? = null
 
     override fun autodetectAddress() {
         scope.launch(Dispatchers.IO) {
@@ -94,12 +96,15 @@ class NexoEmulatorController(
         val endpoint = "https://$address:8443/nexo"
         log("Connecting to $endpoint (encryption=$encrypt)")
 
-        val conn = CoroutineScope(
-            scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+        val conn = Connection(
+            scope = CoroutineScope(
+                scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+            ),
+            dispatcher = Dispatchers.IO.limitedParallelism(1),
         )
         connection = conn
 
-        conn.launch(sessionDispatcher) {
+        conn.scope.launch(conn.dispatcher) {
             // Payload channel: always permissive, so a failing certificate is
             // reported (below) but never blocks terminal communication.
             val clientBuilder = BiltNexoTerminalClient.builder()
@@ -123,7 +128,7 @@ class NexoEmulatorController(
             if (!isActive) {
                 return@launch // disconnected while building; don't install the session
             }
-            session = built
+            conn.session = built
 
             while (isActive) {
                 runDiagnosis(built)
@@ -132,7 +137,7 @@ class NexoEmulatorController(
         }
 
         // Strict verification probe, independent of the payload channel.
-        conn.launch(Dispatchers.IO) {
+        conn.scope.launch(Dispatchers.IO) {
             val tls = TlsVerifier.verify(address, 8443, config.caPem, config.hostnamePattern)
             if (isActive) {
                 _state.update { it.copy(tls = tls) }
@@ -142,12 +147,16 @@ class NexoEmulatorController(
     }
 
     override fun disconnect() {
-        connection?.cancel()
+        val conn = connection ?: return updateDisconnectedState()
         connection = null
-        if (session != null) {
-            session = null
+        conn.scope.cancel()
+        if (conn.session != null) {
             log("Disconnected")
         }
+        updateDisconnectedState()
+    }
+
+    private fun updateDisconnectedState() {
         _state.update {
             it.copy(
                 connection = ConnectionStatus(ConnectionPhase.DISCONNECTED),
@@ -160,12 +169,12 @@ class NexoEmulatorController(
 
     override fun addProduct(product: Product) {
         val conn = connection
-        val current = session
+        val current = conn?.session
         if (conn == null || current == null) {
             log("Not connected — connect before adding items")
             return
         }
-        conn.launch(sessionDispatcher) {
+        conn.scope.launch(conn.dispatcher) {
             try {
                 val existing = current.basket.getItemBySku(product.sku)
                 val basket = if (existing == null) {
