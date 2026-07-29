@@ -10,6 +10,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +31,12 @@ import kotlin.time.Duration.Companion.seconds
  *
  * All SDK calls run on a single-threaded dispatcher — the session is a
  * stateful machine and the emulator has no need for concurrent operations.
+ *
+ * Every coroutine belonging to a connection (diagnostics, TLS probe, basket
+ * work) runs in a per-connection scope that [disconnect] cancels wholesale.
+ * Because the SDK calls block rather than suspend, cancellation alone can't
+ * stop one mid-call — so each job re-checks that it is still the live
+ * connection after a blocking call returns, before touching [state].
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class NexoEmulatorController(
@@ -46,8 +55,12 @@ class NexoEmulatorController(
     )
     override val state: StateFlow<EmulatorState> = _state.asStateFlow()
 
+    /** Scope owning all coroutines of the active connection; child of [scope]. */
+    @Volatile
+    private var connection: CoroutineScope? = null
+
+    @Volatile
     private var session: CheckoutSession? = null
-    private var diagnosticsJob: Job? = null
 
     override fun autodetectAddress() {
         scope.launch(Dispatchers.IO) {
@@ -81,7 +94,12 @@ class NexoEmulatorController(
         val endpoint = "https://$address:8443/nexo"
         log("Connecting to $endpoint (encryption=$encrypt)")
 
-        scope.launch(sessionDispatcher) {
+        val conn = CoroutineScope(
+            scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+        )
+        connection = conn
+
+        conn.launch(sessionDispatcher) {
             // Payload channel: always permissive, so a failing certificate is
             // reported (below) but never blocks terminal communication.
             val clientBuilder = BiltNexoTerminalClient.builder()
@@ -96,34 +114,36 @@ class NexoEmulatorController(
                         .build()
                 )
             }
-            session = CheckoutSession.builder()
+            val built = CheckoutSession.builder()
                 .client(clientBuilder.build())
                 .saleId(config.saleId)
                 .poiId(config.poiId)
                 .currency(config.currency)
                 .build()
+            if (!isActive) {
+                return@launch // disconnected while building; don't install the session
+            }
+            session = built
 
-            runDiagnosis()
-
-            diagnosticsJob = scope.launch(sessionDispatcher) {
-                while (isActive) {
-                    delay(diagnosticsInterval)
-                    runDiagnosis()
-                }
+            while (isActive) {
+                runDiagnosis(built)
+                delay(diagnosticsInterval)
             }
         }
 
         // Strict verification probe, independent of the payload channel.
-        scope.launch(Dispatchers.IO) {
+        conn.launch(Dispatchers.IO) {
             val tls = TlsVerifier.verify(address, 8443, config.caPem, config.hostnamePattern)
-            _state.update { it.copy(tls = tls) }
-            log(tls.label)
+            if (isActive) {
+                _state.update { it.copy(tls = tls) }
+                log(tls.label)
+            }
         }
     }
 
     override fun disconnect() {
-        diagnosticsJob?.cancel()
-        diagnosticsJob = null
+        connection?.cancel()
+        connection = null
         if (session != null) {
             session = null
             log("Disconnected")
@@ -139,12 +159,13 @@ class NexoEmulatorController(
     }
 
     override fun addProduct(product: Product) {
+        val conn = connection
         val current = session
-        if (current == null) {
+        if (conn == null || current == null) {
             log("Not connected — connect before adding items")
             return
         }
-        scope.launch(sessionDispatcher) {
+        conn.launch(sessionDispatcher) {
             try {
                 val existing = current.basket.getItemBySku(product.sku)
                 val basket = if (existing == null) {
@@ -160,19 +181,25 @@ class NexoEmulatorController(
                 } else {
                     current.updateItemQuantityBySku(product.sku, existing.quantity + 1)
                 }
-                publishBasket(basket)
-                log("Added ${product.name} (${product.priceLabel})")
+                if (isActive) {
+                    publishBasket(basket)
+                    log("Added ${product.name} (${product.priceLabel})")
+                }
             } catch (e: Exception) {
-                log("Failed to add ${product.name}: ${e.message}")
+                if (isActive) {
+                    log("Failed to add ${product.name}: ${e.message}")
+                }
             }
         }
     }
 
-    private fun runDiagnosis() {
-        val current = session ?: return
+    private suspend fun runDiagnosis(current: CheckoutSession) {
         val previous = _state.value.connection.phase
         try {
             val result = current.diagnose().get()
+            if (!currentCoroutineContext().isActive) {
+                return // disconnected while the request was in flight
+            }
             val poi = result.poiStatus?.globalStatus?.toString() ?: "OK"
             _state.update {
                 it.copy(connection = ConnectionStatus(ConnectionPhase.CONNECTED, "POI $poi"))
@@ -181,6 +208,9 @@ class NexoEmulatorController(
                 log("Terminal connected (POI status: $poi)")
             }
         } catch (e: Exception) {
+            if (!currentCoroutineContext().isActive) {
+                return
+            }
             _state.update {
                 it.copy(
                     connection = ConnectionStatus(
