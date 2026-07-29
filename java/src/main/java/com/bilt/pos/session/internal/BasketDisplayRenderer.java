@@ -23,6 +23,8 @@ import com.bilt.pos.session.display.DisplayContext;
 import com.bilt.pos.session.display.DisplayRenderer;
 
 import java.math.BigDecimal;
+import java.util.Currency;
+import java.util.Locale;
 
 /**
  * Default {@link DisplayRenderer}: renders the basket as the standard
@@ -35,7 +37,7 @@ public final class BasketDisplayRenderer implements DisplayRenderer {
 
     @Override
     public DisplayPayload render(Basket basket, DisplayContext context) {
-        String currency = context.getCurrency();
+        String currency = displaySymbol(context.getCurrency());
 
         LineItemsType lineItems = new LineItemsType();
         for (BasketLineItem line : basket.getItems()) {
@@ -81,5 +83,19 @@ public final class BasketDisplayRenderer implements DisplayRenderer {
         payload.setVersion(VERSION);
         payload.setReceipt(receipt);
         return payload;
+    }
+
+    /**
+     * The session currency is an ISO 4217 code by contract, but the receipt
+     * layout prints {@code MoneyType.currency} verbatim next to every amount
+     * — customers should see {@code $79.99}, not {@code USD 79.99}. Codes
+     * without a known symbol fall back to the code itself.
+     */
+    private static String displaySymbol(String isoCode) {
+        try {
+            return Currency.getInstance(isoCode).getSymbol(Locale.US);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            return isoCode;
+        }
     }
 }
