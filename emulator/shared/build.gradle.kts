@@ -26,6 +26,7 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.ui)
+            implementation(libs.kotlinx.coroutines.core)
         }
 
         // Both targets are JVM-bytecode, so the Java SDK is shared here rather
@@ -39,6 +40,10 @@ kotlin {
         }
         androidMain.get().dependsOn(jvmShared)
         getByName("desktopMain").dependsOn(jvmShared)
+
+        getByName("desktopTest").dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }
 

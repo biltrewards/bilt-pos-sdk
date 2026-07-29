@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `CheckoutSession` lifecycle brackets: the builder's `start()` announces the session to the terminal (nexo `Admin` signal `BiltSession,Start,v1,<sessionId>`) and yields the session once acknowledged, and `end()` tells the terminal to discard its session-scoped data, sealing the session in the new terminal state `ENDED` (no further operations, no restart). `CheckoutSession` is now `AutoCloseable` — try-with-resources sends the end signal best-effort even on exception paths.
+- Emulator: first functional slice. Terminal address autodetect via adb (as the Python emulator did), a `CheckoutSession`-backed connect flow, automatic diagnostics every 60s driving a connected/unreachable status indicator, message encryption from `NEXO_PASSPHRASE` (env or `local.properties`), an out-of-band TLS verification probe (chain + hostname pattern) that reports failures but never blocks communication, and a quick-buy product grid backed by a `ProductProvider` abstraction with a 24-product mock catalog (sub-$1 to $549.99) that rings items into the session basket.
 
 ### Changed (breaking)
 
