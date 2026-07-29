@@ -1,6 +1,7 @@
 package com.bilt.pos.emulator
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -8,14 +9,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -36,9 +38,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.session.ConnectionPhase
@@ -56,7 +60,12 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
 
     MaterialTheme {
         Scaffold(
-            topBar = { TopAppBar(title = { Text("Bilt POS Emulator") }) },
+            topBar = {
+                TopAppBar(
+                    title = { Text("Bilt POS Emulator") },
+                    actions = { StatusIndicators(state) },
+                )
+            },
         ) { padding ->
             Column(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
@@ -106,6 +115,12 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
     val passphraseAvailable = state.hasConfiguredPassphrase || passphrase.isNotBlank()
     val canConnect = terminalIp.isNotBlank() && (!encryptionOn || passphraseAvailable)
 
+    val passphrasePlaceholder = if (state.hasConfiguredPassphrase) {
+        "passphrase (NEXO_PASSPHRASE)"
+    } else {
+        "passphrase (required)"
+    }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -113,19 +128,38 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
         ) {
             // Stack the controls when the window is narrow (phones, split
             // screen). The breakpoint scales with the font size — dp widths
-            // alone don't grow with fontScale but the button's intrinsic
-            // width does.
+            // alone don't grow with fontScale but the controls' intrinsic
+            // widths do.
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val compact = maxWidth < 420.dp * maxOf(1f, LocalDensity.current.fontScale)
+                val compact = maxWidth < 560.dp * maxOf(1f, LocalDensity.current.fontScale)
                 val ipField: @Composable (Modifier) -> Unit = { modifier ->
-                    OutlinedTextField(
+                    CompactTextField(
                         value = terminalIp,
                         onValueChange = { terminalIp = it },
-                        label = { Text("Terminal IP") },
-                        singleLine = true,
+                        placeholder = "Terminal IP",
                         enabled = !connected,
                         modifier = modifier,
                     )
+                }
+                val passphraseField: @Composable (Modifier) -> Unit = { modifier ->
+                    CompactTextField(
+                        value = passphrase,
+                        onValueChange = { passphrase = it },
+                        placeholder = passphrasePlaceholder,
+                        enabled = !connected,
+                        masked = true,
+                        modifier = modifier,
+                    )
+                }
+                val encryptToggle: @Composable () -> Unit = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = encryptionOn,
+                            onCheckedChange = { encryptionOn = it },
+                            enabled = !connected,
+                        )
+                        Text("Encrypt", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
                 val connectButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
@@ -148,6 +182,10 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         ipField(Modifier.fillMaxWidth())
+                        encryptToggle()
+                        if (encryptionOn) {
+                            passphraseField(Modifier.fillMaxWidth())
+                        }
                         connectButton(Modifier.fillMaxWidth())
                     }
                 } else {
@@ -156,67 +194,92 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        ipField(Modifier.weight(1f))
+                        ipField(Modifier.width(160.dp))
                         connectButton(Modifier)
+                        encryptToggle()
+                        if (encryptionOn) {
+                            passphraseField(Modifier.width(240.dp))
+                        }
                     }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = encryptionOn,
-                    onCheckedChange = { encryptionOn = it },
-                    enabled = !connected,
-                )
-                Text("Encrypt messages", style = MaterialTheme.typography.bodyMedium)
-            }
-            if (encryptionOn) {
-                OutlinedTextField(
-                    value = passphrase,
-                    onValueChange = { passphrase = it },
-                    label = { Text("Passphrase") },
-                    placeholder = {
-                        Text(
-                            if (state.hasConfiguredPassphrase) {
-                                "using NEXO_PASSPHRASE — type to override"
-                            } else {
-                                "required — no NEXO_PASSPHRASE configured"
-                            }
-                        )
-                    },
-                    singleLine = true,
-                    enabled = !connected,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            StatusRow(state)
         }
     }
 }
 
+/**
+ * A single-line text field about two-thirds the height of Material's
+ * [OutlinedTextField] (which has a fixed 56dp minimum) so the connection
+ * controls stay one slim row.
+ */
 @Composable
-private fun StatusRow(state: EmulatorState) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun CompactTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    masked: Boolean = false,
+) {
+    val contentColor = MaterialTheme.colorScheme.onSurface.let {
+        if (enabled) it else it.copy(alpha = 0.5f)
+    }
+    Box(
+        modifier = modifier
+            .height(38.dp)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        val (color, label) = when (state.connection.phase) {
-            ConnectionPhase.CONNECTED -> Color(0xFF2E7D32) to "Connected"
-            ConnectionPhase.CONNECTING -> Color(0xFFF9A825) to "Connecting…"
-            ConnectionPhase.ERROR -> Color(0xFFC62828) to "Unreachable"
-            ConnectionPhase.DISCONNECTED -> Color(0xFF9E9E9E) to "Disconnected"
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            enabled = enabled,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = contentColor),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (value.isEmpty()) {
+            Text(
+                placeholder,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        Box(modifier = Modifier.size(10.dp).background(color, CircleShape))
+    }
+}
+
+/** Connection, TLS, and encryption indicators for the top app bar. */
+@Composable
+private fun StatusIndicators(state: EmulatorState) {
+    Column(
+        horizontalAlignment = Alignment.End,
+        modifier = Modifier.padding(end = 16.dp),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val (color, label) = when (state.connection.phase) {
+                ConnectionPhase.CONNECTED -> Color(0xFF2E7D32) to "Connected"
+                ConnectionPhase.CONNECTING -> Color(0xFFF9A825) to "Connecting…"
+                ConnectionPhase.ERROR -> Color(0xFFC62828) to "Unreachable"
+                ConnectionPhase.DISCONNECTED -> Color(0xFF9E9E9E) to "Disconnected"
+            }
+            Box(modifier = Modifier.size(10.dp).background(color, CircleShape))
+            Text(
+                text = listOfNotNull(label, state.connection.detail).joinToString(" — "),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
         Text(
-            text = listOfNotNull(label, state.connection.detail).joinToString(" — "),
-            style = MaterialTheme.typography.bodyMedium,
+            text = state.tls.label + "   ·   Encryption: " +
+                if (state.encryptionEnabled) "on" else "off",
+            style = MaterialTheme.typography.bodySmall,
         )
     }
-    Text(
-        text = state.tls.label + "   ·   Encryption: " +
-            if (state.encryptionEnabled) "on" else "off",
-        style = MaterialTheme.typography.bodySmall,
-    )
 }
 
 @Composable
@@ -228,16 +291,24 @@ private fun ProductGrid(
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text("Products", style = MaterialTheme.typography.titleMedium)
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 150.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(top = 8.dp),
             ) {
                 items(products, key = { it.sku }) { product ->
-                    Button(onClick = { controller.addProduct(product) }) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(product.name, style = MaterialTheme.typography.labelLarge)
+                    Button(
+                        onClick = { controller.addProduct(product) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                product.name,
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.weight(1f),
+                            )
                             Text(product.priceLabel, style = MaterialTheme.typography.labelMedium)
                         }
                     }
