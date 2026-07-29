@@ -72,7 +72,10 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 ConnectionPanel(state, controller)
-                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                // weight(1f), not fillMaxSize(): a non-weighted child measures
+                // against the Column's full height and would overflow by the
+                // connection panel's height
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     if (maxWidth < 700.dp) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             ProductGrid(products, controller, Modifier.weight(1.4f))
