@@ -318,6 +318,54 @@ class DisplayPayloadHelperTest {
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // Image Payloads (@XmlValue simple content with attributes)
+    // ═══════════════════════════════════════════════════════════════════
+
+    @Test
+    void imagePayloadShouldSerializeValueAsBase64ElementText() throws JAXBException {
+        byte[] imageBytes = "fake-png-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        DisplayPayload payload = new DisplayPayload();
+        payload.setVersion("1.0");
+        payload.setLayout("image.xslt");
+        ImageType image = new ImageType();
+        image.setValue(imageBytes);
+        image.setMediaType("image/png");
+        image.setAltText("Store logo");
+        payload.setImage(image);
+
+        String xml = DisplayPayloadHelper.toXml(payload);
+
+        // attributes stay attributes, the byte[] @XmlValue is the element's
+        // base64 text content (xs:base64Binary), exactly as JAXB emitted it
+        String expectedBase64 = Base64.getEncoder().encodeToString(imageBytes);
+        assertTrue(xml.contains("mediaType=\"image/png\""), "mediaType should serialize as attribute");
+        assertTrue(xml.contains("altText=\"Store logo\""), "altText should serialize as attribute");
+        assertTrue(xml.contains(">" + expectedBase64 + "</image>"),
+                "image bytes should be single-line base64 element text, got: " + xml);
+        assertFalse(xml.contains("<value>"), "@XmlValue must not become a child element");
+    }
+
+    @Test
+    void imagePayloadShouldRoundTrip() throws JAXBException {
+        byte[] imageBytes = new byte[]{(byte) 0x89, 'P', 'N', 'G', 0, 1, 2, 3};
+        DisplayPayload original = new DisplayPayload();
+        original.setVersion("1.0");
+        original.setLayout("image.xslt");
+        ImageType image = new ImageType();
+        image.setValue(imageBytes);
+        image.setMediaType("image/png");
+        image.setAltText("Logo");
+        original.setImage(image);
+
+        DisplayPayload parsed = DisplayPayloadHelper.fromBase64(DisplayPayloadHelper.toBase64(original));
+
+        assertNotNull(parsed.getImage());
+        assertArrayEquals(imageBytes, parsed.getImage().getValue());
+        assertEquals("image/png", parsed.getImage().getMediaType());
+        assertEquals("Logo", parsed.getImage().getAltText());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // Complex Receipt Serialization
     // ═══════════════════════════════════════════════════════════════════
 

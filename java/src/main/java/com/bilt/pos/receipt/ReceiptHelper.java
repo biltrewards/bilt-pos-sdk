@@ -11,15 +11,11 @@
  */
 package com.bilt.pos.receipt;
 
-import jakarta.xml.bind.JAXBContext;
-import jakarta.xml.bind.JAXBElement;
+import com.bilt.pos.internal.XmlSupport;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import jakarta.xml.bind.JAXBException;
-import jakarta.xml.bind.Marshaller;
-import jakarta.xml.bind.Unmarshaller;
 
-import javax.xml.transform.stream.StreamSource;
-import java.io.StringReader;
-import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
@@ -44,16 +40,10 @@ import java.util.Base64;
  */
 public final class ReceiptHelper {
 
-    private static final JAXBContext CONTEXT;
-    private static final ObjectFactory FACTORY = new ObjectFactory();
+    private static final XmlMapper MAPPER = XmlSupport.newMapper();
 
-    static {
-        try {
-            CONTEXT = JAXBContext.newInstance(ObjectFactory.class);
-        } catch (JAXBException e) {
-            throw new ExceptionInInitializerError(e);
-        }
-    }
+    /** Root element name, matching {@link ObjectFactory#createReceipt}'s QName. */
+    private static final String ROOT_ELEMENT = "receipt";
 
     private ReceiptHelper() {
     }
@@ -66,15 +56,12 @@ public final class ReceiptHelper {
      * @throws JAXBException if serialization fails
      */
     public static String toXml(ReceiptType receipt) throws JAXBException {
-        Marshaller marshaller = CONTEXT.createMarshaller();
-        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.FALSE);
-        marshaller.setProperty(Marshaller.JAXB_FRAGMENT, Boolean.FALSE);
-        StringWriter writer = new StringWriter();
-        marshaller.marshal(FACTORY.createReceipt(receipt), writer);
-        return writer.toString().replace(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>",
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-        );
+        try {
+            String xml = MAPPER.writer().withRootName(ROOT_ELEMENT).writeValueAsString(receipt);
+            return XmlSupport.withDefaultNamespace(xml, ROOT_ELEMENT, "urn:bilt:receipt:v1");
+        } catch (JsonProcessingException e) {
+            throw new JAXBException("Failed to serialize ReceiptType", e);
+        }
     }
 
     /**
@@ -97,11 +84,11 @@ public final class ReceiptHelper {
      * @throws JAXBException if deserialization fails
      */
     public static ReceiptType fromXml(String xml) throws JAXBException {
-        Unmarshaller unmarshaller = CONTEXT.createUnmarshaller();
-        JAXBElement<ReceiptType> element = unmarshaller.unmarshal(
-                new StreamSource(new StringReader(xml)), ReceiptType.class
-        );
-        return element.getValue();
+        try {
+            return MAPPER.readValue(xml, ReceiptType.class);
+        } catch (JsonProcessingException e) {
+            throw new JAXBException("Failed to deserialize ReceiptType", e);
+        }
     }
 
     /**
