@@ -75,4 +75,38 @@ class BasketDisplayRendererTest {
         assertEquals(0, new BigDecimal("89.00").compareTo(
                 payload.getReceipt().getTotal().getAmount().getValue()));
     }
+
+    @Test
+    void receiptAmountsUseTheCurrencySymbolNotTheIsoCode() {
+        Basket basket = Basket.builder()
+                .items(List.of(line("1", new BigDecimal("50.00"), BigDecimal.ZERO)))
+                .originalTotal(new BigDecimal("50.00"))
+                .taxTotal(new BigDecimal("4.00"))
+                .grandTotal(new BigDecimal("54.00"))
+                .build();
+
+        DisplayPayload payload = new BasketDisplayRenderer().render(basket, CONTEXT);
+
+        assertEquals("$", payload.getReceipt().getTotal().getAmount().getCurrency());
+        assertEquals("$", payload.getReceipt().getSubtotal().getAmount().getCurrency());
+        assertEquals("$", payload.getReceipt().getLineItems().getLineItem().get(0)
+                .getAmount().getCurrency());
+        assertEquals("$", payload.getReceipt().getTax().getTaxTotal()
+                .getAmount().getCurrency());
+    }
+
+    @Test
+    void unknownCurrencyCodeFallsBackToTheCodeItself() {
+        Basket basket = Basket.builder()
+                .items(List.of(line("1", new BigDecimal("10.00"), BigDecimal.ZERO)))
+                .originalTotal(new BigDecimal("10.00"))
+                .grandTotal(new BigDecimal("10.00"))
+                .build();
+        DisplayContext context =
+                new DisplayContext(SessionState.PAYING, DisplayTarget.TERMINAL, "ZZZ");
+
+        DisplayPayload payload = new BasketDisplayRenderer().render(basket, context);
+
+        assertEquals("ZZZ", payload.getReceipt().getTotal().getAmount().getCurrency());
+    }
 }
