@@ -136,9 +136,9 @@ When the rebate succeeds, your integration receives:
 - **`POIData.POITransactionID.TimeStamp`** — timestamp of the transaction.
 - **`LoyaltyResult[0].LoyaltyAccount.LoyaltyAccountID.LoyaltyID`** — echo of the member's loyalty ID.
 - **`LoyaltyResult[0].LoyaltyAccount.LoyaltyBrand`** — the loyalty program (e.g. `K-Club`).
-- **`LoyaltyResult[0].Rebates.TotalRebate`** — discount on the overall purchase, not attached to a specific item.
-- **`LoyaltyResult[0].Rebates.RebateLabel`** — short text to print on the receipt for the total rebate.
-- **`LoyaltyResult[0].Rebates.SaleItemRebate[]`** — per-item rebates, each keyed to a basket line by `ItemID`:
+- **`LoyaltyResult[0].Rebates.TotalRebate`** *(optional)* — discount on the overall purchase, not attached to a specific item. Treat an omitted value as zero — a response may carry only item-level rebates.
+- **`LoyaltyResult[0].Rebates.RebateLabel`** *(optional)* — short text to print on the receipt for the total rebate.
+- **`LoyaltyResult[0].Rebates.SaleItemRebate[]`** *(optional)* — per-item rebates, each keyed to a basket line by `ItemID`:
     - **`ItemAmount`** — money off that line, and/or
     - **`Quantity`** — extra free units of that item.
     - **`RebateLabel`** — short text to print on the receipt in front of the rebate.
