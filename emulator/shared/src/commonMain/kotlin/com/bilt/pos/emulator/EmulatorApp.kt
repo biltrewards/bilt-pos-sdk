@@ -294,9 +294,11 @@ private fun ProductGrid(
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text("Products", style = MaterialTheme.typography.titleMedium)
+            // weight(1f) so the list measures against the space under the
+            // header instead of the card's full height (clips the last rows)
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(top = 8.dp).weight(1f),
             ) {
                 items(products, key = { it.sku }) { product ->
                     Button(
@@ -339,7 +341,7 @@ private fun BasketCard(state: EmulatorState, modifier: Modifier = Modifier) {
             if (state.basket.isEmpty()) {
                 Text("Empty", style = MaterialTheme.typography.bodySmall)
             } else {
-                LazyColumn {
+                LazyColumn(modifier = Modifier.weight(1f)) {
                     items(state.basket, key = { it.sku }) { line ->
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
                             Text(
@@ -362,7 +364,7 @@ private fun EventsCard(state: EmulatorState, modifier: Modifier = Modifier) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text("Log", style = MaterialTheme.typography.titleMedium)
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            LazyColumn {
+            LazyColumn(modifier = Modifier.weight(1f)) {
                 items(state.events.asReversed()) { event ->
                     Text(
                         event,
