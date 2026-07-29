@@ -105,26 +105,43 @@ class NexoEmulatorController(
         connection = conn
 
         conn.scope.launch(conn.dispatcher) {
-            // Payload channel: always permissive, so a failing certificate is
-            // reported (below) but never blocks terminal communication.
-            val clientBuilder = BiltNexoTerminalClient.builder()
-                .endpoint(endpoint)
-                .trustAllCertificates()
-            if (encrypt) {
-                clientBuilder.securityKey(
-                    SecurityKey.builder()
-                        .passphrase(passphrase)
-                        .keyIdentifier(config.keyId)
-                        .keyVersion(config.keyVersion)
-                        .build()
-                )
+            val built = try {
+                // Payload channel: always permissive, so a failing certificate
+                // is reported (below) but never blocks terminal communication.
+                val clientBuilder = BiltNexoTerminalClient.builder()
+                    .endpoint(endpoint)
+                    .trustAllCertificates()
+                if (encrypt) {
+                    clientBuilder.securityKey(
+                        SecurityKey.builder()
+                            .passphrase(passphrase)
+                            .keyIdentifier(config.keyId)
+                            .keyVersion(config.keyVersion)
+                            .build()
+                    )
+                }
+                CheckoutSession.builder()
+                    .client(clientBuilder.build())
+                    .saleId(config.saleId)
+                    .poiId(config.poiId)
+                    .currency(config.currency)
+                    .build()
+            } catch (e: Exception) {
+                // e.g. an unparsable address making the endpoint URL invalid —
+                // without this the job dies silently and the chip stays on Connecting
+                if (isActive) {
+                    _state.update {
+                        it.copy(
+                            connection = ConnectionStatus(
+                                ConnectionPhase.ERROR,
+                                e.message ?: "session setup failed",
+                            )
+                        )
+                    }
+                    log("Failed to set up the session: ${e.message}")
+                }
+                return@launch
             }
-            val built = CheckoutSession.builder()
-                .client(clientBuilder.build())
-                .saleId(config.saleId)
-                .poiId(config.poiId)
-                .currency(config.currency)
-                .build()
             if (!isActive) {
                 return@launch // disconnected while building; don't install the session
             }
