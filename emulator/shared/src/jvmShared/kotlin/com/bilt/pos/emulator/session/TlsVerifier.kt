@@ -1,6 +1,8 @@
 package com.bilt.pos.emulator.session
 
 import java.io.ByteArrayInputStream
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.security.KeyStore
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
@@ -17,6 +19,8 @@ import javax.net.ssl.TrustManagerFactory
  * reports the outcome for display.
  */
 object TlsVerifier {
+
+    private const val TIMEOUT_MS = 5_000
 
     fun verify(host: String, port: Int, caPem: String?, hostnamePattern: String): TlsStatus {
         if (caPem.isNullOrBlank()) {
@@ -56,10 +60,17 @@ object TlsVerifier {
 
     /** Performs the handshake (chain validation happens here) and returns the leaf. */
     private fun handshake(context: SSLContext, host: String, port: Int): X509Certificate {
-        (context.socketFactory.createSocket(host, port) as SSLSocket).use { socket ->
-            socket.soTimeout = 5_000
-            socket.startHandshake()
-            return socket.session.peerCertificates.first() as X509Certificate
+        // Connect explicitly so the connect phase is bounded too — the
+        // createSocket(host, port) constructor connects with no timeout and
+        // soTimeout only bounds reads after the TCP connect succeeds
+        Socket().use { tcp ->
+            tcp.connect(InetSocketAddress(host, port), TIMEOUT_MS)
+            tcp.soTimeout = TIMEOUT_MS
+            (context.socketFactory.createSocket(tcp, host, port, true) as SSLSocket).use { socket ->
+                socket.soTimeout = TIMEOUT_MS
+                socket.startHandshake()
+                return socket.session.peerCertificates.first() as X509Certificate
+            }
         }
     }
 
