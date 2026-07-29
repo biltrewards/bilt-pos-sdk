@@ -23,6 +23,7 @@ import java.util.Set;
 import static com.bilt.pos.session.SessionState.ABORTED;
 import static com.bilt.pos.session.SessionState.ACTIVE;
 import static com.bilt.pos.session.SessionState.COMPLETED;
+import static com.bilt.pos.session.SessionState.ENDED;
 import static com.bilt.pos.session.SessionState.FAILED;
 import static com.bilt.pos.session.SessionState.IDENTIFIED;
 import static com.bilt.pos.session.SessionState.IDLE;
@@ -41,20 +42,25 @@ public final class SessionStateMachine {
             new EnumMap<>(SessionState.class);
 
     static {
-        TRANSITIONS.put(IDLE, EnumSet.of(IDENTIFIED, ACTIVE, VOIDING, ABORTED));
-        TRANSITIONS.put(IDENTIFIED, EnumSet.of(ACTIVE, IDLE, ABORTED));
-        TRANSITIONS.put(ACTIVE, EnumSet.of(PAYING, IDLE, IDENTIFIED, ABORTED));
+        // ENDED — the register said goodbye and the terminal discarded its
+        // session data — is reachable from every state except the two with
+        // money in flight (PAYING, VOIDING); the other terminal states allow
+        // it so a finished checkout can still be ended, but nothing leaves it
+        TRANSITIONS.put(IDLE, EnumSet.of(IDENTIFIED, ACTIVE, VOIDING, ABORTED, ENDED));
+        TRANSITIONS.put(IDENTIFIED, EnumSet.of(ACTIVE, IDLE, ABORTED, ENDED));
+        TRANSITIONS.put(ACTIVE, EnumSet.of(PAYING, IDLE, IDENTIFIED, ABORTED, ENDED));
         TRANSITIONS.put(PAYING, EnumSet.of(COMPLETED, FAILED, ABORTED));
-        TRANSITIONS.put(COMPLETED, EnumSet.of(VOIDING));
+        TRANSITIONS.put(COMPLETED, EnumSet.of(VOIDING, ENDED));
         // FAILED -> ACTIVE: the tender was fully unwound, so the register
         // may adjust the basket before retrying pay()
-        TRANSITIONS.put(FAILED, EnumSet.of(PAYING, ACTIVE, VOIDING, ABORTED));
+        TRANSITIONS.put(FAILED, EnumSet.of(PAYING, ACTIVE, VOIDING, ABORTED, ENDED));
         // a failed void restores the pre-void state (IDLE/COMPLETED/FAILED):
         // the referenced transaction still stands, so e.g. a COMPLETED
         // payment must not degrade to FAILED where pay() could re-charge
         TRANSITIONS.put(VOIDING, EnumSet.of(VOIDED, IDLE, COMPLETED, FAILED));
-        TRANSITIONS.put(ABORTED, EnumSet.noneOf(SessionState.class));
-        TRANSITIONS.put(VOIDED, EnumSet.noneOf(SessionState.class));
+        TRANSITIONS.put(ABORTED, EnumSet.of(ENDED));
+        TRANSITIONS.put(VOIDED, EnumSet.of(ENDED));
+        TRANSITIONS.put(ENDED, EnumSet.noneOf(SessionState.class));
     }
 
     private volatile SessionState current = IDLE;

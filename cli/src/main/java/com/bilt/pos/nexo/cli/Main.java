@@ -869,7 +869,8 @@ public final class Main {
                         .saleId("bilt-cli")
                         .poiId("bilt-terminal")
                         .currency(currency)
-                        .build();
+                        .start()
+                        .get();
 
         LOG.info("Session " + session.getSessionId() + " started (state "
                 + session.getState() + ")");
@@ -938,6 +939,10 @@ public final class Main {
                     return com.bilt.pos.session.payment.PaymentOptions.voidAndAbort();
                 })
                 .getOrNull();
+
+        session.end()
+                .onError(error -> LOG.warning("Session end failed: " + error))
+                .execute();
 
         LOG.info("Session finished in state " + session.getState());
         if (checkout == null) {

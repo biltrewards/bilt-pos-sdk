@@ -24,8 +24,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CheckoutSessionBasketTest {
 
+    // answers both the display sends and the session-start Admin exchange,
+    // so the catch-all dispatcher can serve every request this class makes
     private static final String DISPLAY_OK =
-            "{\"SaleToPOIResponse\":{\"DisplayResponse\":{}}}";
+            "{\"SaleToPOIResponse\":{\"DisplayResponse\":{},"
+                    + "\"AdminResponse\":{\"Response\":{\"Result\":\"Success\"}}}}";
 
     private final ObjectMapper mapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -60,6 +63,13 @@ class CheckoutSessionBasketTest {
                 .currency("USD");
     }
 
+    /** Starts the session and drains the session-start Admin request. */
+    private CheckoutSession start(CheckoutSession.Builder builder) throws Exception {
+        CheckoutSession session = builder.start().get();
+        server.takeRequest(5, TimeUnit.SECONDS);
+        return session;
+    }
+
     private DisplayPayload nextDisplayPayload() throws Exception {
         RecordedRequest recorded = server.takeRequest(5, TimeUnit.SECONDS);
         assertNotNull(recorded, "expected a display request");
@@ -73,8 +83,8 @@ class CheckoutSessionBasketTest {
     // ─── State transitions ───
 
     @Test
-    void negativeTaxValuesAreRejected() {
-        CheckoutSession session = sessionBuilder().autoDisplay(false).build();
+    void negativeTaxValuesAreRejected() throws Exception {
+        CheckoutSession session = start(sessionBuilder().autoDisplay(false));
         session.addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
 
         assertThrows(IllegalArgumentException.class,
@@ -90,8 +100,8 @@ class CheckoutSessionBasketTest {
     }
 
     @Test
-    void mutateIsAtomicWhenABatchOperationThrows() {
-        CheckoutSession session = sessionBuilder().autoDisplay(false).build();
+    void mutateIsAtomicWhenABatchOperationThrows() throws Exception {
+        CheckoutSession session = start(sessionBuilder().autoDisplay(false));
         session.addItem(BasketItem.of("SKU-1", "Item", 2, "10.00"));
 
         assertThrows(IllegalArgumentException.class, () -> session.mutate(m -> m
@@ -105,8 +115,8 @@ class CheckoutSessionBasketTest {
     }
 
     @Test
-    void basketDrivesIdleActiveTransitions() {
-        CheckoutSession session = sessionBuilder().autoDisplay(false).build();
+    void basketDrivesIdleActiveTransitions() throws Exception {
+        CheckoutSession session = start(sessionBuilder().autoDisplay(false));
 
         assertEquals(SessionState.IDLE, session.getState());
         session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
@@ -116,8 +126,8 @@ class CheckoutSessionBasketTest {
     }
 
     @Test
-    void basketOpsAreRejectedAfterAbort() {
-        CheckoutSession session = sessionBuilder().autoDisplay(false).build();
+    void basketOpsAreRejectedAfterAbort() throws Exception {
+        CheckoutSession session = start(sessionBuilder().autoDisplay(false));
         session.abort();
 
         assertThrows(IllegalStateException.class,
@@ -127,8 +137,8 @@ class CheckoutSessionBasketTest {
     // ─── Totals through the session API ───
 
     @Test
-    void designDocScanningExample() {
-        CheckoutSession session = sessionBuilder().autoDisplay(false).build();
+    void designDocScanningExample() throws Exception {
+        CheckoutSession session = start(sessionBuilder().autoDisplay(false));
 
         Basket basket = session.addItem(
                 BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
@@ -152,7 +162,7 @@ class CheckoutSessionBasketTest {
 
     @Test
     void addItemSendsItemisedReceiptDisplay() throws Exception {
-        CheckoutSession session = sessionBuilder().build();
+        CheckoutSession session = start(sessionBuilder());
 
         session.addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
 
@@ -167,18 +177,18 @@ class CheckoutSessionBasketTest {
     }
 
     @Test
-    void autoDisplayOffSendsNothing() {
-        CheckoutSession session = sessionBuilder().autoDisplay(false).build();
+    void autoDisplayOffSendsNothing() throws Exception {
+        CheckoutSession session = start(sessionBuilder().autoDisplay(false));
 
         session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
         session.setTaxTotal(new BigDecimal("1.00"));
 
-        assertEquals(0, server.getRequestCount());
+        assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
     }
 
     @Test
     void mutateBatchesToSingleDisplayUpdate() throws Exception {
-        CheckoutSession session = sessionBuilder().build();
+        CheckoutSession session = start(sessionBuilder());
 
         Basket basket = session.mutate(m -> m
                 .addItem(BasketItem.of("SKU-1", "Item One", 1, "10.00"))
@@ -189,14 +199,13 @@ class CheckoutSessionBasketTest {
         // give the (synchronous) send a moment to be recorded, then assert exactly one request
         DisplayPayload payload = nextDisplayPayload();
         assertEquals(2, payload.getReceipt().getLineItems().getLineItem().size());
-        assertEquals(1, server.getRequestCount());
+        assertEquals(2, server.getRequestCount(), "session start plus exactly one display update");
     }
 
     @Test
     void customDisplayRendererIsUsed() throws Exception {
-        CheckoutSession session = sessionBuilder()
-                .displayRenderer((basket, context) -> DisplayPayloadHelper.standby("custom"))
-                .build();
+        CheckoutSession session = start(sessionBuilder()
+                .displayRenderer((basket, context) -> DisplayPayloadHelper.standby("custom")));
 
         session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
 
@@ -206,7 +215,7 @@ class CheckoutSessionBasketTest {
 
     @Test
     void displayFailureDoesNotFailBasketOperation() throws Exception {
-        CheckoutSession session = sessionBuilder().build();
+        CheckoutSession session = start(sessionBuilder());
         server.shutdown();
 
         Basket basket = session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
@@ -216,14 +225,13 @@ class CheckoutSessionBasketTest {
     }
 
     @Test
-    void failingCustomRendererDoesNotFailBasketOperation() {
-        CheckoutSession session = sessionBuilder()
+    void failingCustomRendererDoesNotFailBasketOperation() throws Exception {
+        CheckoutSession session = start(sessionBuilder()
                 .displayRenderer((basket, context) -> {
                     throw new IllegalStateException("renderer bug");
-                })
-                .build();
+                }));
 
         assertDoesNotThrow(() -> session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00")));
-        assertEquals(0, server.getRequestCount());
+        assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
     }
 }

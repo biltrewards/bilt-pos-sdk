@@ -47,24 +47,46 @@ class SessionStateMachineTest {
     }
 
     @Test
-    void completedAllowsVoidOnly() {
+    void completedAllowsVoidAndEndOnly() {
         SessionStateMachine machine = new SessionStateMachine();
         machine.transitionTo(ACTIVE);
         machine.transitionTo(PAYING);
         machine.transitionTo(COMPLETED);
         for (SessionState target : SessionState.values()) {
-            assertEquals(target == VOIDING, machine.canTransitionTo(target),
-                    "COMPLETED -> " + target);
+            assertEquals(target == VOIDING || target == ENDED,
+                    machine.canTransitionTo(target), "COMPLETED -> " + target);
         }
     }
 
     @Test
-    void terminalStatesAllowNothing() {
+    void settledStatesAllowOnlyEnd() {
         SessionStateMachine aborted = new SessionStateMachine();
         aborted.transitionTo(ABORTED);
         for (SessionState target : SessionState.values()) {
-            assertFalse(aborted.canTransitionTo(target), "ABORTED -> " + target);
+            assertEquals(target == ENDED, aborted.canTransitionTo(target),
+                    "ABORTED -> " + target);
         }
+    }
+
+    @Test
+    void endedAllowsNothing() {
+        SessionStateMachine ended = new SessionStateMachine();
+        ended.transitionTo(ENDED);
+        for (SessionState target : SessionState.values()) {
+            assertFalse(ended.canTransitionTo(target), "ENDED -> " + target);
+        }
+    }
+
+    @Test
+    void moneyInFlightStatesRefuseEnd() {
+        SessionStateMachine paying = new SessionStateMachine();
+        paying.transitionTo(ACTIVE);
+        paying.transitionTo(PAYING);
+        assertFalse(paying.canTransitionTo(ENDED), "PAYING -> ENDED");
+
+        SessionStateMachine voiding = new SessionStateMachine();
+        voiding.transitionTo(VOIDING);
+        assertFalse(voiding.canTransitionTo(ENDED), "VOIDING -> ENDED");
     }
 
     @Test
@@ -103,6 +125,7 @@ class SessionStateMachineTest {
         assertTrue(COMPLETED.isTerminal());
         assertTrue(ABORTED.isTerminal());
         assertTrue(VOIDED.isTerminal());
+        assertTrue(ENDED.isTerminal());
         assertFalse(IDLE.isTerminal());
         assertFalse(PAYING.isTerminal());
         assertFalse(FAILED.isTerminal());

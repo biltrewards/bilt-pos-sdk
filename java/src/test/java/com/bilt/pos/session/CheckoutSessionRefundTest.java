@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.QueueDispatcher;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,6 +49,18 @@ class CheckoutSessionRefundTest {
     @BeforeEach
     void setUp() throws Exception {
         server = new MockWebServer();
+        // answer the session-start Admin exchange out of band, so tests keep
+        // enqueueing their own responses in wire order before creating the
+        // session (the start would otherwise eat the first enqueued response)
+        server.setDispatcher(new QueueDispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                if (request.getBody().clone().readUtf8().contains("\"AdminRequest\"")) {
+                    return new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK);
+                }
+                return super.dispatch(request);
+            }
+        });
         server.start();
     }
 
@@ -68,11 +81,17 @@ class CheckoutSessionRefundTest {
                 .autoDisplay(false);
     }
 
-    private CheckoutSession refundSession() {
-        return sessionBuilder()
+    private CheckoutSession refundSession() throws Exception {
+        return start(sessionBuilder()
                 .poiTransactionId(ORIGINAL_POI_TXN)
-                .poiTransactionTimestamp(ORIGINAL_TS)
-                .build();
+                .poiTransactionTimestamp(ORIGINAL_TS));
+    }
+
+    /** Starts the session and drains the session-start Admin request. */
+    private CheckoutSession start(CheckoutSession.Builder builder) throws Exception {
+        CheckoutSession session = builder.start().get();
+        server.takeRequest(5, TimeUnit.SECONDS);
+        return session;
     }
 
     private SaleToPOIRequest recordedRequest() throws Exception {
@@ -92,6 +111,9 @@ class CheckoutSessionRefundTest {
             @Override
             public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
                 String body = request.getBody().readUtf8();
+                if (body.contains("\"AdminRequest\"")) {
+                    return new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK);
+                }
                 if (body.contains("\"PaymentRequest\"")) {
                     refundOnTheWire.countDown();
                     // hold the refund response until abort() has ended the session
@@ -139,8 +161,8 @@ class CheckoutSessionRefundTest {
         SessionException failure = assertThrows(SessionException.class,
                 () -> session.voidTransaction().get());
         assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
-        assertEquals(1, server.getRequestCount(),
-                "the rejected void must not reach the wire");
+        assertEquals(2, server.getRequestCount(),
+                "the rejected void must not reach the wire (session start plus the refund)");
 
         // further refunds remain the correct path for additional returns
         server.enqueue(new MockResponse().setBody(REFUND_OK));
@@ -162,8 +184,8 @@ class CheckoutSessionRefundTest {
         assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
         assertTrue(failure.getError().getMessage().contains("refund"),
                 "the error must steer the register to further refunds");
-        assertEquals(2, server.getRequestCount(),
-                "the rejected void must not reach the wire");
+        assertEquals(3, server.getRequestCount(),
+                "the rejected void must not reach the wire (start, refund, award refund)");
 
         // further partial returns stay possible — that is the correct path
         server.enqueue(new MockResponse().setBody(REFUND_OK));
@@ -207,12 +229,11 @@ class CheckoutSessionRefundTest {
         server.enqueue(new MockResponse().setBody(REFUND_OK));
         server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
 
-        sessionBuilder()
+        start(sessionBuilder()
                 .poiTransactionId(ORIGINAL_POI_TXN)
                 .poiTransactionTimestamp(ORIGINAL_TS)
                 .awardPoiTransactionId("POI-AW-9")
-                .memberId("98234")
-                .build()
+                .memberId("98234"))
                 .refund(new BigDecimal("10.00")).execute();
 
         recordedRequest();  // the refund itself
@@ -230,11 +251,10 @@ class CheckoutSessionRefundTest {
                 "{\"SaleToPOIResponse\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
         server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
 
-        sessionBuilder()
+        start(sessionBuilder()
                 .poiTransactionId(ORIGINAL_POI_TXN)
                 .poiTransactionTimestamp(ORIGINAL_TS)
-                .memberId("98234")
-                .build()
+                .memberId("98234"))
                 .voidTransaction().execute();
 
         recordedRequest();  // the reversal
@@ -258,15 +278,16 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
-    void linkedRefundWithoutBuilderReferenceFailsWithInvalidState() {
+    void linkedRefundWithoutBuilderReferenceFailsWithInvalidState() throws Exception {
+        CheckoutSession session = start(sessionBuilder());
         SessionException e = assertThrows(SessionException.class,
-                () -> sessionBuilder().build().refund().get());
+                () -> session.refund().get());
         assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
-        assertEquals(0, server.getRequestCount());
+        assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
     }
 
     @Test
-    void failedLoyaltyReversalDoesNotFailTheRefund() {
+    void failedLoyaltyReversalDoesNotFailTheRefund() throws Exception {
         server.enqueue(new MockResponse().setBody(REFUND_OK));
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
@@ -279,7 +300,7 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
-    void declinedRefundGoesToErrorChannel() {
+    void declinedRefundGoesToErrorChannel() throws Exception {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
                         + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}"));
@@ -287,7 +308,7 @@ class CheckoutSessionRefundTest {
         SessionException e = assertThrows(SessionException.class,
                 () -> refundSession().refund(new BigDecimal("10.00")).get());
         assertEquals(SessionErrorCode.DECLINED, e.getError().getCode());
-        assertEquals(1, server.getRequestCount(), "no loyalty reversal after a declined refund");
+        assertEquals(2, server.getRequestCount(), "no loyalty reversal after a declined refund");
     }
 
     // ─── Unlinked refunds ───
@@ -296,12 +317,12 @@ class CheckoutSessionRefundTest {
     void unlinkedRefundSendsNoOriginalTransactionAndNoLoyaltyReversal() throws Exception {
         server.enqueue(new MockResponse().setBody(REFUND_OK));
 
-        RefundResult result = sessionBuilder().build()
+        RefundResult result = start(sessionBuilder())
                 .refundUnlinked(new BigDecimal("15.00")).get();
 
         assertTrue(result.isSuccess());
         assertEquals(0, result.getPointsReversed());
-        assertEquals(1, server.getRequestCount());
+        assertEquals(2, server.getRequestCount(), "the session start plus the refund");
 
         SaleToPOIRequest refund = recordedRequest();
         assertEquals("Refund", refund.getPaymentRequest().getPaymentData().getPaymentType().toValue());
@@ -311,7 +332,7 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
-    void refundAmountMustBePositive() {
+    void refundAmountMustBePositive() throws Exception {
         CheckoutSession session = refundSession();
         assertThrows(IllegalArgumentException.class, () -> session.refund(BigDecimal.ZERO));
         assertThrows(IllegalArgumentException.class,
@@ -346,7 +367,7 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
-    void failedVoidRestoresThePreVoidState() {
+    void failedVoidRestoresThePreVoidState() throws Exception {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
                         + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
@@ -365,14 +386,15 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
-    void voidWithoutBuilderReferenceFailsWithInvalidState() {
+    void voidWithoutBuilderReferenceFailsWithInvalidState() throws Exception {
+        CheckoutSession session = start(sessionBuilder());
         SessionException e = assertThrows(SessionException.class,
-                () -> sessionBuilder().build().voidTransaction().get());
+                () -> session.voidTransaction().get());
         assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
     }
 
     @Test
-    void voidedSessionRejectsFurtherOperations() {
+    void voidedSessionRejectsFurtherOperations() throws Exception {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
         server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));

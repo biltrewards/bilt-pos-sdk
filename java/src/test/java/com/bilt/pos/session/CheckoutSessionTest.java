@@ -20,6 +20,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CheckoutSessionTest {
 
+    static final String ADMIN_OK =
+            "{\"SaleToPOIResponse\":{\"MessageHeader\":{\"ProtocolVersion\":\"3.0\"},"
+                    + "\"AdminResponse\":{\"Response\":{\"Result\":\"Success\"}}}}";
+
     private final ObjectMapper mapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
@@ -30,13 +34,20 @@ class CheckoutSessionTest {
     void setUp() throws Exception {
         server = new MockWebServer();
         server.start();
-        session = CheckoutSession.builder()
+        session = start(CheckoutSession.builder()
                 .client(terminalClient())
                 .saleId("POS-LANE-3")
                 .poiId("VictaLane-275839164")
                 .currency("USD")
-                .storeLocation("STR-0142")
-                .build();
+                .storeLocation("STR-0142"));
+    }
+
+    /** Starts the session against a mocked session-start acknowledgement. */
+    private CheckoutSession start(CheckoutSession.Builder builder) throws Exception {
+        server.enqueue(new MockResponse().setBody(ADMIN_OK));
+        CheckoutSession started = builder.start().get();
+        server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
+        return started;
     }
 
     @AfterEach
@@ -62,9 +73,9 @@ class CheckoutSessionTest {
 
     @Test
     void builderRequiresMandatoryFields() {
-        assertThrows(IllegalStateException.class, () -> CheckoutSession.builder().build());
+        assertThrows(IllegalStateException.class, () -> CheckoutSession.builder().start());
         assertThrows(IllegalStateException.class, () -> CheckoutSession.builder()
-                .client(terminalClient()).saleId("s").poiId("p").build());
+                .client(terminalClient()).saleId("s").poiId("p").start());
     }
 
     @Test
@@ -81,7 +92,7 @@ class CheckoutSessionTest {
     @Test
     void creatingAnOperationSendsNothing() {
         session.diagnose().onSuccess(r -> { }).onError(e -> { });
-        assertEquals(0, server.getRequestCount());
+        assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
     }
 
     // ─── Diagnose ───
@@ -224,7 +235,7 @@ class CheckoutSessionTest {
             displayServer.enqueue(new MockResponse().setBody(
                     "{\"SaleToPOIResponse\":{\"DisplayResponse\":{}}}"));
 
-            CheckoutSession dual = CheckoutSession.builder()
+            CheckoutSession dual = start(CheckoutSession.builder()
                     .client(terminalClient())
                     .externalDisplayClient(BiltNexoTerminalClient.builder()
                             .endpoint(displayServer.url("/nexo").toString())
@@ -232,14 +243,14 @@ class CheckoutSessionTest {
                             .build())
                     .saleId("POS-LANE-3")
                     .poiId("VictaLane-275839164")
-                    .currency("USD")
-                    .build();
+                    .currency("USD"));
 
             dual.updateDisplay(DisplayPayloadHelper.standby("welcome"));
 
             RecordedRequest recorded = displayServer.takeRequest(5, TimeUnit.SECONDS);
             assertNotNull(recorded, "display request must hit the external display");
-            assertEquals(0, server.getRequestCount(), "terminal must not receive display traffic");
+            assertEquals(2, server.getRequestCount(),
+                    "terminal must not receive display traffic (only the two session starts)");
 
             SaleToPOIRequest sent = mapper.readValue(recorded.getBody().readUtf8(),
                     NexoTerminalAPI.class).getSaleToPOIRequest();
@@ -265,7 +276,7 @@ class CheckoutSessionTest {
         session.abort();
 
         assertEquals(SessionState.ABORTED, session.getState());
-        assertEquals(0, server.getRequestCount());
+        assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
     }
 
     @Test

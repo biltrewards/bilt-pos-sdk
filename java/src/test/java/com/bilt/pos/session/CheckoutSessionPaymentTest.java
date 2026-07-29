@@ -98,6 +98,7 @@ class CheckoutSessionPaymentTest {
     void setUp() throws Exception {
         server = new MockWebServer();
         server.start();
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
         session = CheckoutSession.builder()
                 .client(BiltNexoTerminalClient.builder()
                         .endpoint(server.url("/nexo").toString())
@@ -107,7 +108,9 @@ class CheckoutSessionPaymentTest {
                 .poiId("VictaLane-275839164")
                 .currency("USD")
                 .autoDisplay(false)
-                .build();
+                .start()
+                .get();
+        server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
     }
 
     @AfterEach
@@ -174,7 +177,7 @@ class CheckoutSessionPaymentTest {
 
         assertNotNull(seen.get(), "a failure before the sequence starts must reach onError");
         assertEquals(SessionErrorCode.INVALID_STATE, seen.get().getCode());
-        assertEquals(0, server.getRequestCount());
+        assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
     }
 
     @Test
@@ -212,7 +215,7 @@ class CheckoutSessionPaymentTest {
                 .onSuccess(r -> { })
                 .onError(e -> PaymentOptions.voidAndAbort());
 
-        assertEquals(0, server.getRequestCount());
+        assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
         assertEquals(SessionState.ACTIVE, session.getState());
 
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
@@ -241,12 +244,13 @@ class CheckoutSessionPaymentTest {
 
         SessionException failure = assertThrows(SessionException.class, flow::get);
         assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
-        assertEquals(0, server.getRequestCount(), "nothing may reach the wire");
+        assertEquals(1, server.getRequestCount(), "nothing beyond the session start may reach the wire");
         assertEquals(SessionState.ACTIVE, session.getState());
     }
 
     @Test
     void storeLocationIsSentAsTotalsGroupId() throws Exception {
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
         CheckoutSession storeSession = CheckoutSession.builder()
                 .client(BiltNexoTerminalClient.builder()
                         .endpoint(server.url("/nexo").toString())
@@ -257,7 +261,9 @@ class CheckoutSessionPaymentTest {
                 .currency("USD")
                 .storeLocation("STR-0142")
                 .autoDisplay(false)
-                .build();
+                .start()
+                .get();
+        server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
         storeSession.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 10.00)));
 
@@ -1436,7 +1442,7 @@ class CheckoutSessionPaymentTest {
                 failure.getError().getMessage());
         assertEquals(4, errorCalls.get(),
                 "3 consultations plus the notification that the last retry was refused");
-        assertEquals(3, server.getRequestCount(), "retry cap stops the loop");
+        assertEquals(4, server.getRequestCount(), "retry cap stops the loop (plus the session start)");
         assertEquals(SessionState.FAILED, session.getState());
     }
 
