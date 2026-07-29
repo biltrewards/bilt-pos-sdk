@@ -326,6 +326,12 @@ private fun BasketCard(state: EmulatorState, modifier: Modifier = Modifier) {
                 "Basket — total $${state.basketTotal}",
                 style = MaterialTheme.typography.titleMedium,
             )
+            if (state.basketTax != "0.00") {
+                Text(
+                    "incl. $${state.basketTax} tax (NJ 6.625%)",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             if (state.basket.isEmpty()) {
                 Text("Empty", style = MaterialTheme.typography.bodySmall)

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.math.BigDecimal
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -132,6 +133,7 @@ class NexoEmulatorController(
                 connection = ConnectionStatus(ConnectionPhase.DISCONNECTED),
                 basket = emptyList(),
                 basketTotal = "0.00",
+                basketTax = "0.00",
             )
         }
     }
@@ -146,9 +148,15 @@ class NexoEmulatorController(
             try {
                 val existing = current.basket.getItemBySku(product.sku)
                 val basket = if (existing == null) {
-                    current.addItem(
-                        BasketItem.of(product.sku, product.name, 1, product.priceDecimal)
-                    )
+                    val item = BasketItem.builder()
+                        .sku(product.sku)
+                        .description(product.name)
+                        .category(product.category)
+                        .quantity(1)
+                        .unitPrice(BigDecimal(product.priceDecimal))
+                        .apply { NjSalesTax.rateFor(product)?.let(::taxRate) }
+                        .build()
+                    current.addItem(item)
                 } else {
                     current.updateItemQuantityBySku(product.sku, existing.quantity + 1)
                 }
@@ -199,6 +207,7 @@ class NexoEmulatorController(
                     )
                 },
                 basketTotal = basket.grandTotal.toPlainString(),
+                basketTax = basket.taxTotal.toPlainString(),
             )
         }
     }

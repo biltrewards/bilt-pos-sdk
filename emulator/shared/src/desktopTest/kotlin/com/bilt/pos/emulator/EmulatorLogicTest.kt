@@ -2,10 +2,13 @@ package com.bilt.pos.emulator
 
 import com.bilt.pos.emulator.catalog.MockProductProvider
 import com.bilt.pos.emulator.catalog.Product
+import com.bilt.pos.emulator.session.NjSalesTax
 import com.bilt.pos.emulator.session.TlsVerifier
+import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EmulatorLogicTest {
@@ -25,6 +28,20 @@ class EmulatorLogicTest {
         assertTrue(products.any { it.priceMinor < 100 }, "expected a sub-dollar product")
         assertTrue(products.any { it.priceMinor > 50_000 }, "expected a $500+ product")
         assertEquals(products.size, products.map { it.sku }.toSet().size, "SKUs must be unique")
+    }
+
+    @Test
+    fun njSalesTaxExemptsGroceryAndApparel() {
+        assertNull(NjSalesTax.rateFor(Product("S", "Banana", 35, "Grocery")))
+        assertNull(NjSalesTax.rateFor(Product("S", "T-Shirt", 2499, "Apparel")))
+        assertEquals(
+            BigDecimal("0.06625"),
+            NjSalesTax.rateFor(Product("S", "Tablet", 32999, "Electronics")),
+        )
+        assertEquals(
+            BigDecimal("0.06625"),
+            NjSalesTax.rateFor(Product("S", "Desk Lamp", 3499, "Home")),
+        )
     }
 
     @Test

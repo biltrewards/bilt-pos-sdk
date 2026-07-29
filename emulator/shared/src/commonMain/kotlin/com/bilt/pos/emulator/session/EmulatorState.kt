@@ -56,6 +56,7 @@ data class EmulatorState(
     val hasConfiguredPassphrase: Boolean = false,
     val basket: List<BasketLine> = emptyList(),
     val basketTotal: String = "0.00",
+    val basketTax: String = "0.00",
     val events: List<String> = emptyList(),
 )
 
