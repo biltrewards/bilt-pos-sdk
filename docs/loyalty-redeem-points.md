@@ -224,7 +224,7 @@ Redemption (and any [rebate](./loyalty-apply-rebates.md)) is committed **before*
 Final amount = TotalAmount − TotalRebate − per-item rebates − redeemed point value
 ```
 
-and send the [payment](./make-payment.md) with `PaymentData.TransactionConditions.LoyaltyHandling` set to `Processed`, indicating that loyalty has already been handled in standalone loyalty transactions.
+and send the [payment](./make-payment.md) with `PaymentTransaction.TransactionConditions.LoyaltyHandling` set to `Processed`, indicating that loyalty has already been handled in standalone loyalty transactions.
 
 If the customer rejects the final amount, reverse each committed loyalty transaction using its `POITransactionID` — see [Reverse a redemption](./loyalty-reverse-redemption.md) and [Reverse a rebate](./loyalty-reverse-rebate.md).
 

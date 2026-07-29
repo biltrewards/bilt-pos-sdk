@@ -5,6 +5,11 @@
     - name: CheckoutSession
       url: /checkout-session-integration.html
 
+- title: Session
+  items:
+    - name: Start & End
+      url: /session-start-end.html
+
 - title: Payments
   items:
     - name: Make Payment
@@ -32,6 +37,12 @@
 
 - title: Loyalty
   items:
+    - name: 'Integration: Minimal'
+      url: /loyalty-integration-minimal.html
+    - name: 'Integration: Identified Members'
+      url: /loyalty-integration-complete.html
+    - name: 'Integration: Advanced Flows'
+      url: /loyalty-integration-advanced.html
     - name: Identify Member
       url: /loyalty-identify-member.html
     - name: Award Points
