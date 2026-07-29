@@ -1,6 +1,7 @@
 package com.bilt.pos.emulator
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,20 +59,45 @@ private fun ConnectionPanel() {
     var terminalIp by remember { mutableStateOf("") }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = terminalIp,
-                onValueChange = { terminalIp = it },
-                label = { Text("Terminal IP") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            Button(onClick = { /* session wiring lands in a follow-up */ }, enabled = terminalIp.isNotBlank()) {
-                Text("Connect")
+        // Stack the controls when the window is narrow (phones, split screen)
+        // or font scaling shrinks the usable field width
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            val compact = maxWidth < 420.dp
+            val ipField: @Composable (Modifier) -> Unit = { modifier ->
+                OutlinedTextField(
+                    value = terminalIp,
+                    onValueChange = { terminalIp = it },
+                    label = { Text("Terminal IP") },
+                    singleLine = true,
+                    modifier = modifier,
+                )
+            }
+            val connectButton: @Composable (Modifier) -> Unit = { modifier ->
+                Button(
+                    onClick = { /* session wiring lands in a follow-up */ },
+                    enabled = terminalIp.isNotBlank(),
+                    modifier = modifier,
+                ) {
+                    Text("Connect")
+                }
+            }
+            if (compact) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    ipField(Modifier.fillMaxWidth())
+                    connectButton(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ipField(Modifier.weight(1f))
+                    connectButton(Modifier)
+                }
             }
         }
     }
