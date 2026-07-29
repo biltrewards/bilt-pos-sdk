@@ -49,7 +49,11 @@ data class EmulatorState(
     val addressAutodetected: Boolean = false,
     val connection: ConnectionStatus = ConnectionStatus(),
     val tls: TlsStatus = TlsStatus.Unknown,
+    /** Whether the active (or last) connection encrypts messages. */
     val encryptionEnabled: Boolean = false,
+    /** True when a passphrase is available from config (NEXO_PASSPHRASE), so
+     *  the UI can offer encryption without asking for one. */
+    val hasConfiguredPassphrase: Boolean = false,
     val basket: List<BasketLine> = emptyList(),
     val basketTotal: String = "0.00",
     val events: List<String> = emptyList(),
@@ -65,7 +69,14 @@ interface EmulatorController {
     /** Try to prefill the terminal address (adb-based on desktop). */
     fun autodetectAddress()
 
-    fun connect(address: String)
+    /**
+     * Connect to the terminal at [address].
+     *
+     * @param encryptionEnabled whether to encrypt messages on this connection
+     * @param passphraseOverride passphrase entered in the UI; blank/null falls
+     *   back to the configured `NEXO_PASSPHRASE`
+     */
+    fun connect(address: String, encryptionEnabled: Boolean, passphraseOverride: String? = null)
 
     fun disconnect()
 

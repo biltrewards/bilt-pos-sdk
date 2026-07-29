@@ -38,7 +38,10 @@ class NexoEmulatorController(
     private val sessionDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     private val _state = MutableStateFlow(
-        EmulatorState(encryptionEnabled = config.encryptionEnabled)
+        EmulatorState(
+            encryptionEnabled = config.encryptionEnabled,
+            hasConfiguredPassphrase = config.encryptionEnabled,
+        )
     )
     override val state: StateFlow<EmulatorState> = _state.asStateFlow()
 
@@ -57,17 +60,25 @@ class NexoEmulatorController(
         }
     }
 
-    override fun connect(address: String) {
+    override fun connect(address: String, encryptionEnabled: Boolean, passphraseOverride: String?) {
         disconnect()
+
+        val passphrase = passphraseOverride?.takeIf { it.isNotBlank() } ?: config.passphrase
+        val encrypt = encryptionEnabled && !passphrase.isNullOrBlank()
+        if (encryptionEnabled && !encrypt) {
+            log("Encryption requested but no passphrase available (enter one or set NEXO_PASSPHRASE) — connecting unencrypted")
+        }
+
         _state.update {
             it.copy(
                 terminalAddress = address,
                 connection = ConnectionStatus(ConnectionPhase.CONNECTING),
                 tls = TlsStatus.Unknown,
+                encryptionEnabled = encrypt,
             )
         }
         val endpoint = "https://$address:8443/nexo"
-        log("Connecting to $endpoint (encryption=${config.encryptionEnabled})")
+        log("Connecting to $endpoint (encryption=$encrypt)")
 
         scope.launch(sessionDispatcher) {
             // Payload channel: always permissive, so a failing certificate is
@@ -75,10 +86,10 @@ class NexoEmulatorController(
             val clientBuilder = BiltNexoTerminalClient.builder()
                 .endpoint(endpoint)
                 .trustAllCertificates()
-            if (config.encryptionEnabled) {
+            if (encrypt) {
                 clientBuilder.securityKey(
                     SecurityKey.builder()
-                        .passphrase(config.passphrase)
+                        .passphrase(passphrase)
                         .keyIdentifier(config.keyId)
                         .keyVersion(config.keyVersion)
                         .build()

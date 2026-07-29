@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.session.ConnectionPhase
@@ -89,6 +91,8 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
 @Composable
 private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController) {
     var terminalIp by remember { mutableStateOf("") }
+    var encryptionOn by remember { mutableStateOf(state.encryptionEnabled) }
+    var passphrase by remember { mutableStateOf("") }
 
     // Adopt the autodetected address unless the operator already typed one
     LaunchedEffect(state.terminalAddress, state.addressAutodetected) {
@@ -98,6 +102,9 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
     }
 
     val connected = state.connection.phase != ConnectionPhase.DISCONNECTED
+    // Encryption needs a passphrase from somewhere: the field or NEXO_PASSPHRASE
+    val passphraseAvailable = state.hasConfiguredPassphrase || passphrase.isNotBlank()
+    val canConnect = terminalIp.isNotBlank() && (!encryptionOn || passphraseAvailable)
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -123,9 +130,13 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                 val connectButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
                         onClick = {
-                            if (connected) controller.disconnect() else controller.connect(terminalIp.trim())
+                            if (connected) {
+                                controller.disconnect()
+                            } else {
+                                controller.connect(terminalIp.trim(), encryptionOn, passphrase)
+                            }
                         },
-                        enabled = connected || terminalIp.isNotBlank(),
+                        enabled = connected || canConnect,
                         modifier = modifier,
                     ) {
                         Text(if (connected) "Disconnect" else "Connect")
@@ -149,6 +160,34 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         connectButton(Modifier)
                     }
                 }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = encryptionOn,
+                    onCheckedChange = { encryptionOn = it },
+                    enabled = !connected,
+                )
+                Text("Encrypt messages", style = MaterialTheme.typography.bodyMedium)
+            }
+            if (encryptionOn) {
+                OutlinedTextField(
+                    value = passphrase,
+                    onValueChange = { passphrase = it },
+                    label = { Text("Passphrase") },
+                    placeholder = {
+                        Text(
+                            if (state.hasConfiguredPassphrase) {
+                                "using NEXO_PASSPHRASE — type to override"
+                            } else {
+                                "required — no NEXO_PASSPHRASE configured"
+                            }
+                        )
+                    },
+                    singleLine = true,
+                    enabled = !connected,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
             StatusRow(state)
         }
