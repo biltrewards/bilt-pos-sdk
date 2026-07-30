@@ -180,6 +180,7 @@ class NexoEmulatorController(
         _state.update {
             it.copy(
                 connection = ConnectionStatus(ConnectionPhase.DISCONNECTED),
+                tls = TlsStatus.Unknown, // per-connection fact; stale FAILED would outlive it
                 basket = emptyList(),
                 basketTotal = "0.00",
                 basketTax = "0.00",
