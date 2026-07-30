@@ -70,7 +70,11 @@ class NexoEmulatorController(
         val dispatcher: CoroutineDispatcher,
         @Volatile var client: BiltNexoTerminalClient? = null,
         @Volatile var session: CheckoutSession? = null,
-    )
+    ) {
+        /** Claimed synchronously by [pay] so rapid taps can't queue a second
+         *  payment behind the first on the serialized dispatcher. */
+        val paymentClaimed = java.util.concurrent.atomic.AtomicBoolean(false)
+    }
 
     /**
      * Runs End brackets during teardown. Deliberately NOT a child of [scope]:
@@ -378,13 +382,21 @@ class NexoEmulatorController(
             log("No active checkout session — press Start Session first")
             return
         }
-        conn.scope.launch(conn.dispatcher) {
+        // Claimed here, not inside the job: two quick Pay taps would both
+        // queue on the serialized dispatcher (paymentInProgress publishes
+        // asynchronously), and the second would reach the already-completed
+        // session only to log a spurious failure.
+        if (!conn.paymentClaimed.compareAndSet(false, true)) {
+            log("A payment is already in progress")
+            return
+        }
+        _state.update { it.copy(paymentInProgress = true) }
+        val job = conn.scope.launch(conn.dispatcher) {
             val session = conn.session
             if (session == null) {
                 log("No active checkout session — press Start Session first")
                 return@launch
             }
-            _state.update { it.copy(paymentInProgress = true) }
             try {
                 // Every loyalty step needs an identified member; prompt the
                 // customer on the terminal first when the operator asked for
@@ -427,11 +439,15 @@ class NexoEmulatorController(
                     log("Payment not started: ${e.message}")
                     detailedLog(e.stackTraceToString())
                 }
-            } finally {
-                // unconditional: a disconnect resets state anyway, and a stale
-                // in-progress flag would wedge the Pay button
-                _state.update { it.copy(paymentInProgress = false) }
             }
+        }
+        // Releases on every path, including a job the scope cancelled before
+        // it ever ran (disconnect racing this call) — a finally inside the
+        // job would never execute then and the claim would wedge the Pay
+        // button. Unconditional: a disconnect resets the state anyway.
+        job.invokeOnCompletion {
+            conn.paymentClaimed.set(false)
+            _state.update { it.copy(paymentInProgress = false) }
         }
     }
 
