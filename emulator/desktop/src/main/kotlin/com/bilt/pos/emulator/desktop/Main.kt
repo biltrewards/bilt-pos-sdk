@@ -25,4 +25,9 @@ fun main() {
             EmulatorApp(controller, MockProductProvider.products())
         }
     }
+
+    // application {} has returned (window closed): end any active checkout
+    // session synchronously so the terminal doesn't keep session-scoped
+    // state after the emulator is gone. Bounded by the client's timeouts.
+    controller.shutdown()
 }
