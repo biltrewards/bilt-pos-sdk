@@ -5,6 +5,11 @@
     - name: CheckoutSession
       url: /checkout-session-integration.html
 
+- title: Session
+  items:
+    - name: Start & End
+      url: /session-start-end.html
+
 - title: Payments
   items:
     - name: Make Payment
@@ -32,12 +37,22 @@
 
 - title: Loyalty
   items:
+    - name: 'Integration: Minimal'
+      url: /loyalty-integration-minimal.html
+    - name: 'Integration: Identified Members'
+      url: /loyalty-integration-complete.html
+    - name: 'Integration: Advanced Flows'
+      url: /loyalty-integration-advanced.html
     - name: Identify Member
       url: /loyalty-identify-member.html
     - name: Award Points
       url: /loyalty-award-points.html
-    - name: Redeem Rewards
-      url: /loyalty-redeem-rewards.html
+    - name: Apply Rebates
+      url: /loyalty-apply-rebates.html
+    - name: Redeem Points
+      url: /loyalty-redeem-points.html
+    - name: Reverse Rebate
+      url: /loyalty-reverse-rebate.html
     - name: Reverse Redemption
       url: /loyalty-reverse-redemption.html
     - name: Reverse Award

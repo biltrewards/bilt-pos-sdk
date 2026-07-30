@@ -5,7 +5,7 @@
 
 Sign up a new loyalty member from the terminal.
 
-Enrollment creates a member in the loyalty provider using the shopper's profile details — at minimum a name and email, and optionally a phone number. On success, the response returns a freshly assigned `LoyaltyID` that you can use immediately for [redemption](./loyalty-redeem-rewards.md) or [awarding points](./loyalty-award-points.md) within the same sale. Enrollment is typically offered as a fallback when a [member lookup](./loyalty-identify-member.md) returns no match.
+Enrollment creates a member in the loyalty provider using the shopper's profile details — at minimum a name and email, and optionally a phone number. On success, the response returns a freshly assigned `LoyaltyID` that you can use immediately for [rebates](./loyalty-apply-rebates.md), [point redemption](./loyalty-redeem-points.md), or [awarding points](./loyalty-award-points.md) within the same sale. Enrollment is typically offered as a fallback when a [member lookup](./loyalty-identify-member.md) returns no match.
 
 ---
 
@@ -164,5 +164,5 @@ For general guidance on handling failed requests, see [Handle responses](./error
 ## Next steps
 
 - [Award loyalty points](./loyalty-award-points.md) — credit points to the new member for the current sale.
-- [Redeem loyalty rewards](./loyalty-redeem-rewards.md) — apply any welcome rewards the program issues at enrollment.
+- [Apply loyalty rebates](./loyalty-apply-rebates.md) — apply any welcome rewards the program issues at enrollment.
 - [Check member status](./loyalty-member-status.md) — verify the new member is active before transacting.

@@ -39,7 +39,7 @@ To identify a loyalty member, send a Terminal API card acquisition request with 
 
    And the following `CardAcquisitionRequest` fields:
 
-    - **`SaleData.SaleTransactionID.TransactionID`** — Your reference for this acquisition. We recommend using a unique value per transaction. Use the same value when sending follow-up loyalty requests so the terminal can correlate them.
+    - **`SaleData.SaleTransactionID.TransactionID`** — Your reference for this acquisition. Use a unique value per transaction — follow-up loyalty requests are independent transactions with their own IDs. They correlate with this acquisition by carrying the returned `LoyaltyID` in `LoyaltyData[].LoyaltyAccountID`, or by referencing it via `LoyaltyData[].CardAcquisitionReference`.
     - **`SaleData.SaleTransactionID.TimeStamp`** — Date and time of the request in UTC format.
     - **`CardAcquisitionTransaction.LoyaltyHandling`** — `Required` to fail when no member is found, or `Proposed` to allow the flow to continue without a member.
     - **`CardAcquisitionTransaction.ForceEntryMode`** *(optional)* — Array restricting how the identifier is captured. Use `["Keyed"]` for email or phone entry, `["Scanned"]` for a loyalty card barcode. Omit to allow any method.
@@ -98,7 +98,7 @@ When the member is found, your integration receives:
     - **`LoyaltyAccountID.IdentificationType`** — type of identifier (`PAN`, `BarCode`, `PhoneNumber`, `AccountNumber`).
     - **`LoyaltyAccountID.IdentificationSupport`** — medium that supplied the identifier (`LoyaltyCard`, `MobileApplication`, `NoCard`, `HybridCard`, `LinkedCard`).
     - **`LoyaltyBrand`** *(optional)* — the loyalty program name (e.g. `K-Club`).
-- **`Response.AdditionalResponse`** — base64-encoded JSON containing the member's active rewards. Decode and parse to obtain a `rewards` array (each entry has `rewardRef`, `type`, `name`, `expirationDate`) and a `rewardCount`. The `rewardRef` values are required for [reward redemption](./loyalty-redeem-rewards.md).
+- **`Response.AdditionalResponse`** — base64-encoded JSON containing the member's active rewards. Decode and parse to obtain a `rewards` array (each entry has `rewardRef`, `type`, `name`, `expirationDate`) and a `rewardCount`. Use these to show the member's available rewards at the register; rewards and coupons are applied to the sale via a [rebate](./loyalty-apply-rebates.md).
 
   Example response:
 
@@ -209,7 +209,8 @@ For general guidance on handling failed requests, see [Handle responses](./error
 
 ## Next steps
 
-- [Redeem loyalty rewards](./loyalty-redeem-rewards.md) — apply rewards or coupons to the sale.
+- [Apply loyalty rebates](./loyalty-apply-rebates.md) — apply rewards or coupons to the sale.
+- [Redeem loyalty points](./loyalty-redeem-points.md) — apply the member's point balance as a discount.
 - [Award loyalty points](./loyalty-award-points.md) — credit points after payment completes.
 - [Query a loyalty balance](./loyalty-balance-inquiry.md) — fetch the member's current point balance.
 - [Enroll a new member](./loyalty-enroll-member.md) — sign up a shopper when no member is found.
