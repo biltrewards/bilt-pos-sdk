@@ -43,6 +43,9 @@ kotlin {
 
         getByName("desktopTest").dependencies {
             implementation(kotlin("test"))
+            // real TLS handshakes against a local server in TlsVerifierTest
+            implementation(libs.okhttp.mockwebserver)
+            implementation(libs.okhttp.tls)
         }
     }
 }

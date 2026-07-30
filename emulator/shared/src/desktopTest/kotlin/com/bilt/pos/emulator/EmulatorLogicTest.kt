@@ -44,14 +44,4 @@ class EmulatorLogicTest {
         )
     }
 
-    @Test
-    fun hostnamePatternMatchesSingleWildcardLabel() {
-        assertTrue(TlsVerifier.matchesPattern("V400m-123.pos.staging.bilt.dev", "*.pos.staging.bilt.dev"))
-        assertTrue(TlsVerifier.matchesPattern("V400M-123.POS.STAGING.BILT.DEV", "*.pos.staging.bilt.dev"))
-        assertFalse(TlsVerifier.matchesPattern("a.b.pos.staging.bilt.dev", "*.pos.staging.bilt.dev"))
-        assertFalse(TlsVerifier.matchesPattern("pos.staging.bilt.dev", "*.pos.staging.bilt.dev"))
-        assertFalse(TlsVerifier.matchesPattern("V400m-123.live.pos.bilt.com", "*.pos.staging.bilt.dev"))
-        assertTrue(TlsVerifier.matchesPattern("exact.host", "exact.host"))
-        assertFalse(TlsVerifier.matchesPattern("other.host", "exact.host"))
-    }
 }

@@ -94,9 +94,8 @@ object TlsVerifier {
     /**
      * Same semantics as the SDK client: a single leading `*.` wildcard matches
      * exactly one label; otherwise exact match. Case-insensitive.
-     * Internal for tests.
      */
-    internal fun matchesPattern(name: String, pattern: String): Boolean {
+    private fun matchesPattern(name: String, pattern: String): Boolean {
         if (!pattern.startsWith("*.")) {
             return name.equals(pattern, ignoreCase = true)
         }
