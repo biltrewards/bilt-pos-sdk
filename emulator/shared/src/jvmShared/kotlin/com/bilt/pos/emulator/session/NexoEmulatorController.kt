@@ -105,7 +105,7 @@ class NexoEmulatorController(
         connection = conn
 
         conn.scope.launch(conn.dispatcher) {
-            val built = try {
+            val sessionBuilder = try {
                 // Payload channel: always permissive, so a failing certificate
                 // is reported (below) but never blocks terminal communication.
                 val clientBuilder = BiltNexoTerminalClient.builder()
@@ -125,7 +125,6 @@ class NexoEmulatorController(
                     .saleId(config.saleId)
                     .poiId(config.poiId)
                     .currency(config.currency)
-                    .build()
             } catch (e: Exception) {
                 // e.g. an unparsable address making the endpoint URL invalid —
                 // without this the job dies silently and the chip stays on Connecting
@@ -142,13 +141,15 @@ class NexoEmulatorController(
                 }
                 return@launch
             }
-            if (!isActive) {
-                return@launch // disconnected while building; don't install the session
-            }
-            conn.session = built
 
+            // start() is a terminal roundtrip (the session Start bracket), so
+            // it is retried each tick until the terminal is reachable — same
+            // auto-recovery the diagnostics loop always had.
             while (isActive) {
-                runDiagnosis(built)
+                val current = conn.session ?: startSession(conn, sessionBuilder)
+                if (current != null) {
+                    runDiagnosis(current)
+                }
                 delay(diagnosticsInterval)
             }
         }
@@ -170,10 +171,55 @@ class NexoEmulatorController(
         val conn = connection ?: return updateDisconnectedState()
         connection = null
         conn.scope.cancel()
-        if (conn.session != null) {
+        val active = conn.session
+        if (active != null) {
+            // Session End bracket, best-effort, on the app scope — the
+            // connection scope is already dead
+            scope.launch(Dispatchers.IO) {
+                runCatching { active.close() }
+            }
             log("Disconnected")
         }
         updateDisconnectedState()
+    }
+
+    /**
+     * Starts the session (terminal Start bracket) and installs it on the
+     * connection; null when the terminal wasn't reachable — the diagnostics
+     * loop retries next tick.
+     */
+    private suspend fun startSession(
+        conn: Connection,
+        sessionBuilder: CheckoutSession.Builder,
+    ): CheckoutSession? {
+        val previous = _state.value.connection.phase
+        return try {
+            val started = sessionBuilder.start().get()
+            if (!currentCoroutineContext().isActive) {
+                // disconnected while starting; end the orphaned session
+                runCatching { started.close() }
+                return null
+            }
+            conn.session = started
+            log("Session started (id ${started.sessionId})")
+            started
+        } catch (e: Exception) {
+            if (!currentCoroutineContext().isActive) {
+                return null
+            }
+            _state.update {
+                it.copy(
+                    connection = ConnectionStatus(
+                        ConnectionPhase.ERROR,
+                        e.message ?: "session start failed",
+                    )
+                )
+            }
+            if (previous == ConnectionPhase.CONNECTING || previous == ConnectionPhase.CONNECTED) {
+                log("Terminal unreachable: ${e.message}")
+            }
+            null
+        }
     }
 
     private fun updateDisconnectedState() {
