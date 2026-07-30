@@ -13,7 +13,15 @@ data class Product(
     val priceMinor: Long,
     val category: String,
 ) {
-    /** Decimal price string, e.g. `79.99` — the format `BasketItem.of` expects. */
+    /**
+     * Decimal price string, e.g. `79.99` — the format `BasketItem.of` expects.
+     *
+     * Assumes a two-decimal (exponent-2) currency, i.e. USD. If the emulator
+     * ever handles non-USD currencies, this — and [priceLabel]'s hardcoded
+     * `$` — should move into a Money type owning currency, exponent, and
+     * formatting rather than being patched in place (JPY has exponent 0,
+     * KWD has 3).
+     */
     val priceDecimal: String
         get() = "${priceMinor / 100}.${(priceMinor % 100).toString().padStart(2, '0')}"
 
