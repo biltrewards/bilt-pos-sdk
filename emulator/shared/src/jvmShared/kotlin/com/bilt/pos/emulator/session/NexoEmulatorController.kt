@@ -265,32 +265,34 @@ class NexoEmulatorController(
             return
         }
         conn.scope.launch(conn.dispatcher) {
-            // Read-and-clear inside the serialized job so it can't interleave
-            // with an in-flight startSession installing the session
+            // Read inside the serialized job so it can't interleave with an
+            // in-flight startSession installing the session
             val active = conn.session
             if (active == null) {
                 log("No active checkout session")
                 return@launch
             }
-            conn.session = null
-            // Clear the register immediately for the next customer; the End
-            // bracket completes (or fails) below
-            _state.update {
-                it.copy(
-                    sessionId = null,
-                    basket = emptyList(),
-                    basketTotal = "0.00",
-                    basketTax = "0.00",
-                )
-            }
             try {
                 active.end().get()
+                // Clear only on a successful End bracket — a failed end keeps
+                // the session held and retryable (the SDK doesn't seal it),
+                // instead of orphaning terminal session state with the UI
+                // offering Start Session. Disconnect remains the escape hatch.
+                conn.session = null
                 if (currentCoroutineContext().isActive) {
+                    _state.update {
+                        it.copy(
+                            sessionId = null,
+                            basket = emptyList(),
+                            basketTotal = "0.00",
+                            basketTax = "0.00",
+                        )
+                    }
                     log("Checkout session ended")
                 }
             } catch (e: Exception) {
                 if (currentCoroutineContext().isActive) {
-                    log("Failed to end the session cleanly: ${e.message}")
+                    log("Failed to end the session: ${e.message} — still active, retry or disconnect")
                 }
             }
         }
