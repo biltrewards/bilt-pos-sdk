@@ -85,6 +85,12 @@ class NexoEmulatorController(
     @Volatile
     private var connection: Connection? = null
 
+    init {
+        // SDK diagnostics (client, session, payment internals) log via JUL;
+        // surface them on the Detailed tab
+        JulLogCapture.install(::detailedLog)
+    }
+
     override fun autodetectAddress() {
         scope.launch(Dispatchers.IO) {
             val detected = TerminalAddressDetector.detect()
@@ -155,6 +161,7 @@ class NexoEmulatorController(
                         )
                     }
                     log("Failed to set up the client: ${e.message}")
+                    detailedLog(e.stackTraceToString())
                 }
                 return@launch
             }
@@ -253,6 +260,7 @@ class NexoEmulatorController(
             } catch (e: Exception) {
                 if (currentCoroutineContext().isActive) {
                     log("Failed to start a checkout session: ${e.message}")
+                    detailedLog(e.stackTraceToString())
                 }
             }
         }
@@ -293,6 +301,7 @@ class NexoEmulatorController(
             } catch (e: Exception) {
                 if (currentCoroutineContext().isActive) {
                     log("Failed to end the session: ${e.message} — still active, retry or disconnect")
+                    detailedLog(e.stackTraceToString())
                 }
             }
         }
@@ -335,6 +344,7 @@ class NexoEmulatorController(
             } catch (e: Exception) {
                 if (isActive) {
                     log("Failed to add ${product.name}: ${e.message}")
+                    detailedLog(e.stackTraceToString())
                 }
             }
         }
@@ -389,6 +399,7 @@ class NexoEmulatorController(
             if (previous == ConnectionPhase.CONNECTED || previous == ConnectionPhase.CONNECTING) {
                 log("Terminal unreachable: ${e.message}")
             }
+            detailedLog(e.stackTraceToString())
         }
     }
 
@@ -423,6 +434,21 @@ class NexoEmulatorController(
     }
 
     private fun log(message: String) {
-        _state.update { it.copy(events = (it.events + message).takeLast(200)) }
+        val stamped = "${timestamp()} $message"
+        _state.update {
+            it.copy(
+                events = (it.events + stamped).takeLast(200),
+                // events echo into the detailed stream so it reads as one timeline
+                detailedEvents = (it.detailedEvents + stamped).takeLast(500),
+            )
+        }
     }
+
+    private fun detailedLog(message: String) {
+        val stamped = "${timestamp()} $message"
+        _state.update { it.copy(detailedEvents = (it.detailedEvents + stamped).takeLast(500)) }
+    }
+
+    private fun timestamp(): String =
+        java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))
 }

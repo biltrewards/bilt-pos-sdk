@@ -26,6 +26,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -381,12 +383,27 @@ private fun BasketCard(state: EmulatorState, modifier: Modifier = Modifier) {
 
 @Composable
 private fun EventsCard(state: EmulatorState, modifier: Modifier = Modifier) {
+    // 0 = curated events, 1 = raw logger output (SDK JUL records, stack traces)
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
+
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text("Log", style = MaterialTheme.typography.titleMedium)
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            TabRow(selectedTabIndex = selectedTab) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text("Events") },
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("Detailed") },
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(bottom = 8.dp))
+            val lines = if (selectedTab == 0) state.events else state.detailedEvents
             LazyColumn(modifier = Modifier.weight(1f)) {
-                items(state.events.asReversed()) { event ->
+                items(lines.asReversed()) { event ->
                     Text(
                         event,
                         style = MaterialTheme.typography.bodySmall,

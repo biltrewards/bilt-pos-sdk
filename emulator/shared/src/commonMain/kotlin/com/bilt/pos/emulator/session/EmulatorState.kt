@@ -60,7 +60,10 @@ data class EmulatorState(
     val basket: List<BasketLine> = emptyList(),
     val basketTotal: String = "0.00",
     val basketTax: String = "0.00",
+    /** Curated one-line event feed shown on the Events tab. */
     val events: List<String> = emptyList(),
+    /** Raw logger output (SDK java.util.logging records, stack traces) for the Detailed tab. */
+    val detailedEvents: List<String> = emptyList(),
 )
 
 /**
