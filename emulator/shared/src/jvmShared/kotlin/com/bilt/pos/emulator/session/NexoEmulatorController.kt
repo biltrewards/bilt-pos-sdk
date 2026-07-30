@@ -298,12 +298,19 @@ class NexoEmulatorController(
 
     override fun addProduct(product: Product) {
         val conn = connection
-        val current = conn?.session
-        if (conn == null || current == null) {
+        if (conn == null) {
             log("No active checkout session — press Start Session first")
             return
         }
         conn.scope.launch(conn.dispatcher) {
+            // Read inside the serialized job (same as start/endSession) so an
+            // End-then-tap sequence can't ring an item into a session already
+            // cleared for its End bracket
+            val current = conn.session
+            if (current == null) {
+                log("No active checkout session — press Start Session first")
+                return@launch
+            }
             try {
                 val existing = current.basket.getItemBySku(product.sku)
                 val basket = if (existing == null) {
