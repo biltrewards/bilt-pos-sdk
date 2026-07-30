@@ -217,11 +217,16 @@ class NexoEmulatorController(
             log("Not connected — connect before starting a session")
             return
         }
-        if (conn.session != null) {
-            log("A checkout session is already active — end it first")
-            return
-        }
         conn.scope.launch(conn.dispatcher) {
+            // The authoritative already-active check lives INSIDE the
+            // serialized job: a second quick press queues behind the first
+            // start() and sees the installed session — checking only before
+            // launch would let both presses start (and orphan) a terminal
+            // session, since conn.session stays null until start() returns.
+            if (conn.session != null) {
+                log("A checkout session is already active — end it first")
+                return@launch
+            }
             try {
                 val started = CheckoutSession.builder()
                     .client(client)
@@ -255,23 +260,29 @@ class NexoEmulatorController(
 
     override fun endSession() {
         val conn = connection
-        val active = conn?.session
-        if (conn == null || active == null) {
+        if (conn == null) {
             log("No active checkout session")
             return
         }
-        // Clear locally first so the UI is immediately ready for the next
-        // customer; the End bracket completes (or fails) in the background
-        conn.session = null
-        _state.update {
-            it.copy(
-                sessionId = null,
-                basket = emptyList(),
-                basketTotal = "0.00",
-                basketTax = "0.00",
-            )
-        }
         conn.scope.launch(conn.dispatcher) {
+            // Read-and-clear inside the serialized job so it can't interleave
+            // with an in-flight startSession installing the session
+            val active = conn.session
+            if (active == null) {
+                log("No active checkout session")
+                return@launch
+            }
+            conn.session = null
+            // Clear the register immediately for the next customer; the End
+            // bracket completes (or fails) below
+            _state.update {
+                it.copy(
+                    sessionId = null,
+                    basket = emptyList(),
+                    basketTotal = "0.00",
+                    basketTax = "0.00",
+                )
+            }
             try {
                 active.end().get()
                 if (currentCoroutineContext().isActive) {
