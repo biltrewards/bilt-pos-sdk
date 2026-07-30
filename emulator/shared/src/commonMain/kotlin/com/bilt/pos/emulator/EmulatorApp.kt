@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,8 +103,11 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
 
 @Composable
 private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController) {
-    var terminalIp by remember { mutableStateOf("") }
-    var encryptionOn by remember { mutableStateOf(state.encryptionEnabled) }
+    // Saveable so an Android configuration change keeps the typed values;
+    // the passphrase is deliberately plain remember — secrets don't belong
+    // in saved instance state
+    var terminalIp by rememberSaveable { mutableStateOf("") }
+    var encryptionOn by rememberSaveable { mutableStateOf(state.encryptionEnabled) }
     var passphrase by remember { mutableStateOf("") }
 
     // Adopt the autodetected address unless the operator already typed one
