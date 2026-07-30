@@ -13,6 +13,9 @@ import com.bilt.pos.nexo.security.SecurityKey
 import com.bilt.pos.session.CheckoutSession
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketItem
+import com.bilt.pos.session.identity.IdentifyStatus
+import com.bilt.pos.session.payment.CheckoutResult
+import com.bilt.pos.session.payment.PaymentOptions
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -270,6 +273,7 @@ class NexoEmulatorController(
                         basket = emptyList(),
                         basketTotal = "0.00",
                         basketTax = "0.00",
+                        lastPayment = null,
                     )
                 }
                 log("Checkout session started (id ${started.sessionId})")
@@ -311,6 +315,7 @@ class NexoEmulatorController(
                             basket = emptyList(),
                             basketTotal = "0.00",
                             basketTax = "0.00",
+                            lastPayment = null,
                         )
                     }
                     log("Checkout session ended")
@@ -366,6 +371,121 @@ class NexoEmulatorController(
             }
         }
     }
+
+    override fun pay(loyalty: LoyaltyOptions) {
+        val conn = connection
+        if (conn == null) {
+            log("No active checkout session — press Start Session first")
+            return
+        }
+        conn.scope.launch(conn.dispatcher) {
+            val session = conn.session
+            if (session == null) {
+                log("No active checkout session — press Start Session first")
+                return@launch
+            }
+            _state.update { it.copy(paymentInProgress = true) }
+            try {
+                // Every loyalty step needs an identified member; prompt the
+                // customer on the terminal first when the operator asked for
+                // any. A no-member outcome (not found, cancelled) degrades to
+                // a guest checkout instead of blocking the payment.
+                if (loyalty.anyEnabled && session.member == null) {
+                    identifyMember(session)
+                }
+                if (!currentCoroutineContext().isActive) return@launch
+
+                val options = PaymentOptions.builder()
+                    .disableRebates(!loyalty.rebates)
+                    .disablePoints(!loyalty.redemption)
+                    .disableAward(!loyalty.award)
+                    .build()
+                log(
+                    "Starting payment — rebates ${onOff(loyalty.rebates)}, " +
+                        "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}"
+                )
+                session.pay(options)
+                    .onRebatesRedeemed { rebates ->
+                        log("Rebates applied: −$${rebates.totalRebateAmount.toPlainString()} → total $${rebates.suggestedTotal.toPlainString()}")
+                        rebates.suggestedTotal
+                    }
+                    .onPointsRedeemed { points ->
+                        log("Points redeemed: ${points.pointsUsed} (−$${points.monetaryValue.toPlainString()}) → total $${points.suggestedTotal.toPlainString()}")
+                        points.suggestedTotal
+                    }
+                    .onSuccess { result ->
+                        if (isActive) publishPaymentResult(result)
+                    }
+                    .onError { error ->
+                        if (isActive) log("Payment failed: ${error.code} — ${error.message}")
+                        PaymentOptions.voidAndAbort()
+                    }
+                    .execute()
+            } catch (e: Exception) {
+                // e.g. pay() rejecting an empty basket or a completed session
+                if (isActive) {
+                    log("Payment not started: ${e.message}")
+                    detailedLog(e.stackTraceToString())
+                }
+            } finally {
+                // unconditional: a disconnect resets state anyway, and a stale
+                // in-progress flag would wedge the Pay button
+                _state.update { it.copy(paymentInProgress = false) }
+            }
+        }
+    }
+
+    /** Terminal member-identification prompt; failures degrade to guest. */
+    private fun identifyMember(session: CheckoutSession) {
+        log("Identifying member on the terminal…")
+        try {
+            val outcome = session.identifyMember().get()
+            if (outcome.status == IdentifyStatus.FOUND) {
+                log(
+                    "Member identified: ${outcome.memberId}" +
+                        (outcome.loyaltyBrand?.let { " ($it)" } ?: "") +
+                        ", ${outcome.pointBalance} pts, ${outcome.rewards.size} reward(s)"
+                )
+            } else {
+                log("No member (${outcome.status}) — loyalty steps will be skipped")
+            }
+        } catch (e: Exception) {
+            log("Member identification failed: ${e.message} — continuing as guest")
+            detailedLog(e.stackTraceToString())
+        }
+    }
+
+    private fun publishPaymentResult(result: CheckoutResult) {
+        result.finalBasket?.let(::publishBasket)
+        val parts = buildList {
+            if (result.cardAmountCharged.signum() > 0) {
+                add(
+                    "card $${result.cardAmountCharged.toPlainString()}" +
+                        (result.paymentBrand?.let { " ($it)" } ?: "")
+                )
+            }
+            if (result.storedValueAmountUsed.signum() > 0) {
+                add("gift card $${result.storedValueAmountUsed.toPlainString()}")
+            }
+            if (result.totalRebateAmount.signum() > 0) {
+                add("rebates −$${result.totalRebateAmount.toPlainString()}")
+            }
+            if (result.pointsRedeemed > 0) {
+                add("${result.pointsRedeemed} pts −$${result.pointsMonetaryValue.toPlainString()}")
+            }
+            if (result.totalPointsEarned > 0) {
+                add("earned ${result.totalPointsEarned} pts (balance ${result.pointsBalance})")
+            }
+        }
+        val summary = "Paid $${result.authorizedAmount.toPlainString()}" +
+            (if (parts.isEmpty()) "" else " — " + parts.joinToString(", "))
+        _state.update { it.copy(lastPayment = summary) }
+        log(summary)
+        result.promotionMessages.forEach { log("Promo: $it") }
+        result.warnings.forEach { log("Warning: $it") }
+    }
+
+    private fun onOff(enabled: Boolean) = if (enabled) "on" else "off"
 
     /** Connectivity probe: a raw nexo Diagnosis request, no session involved. */
     private suspend fun runDiagnosis(client: BiltNexoTerminalClient) {
@@ -429,6 +549,8 @@ class NexoEmulatorController(
                 basket = emptyList(),
                 basketTotal = "0.00",
                 basketTax = "0.00",
+                paymentInProgress = false,
+                lastPayment = null,
             )
         }
     }

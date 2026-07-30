@@ -51,6 +51,7 @@ import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
+import com.bilt.pos.emulator.session.LoyaltyOptions
 
 /**
  * Root composable of the terminal emulator, shared by the Android and
@@ -82,7 +83,7 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
                     if (maxWidth < 700.dp) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             ProductGrid(products, controller, Modifier.weight(1.4f))
-                            BasketCard(state, Modifier.weight(0.8f))
+                            BasketCard(state, controller, Modifier.weight(0.8f))
                             EventsCard(state, Modifier.weight(0.8f))
                         }
                     } else {
@@ -92,7 +93,7 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
                                 modifier = Modifier.weight(2f),
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
                             ) {
-                                BasketCard(state, Modifier.weight(1f))
+                                BasketCard(state, controller, Modifier.weight(1f))
                                 EventsCard(state, Modifier.weight(1f))
                             }
                         }
@@ -347,7 +348,11 @@ private fun ProductGrid(
 }
 
 @Composable
-private fun BasketCard(state: EmulatorState, modifier: Modifier = Modifier) {
+private fun BasketCard(
+    state: EmulatorState,
+    controller: EmulatorController,
+    modifier: Modifier = Modifier,
+) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
@@ -362,7 +367,7 @@ private fun BasketCard(state: EmulatorState, modifier: Modifier = Modifier) {
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             if (state.basket.isEmpty()) {
-                Text("Empty", style = MaterialTheme.typography.bodySmall)
+                Text("Empty", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(state.basket, key = { it.sku }) { line ->
@@ -377,7 +382,72 @@ private fun BasketCard(state: EmulatorState, modifier: Modifier = Modifier) {
                     }
                 }
             }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            PaymentControls(state, controller)
         }
+    }
+}
+
+@Composable
+private fun PaymentControls(state: EmulatorState, controller: EmulatorController) {
+    // Loyalty step toggles for the next payment; identification is prompted
+    // automatically when any is on and no member is attached yet
+    var rebates by rememberSaveable { mutableStateOf(true) }
+    var redemption by rememberSaveable { mutableStateOf(true) }
+    var award by rememberSaveable { mutableStateOf(true) }
+
+    // One payment per session: pay again only after End Session
+    val paid = state.lastPayment != null
+    val canPay = state.sessionId != null && state.basket.isNotEmpty() &&
+        !state.paymentInProgress && !paid
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LoyaltyCheckbox("Rebates", rebates, !state.paymentInProgress) { rebates = it }
+            LoyaltyCheckbox("Redemption", redemption, !state.paymentInProgress) { redemption = it }
+            LoyaltyCheckbox("Award", award, !state.paymentInProgress) { award = it }
+        }
+        if (paid) {
+            Text(
+                "${state.lastPayment} — End Session to start a new checkout",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF2E7D32),
+            )
+        }
+        Button(
+            onClick = { controller.pay(LoyaltyOptions(rebates, redemption, award)) },
+            enabled = canPay,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                when {
+                    state.paymentInProgress -> "Paying…"
+                    paid -> "Paid"
+                    else -> "Pay $${state.basketTotal}"
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoyaltyCheckbox(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+        )
+        Text(label, style = MaterialTheme.typography.bodySmall)
     }
 }
 

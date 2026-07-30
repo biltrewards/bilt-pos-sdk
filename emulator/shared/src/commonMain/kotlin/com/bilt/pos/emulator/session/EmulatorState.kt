@@ -44,6 +44,22 @@ data class BasketLine(
     val lineTotal: String,
 )
 
+/**
+ * Which loyalty steps the payment runs. All of them need an identified
+ * member — enabling any prompts the customer on the terminal before the
+ * payment when no member is attached yet.
+ */
+data class LoyaltyOptions(
+    /** Rebate (coupon) redemption. */
+    val rebates: Boolean = true,
+    /** Point/reward redemption for monetary value. */
+    val redemption: Boolean = true,
+    /** Point award on the completed purchase. */
+    val award: Boolean = true,
+) {
+    val anyEnabled: Boolean get() = rebates || redemption || award
+}
+
 data class EmulatorState(
     val terminalAddress: String = "",
     val addressAutodetected: Boolean = false,
@@ -60,6 +76,11 @@ data class EmulatorState(
     val basket: List<BasketLine> = emptyList(),
     val basketTotal: String = "0.00",
     val basketTax: String = "0.00",
+    /** True while a payment (and its member identification) is on the wire. */
+    val paymentInProgress: Boolean = false,
+    /** One-line summary of the session's completed payment; null until paid.
+     *  A completed session takes no further payment — end it to start anew. */
+    val lastPayment: String? = null,
     /** Curated one-line event feed shown on the Events tab. */
     val events: List<String> = emptyList(),
     /** Raw logger output (SDK java.util.logging records, stack traces) for the Detailed tab. */
@@ -95,4 +116,12 @@ interface EmulatorController {
 
     /** Ring up one unit of [product] on the active session. */
     fun addProduct(product: Product)
+
+    /**
+     * Run the payment on the active session. [loyalty] picks which loyalty
+     * steps run; when any is enabled and no member is identified yet, the
+     * terminal prompts the customer first (a declined prompt falls back to a
+     * guest checkout).
+     */
+    fun pay(loyalty: LoyaltyOptions)
 }

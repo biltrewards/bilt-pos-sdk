@@ -1601,6 +1601,33 @@ class CheckoutSessionPaymentTest {
         assertEquals(SessionState.COMPLETED, session.getState());
     }
 
+    @Test
+    void disableAwardSkipsTheAwardStepButKeepsRedemptions() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 85.00)));
+
+        CheckoutResult result = session.pay(PaymentOptions.builder()
+                .disableAward(true).build()).get();
+
+        assertEquals(0, result.getTotalPointsEarned());
+        assertNull(result.getAwardPoiTransactionId());
+        assertEquals(0, new BigDecimal("10.00").compareTo(result.getTotalRebateAmount()));
+        assertEquals(0, new BigDecimal("5.00").compareTo(result.getPointsMonetaryValue()));
+        assertEquals(SessionState.COMPLETED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(3, requests.size(), "rebate, redemption, payment — no award");
+        assertEquals("Rebate", requests.get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("Redemption", requests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertNotNull(requests.get(2).getPaymentRequest());
+    }
+
     // ─── Abort mid-flow ───
 
     @Test
