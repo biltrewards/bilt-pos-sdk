@@ -23,6 +23,10 @@ data class EmulatorConfig(
     val keyId: String,
     val keyVersion: Int,
     val caPem: String?,
+    /** Set when a CA *was* configured but couldn't be loaded (bad NEXO_CA_BUNDLE
+     *  path, unreadable file) — reported as a TLS failure rather than silently
+     *  degrading to "no CA configured". */
+    val caError: String? = null,
     val hostnamePattern: String,
     val saleId: String = "bilt-emulator",
     val poiId: String = "EMULATOR",
@@ -40,9 +44,21 @@ data class EmulatorConfig(
                 System.getenv(key)?.takeIf { it.isNotBlank() }
                     ?: props.getProperty(key)?.takeIf { it.isNotBlank() }
 
+            var caError: String? = null
             val caPem = value("NEXO_CA_CERT")?.replace("\\n", "\n")
                 ?: value("NEXO_CA_BUNDLE")?.let { path ->
-                    File(path).takeIf { it.isFile }?.readText()
+                    try {
+                        val file = File(path)
+                        if (file.isFile) {
+                            file.readText()
+                        } else {
+                            caError = "NEXO_CA_BUNDLE points to a missing file: $path"
+                            null
+                        }
+                    } catch (e: Exception) {
+                        caError = "NEXO_CA_BUNDLE could not be read ($path): ${e.message}"
+                        null
+                    }
                 }
 
             val pattern = value("NEXO_HOSTNAME_PATTERN")
@@ -57,6 +73,7 @@ data class EmulatorConfig(
                 keyId = value("NEXO_KEY_ID") ?: "emulator",
                 keyVersion = value("NEXO_KEY_VERSION")?.toIntOrNull() ?: 0,
                 caPem = caPem,
+                caError = caError,
                 hostnamePattern = pattern,
             )
         }

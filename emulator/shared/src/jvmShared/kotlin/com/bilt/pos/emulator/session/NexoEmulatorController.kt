@@ -153,9 +153,12 @@ class NexoEmulatorController(
             }
         }
 
-        // Strict verification probe, independent of the payload channel.
+        // Strict verification probe, independent of the payload channel. A CA
+        // that was configured but failed to load reports as a TLS failure —
+        // not as "no CA configured", which would mask the misconfiguration.
         conn.scope.launch(Dispatchers.IO) {
-            val tls = TlsVerifier.verify(address, 8443, config.caPem, config.hostnamePattern)
+            val tls = config.caError?.let { TlsStatus.Failed(it) }
+                ?: TlsVerifier.verify(address, 8443, config.caPem, config.hostnamePattern)
             if (isActive) {
                 _state.update { it.copy(tls = tls) }
                 log(tls.label)
