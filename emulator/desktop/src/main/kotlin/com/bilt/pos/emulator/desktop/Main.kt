@@ -5,14 +5,29 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.bilt.pos.emulator.EmulatorApp
-import com.bilt.pos.emulator.SdkProbe
+import com.bilt.pos.emulator.catalog.MockProductProvider
+import com.bilt.pos.emulator.session.NexoEmulatorController
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
-fun main() = application {
-    Window(
-        onCloseRequest = ::exitApplication,
-        title = "Bilt POS Emulator",
-        state = rememberWindowState(width = 1100.dp, height = 800.dp),
-    ) {
-        EmulatorApp(sdkInfo = SdkProbe.describe())
+fun main() {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val controller = NexoEmulatorController(scope)
+    controller.autodetectAddress()
+
+    application {
+        Window(
+            onCloseRequest = ::exitApplication,
+            title = "Bilt POS Emulator",
+            state = rememberWindowState(width = 1100.dp, height = 800.dp),
+        ) {
+            EmulatorApp(controller, MockProductProvider.products())
+        }
     }
+
+    // application {} has returned (window closed): end any active checkout
+    // session synchronously so the terminal doesn't keep session-scoped
+    // state after the emulator is gone. Bounded by the client's timeouts.
+    controller.shutdown()
 }
