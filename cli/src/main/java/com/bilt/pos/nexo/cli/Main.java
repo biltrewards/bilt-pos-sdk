@@ -863,88 +863,96 @@ public final class Main {
     private static void runCheckoutSessionDemo(BiltNexoTerminalClient client,
                                                double amount, String currency,
                                                boolean identifyMember) {
-        com.bilt.pos.session.CheckoutSession session =
+        // try-with-resources: close() sends the end signal best-effort even
+        // when a demo step throws, so the terminal never keeps a stale session
+        try (com.bilt.pos.session.CheckoutSession session =
                 com.bilt.pos.session.CheckoutSession.builder()
                         .client(client)
                         .saleId("bilt-cli")
                         .poiId("bilt-terminal")
                         .currency(currency)
-                        .build();
+                        .start()
+                        .get()) {
 
-        LOG.info("Session " + session.getSessionId() + " started (state "
-                + session.getState() + ")");
+            LOG.info("Session " + session.getSessionId() + " started (state "
+                    + session.getState() + ")");
 
-        // 1. Identify the member — opt-in via --identify: the terminal-side
-        // CardAcquisition prompt immediately asks for a card, which gets in
-        // the way when exercising the basket/display flow alone
-        if (identifyMember) {
-            session.identifyMember()
-                    .onSuccess(member -> {
-                        if (member.getStatus()
-                                == com.bilt.pos.session.identity.IdentifyStatus.FOUND) {
-                            LOG.info("Member " + member.getMemberId() + " ("
-                                    + member.getLoyaltyBrand() + "), "
-                                    + member.getRewards().size() + " reward(s) available");
-                        } else {
-                            LOG.info("No member attached (" + member.getStatus()
-                                    + "); guest checkout");
-                        }
+            // 1. Identify the member — opt-in via --identify: the terminal-side
+            // CardAcquisition prompt immediately asks for a card, which gets in
+            // the way when exercising the basket/display flow alone
+            if (identifyMember) {
+                session.identifyMember()
+                        .onSuccess(member -> {
+                            if (member.getStatus()
+                                    == com.bilt.pos.session.identity.IdentifyStatus.FOUND) {
+                                LOG.info("Member " + member.getMemberId() + " ("
+                                        + member.getLoyaltyBrand() + "), "
+                                        + member.getRewards().size() + " reward(s) available");
+                            } else {
+                                LOG.info("No member attached (" + member.getStatus()
+                                        + "); guest checkout");
+                            }
+                        })
+                        .onError(error -> LOG.warning("Identification failed: " + error))
+                        .execute();
+            } else {
+                LOG.info("Skipping member identification (pass --identify to enable); "
+                        + "guest checkout");
+            }
+
+            // 2. Scan items — each addItem refreshes the terminal display with
+            // the itemised basket (a DisplayRequest); pause so it can be verified
+            BigDecimal half = BigDecimal.valueOf(amount / 2).setScale(2, java.math.RoundingMode.HALF_UP);
+            com.bilt.pos.session.basket.Basket basket =
+                    session.addItem(com.bilt.pos.session.basket.BasketItem.builder()
+                            .sku("CLI-DEMO-1").description("Demo Item A").quantity(1)
+                            .unitPrice(half).build());
+            LOG.info("Added Demo Item A — basket total " + basket.getGrandTotal() + " " + currency);
+            pauseForDisplayCheck("Demo Item A should now be on the terminal display");
+            basket = session.addItem(com.bilt.pos.session.basket.BasketItem.builder()
+                    .sku("CLI-DEMO-2").description("Demo Item B").quantity(1)
+                    .unitPrice(BigDecimal.valueOf(amount).subtract(half)).build());
+            LOG.info("Added Demo Item B — basket total " + basket.getGrandTotal() + " " + currency);
+            pauseForDisplayCheck("Demo Item B should now be on the terminal display");
+
+            // 3. Pay — rebate/point steps run automatically for identified members
+            com.bilt.pos.session.payment.CheckoutResult checkout = session.pay()
+                    .onRebatesRedeemed(rebates -> {
+                        LOG.info("Rebates committed: -" + rebates.getTotalRebateAmount());
+                        return rebates.getSuggestedTotal();
                     })
-                    .onError(error -> LOG.warning("Identification failed: " + error))
+                    .onPointsRedeemed(points -> {
+                        LOG.info("Points redeemed: " + points.getPointsUsed()
+                                + " (-" + points.getMonetaryValue() + ")");
+                        return points.getSuggestedTotal();
+                    })
+                    .onSuccess(result -> {
+                        LOG.info("Payment approved: card " + result.getCardAmountCharged()
+                                + " " + currency + ", approval " + result.getApprovalCode()
+                                + ", POI txn " + result.getPoiTransactionId());
+                        if (result.getTotalPointsEarned() > 0) {
+                            LOG.info("Earned " + result.getTotalPointsEarned()
+                                    + " points (balance " + result.getPointsBalance() + ")");
+                        }
+                        result.getWarnings().forEach(w -> LOG.warning("Warning: " + w));
+                    })
+                    .onError(error -> {
+                        LOG.severe("Payment failed: " + error);
+                        return com.bilt.pos.session.payment.PaymentOptions.voidAndAbort();
+                    })
+                    .getOrNull();
+
+            session.end()
+                    .onError(error -> LOG.warning("Session end failed: " + error))
                     .execute();
-        } else {
-            LOG.info("Skipping member identification (pass --identify to enable); "
-                    + "guest checkout");
-        }
 
-        // 2. Scan items — each addItem refreshes the terminal display with
-        // the itemised basket (a DisplayRequest); pause so it can be verified
-        BigDecimal half = BigDecimal.valueOf(amount / 2).setScale(2, java.math.RoundingMode.HALF_UP);
-        com.bilt.pos.session.basket.Basket basket =
-                session.addItem(com.bilt.pos.session.basket.BasketItem.builder()
-                        .sku("CLI-DEMO-1").description("Demo Item A").quantity(1)
-                        .unitPrice(half).build());
-        LOG.info("Added Demo Item A — basket total " + basket.getGrandTotal() + " " + currency);
-        pauseForDisplayCheck("Demo Item A should now be on the terminal display");
-        basket = session.addItem(com.bilt.pos.session.basket.BasketItem.builder()
-                .sku("CLI-DEMO-2").description("Demo Item B").quantity(1)
-                .unitPrice(BigDecimal.valueOf(amount).subtract(half)).build());
-        LOG.info("Added Demo Item B — basket total " + basket.getGrandTotal() + " " + currency);
-        pauseForDisplayCheck("Demo Item B should now be on the terminal display");
-
-        // 3. Pay — rebate/point steps run automatically for identified members
-        com.bilt.pos.session.payment.CheckoutResult checkout = session.pay()
-                .onRebatesRedeemed(rebates -> {
-                    LOG.info("Rebates committed: -" + rebates.getTotalRebateAmount());
-                    return rebates.getSuggestedTotal();
-                })
-                .onPointsRedeemed(points -> {
-                    LOG.info("Points redeemed: " + points.getPointsUsed()
-                            + " (-" + points.getMonetaryValue() + ")");
-                    return points.getSuggestedTotal();
-                })
-                .onSuccess(result -> {
-                    LOG.info("Payment approved: card " + result.getCardAmountCharged()
-                            + " " + currency + ", approval " + result.getApprovalCode()
-                            + ", POI txn " + result.getPoiTransactionId());
-                    if (result.getTotalPointsEarned() > 0) {
-                        LOG.info("Earned " + result.getTotalPointsEarned()
-                                + " points (balance " + result.getPointsBalance() + ")");
-                    }
-                    result.getWarnings().forEach(w -> LOG.warning("Warning: " + w));
-                })
-                .onError(error -> {
-                    LOG.severe("Payment failed: " + error);
-                    return com.bilt.pos.session.payment.PaymentOptions.voidAndAbort();
-                })
-                .getOrNull();
-
-        LOG.info("Session finished in state " + session.getState());
-        if (checkout == null) {
-            // this demo doubles as a smoke test: a failed checkout must
-            // fail the process (main exits 1 on any exception from run())
-            throw new IllegalStateException(
-                    "checkout did not complete (session state " + session.getState() + ")");
+            LOG.info("Session finished in state " + session.getState());
+            if (checkout == null) {
+                // this demo doubles as a smoke test: a failed checkout must
+                // fail the process (main exits 1 on any exception from run())
+                throw new IllegalStateException(
+                        "checkout did not complete (session state " + session.getState() + ")");
+            }
         }
     }
 

@@ -43,6 +43,7 @@ class CheckoutSessionInputTest {
     void setUp() throws Exception {
         server = new MockWebServer();
         server.start();
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
         session = CheckoutSession.builder()
                 .client(BiltNexoTerminalClient.builder()
                         .endpoint(server.url("/nexo").toString())
@@ -52,7 +53,9 @@ class CheckoutSessionInputTest {
                 .poiId("VictaLane-275839164")
                 .currency("USD")
                 .autoDisplay(false)
-                .build();
+                .start()
+                .get();
+        server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
     }
 
     @AfterEach
@@ -327,6 +330,7 @@ class CheckoutSessionInputTest {
             displayServer.start();
             displayServer.enqueue(new MockResponse().setBody(
                     inputResponse("\"InputCommand\":\"DigitString\",\"DigitInput\":\"42\"")));
+            server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
             server.enqueue(new MockResponse().setBody(
                     "{\"SaleToPOIResponse\":{\"PINResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
 
@@ -342,13 +346,15 @@ class CheckoutSessionInputTest {
                     .saleId("POS-LANE-3")
                     .poiId("VictaLane-275839164")
                     .currency("USD")
-                    .build();
+                    .start()
+                    .get();
 
             assertEquals("42", dual.requestDigitString("Lane number?").get());
             assertNotNull(dual.requestPinEntry(PinOptions.defaults()).getOrNull());
 
             assertEquals(1, displayServer.getRequestCount(), "input must hit external display");
-            assertEquals(1, server.getRequestCount(), "PIN must stay on the terminal");
+            assertEquals(3, server.getRequestCount(),
+                    "both session starts and the PIN must stay on the terminal");
         }
     }
 

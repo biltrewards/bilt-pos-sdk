@@ -23,6 +23,7 @@ Make sure you have:
 
 A few principles explain most of the behavior:
 
+- **A session is bracketed on the terminal.** The builder's `start()` announces the session to the terminal and only hands out the `CheckoutSession` once the terminal acknowledged — an unstarted session never exists. `end()` tells the terminal to discard the session-scoped data it accumulated and seals the session: nothing can run on it afterwards, and it cannot be restarted. One session per checkout, always closed with `end()` (or try-with-resources — the session is `AutoCloseable`).
 - **The session owns the basket.** Items, tax, and totals live in one place, and `Basket` is the single source of truth. Every mutation returns the updated basket.
 - **nexo underneath.** Every session operation maps to a standard nexo 3.0 message, but the SDK hides much more than message serialization: it manages the complexity of communicating with the terminal, and it orchestrates payment when the transaction is multi-tender — sequencing rebates, point redemption, stored value, and card, and handling loyalty award and reversal — so the register doesn't have to coordinate any of it.
 - **Terminal operations are lazy.** Methods returning a `SessionResult` or `PaymentFlow` send nothing until you call `.execute()`, `.get()`, or `.getOrNull()`. Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
@@ -46,6 +47,9 @@ Loyalty is where a checkout gets complicated: identifying the member, looking up
 ```
 Register                    CheckoutSession                  Terminal (POI)
    │                              │                                │
+   │ ── builder().start()…get() > │ ── Admin(SessionStart) ──────> │  session announced
+   │ <── started session ──────── │                                │
+   │                              │                                │
    │ ── addItem(item) ──────────> │ upsert into basket             │
    │                              │ ── DisplayRequest ───────────> │  (auto-display)
    │ <── updated Basket ───────── │                                │
@@ -66,6 +70,8 @@ Register                    CheckoutSession                  Terminal (POI)
    │                              │ ── LoyaltyRequest(Award) ────> │  points earned (SAF)
    │                              │ ── DisplayRequest (receipt) ─> │
    │ <── onSuccess(result) ────── │                                │
+   │                              │                                │
+   │ ── end()…execute() ────────> │ ── Admin(SessionEnd) ────────> │  session data discarded
 ```
 
 The terminal forwards loyalty requests to POS Loyalty for offer evaluation, redemption, and award; when loyalty is briefly unreachable the award is stored and forwarded by the terminal.
@@ -113,6 +119,7 @@ IDLE → IDENTIFIED → ACTIVE → PAYING → COMPLETED
                        ↑         ↓        ↓
                        └────── FAILED → VOIDING → VOIDED
 abort() → ABORTED (from any non-terminal state)
+end()   → ENDED   (from any state except PAYING/VOIDING)
 ```
 
 Notes:
@@ -121,11 +128,12 @@ Notes:
 - Removing all items from `ACTIVE` returns to `IDLE` (or `IDENTIFIED` if a member was explicitly identified).
 - From `FAILED` the register can retry `pay()` directly, keep editing the basket (back to `ACTIVE`), or `voidTransaction()`. While a failed payment's rollback is incomplete, edits keep the session in `FAILED` and `abort()` first reverses the standing movements — both preserve the path to finish the unwind.
 - `voidTransaction()` runs from `COMPLETED` (or `FAILED`); if the void itself fails, the session is restored to its pre-void state so it can be retried.
-- `COMPLETED`, `VOIDED`, and `ABORTED` are terminal. `getState()` reports the current `SessionState`; the basket is frozen while `PAYING`.
+- `COMPLETED`, `VOIDED`, `ABORTED`, and `ENDED` are terminal. `getState()` reports the current `SessionState`; the basket is frozen while `PAYING`.
+- `ENDED` is the strictest terminal state: `COMPLETED`/`ABORTED`/`VOIDED` still allow the wrap-up operations that reference the settled transaction (void, refund, receipt reprint, diagnostics), but after `end()` nothing runs at all — the terminal has discarded the session.
 
 ---
 
-## Create a session
+## Start a session
 
 ```java
 CheckoutSession session = CheckoutSession.builder()
@@ -134,10 +142,34 @@ CheckoutSession session = CheckoutSession.builder()
     .poiId("VictaLane-275839164")         // required — target terminal (POIID)
     .currency("USD")                      // required
     .storeLocation("STR-0142")            // optional — sent as SaleTerminalData.TotalsGroupID
-    .build();
+    .start()                              // lazy, like every terminal operation
+    .get();                               // announces the session; throws if refused
 ```
 
+The builder's `start()` announces the session to the terminal (the [session start signal](./session-start-end.md)) and yields the `CheckoutSession` once the terminal acknowledged. It is lazy like every other operation — chain `onSuccess`/`onError` and finish with `execute()`, `get()`, or `getOrNull()`. A refused start hands out no session; call `start()` again for a fresh attempt. And if your `onSuccess` handler itself throws, the just-started session is ended on the terminal (best-effort) before the exception propagates — a `start()` whose execution threw never leaves a terminal-side session behind.
+
 A session represents one checkout. Create a new session per transaction; sessions are intended for use from a single register thread (`abort()` may be called from any thread).
+
+### End the session
+
+```java
+session.end().execute();          // or in a handler-style chain, or .get()
+```
+
+`end()` sends the [session end signal](./session-start-end.md) — the terminal discards the session-scoped data it accumulated — and moves the session to `ENDED`. After that **nothing** runs on the session — not even diagnostics or display — and it cannot be restarted; create a new session for the next checkout. Rules:
+
+- Allowed from any state except `PAYING` and `VOIDING` (money in flight).
+- Refused while a failed payment's rollback is incomplete — finish the unwind with `voidTransaction()` first.
+- If the end signal itself fails, the session keeps its state and `end()` can be retried.
+- A concurrent `abort()` never cancels an in-flight `end()` — like an in-flight void, the end exchange always settles (cancelling cleanup would only strand terminal-side session data).
+
+`CheckoutSession` is `AutoCloseable`: `close()` is a best-effort `end()` (failures are logged, an already-ended session is left alone), so try-with-resources guarantees the terminal is told to clean up even on exception paths:
+
+```java
+try (CheckoutSession session = CheckoutSession.builder()....start().get()) {
+    // scan, pay, ...
+}   // Admin(SessionEnd) sent here
+```
 
 ### Lazy execution
 
@@ -167,7 +199,8 @@ CheckoutSession session = CheckoutSession.builder()
     .poiId("VictaLane-275839164")
     .currency("USD")
     .storeLocation("STR-0142")
-    .build();
+    .start()
+    .get();
 
 session.addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
 
@@ -178,6 +211,8 @@ session.pay()
         return PaymentOptions.voidAndAbort();
     })
     .execute();
+
+session.end().execute();   // the terminal discards its session data
 ```
 
 ---
@@ -197,7 +232,8 @@ CheckoutSession session = CheckoutSession.builder()
     .poiId("VictaLane-275839164")
     .currency("USD")
     .storeLocation("STR-0142")
-    .build();
+    .start()
+    .get();
 
 // --- 1. Identify member (optional — customer can also do it on the terminal) ---
 session.identifyMember()
@@ -258,6 +294,9 @@ session.pay()
         return PaymentOptions.voidAndAbort();
     })
     .execute();
+
+// --- 5. End the session (the terminal discards its session data) ---
+session.end().execute();
 ```
 
 ### Variant: gift card split tender
@@ -363,7 +402,8 @@ CheckoutSession refundSession = CheckoutSession.builder()
     .currency("USD")
     .poiTransactionId("POI-TXN-0099")                              // from the original payment
     .poiTransactionTimestamp(Instant.parse("2026-04-30T14:15:05Z"))
-    .build();
+    .start()
+    .get();
 
 refundSession.refund(new BigDecimal("24.99"))     // partial linked refund
     .onSuccess(result -> {
@@ -435,7 +475,8 @@ CheckoutSession session = CheckoutSession.builder()
     .externalDisplayClient(externalDisplayClient)
     .currency("USD")
     .storeLocation("STR-0142")
-    .build();
+    .start()
+    .get();
 
 session.updateDisplay(basket);            // goes to the external display
 session.updateDisplay(promotionalPayload);
@@ -449,7 +490,8 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 
 | Task | Call |
 | --- | --- |
-| Build a session | `CheckoutSession.builder()...build()` |
+| Start a session | `CheckoutSession.builder()...start().get()` |
+| End the session (terminal discards its data) | `session.end()` |
 | Prompt customer to identify | `session.identifyMember()` |
 | POS-driven member lookup (no prompt) | `session.identifyMember(identifier)` |
 | Add / remove / update item | `addItem(item)`, `removeItemBySku(sku)`, `updateItemQuantityBySku(sku, qty)` |

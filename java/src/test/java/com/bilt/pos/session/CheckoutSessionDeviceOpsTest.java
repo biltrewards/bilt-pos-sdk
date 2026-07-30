@@ -32,6 +32,7 @@ class CheckoutSessionDeviceOpsTest {
     void setUp() throws Exception {
         server = new MockWebServer();
         server.start();
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
         session = CheckoutSession.builder()
                 .client(BiltNexoTerminalClient.builder()
                         .endpoint(server.url("/nexo").toString())
@@ -41,7 +42,9 @@ class CheckoutSessionDeviceOpsTest {
                 .poiId("VictaLane-275839164")
                 .currency("USD")
                 .autoDisplay(false)
-                .build();
+                .start()
+                .get();
+        server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
     }
 
     @AfterEach
@@ -193,6 +196,6 @@ class CheckoutSessionDeviceOpsTest {
         SessionException e = assertThrows(SessionException.class,
                 () -> session.updateInputDisplay(DisplayPayloadHelper.standby("x")).get());
         assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
-        assertEquals(0, server.getRequestCount());
+        assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
     }
 }

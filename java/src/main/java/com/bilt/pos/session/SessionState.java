@@ -26,6 +26,7 @@ package com.bilt.pos.session;
  *
  * abort()            ──► ABORTED   (from any non-terminal state)
  * voidTransaction()  ──► VOIDING ──► VOIDED
+ * end()              ──► ENDED     (from any state except PAYING/VOIDING)
  * </pre>
  */
 public enum SessionState {
@@ -55,10 +56,17 @@ public enum SessionState {
     VOIDING,
 
     /** The transaction was voided. Terminal state. */
-    VOIDED;
+    VOIDED,
+
+    /**
+     * The session was ended: the terminal was told to discard its
+     * session-scoped data, and no further operation of any kind is allowed
+     * — create a new session for the next checkout. Terminal state.
+     */
+    ENDED;
 
     /** Returns {@code true} if no further operations are possible from this state. */
     public boolean isTerminal() {
-        return this == COMPLETED || this == ABORTED || this == VOIDED;
+        return this == COMPLETED || this == ABORTED || this == VOIDED || this == ENDED;
     }
 }

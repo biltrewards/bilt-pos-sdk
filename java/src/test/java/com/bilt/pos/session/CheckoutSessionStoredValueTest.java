@@ -47,6 +47,7 @@ class CheckoutSessionStoredValueTest {
     void setUp() throws Exception {
         server = new MockWebServer();
         server.start();
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
         session = CheckoutSession.builder()
                 .client(BiltNexoTerminalClient.builder()
                         .endpoint(server.url("/nexo").toString())
@@ -56,7 +57,9 @@ class CheckoutSessionStoredValueTest {
                 .poiId("VictaLane-275839164")
                 .currency("USD")
                 .autoDisplay(false)
-                .build();
+                .start()
+                .get();
+        server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
     }
 
     @AfterEach

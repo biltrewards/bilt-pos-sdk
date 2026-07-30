@@ -14,6 +14,8 @@ import com.bilt.pos.display.DisplayPayloadHelper;
 import com.bilt.pos.nexo.client.BiltNexoClientException;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.AbortRequest;
+import com.bilt.pos.nexo.model.AdminRequest;
+import com.bilt.pos.nexo.model.AdminResponse;
 import com.bilt.pos.nexo.model.DiagnosisRequest;
 import com.bilt.pos.nexo.model.DiagnosisResponse;
 import com.bilt.pos.nexo.model.DocumentQualifierEnum;
@@ -76,6 +78,7 @@ import com.bilt.pos.session.internal.NexoExchange;
 import com.bilt.pos.session.internal.NexoMessageFactory;
 import com.bilt.pos.session.internal.PaymentOrchestrator;
 import com.bilt.pos.session.internal.RefundManager;
+import com.bilt.pos.session.internal.SessionSignalCodec;
 import com.bilt.pos.session.internal.SessionStateMachine;
 import com.bilt.pos.session.internal.StoredValueManager;
 import com.bilt.pos.session.internal.Wire;
@@ -118,20 +121,32 @@ import java.util.logging.Logger;
  * {@code getOrNull()} is invoked. All I/O and handlers run blocking on the
  * calling thread.</p>
  *
+ * <p>A session is bracketed on the terminal: the builder's
+ * {@link Builder#start() start()} announces it (Nexo {@code Admin} session
+ * start signal) and only hands out the session once the terminal
+ * acknowledged, and {@link #end()} tells the terminal to discard the
+ * session-scoped data it accumulated. An ended session cannot be used or
+ * restarted — create a new one per checkout. Sessions are
+ * {@link AutoCloseable}, so try-with-resources sends the end signal even on
+ * exception paths.</p>
+ *
  * <pre>{@code
- * CheckoutSession session = CheckoutSession.builder()
- *     .client(client)
- *     .saleId("POS-LANE-3")
- *     .poiId("VictaLane-275839164")
- *     .currency("USD")
- *     .build();
+ * try (CheckoutSession session = CheckoutSession.builder()
+ *         .client(client)
+ *         .saleId("POS-LANE-3")
+ *         .poiId("VictaLane-275839164")
+ *         .currency("USD")
+ *         .start()
+ *         .get()) {
+ *     ...
+ * }
  * }</pre>
  *
  * <p>Sessions are intended for use from a single register thread.
  * {@link #abort()} and {@link #updateInputDisplay(DisplayPayload)} are the
  * only methods that are safe to call from another thread.</p>
  */
-public final class CheckoutSession {
+public final class CheckoutSession implements AutoCloseable {
 
     private static final Logger LOGGER = Logger.getLogger(CheckoutSession.class.getName());
 
@@ -1316,6 +1331,12 @@ public final class CheckoutSession {
     }
 
     private void sendDisplay(String base64Xhtml) {
+        // display is best-effort and never throws, so an ended session skips
+        // quietly instead of failing like the SessionResult operations do
+        if (stateMachine.current() == SessionState.ENDED) {
+            LOGGER.warning("display update skipped: the session has ended");
+            return;
+        }
         try {
             exchange.send(MessageCategoryType.DISPLAY, factory.displayRequest(base64Xhtml));
         } catch (SessionException e) {
@@ -1344,7 +1365,10 @@ public final class CheckoutSession {
      * hiding a real money movement would be worse than reporting it on an
      * ended session. Voids are unaffected: {@code VOIDING} has no
      * transition to {@code ABORTED}, so an in-flight void always settles
-     * normally.</p>
+     * normally. The session lifecycle signals are likewise never aborted:
+     * cancelling an in-flight {@link #end()} would only strand the
+     * terminal's session-scoped data, so it always settles — succeeding
+     * into {@code ENDED} even when this abort sealed the session first.</p>
      *
      * <p>Safe to call from any thread.</p>
      */
@@ -1404,7 +1428,13 @@ public final class CheckoutSession {
             }
         }
         NexoExchange.InFlight inFlight = exchange.currentInFlight();
-        if (inFlight != null) {
+        // the session lifecycle signals (the ADMIN category carries only
+        // start/end) are never the abort's target: cancelling the end
+        // exchange would buy nothing and could strand the terminal's
+        // session-scoped data — like VOIDING, an in-flight end() always
+        // settles, and the session still moves to ABORTED above when the
+        // end has not yet succeeded
+        if (inFlight != null && inFlight.getCategory() != MessageCategoryType.ADMIN) {
             sendAbort(inFlight);
         }
     }
@@ -1444,6 +1474,108 @@ public final class CheckoutSession {
         }
     }
 
+    // ─── Session lifecycle ───
+
+    /**
+     * Announces this session to the terminal. Invoked by the builder's
+     * {@link Builder#start() start()} — the session is handed out only after
+     * this succeeds, so an unstarted session never escapes.
+     */
+    private CheckoutSession started() {
+        sendSessionSignal(SessionSignalCodec.start(sessionId));
+        return this;
+    }
+
+    /**
+     * Ends the session: tells the terminal to discard the session-scoped
+     * data it accumulated (Nexo {@code Admin} session end signal) and moves
+     * the session to {@link SessionState#ENDED}, from which no operation of
+     * any kind — including a restart — is allowed. Create a new session for
+     * the next checkout.
+     *
+     * <p>Allowed from any state except {@code PAYING} and {@code VOIDING}
+     * (money in flight), and refused while a failed payment's rollback is
+     * incomplete — finish the unwind with {@link #voidTransaction()} first,
+     * or the terminal would discard state with reversals still standing. If
+     * the end signal fails, the session keeps its current state so the call
+     * can be retried. A concurrent {@link #abort()} never cancels an
+     * in-flight end — the exchange always settles, and its success still
+     * moves the session to {@code ENDED}.</p>
+     */
+    public SessionResult<Void> end() {
+        return operation("end", () -> {
+            lock.lock();
+            try {
+                SessionState state = stateMachine.current();
+                if (state == SessionState.PAYING || state == SessionState.VOIDING) {
+                    throw invalidState("end() is not allowed while an operation is in "
+                            + "flight (state " + state + ")");
+                }
+                if (state == SessionState.ENDED) {
+                    throw invalidState(
+                            "the session has already ended; create a new session");
+                }
+                if (rollbackIncomplete()) {
+                    throw invalidState("a failed payment's rollback is incomplete; "
+                            + "finish the unwind with voidTransaction() before ending "
+                            + "the session");
+                }
+            } finally {
+                lock.unlock();
+            }
+            sendSessionSignal(SessionSignalCodec.end(sessionId));
+            transitionLocked(SessionState.ENDED);
+            return null;
+        });
+    }
+
+    /**
+     * Best-effort {@link #end()} for try-with-resources: a failure to send
+     * the end signal is logged, not thrown, and an already-ended session is
+     * left alone. Registers that need to react to a failed end should call
+     * {@code end()} directly.
+     */
+    @Override
+    public void close() {
+        if (stateMachine.current() == SessionState.ENDED) {
+            return;
+        }
+        end().onError(e -> LOGGER.warning("close() could not end the session: " + e))
+                .execute();
+    }
+
+    /** Sends a Bilt session signal as a Nexo {@code AdminRequest}. */
+    private void sendSessionSignal(String serviceIdentification) {
+        SaleToPOIRequest request = SaleToPOIRequest.builder()
+                .messageHeader(factory.header(MessageClassType.SERVICE,
+                        MessageCategoryType.ADMIN))
+                .adminRequest(AdminRequest.builder()
+                        .serviceIdentification(serviceIdentification)
+                        .build())
+                .build();
+        SaleToPOIResponse response = exchange.sendExpectingBody(
+                MessageCategoryType.ADMIN, request);
+        AdminResponse body = response.getAdminResponse();
+        if (body == null) {
+            throw Wire.missing("AdminResponse");
+        }
+        exchange.requireSuccess(MessageCategoryType.ADMIN, body.getResponse());
+    }
+
+    /**
+     * Guard for the diagnostics/device operations that deliberately keep
+     * working after a checkout settles in {@code COMPLETED}, {@code ABORTED},
+     * or {@code VOIDED} (receipt reprints, status queries, totals): the one
+     * state that shuts them off is {@link SessionState#ENDED} — the register
+     * said goodbye and the terminal discarded the session.
+     */
+    private void requireSessionNotEnded(String operationName) {
+        if (stateMachine.current() == SessionState.ENDED) {
+            throw invalidState(operationName
+                    + " is not allowed after end(); create a new session");
+        }
+    }
+
     // ─── Transaction Status ───
 
     /**
@@ -1466,6 +1598,7 @@ public final class CheckoutSession {
         Objects.requireNonNull(originalServiceId, "originalServiceId");
         Objects.requireNonNull(options, "options");
         return operation("getTransactionStatus", () -> {
+            requireSessionNotEnded("getTransactionStatus");
             TransactionStatusRequest.Builder statusRequest = TransactionStatusRequest.builder()
                     .messageReference(MessageReference.builder()
                             .messageCategory(options.getOriginalCategory())
@@ -1535,17 +1668,23 @@ public final class CheckoutSession {
         if (volumePercent != null && (volumePercent < 0 || volumePercent > 100)) {
             throw new IllegalArgumentException("volumePercent must be between 0 and 100");
         }
-        return operation("playSound", () -> sendSound(SoundActionEnum.START_SOUND,
-                SoundContent.builder()
-                        .soundFormat(SoundFormatEnum.SOUND_REF)
-                        .referenceID(soundReferenceId)
-                        .build(),
-                volumePercent));
+        return operation("playSound", () -> {
+            requireSessionNotEnded("playSound");
+            return sendSound(SoundActionEnum.START_SOUND,
+                    SoundContent.builder()
+                            .soundFormat(SoundFormatEnum.SOUND_REF)
+                            .referenceID(soundReferenceId)
+                            .build(),
+                    volumePercent);
+        });
     }
 
     /** Stops any sound currently playing on the terminal. */
     public SessionResult<Void> stopSound() {
-        return operation("stopSound", () -> sendSound(SoundActionEnum.STOP_SOUND, null, null));
+        return operation("stopSound", () -> {
+            requireSessionNotEnded("stopSound");
+            return sendSound(SoundActionEnum.STOP_SOUND, null, null);
+        });
     }
 
     private Void sendSound(SoundActionEnum action, SoundContent content, Integer volumePercent) {
@@ -1632,6 +1771,7 @@ public final class CheckoutSession {
      */
     public SessionResult<ReconciliationResult> getTotals() {
         return operation("getTotals", () -> {
+            requireSessionNotEnded("getTotals");
             SaleToPOIRequest request = SaleToPOIRequest.builder()
                     .messageHeader(factory.header(MessageClassType.SERVICE,
                             MessageCategoryType.GET_TOTALS))
@@ -1658,6 +1798,7 @@ public final class CheckoutSession {
     /** Queries terminal health and host reachability. */
     public SessionResult<DiagnosisResult> diagnose() {
         return operation("diagnose", () -> {
+            requireSessionNotEnded("diagnose");
             SaleToPOIRequest request = SaleToPOIRequest.builder()
                     .messageHeader(factory.header(MessageClassType.SERVICE,
                             MessageCategoryType.DIAGNOSIS))
@@ -1678,6 +1819,7 @@ public final class CheckoutSession {
     /** Runs a sale reconciliation (end-of-period totals). */
     public SessionResult<ReconciliationResult> reconcile() {
         return operation("reconcile", () -> {
+            requireSessionNotEnded("reconcile");
             SaleToPOIRequest request = SaleToPOIRequest.builder()
                     .messageHeader(factory.header(MessageClassType.SERVICE,
                             MessageCategoryType.RECONCILIATION))
@@ -1702,6 +1844,7 @@ public final class CheckoutSession {
     public SessionResult<Void> print(PrintPayload payload) {
         Objects.requireNonNull(payload, "payload");
         return operation("print", () -> {
+            requireSessionNotEnded("print");
             OutputContent.Builder content = OutputContent.builder();
             if (payload.getFormat() == PrintPayload.Format.TEXT) {
                 content.outputFormat(OutputFormatEnum.TEXT)
@@ -1905,7 +2048,28 @@ public final class CheckoutSession {
             return this;
         }
 
-        public CheckoutSession build() {
+        /**
+         * Validates the configuration and returns a lazy operation that
+         * announces the session to the terminal (Nexo {@code Admin} session
+         * start signal) and yields it once the terminal acknowledged — an
+         * unstarted session never exists, so no operation can reach the
+         * terminal before the start. Like every session operation, nothing
+         * is sent until {@code execute()}, {@code get()}, or
+         * {@code getOrNull()} is invoked.
+         *
+         * <p>A refused start yields no session; call {@code start()} again
+         * for a fresh attempt (each attempt is a new session with a new
+         * session ID).</p>
+         *
+         * <p>If the registered {@code onSuccess} handler itself throws, the
+         * just-started session is ended on the terminal (best-effort) before
+         * the exception propagates: a {@code start()} whose execution threw
+         * never leaves a terminal-side session behind, and any session it
+         * may have delivered to the handler must be considered lost.</p>
+         *
+         * @throws IllegalStateException if a required field is missing
+         */
+        public SessionResult<CheckoutSession> start() {
             if (client == null) {
                 throw new IllegalStateException("client is required");
             }
@@ -1918,7 +2082,12 @@ public final class CheckoutSession {
             if (currency == null || currency.isEmpty()) {
                 throw new IllegalStateException("currency is required");
             }
-            return new CheckoutSession(this);
+            CheckoutSession session = new CheckoutSession(this);
+            // the terminal has acknowledged Start by the time onSuccess
+            // runs; a handler that throws would strand that session-scoped
+            // context with no session object to end it, so it is released
+            return new SessionResult<>("start", session::started)
+                    .releasing(CheckoutSession::close);
         }
     }
 }
