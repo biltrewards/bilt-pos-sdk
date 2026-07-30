@@ -2,6 +2,13 @@ package com.bilt.pos.emulator.session
 
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient
+import com.bilt.pos.nexo.model.DiagnosisRequest
+import com.bilt.pos.nexo.model.MessageCategoryType
+import com.bilt.pos.nexo.model.MessageClassType
+import com.bilt.pos.nexo.model.MessageHeader
+import com.bilt.pos.nexo.model.MessageTypeType
+import com.bilt.pos.nexo.model.NexoTerminalAPI
+import com.bilt.pos.nexo.model.SaleToPOIRequest
 import com.bilt.pos.nexo.security.SecurityKey
 import com.bilt.pos.session.CheckoutSession
 import com.bilt.pos.session.basket.Basket
@@ -22,19 +29,25 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * The emulator session engine: owns the terminal client and
- * [CheckoutSession], runs the periodic diagnostics loop, and projects
- * everything into [EmulatorState] for the UI.
+ * The emulator session engine. A connection to the terminal and a checkout
+ * session are separate lifecycles:
+ *
+ * - **Connect** builds the client and runs the periodic diagnostics loop
+ *   (raw nexo Diagnosis requests — pure connectivity, no session involved).
+ * - **Start Session** opens a [CheckoutSession] (terminal Start bracket) on
+ *   that connection: one session per customer checkout. **End Session**
+ *   closes it (End bracket). Disconnect ends any active session best-effort.
  *
  * Each connection is a self-contained [Connection]: its own scope (child of
  * the app scope, cancelled wholesale on disconnect), its own single-threaded
- * dispatcher (the session is a stateful machine, so its SDK calls are
- * serialized — but per connection, so a reconnect never queues behind the
- * previous connection's in-flight blocking call), and its session once built.
+ * dispatcher (SDK calls are serialized per connection — the session is a
+ * stateful machine — but a reconnect never queues behind the previous
+ * connection's in-flight blocking call), the client, and the session.
  *
  * Because the SDK calls block rather than suspend, cancellation alone can't
  * stop one mid-call — so each job re-checks that it is still active after a
@@ -50,8 +63,16 @@ class NexoEmulatorController(
     private class Connection(
         val scope: CoroutineScope,
         val dispatcher: CoroutineDispatcher,
+        @Volatile var client: BiltNexoTerminalClient? = null,
         @Volatile var session: CheckoutSession? = null,
     )
+
+    /**
+     * Runs End brackets during teardown. Deliberately NOT a child of [scope]:
+     * a ViewModel clearing its scope right after disconnect() must not kill
+     * the in-flight best-effort end signal.
+     */
+    private val teardownScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _state = MutableStateFlow(
         EmulatorState(
@@ -105,7 +126,7 @@ class NexoEmulatorController(
         connection = conn
 
         conn.scope.launch(conn.dispatcher) {
-            val sessionBuilder = try {
+            val client = try {
                 // Payload channel: always permissive, so a failing certificate
                 // is reported (below) but never blocks terminal communication.
                 val clientBuilder = BiltNexoTerminalClient.builder()
@@ -120,11 +141,7 @@ class NexoEmulatorController(
                             .build()
                     )
                 }
-                CheckoutSession.builder()
-                    .client(clientBuilder.build())
-                    .saleId(config.saleId)
-                    .poiId(config.poiId)
-                    .currency(config.currency)
+                clientBuilder.build()
             } catch (e: Exception) {
                 // e.g. an unparsable address making the endpoint URL invalid —
                 // without this the job dies silently and the chip stays on Connecting
@@ -133,23 +150,18 @@ class NexoEmulatorController(
                         it.copy(
                             connection = ConnectionStatus(
                                 ConnectionPhase.ERROR,
-                                e.message ?: "session setup failed",
+                                e.message ?: "client setup failed",
                             )
                         )
                     }
-                    log("Failed to set up the session: ${e.message}")
+                    log("Failed to set up the client: ${e.message}")
                 }
                 return@launch
             }
+            conn.client = client
 
-            // start() is a terminal roundtrip (the session Start bracket), so
-            // it is retried each tick until the terminal is reachable — same
-            // auto-recovery the diagnostics loop always had.
             while (isActive) {
-                val current = conn.session ?: startSession(conn, sessionBuilder)
-                if (current != null) {
-                    runDiagnosis(current)
-                }
+                runDiagnosis(client)
                 delay(diagnosticsInterval)
             }
         }
@@ -172,65 +184,104 @@ class NexoEmulatorController(
         connection = null
         conn.scope.cancel()
         val active = conn.session
+        conn.session = null
         if (active != null) {
-            // Session End bracket, best-effort, on the app scope — the
-            // connection scope is already dead
-            scope.launch(Dispatchers.IO) {
+            // Session End bracket, best-effort; teardownScope so a ViewModel
+            // cancelling the app scope right after doesn't kill it
+            teardownScope.launch {
                 runCatching { active.close() }
             }
-            log("Disconnected")
         }
+        log("Disconnected")
         updateDisconnectedState()
     }
 
     /**
-     * Starts the session (terminal Start bracket) and installs it on the
-     * connection; null when the terminal wasn't reachable — the diagnostics
-     * loop retries next tick.
+     * Blocking best-effort teardown for process-exit paths (desktop window
+     * close): ends the active session synchronously so the End bracket isn't
+     * lost to the exiting process. Bounded by the client's timeouts.
      */
-    private suspend fun startSession(
-        conn: Connection,
-        sessionBuilder: CheckoutSession.Builder,
-    ): CheckoutSession? {
-        val previous = _state.value.connection.phase
-        return try {
-            val started = sessionBuilder.start().get()
-            if (!currentCoroutineContext().isActive) {
-                // disconnected while starting; end the orphaned session
-                runCatching { started.close() }
-                return null
-            }
-            conn.session = started
-            log("Session started (id ${started.sessionId})")
-            started
-        } catch (e: Exception) {
-            if (!currentCoroutineContext().isActive) {
-                return null
-            }
-            _state.update {
-                it.copy(
-                    connection = ConnectionStatus(
-                        ConnectionPhase.ERROR,
-                        e.message ?: "session start failed",
+    fun shutdown() {
+        val conn = connection
+        connection = null
+        conn?.scope?.cancel()
+        val active = conn?.session ?: return
+        conn.session = null
+        runCatching { active.close() }
+    }
+
+    override fun startSession() {
+        val conn = connection
+        val client = conn?.client
+        if (conn == null || client == null) {
+            log("Not connected — connect before starting a session")
+            return
+        }
+        if (conn.session != null) {
+            log("A checkout session is already active — end it first")
+            return
+        }
+        conn.scope.launch(conn.dispatcher) {
+            try {
+                val started = CheckoutSession.builder()
+                    .client(client)
+                    .saleId(config.saleId)
+                    .poiId(config.poiId)
+                    .currency(config.currency)
+                    .start()
+                    .get()
+                if (!currentCoroutineContext().isActive) {
+                    // disconnected while starting; end the orphaned session
+                    runCatching { started.close() }
+                    return@launch
+                }
+                conn.session = started
+                _state.update {
+                    it.copy(
+                        sessionId = started.sessionId,
+                        basket = emptyList(),
+                        basketTotal = "0.00",
+                        basketTax = "0.00",
                     )
-                )
+                }
+                log("Checkout session started (id ${started.sessionId})")
+            } catch (e: Exception) {
+                if (currentCoroutineContext().isActive) {
+                    log("Failed to start a checkout session: ${e.message}")
+                }
             }
-            if (previous == ConnectionPhase.CONNECTING || previous == ConnectionPhase.CONNECTED) {
-                log("Terminal unreachable: ${e.message}")
-            }
-            null
         }
     }
 
-    private fun updateDisconnectedState() {
+    override fun endSession() {
+        val conn = connection
+        val active = conn?.session
+        if (conn == null || active == null) {
+            log("No active checkout session")
+            return
+        }
+        // Clear locally first so the UI is immediately ready for the next
+        // customer; the End bracket completes (or fails) in the background
+        conn.session = null
         _state.update {
             it.copy(
-                connection = ConnectionStatus(ConnectionPhase.DISCONNECTED),
-                tls = TlsStatus.Unknown, // per-connection fact; stale FAILED would outlive it
+                sessionId = null,
                 basket = emptyList(),
                 basketTotal = "0.00",
                 basketTax = "0.00",
             )
+        }
+        conn.scope.launch(conn.dispatcher) {
+            try {
+                active.end().get()
+                if (currentCoroutineContext().isActive) {
+                    log("Checkout session ended")
+                }
+            } catch (e: Exception) {
+                if (currentCoroutineContext().isActive) {
+                    log("Failed to end the session cleanly: ${e.message}")
+                }
+            }
         }
     }
 
@@ -238,7 +289,7 @@ class NexoEmulatorController(
         val conn = connection
         val current = conn?.session
         if (conn == null || current == null) {
-            log("Not connected — connect before adding items")
+            log("No active checkout session — press Start Session first")
             return
         }
         conn.scope.launch(conn.dispatcher) {
@@ -269,14 +320,34 @@ class NexoEmulatorController(
         }
     }
 
-    private suspend fun runDiagnosis(current: CheckoutSession) {
+    /** Connectivity probe: a raw nexo Diagnosis request, no session involved. */
+    private suspend fun runDiagnosis(client: BiltNexoTerminalClient) {
         val previous = _state.value.connection.phase
         try {
-            val result = current.diagnose().get()
+            val request = NexoTerminalAPI.builder()
+                .saleToPOIRequest(
+                    SaleToPOIRequest.builder()
+                        .messageHeader(
+                            MessageHeader.builder()
+                                .protocolVersion("3.0")
+                                .messageClass(MessageClassType.SERVICE)
+                                .messageCategory(MessageCategoryType.DIAGNOSIS)
+                                .messageType(MessageTypeType.REQUEST)
+                                .serviceID(UUID.randomUUID().toString().substring(0, 8))
+                                .saleID(config.saleId)
+                                .poiid(config.poiId)
+                                .build()
+                        )
+                        .diagnosisRequest(DiagnosisRequest.builder().build())
+                        .build()
+                )
+                .build()
+            val response = client.request(request)
             if (!currentCoroutineContext().isActive) {
                 return // disconnected while the request was in flight
             }
-            val poi = result.poiStatus?.globalStatus?.toString() ?: "OK"
+            val poi = response?.saleToPOIResponse?.diagnosisResponse
+                ?.poiStatus?.globalStatus?.toString() ?: "OK"
             _state.update {
                 it.copy(connection = ConnectionStatus(ConnectionPhase.CONNECTED, "POI $poi"))
             }
@@ -298,6 +369,19 @@ class NexoEmulatorController(
             if (previous == ConnectionPhase.CONNECTED || previous == ConnectionPhase.CONNECTING) {
                 log("Terminal unreachable: ${e.message}")
             }
+        }
+    }
+
+    private fun updateDisconnectedState() {
+        _state.update {
+            it.copy(
+                connection = ConnectionStatus(ConnectionPhase.DISCONNECTED),
+                tls = TlsStatus.Unknown, // per-connection fact; stale FAILED would outlive it
+                sessionId = null,
+                basket = emptyList(),
+                basketTotal = "0.00",
+                basketTax = "0.00",
+            )
         }
     }
 

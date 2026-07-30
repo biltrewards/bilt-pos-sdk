@@ -183,6 +183,20 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         Text(if (connected) "Disconnect" else "Connect")
                     }
                 }
+                // One checkout session per customer — started and ended
+                // explicitly, independent of the connection lifecycle
+                val sessionButton: @Composable (Modifier) -> Unit = { modifier ->
+                    val sessionActive = state.sessionId != null
+                    Button(
+                        onClick = {
+                            if (sessionActive) controller.endSession() else controller.startSession()
+                        },
+                        enabled = connected,
+                        modifier = modifier,
+                    ) {
+                        Text(if (sessionActive) "End Session" else "Start Session")
+                    }
+                }
                 if (compact) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -194,6 +208,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                             passphraseField(Modifier.fillMaxWidth())
                         }
                         connectButton(Modifier.fillMaxWidth())
+                        sessionButton(Modifier.fillMaxWidth())
                     }
                 } else {
                     Row(
@@ -203,6 +218,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                     ) {
                         ipField(Modifier.width(160.dp))
                         connectButton(Modifier)
+                        sessionButton(Modifier)
                         encryptToggle()
                         if (encryptionOn) {
                             passphraseField(Modifier.width(240.dp))
@@ -282,8 +298,9 @@ private fun StatusIndicators(state: EmulatorState) {
             )
         }
         Text(
-            text = state.tls.label + "   ·   Encryption: " +
-                if (state.encryptionEnabled) "on" else "off",
+            text = state.tls.label +
+                "   ·   Encryption: " + (if (state.encryptionEnabled) "on" else "off") +
+                "   ·   Session: " + (state.sessionId?.take(8) ?: "none"),
             style = MaterialTheme.typography.bodySmall,
         )
     }

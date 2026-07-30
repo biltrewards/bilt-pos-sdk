@@ -54,6 +54,9 @@ data class EmulatorState(
     /** True when a passphrase is available from config (NEXO_PASSPHRASE), so
      *  the UI can offer encryption without asking for one. */
     val hasConfiguredPassphrase: Boolean = false,
+    /** Active checkout session id, or null when no session is running.
+     *  One session = one customer checkout; connect alone starts none. */
+    val sessionId: String? = null,
     val basket: List<BasketLine> = emptyList(),
     val basketTotal: String = "0.00",
     val basketTax: String = "0.00",
@@ -80,6 +83,12 @@ interface EmulatorController {
     fun connect(address: String, encryptionEnabled: Boolean, passphraseOverride: String? = null)
 
     fun disconnect()
+
+    /** Start a new checkout session (terminal Start bracket) on the connection. */
+    fun startSession()
+
+    /** End the active checkout session (terminal End bracket). */
+    fun endSession()
 
     /** Ring up one unit of [product] on the active session. */
     fun addProduct(product: Product)
