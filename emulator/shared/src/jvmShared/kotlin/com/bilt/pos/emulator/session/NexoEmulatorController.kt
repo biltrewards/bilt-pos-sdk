@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigDecimal
 import java.util.UUID
 import kotlin.time.Duration
@@ -206,13 +208,22 @@ class NexoEmulatorController(
     /**
      * Blocking best-effort teardown for process-exit paths (desktop window
      * close): ends the active session synchronously so the End bracket isn't
-     * lost to the exiting process. Bounded by the client's timeouts.
+     * lost to the exiting process. Bounded by the client's timeouts plus a
+     * join cap.
      */
     fun shutdown() {
-        val conn = connection
+        val conn = connection ?: return
         connection = null
-        conn?.scope?.cancel()
-        val active = conn?.session ?: return
+        conn.scope.cancel()
+        // Wait (bounded) for the serialized jobs to settle before reading the
+        // session: an in-flight start() may have already succeeded on the
+        // terminal without conn.session being set yet. After the join it has
+        // either installed the session (closed below) or taken the cancelled
+        // path and closed its own orphan — both need the process alive.
+        runBlocking {
+            withTimeoutOrNull(10_000) { conn.scope.coroutineContext[Job]?.join() }
+        }
+        val active = conn.session ?: return
         conn.session = null
         runCatching { active.close() }
     }
