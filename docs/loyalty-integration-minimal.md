@@ -108,5 +108,5 @@ Close the bracket with `BiltSession,End,v1,<sessionId>` so the terminal discards
 
 The register never sees who the member is, cannot greet them or show their point balance, and no coupons/offers or point awards are involved. When you want any of that:
 
-- [Loyalty integration: with member identification](./loyalty-integration-complete.md) — the register learns the member via card acquisition.
-- [Loyalty integration: advanced flows](./loyalty-integration-advanced.md) — rebates, awards, reversals, and register-side member lookup.
+- [Loyalty integration: with member identification](./loyalty-integration-complete.md) — the register learns the member via card acquisition and applies their coupons/offers as rebates.
+- [Loyalty integration: advanced flows](./loyalty-integration-advanced.md) — awards, reversals, and register-side member lookup.
