@@ -245,6 +245,11 @@ class NexoEmulatorController(
                 log("A checkout session is already active — end it first")
                 return@launch
             }
+            // Visible before the roundtrip: a terminal that never answers the
+            // Start bracket blocks here for the client's read timeout (120s
+            // default), and the serialized dispatcher queues diagnostics
+            // behind it — without this line the UI is silent the whole time
+            log("Starting checkout session (Start bracket)…")
             try {
                 val started = CheckoutSession.builder()
                     .client(client)
@@ -291,6 +296,7 @@ class NexoEmulatorController(
                 log("No active checkout session")
                 return@launch
             }
+            log("Ending checkout session (End bracket)…")
             try {
                 active.end().get()
                 // Clear only on a successful End bracket — a failed end keeps

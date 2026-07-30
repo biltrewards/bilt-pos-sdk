@@ -19,6 +19,17 @@ object JulLogCapture {
     @Volatile
     private var sink: ((String) -> Unit)? = null
 
+    /**
+     * The SDK logs its interesting diagnostics (encryption, protocol
+     * negotiation) at FINE, which the default logger level suppresses before
+     * any handler sees it. Opening just the SDK's namespace keeps third-party
+     * FINE spam out. Held as a field: JUL keeps loggers weakly referenced, so
+     * without a strong reference the level setting could be GC'd away.
+     */
+    private val sdkLogger: Logger = Logger.getLogger("com.bilt.pos").apply {
+        level = Level.FINE
+    }
+
     /** Idempotent; a later call just redirects the sink (e.g. a recreated controller). */
     fun install(newSink: (String) -> Unit) {
         sink = newSink
@@ -27,7 +38,7 @@ object JulLogCapture {
         }
         Logger.getLogger("").addHandler(object : Handler() {
             override fun publish(record: LogRecord) {
-                if (record.level.intValue() < Level.INFO.intValue()) {
+                if (record.level.intValue() < Level.FINE.intValue()) {
                     return
                 }
                 val message = buildString {
