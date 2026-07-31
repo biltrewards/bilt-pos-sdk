@@ -11,6 +11,7 @@ import com.bilt.pos.nexo.model.NexoTerminalAPI
 import com.bilt.pos.nexo.model.SaleToPOIRequest
 import com.bilt.pos.nexo.security.SecurityKey
 import com.bilt.pos.session.CheckoutSession
+import com.bilt.pos.session.SessionState
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketItem
 import com.bilt.pos.session.identity.IdentifyStatus
@@ -407,9 +408,19 @@ class NexoEmulatorController(
                 // Every loyalty step needs an identified member; prompt the
                 // customer on the terminal first when the operator asked for
                 // any. A no-member outcome (not found, cancelled) degrades to
-                // a guest checkout instead of blocking the payment.
+                // a guest checkout instead of blocking the payment. The
+                // prompt is legal only in IDLE/IDENTIFIED/ACTIVE — pay() also
+                // accepts FAILED (a declined payment's retry), where the
+                // prompt would just throw; say so instead of attempting it.
                 if (loyalty.anyEnabled && session.member == null) {
-                    identifyMember(session)
+                    when (session.state) {
+                        SessionState.IDLE, SessionState.IDENTIFIED, SessionState.ACTIVE ->
+                            identifyMember(session)
+                        else -> log(
+                            "Member identification is unavailable in state " +
+                                "${session.state} — retrying as a guest checkout"
+                        )
+                    }
                 }
                 if (!currentCoroutineContext().isActive) return@launch
 
