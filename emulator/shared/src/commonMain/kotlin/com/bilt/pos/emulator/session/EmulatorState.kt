@@ -45,20 +45,22 @@ data class BasketLine(
 )
 
 /**
- * Which loyalty steps the payment runs. All of them need an identified
- * member — enabling any prompts the customer on the terminal before the
- * payment when no member is attached yet.
+ * Payment configuration. The SDK-side loyalty steps run only for a member
+ * attached to the session, but identification is a separate choice:
+ * [identify] prompts on the terminal before the payment, while the loyalty
+ * toggles keep working without it when the customer self-identifies on the
+ * terminal during the flow.
  */
 data class LoyaltyOptions(
+    /** Prompt for member identification on the terminal before the payment. */
+    val identify: Boolean = true,
     /** Rebate (coupon) redemption. */
     val rebates: Boolean = true,
     /** Point/reward redemption for monetary value. */
     val redemption: Boolean = true,
     /** Point award on the completed purchase. */
     val award: Boolean = true,
-) {
-    val anyEnabled: Boolean get() = rebates || redemption || award
-}
+)
 
 data class EmulatorState(
     val terminalAddress: String = "",
@@ -119,9 +121,9 @@ interface EmulatorController {
 
     /**
      * Run the payment on the active session. [loyalty] picks which loyalty
-     * steps run; when any is enabled and no member is identified yet, the
-     * terminal prompts the customer first (a declined prompt falls back to a
-     * guest checkout).
+     * steps run; when [LoyaltyOptions.identify] is enabled and no member is
+     * attached yet, the terminal prompts the customer first (a declined
+     * prompt falls back to a guest checkout).
      */
     fun pay(loyalty: LoyaltyOptions)
 

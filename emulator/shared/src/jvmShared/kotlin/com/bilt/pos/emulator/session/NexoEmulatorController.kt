@@ -416,13 +416,14 @@ class NexoEmulatorController(
                 return@launch
             }
             try {
-                // Every loyalty step needs an identified member; prompt the
-                // customer on the terminal first when the operator asked for
-                // any. A no-member outcome (not found, cancelled) degrades to
-                // a guest checkout instead of blocking the payment. FAILED is
-                // included: a declined/cancelled payment retried with loyalty
-                // switched on identifies the member before the retry.
-                if (loyalty.anyEnabled && session.member == null) {
+                // The prompt runs only when the operator asked for it — the
+                // loyalty toggles alone don't force it, since the customer
+                // may self-identify on the terminal during the flow. A
+                // no-member outcome (not found, cancelled) degrades to a
+                // guest checkout instead of blocking the payment. FAILED is
+                // included: a declined/cancelled payment retried with
+                // identification switched on prompts before the retry.
+                if (loyalty.identify && session.member == null) {
                     when (session.state) {
                         SessionState.IDLE, SessionState.IDENTIFIED, SessionState.ACTIVE,
                         SessionState.FAILED,

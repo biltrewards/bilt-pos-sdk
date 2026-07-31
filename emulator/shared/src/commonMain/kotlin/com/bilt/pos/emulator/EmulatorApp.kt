@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -389,10 +391,13 @@ private fun BasketCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PaymentControls(state: EmulatorState, controller: EmulatorController) {
-    // Loyalty step toggles for the next payment; identification is prompted
-    // automatically when any is on and no member is attached yet
+    // Toggles for the next payment. Identify prompts on the terminal before
+    // paying; the loyalty steps work without it when the customer
+    // self-identifies on the terminal during the flow.
+    var identify by rememberSaveable { mutableStateOf(true) }
     var rebates by rememberSaveable { mutableStateOf(true) }
     var redemption by rememberSaveable { mutableStateOf(true) }
     var award by rememberSaveable { mutableStateOf(true) }
@@ -403,11 +408,12 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
         !state.paymentInProgress && !paid
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
+        // FlowRow: four labeled checkboxes overflow a narrow card; wrap
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
+            LoyaltyCheckbox("Identify", identify, !state.paymentInProgress) { identify = it }
             LoyaltyCheckbox("Rebates", rebates, !state.paymentInProgress) { rebates = it }
             LoyaltyCheckbox("Redemption", redemption, !state.paymentInProgress) { redemption = it }
             LoyaltyCheckbox("Award", award, !state.paymentInProgress) { award = it }
@@ -424,7 +430,16 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Button(
-                onClick = { controller.pay(LoyaltyOptions(rebates, redemption, award)) },
+                onClick = {
+                    controller.pay(
+                        LoyaltyOptions(
+                            identify = identify,
+                            rebates = rebates,
+                            redemption = redemption,
+                            award = award,
+                        )
+                    )
+                },
                 enabled = canPay,
                 modifier = Modifier.weight(1f),
             ) {
