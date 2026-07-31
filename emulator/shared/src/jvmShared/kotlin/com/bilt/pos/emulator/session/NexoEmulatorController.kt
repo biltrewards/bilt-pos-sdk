@@ -415,17 +415,17 @@ class NexoEmulatorController(
                 // Every loyalty step needs an identified member; prompt the
                 // customer on the terminal first when the operator asked for
                 // any. A no-member outcome (not found, cancelled) degrades to
-                // a guest checkout instead of blocking the payment. The
-                // prompt is legal only in IDLE/IDENTIFIED/ACTIVE — pay() also
-                // accepts FAILED (a declined payment's retry), where the
-                // prompt would just throw; say so instead of attempting it.
+                // a guest checkout instead of blocking the payment. FAILED is
+                // included: a declined/cancelled payment retried with loyalty
+                // switched on identifies the member before the retry.
                 if (loyalty.anyEnabled && session.member == null) {
                     when (session.state) {
-                        SessionState.IDLE, SessionState.IDENTIFIED, SessionState.ACTIVE ->
-                            identifyMember(session)
+                        SessionState.IDLE, SessionState.IDENTIFIED, SessionState.ACTIVE,
+                        SessionState.FAILED,
+                        -> identifyMember(session)
                         else -> log(
                             "Member identification is unavailable in state " +
-                                "${session.state} — retrying as a guest checkout"
+                                "${session.state} — paying as a guest checkout"
                         )
                     }
                 }
@@ -453,6 +453,7 @@ class NexoEmulatorController(
                         if (isActive) publishPaymentResult(result)
                     }
                     .onError { error ->
+                        session.updateDisplay(session.basket)
                         if (isActive) log("Payment failed: ${error.code} — ${error.message}")
                         PaymentOptions.voidAndAbort()
                     }

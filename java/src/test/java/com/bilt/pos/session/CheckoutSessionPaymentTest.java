@@ -1602,6 +1602,37 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void declinedGuestPaymentCanIdentifyBeforeRetryingWithLoyalty() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        assertThrows(SessionException.class, () -> session.pay().get());
+        drainRequests();
+        assertEquals(SessionState.FAILED, session.getState());
+
+        // the register attaches the member on the FAILED session, then
+        // retries the payment with the loyalty steps enabled
+        identifyMember();
+        assertEquals(SessionState.FAILED, session.getState());
+        assertNotNull(session.getMember());
+
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 85.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+        CheckoutResult result = session.pay().get();
+
+        assertEquals(0, new BigDecimal("10.00").compareTo(result.getTotalRebateAmount()));
+        assertEquals(0, new BigDecimal("5.00").compareTo(result.getPointsMonetaryValue()));
+        assertEquals(SessionState.COMPLETED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(4, requests.size(), "rebate, redemption, payment, award");
+        assertEquals("Rebate", requests.get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
+    @Test
     void disableAwardSkipsTheAwardStepButKeepsRedemptions() throws Exception {
         identifyMember();
         addHundredDollarItem();

@@ -468,6 +468,10 @@ public final class CheckoutSession implements AutoCloseable {
      * not found, suspended, customer cancelled — are delivered to
      * {@code onSuccess} with the corresponding {@link IdentifyStatus};
      * {@code onError} fires only for real failures.</p>
+     *
+     * <p>Also allowed while a failed payment awaits retry
+     * ({@link SessionState#FAILED}), so a declined guest checkout can attach
+     * a member and retry with loyalty enabled.</p>
      */
     public SessionResult<IdentifyResult> identifyMember(IdentifyOptions options) {
         Objects.requireNonNull(options, "options");
@@ -485,8 +489,13 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     private IdentifyResult identifyStateChecked(Supplier<IdentifyResult> lookup) {
-        requireState(EnumSet.of(SessionState.IDLE, SessionState.IDENTIFIED, SessionState.ACTIVE),
-                "identifyMember");
+        // FAILED is allowed so a register can identify (or re-identify) the
+        // member before retrying a failed payment with loyalty enabled — a
+        // guest checkout whose card was declined would otherwise be stuck
+        // retrying as a guest, since pay() accepts FAILED but the checkout
+        // only resumes ACTIVE on a basket edit.
+        requireState(EnumSet.of(SessionState.IDLE, SessionState.IDENTIFIED, SessionState.ACTIVE,
+                SessionState.FAILED), "identifyMember");
         return lookup.get();
     }
 
@@ -503,7 +512,7 @@ public final class CheckoutSession implements AutoCloseable {
         try {
             SessionState state = stateMachine.current();
             if (state != SessionState.IDLE && state != SessionState.IDENTIFIED
-                    && state != SessionState.ACTIVE) {
+                    && state != SessionState.ACTIVE && state != SessionState.FAILED) {
                 // abort() — the one documented cross-thread entry point —
                 // can end the session while the lookup is on the wire. An
                 // outcome that arrives after that must be discarded: it must
