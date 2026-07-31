@@ -124,4 +124,11 @@ interface EmulatorController {
      * guest checkout).
      */
     fun pay(loyalty: LoyaltyOptions)
+
+    /**
+     * Abort the in-flight payment (SDK `abort()`): committed steps are
+     * reversed and the session settles in an aborted/failed state. An abort
+     * that lands after the payment completed leaves the transaction standing.
+     */
+    fun abortPayment()
 }

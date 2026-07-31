@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -418,18 +419,33 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                 color = Color(0xFF2E7D32),
             )
         }
-        Button(
-            onClick = { controller.pay(LoyaltyOptions(rebates, redemption, award)) },
-            enabled = canPay,
+        Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                when {
-                    state.paymentInProgress -> "Paying…"
-                    paid -> "Paid"
-                    else -> "Pay $${state.basketTotal}"
-                }
-            )
+            Button(
+                onClick = { controller.pay(LoyaltyOptions(rebates, redemption, award)) },
+                enabled = canPay,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    when {
+                        state.paymentInProgress -> "Paying…"
+                        paid -> "Paid"
+                        else -> "Pay $${state.basketTotal}"
+                    }
+                )
+            }
+            Button(
+                onClick = { controller.abortPayment() },
+                enabled = state.paymentInProgress,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                Text("Abort")
+            }
         }
     }
 }

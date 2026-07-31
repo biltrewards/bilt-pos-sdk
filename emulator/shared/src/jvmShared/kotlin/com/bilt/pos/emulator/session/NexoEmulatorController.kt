@@ -11,6 +11,8 @@ import com.bilt.pos.nexo.model.NexoTerminalAPI
 import com.bilt.pos.nexo.model.SaleToPOIRequest
 import com.bilt.pos.nexo.security.SecurityKey
 import com.bilt.pos.session.CheckoutSession
+import com.bilt.pos.session.SessionErrorCode
+import com.bilt.pos.session.SessionException
 import com.bilt.pos.session.SessionState
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketItem
@@ -442,7 +444,7 @@ class NexoEmulatorController(
                     "Starting payment — rebates ${onOff(loyalty.rebates)}, " +
                         "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}"
                 )
-                session.pay(options)
+                val flow = session.pay(options)
                     .onRebatesRedeemed { rebates ->
                         log("Rebates applied: −$${rebates.totalRebateAmount.toPlainString()} → total $${rebates.suggestedTotal.toPlainString()}")
                         rebates.suggestedTotal
@@ -459,7 +461,20 @@ class NexoEmulatorController(
                         if (isActive) log("Payment failed: ${error.code} — ${error.message}")
                         PaymentOptions.voidAndAbort()
                     }
-                    .execute()
+                try {
+                    flow.get()
+                } catch (e: SessionException) {
+                    // ABORTED bypasses onError by design (the register asked
+                    // for the abort); every other failure was already
+                    // reported by the handler above
+                    if (e.error.code == SessionErrorCode.ABORTED && isActive) {
+                        session.updateDisplay(session.basket)
+                        log(
+                            "Payment aborted; committed steps reversed — " +
+                                "End Session to start the next checkout"
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 // e.g. pay() rejecting an empty basket or a completed session
                 if (isActive) {
@@ -481,6 +496,30 @@ class NexoEmulatorController(
             conn.paymentClaimed.set(false)
             if (connection === conn) {
                 _state.update { it.copy(paymentInProgress = false) }
+            }
+        }
+    }
+
+    override fun abortPayment() {
+        val conn = connection
+        val session = conn?.session
+        if (conn == null || session == null) {
+            log("No active checkout session")
+            return
+        }
+        // Deliberately NOT on the serialized dispatcher: abort() is the
+        // SDK's documented cross-thread entry point, and it must overtake
+        // the blocking payment call it interrupts — queueing it would run
+        // it only after the payment finished on its own.
+        conn.scope.launch(Dispatchers.IO) {
+            log("Aborting the payment…")
+            try {
+                session.abort()
+            } catch (e: Exception) {
+                if (isActive) {
+                    log("Abort failed: ${e.message}")
+                    detailedLog(e.stackTraceToString())
+                }
             }
         }
     }
