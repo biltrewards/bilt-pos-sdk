@@ -461,10 +461,17 @@ class NexoEmulatorController(
         // Releases on every path, including a job the scope cancelled before
         // it ever ran (disconnect racing this call) — a finally inside the
         // job would never execute then and the claim would wedge the Pay
-        // button. Unconditional: a disconnect resets the state anyway.
+        // button. The claim is per-connection and always released; the
+        // shared UI flag is cleared only while this connection is still
+        // current — a cancelled job's blocking call can outlive a
+        // disconnect, and its late completion must not re-enable Pay while
+        // a NEW connection's payment is on the wire (the disconnect itself
+        // already reset the flag via updateDisconnectedState).
         job.invokeOnCompletion {
             conn.paymentClaimed.set(false)
-            _state.update { it.copy(paymentInProgress = false) }
+            if (connection === conn) {
+                _state.update { it.copy(paymentInProgress = false) }
+            }
         }
     }
 
