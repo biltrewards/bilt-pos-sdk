@@ -14,6 +14,8 @@ import com.bilt.pos.session.CheckoutSession
 import com.bilt.pos.session.SessionState
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketItem
+import com.bilt.pos.session.identity.ForceEntryMode
+import com.bilt.pos.session.identity.IdentifyOptions
 import com.bilt.pos.session.identity.IdentifyStatus
 import com.bilt.pos.session.payment.CheckoutResult
 import com.bilt.pos.session.payment.PaymentOptions
@@ -487,7 +489,15 @@ class NexoEmulatorController(
     private fun identifyMember(session: CheckoutSession) {
         log("Identifying member on the terminal…")
         try {
-            val outcome = session.identifyMember().get()
+            // The terminal's keyed loyalty capture (loyalty ID input form)
+            // engages only for LoyaltyHandling=Required (the SDK default)
+            // with ForceEntryMode containing Keyed — without Keyed it waits
+            // on the card reader instead of showing the input form
+            val outcome = session.identifyMember(
+                IdentifyOptions.builder()
+                    .forceEntryMode(ForceEntryMode.KEYED)
+                    .build()
+            ).get()
             if (outcome.status == IdentifyStatus.FOUND) {
                 log(
                     "Member identified: ${outcome.memberId}" +
