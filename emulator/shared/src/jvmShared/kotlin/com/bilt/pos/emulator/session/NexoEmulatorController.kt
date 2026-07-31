@@ -204,8 +204,15 @@ class NexoEmulatorController(
         conn.session = null
         if (active != null) {
             // Session End bracket, best-effort; teardownScope so a ViewModel
-            // cancelling the app scope right after doesn't kill it
+            // cancelling the app scope right after doesn't kill it. Like
+            // shutdown(), wait for the serialized jobs first: an in-flight
+            // payment's blocking call survives the cancel and holds the
+            // session in PAYING, where end() is rejected — closing right
+            // away would lose the End bracket for good once the payment
+            // lands. The cap must outlast the client's read timeout (120s
+            // default) so the join covers a terminal that answers late.
             teardownScope.launch {
+                withTimeoutOrNull(180_000) { conn.scope.coroutineContext[Job]?.join() }
                 runCatching { active.close() }
             }
         }
