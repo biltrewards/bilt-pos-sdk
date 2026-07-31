@@ -281,6 +281,12 @@ class NexoEmulatorController(
                     )
                 }
                 log("Checkout session started (id ${started.sessionId})")
+                // Blank the customer display: autoDisplay only fires on
+                // basket mutations, so the previous checkout's receipt would
+                // linger until the first item is rung in. Best-effort — a
+                // failure logs via JUL (Detailed tab) and never throws.
+                started.updateDisplay(started.basket)
+                log("Customer display cleared (empty basket)")
             } catch (e: Exception) {
                 if (currentCoroutineContext().isActive) {
                     log("Failed to start a checkout session: ${e.message}")
