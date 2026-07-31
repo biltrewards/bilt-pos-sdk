@@ -1662,6 +1662,41 @@ class CheckoutSessionPaymentTest {
     // ─── Abort mid-flow ───
 
     @Test
+    void abortPaymentUnwindsButLeavesTheSessionRetryable() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));  // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));  // rebate refund
+
+        PaymentFlow flow = session.pay()
+                .onPointsRedeemed(points -> {
+                    session.abortPayment();  // register cancels just this payment
+                    return points.getSuggestedTotal();
+                });
+
+        SessionException e = assertThrows(SessionException.class, flow::get);
+        assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
+        assertEquals(SessionState.FAILED, session.getState(),
+                "a payment-scoped abort must leave the session retryable");
+        drainRequests();
+
+        // the same session retries and completes
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 85.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+        CheckoutResult result = session.pay().get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(SessionState.COMPLETED, session.getState());
+        assertEquals(4, drainRequests().size(), "rebate, redemption, payment, award");
+    }
+
+    @Test
     void abortInsideHandlerUnwindsAndAbortsSession() throws Exception {
         identifyMember();
         addHundredDollarItem();

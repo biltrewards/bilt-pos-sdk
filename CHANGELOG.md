@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `CheckoutSession.abortPayment()` — aborts only the in-flight payment: committed steps are reversed like `abort()`, but the session settles in `FAILED` (basket intact, `pay()` may retry) instead of sealing in the terminal `ABORTED` state. A pending `abort()` is never downgraded; terminal-initiated aborts keep the existing `ABORTED` semantics.
 - `identifyMember()` is now allowed on a `FAILED` session, so a declined guest payment can attach a member and retry with loyalty enabled (previously the retry could only run as a guest — identification was rejected until a basket edit resumed the checkout).
 - `PaymentOptions.disableAward` — skips the loyalty award step of the payment sequence, mirroring `disableRebates`/`disablePoints`. Previously the award ran unconditionally whenever a member was identified; combining all three now yields a fully loyalty-free payment for an identified member.
 - Emulator: payment. The basket card gains Rebates/Redemption/Award checkboxes and a Pay button wired through `CheckoutSession.pay()`; enabling any loyalty step with no member attached runs the terminal identification prompt first (a declined or not-found lookup degrades to a guest checkout). Step results, promotion messages, and award warnings stream into the event feed; one payment per session, and starting a session clears the customer display with an empty basket so the previous checkout's receipt doesn't linger.

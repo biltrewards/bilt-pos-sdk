@@ -472,7 +472,7 @@ class NexoEmulatorController(
                         session.updateDisplay(session.basket)
                         log(
                             "Payment aborted; committed steps reversed — " +
-                                "End Session to start the next checkout"
+                                "the basket is intact, Pay again to retry"
                         )
                     }
                 }
@@ -508,14 +508,15 @@ class NexoEmulatorController(
             log("No active checkout session")
             return
         }
-        // Deliberately NOT on the serialized dispatcher: abort() is the
-        // SDK's documented cross-thread entry point, and it must overtake
+        // Deliberately NOT on the serialized dispatcher: abortPayment() is
+        // a cross-thread entry point like abort(), and it must overtake
         // the blocking payment call it interrupts — queueing it would run
-        // it only after the payment finished on its own.
+        // it only after the payment finished on its own. Payment-scoped:
+        // the session settles FAILED and stays retryable.
         conn.scope.launch(Dispatchers.IO) {
             log("Aborting the payment…")
             try {
-                session.abort()
+                session.abortPayment()
             } catch (e: Exception) {
                 if (isActive) {
                     log("Abort failed: ${e.message}")

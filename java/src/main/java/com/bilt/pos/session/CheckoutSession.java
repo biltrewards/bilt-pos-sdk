@@ -178,6 +178,10 @@ public final class CheckoutSession implements AutoCloseable {
     private final StoredValueManager storedValueManager;
 
     private volatile boolean abortRequested;
+    // Scope of the pending abort: true (the default per payment run) means
+    // the session seals in ABORTED — abort() and terminal-initiated aborts;
+    // abortPayment() clears it so the session settles retryable in FAILED.
+    private volatile boolean abortEndsSession = true;
     private boolean memberIdentified;
     private volatile IdentifyResult member;
     private volatile StoredValueCard storedValueCard;
@@ -900,6 +904,7 @@ public final class CheckoutSession implements AutoCloseable {
             // abort left over from an earlier decline or failed void must
             // not kill a legitimate retry at its first checkAbort
             abortRequested = false;
+            abortEndsSession = true;
             request.basket = basketEngine.snapshot();
         } finally {
             lock.unlock();
@@ -960,9 +965,13 @@ public final class CheckoutSession implements AutoCloseable {
             // movements could never be finished from it. FAILED keeps
             // voidTransaction() (and a draining retry) available; the error
             // still carries the ABORTED code and the movements standing.
+            // A payment-scoped abort (abortPayment()) settles in FAILED
+            // even when the unwind was clean: the checkout is meant to be
+            // retryable, only abort() abandons the session.
             boolean cleanlyAborted = e.getError().getCode() == SessionErrorCode.ABORTED
                     && !rollbackIncomplete();
-            transitionLocked(cleanlyAborted ? SessionState.ABORTED : SessionState.FAILED);
+            transitionLocked(cleanlyAborted && abortEndsSession
+                    ? SessionState.ABORTED : SessionState.FAILED);
             throw e;
         } catch (RuntimeException e) {
             // defense in depth: whatever escapes, the session must not stay
@@ -1388,8 +1397,10 @@ public final class CheckoutSession implements AutoCloseable {
             // flag and state change share this critical section, so the
             // reset a starting payment performs entering PAYING cannot eat
             // a live abort. When a drain intervenes (below), the flag is
-            // re-asserted afterwards for the same reason.
+            // re-asserted afterwards for the same reason. Session scope
+            // always wins over a pending abortPayment().
             abortRequested = true;
+            abortEndsSession = true;
             SessionState state = stateMachine.current();
             needsDrain = state == SessionState.FAILED && rollbackIncomplete();
             if (!needsDrain) {
@@ -1416,6 +1427,7 @@ public final class CheckoutSession implements AutoCloseable {
                     // payment still observes this abort at its next step
                     // boundary; on a plain reversal failure this is a no-op.
                     abortRequested = true;
+                    abortEndsSession = true;
                 } finally {
                     lock.unlock();
                 }
@@ -1431,6 +1443,7 @@ public final class CheckoutSession implements AutoCloseable {
                 // flag; re-assert it so that payment observes the abort at
                 // its next step boundary instead of charging through
                 abortRequested = true;
+                abortEndsSession = true;
                 transitionToAbortedIfAllowed(stateMachine.current());
             } finally {
                 lock.unlock();
@@ -1443,6 +1456,46 @@ public final class CheckoutSession implements AutoCloseable {
         // session-scoped data — like VOIDING, an in-flight end() always
         // settles, and the session still moves to ABORTED above when the
         // end has not yet succeeded
+        if (inFlight != null && inFlight.getCategory() != MessageCategoryType.ADMIN) {
+            sendAbort(inFlight);
+        }
+    }
+
+    /**
+     * Aborts only the in-flight payment, keeping the session retryable.
+     *
+     * <p>Like {@link #abort()}, this is safe to call from another thread
+     * while {@code pay()} is executing: the running sequence stops at its
+     * next step boundary (the in-flight step is aborted on the terminal,
+     * best-effort) and the committed steps are reversed. Unlike
+     * {@code abort()}, the session then settles in
+     * {@link SessionState#FAILED} — the basket stays intact and
+     * {@code pay()} may retry — instead of sealing in {@code ABORTED}.</p>
+     *
+     * <p>No effect when no payment is in flight, and a pending
+     * {@code abort()} is never downgraded. An abort that lands after the
+     * payment completed leaves the transaction standing — use
+     * {@code voidTransaction()} to reverse it.</p>
+     */
+    public void abortPayment() {
+        lock.lock();
+        try {
+            if (stateMachine.current() != SessionState.PAYING) {
+                LOGGER.warning("abortPayment() called with no payment in flight; ignored");
+                return;
+            }
+            // a pending session abort() keeps its scope — the wider intent
+            // wins; otherwise claim the flag with payment scope
+            if (!abortRequested) {
+                abortRequested = true;
+                abortEndsSession = false;
+            }
+        } finally {
+            lock.unlock();
+        }
+        NexoExchange.InFlight inFlight = exchange.currentInFlight();
+        // ADMIN carries only the session start/end signals — never a
+        // payment step; see abort()
         if (inFlight != null && inFlight.getCategory() != MessageCategoryType.ADMIN) {
             sendAbort(inFlight);
         }
