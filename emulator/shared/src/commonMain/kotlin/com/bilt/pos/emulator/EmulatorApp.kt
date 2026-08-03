@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -32,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +57,7 @@ import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
+import com.bilt.pos.emulator.session.PaymentOutcome
 
 /**
  * Root composable of the terminal emulator, shared by the Android and
@@ -66,6 +69,9 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
     val state by controller.state.collectAsState()
 
     MaterialTheme {
+        state.paymentOutcome?.let { outcome ->
+            PaymentOutcomeDialog(outcome) { controller.dismissPaymentOutcome() }
+        }
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -105,6 +111,23 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
             }
         }
     }
+}
+
+@Composable
+private fun PaymentOutcomeDialog(outcome: PaymentOutcome, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (outcome.success) "Payment successful" else "Payment failed",
+                color = if (outcome.success) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+            )
+        },
+        text = { Text(outcome.message) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("OK") }
+        },
+    )
 }
 
 @Composable

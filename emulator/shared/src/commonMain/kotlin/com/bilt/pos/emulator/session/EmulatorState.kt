@@ -44,6 +44,12 @@ data class BasketLine(
     val lineTotal: String,
 )
 
+/** Outcome of the last payment attempt, shown as a popup until dismissed. */
+data class PaymentOutcome(
+    val success: Boolean,
+    val message: String,
+)
+
 /**
  * Payment configuration. The SDK-side loyalty steps run only for a member
  * attached to the session, but identification is a separate choice:
@@ -84,6 +90,9 @@ data class EmulatorState(
      *  paid. A fully collected payment ends the checkout automatically; the
      *  summary stays visible until the next one starts. */
     val lastPayment: String? = null,
+    /** Success/failure of the last payment attempt, rendered as a popup
+     *  until dismissed; cleared when a new payment starts. */
+    val paymentOutcome: PaymentOutcome? = null,
     /** Curated one-line event feed shown on the Events tab. */
     val events: List<String> = emptyList(),
     /** Raw logger output (SDK java.util.logging records, stack traces) for the Detailed tab. */
@@ -137,4 +146,7 @@ interface EmulatorController {
      * completed leaves the transaction standing.
      */
     fun abortPayment()
+
+    /** Dismiss the payment outcome popup. */
+    fun dismissPaymentOutcome()
 }

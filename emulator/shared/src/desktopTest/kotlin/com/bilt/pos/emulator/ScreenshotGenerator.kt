@@ -38,6 +38,7 @@ class ScreenshotGenerator {
         override fun addProduct(product: Product) = Unit
         override fun pay(loyalty: LoyaltyOptions) = Unit
         override fun abortPayment() = Unit
+        override fun dismissPaymentOutcome() = Unit
     }
 
     @OptIn(ExperimentalComposeUiApi::class)

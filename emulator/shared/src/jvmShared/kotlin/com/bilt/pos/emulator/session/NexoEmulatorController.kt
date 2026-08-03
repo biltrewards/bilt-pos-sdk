@@ -424,7 +424,7 @@ class NexoEmulatorController(
             return
         }
         conn.paymentAbortRequested.set(false)
-        _state.update { it.copy(paymentInProgress = true) }
+        _state.update { it.copy(paymentInProgress = true, paymentOutcome = null) }
         val job = conn.scope.launch(conn.dispatcher) {
             val session = conn.session
             if (session == null) {
@@ -484,7 +484,15 @@ class NexoEmulatorController(
                     }
                     .onError { error ->
                         session.updateDisplay(session.basket)
-                        if (isActive) log("Payment failed: ${error.code} — ${error.message}")
+                        if (isActive) {
+                            log("Payment failed: ${error.code} — ${error.message}")
+                            _state.update {
+                                it.copy(paymentOutcome = PaymentOutcome(
+                                    success = false,
+                                    message = "${error.code}\n${error.message}",
+                                ))
+                            }
+                        }
                         PaymentOptions.voidAndAbort()
                     }
                 val result = try {
@@ -530,6 +538,12 @@ class NexoEmulatorController(
                 // e.g. pay() rejecting an empty basket or a completed session
                 if (isActive) {
                     log("Payment not started: ${e.message}")
+                    _state.update {
+                        it.copy(paymentOutcome = PaymentOutcome(
+                            success = false,
+                            message = "Payment not started\n${e.message}",
+                        ))
+                    }
                     detailedLog(e.stackTraceToString())
                 }
             }
@@ -633,10 +647,27 @@ class NexoEmulatorController(
         }
         val summary = "Paid $${result.authorizedAmount.toPlainString()}" +
             (if (parts.isEmpty()) "" else " — " + parts.joinToString(", "))
-        _state.update { it.copy(lastPayment = summary) }
+        // the popup breaks the breakdown into lines and carries the promo
+        // messages and warnings that otherwise live only in the event log
+        val popup = buildList {
+            add("Paid $${result.authorizedAmount.toPlainString()}")
+            addAll(parts)
+            result.promotionMessages.forEach { add(it) }
+            result.warnings.forEach { add("Warning: $it") }
+        }.joinToString("\n")
+        _state.update {
+            it.copy(
+                lastPayment = summary,
+                paymentOutcome = PaymentOutcome(success = true, message = popup),
+            )
+        }
         log(summary)
         result.promotionMessages.forEach { log("Promo: $it") }
         result.warnings.forEach { log("Warning: $it") }
+    }
+
+    override fun dismissPaymentOutcome() {
+        _state.update { it.copy(paymentOutcome = null) }
     }
 
     private fun onOff(enabled: Boolean) = if (enabled) "on" else "off"
@@ -705,6 +736,7 @@ class NexoEmulatorController(
                 basketTax = "0.00",
                 paymentInProgress = false,
                 lastPayment = null,
+                paymentOutcome = null,
             )
         }
     }
