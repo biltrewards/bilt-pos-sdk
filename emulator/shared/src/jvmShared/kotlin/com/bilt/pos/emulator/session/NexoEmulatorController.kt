@@ -49,8 +49,8 @@ import kotlin.time.Duration.Companion.seconds
  *
  * - **Connect** builds the client and runs the periodic diagnostics loop
  *   (raw nexo Diagnosis requests — pure connectivity, no session involved).
- * - **Start Session** opens a [CheckoutSession] (terminal Start bracket) on
- *   that connection: one session per customer checkout. **End Session**
+ * - **Start Checkout** opens a [CheckoutSession] (terminal Start bracket) on
+ *   that connection: one session per customer checkout. **End Checkout**
  *   closes it (End bracket). Disconnect ends any active session best-effort.
  *
  * Each connection is a self-contained [Connection]: its own scope (child of
@@ -118,6 +118,14 @@ class NexoEmulatorController(
             if (detected != null) {
                 _state.update { it.copy(terminalAddress = detected, addressAutodetected = true) }
                 log("Autodetected terminal address $detected via adb")
+                // The operator's next move after a successful detect is
+                // always Connect — do it for them. Only from DISCONNECTED:
+                // autodetect runs at startup and must never tear down a
+                // connection the operator made while adb was probing.
+                if (_state.value.connection.phase == ConnectionPhase.DISCONNECTED) {
+                    log("Connecting automatically to the detected terminal")
+                    connect(detected, _state.value.encryptionEnabled, null)
+                }
             } else {
                 log("Address autodetect found no adb device; enter the address manually")
             }
@@ -335,7 +343,7 @@ class NexoEmulatorController(
                 // Clear only on a successful End bracket — a failed end keeps
                 // the session held and retryable (the SDK doesn't seal it),
                 // instead of orphaning terminal session state with the UI
-                // offering Start Session. Disconnect remains the escape hatch.
+                // offering Start Checkout. Disconnect remains the escape hatch.
                 conn.session = null
                 if (currentCoroutineContext().isActive) {
                     _state.update {
@@ -361,7 +369,7 @@ class NexoEmulatorController(
     override fun addProduct(product: Product) {
         val conn = connection
         if (conn == null) {
-            log("No active checkout session — press Start Session first")
+            log("No active checkout session — press Start Checkout first")
             return
         }
         conn.scope.launch(conn.dispatcher) {
@@ -370,7 +378,7 @@ class NexoEmulatorController(
             // cleared for its End bracket
             val current = conn.session
             if (current == null) {
-                log("No active checkout session — press Start Session first")
+                log("No active checkout session — press Start Checkout first")
                 return@launch
             }
             try {
@@ -404,7 +412,7 @@ class NexoEmulatorController(
     override fun pay(loyalty: LoyaltyOptions) {
         val conn = connection
         if (conn == null) {
-            log("No active checkout session — press Start Session first")
+            log("No active checkout session — press Start Checkout first")
             return
         }
         // Claimed here, not inside the job: two quick Pay taps would both
@@ -420,7 +428,7 @@ class NexoEmulatorController(
         val job = conn.scope.launch(conn.dispatcher) {
             val session = conn.session
             if (session == null) {
-                log("No active checkout session — press Start Session first")
+                log("No active checkout session — press Start Checkout first")
                 return@launch
             }
             try {
@@ -474,15 +482,12 @@ class NexoEmulatorController(
                         log("Points redeemed: ${points.pointsUsed} (−$${points.monetaryValue.toPlainString()}) → total $${points.suggestedTotal.toPlainString()}")
                         points.suggestedTotal
                     }
-                    .onSuccess { result ->
-                        if (isActive) publishPaymentResult(result)
-                    }
                     .onError { error ->
                         session.updateDisplay(session.basket)
                         if (isActive) log("Payment failed: ${error.code} — ${error.message}")
                         PaymentOptions.voidAndAbort()
                     }
-                try {
+                val result = try {
                     flow.get()
                 } catch (e: SessionException) {
                     // ABORTED bypasses onError by design (the register asked
@@ -494,6 +499,24 @@ class NexoEmulatorController(
                             "Payment aborted; committed steps reversed — " +
                                 "the basket is intact, Pay again to retry"
                         )
+                    }
+                    null
+                }
+                if (result != null && isActive) {
+                    publishPaymentResult(result)
+                    // The checkout is collected in full (pay() completes
+                    // only then) — end the session for the operator. The
+                    // basket and payment summary stay on screen; Start
+                    // Checkout clears them for the next customer.
+                    log("Payment complete — ending the checkout automatically")
+                    try {
+                        session.end().get()
+                        conn.session = null
+                        _state.update { it.copy(sessionId = null) }
+                        log("Checkout ended")
+                    } catch (e: Exception) {
+                        log("Failed to end the checkout: ${e.message} — press End Checkout to retry")
+                        detailedLog(e.stackTraceToString())
                     }
                 }
             } catch (e: Exception) {

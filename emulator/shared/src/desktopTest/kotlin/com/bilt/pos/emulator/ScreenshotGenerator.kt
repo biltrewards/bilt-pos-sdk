@@ -88,6 +88,8 @@ class ScreenshotGenerator {
         render(midCheckout, File(dir, "emulator-mid-checkout.png"))
 
         val paid = midCheckout.copy(
+            // a fully collected payment ends the checkout automatically
+            sessionId = null,
             basket = midCheckout.basket.map {
                 if (it.sku == "SKU-014") it.copy(lineTotal = "119.99") else it
             },
@@ -102,6 +104,8 @@ class ScreenshotGenerator {
                 "10:41:51 Points redeemed: 5 (−$5.00) → total $174.89",
                 "10:42:03 Paid $174.89 — card $169.89 (Visa), rebates −$10.00, " +
                     "5 pts −$5.00, earned 175 pts (balance 964)",
+                "10:42:03 Payment complete — ending the checkout automatically",
+                "10:42:04 Checkout ended",
             ),
         )
         render(paid, File(dir, "emulator-paid.png"))

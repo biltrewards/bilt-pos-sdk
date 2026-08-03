@@ -80,8 +80,9 @@ data class EmulatorState(
     val basketTax: String = "0.00",
     /** True while a payment (and its member identification) is on the wire. */
     val paymentInProgress: Boolean = false,
-    /** One-line summary of the session's completed payment; null until paid.
-     *  A completed session takes no further payment — end it to start anew. */
+    /** One-line summary of the checkout's completed payment; null until
+     *  paid. A fully collected payment ends the checkout automatically; the
+     *  summary stays visible until the next one starts. */
     val lastPayment: String? = null,
     /** Curated one-line event feed shown on the Events tab. */
     val events: List<String> = emptyList(),
@@ -96,7 +97,9 @@ data class EmulatorState(
 interface EmulatorController {
     val state: StateFlow<EmulatorState>
 
-    /** Try to prefill the terminal address (adb-based on desktop). */
+    /** Try to prefill the terminal address (adb-based on desktop); when
+     *  detection succeeds and nothing is connected yet, connects to the
+     *  detected terminal automatically. */
     fun autodetectAddress()
 
     /**

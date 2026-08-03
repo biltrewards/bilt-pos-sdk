@@ -200,7 +200,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         enabled = connected,
                         modifier = modifier,
                     ) {
-                        Text(if (sessionActive) "End Session" else "Start Session")
+                        Text(if (sessionActive) "End Checkout" else "Start Checkout")
                     }
                 }
                 if (compact) {
@@ -402,7 +402,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
     var redemption by rememberSaveable { mutableStateOf(true) }
     var award by rememberSaveable { mutableStateOf(true) }
 
-    // One payment per session: pay again only after End Session
+    // One payment per checkout: pay again only after the next Start Checkout
     val paid = state.lastPayment != null
     val canPay = state.sessionId != null && state.basket.isNotEmpty() &&
         !state.paymentInProgress && !paid
@@ -419,8 +419,15 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             LoyaltyCheckbox("Award", award, !state.paymentInProgress) { award = it }
         }
         if (paid) {
+            // the checkout auto-ends on full payment; the hint covers the
+            // fallback where that end failed and the session is still open
+            val next = if (state.sessionId == null) {
+                "Start Checkout for the next customer"
+            } else {
+                "End Checkout to start the next one"
+            }
             Text(
-                "${state.lastPayment} — End Session to start a new checkout",
+                "${state.lastPayment} — $next",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF2E7D32),
             )
