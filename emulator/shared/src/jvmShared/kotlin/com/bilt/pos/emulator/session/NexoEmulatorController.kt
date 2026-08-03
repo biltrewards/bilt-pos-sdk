@@ -79,6 +79,13 @@ class NexoEmulatorController(
         /** Claimed synchronously by [pay] so rapid taps can't queue a second
          *  payment behind the first on the serialized dispatcher. */
         val paymentClaimed = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /** Set by [abortPayment] for the current payment attempt. SDK
+         *  abort() only interrupts what is on the wire — during the
+         *  pre-payment identify prompt the session is not yet PAYING, so
+         *  without this flag a cancelled prompt would read as a guest
+         *  outcome and the payment would continue to charge. */
+        val paymentAbortRequested = java.util.concurrent.atomic.AtomicBoolean(false)
     }
 
     /**
@@ -408,6 +415,7 @@ class NexoEmulatorController(
             log("A payment is already in progress")
             return
         }
+        conn.paymentAbortRequested.set(false)
         _state.update { it.copy(paymentInProgress = true) }
         val job = conn.scope.launch(conn.dispatcher) {
             val session = conn.session
@@ -423,6 +431,10 @@ class NexoEmulatorController(
                 // guest checkout instead of blocking the payment. FAILED is
                 // included: a declined/cancelled payment retried with
                 // identification switched on prompts before the retry.
+                if (conn.paymentAbortRequested.get()) {
+                    log("Payment aborted before it started — nothing charged")
+                    return@launch
+                }
                 if (loyalty.identify && session.member == null) {
                     when (session.state) {
                         SessionState.IDLE, SessionState.IDENTIFIED, SessionState.ACTIVE,
@@ -433,6 +445,14 @@ class NexoEmulatorController(
                                 "${session.state} — paying as a guest checkout"
                         )
                     }
+                }
+                // An abort during the identify prompt cancels only the
+                // prompt on the wire (the session is not PAYING yet), which
+                // would otherwise read as a guest outcome — the attempt
+                // flag is what stops the charge
+                if (conn.paymentAbortRequested.get()) {
+                    log("Payment aborted during member identification — nothing charged")
+                    return@launch
                 }
                 if (!currentCoroutineContext().isActive) return@launch
 
@@ -508,6 +528,11 @@ class NexoEmulatorController(
             log("No active checkout session")
             return
         }
+        // The attempt flag covers the window the SDK cannot: during the
+        // pre-payment identify prompt the session is not PAYING, so abort()
+        // only cancels the prompt — the pay job checks this flag before it
+        // lets the payment start.
+        conn.paymentAbortRequested.set(true)
         // Deliberately NOT on the serialized dispatcher: abort() is the
         // SDK's cross-thread entry point, and it must overtake the blocking
         // payment call it interrupts — queueing it would run it only after
