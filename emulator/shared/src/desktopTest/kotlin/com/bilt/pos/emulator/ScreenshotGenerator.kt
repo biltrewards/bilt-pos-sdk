@@ -17,11 +17,14 @@ import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
- * Temporary tool, not part of the suite's assertions: renders the emulator
- * UI headlessly into PNGs for the PR description. Output directory comes
- * from -Dscreenshot.dir; without it the test is a no-op.
+ * Renders the full emulator UI headlessly ([ImageComposeScene], no window
+ * or display needed) in two representative states — a render smoke test
+ * that doubles as the screenshot generator: the PNGs land in
+ * `build/screenshots`, and the copies committed under `emulator/docs` are
+ * refreshed from there when the UI changes.
  */
 class ScreenshotGenerator {
 
@@ -46,6 +49,9 @@ class ScreenshotGenerator {
         }
         val png = scene.render().encodeToData(EncodedImageFormat.PNG)!!.bytes
         scene.close()
+        // the render itself is the test: a composition crash or an empty
+        // frame fails here, screenshots are the byproduct
+        assertTrue(png.size > 10_000, "suspiciously small render: ${png.size} bytes")
         file.writeBytes(png)
         println("wrote ${file.absolutePath}")
     }
