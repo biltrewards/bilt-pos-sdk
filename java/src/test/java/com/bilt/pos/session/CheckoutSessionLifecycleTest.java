@@ -183,10 +183,11 @@ class CheckoutSessionLifecycleTest {
     }
 
     @Test
-    void endIsAllowedFromAborted() throws Exception {
+    void endIsAllowedAfterAnAbort() throws Exception {
         CheckoutSession session = startedSession();
         session.abort();
-        assertEquals(SessionState.ABORTED, session.getState());
+        assertEquals(SessionState.IDLE, session.getState(),
+                "abort is operation-scoped; the session continues until end()");
 
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
         session.end().execute();

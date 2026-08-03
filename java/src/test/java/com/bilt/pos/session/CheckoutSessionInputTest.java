@@ -119,7 +119,7 @@ class CheckoutSessionInputTest {
     }
 
     @Test
-    void inputArrivingAfterAbortIsDiscarded() throws Exception {
+    void inputArrivingAfterAbortIsStillDelivered() throws Exception {
         CountDownLatch promptOnTheWire = new CountDownLatch(1);
         CountDownLatch aborted = new CountDownLatch(1);
         server.setDispatcher(new Dispatcher() {
@@ -127,7 +127,7 @@ class CheckoutSessionInputTest {
             public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
                 if (request.getBody().readUtf8().contains("InputRequest")) {
                     promptOnTheWire.countDown();
-                    // hold the customer's answer until abort() has ended the session
+                    // hold the customer's answer until abort() has fired
                     aborted.await(5, TimeUnit.SECONDS);
                     return new MockResponse().setBody(inputResponse(
                             "\"InputCommand\":\"GetConfirmation\",\"ConfirmedFlag\":true"));
@@ -153,10 +153,13 @@ class CheckoutSessionInputTest {
         register.join(5_000);
         assertFalse(register.isAlive());
 
-        assertNull(delivered.get(), "input after abort must not reach onSuccess");
-        assertNotNull(failure.get());
-        assertEquals(SessionErrorCode.ABORTED, failure.get().getError().getCode());
-        assertEquals(SessionState.ABORTED, session.getState());
+        // abort is operation-scoped and the customer answered before the
+        // terminal processed it: the answer is delivered, the session
+        // continues unchanged
+        assertNull(failure.get());
+        assertEquals(Boolean.TRUE, delivered.get());
+        assertEquals(SessionState.IDLE, session.getState(),
+                "abort does not end the session; the checkout continues");
     }
 
     @Test

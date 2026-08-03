@@ -468,6 +468,10 @@ public final class CheckoutSession implements AutoCloseable {
      * not found, suspended, customer cancelled — are delivered to
      * {@code onSuccess} with the corresponding {@link IdentifyStatus};
      * {@code onError} fires only for real failures.</p>
+     *
+     * <p>Also allowed while a failed payment awaits retry
+     * ({@link SessionState#FAILED}), so a declined guest checkout can attach
+     * a member and retry with loyalty enabled.</p>
      */
     public SessionResult<IdentifyResult> identifyMember(IdentifyOptions options) {
         Objects.requireNonNull(options, "options");
@@ -485,8 +489,13 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     private IdentifyResult identifyStateChecked(Supplier<IdentifyResult> lookup) {
-        requireState(EnumSet.of(SessionState.IDLE, SessionState.IDENTIFIED, SessionState.ACTIVE),
-                "identifyMember");
+        // FAILED is allowed so a register can identify (or re-identify) the
+        // member before retrying a failed payment with loyalty enabled — a
+        // guest checkout whose card was declined would otherwise be stuck
+        // retrying as a guest, since pay() accepts FAILED but the checkout
+        // only resumes ACTIVE on a basket edit.
+        requireState(EnumSet.of(SessionState.IDLE, SessionState.IDENTIFIED, SessionState.ACTIVE,
+                SessionState.FAILED), "identifyMember");
         return lookup.get();
     }
 
@@ -503,7 +512,7 @@ public final class CheckoutSession implements AutoCloseable {
         try {
             SessionState state = stateMachine.current();
             if (state != SessionState.IDLE && state != SessionState.IDENTIFIED
-                    && state != SessionState.ACTIVE) {
+                    && state != SessionState.ACTIVE && state != SessionState.FAILED) {
                 // abort() — the one documented cross-thread entry point —
                 // can end the session while the lookup is on the wire. An
                 // outcome that arrives after that must be discarded: it must
@@ -686,8 +695,7 @@ public final class CheckoutSession implements AutoCloseable {
     private static SessionException discardedMidFlight(String operationName,
                                                        SessionState state) {
         return new SessionException(new SessionError(
-                state == SessionState.ABORTED
-                        ? SessionErrorCode.ABORTED : SessionErrorCode.INVALID_STATE,
+                SessionErrorCode.INVALID_STATE,
                 operationName + " completed after the session moved to " + state
                         + "; the result was discarded"));
     }
@@ -946,14 +954,11 @@ public final class CheckoutSession implements AutoCloseable {
             }
             return result;
         } catch (SessionException e) {
-            // an abort whose unwind was incomplete must not seal the session
-            // in ABORTED — that state is terminal, and the standing
-            // movements could never be finished from it. FAILED keeps
-            // voidTransaction() (and a draining retry) available; the error
-            // still carries the ABORTED code and the movements standing.
-            boolean cleanlyAborted = e.getError().getCode() == SessionErrorCode.ABORTED
-                    && !rollbackIncomplete();
-            transitionLocked(cleanlyAborted ? SessionState.ABORTED : SessionState.FAILED);
+            // aborted or failed, the payment settles in FAILED: the basket
+            // stays intact and retry/void/end all remain available. An
+            // abort is not an abandonment — the error's ABORTED code tells
+            // the register what happened; end() abandons the checkout.
+            transitionLocked(SessionState.FAILED);
             throw e;
         } catch (RuntimeException e) {
             // defense in depth: whatever escapes, the session must not stay
@@ -1347,111 +1352,55 @@ public final class CheckoutSession implements AutoCloseable {
     // ─── Abort ───
 
     /**
-     * Aborts the current operation and the session.
+     * Aborts the in-flight operation. The session itself continues — an
+     * abort is a normal register maneuver (cancel the signature prompt, stop
+     * a tender to take a gift card first), not an abandonment; to abandon
+     * the checkout, {@link #end()} the session.
      *
      * <p>If a terminal operation is awaiting a response, a Nexo
-     * {@code AbortRequest} referencing it is sent (best-effort) to the device
-     * that is processing it. The session then moves to
-     * {@link SessionState#ABORTED}; aborting a session already in a terminal
-     * state has no effect. An aborted payment whose rollback was incomplete
-     * settles in {@link SessionState#FAILED} instead, so
-     * {@link #voidTransaction()} can finish reversing the movements still
-     * standing.</p>
+     * {@code AbortRequest} referencing it is sent (best-effort) to the
+     * device that is processing it. An aborted payment stops at its next
+     * step boundary, reverses the committed steps, and settles in
+     * {@link SessionState#FAILED} — the basket stays intact and
+     * {@code pay()} may retry (the thrown error carries
+     * {@link SessionErrorCode#ABORTED}). Aborted prompts (input, PIN, card
+     * reads, identification) deliver their aborted/cancelled outcome and
+     * leave the session state unchanged. With nothing in flight this is a
+     * no-op.</p>
      *
-     * <p>Read-only prompts (input, PIN, card reads, identification) that
-     * complete after the abort are discarded. Money-moving operations
-     * (refunds, stored value) are NOT: the movement may have completed on
-     * the terminal despite the abort, and its outcome is always delivered —
-     * hiding a real money movement would be worse than reporting it on an
-     * ended session. Voids are unaffected: {@code VOIDING} has no
-     * transition to {@code ABORTED}, so an in-flight void always settles
-     * normally. The session lifecycle signals are likewise never aborted:
-     * cancelling an in-flight {@link #end()} would only strand the
-     * terminal's session-scoped data, so it always settles — succeeding
-     * into {@code ENDED} even when this abort sealed the session first.</p>
+     * <p>Money-moving operations (refunds, stored value) always deliver
+     * their outcome even when the abort raced them: the movement may have
+     * completed on the terminal, and the register must know. Voids and the
+     * session lifecycle signals are never the abort's target — cancelling
+     * an in-flight {@link #end()} would only strand the terminal's
+     * session-scoped data. An abort that lands after the payment completed
+     * leaves the transaction standing; use {@code voidTransaction()} to
+     * reverse it.</p>
      *
      * <p>Safe to call from any thread.</p>
      */
     public void abort() {
-        boolean needsDrain;
         lock.lock();
         try {
-            // flag and state change share this critical section, so the
+            // flag and state check share this critical section, so the
             // reset a starting payment performs entering PAYING cannot eat
-            // a live abort. When a drain intervenes (below), the flag is
-            // re-asserted afterwards for the same reason.
-            abortRequested = true;
-            SessionState state = stateMachine.current();
-            needsDrain = state == SessionState.FAILED && rollbackIncomplete();
-            if (!needsDrain) {
-                transitionToAbortedIfAllowed(state);
+            // a live abort. Outside PAYING the flag stays clear: a stale
+            // abort must not kill the next payment at its first checkAbort,
+            // and prompts are aborted via the wire request below.
+            if (stateMachine.current() == SessionState.PAYING) {
+                abortRequested = true;
             }
         } finally {
             lock.unlock();
-        }
-        if (needsDrain) {
-            // "reverses everything committed so far": a failed payment's
-            // standing movements are drained before the session seals —
-            // ABORTED is terminal and could never finish them. If a
-            // reversal still fails, the session stays FAILED so
-            // voidTransaction() (or a retried pay()) can finish the unwind.
-            try {
-                drainStandingMovements();
-            } catch (SessionException e) {
-                lock.lock();
-                try {
-                    // the drain may have failed as busy because a concurrent
-                    // retry's own drain owns the movements — and that retry
-                    // reset the flag when it entered PAYING. Re-assert it
-                    // (mirroring the success path below) so the running
-                    // payment still observes this abort at its next step
-                    // boundary; on a plain reversal failure this is a no-op.
-                    abortRequested = true;
-                } finally {
-                    lock.unlock();
-                }
-                LOGGER.log(Level.WARNING, "abort() did not finish the standing "
-                        + "reversals (a reversal failed, or another recovery is in "
-                        + "flight); the session stays FAILED so voidTransaction() can "
-                        + "finish the unwind: " + e.getError(), e);
-                return;
-            }
-            lock.lock();
-            try {
-                // a retry that entered PAYING during the drain has reset the
-                // flag; re-assert it so that payment observes the abort at
-                // its next step boundary instead of charging through
-                abortRequested = true;
-                transitionToAbortedIfAllowed(stateMachine.current());
-            } finally {
-                lock.unlock();
-            }
         }
         NexoExchange.InFlight inFlight = exchange.currentInFlight();
         // the session lifecycle signals (the ADMIN category carries only
         // start/end) are never the abort's target: cancelling the end
         // exchange would buy nothing and could strand the terminal's
         // session-scoped data — like VOIDING, an in-flight end() always
-        // settles, and the session still moves to ABORTED above when the
-        // end has not yet succeeded
+        // settles
         if (inFlight != null && inFlight.getCategory() != MessageCategoryType.ADMIN) {
             sendAbort(inFlight);
-        }
-    }
-
-    /** Must be called under the lock. */
-    private void transitionToAbortedIfAllowed(SessionState state) {
-        if (state == SessionState.PAYING || state.isTerminal()) {
-            // during PAYING the payment thread observes the flag between
-            // steps, unwinds what was committed, and settles the final
-            // state — transitioning here would race that decision; a
-            // terminal session stays where it ended
-            return;
-        }
-        if (stateMachine.canTransitionTo(SessionState.ABORTED)) {
-            stateMachine.transitionTo(SessionState.ABORTED);
-        } else {
-            LOGGER.warning("abort() called in state " + state + "; state unchanged");
         }
     }
 
@@ -1564,8 +1513,8 @@ public final class CheckoutSession implements AutoCloseable {
 
     /**
      * Guard for the diagnostics/device operations that deliberately keep
-     * working after a checkout settles in {@code COMPLETED}, {@code ABORTED},
-     * or {@code VOIDED} (receipt reprints, status queries, totals): the one
+     * working after a checkout settles in {@code COMPLETED} or
+     * {@code VOIDED} (receipt reprints, status queries, totals): the one
      * state that shuts them off is {@link SessionState#ENDED} — the register
      * said goodbye and the terminal discarded the session.
      */

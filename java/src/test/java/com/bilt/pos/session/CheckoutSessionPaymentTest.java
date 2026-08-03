@@ -172,12 +172,14 @@ class CheckoutSessionPaymentTest {
             return PaymentOptions.voidAndAbort();
         });
 
-        session.abort();   // the session ends before the flow executes
-        flow.execute();    // must not return silently
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+        session.end().get();   // the session ends before the flow executes
+        flow.execute();        // must not return silently
 
         assertNotNull(seen.get(), "a failure before the sequence starts must reach onError");
         assertEquals(SessionErrorCode.INVALID_STATE, seen.get().getCode());
-        assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
+        assertEquals(2, server.getRequestCount(),
+                "only the session start and end may hit the wire");
     }
 
     @Test
@@ -794,117 +796,22 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
-    void abortDrainsStandingMovementsBeforeSealing() throws Exception {
+    void abortWithNoOperationInFlightLeavesStandingMovementsToTheVoid() throws Exception {
         failPaymentWithStandingRebate();
-
-        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
-        session.abort();
-
-        assertEquals(SessionState.ABORTED, session.getState());
-        List<SaleToPOIRequest> requests = drainRequests();
-        assertEquals(1, requests.size(),
-                "abort must reverse the standing movement before sealing the session");
-        assertEquals("RebateRefund", requests.get(0).getLoyaltyRequest()
-                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
-    }
-
-    @Test
-    void doubleAbortDoesNotSealWhileADrainIsInFlight() throws Exception {
-        failPaymentWithStandingRebate();
-
-        CountDownLatch drainOnTheWire = new CountDownLatch(1);
-        CountDownLatch releaseDrain = new CountDownLatch(1);
-        server.setDispatcher(new Dispatcher() {
-            @Override
-            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
-                if (request.getBody().readUtf8().contains("\"RebateRefund\"")) {
-                    drainOnTheWire.countDown();
-                    releaseDrain.await(5, TimeUnit.SECONDS);
-                    return new MockResponse().setBody(LOYALTY_REFUND_FAILED);
-                }
-                return new MockResponse();
-            }
-        });
-
-        Thread firstAbort = new Thread(session::abort);
-        firstAbort.start();
-        assertTrue(drainOnTheWire.await(5, TimeUnit.SECONDS));
-
-        // second tap of the cancel button: the first abort's drain has
-        // claimed the list, so the empty list must NOT read as "rollback
-        // complete" — sealing ABORTED here would strand the movement when
-        // the in-flight reversal fails and puts it back
-        session.abort();
-        assertEquals(SessionState.FAILED, session.getState(),
-                "an in-flight drain must block sealing, not masquerade as done");
-
-        releaseDrain.countDown();
-        firstAbort.join(5_000);
-        assertFalse(firstAbort.isAlive());
-        assertEquals(SessionState.FAILED, session.getState());
-
-        // the movement survived both aborts and the void can still finish it
-        server.setDispatcher(new okhttp3.mockwebserver.QueueDispatcher());
-        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
-        assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
-    }
-
-    @Test
-    void abortStaysFailedWhenAStandingReversalStillFails() throws Exception {
-        failPaymentWithStandingRebate();
-
-        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));
-        session.abort();
-
-        assertEquals(SessionState.FAILED, session.getState(),
-                "sealing in ABORTED would make the standing movement unrecoverable");
-
-        // the movement is retained: the void can still finish the unwind
-        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
-        assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
-    }
-
-    @Test
-    void payRacingAnAbortMidDrainIsRefused() throws Exception {
-        failPaymentWithStandingRebate();
-
-        CountDownLatch abortDraining = new CountDownLatch(1);
-        CountDownLatch releaseAbortDrain = new CountDownLatch(1);
-        server.setDispatcher(new Dispatcher() {
-            @Override
-            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
-                if (request.getBody().readUtf8().contains("\"RebateRefund\"")) {
-                    abortDraining.countDown();
-                    releaseAbortDrain.await(5, TimeUnit.SECONDS);
-                    return new MockResponse().setBody(LOYALTY_REFUND_OK);
-                }
-                return new MockResponse();
-            }
-        });
 
         int requestsBefore = server.getRequestCount();
-        Thread aborter = new Thread(session::abort);
-        aborter.start();
-        assertTrue(abortDraining.await(5, TimeUnit.SECONDS));
+        session.abort();
 
-        // a retry cannot slip in while the abort's drain is reversing on
-        // the wire: it is refused outright rather than charging over the
-        // in-flight recovery
-        SessionException refused = assertThrows(SessionException.class,
-                () -> session.pay().get());
-        assertTrue(refused.getError().getMessage().contains("retry did not start"),
-                refused.getError().getMessage());
+        // abort is operation-scoped: with nothing in flight it neither
+        // drains nor changes state — finishing the unwind is the job of
+        // voidTransaction() (or a retried pay())
+        assertEquals(SessionState.FAILED, session.getState());
+        assertEquals(requestsBefore, server.getRequestCount(),
+                "an abort with nothing in flight sends nothing");
 
-        releaseAbortDrain.countDown();
-        aborter.join(5_000);
-        assertFalse(aborter.isAlive());
-
-        assertEquals(SessionState.ABORTED, session.getState(),
-                "the abort seals once its drain completed cleanly");
-        assertEquals(requestsBefore + 1, server.getRequestCount(),
-                "only the drain's reversal reached the wire — the refused retry sent nothing");
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
     }
 
     @Test
@@ -1601,10 +1508,103 @@ class CheckoutSessionPaymentTest {
         assertEquals(SessionState.COMPLETED, session.getState());
     }
 
+    @Test
+    void declinedGuestPaymentCanIdentifyBeforeRetryingWithLoyalty() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        assertThrows(SessionException.class, () -> session.pay().get());
+        drainRequests();
+        assertEquals(SessionState.FAILED, session.getState());
+
+        // the register attaches the member on the FAILED session, then
+        // retries the payment with the loyalty steps enabled
+        identifyMember();
+        assertEquals(SessionState.FAILED, session.getState());
+        assertNotNull(session.getMember());
+
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 85.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+        CheckoutResult result = session.pay().get();
+
+        assertEquals(0, new BigDecimal("10.00").compareTo(result.getTotalRebateAmount()));
+        assertEquals(0, new BigDecimal("5.00").compareTo(result.getPointsMonetaryValue()));
+        assertEquals(SessionState.COMPLETED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(4, requests.size(), "rebate, redemption, payment, award");
+        assertEquals("Rebate", requests.get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
+    @Test
+    void disableAwardSkipsTheAwardStepButKeepsRedemptions() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 85.00)));
+
+        CheckoutResult result = session.pay(PaymentOptions.builder()
+                .disableAward(true).build()).get();
+
+        assertEquals(0, result.getTotalPointsEarned());
+        assertNull(result.getAwardPoiTransactionId());
+        assertEquals(0, new BigDecimal("10.00").compareTo(result.getTotalRebateAmount()));
+        assertEquals(0, new BigDecimal("5.00").compareTo(result.getPointsMonetaryValue()));
+        assertEquals(SessionState.COMPLETED, session.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(3, requests.size(), "rebate, redemption, payment — no award");
+        assertEquals("Rebate", requests.get(0).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("Redemption", requests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertNotNull(requests.get(2).getPaymentRequest());
+    }
+
     // ─── Abort mid-flow ───
 
     @Test
-    void abortInsideHandlerUnwindsAndAbortsSession() throws Exception {
+    void abortUnwindsButLeavesTheSessionRetryable() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));  // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));  // rebate refund
+
+        PaymentFlow flow = session.pay()
+                .onPointsRedeemed(points -> {
+                    session.abort();  // register cancels this payment attempt
+                    return points.getSuggestedTotal();
+                });
+
+        SessionException e = assertThrows(SessionException.class, flow::get);
+        assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
+        assertEquals(SessionState.FAILED, session.getState(),
+                "a payment-scoped abort must leave the session retryable");
+        drainRequests();
+
+        // the same session retries and completes
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 85.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+        CheckoutResult result = session.pay().get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(SessionState.COMPLETED, session.getState());
+        assertEquals(4, drainRequests().size(), "rebate, redemption, payment, award");
+    }
+
+    @Test
+    void abortInsideHandlerUnwindsInReverseOrder() throws Exception {
         identifyMember();
         addHundredDollarItem();
 
@@ -1618,7 +1618,7 @@ class CheckoutSessionPaymentTest {
                     session.abort();  // customer walked away
                     // abort() defers to the payment thread while PAYING: the
                     // state must not flip mid-run (that would race the
-                    // COMPLETED/ABORTED decision after orchestration returns)
+                    // COMPLETED/FAILED decision after orchestration returns)
                     assertEquals(SessionState.PAYING, session.getState());
                     return points.getSuggestedTotal();
                 })
@@ -1629,7 +1629,8 @@ class CheckoutSessionPaymentTest {
 
         SessionException e = assertThrows(SessionException.class, flow::get);
         assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
-        assertEquals(SessionState.ABORTED, session.getState());
+        assertEquals(SessionState.FAILED, session.getState(),
+                "an aborted payment settles retryable; the session continues");
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(4, requests.size());
@@ -1668,7 +1669,7 @@ class CheckoutSessionPaymentTest {
 
         SessionException e = assertThrows(SessionException.class, flow::get);
         assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
-        assertEquals(SessionState.ABORTED, session.getState());
+        assertEquals(SessionState.FAILED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(8, requests.size());
@@ -1707,7 +1708,7 @@ class CheckoutSessionPaymentTest {
 
         SessionException e = assertThrows(SessionException.class, flow::get);
         assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
-        assertEquals(SessionState.ABORTED, session.getState());
+        assertEquals(SessionState.FAILED, session.getState());
     }
 
     @Test
@@ -1726,7 +1727,7 @@ class CheckoutSessionPaymentTest {
 
         assertEquals(SessionErrorCode.ABORTED, seen.get().getCode(),
                 "a spontaneous terminal abort is surfaced to the register via onError");
-        assertEquals(SessionState.ABORTED, session.getState());
+        assertEquals(SessionState.FAILED, session.getState());
     }
 
     // ─── Post-payment void uses the payment's references ───

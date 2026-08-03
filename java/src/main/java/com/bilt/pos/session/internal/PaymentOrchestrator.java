@@ -297,7 +297,7 @@ public final class PaymentOrchestrator {
         }
 
         // 5. Award (best-effort — never fails the checkout; terminal SAFs)
-        if (loyalty) {
+        if (loyalty && !options.isDisableAward()) {
             checkAbort(request);
             String saleTxnId = beforeStep(request, TransactionStep.AWARD,
                     workingBasket, storedValueCharged.add(cardCharged), committed);

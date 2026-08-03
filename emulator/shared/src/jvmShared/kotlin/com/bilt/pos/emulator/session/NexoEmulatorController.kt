@@ -11,8 +11,16 @@ import com.bilt.pos.nexo.model.NexoTerminalAPI
 import com.bilt.pos.nexo.model.SaleToPOIRequest
 import com.bilt.pos.nexo.security.SecurityKey
 import com.bilt.pos.session.CheckoutSession
+import com.bilt.pos.session.SessionErrorCode
+import com.bilt.pos.session.SessionException
+import com.bilt.pos.session.SessionState
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketItem
+import com.bilt.pos.session.identity.ForceEntryMode
+import com.bilt.pos.session.identity.IdentifyOptions
+import com.bilt.pos.session.identity.IdentifyStatus
+import com.bilt.pos.session.payment.CheckoutResult
+import com.bilt.pos.session.payment.PaymentOptions
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,8 +49,8 @@ import kotlin.time.Duration.Companion.seconds
  *
  * - **Connect** builds the client and runs the periodic diagnostics loop
  *   (raw nexo Diagnosis requests — pure connectivity, no session involved).
- * - **Start Session** opens a [CheckoutSession] (terminal Start bracket) on
- *   that connection: one session per customer checkout. **End Session**
+ * - **Start Checkout** opens a [CheckoutSession] (terminal Start bracket) on
+ *   that connection: one session per customer checkout. **End Checkout**
  *   closes it (End bracket). Disconnect ends any active session best-effort.
  *
  * Each connection is a self-contained [Connection]: its own scope (child of
@@ -67,7 +75,18 @@ class NexoEmulatorController(
         val dispatcher: CoroutineDispatcher,
         @Volatile var client: BiltNexoTerminalClient? = null,
         @Volatile var session: CheckoutSession? = null,
-    )
+    ) {
+        /** Claimed synchronously by [pay] so rapid taps can't queue a second
+         *  payment behind the first on the serialized dispatcher. */
+        val paymentClaimed = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /** Set by [abortPayment] for the current payment attempt. SDK
+         *  abort() only interrupts what is on the wire — during the
+         *  pre-payment identify prompt the session is not yet PAYING, so
+         *  without this flag a cancelled prompt would read as a guest
+         *  outcome and the payment would continue to charge. */
+        val paymentAbortRequested = java.util.concurrent.atomic.AtomicBoolean(false)
+    }
 
     /**
      * Runs End brackets during teardown. Deliberately NOT a child of [scope]:
@@ -99,6 +118,14 @@ class NexoEmulatorController(
             if (detected != null) {
                 _state.update { it.copy(terminalAddress = detected, addressAutodetected = true) }
                 log("Autodetected terminal address $detected via adb")
+                // The operator's next move after a successful detect is
+                // always Connect — do it for them. Only from DISCONNECTED:
+                // autodetect runs at startup and must never tear down a
+                // connection the operator made while adb was probing.
+                if (_state.value.connection.phase == ConnectionPhase.DISCONNECTED) {
+                    log("Connecting automatically to the detected terminal")
+                    connect(detected, _state.value.encryptionEnabled, null)
+                }
             } else {
                 log("Address autodetect found no adb device; enter the address manually")
             }
@@ -196,8 +223,15 @@ class NexoEmulatorController(
         conn.session = null
         if (active != null) {
             // Session End bracket, best-effort; teardownScope so a ViewModel
-            // cancelling the app scope right after doesn't kill it
+            // cancelling the app scope right after doesn't kill it. Like
+            // shutdown(), wait for the serialized jobs first: an in-flight
+            // payment's blocking call survives the cancel and holds the
+            // session in PAYING, where end() is rejected — closing right
+            // away would lose the End bracket for good once the payment
+            // lands. The cap must outlast the client's read timeout (120s
+            // default) so the join covers a terminal that answers late.
             teardownScope.launch {
+                withTimeoutOrNull(180_000) { conn.scope.coroutineContext[Job]?.join() }
                 runCatching { active.close() }
             }
         }
@@ -270,9 +304,16 @@ class NexoEmulatorController(
                         basket = emptyList(),
                         basketTotal = "0.00",
                         basketTax = "0.00",
+                        lastPayment = null,
                     )
                 }
                 log("Checkout session started (id ${started.sessionId})")
+                // Blank the customer display: autoDisplay only fires on
+                // basket mutations, so the previous checkout's receipt would
+                // linger until the first item is rung in. Best-effort — a
+                // failure logs via JUL (Detailed tab) and never throws.
+                started.updateDisplay(started.basket)
+                log("Customer display cleared (empty basket)")
             } catch (e: Exception) {
                 if (currentCoroutineContext().isActive) {
                     log("Failed to start a checkout session: ${e.message}")
@@ -302,7 +343,7 @@ class NexoEmulatorController(
                 // Clear only on a successful End bracket — a failed end keeps
                 // the session held and retryable (the SDK doesn't seal it),
                 // instead of orphaning terminal session state with the UI
-                // offering Start Session. Disconnect remains the escape hatch.
+                // offering Start Checkout. Disconnect remains the escape hatch.
                 conn.session = null
                 if (currentCoroutineContext().isActive) {
                     _state.update {
@@ -311,6 +352,7 @@ class NexoEmulatorController(
                             basket = emptyList(),
                             basketTotal = "0.00",
                             basketTax = "0.00",
+                            lastPayment = null,
                         )
                     }
                     log("Checkout session ended")
@@ -327,7 +369,7 @@ class NexoEmulatorController(
     override fun addProduct(product: Product) {
         val conn = connection
         if (conn == null) {
-            log("No active checkout session — press Start Session first")
+            log("No active checkout session — press Start Checkout first")
             return
         }
         conn.scope.launch(conn.dispatcher) {
@@ -336,7 +378,7 @@ class NexoEmulatorController(
             // cleared for its End bracket
             val current = conn.session
             if (current == null) {
-                log("No active checkout session — press Start Session first")
+                log("No active checkout session — press Start Checkout first")
                 return@launch
             }
             try {
@@ -366,6 +408,269 @@ class NexoEmulatorController(
             }
         }
     }
+
+    override fun pay(loyalty: LoyaltyOptions) {
+        val conn = connection
+        if (conn == null) {
+            log("No active checkout session — press Start Checkout first")
+            return
+        }
+        // Claimed here, not inside the job: two quick Pay taps would both
+        // queue on the serialized dispatcher (paymentInProgress publishes
+        // asynchronously), and the second would reach the already-completed
+        // session only to log a spurious failure.
+        if (!conn.paymentClaimed.compareAndSet(false, true)) {
+            log("A payment is already in progress")
+            return
+        }
+        conn.paymentAbortRequested.set(false)
+        _state.update { it.copy(paymentInProgress = true, paymentOutcome = null) }
+        val job = conn.scope.launch(conn.dispatcher) {
+            val session = conn.session
+            if (session == null) {
+                log("No active checkout session — press Start Checkout first")
+                return@launch
+            }
+            try {
+                // The prompt runs only when the operator asked for it — the
+                // loyalty toggles alone don't force it, since the customer
+                // may self-identify on the terminal during the flow. A
+                // no-member outcome (not found, cancelled) degrades to a
+                // guest checkout instead of blocking the payment. FAILED is
+                // included: a declined/cancelled payment retried with
+                // identification switched on prompts before the retry.
+                if (conn.paymentAbortRequested.get()) {
+                    log("Payment aborted before it started — nothing charged")
+                    return@launch
+                }
+                if (loyalty.identify && session.member == null) {
+                    when (session.state) {
+                        SessionState.IDLE, SessionState.IDENTIFIED, SessionState.ACTIVE,
+                        SessionState.FAILED,
+                        -> identifyMember(session)
+                        else -> log(
+                            "Member identification is unavailable in state " +
+                                "${session.state} — paying as a guest checkout"
+                        )
+                    }
+                }
+                // An abort during the identify prompt cancels only the
+                // prompt on the wire (the session is not PAYING yet), which
+                // would otherwise read as a guest outcome — the attempt
+                // flag is what stops the charge
+                if (conn.paymentAbortRequested.get()) {
+                    log("Payment aborted during member identification — nothing charged")
+                    return@launch
+                }
+                if (!currentCoroutineContext().isActive) return@launch
+
+                val options = PaymentOptions.builder()
+                    .disableRebates(!loyalty.rebates)
+                    .disablePoints(!loyalty.redemption)
+                    .disableAward(!loyalty.award)
+                    .build()
+                log(
+                    "Starting payment — rebates ${onOff(loyalty.rebates)}, " +
+                        "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}"
+                )
+                val flow = session.pay(options)
+                    .onRebatesRedeemed { rebates ->
+                        log("Rebates applied: −$${rebates.totalRebateAmount.toPlainString()} → total $${rebates.suggestedTotal.toPlainString()}")
+                        rebates.suggestedTotal
+                    }
+                    .onPointsRedeemed { points ->
+                        log("Points redeemed: ${points.pointsUsed} (−$${points.monetaryValue.toPlainString()}) → total $${points.suggestedTotal.toPlainString()}")
+                        points.suggestedTotal
+                    }
+                    .onError { error ->
+                        session.updateDisplay(session.basket)
+                        if (isActive) {
+                            log("Payment failed: ${error.code} — ${error.message}")
+                            _state.update {
+                                it.copy(paymentOutcome = PaymentOutcome(
+                                    success = false,
+                                    message = "${error.code}\n${error.message}",
+                                ))
+                            }
+                        }
+                        PaymentOptions.voidAndAbort()
+                    }
+                val result = try {
+                    flow.get()
+                } catch (e: SessionException) {
+                    // ABORTED bypasses onError by design (the register asked
+                    // for the abort); every other failure was already
+                    // reported by the handler above
+                    if (e.error.code == SessionErrorCode.ABORTED && isActive) {
+                        session.updateDisplay(session.basket)
+                        log(
+                            "Payment aborted; committed steps reversed — " +
+                                "the basket is intact, Pay again to retry"
+                        )
+                    }
+                    null
+                }
+                if (result != null && isActive) {
+                    publishPaymentResult(result)
+                    // The checkout is collected in full (pay() completes
+                    // only then) — end the session for the operator. The
+                    // basket clears like any other end; the payment summary
+                    // stays visible until the next Start Checkout.
+                    log("Payment complete — ending the checkout automatically")
+                    try {
+                        session.end().get()
+                        conn.session = null
+                        _state.update {
+                            it.copy(
+                                sessionId = null,
+                                basket = emptyList(),
+                                basketTotal = "0.00",
+                                basketTax = "0.00",
+                            )
+                        }
+                        log("Checkout ended")
+                    } catch (e: Exception) {
+                        log("Failed to end the checkout: ${e.message} — press End Checkout to retry")
+                        detailedLog(e.stackTraceToString())
+                    }
+                }
+            } catch (e: Exception) {
+                // e.g. pay() rejecting an empty basket or a completed session
+                if (isActive) {
+                    log("Payment not started: ${e.message}")
+                    _state.update {
+                        it.copy(paymentOutcome = PaymentOutcome(
+                            success = false,
+                            message = "Payment not started\n${e.message}",
+                        ))
+                    }
+                    detailedLog(e.stackTraceToString())
+                }
+            }
+        }
+        // Releases on every path, including a job the scope cancelled before
+        // it ever ran (disconnect racing this call) — a finally inside the
+        // job would never execute then and the claim would wedge the Pay
+        // button. The claim is per-connection and always released; the
+        // shared UI flag is cleared only while this connection is still
+        // current — a cancelled job's blocking call can outlive a
+        // disconnect, and its late completion must not re-enable Pay while
+        // a NEW connection's payment is on the wire (the disconnect itself
+        // already reset the flag via updateDisconnectedState).
+        job.invokeOnCompletion {
+            conn.paymentClaimed.set(false)
+            if (connection === conn) {
+                _state.update { it.copy(paymentInProgress = false) }
+            }
+        }
+    }
+
+    override fun abortPayment() {
+        val conn = connection
+        val session = conn?.session
+        if (conn == null || session == null) {
+            log("No active checkout session")
+            return
+        }
+        // The attempt flag covers the window the SDK cannot: during the
+        // pre-payment identify prompt the session is not PAYING, so abort()
+        // only cancels the prompt — the pay job checks this flag before it
+        // lets the payment start.
+        conn.paymentAbortRequested.set(true)
+        // Deliberately NOT on the serialized dispatcher: abort() is the
+        // SDK's cross-thread entry point, and it must overtake the blocking
+        // payment call it interrupts — queueing it would run it only after
+        // the payment finished on its own. Operation-scoped: the aborted
+        // payment settles FAILED and the session stays retryable.
+        conn.scope.launch(Dispatchers.IO) {
+            log("Aborting the payment…")
+            try {
+                session.abort()
+            } catch (e: Exception) {
+                if (isActive) {
+                    log("Abort failed: ${e.message}")
+                    detailedLog(e.stackTraceToString())
+                }
+            }
+        }
+    }
+
+    /** Terminal member-identification prompt; failures degrade to guest. */
+    private fun identifyMember(session: CheckoutSession) {
+        log("Identifying member on the terminal…")
+        try {
+            // The terminal's keyed loyalty capture (loyalty ID input form)
+            // engages only for LoyaltyHandling=Required (the SDK default)
+            // with ForceEntryMode containing Keyed — without Keyed it waits
+            // on the card reader instead of showing the input form
+            val outcome = session.identifyMember(
+                IdentifyOptions.builder()
+                    .forceEntryMode(ForceEntryMode.KEYED)
+                    .build()
+            ).get()
+            if (outcome.status == IdentifyStatus.FOUND) {
+                log(
+                    "Member identified: ${outcome.memberId}" +
+                        (outcome.loyaltyBrand?.let { " ($it)" } ?: "") +
+                        ", ${outcome.pointBalance} pts, ${outcome.rewards.size} reward(s)"
+                )
+            } else {
+                log("No member (${outcome.status}) — loyalty steps will be skipped")
+            }
+        } catch (e: Exception) {
+            log("Member identification failed: ${e.message} — continuing as guest")
+            detailedLog(e.stackTraceToString())
+        }
+    }
+
+    private fun publishPaymentResult(result: CheckoutResult) {
+        result.finalBasket?.let(::publishBasket)
+        val parts = buildList {
+            if (result.cardAmountCharged.signum() > 0) {
+                add(
+                    "card $${result.cardAmountCharged.toPlainString()}" +
+                        (result.paymentBrand?.let { " ($it)" } ?: "")
+                )
+            }
+            if (result.storedValueAmountUsed.signum() > 0) {
+                add("gift card $${result.storedValueAmountUsed.toPlainString()}")
+            }
+            if (result.totalRebateAmount.signum() > 0) {
+                add("rebates −$${result.totalRebateAmount.toPlainString()}")
+            }
+            if (result.pointsRedeemed > 0) {
+                add("${result.pointsRedeemed} pts −$${result.pointsMonetaryValue.toPlainString()}")
+            }
+            if (result.totalPointsEarned > 0) {
+                add("earned ${result.totalPointsEarned} pts (balance ${result.pointsBalance})")
+            }
+        }
+        val summary = "Paid $${result.authorizedAmount.toPlainString()}" +
+            (if (parts.isEmpty()) "" else " — " + parts.joinToString(", "))
+        // the popup breaks the breakdown into lines and carries the promo
+        // messages and warnings that otherwise live only in the event log
+        val popup = buildList {
+            add("Paid $${result.authorizedAmount.toPlainString()}")
+            addAll(parts)
+            result.promotionMessages.forEach { add(it) }
+            result.warnings.forEach { add("Warning: $it") }
+        }.joinToString("\n")
+        _state.update {
+            it.copy(
+                lastPayment = summary,
+                paymentOutcome = PaymentOutcome(success = true, message = popup),
+            )
+        }
+        log(summary)
+        result.promotionMessages.forEach { log("Promo: $it") }
+        result.warnings.forEach { log("Warning: $it") }
+    }
+
+    override fun dismissPaymentOutcome() {
+        _state.update { it.copy(paymentOutcome = null) }
+    }
+
+    private fun onOff(enabled: Boolean) = if (enabled) "on" else "off"
 
     /** Connectivity probe: a raw nexo Diagnosis request, no session involved. */
     private suspend fun runDiagnosis(client: BiltNexoTerminalClient) {
@@ -429,6 +734,9 @@ class NexoEmulatorController(
                 basket = emptyList(),
                 basketTotal = "0.00",
                 basketTax = "0.00",
+                paymentInProgress = false,
+                lastPayment = null,
+                paymentOutcome = null,
             )
         }
     }

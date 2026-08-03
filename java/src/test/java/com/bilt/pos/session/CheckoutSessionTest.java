@@ -272,17 +272,13 @@ class CheckoutSessionTest {
     // ─── Abort ───
 
     @Test
-    void abortWithoutInFlightOperationSendsNothingAndAbortsSession() {
+    void abortWithoutInFlightOperationIsANoOp() {
+        SessionState before = session.getState();
         session.abort();
 
-        assertEquals(SessionState.ABORTED, session.getState());
+        assertEquals(before, session.getState(),
+                "abort is operation-scoped; with nothing in flight the session is untouched");
         assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
-    }
-
-    @Test
-    void abortIsIdempotentFromTerminalState() {
-        session.abort();
         assertDoesNotThrow(session::abort);
-        assertEquals(SessionState.ABORTED, session.getState());
     }
 }

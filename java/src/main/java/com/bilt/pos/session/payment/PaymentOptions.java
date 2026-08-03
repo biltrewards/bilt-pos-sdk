@@ -26,6 +26,7 @@ public final class PaymentOptions {
 
     private final boolean disableRebates;
     private final boolean disablePoints;
+    private final boolean disableAward;
     private final BigDecimal cashback;
     private final DisplayPayload paymentProcessingDisplay;
     private final boolean voidAndAbort;
@@ -33,6 +34,7 @@ public final class PaymentOptions {
     private PaymentOptions(Builder builder) {
         this.disableRebates = builder.disableRebates;
         this.disablePoints = builder.disablePoints;
+        this.disableAward = builder.disableAward;
         this.cashback = builder.cashback;
         this.paymentProcessingDisplay = builder.paymentProcessingDisplay;
         this.voidAndAbort = builder.voidAndAbort;
@@ -71,6 +73,10 @@ public final class PaymentOptions {
         return disablePoints;
     }
 
+    public boolean isDisableAward() {
+        return disableAward;
+    }
+
     /** Cashback to request with the card payment, or {@code null}. */
     public BigDecimal getCashback() {
         return cashback;
@@ -91,6 +97,7 @@ public final class PaymentOptions {
 
         private boolean disableRebates;
         private boolean disablePoints;
+        private boolean disableAward;
         private BigDecimal cashback;
         private DisplayPayload paymentProcessingDisplay;
         private boolean voidAndAbort;
@@ -105,6 +112,17 @@ public final class PaymentOptions {
 
         public Builder disablePoints(boolean disablePoints) {
             this.disablePoints = disablePoints;
+            return this;
+        }
+
+        /**
+         * Skips the loyalty award step, so the member earns no points on
+         * this checkout. Redemptions are unaffected — combine with
+         * {@link #disableRebates(boolean)} and {@link #disablePoints(boolean)}
+         * to run a fully loyalty-free payment.
+         */
+        public Builder disableAward(boolean disableAward) {
+            this.disableAward = disableAward;
             return this;
         }
 

@@ -44,6 +44,30 @@ data class BasketLine(
     val lineTotal: String,
 )
 
+/** Outcome of the last payment attempt, shown as a popup until dismissed. */
+data class PaymentOutcome(
+    val success: Boolean,
+    val message: String,
+)
+
+/**
+ * Payment configuration. The SDK-side loyalty steps run only for a member
+ * attached to the session, but identification is a separate choice:
+ * [identify] prompts on the terminal before the payment, while the loyalty
+ * toggles keep working without it when the customer self-identifies on the
+ * terminal during the flow.
+ */
+data class LoyaltyOptions(
+    /** Prompt for member identification on the terminal before the payment. */
+    val identify: Boolean = true,
+    /** Rebate (coupon) redemption. */
+    val rebates: Boolean = true,
+    /** Point/reward redemption for monetary value. */
+    val redemption: Boolean = true,
+    /** Point award on the completed purchase. */
+    val award: Boolean = true,
+)
+
 data class EmulatorState(
     val terminalAddress: String = "",
     val addressAutodetected: Boolean = false,
@@ -60,6 +84,15 @@ data class EmulatorState(
     val basket: List<BasketLine> = emptyList(),
     val basketTotal: String = "0.00",
     val basketTax: String = "0.00",
+    /** True while a payment (and its member identification) is on the wire. */
+    val paymentInProgress: Boolean = false,
+    /** One-line summary of the checkout's completed payment; null until
+     *  paid. A fully collected payment ends the checkout automatically; the
+     *  summary stays visible until the next one starts. */
+    val lastPayment: String? = null,
+    /** Success/failure of the last payment attempt, rendered as a popup
+     *  until dismissed; cleared when a new payment starts. */
+    val paymentOutcome: PaymentOutcome? = null,
     /** Curated one-line event feed shown on the Events tab. */
     val events: List<String> = emptyList(),
     /** Raw logger output (SDK java.util.logging records, stack traces) for the Detailed tab. */
@@ -73,7 +106,9 @@ data class EmulatorState(
 interface EmulatorController {
     val state: StateFlow<EmulatorState>
 
-    /** Try to prefill the terminal address (adb-based on desktop). */
+    /** Try to prefill the terminal address (adb-based on desktop); when
+     *  detection succeeds and nothing is connected yet, connects to the
+     *  detected terminal automatically. */
     fun autodetectAddress()
 
     /**
@@ -95,4 +130,23 @@ interface EmulatorController {
 
     /** Ring up one unit of [product] on the active session. */
     fun addProduct(product: Product)
+
+    /**
+     * Run the payment on the active session. [loyalty] picks which loyalty
+     * steps run; when [LoyaltyOptions.identify] is enabled and no member is
+     * attached yet, the terminal prompts the customer first (a declined
+     * prompt falls back to a guest checkout).
+     */
+    fun pay(loyalty: LoyaltyOptions)
+
+    /**
+     * Abort the in-flight payment (SDK `abort()`): committed steps are
+     * reversed and the session settles retryable — the basket stays intact
+     * and Pay may run again. An abort that lands after the payment
+     * completed leaves the transaction standing.
+     */
+    fun abortPayment()
+
+    /** Dismiss the payment outcome popup. */
+    fun dismissPaymentOutcome()
 }

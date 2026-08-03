@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,7 +20,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +56,8 @@ import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
+import com.bilt.pos.emulator.session.LoyaltyOptions
+import com.bilt.pos.emulator.session.PaymentOutcome
 
 /**
  * Root composable of the terminal emulator, shared by the Android and
@@ -62,6 +69,9 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
     val state by controller.state.collectAsState()
 
     MaterialTheme {
+        state.paymentOutcome?.let { outcome ->
+            PaymentOutcomeDialog(outcome) { controller.dismissPaymentOutcome() }
+        }
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -82,7 +92,7 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
                     if (maxWidth < 700.dp) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             ProductGrid(products, controller, Modifier.weight(1.4f))
-                            BasketCard(state, Modifier.weight(0.8f))
+                            BasketCard(state, controller, Modifier.weight(0.8f))
                             EventsCard(state, Modifier.weight(0.8f))
                         }
                     } else {
@@ -92,7 +102,7 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
                                 modifier = Modifier.weight(2f),
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
                             ) {
-                                BasketCard(state, Modifier.weight(1f))
+                                BasketCard(state, controller, Modifier.weight(1f))
                                 EventsCard(state, Modifier.weight(1f))
                             }
                         }
@@ -101,6 +111,23 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
             }
         }
     }
+}
+
+@Composable
+private fun PaymentOutcomeDialog(outcome: PaymentOutcome, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (outcome.success) "Payment successful" else "Payment failed",
+                color = if (outcome.success) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+            )
+        },
+        text = { Text(outcome.message) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("OK") }
+        },
+    )
 }
 
 @Composable
@@ -196,7 +223,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         enabled = connected,
                         modifier = modifier,
                     ) {
-                        Text(if (sessionActive) "End Session" else "Start Session")
+                        Text(if (sessionActive) "End Checkout" else "Start Checkout")
                     }
                 }
                 if (compact) {
@@ -347,7 +374,11 @@ private fun ProductGrid(
 }
 
 @Composable
-private fun BasketCard(state: EmulatorState, modifier: Modifier = Modifier) {
+private fun BasketCard(
+    state: EmulatorState,
+    controller: EmulatorController,
+    modifier: Modifier = Modifier,
+) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
@@ -362,7 +393,7 @@ private fun BasketCard(state: EmulatorState, modifier: Modifier = Modifier) {
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             if (state.basket.isEmpty()) {
-                Text("Empty", style = MaterialTheme.typography.bodySmall)
+                Text("Empty", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(state.basket, key = { it.sku }) { line ->
@@ -377,7 +408,107 @@ private fun BasketCard(state: EmulatorState, modifier: Modifier = Modifier) {
                     }
                 }
             }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            PaymentControls(state, controller)
         }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PaymentControls(state: EmulatorState, controller: EmulatorController) {
+    // Toggles for the next payment. Identify prompts on the terminal before
+    // paying; the loyalty steps work without it when the customer
+    // self-identifies on the terminal during the flow.
+    var identify by rememberSaveable { mutableStateOf(true) }
+    var rebates by rememberSaveable { mutableStateOf(true) }
+    var redemption by rememberSaveable { mutableStateOf(true) }
+    var award by rememberSaveable { mutableStateOf(true) }
+
+    // One payment per checkout: pay again only after the next Start Checkout
+    val paid = state.lastPayment != null
+    val canPay = state.sessionId != null && state.basket.isNotEmpty() &&
+        !state.paymentInProgress && !paid
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // FlowRow: four labeled checkboxes overflow a narrow card; wrap
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            LoyaltyCheckbox("Identify", identify, !state.paymentInProgress) { identify = it }
+            LoyaltyCheckbox("Rebates", rebates, !state.paymentInProgress) { rebates = it }
+            LoyaltyCheckbox("Redemption", redemption, !state.paymentInProgress) { redemption = it }
+            LoyaltyCheckbox("Award", award, !state.paymentInProgress) { award = it }
+        }
+        if (paid) {
+            // the checkout auto-ends on full payment; the hint covers the
+            // fallback where that end failed and the session is still open
+            val next = if (state.sessionId == null) {
+                "Start Checkout for the next customer"
+            } else {
+                "End Checkout to start the next one"
+            }
+            Text(
+                "${state.lastPayment} — $next",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF2E7D32),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(
+                onClick = {
+                    controller.pay(
+                        LoyaltyOptions(
+                            identify = identify,
+                            rebates = rebates,
+                            redemption = redemption,
+                            award = award,
+                        )
+                    )
+                },
+                enabled = canPay,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    when {
+                        state.paymentInProgress -> "Paying…"
+                        paid -> "Paid"
+                        else -> "Pay $${state.basketTotal}"
+                    }
+                )
+            }
+            Button(
+                onClick = { controller.abortPayment() },
+                enabled = state.paymentInProgress,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                Text("Abort")
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoyaltyCheckbox(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+        )
+        Text(label, style = MaterialTheme.typography.bodySmall)
     }
 }
 

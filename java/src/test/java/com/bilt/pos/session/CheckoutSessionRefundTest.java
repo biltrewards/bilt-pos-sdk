@@ -143,12 +143,13 @@ class CheckoutSessionRefundTest {
         assertFalse(register.isAlive());
 
         // money moved on the terminal: unlike read-only prompts, the outcome
-        // must be delivered even though the session has ended
+        // must be delivered even though an abort raced it
         assertNull(failed.get());
         assertNotNull(delivered.get(),
                 "a completed refund is money moved — its outcome must not be discarded");
         assertEquals(0, new BigDecimal("24.99").compareTo(delivered.get().getRefundedAmount()));
-        assertEquals(SessionState.ABORTED, session.getState());
+        assertEquals(SessionState.IDLE, session.getState(),
+                "abort is operation-scoped; the session continues");
     }
 
     @Test

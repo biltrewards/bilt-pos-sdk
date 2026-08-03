@@ -2,13 +2,18 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.android.library)
+    // AGP 9's KMP library plugin: the android target is declared inside
+    // kotlin {} below; there is no separate android {} block
+    alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose.multiplatform)
 }
 
 kotlin {
-    androidTarget {
+    android {
+        namespace = "com.bilt.pos.emulator.shared"
+        compileSdk = 36
+        minSdk = 26
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }
@@ -43,21 +48,11 @@ kotlin {
 
         getByName("desktopTest").dependencies {
             implementation(kotlin("test"))
+            // skiko natives for headless UI rendering (ScreenshotGenerator)
+            implementation(compose.desktop.currentOs)
             // real TLS handshakes against a local server in TlsVerifierTest
             implementation(libs.okhttp.mockwebserver)
             implementation(libs.okhttp.tls)
         }
-    }
-}
-
-android {
-    namespace = "com.bilt.pos.emulator.shared"
-    compileSdk = 36
-    defaultConfig {
-        minSdk = 26
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
     }
 }

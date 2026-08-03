@@ -9,11 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `identifyMember()` is now allowed on a `FAILED` session, so a declined guest payment can attach a member and retry with loyalty enabled (previously the retry could only run as a guest — identification was rejected until a basket edit resumed the checkout).
+- `PaymentOptions.disableAward` — skips the loyalty award step of the payment sequence, mirroring `disableRebates`/`disablePoints`. Previously the award ran unconditionally whenever a member was identified; combining all three now yields a fully loyalty-free payment for an identified member.
+- Emulator: payment. The basket card gains Rebates/Redemption/Award checkboxes and a Pay button wired through `CheckoutSession.pay()`; enabling any loyalty step with no member attached runs the terminal identification prompt first (a declined or not-found lookup degrades to a guest checkout). Step results, promotion messages, and award warnings stream into the event feed; one payment per session, and starting a session clears the customer display with an empty basket so the previous checkout's receipt doesn't linger.
+
 - `CheckoutSession` lifecycle brackets: the builder's `start()` announces the session to the terminal (nexo `Admin` signal `BiltSession,Start,v1,<sessionId>`) and yields the session once acknowledged, and `end()` tells the terminal to discard its session-scoped data, sealing the session in the new terminal state `ENDED` (no further operations, no restart). `CheckoutSession` is now `AutoCloseable` — try-with-resources sends the end signal best-effort even on exception paths.
 - Emulator: first functional slice. Terminal address autodetect via adb (as the Python emulator did), a connect flow with automatic connectivity diagnostics every 60s driving a connected/unreachable status indicator, explicit Start/End Session controls (one `CheckoutSession` per customer checkout, bracketed on the terminal, ended best-effort on disconnect and app exit), message encryption from `NEXO_PASSPHRASE` (env or `local.properties`) with an in-UI toggle and passphrase field, an out-of-band TLS verification probe (chain + hostname pattern) that reports failures but never blocks communication, and a quick-buy product grid backed by a `ProductProvider` abstraction with a 24-product mock catalog (sub-$1 to $549.99) that rings items into the session basket with NJ sales tax.
 
 ### Changed (breaking)
 
+- `SessionState.ABORTED` is removed and `abort()` is now operation-scoped: it interrupts the in-flight operation and the session continues — an abort is a register maneuver (cancel a prompt, stop a tender to take a gift card), not an abandonment. An aborted payment unwinds and settles in `FAILED` (basket intact, `pay()` retryable; the error still carries the `ABORTED` code), aborted prompts deliver their aborted/cancelled outcome with the state unchanged, and `abort()` with nothing in flight is a no-op. Abandoning a checkout is `end()`. Terminal-initiated payment aborts likewise settle in `FAILED`.
 - `CheckoutSession.Builder.build()` is replaced by `start()`, which returns a lazy `SessionResult<CheckoutSession>` — finish with `execute()`/`get()`/`getOrNull()` like every other session operation. An unstarted session can no longer exist.
 
 - Terminal emulator scaffold (`:emulator`) — a Compose Multiplatform app (Android + desktop from one shared UI) that will drive a terminal through `CheckoutSession`, replacing the Python/tkinter nexo emulator. Run the desktop app with `./gradlew :emulator:desktop:run`; the Android app is `:emulator:android`. UI is a placeholder shell for now.
@@ -23,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Build: Gradle wrapper 9.2.1 → 9.6.1 and AGP 8.13.2 → 9.3.1. AGP 8.x fails to configure under Gradle ≥ 9.6 (it used a removed Gradle-internal API), which broke builds with a system-installed Gradle. The AGP 9 migration drops the standalone `kotlin-android` plugin (built-in Kotlin) and moves `:emulator:shared` to `com.android.kotlin.multiplatform.library`. Published artifacts are unaffected.
 - XML marshalling of display/input/receipt payloads no longer uses the JAXB runtime, which does not run on Android; Jackson (`jackson-dataformat-xml`) now reads the same `jakarta.xml.bind` annotations on the generated models. Public API is unchanged (`DisplayPayloadHelper`/`ReceiptHelper` signatures still throw `JAXBException`); `org.glassfish.jaxb:jaxb-runtime` is dropped from the SDK's dependencies. Android consumers get the Woodstox StAX implementation transitively but must additionally bundle the `javax.xml.stream` API classes (absent from the Android platform), e.g. `javax.xml.stream:stax-api:1.0-2`.
 
 ### Fixed

@@ -24,7 +24,9 @@ package com.bilt.pos.session;
  *               PAYING ── success ──► COMPLETED
  *                  └────── failure ─────────┘
  *
- * abort()            ──► ABORTED   (from any non-terminal state)
+ * abort()            interrupts the in-flight operation only — an aborted
+ *                    payment unwinds and settles FAILED; the session state
+ *                    is otherwise unchanged
  * voidTransaction()  ──► VOIDING ──► VOIDED
  * end()              ──► ENDED     (from any state except PAYING/VOIDING)
  * </pre>
@@ -46,11 +48,8 @@ public enum SessionState {
     /** The payment sequence completed successfully. Terminal state. */
     COMPLETED,
 
-    /** The payment sequence failed. Retry {@code pay()} or void. */
+    /** The payment sequence failed or was aborted. Retry {@code pay()} or void. */
     FAILED,
-
-    /** The session was aborted. Terminal state. */
-    ABORTED,
 
     /** A void of the completed transaction is in progress. */
     VOIDING,
@@ -67,6 +66,6 @@ public enum SessionState {
 
     /** Returns {@code true} if no further operations are possible from this state. */
     public boolean isTerminal() {
-        return this == COMPLETED || this == ABORTED || this == VOIDED || this == ENDED;
+        return this == COMPLETED || this == VOIDED || this == ENDED;
     }
 }
