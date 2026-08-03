@@ -88,12 +88,12 @@ class ScreenshotGenerator {
         render(midCheckout, File(dir, "emulator-mid-checkout.png"))
 
         val paid = midCheckout.copy(
-            // a fully collected payment ends the checkout automatically
+            // a fully collected payment ends the checkout automatically,
+            // clearing the basket; the summary line carries the outcome
             sessionId = null,
-            basket = midCheckout.basket.map {
-                if (it.sku == "SKU-014") it.copy(lineTotal = "119.99") else it
-            },
-            basketTotal = "174.89",
+            basket = emptyList(),
+            basketTotal = "0.00",
+            basketTax = "0.00",
             lastPayment = "Paid $174.89 — card $169.89 (Visa), rebates −$10.00, " +
                 "5 pts −$5.00, earned 175 pts (balance 964)",
             events = midCheckout.events + listOf(

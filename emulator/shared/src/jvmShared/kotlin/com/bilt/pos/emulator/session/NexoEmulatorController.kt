@@ -506,13 +506,20 @@ class NexoEmulatorController(
                     publishPaymentResult(result)
                     // The checkout is collected in full (pay() completes
                     // only then) — end the session for the operator. The
-                    // basket and payment summary stay on screen; Start
-                    // Checkout clears them for the next customer.
+                    // basket clears like any other end; the payment summary
+                    // stays visible until the next Start Checkout.
                     log("Payment complete — ending the checkout automatically")
                     try {
                         session.end().get()
                         conn.session = null
-                        _state.update { it.copy(sessionId = null) }
+                        _state.update {
+                            it.copy(
+                                sessionId = null,
+                                basket = emptyList(),
+                                basketTotal = "0.00",
+                                basketTax = "0.00",
+                            )
+                        }
                         log("Checkout ended")
                     } catch (e: Exception) {
                         log("Failed to end the checkout: ${e.message} — press End Checkout to retry")
