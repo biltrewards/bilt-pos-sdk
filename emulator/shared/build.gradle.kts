@@ -48,6 +48,8 @@ kotlin {
 
         getByName("desktopTest").dependencies {
             implementation(kotlin("test"))
+            // skiko natives for headless UI rendering (ScreenshotGenerator)
+            implementation(compose.desktop.currentOs)
             // real TLS handshakes against a local server in TlsVerifierTest
             implementation(libs.okhttp.mockwebserver)
             implementation(libs.okhttp.tls)
