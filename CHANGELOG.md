@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `CheckoutSession.abortPayment()` — aborts only the in-flight payment: committed steps are reversed like `abort()`, but the session settles in `FAILED` (basket intact, `pay()` may retry) instead of sealing in the terminal `ABORTED` state. A pending `abort()` is never downgraded; terminal-initiated aborts keep the existing `ABORTED` semantics.
 - `identifyMember()` is now allowed on a `FAILED` session, so a declined guest payment can attach a member and retry with loyalty enabled (previously the retry could only run as a guest — identification was rejected until a basket edit resumed the checkout).
 - `PaymentOptions.disableAward` — skips the loyalty award step of the payment sequence, mirroring `disableRebates`/`disablePoints`. Previously the award ran unconditionally whenever a member was identified; combining all three now yields a fully loyalty-free payment for an identified member.
 - Emulator: payment. The basket card gains Rebates/Redemption/Award checkboxes and a Pay button wired through `CheckoutSession.pay()`; enabling any loyalty step with no member attached runs the terminal identification prompt first (a declined or not-found lookup degrades to a guest checkout). Step results, promotion messages, and award warnings stream into the event feed; one payment per session, and starting a session clears the customer display with an empty basket so the previous checkout's receipt doesn't linger.
@@ -19,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (breaking)
 
+- `SessionState.ABORTED` is removed and `abort()` is now operation-scoped: it interrupts the in-flight operation and the session continues — an abort is a register maneuver (cancel a prompt, stop a tender to take a gift card), not an abandonment. An aborted payment unwinds and settles in `FAILED` (basket intact, `pay()` retryable; the error still carries the `ABORTED` code), aborted prompts deliver their aborted/cancelled outcome with the state unchanged, and `abort()` with nothing in flight is a no-op. Abandoning a checkout is `end()`. Terminal-initiated payment aborts likewise settle in `FAILED`.
 - `CheckoutSession.Builder.build()` is replaced by `start()`, which returns a lazy `SessionResult<CheckoutSession>` — finish with `execute()`/`get()`/`getOrNull()` like every other session operation. An unstarted session can no longer exist.
 
 - Terminal emulator scaffold (`:emulator`) — a Compose Multiplatform app (Android + desktop from one shared UI) that will drive a terminal through `CheckoutSession`, replacing the Python/tkinter nexo emulator. Run the desktop app with `./gradlew :emulator:desktop:run`; the Android app is `:emulator:android`. UI is a placeholder shell for now.

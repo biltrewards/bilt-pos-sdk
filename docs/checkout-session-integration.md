@@ -29,7 +29,7 @@ A few principles explain most of the behavior:
 - **Terminal operations are lazy.** Methods returning a `SessionResult` or `PaymentFlow` send nothing until you call `.execute()`, `.get()`, or `.getOrNull()`. Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
 - **Cart-building is local + auto-display.** `addItem` / `removeItem` / `updateItemQuantity` update the local basket and (with `autoDisplay=true`, the default) push a `DisplayRequest` to the terminal. The terminal may independently evaluate offers while items are scanned, but those offers are **only committed during `pay()`**.
 - **`pay()` is a fixed orchestration sequence,** with a blocking callback after each loyalty/stored-value step so the register can update its own model and recompute tax, then return the total that feeds the next step. The shape is fixed, but steps are conditional: loyalty (rebates + points) runs only for identified members and can be disabled via `PaymentOptions`, the stored-value step only runs when a gift card has been registered with `setStoredValueCard`, and card payment runs whenever an amount remains.
-- **Errors and aborts roll back cleanly.** If a step fails or `abort()` is called mid-sequence, everything already committed (rebates, points, stored value) is reversed in the opposite order before the session moves to `FAILED` / `ABORTED`.
+- **Errors and aborts roll back cleanly.** If a step fails or `abort()` is called mid-sequence, everything already committed (rebates, points, stored value) is reversed in the opposite order before the session moves to `FAILED` — basket intact, `pay()` retryable. An abort is a register maneuver, not an abandonment; `end()` abandons the checkout.
 
 ### Built-in loyalty handling
 
@@ -102,7 +102,7 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 | `onSuccess` | No-op (the result is still available via `.get()`). |
 | `onError` | `PaymentOptions.voidAndAbort()` — roll back and fail the payment. |
 
-**Abort / error rollback.** If `abort()` fires mid-sequence (e.g. after rebates committed but before card payment), the session reverses everything committed so far — rebate refunds, redemption refunds, stored-value reversals — before moving to `ABORTED`. If one of those reversals fails, the session settles in `FAILED` instead, so `voidTransaction()` can finish the unwind. `abort()` is safe to call from any thread. Read-only prompts that complete after an abort are discarded, but a money-moving operation (refund, stored value) racing the abort always delivers its outcome — the movement may have completed on the terminal, and the register must know. On error the `PaymentOptions` returned by `onError` decides what happens next:
+**Abort / error rollback.** `abort()` is operation-scoped: it interrupts the in-flight operation and the session continues. If it fires mid-payment (e.g. after rebates committed but before card payment), the session reverses everything committed so far — rebate refunds, redemption refunds, stored-value reversals — and settles in `FAILED` with the basket intact, so `pay()` can retry (the thrown error carries the `ABORTED` code); if a reversal fails, `voidTransaction()` finishes the unwind. Aborted prompts (input, PIN, identification) deliver their aborted/cancelled outcome and leave the state unchanged; with nothing in flight `abort()` is a no-op. `abort()` is safe to call from any thread. An operation that completes on the terminal despite a racing abort always delivers its outcome — a prompt was genuinely answered, money may have genuinely moved, and the register must know. On error the `PaymentOptions` returned by `onError` decides what happens next:
 
 - `PaymentOptions.voidAndAbort()` (the default) — roll back committed steps in reverse order and fail; the session moves to `FAILED`, from which `pay()` can be retried. If the rollback itself was incomplete, a retried `pay()` first finishes the standing reversals — and refuses to start if one still cannot go through.
 - `PaymentOptions.retryWithoutLoyalty()` — roll back the loyalty steps and restart the sequence with rebates and points disabled.
@@ -118,7 +118,7 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 IDLE → IDENTIFIED → ACTIVE → PAYING → COMPLETED
                        ↑         ↓        ↓
                        └────── FAILED → VOIDING → VOIDED
-abort() → ABORTED (from any non-terminal state)
+abort() interrupts the in-flight operation only (an aborted payment → FAILED)
 end()   → ENDED   (from any state except PAYING/VOIDING)
 ```
 
@@ -126,10 +126,10 @@ Notes:
 
 - `identifyMember()` can be called from `IDLE` or `ACTIVE`. Called from `ACTIVE`, the terminal re-evaluates offers with member context. Identification is optional — the customer can identify themselves on the terminal, and they can always opt out.
 - Removing all items from `ACTIVE` returns to `IDLE` (or `IDENTIFIED` if a member was explicitly identified).
-- From `FAILED` the register can retry `pay()` directly, keep editing the basket (back to `ACTIVE`), or `voidTransaction()`. While a failed payment's rollback is incomplete, edits keep the session in `FAILED` and `abort()` first reverses the standing movements — both preserve the path to finish the unwind.
+- From `FAILED` the register can retry `pay()` directly, keep editing the basket (back to `ACTIVE`), identify a member, or `voidTransaction()`. While a failed payment's rollback is incomplete, edits keep the session in `FAILED` — preserving the path to finish the unwind.
 - `voidTransaction()` runs from `COMPLETED` (or `FAILED`); if the void itself fails, the session is restored to its pre-void state so it can be retried.
-- `COMPLETED`, `VOIDED`, `ABORTED`, and `ENDED` are terminal. `getState()` reports the current `SessionState`; the basket is frozen while `PAYING`.
-- `ENDED` is the strictest terminal state: `COMPLETED`/`ABORTED`/`VOIDED` still allow the wrap-up operations that reference the settled transaction (void, refund, receipt reprint, diagnostics), but after `end()` nothing runs at all — the terminal has discarded the session.
+- `COMPLETED`, `VOIDED`, and `ENDED` are terminal. `getState()` reports the current `SessionState`; the basket is frozen while `PAYING`.
+- `ENDED` is the strictest terminal state: `COMPLETED`/`VOIDED` still allow the wrap-up operations that reference the settled transaction (void, refund, receipt reprint, diagnostics), but after `end()` nothing runs at all — the terminal has discarded the session.
 
 ---
 

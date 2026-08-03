@@ -126,9 +126,10 @@ class CheckoutSessionBasketTest {
     }
 
     @Test
-    void basketOpsAreRejectedAfterAbort() throws Exception {
+    void basketOpsAreRejectedAfterEnd() throws Exception {
         CheckoutSession session = start(sessionBuilder().autoDisplay(false));
-        session.abort();
+        // the catch-all dispatcher answers the end() Admin exchange
+        session.end().get();
 
         assertThrows(IllegalStateException.class,
                 () -> session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00")));

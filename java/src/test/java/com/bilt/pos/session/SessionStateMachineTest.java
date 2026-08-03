@@ -60,11 +60,12 @@ class SessionStateMachineTest {
 
     @Test
     void settledStatesAllowOnlyEnd() {
-        SessionStateMachine aborted = new SessionStateMachine();
-        aborted.transitionTo(ABORTED);
+        SessionStateMachine voided = new SessionStateMachine();
+        voided.transitionTo(VOIDING);
+        voided.transitionTo(VOIDED);
         for (SessionState target : SessionState.values()) {
-            assertEquals(target == ENDED, aborted.canTransitionTo(target),
-                    "ABORTED -> " + target);
+            assertEquals(target == ENDED, voided.canTransitionTo(target),
+                    "VOIDED -> " + target);
         }
     }
 
@@ -123,7 +124,6 @@ class SessionStateMachineTest {
     @Test
     void isTerminalMatchesTable() {
         assertTrue(COMPLETED.isTerminal());
-        assertTrue(ABORTED.isTerminal());
         assertTrue(VOIDED.isTerminal());
         assertTrue(ENDED.isTerminal());
         assertFalse(IDLE.isTerminal());

@@ -80,7 +80,7 @@ class CheckoutSessionIdentityTest {
     // ─── Terminal-prompted identification ───
 
     @Test
-    void identifyOutcomeArrivingAfterAbortIsDiscarded() throws Exception {
+    void identifyOutcomeArrivingAfterAbortIsStillDelivered() throws Exception {
         String found =
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
                         + "\"Response\":{\"Result\":\"Success\"},"
@@ -93,7 +93,7 @@ class CheckoutSessionIdentityTest {
             public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
                 if (request.getBody().readUtf8().contains("CardAcquisitionRequest")) {
                     identifyOnTheWire.countDown();
-                    // hold the FOUND response until abort() has ended the session
+                    // hold the FOUND response until abort() has fired
                     aborted.await(5, TimeUnit.SECONDS);
                     return new MockResponse().setBody(found);
                 }
@@ -118,11 +118,15 @@ class CheckoutSessionIdentityTest {
         register.join(5_000);
         assertFalse(register.isAlive());
 
-        assertNull(delivered.get(), "onSuccess must not fire on an aborted session");
-        assertNotNull(failure.get());
-        assertEquals(SessionErrorCode.ABORTED, failure.get().getError().getCode());
-        assertNull(session.getMember(), "no member may attach to an ended session");
-        assertEquals(SessionState.ABORTED, session.getState());
+        // abort is operation-scoped and the terminal answered FOUND before
+        // processing it: the outcome is real and is delivered — the
+        // checkout continues with the member attached
+        assertNull(failure.get());
+        assertNotNull(delivered.get());
+        assertEquals(IdentifyStatus.FOUND, delivered.get().getStatus());
+        assertNotNull(session.getMember());
+        assertEquals(SessionState.IDENTIFIED, session.getState(),
+                "abort does not end the session; the checkout continues");
     }
 
     @Test
