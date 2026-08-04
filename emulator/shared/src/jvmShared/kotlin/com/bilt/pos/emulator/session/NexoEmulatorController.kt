@@ -514,7 +514,12 @@ class NexoEmulatorController(
                     }
                     null
                 }
-                if (result != null) {
+                // Today a non-null result IS a success (the orchestrator's
+                // only return site follows the last step; failures throw),
+                // so the isSuccess guard is defense in depth against the SDK
+                // ever returning a failed result — a declined attempt must
+                // not enter the store as a refundable sale.
+                if (result != null && result.isSuccess) {
                     // The terminal charged the customer, so the sale is
                     // recorded even when a disconnect cancelled this job
                     // mid-call (cancellation can't stop the blocking SDK
