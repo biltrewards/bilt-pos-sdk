@@ -1,0 +1,109 @@
+package com.bilt.pos.emulator.store
+
+import kotlinx.serialization.Serializable
+
+/**
+ * One movement the terminal committed as part of a sale. A payment is not a
+ * single transaction: a split tender has a card and a stored value leg, and
+ * the loyalty steps (award, rebate, redemption) each carry their own POI
+ * transaction reference — the reference a later referenced refund/void of
+ * that movement must present.
+ */
+enum class LegType { CARD, STORED_VALUE, AWARD, REBATE, REDEMPTION }
+
+@Serializable
+data class TransactionLeg(
+    val type: LegType,
+    val poiTransactionId: String,
+    /** ISO-8601 timestamp the terminal reported for this movement. */
+    val poiTimestamp: String? = null,
+    /** Monetary amount of the movement as a plain decimal string. */
+    val amount: String? = null,
+    val approvalCode: String? = null,
+    val acquirerTransactionId: String? = null,
+    val brand: String? = null,
+    /** The rewardRefs the redemption carried; a referenced redemption
+     *  reversal must replay the same refs. Unset until the SDK exposes them
+     *  on CheckoutResult. */
+    val rewardRefs: List<String>? = null,
+)
+
+@Serializable
+data class SaleItem(
+    val sku: String,
+    val description: String,
+    val category: String? = null,
+    val quantity: Int,
+    val unitPrice: String,
+    val taxRate: String? = null,
+    /** Line total after rebates/discounts, as a plain decimal string. */
+    val lineTotal: String,
+)
+
+/**
+ * A completed sale with everything a later referenced refund or void needs:
+ * the cart contents, the totals, the member, and every committed movement's
+ * POI transaction reference.
+ */
+@Serializable
+data class SaleRecord(
+    /** Emulator-local identifier, unrelated to any terminal reference. */
+    val id: String,
+    val sessionId: String,
+    val saleId: String,
+    val poiId: String,
+    val currency: String,
+    /** ISO-8601 instant the sale was recorded. */
+    val completedAt: String,
+    /** Loyalty account of the identified member; referenced loyalty
+     *  reversals send it in LoyaltyData. Null for a guest checkout. */
+    val memberId: String? = null,
+    val items: List<SaleItem> = emptyList(),
+    val authorizedAmount: String,
+    val cardAmountCharged: String = "0.00",
+    val storedValueAmountUsed: String = "0.00",
+    val totalRebateAmount: String = "0.00",
+    val pointsRedeemed: Int = 0,
+    val pointsMonetaryValue: String = "0.00",
+    val totalPointsEarned: Int = 0,
+    val legs: List<TransactionLeg> = emptyList(),
+) {
+    fun leg(type: LegType): TransactionLeg? = legs.firstOrNull { it.type == type }
+}
+
+/** A refund issued against a stored sale. */
+@Serializable
+data class RefundRecord(
+    /** Amount returned, or null when the terminal did not echo it. */
+    val amount: String? = null,
+    /** Terminal reference of the refund itself. */
+    val poiTransactionId: String? = null,
+    val poiTimestamp: String? = null,
+    val recordedAt: String,
+)
+
+/** A void issued against a stored sale. */
+@Serializable
+data class VoidRecord(
+    /** Terminal reference of the reversal. */
+    val poiTransactionId: String? = null,
+    val poiTimestamp: String? = null,
+    val recordedAt: String,
+)
+
+/**
+ * A sale folded together with the refunds and void recorded against it —
+ * the view refund/void flows consult before going to the terminal. The SDK's
+ * "no void after a refund" guard is per-session; across sessions this
+ * history is the source of truth.
+ */
+data class StoredSale(
+    val sale: SaleRecord,
+    val refunds: List<RefundRecord> = emptyList(),
+    val voided: VoidRecord? = null,
+) {
+    /** A void must not run on a voided or already partially refunded sale. */
+    val voidable: Boolean get() = voided == null && refunds.isEmpty()
+
+    val refundable: Boolean get() = voided == null
+}

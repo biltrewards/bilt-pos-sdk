@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose.multiplatform)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
@@ -41,6 +42,8 @@ kotlin {
             dependsOn(commonMain.get())
             dependencies {
                 api(projects.java)
+                // sale store persistence (JSONL)
+                implementation(libs.kotlinx.serialization.json)
             }
         }
         androidMain.get().dependsOn(jvmShared)

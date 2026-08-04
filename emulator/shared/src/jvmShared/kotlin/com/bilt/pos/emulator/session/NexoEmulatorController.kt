@@ -1,6 +1,8 @@
 package com.bilt.pos.emulator.session
 
 import com.bilt.pos.emulator.catalog.Product
+import com.bilt.pos.emulator.store.SaleStore
+import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient
 import com.bilt.pos.nexo.model.DiagnosisRequest
 import com.bilt.pos.nexo.model.MessageCategoryType
@@ -68,6 +70,9 @@ class NexoEmulatorController(
     private val scope: CoroutineScope,
     private val config: EmulatorConfig = EmulatorConfig.load(),
     private val diagnosticsInterval: Duration = 60.seconds,
+    /** Persists completed sales for later referenced refunds/voids;
+     *  null disables persistence (tests). */
+    private val saleStore: SaleStore? = null,
 ) : EmulatorController {
 
     private class Connection(
@@ -512,6 +517,10 @@ class NexoEmulatorController(
                 }
                 if (result != null && isActive) {
                     publishPaymentResult(result)
+                    // Persist before the session ends: end() clears the
+                    // member the record captures, and a failed end must not
+                    // cost the sale its refund/void references
+                    persistSale(session, result)
                     // The checkout is collected in full (pay() completes
                     // only then) — end the session for the operator. The
                     // basket clears like any other end; the payment summary
@@ -619,6 +628,29 @@ class NexoEmulatorController(
             }
         } catch (e: Exception) {
             log("Member identification failed: ${e.message} — continuing as guest")
+            detailedLog(e.stackTraceToString())
+        }
+    }
+
+    /**
+     * Stores the completed sale with every transaction leg's POI reference,
+     * so referenced refunds/voids can run after the session is gone.
+     * Best-effort: a storage failure must never fail the checkout.
+     */
+    private fun persistSale(session: CheckoutSession, result: CheckoutResult) {
+        val store = saleStore ?: return
+        try {
+            val record = result.toSaleRecord(
+                sessionId = session.sessionId,
+                saleId = config.saleId,
+                poiId = config.poiId,
+                currency = config.currency,
+                memberId = session.member?.memberId,
+            )
+            store.recordSale(record)
+            log("Sale stored (${record.legs.size} transaction leg(s), id ${record.id})")
+        } catch (e: Exception) {
+            log("Failed to store the sale: ${e.message}")
             detailedLog(e.stackTraceToString())
         }
     }

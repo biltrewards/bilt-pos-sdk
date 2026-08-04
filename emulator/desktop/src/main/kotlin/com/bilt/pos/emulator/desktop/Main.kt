@@ -7,13 +7,20 @@ import androidx.compose.ui.window.rememberWindowState
 import com.bilt.pos.emulator.EmulatorApp
 import com.bilt.pos.emulator.catalog.MockProductProvider
 import com.bilt.pos.emulator.session.NexoEmulatorController
+import com.bilt.pos.emulator.store.JsonlSaleStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import java.io.File
 
 fun main() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val controller = NexoEmulatorController(scope)
+    val controller = NexoEmulatorController(
+        scope = scope,
+        saleStore = JsonlSaleStore(
+            File(System.getProperty("user.home"), ".bilt-pos-emulator/sales.jsonl")
+        ),
+    )
     controller.autodetectAddress()
 
     application {
