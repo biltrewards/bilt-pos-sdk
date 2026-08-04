@@ -1,6 +1,8 @@
 package com.bilt.pos.emulator.session
 
 import com.bilt.pos.emulator.catalog.Product
+import com.bilt.pos.emulator.store.SaleStore
+import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient
 import com.bilt.pos.nexo.model.DiagnosisRequest
 import com.bilt.pos.nexo.model.MessageCategoryType
@@ -68,6 +70,8 @@ class NexoEmulatorController(
     private val scope: CoroutineScope,
     private val config: EmulatorConfig = EmulatorConfig.load(),
     private val diagnosticsInterval: Duration = 60.seconds,
+    /** Persists completed sales for later referenced refunds/voids. */
+    private val saleStore: SaleStore,
 ) : EmulatorController {
 
     private class Connection(
@@ -510,6 +514,24 @@ class NexoEmulatorController(
                     }
                     null
                 }
+                // Today a non-null result IS a success (the orchestrator's
+                // only return site follows the last step; failures throw),
+                // so the isSuccess guard is defense in depth against the SDK
+                // ever returning a failed result — a declined attempt must
+                // not enter the store as a refundable sale.
+                if (result != null && result.isSuccess) {
+                    // The terminal charged the customer, so the sale is
+                    // recorded even when a disconnect cancelled this job
+                    // mid-call (cancellation can't stop the blocking SDK
+                    // call, and the charge stands) — deliberately NOT gated
+                    // on isActive like the UI updates below: a charged
+                    // transaction without its stored references could never
+                    // be refunded or voided later. Before the session ends
+                    // for the same reason: end() clears the member the
+                    // record captures, and a failed end must not cost the
+                    // sale its references either.
+                    persistSale(session, result)
+                }
                 if (result != null && isActive) {
                     publishPaymentResult(result)
                     // The checkout is collected in full (pay() completes
@@ -619,6 +641,30 @@ class NexoEmulatorController(
             }
         } catch (e: Exception) {
             log("Member identification failed: ${e.message} — continuing as guest")
+            detailedLog(e.stackTraceToString())
+        }
+    }
+
+    /**
+     * Stores the completed sale with every transaction leg's POI reference,
+     * so referenced refunds/voids can run after the session is gone.
+     * Best-effort: a storage failure must never fail the checkout.
+     */
+    private fun persistSale(session: CheckoutSession, result: CheckoutResult) {
+        try {
+            val record = result.toSaleRecord(
+                sessionId = session.sessionId,
+                saleId = config.saleId,
+                poiId = config.poiId,
+                currency = config.currency,
+                memberId = session.member?.memberId,
+                recordId = UUID.randomUUID().toString(),
+                completedAt = java.time.Instant.now(),
+            )
+            saleStore.recordSale(record)
+            log("Sale stored (${record.legs.size} transaction leg(s), id ${record.id})")
+        } catch (e: Exception) {
+            log("Failed to store the sale: ${e.message}")
             detailedLog(e.stackTraceToString())
         }
     }
