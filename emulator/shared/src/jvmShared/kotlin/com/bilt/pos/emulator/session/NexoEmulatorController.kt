@@ -514,12 +514,21 @@ class NexoEmulatorController(
                     }
                     null
                 }
+                if (result != null) {
+                    // The terminal charged the customer, so the sale is
+                    // recorded even when a disconnect cancelled this job
+                    // mid-call (cancellation can't stop the blocking SDK
+                    // call, and the charge stands) — deliberately NOT gated
+                    // on isActive like the UI updates below: a charged
+                    // transaction without its stored references could never
+                    // be refunded or voided later. Before the session ends
+                    // for the same reason: end() clears the member the
+                    // record captures, and a failed end must not cost the
+                    // sale its references either.
+                    persistSale(session, result)
+                }
                 if (result != null && isActive) {
                     publishPaymentResult(result)
-                    // Persist before the session ends: end() clears the
-                    // member the record captures, and a failed end must not
-                    // cost the sale its refund/void references
-                    persistSale(session, result)
                     // The checkout is collected in full (pay() completes
                     // only then) — end the session for the operator. The
                     // basket clears like any other end; the payment summary
