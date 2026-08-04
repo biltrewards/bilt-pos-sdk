@@ -40,7 +40,6 @@ class JsonlSaleStoreTest {
             )
         ),
         authorizedAmount = "2.10",
-        cardAmountCharged = "2.10",
         legs = legs,
     )
 

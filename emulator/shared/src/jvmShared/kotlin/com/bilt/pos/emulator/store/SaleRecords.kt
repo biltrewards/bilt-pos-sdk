@@ -3,13 +3,15 @@ package com.bilt.pos.emulator.store
 import com.bilt.pos.session.payment.CheckoutResult
 import java.math.BigDecimal
 import java.time.Instant
-import java.util.UUID
 
 /**
  * Flattens a completed payment into a [SaleRecord]: only the legs the
  * terminal actually committed are recorded (a rewards-only checkout may have
  * no CARD leg at all), each with the POI reference a later referenced
  * refund/void of that movement must present.
+ *
+ * A pure projection — [recordId] and [completedAt] belong to the act of
+ * persisting, so the caller supplies them.
  */
 fun CheckoutResult.toSaleRecord(
     sessionId: String,
@@ -17,8 +19,8 @@ fun CheckoutResult.toSaleRecord(
     poiId: String,
     currency: String,
     memberId: String?,
-    recordId: String = UUID.randomUUID().toString(),
-    completedAt: Instant = Instant.now(),
+    recordId: String,
+    completedAt: Instant,
 ): SaleRecord {
     // A gift-card-only checkout has no card step: the SDK copies the stored
     // value payment's reference into poiTransactionId so a same-session
@@ -28,13 +30,18 @@ fun CheckoutResult.toSaleRecord(
     val storedValueIsPrimary = poiTransactionId != null
         && poiTransactionId == storedValuePoiTransactionId
     val legs = buildList {
+        fun loyaltyLeg(type: LegType, id: String?, timestamp: Instant?, amount: BigDecimal?) {
+            if (id != null) {
+                add(TransactionLeg(type, id, timestamp?.toString(), amount?.toPlainString()))
+            }
+        }
         if (!storedValueIsPrimary) {
             poiTransactionId?.let {
                 add(TransactionLeg(
                     type = LegType.CARD,
                     poiTransactionId = it,
                     poiTimestamp = poiTransactionTimestamp?.toString(),
-                    amount = cardAmountCharged?.plain(),
+                    amount = cardAmountCharged.toPlainString(),
                     approvalCode = approvalCode,
                     acquirerTransactionId = acquirerTransactionId,
                     brand = paymentBrand,
@@ -49,36 +56,18 @@ fun CheckoutResult.toSaleRecord(
                 type = LegType.STORED_VALUE,
                 poiTransactionId = it,
                 poiTimestamp = storedValuePoiTransactionTimestamp?.toString(),
-                amount = storedValueAmountUsed?.plain(),
+                amount = storedValueAmountUsed.toPlainString(),
                 approvalCode = if (storedValueIsPrimary) approvalCode else null,
                 acquirerTransactionId = if (storedValueIsPrimary) acquirerTransactionId else null,
             ))
         }
-        awardPoiTransactionId?.let {
-            add(TransactionLeg(
-                type = LegType.AWARD,
-                poiTransactionId = it,
-                poiTimestamp = awardPoiTransactionTimestamp?.toString(),
-            ))
-        }
-        rebatePoiTransactionId?.let {
-            add(TransactionLeg(
-                type = LegType.REBATE,
-                poiTransactionId = it,
-                poiTimestamp = rebatePoiTransactionTimestamp?.toString(),
-                amount = totalRebateAmount?.plain(),
-            ))
-        }
-        redemptionPoiTransactionId?.let {
-            // rewardRefs stay unset until CheckoutResult exposes the refs the
-            // redemption sent (SDK referenced-reversal work)
-            add(TransactionLeg(
-                type = LegType.REDEMPTION,
-                poiTransactionId = it,
-                poiTimestamp = redemptionPoiTransactionTimestamp?.toString(),
-                amount = pointsMonetaryValue?.plain(),
-            ))
-        }
+        loyaltyLeg(LegType.AWARD, awardPoiTransactionId, awardPoiTransactionTimestamp, null)
+        loyaltyLeg(LegType.REBATE, rebatePoiTransactionId, rebatePoiTransactionTimestamp,
+            totalRebateAmount)
+        // rewardRefs stay unset until CheckoutResult exposes the refs the
+        // redemption sent (SDK referenced-reversal work)
+        loyaltyLeg(LegType.REDEMPTION, redemptionPoiTransactionId,
+            redemptionPoiTransactionTimestamp, pointsMonetaryValue)
     }
     val items = finalBasket?.items.orEmpty().map { line ->
         SaleItem(
@@ -86,9 +75,9 @@ fun CheckoutResult.toSaleRecord(
             description = line.description,
             category = line.category,
             quantity = line.quantity,
-            unitPrice = line.unitPrice?.plain() ?: "0.00",
-            taxRate = line.taxRate?.plain(),
-            lineTotal = line.adjustedTotal?.plain() ?: "0.00",
+            unitPrice = line.unitPrice?.toPlainString() ?: "0.00",
+            taxRate = line.taxRate?.toPlainString(),
+            lineTotal = line.adjustedTotal?.toPlainString() ?: "0.00",
         )
     }
     return SaleRecord(
@@ -100,15 +89,9 @@ fun CheckoutResult.toSaleRecord(
         completedAt = completedAt.toString(),
         memberId = memberId,
         items = items,
-        authorizedAmount = authorizedAmount?.plain() ?: "0.00",
-        cardAmountCharged = cardAmountCharged?.plain() ?: "0.00",
-        storedValueAmountUsed = storedValueAmountUsed?.plain() ?: "0.00",
-        totalRebateAmount = totalRebateAmount?.plain() ?: "0.00",
+        authorizedAmount = authorizedAmount.toPlainString(),
         pointsRedeemed = pointsRedeemed,
-        pointsMonetaryValue = pointsMonetaryValue?.plain() ?: "0.00",
         totalPointsEarned = totalPointsEarned,
         legs = legs,
     )
 }
-
-private fun BigDecimal.plain(): String = toPlainString()

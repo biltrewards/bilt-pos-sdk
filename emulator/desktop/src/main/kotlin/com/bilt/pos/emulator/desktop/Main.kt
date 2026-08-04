@@ -17,8 +17,8 @@ fun main() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val controller = NexoEmulatorController(
         scope = scope,
-        saleStore = JsonlSaleStore(
-            File(System.getProperty("user.home"), ".bilt-pos-emulator/sales.jsonl")
+        saleStore = JsonlSaleStore.inDirectory(
+            File(System.getProperty("user.home"), ".bilt-pos-emulator")
         ),
     )
     controller.autodetectAddress()

@@ -13,6 +13,13 @@ import java.io.File
  */
 class JsonlSaleStore(private val file: File) : SaleStore {
 
+    companion object {
+        /** The store's file within a platform's data directory, so the two
+         *  entry points don't each restate the layout. */
+        fun inDirectory(dataDir: File): JsonlSaleStore =
+            JsonlSaleStore(File(dataDir, "sales.jsonl"))
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
 
     override fun recordSale(sale: SaleRecord) = append(SaleEvent.Sale(sale))
@@ -26,7 +33,7 @@ class JsonlSaleStore(private val file: File) : SaleStore {
     override fun findSale(saleId: String): StoredSale? = fold()[saleId]
 
     override fun listSales(limit: Int): List<StoredSale> =
-        fold().values.toList().takeLast(limit).asReversed()
+        fold().values.reversed().take(limit)
 
     private fun append(event: SaleEvent) {
         synchronized(this) {
@@ -53,15 +60,10 @@ class JsonlSaleStore(private val file: File) : SaleStore {
         return sales
     }
 
-    private fun readEvents(): List<SaleEvent> = synchronized(this) {
-        val lines = if (file.isFile) file.readLines() else return emptyList()
-        lines.mapNotNull { line ->
-            if (line.isBlank()) {
-                null
-            } else {
-                runCatching { json.decodeFromString(SaleEvent.serializer(), line) }.getOrNull()
-            }
-        }
+    private fun readEvents(): List<SaleEvent> {
+        if (!file.isFile) return emptyList()
+        return synchronized(this) { file.readLines() }
+            .mapNotNull { runCatching { json.decodeFromString(SaleEvent.serializer(), it) }.getOrNull() }
     }
 
     /** The on-disk line format; the discriminator is the default "type" field. */

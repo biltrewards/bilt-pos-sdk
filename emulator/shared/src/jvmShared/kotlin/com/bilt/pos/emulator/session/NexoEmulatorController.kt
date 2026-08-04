@@ -70,9 +70,8 @@ class NexoEmulatorController(
     private val scope: CoroutineScope,
     private val config: EmulatorConfig = EmulatorConfig.load(),
     private val diagnosticsInterval: Duration = 60.seconds,
-    /** Persists completed sales for later referenced refunds/voids;
-     *  null disables persistence (tests). */
-    private val saleStore: SaleStore? = null,
+    /** Persists completed sales for later referenced refunds/voids. */
+    private val saleStore: SaleStore,
 ) : EmulatorController {
 
     private class Connection(
@@ -638,7 +637,6 @@ class NexoEmulatorController(
      * Best-effort: a storage failure must never fail the checkout.
      */
     private fun persistSale(session: CheckoutSession, result: CheckoutResult) {
-        val store = saleStore ?: return
         try {
             val record = result.toSaleRecord(
                 sessionId = session.sessionId,
@@ -646,8 +644,10 @@ class NexoEmulatorController(
                 poiId = config.poiId,
                 currency = config.currency,
                 memberId = session.member?.memberId,
+                recordId = UUID.randomUUID().toString(),
+                completedAt = java.time.Instant.now(),
             )
-            store.recordSale(record)
+            saleStore.recordSale(record)
             log("Sale stored (${record.legs.size} transaction leg(s), id ${record.id})")
         } catch (e: Exception) {
             log("Failed to store the sale: ${e.message}")

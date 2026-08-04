@@ -107,9 +107,6 @@ class SaleRecordMapperTest {
         assertEquals(listOf(LegType.CARD), sale.legs.map { it.type })
         assertNull(sale.leg(LegType.AWARD))
         assertEquals(emptyList(), sale.items)
-        // CheckoutResult defaults untouched amounts to BigDecimal.ZERO,
-        // whose plain string is "0" — the record mirrors the SDK value
-        assertEquals("0", sale.storedValueAmountUsed)
     }
 
     @Test

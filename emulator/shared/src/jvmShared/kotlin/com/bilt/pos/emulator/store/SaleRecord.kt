@@ -8,6 +8,10 @@ import kotlinx.serialization.Serializable
  * the loyalty steps (award, rebate, redemption) each carry their own POI
  * transaction reference — the reference a later referenced refund/void of
  * that movement must present.
+ *
+ * Mirrors the SDK's `TransactionStep` one-to-one, but stays a separate enum:
+ * these names are the persisted on-disk format and must not shift with SDK
+ * internals (and a Java enum would need a hand-written serializer).
  */
 enum class LegType { CARD, STORED_VALUE, AWARD, REBATE, REDEMPTION }
 
@@ -59,12 +63,10 @@ data class SaleRecord(
      *  reversals send it in LoyaltyData. Null for a guest checkout. */
     val memberId: String? = null,
     val items: List<SaleItem> = emptyList(),
+    /** Total authorized across all tenders. Per-tender and per-loyalty
+     *  amounts live on the [legs] — the single source of each movement. */
     val authorizedAmount: String,
-    val cardAmountCharged: String = "0.00",
-    val storedValueAmountUsed: String = "0.00",
-    val totalRebateAmount: String = "0.00",
     val pointsRedeemed: Int = 0,
-    val pointsMonetaryValue: String = "0.00",
     val totalPointsEarned: Int = 0,
     val legs: List<TransactionLeg> = emptyList(),
 ) {

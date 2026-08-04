@@ -24,7 +24,7 @@ class EmulatorViewModel(application: Application) : AndroidViewModel(application
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val controller = NexoEmulatorController(
         scope = scope,
-        saleStore = JsonlSaleStore(File(application.filesDir, "sales.jsonl")),
+        saleStore = JsonlSaleStore.inDirectory(application.filesDir),
     )
 
     override fun onCleared() {
