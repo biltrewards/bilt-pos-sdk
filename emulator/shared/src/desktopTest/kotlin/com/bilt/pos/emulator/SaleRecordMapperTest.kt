@@ -113,6 +113,56 @@ class SaleRecordMapperTest {
     }
 
     @Test
+    fun giftCardOnlyCheckoutRecordsOneStoredValueLeg() {
+        // gift-card-only: the SDK copies the stored value payment's reference
+        // into poiTransactionId (no card step ran) — the mapper must not
+        // record that copy as a CARD leg on top of the STORED_VALUE leg
+        val result = CheckoutResult.builder()
+            .success(true)
+            .authorizedAmount(BigDecimal("8.00"))
+            .storedValueAmountUsed(BigDecimal("8.00"))
+            .approvalCode("SV-APPR")
+            .acquirerTransactionId("acq-sv")
+            .poiTransactionId("poi-sv").poiTransactionTimestamp(cardTime)
+            .storedValuePoiTransactionId("poi-sv")
+            .storedValuePoiTransactionTimestamp(cardTime)
+            .build()
+
+        val sale = record(result)
+
+        assertEquals(listOf(LegType.STORED_VALUE), sale.legs.map { it.type })
+        val leg = sale.leg(LegType.STORED_VALUE)!!
+        assertEquals("poi-sv", leg.poiTransactionId)
+        assertEquals("8.00", leg.amount)
+        // as the sole tender, the payment artifacts describe the gift card leg
+        assertEquals("SV-APPR", leg.approvalCode)
+        assertEquals("acq-sv", leg.acquirerTransactionId)
+    }
+
+    @Test
+    fun splitTenderKeepsPaymentArtifactsOnTheCardLeg() {
+        val result = CheckoutResult.builder()
+            .success(true)
+            .authorizedAmount(BigDecimal("10.00"))
+            .cardAmountCharged(BigDecimal("6.00"))
+            .storedValueAmountUsed(BigDecimal("4.00"))
+            .approvalCode("CARD-APPR")
+            .acquirerTransactionId("acq-card")
+            .poiTransactionId("poi-card").poiTransactionTimestamp(cardTime)
+            .storedValuePoiTransactionId("poi-sv")
+            .build()
+
+        val sale = record(result)
+
+        assertEquals(listOf(LegType.CARD, LegType.STORED_VALUE), sale.legs.map { it.type })
+        assertEquals("CARD-APPR", sale.leg(LegType.CARD)?.approvalCode)
+        // the result's artifacts belong to the card step; the stored value
+        // leg's own approval code was overwritten and must not be claimed
+        assertNull(sale.leg(LegType.STORED_VALUE)?.approvalCode)
+        assertNull(sale.leg(LegType.STORED_VALUE)?.acquirerTransactionId)
+    }
+
+    @Test
     fun loyaltyOnlyCheckoutHasNoTenderLegs() {
         val result = CheckoutResult.builder()
             .success(true)

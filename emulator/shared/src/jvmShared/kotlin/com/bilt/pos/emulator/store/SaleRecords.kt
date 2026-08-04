@@ -20,24 +20,38 @@ fun CheckoutResult.toSaleRecord(
     recordId: String = UUID.randomUUID().toString(),
     completedAt: Instant = Instant.now(),
 ): SaleRecord {
+    // A gift-card-only checkout has no card step: the SDK copies the stored
+    // value payment's reference into poiTransactionId so a same-session
+    // void/refund can target the one committed transaction. Only a reference
+    // distinct from the stored value leg's is a real card payment — mapping
+    // the copy as a CARD leg would record the same transaction twice.
+    val storedValueIsPrimary = poiTransactionId != null
+        && poiTransactionId == storedValuePoiTransactionId
     val legs = buildList {
-        poiTransactionId?.let {
-            add(TransactionLeg(
-                type = LegType.CARD,
-                poiTransactionId = it,
-                poiTimestamp = poiTransactionTimestamp?.toString(),
-                amount = cardAmountCharged?.plain(),
-                approvalCode = approvalCode,
-                acquirerTransactionId = acquirerTransactionId,
-                brand = paymentBrand,
-            ))
+        if (!storedValueIsPrimary) {
+            poiTransactionId?.let {
+                add(TransactionLeg(
+                    type = LegType.CARD,
+                    poiTransactionId = it,
+                    poiTimestamp = poiTransactionTimestamp?.toString(),
+                    amount = cardAmountCharged?.plain(),
+                    approvalCode = approvalCode,
+                    acquirerTransactionId = acquirerTransactionId,
+                    brand = paymentBrand,
+                ))
+            }
         }
         storedValuePoiTransactionId?.let {
+            // as the sole tender, the result's payment artifacts (approval
+            // code, acquirer id) describe the gift card payment itself; in a
+            // split tender the card step overwrote them, so they stay off
             add(TransactionLeg(
                 type = LegType.STORED_VALUE,
                 poiTransactionId = it,
                 poiTimestamp = storedValuePoiTransactionTimestamp?.toString(),
                 amount = storedValueAmountUsed?.plain(),
+                approvalCode = if (storedValueIsPrimary) approvalCode else null,
+                acquirerTransactionId = if (storedValueIsPrimary) acquirerTransactionId else null,
             ))
         }
         awardPoiTransactionId?.let {
