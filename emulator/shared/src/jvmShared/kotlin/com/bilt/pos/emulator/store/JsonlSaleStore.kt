@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.RandomAccessFile
 
 /**
  * [SaleStore] backed by an append-only JSONL file: one JSON object per line,
@@ -38,7 +39,20 @@ class JsonlSaleStore(private val file: File) : SaleStore {
     private fun append(event: SaleEvent) {
         synchronized(this) {
             file.parentFile?.mkdirs()
-            file.appendText(json.encodeToString(SaleEvent.serializer(), event) + "\n")
+            // A crash can tear the final line mid-record, leaving no trailing
+            // newline; appending straight onto that wreckage would glue THIS
+            // record to the torn one and lose both on read. A leading newline
+            // isolates the torn fragment on its own (skipped) line.
+            val line = json.encodeToString(SaleEvent.serializer(), event) + "\n"
+            file.appendText(if (endsMidLine()) "\n$line" else line)
+        }
+    }
+
+    private fun endsMidLine(): Boolean {
+        if (!file.isFile || file.length() == 0L) return false
+        return RandomAccessFile(file, "r").use {
+            it.seek(it.length() - 1)
+            it.read() != '\n'.code
         }
     }
 
