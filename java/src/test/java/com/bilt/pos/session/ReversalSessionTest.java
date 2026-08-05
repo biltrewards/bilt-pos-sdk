@@ -538,6 +538,45 @@ class ReversalSessionTest {
     }
 
     @Test
+    void loyaltyOnlyVoidIsStrictAboutTheAwardToo() throws Exception {
+        ReversalSession session = start(sessionBuilder()
+                .redemptionPoiTransactionId(REDEMPTION_POI_TXN)
+                .redemptionPoiTransactionTimestamp(REDEMPTION_TS)
+                .rebatePoiTransactionId(REBATE_POI_TXN)
+                .rebatePoiTransactionTimestamp(REBATE_TS)
+                .awardPoiTransactionId(AWARD_POI_TXN));
+
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));       // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));       // rebate refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // award refund
+
+        SessionException failure = assertThrows(SessionException.class,
+                () -> session.voidTransaction().get());
+        assertTrue(failure.getError().getMessage().contains(AWARD_POI_TXN),
+                "with no money leg the loyalty movements are the substance of the "
+                        + "void — a standing award must fail it loudly: "
+                        + failure.getError().getMessage());
+        assertTrue(failure.getError().getMessage().contains(REDEMPTION_POI_TXN),
+                "the error must say what was already reversed");
+        assertEquals(SessionState.IDLE, session.getState(),
+                "a failed void restores the pre-void state");
+        recordedRequest();  // the redemption refund
+        recordedRequest();  // the rebate refund
+        recordedRequest();  // the failed award refund
+
+        // the retry resumes at the award alone
+        server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
+
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+        SaleToPOIRequest awardRefund = recordedRequest();
+        assertEquals("AwardRefund", awardRefund.getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue(),
+                "the reversed redemption and rebate legs must not be re-credited");
+        assertEquals(5, server.getRequestCount());
+    }
+
+    @Test
     void rebateOnlyVoidRefundsTheRebate() throws Exception {
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // rebate refund
 

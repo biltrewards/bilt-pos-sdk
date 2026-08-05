@@ -117,7 +117,8 @@ public final class RefundManager {
                                Instant originalPoiTimestamp,
                                String awardPoiTxnId, Instant awardPoiTimestamp,
                                String memberId, StepDecider decider, Runnable onRefunded) {
-        StepDecider effective = decider != null ? decider : defaultPolicy(true, false);
+        // the tender refund anchors the flow, so the award is best-effort
+        StepDecider effective = decider != null ? decider : defaultPolicy(true);
         SessionException[] lastFailure = new SessionException[1];
 
         PaymentResponse body = runStep(ReversalStep.REFUND, effective,
@@ -236,9 +237,7 @@ public final class RefundManager {
             return VoidResult.builder().success(true).build();
         }
         StepDecider effective = decider != null ? decider : defaultPolicy(
-                movements.stream().anyMatch(movement -> isMoneyLeg(movement.getStep())),
-                movements.size() == 1
-                        && movements.get(0).getStep() == ReversalStep.AWARD);
+                movements.stream().anyMatch(movement -> isMoneyLeg(movement.getStep())));
         Map<ReversalStep, ReversalResponse> money = new EnumMap<>(ReversalStep.class);
         Map<ReversalStep, LoyaltyResponse> loyalty = new EnumMap<>(ReversalStep.class);
         List<ReversalMovement> reversed = new ArrayList<>();
@@ -355,18 +354,16 @@ public final class RefundManager {
     /**
      * The default decision policy, stated once beside the mechanism: money
      * legs abort; loyalty movements are best-effort when a money leg
-     * anchors the reversal, strict when they are its substance (the award
-     * only when it is the whole reversal — otherwise the terminal can
-     * retry it via store-and-forward).
+     * anchors the reversal (the terminal can retry them via
+     * store-and-forward), strict when they are its substance.
      */
-    private static StepDecider defaultPolicy(boolean moneyAnchored, boolean awardIsTheWhole) {
+    private static StepDecider defaultPolicy(boolean moneyAnchored) {
         return (step, error) -> {
             switch (step) {
                 case REDEMPTION:
                 case REBATE:
-                    return moneyAnchored ? ReversalDecision.SKIP : ReversalDecision.ABORT;
                 case AWARD:
-                    return awardIsTheWhole ? ReversalDecision.ABORT : ReversalDecision.SKIP;
+                    return moneyAnchored ? ReversalDecision.SKIP : ReversalDecision.ABORT;
                 default:  // CARD, STORED_VALUE, REFUND — the money moved
                     return ReversalDecision.ABORT;
             }
