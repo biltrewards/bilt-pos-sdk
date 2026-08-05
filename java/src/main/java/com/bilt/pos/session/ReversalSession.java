@@ -237,10 +237,14 @@ public final class ReversalSession implements AutoCloseable {
             throw invalidState(
                     "a linked refund requires poiTransactionId on the session builder");
         }
+        // the guard rises the moment money moves (the onRefunded callback),
+        // not when the flow returns: an ABORT on the award step after the
+        // tender refund completed must not leave the sale voidable on top
+        // of the refund
         RefundResult result = refundManager.refund(amount,
                 poiTransactionId, poiTransactionTimestamp,
                 awardPoiTransactionId, awardPoiTransactionTimestamp,
-                memberId, flow.decider());
+                memberId, flow.decider(), () -> refundIssued = true);
         refundIssued = true;
         return result;
     }

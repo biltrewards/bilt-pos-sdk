@@ -170,6 +170,28 @@ class ReversalSessionTest {
     }
 
     @Test
+    void abortedAwardReversalAfterTheTenderRefundStillRaisesTheVoidGuard() throws Exception {
+        server.enqueue(new MockResponse().setBody(REFUND_OK));               // money moved
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // award fails
+
+        ReversalSession session = cardSessionWithAward();
+        assertThrows(SessionException.class, () -> session.refund(new BigDecimal("24.99"))
+                .onError((step, error) -> ReversalDecision.ABORT)
+                .get());
+
+        // the refund flow aborted AFTER the tender refund completed: the
+        // money moved, so a void would return the full amount on top of it
+        SessionException e = assertThrows(SessionException.class,
+                () -> session.voidTransaction().get());
+        assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
+        assertTrue(e.getError().getMessage().contains("refund"),
+                "the error must steer the register to further refunds: "
+                        + e.getError().getMessage());
+        assertEquals(3, server.getRequestCount(),
+                "the rejected void must not reach the wire (start, refund, failed award)");
+    }
+
+    @Test
     void voidAfterRefundIsRejectedButFurtherRefundsWork() throws Exception {
         server.enqueue(new MockResponse().setBody(REFUND_OK));
         ReversalSession session = cardSession();

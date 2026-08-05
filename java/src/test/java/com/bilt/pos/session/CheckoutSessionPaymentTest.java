@@ -1809,7 +1809,6 @@ class CheckoutSessionPaymentTest {
                 "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
                         + "\"Response\":{\"Result\":\"Success\"},"
                         + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":25.00}}}}}"));
-        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));  // award refund
 
         RefundResult refund = session.refund(new BigDecimal("25.00")).get();
 
@@ -1819,6 +1818,35 @@ class CheckoutSessionPaymentTest {
         assertEquals("Refund", sent.getPaymentRequest().getPaymentData().getPaymentType().toValue());
         assertEquals("POI-PAY-1", sent.getPaymentRequest().getPaymentTransaction()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
+    void abortedAwardReversalAfterTheTenderRefundStillRaisesTheVoidGuard() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));  // POI-AW-1
+        session.pay(PaymentOptions.builder()
+                .disableRebates(true).disablePoints(true).build()).execute();
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(
+                CheckoutSessionTest.refundOk(25.00)));                       // money moved
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // award fails
+        assertThrows(SessionException.class, () -> session.refund(new BigDecimal("25.00"))
+                .onError((step, error) -> ReversalDecision.ABORT)
+                .get());
+        drainRequests();  // the tender refund and the failed award reversal
+
+        // the refund flow aborted AFTER the tender refund completed: the
+        // money moved, so a void would return the full amount on top of it
+        SessionException e = assertThrows(SessionException.class,
+                () -> session.voidTransaction().get());
+        assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
+        assertTrue(e.getError().getMessage().contains("refund"),
+                "the error must steer the register to further refunds: "
+                        + e.getError().getMessage());
+        assertEquals(0, drainRequests().size(), "the rejected void must not reach the wire");
     }
 
     @Test

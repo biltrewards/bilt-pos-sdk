@@ -107,11 +107,16 @@ public final class RefundManager {
      * @param decider          per-step failure resolution; {@code null}
      *                         for the default policy (tender aborts, award
      *                         is best-effort)
+     * @param onRefunded       invoked the moment the tender refund
+     *                         completes, before the award reversal — the
+     *                         caller's void guard must rise as soon as
+     *                         money moves, even if a later step aborts the
+     *                         flow
      */
     public RefundResult refund(BigDecimal amount, String originalPoiTxnId,
                                Instant originalPoiTimestamp,
                                String awardPoiTxnId, Instant awardPoiTimestamp,
-                               String memberId, StepDecider decider) {
+                               String memberId, StepDecider decider, Runnable onRefunded) {
         StepDecider effective = decider != null ? decider : defaultPolicy(true, false);
         SessionException[] lastFailure = new SessionException[1];
 
@@ -123,6 +128,9 @@ public final class RefundManager {
                             + "no money moved: " + e.getError());
                 },
                 e -> e);
+        if (body != null) {
+            onRefunded.run();
+        }
 
         LoyaltyReversal loyalty = NO_REVERSAL;
         boolean awardReversed = false;

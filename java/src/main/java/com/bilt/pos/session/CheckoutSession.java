@@ -1000,14 +1000,17 @@ public final class CheckoutSession implements AutoCloseable {
             throw invalidState("a linked refund requires a completed payment in this "
                     + "session; to refund a prior sale, use ReversalSession");
         }
+        // the guard rises the moment money moves (the onRefunded callback),
+        // not when the flow returns: an ABORT on the award step after the
+        // tender refund completed must not leave the payment voidable on
+        // top of the refund. It counts even when unlinked — through a
+        // checkout session it is almost certainly returning this
+        // checkout's money.
         RefundResult result = refundManager.refund(amount,
                 paid.poiTransactionId, paid.poiTransactionTimestamp,
                 paid.awardPoiTransactionId, paid.awardPoiTransactionTimestamp,
                 linked ? reversalMemberId() : null,
-                flow.decider());
-        // counts against the void guard even when unlinked: through a
-        // checkout session it is almost certainly returning this
-        // checkout's money
+                flow.decider(), () -> refundIssued = true);
         refundIssued = true;
         return result;
     }
