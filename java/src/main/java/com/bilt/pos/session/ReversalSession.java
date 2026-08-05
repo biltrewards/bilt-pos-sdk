@@ -213,7 +213,8 @@ public final class ReversalSession implements AutoCloseable {
      * including its rebate and redemption. Repeated partial refunds are
      * allowed (the acquirer enforces the cumulative limit), but once any
      * refund has been issued from this session the sale can no longer be
-     * voided from it.</p>
+     * voided from it — and once a void has partially reversed the sale,
+     * refunds are refused until the void is finished.</p>
      */
     public ReversalFlow<RefundResult> refund() {
         operations.track("refund");
@@ -233,6 +234,13 @@ public final class ReversalSession implements AutoCloseable {
     private RefundResult executeRefund(ReversalFlow<RefundResult> flow, BigDecimal amount) {
         operations.begin("refund");
         requireState(EnumSet.of(SessionState.IDLE), "refund");
+        if (!voidStepsReversed.isEmpty()) {
+            // the card leg may be among the reversed movements — a refund
+            // against it would double-return the money
+            throw invalidState("a void of this sale is partially complete; finish "
+                    + "it with voidTransaction() — a refund cannot mix with a "
+                    + "half-reversed sale");
+        }
         if (poiTransactionId == null) {
             throw invalidState(
                     "a linked refund requires poiTransactionId on the session builder");

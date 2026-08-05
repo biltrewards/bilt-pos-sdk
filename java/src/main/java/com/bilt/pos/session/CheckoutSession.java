@@ -961,8 +961,10 @@ public final class CheckoutSession implements AutoCloseable {
      * reverse both legs, or the stored value operations to return funds to
      * the gift card. A refund reverses the card leg and award only; the
      * sale's committed rebate and redemption movements are reversed by
-     * {@link #voidTransaction()}. To refund a sale taken by an earlier,
-     * gone session, use {@link ReversalSession}.</p>
+     * {@link #voidTransaction()}. Once a void has partially reversed the
+     * payment, refunds are refused until the void is finished. To refund a
+     * sale taken by an earlier, gone session, use
+     * {@link ReversalSession}.</p>
      */
     public ReversalFlow<RefundResult> refund() {
         operations.track("refund");
@@ -995,6 +997,13 @@ public final class CheckoutSession implements AutoCloseable {
                                        BigDecimal amount, boolean linked) {
         operations.begin(name);
         requireRefundable(name);
+        if (!voidStepsReversed.isEmpty()) {
+            // the card leg may be among the reversed movements — a refund
+            // against it would double-return the money
+            throw invalidState("a void of this payment is partially complete; "
+                    + "finish it with voidTransaction() — a refund cannot mix "
+                    + "with a half-reversed sale");
+        }
         LastPayment paid = linked ? lastPayment : LastPayment.NONE;
         if (linked && paid.poiTransactionId == null) {
             throw invalidState("a linked refund requires a completed payment in this "

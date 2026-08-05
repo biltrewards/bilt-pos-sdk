@@ -502,6 +502,40 @@ class ReversalSessionTest {
     }
 
     @Test
+    void partiallyVoidedSaleRefusesRefundsUntilTheVoidFinishes() throws Exception {
+        ReversalSession session = start(sessionBuilder()
+                .poiTransactionId(ORIGINAL_POI_TXN)
+                .poiTransactionTimestamp(ORIGINAL_TS)
+                .storedValuePoiTransactionId(STORED_VALUE_POI_TXN)
+                .storedValuePoiTransactionTimestamp(STORED_VALUE_TS));
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));   // card leg reversed
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnreachableHost\"}}}}"));
+        assertThrows(SessionException.class, () -> session.voidTransaction().get());
+        assertEquals(SessionState.IDLE, session.getState());
+        recordedRequest();  // the card reversal
+        recordedRequest();  // the failed stored value reversal
+
+        // the card leg is already reversed: a refund against it would
+        // double-return the money, so refunds are refused mid-void
+        SessionException e = assertThrows(SessionException.class,
+                () -> session.refund(new BigDecimal("10.00")).get());
+        assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
+        assertTrue(e.getError().getMessage().contains("voidTransaction"),
+                "the error must steer the register to finishing the void: "
+                        + e.getError().getMessage());
+        assertEquals(3, server.getRequestCount(),
+                "the refused refund must not reach the wire");
+
+        // finishing the void remains the correct path
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));   // stored value leg
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+    }
+
+    @Test
     void loyaltyOnlyVoidIsStrictAndResumable() throws Exception {
         ReversalSession session = start(sessionBuilder()
                 .redemptionPoiTransactionId(REDEMPTION_POI_TXN)

@@ -1949,6 +1949,16 @@ class CheckoutSessionPaymentTest {
                 "the void failed; the session returns to its pre-void state");
         drainRequests();
 
+        // the card leg is already reversed: a refund against it would
+        // double-return the money, so refunds are refused mid-void
+        SessionException refundRefused = assertThrows(SessionException.class,
+                () -> session.refund(new BigDecimal("10.00")).get());
+        assertEquals(SessionErrorCode.INVALID_STATE, refundRefused.getError().getCode());
+        assertTrue(refundRefused.getError().getMessage().contains("voidTransaction"),
+                "the error must steer the register to finishing the void: "
+                        + refundRefused.getError().getMessage());
+        assertEquals(0, drainRequests().size(), "the refused refund must not reach the wire");
+
         // the retry resumes at the outstanding gift card leg — the card
         // payment must not be reversed a second time
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
