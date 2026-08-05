@@ -16,7 +16,6 @@ import com.bilt.pos.nexo.model.BalanceInquiryResponse;
 import com.bilt.pos.nexo.model.EntryModeType;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
-import com.bilt.pos.nexo.model.OriginalPOITransaction;
 import com.bilt.pos.nexo.model.PaymentAccountReq;
 import com.bilt.pos.nexo.model.PaymentInstrumentData;
 import com.bilt.pos.nexo.model.PaymentInstrumentTypeEnum;
@@ -73,13 +72,8 @@ public final class StoredValueManager {
             }
         }
         if (originalPoiTxnId != null) {
-            data.originalPOITransaction(OriginalPOITransaction.builder()
-                    .poiTransactionID(TransactionIdentificationType.builder()
-                            .transactionID(originalPoiTxnId)
-                            .timeStamp(originalPoiTimestamp == null
-                                    ? null : originalPoiTimestamp.toString())
-                            .build())
-                    .build());
+            data.originalPOITransaction(Wire.originalTransaction(
+                    originalPoiTxnId, originalPoiTimestamp));
         }
         SaleToPOIRequest request = SaleToPOIRequest.builder()
                 .messageHeader(exchange.factory().header(

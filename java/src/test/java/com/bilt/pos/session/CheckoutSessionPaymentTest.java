@@ -58,8 +58,7 @@ class CheckoutSessionPaymentTest {
                     + "\"LoyaltyResult\":[{\"CurrentBalance\":700,"
                     + "\"LoyaltyAmount\":{\"AmountValue\":5.00,\"LoyaltyUnit\":\"Monetary\"}}]}}}";
 
-    private static final String LOYALTY_REFUND_OK =
-            "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{\"Response\":{\"Result\":\"Success\"}}}}";
+    private static final String LOYALTY_REFUND_OK = CheckoutSessionTest.LOYALTY_REFUND_OK;
 
     private static final String AWARD_OK =
             "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
@@ -85,8 +84,7 @@ class CheckoutSessionPaymentTest {
             "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
                     + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}";
 
-    private static final String REVERSAL_OK =
-            "{\"SaleToPOIResponse\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Success\"}}}}";
+    private static final String REVERSAL_OK = CheckoutSessionTest.REVERSAL_OK;
 
     private final ObjectMapper mapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -98,8 +96,11 @@ class CheckoutSessionPaymentTest {
     void setUp() throws Exception {
         server = new MockWebServer();
         server.start();
-        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
-        session = CheckoutSession.builder()
+        session = start(sessionBuilder());
+    }
+
+    private CheckoutSession.Builder sessionBuilder() {
+        return CheckoutSession.builder()
                 .client(BiltNexoTerminalClient.builder()
                         .endpoint(server.url("/nexo").toString())
                         .disableRecoveryOnNetworkError()
@@ -107,10 +108,15 @@ class CheckoutSessionPaymentTest {
                 .saleId("POS-LANE-3")
                 .poiId("VictaLane-275839164")
                 .currency("USD")
-                .autoDisplay(false)
-                .start()
-                .get();
+                .autoDisplay(false);
+    }
+
+    /** Starts a session, answering and draining the session-start Admin exchange. */
+    private CheckoutSession start(CheckoutSession.Builder builder) throws Exception {
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+        CheckoutSession started = builder.start().get();
         server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
+        return started;
     }
 
     @AfterEach
@@ -548,10 +554,7 @@ class CheckoutSessionPaymentTest {
                     + "\"LoyaltyResult\":[{\"CurrentBalance\":100,"
                     + "\"LoyaltyAmount\":{\"AmountValue\":50.00,\"LoyaltyUnit\":\"Monetary\"}}]}}}";
 
-    private static final String LOYALTY_REFUND_FAILED =
-            "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
-                    + "\"Response\":{\"Result\":\"Failure\","
-                    + "\"ErrorCondition\":\"UnavailableService\"}}}}";
+    private static final String LOYALTY_REFUND_FAILED = CheckoutSessionTest.LOYALTY_REFUND_FAILED;
 
     /** Rewards cover the whole basket: rebate 50 + redemption 50 on a 100 item. */
     private void completeRewardOnlyCheckout() throws Exception {
@@ -974,8 +977,8 @@ class CheckoutSessionPaymentTest {
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
         assertEquals("POI-RD-1", requests.get(1).getLoyaltyRequest().getLoyaltyTransaction()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
-        assertNotNull(requests.get(1).getLoyaltyRequest().getSaleData().getSaleToPOIData(),
-                "the redemption refund must carry the rewardRefs payload");
+        assertNull(requests.get(1).getLoyaltyRequest().getSaleData().getSaleToPOIData(),
+                "per the reversal contract the original transaction reference suffices");
         assertEquals("RebateRefund", requests.get(2).getLoyaltyRequest()
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
         assertEquals("POI-RB-1", requests.get(2).getLoyaltyRequest().getLoyaltyTransaction()
@@ -1024,8 +1027,8 @@ class CheckoutSessionPaymentTest {
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
         assertEquals("POI-RD-1", requests.get(0).getLoyaltyRequest().getLoyaltyTransaction()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
-        assertNotNull(requests.get(0).getLoyaltyRequest().getSaleData().getSaleToPOIData(),
-                "the redemption refund must carry the rewardRefs payload");
+        assertNull(requests.get(0).getLoyaltyRequest().getSaleData().getSaleToPOIData(),
+                "per the reversal contract the original transaction reference suffices");
         assertEquals("98234", requests.get(0).getLoyaltyRequest().getLoyaltyData()[0]
                 .getLoyaltyAccountID().getLoyaltyID());
         assertEquals("RebateRefund", requests.get(1).getLoyaltyRequest()
@@ -1065,6 +1068,72 @@ class CheckoutSessionPaymentTest {
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
         assertEquals("AwardRefund", requests.get(1).getLoyaltyRequest()
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
+    // ─── Cross-session (referenced) reversal from a persisted result ───
+
+    @Test
+    void persistedResultVoidsEveryLegFromAReversalSession() throws Exception {
+        // the original sale: rebate + redemption + card + award
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));                    // -10.00
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));                    // -5.00
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 85.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+        CheckoutResult sale = session.pay().get();
+        drainRequests();
+
+        // a later process: a reversal session built only from what the POS
+        // persisted
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+        ReversalSession later = ReversalSession.builder()
+                .client(BiltNexoTerminalClient.builder()
+                        .endpoint(server.url("/nexo").toString())
+                        .disableRecoveryOnNetworkError()
+                        .build())
+                .saleId("POS-LANE-3")
+                .poiId("VictaLane-275839164")
+                .currency("USD")
+                .poiTransactionId(sale.getPoiTransactionId())
+                .poiTransactionTimestamp(sale.getPoiTransactionTimestamp())
+                .storedValuePoiTransactionId(sale.getStoredValuePoiTransactionId())
+                .storedValuePoiTransactionTimestamp(sale.getStoredValuePoiTransactionTimestamp())
+                .rebatePoiTransactionId(sale.getRebatePoiTransactionId())
+                .rebatePoiTransactionTimestamp(sale.getRebatePoiTransactionTimestamp())
+                .redemptionPoiTransactionId(sale.getRedemptionPoiTransactionId())
+                .redemptionPoiTransactionTimestamp(sale.getRedemptionPoiTransactionTimestamp())
+                .awardPoiTransactionId(sale.getAwardPoiTransactionId())
+                .awardPoiTransactionTimestamp(sale.getAwardPoiTransactionTimestamp())
+                .memberId("98234")
+                .start()
+                .get();
+        server.takeRequest(5, TimeUnit.SECONDS);  // drain the session-start Admin request
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));         // card leg
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // rebate refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // award refund
+        assertTrue(later.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, later.getState());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(4, requests.size(),
+                "every persisted movement must be reversed: tender, redemption, rebate, award");
+        assertEquals("POI-PAY-1", requests.get(0).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals("RedemptionRefund", requests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("POI-RD-1", requests.get(1).getLoyaltyRequest().getLoyaltyTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals("RebateRefund", requests.get(2).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("POI-RB-1", requests.get(2).getLoyaltyRequest().getLoyaltyTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals("AwardRefund", requests.get(3).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("POI-AW-1", requests.get(3).getLoyaltyRequest().getLoyaltyTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
     }
 
     @Test
@@ -1217,7 +1286,6 @@ class CheckoutSessionPaymentTest {
 
         // and the checkout is voidable via that reference
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
-        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
         SaleToPOIRequest reversal = nextRequest();
         assertEquals("POI-GC-1", reversal.getReversalRequest()
@@ -1291,11 +1359,8 @@ class CheckoutSessionPaymentTest {
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
         assertEquals("POI-RD-1", requests.get(3).getLoyaltyRequest().getLoyaltyTransaction()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
-        String reversedRefs = new String(java.util.Base64.getDecoder().decode(
-                requests.get(3).getLoyaltyRequest().getSaleData().getSaleToPOIData()),
-                java.nio.charset.StandardCharsets.UTF_8);
-        assertTrue(reversedRefs.contains("rwd:RWD-44021"),
-                "the redemption reversal must carry the redeemed rewardRefs: " + reversedRefs);
+        assertNull(requests.get(3).getLoyaltyRequest().getSaleData().getSaleToPOIData(),
+                "per the reversal contract the original transaction reference suffices");
         assertEquals("RebateRefund", requests.get(4).getLoyaltyRequest()
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
         assertEquals("POI-RB-1", requests.get(4).getLoyaltyRequest().getLoyaltyTransaction()
@@ -1774,7 +1839,6 @@ class CheckoutSessionPaymentTest {
 
         // but the void can be retried
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
-        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
         assertEquals(SessionState.VOIDED, session.getState());
     }
@@ -1798,7 +1862,6 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
                         + "\"Response\":{\"Result\":\"Success\"},\"ReversedAmount\":35.00}}}"));
-        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
 
         VoidResult voided = session.voidTransaction().get();
 
@@ -1807,13 +1870,12 @@ class CheckoutSessionPaymentTest {
         assertEquals(SessionState.VOIDED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
-        assertEquals(3, requests.size());
+        assertEquals(2, requests.size(),
+                "a guest checkout has no loyalty movements — two reversals only");
         assertEquals("POI-PAY-1", requests.get(0).getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
         assertEquals("POI-GC-1", requests.get(1).getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
-        assertEquals("AwardRefund", requests.get(2).getLoyaltyRequest()
-                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
     }
 
     @Test
@@ -1825,11 +1887,10 @@ class CheckoutSessionPaymentTest {
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
-        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         session.voidTransaction().execute();
 
         List<SaleToPOIRequest> requests = drainRequests();
-        assertEquals(2, requests.size(), "one transaction, one reversal — no duplicate");
+        assertEquals(1, requests.size(), "one transaction, one reversal — no duplicate");
         assertEquals("POI-GC-1", requests.get(0).getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
     }
@@ -1863,17 +1924,14 @@ class CheckoutSessionPaymentTest {
         // the retry resumes at the outstanding gift card leg — the card
         // payment must not be reversed a second time
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
-        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
         assertEquals(SessionState.VOIDED, session.getState());
 
         List<SaleToPOIRequest> retryRequests = drainRequests();
-        assertEquals(2, retryRequests.size());
+        assertEquals(1, retryRequests.size());
         assertEquals("POI-GC-1", retryRequests.get(0).getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID(),
                 "only the stored value leg remains to reverse");
-        assertEquals("AwardRefund", retryRequests.get(1).getLoyaltyRequest()
-                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
     }
 
     @Test
@@ -1910,7 +1968,6 @@ class CheckoutSessionPaymentTest {
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
-        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         VoidResult voided = session.voidTransaction().get();
 
         assertTrue(voided.isSuccess());

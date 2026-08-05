@@ -14,7 +14,11 @@ package com.bilt.pos.session.internal;
 import com.bilt.pos.nexo.model.EntryModeType;
 import com.bilt.pos.nexo.model.IdentificationTypeEnum;
 import com.bilt.pos.nexo.model.LoyaltyAccountID;
+import com.bilt.pos.nexo.model.LoyaltyResponse;
+import com.bilt.pos.nexo.model.LoyaltyResult;
+import com.bilt.pos.nexo.model.OriginalPOITransaction;
 import com.bilt.pos.nexo.model.POIData;
+import com.bilt.pos.nexo.model.PaymentResponse;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
@@ -78,6 +82,47 @@ public final class Wire {
     /** The POI transaction reference of a response, or {@code null}. */
     public static TransactionIdentificationType poiRef(POIData poiData) {
         return poiData == null ? null : poiData.getPoiTransactionID();
+    }
+
+    /** The transaction ID of a response's POI reference, or {@code null}. */
+    public static String txnId(POIData poiData) {
+        TransactionIdentificationType ref = poiRef(poiData);
+        return ref == null ? null : ref.getTransactionID();
+    }
+
+    /** The parsed timestamp of a response's POI reference, or {@code null}. */
+    public static Instant txnTimestamp(POIData poiData) {
+        TransactionIdentificationType ref = poiRef(poiData);
+        return ref == null ? null : instant(ref.getTimeStamp());
+    }
+
+    /** An {@code OriginalPOITransaction} referencing a prior transaction. */
+    public static OriginalPOITransaction originalTransaction(String poiTxnId, Instant timestamp) {
+        return originalTransaction(TransactionIdentificationType.builder()
+                .transactionID(poiTxnId)
+                .timeStamp(timestamp == null ? null : timestamp.toString())
+                .build());
+    }
+
+    /** An {@code OriginalPOITransaction} referencing a prior transaction. */
+    public static OriginalPOITransaction originalTransaction(
+            TransactionIdentificationType poiTxn) {
+        return OriginalPOITransaction.builder().poiTransactionID(poiTxn).build();
+    }
+
+    /** The first (on this wire, only) result of a loyalty response, or {@code null}. */
+    public static LoyaltyResult firstLoyaltyResult(LoyaltyResponse body) {
+        return body.getLoyaltyResult() != null && body.getLoyaltyResult().length > 0
+                ? body.getLoyaltyResult()[0] : null;
+    }
+
+    /** The acquirer approval code of a payment response, or {@code null}. */
+    public static String approvalCode(PaymentResponse body) {
+        if (body.getPaymentResult() == null
+                || body.getPaymentResult().getPaymentAcquirerData() == null) {
+            return null;
+        }
+        return body.getPaymentResult().getPaymentAcquirerData().getApprovalCode();
     }
 
     /**

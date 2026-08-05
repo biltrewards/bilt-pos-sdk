@@ -15,13 +15,20 @@ import com.bilt.pos.nexo.model.DeviceEnum;
 import com.bilt.pos.nexo.model.DisplayOutput;
 import com.bilt.pos.nexo.model.DisplayRequest;
 import com.bilt.pos.nexo.model.InfoQualifyEnum;
+import com.bilt.pos.nexo.model.LoyaltyData;
+import com.bilt.pos.nexo.model.LoyaltyRequest;
+import com.bilt.pos.nexo.model.LoyaltyTransaction;
+import com.bilt.pos.nexo.model.LoyaltyTransactionTypeEnum;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
 import com.bilt.pos.nexo.model.MessageHeader;
 import com.bilt.pos.nexo.model.MessageTypeType;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
+import com.bilt.pos.nexo.model.OriginalPOITransaction;
 import com.bilt.pos.nexo.model.OutputContent;
 import com.bilt.pos.nexo.model.OutputFormatEnum;
+import com.bilt.pos.nexo.model.ReversalReasonEnum;
+import com.bilt.pos.nexo.model.ReversalRequest;
 import com.bilt.pos.nexo.model.SaleData;
 import com.bilt.pos.nexo.model.SaleTerminalData;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
@@ -127,6 +134,47 @@ public final class NexoMessageFactory {
                     .build());
         }
         return saleData.build();
+    }
+
+    /**
+     * A loyalty refund request ({@code RedemptionRefund} /
+     * {@code RebateRefund} / {@code AwardRefund}) against the movement's
+     * own POI reference — the one wire shape every loyalty reversal on
+     * this terminal uses, whether sent by a void, a refund, or a payment
+     * unwind. Per the reversal contracts the original transaction
+     * reference alone suffices; the member's {@code LoyaltyData} is
+     * attached when known.
+     */
+    public SaleToPOIRequest loyaltyRefundRequest(LoyaltyTransactionTypeEnum refundType,
+                                                 OriginalPOITransaction original,
+                                                 String memberId) {
+        LoyaltyRequest.Builder loyaltyRequest = LoyaltyRequest.builder()
+                .saleData(saleData())
+                .loyaltyTransaction(LoyaltyTransaction.builder()
+                        .loyaltyTransactionType(refundType)
+                        .originalPOITransaction(original)
+                        .build());
+        if (memberId != null) {
+            loyaltyRequest.loyaltyData(new LoyaltyData[] {LoyaltyData.builder()
+                    .loyaltyAccountID(Wire.memberAccount(memberId))
+                    .build()});
+        }
+        return SaleToPOIRequest.builder()
+                .messageHeader(header(MessageClassType.SERVICE, MessageCategoryType.LOYALTY))
+                .loyaltyRequest(loyaltyRequest.build())
+                .build();
+    }
+
+    /** A {@code ReversalRequest} (merchant cancel) against a prior transaction. */
+    public SaleToPOIRequest reversalRequest(OriginalPOITransaction original) {
+        return SaleToPOIRequest.builder()
+                .messageHeader(header(MessageClassType.SERVICE, MessageCategoryType.REVERSAL))
+                .reversalRequest(ReversalRequest.builder()
+                        .saleData(saleData())
+                        .originalPOITransaction(original)
+                        .reversalReason(ReversalReasonEnum.MERCHANT_CANCEL)
+                        .build())
+                .build();
     }
 
     /**

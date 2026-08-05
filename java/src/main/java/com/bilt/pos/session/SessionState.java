@@ -10,7 +10,9 @@
 package com.bilt.pos.session;
 
 /**
- * Lifecycle state of a {@link CheckoutSession}.
+ * Lifecycle state of a {@link CheckoutSession} (full diagram below) or a
+ * {@link ReversalSession}, which only ever moves {@code IDLE → VOIDING →
+ * VOIDED} (or {@code ENDED}).
  *
  * <pre>
  * IDLE ── identifyMember() ──► IDENTIFIED

@@ -13,46 +13,62 @@ package com.bilt.pos.session.internal;
 
 import com.bilt.pos.nexo.model.AmountsReq;
 import com.bilt.pos.nexo.model.LoyaltyAmount;
-import com.bilt.pos.nexo.model.LoyaltyData;
-import com.bilt.pos.nexo.model.LoyaltyRequest;
 import com.bilt.pos.nexo.model.LoyaltyResponse;
 import com.bilt.pos.nexo.model.LoyaltyResult;
-import com.bilt.pos.nexo.model.LoyaltyTransaction;
 import com.bilt.pos.nexo.model.LoyaltyTransactionTypeEnum;
 import com.bilt.pos.nexo.model.LoyaltyUnitEnum;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
-import com.bilt.pos.nexo.model.OriginalPOITransaction;
 import com.bilt.pos.nexo.model.PaymentData;
 import com.bilt.pos.nexo.model.PaymentRequest;
 import com.bilt.pos.nexo.model.PaymentResponse;
 import com.bilt.pos.nexo.model.PaymentTransaction;
 import com.bilt.pos.nexo.model.PaymentTypeEnum;
-import com.bilt.pos.nexo.model.ReversalReasonEnum;
-import com.bilt.pos.nexo.model.ReversalRequest;
 import com.bilt.pos.nexo.model.ReversalResponse;
-import com.bilt.pos.nexo.model.SaleData;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
-import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.RefundResult;
+import com.bilt.pos.session.ReversalDecision;
+import com.bilt.pos.session.ReversalStep;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.VoidResult;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.logging.Level;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
- * Refund and void flows: {@code PaymentRequest(Refund)} /
- * {@code ReversalRequest}, each followed for linked operations by a
- * best-effort {@code LoyaltyRequest(AwardRefund)}.
+ * Refund and void flows. A void is a list of {@link ReversalMovement}s
+ * executed in order — money legs as Nexo {@code ReversalRequest}s, loyalty
+ * legs as the matching {@code LoyaltyRequest} refund types — and a refund
+ * is a {@code PaymentRequest(Refund)} followed by an award reversal when
+ * the award reference is known. When a step fails, the caller-supplied
+ * {@link StepDecider} chooses between retrying it, leaving it standing, or
+ * aborting the flow; already-reversed steps always stand. A {@code null}
+ * decider selects the default policy (see {@link #defaultPolicy}).
  */
 public final class RefundManager {
 
     private static final Logger LOGGER = Logger.getLogger(RefundManager.class.getName());
+
+    private static final Map<ReversalStep, LoyaltyTransactionTypeEnum> LOYALTY_REFUND_TYPES =
+            Map.of(ReversalStep.REDEMPTION, LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
+                    ReversalStep.REBATE, LoyaltyTransactionTypeEnum.REBATE_REFUND,
+                    ReversalStep.AWARD, LoyaltyTransactionTypeEnum.AWARD_REFUND);
+
+    /** Resolves a failed step into a {@link ReversalDecision}. */
+    public interface StepDecider {
+        ReversalDecision decide(ReversalStep step, SessionError error);
+    }
 
     /** Points reversed and remaining balance from a loyalty reversal. */
     private static final class LoyaltyReversal {
@@ -67,51 +83,6 @@ public final class RefundManager {
 
     private static final LoyaltyReversal NO_REVERSAL = new LoyaltyReversal(0, 0);
 
-    /**
-     * What the caller knows about the loyalty side of the original sale:
-     * the award's own POI reference (preferred by the reverse-award
-     * contract) and the member, both optional.
-     */
-    public static final class LoyaltyRef {
-        final String awardPoiTransactionId;
-        final Instant awardPoiTransactionTimestamp;
-        final String memberId;
-
-        public LoyaltyRef(String awardPoiTransactionId, Instant awardPoiTransactionTimestamp,
-                          String memberId) {
-            this.awardPoiTransactionId = awardPoiTransactionId;
-            this.awardPoiTransactionTimestamp = awardPoiTransactionTimestamp;
-            this.memberId = memberId;
-        }
-
-        public static final LoyaltyRef NONE = new LoyaltyRef(null, null, null);
-    }
-
-    /**
-     * The committed loyalty movements of the original sale — redemption and
-     * rebate references plus the rewardRefs payload the redemption refund
-     * must carry. All fields optional.
-     */
-    public static final class LoyaltyLegs {
-        public static final LoyaltyLegs NONE = new LoyaltyLegs(null, null, null, null, null);
-
-        final String redemptionPoiTxnId;
-        final Instant redemptionPoiTimestamp;
-        final String rewardRefsPayload;
-        final String rebatePoiTxnId;
-        final Instant rebatePoiTimestamp;
-
-        public LoyaltyLegs(String redemptionPoiTxnId, Instant redemptionPoiTimestamp,
-                           String rewardRefsPayload,
-                           String rebatePoiTxnId, Instant rebatePoiTimestamp) {
-            this.redemptionPoiTxnId = redemptionPoiTxnId;
-            this.redemptionPoiTimestamp = redemptionPoiTimestamp;
-            this.rewardRefsPayload = rewardRefsPayload;
-            this.rebatePoiTxnId = rebatePoiTxnId;
-            this.rebatePoiTimestamp = rebatePoiTimestamp;
-        }
-    }
-
     private final NexoExchange exchange;
     private final String currency;
 
@@ -120,16 +91,91 @@ public final class RefundManager {
         this.currency = currency;
     }
 
+    // ─── Refund ───
+
     /**
-     * Linked or unlinked refund.
+     * Linked or unlinked refund: the tender refund, then — when the award
+     * reference of a linked original is known — the award reversal.
      *
      * @param amount           the amount to refund, or {@code null} for a
      *                         full linked refund
      * @param originalPoiTxnId original transaction reference; {@code null}
      *                         for an unlinked refund
+     * @param awardPoiTxnId    the original sale's award reference (linked
+     *                         refunds only), or {@code null} when no award
+     *                         is to be reversed
+     * @param decider          per-step failure resolution; {@code null}
+     *                         for the default policy (tender aborts, award
+     *                         is best-effort)
      */
     public RefundResult refund(BigDecimal amount, String originalPoiTxnId,
-                               Instant originalPoiTimestamp, LoyaltyRef loyaltyRef) {
+                               Instant originalPoiTimestamp,
+                               String awardPoiTxnId, Instant awardPoiTimestamp,
+                               String memberId, StepDecider decider) {
+        StepDecider effective = decider != null ? decider : defaultPolicy(true, false);
+        SessionException[] lastFailure = new SessionException[1];
+
+        PaymentResponse body = runStep(ReversalStep.REFUND, effective,
+                () -> sendRefund(amount, originalPoiTxnId, originalPoiTimestamp),
+                e -> {
+                    lastFailure[0] = e;
+                    LOGGER.warning("the tender refund was skipped by decision; "
+                            + "no money moved: " + e.getError());
+                },
+                e -> e);
+
+        LoyaltyReversal loyalty = NO_REVERSAL;
+        boolean awardReversed = false;
+        if (awardPoiTxnId != null) {
+            LoyaltyResponse awardLeg = runStep(ReversalStep.AWARD, effective,
+                    () -> loyaltyRefund(LoyaltyTransactionTypeEnum.AWARD_REFUND,
+                            awardPoiTxnId, awardPoiTimestamp, memberId),
+                    e -> {
+                        lastFailure[0] = e;
+                        LOGGER.warning("AwardRefund failed (terminal may retry via "
+                                + "SAF): " + e.getError());
+                    },
+                    e -> body == null ? e : new SessionException(Wire.annotated(
+                            e.getError(),
+                            "the tender refund completed but the award " + awardPoiTxnId
+                                    + " was not reversed: " + e.getError().getMessage(), e)));
+            if (awardLeg != null) {
+                loyalty = parseReversal(awardLeg);
+                awardReversed = true;
+            }
+        }
+
+        if (body == null) {
+            if (!awardReversed) {
+                // every step was skipped: nothing moved, so the refund
+                // must not report success
+                throw lastFailure[0];
+            }
+            // the tender refund was skipped by decision; only the award moved
+            return RefundResult.builder()
+                    .success(true)
+                    .pointsReversed(loyalty.pointsReversed)
+                    .remainingPointBalance(loyalty.remainingBalance)
+                    .build();
+        }
+        Double authorized = body.getPaymentResult() != null
+                && body.getPaymentResult().getAmountsResp() != null
+                ? body.getPaymentResult().getAmountsResp().getAuthorizedAmount() : null;
+        return RefundResult.builder()
+                .success(true)
+                .refundedAmount(authorized != null ? BigDecimal.valueOf(authorized) : amount)
+                .approvalCode(Wire.approvalCode(body))
+                .poiTransactionId(Wire.txnId(body.getPoiData()))
+                .poiTransactionTimestamp(Wire.txnTimestamp(body.getPoiData()))
+                .customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()))
+                .merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()))
+                .pointsReversed(loyalty.pointsReversed)
+                .remainingPointBalance(loyalty.remainingBalance)
+                .build();
+    }
+
+    private PaymentResponse sendRefund(BigDecimal amount, String originalPoiTxnId,
+                                       Instant originalPoiTimestamp) {
         AmountsReq.Builder amounts = AmountsReq.builder().currency(currency);
         if (amount != null) {
             amounts.requestedAmount(amount.doubleValue());
@@ -137,7 +183,7 @@ public final class RefundManager {
         PaymentTransaction.Builder transaction = PaymentTransaction.builder()
                 .amountsReq(amounts.build());
         if (originalPoiTxnId != null) {
-            transaction.originalPOITransaction(originalTransaction(
+            transaction.originalPOITransaction(Wire.originalTransaction(
                     originalPoiTxnId, originalPoiTimestamp));
         }
         SaleToPOIRequest request = SaleToPOIRequest.builder()
@@ -159,232 +205,212 @@ public final class RefundManager {
             throw Wire.missing("PaymentResponse");
         }
         exchange.requireSuccess(MessageCategoryType.PAYMENT, body.getResponse());
-
-        // linked refunds also reverse loyalty points, best-effort
-        LoyaltyReversal loyalty = originalPoiTxnId != null
-                ? awardRefund(loyaltyRef, originalPoiTxnId, originalPoiTimestamp)
-                : NO_REVERSAL;
-
-        Double authorized = body.getPaymentResult() != null
-                && body.getPaymentResult().getAmountsResp() != null
-                ? body.getPaymentResult().getAmountsResp().getAuthorizedAmount() : null;
-        TransactionIdentificationType poiTxn = Wire.poiRef(body.getPoiData());
-        return RefundResult.builder()
-                .success(true)
-                .refundedAmount(authorized != null
-                        ? BigDecimal.valueOf(authorized)
-                        : amount)
-                .approvalCode(approvalCode(body))
-                .poiTransactionId(poiTxn == null ? null : poiTxn.getTransactionID())
-                .poiTransactionTimestamp(Wire.instant(
-                        poiTxn == null ? null : poiTxn.getTimeStamp()))
-                .customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()))
-                .merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()))
-                .pointsReversed(loyalty.pointsReversed)
-                .remainingPointBalance(loyalty.remainingBalance)
-                .build();
+        return body;
     }
 
+    // ─── Void ───
+
     /**
-     * Reverses a completed transaction ({@code ReversalRequest} per tender
-     * leg, card first — mirroring the orchestrator's reverse-commit unwind
-     * order — then best-effort refunds of the sale's committed loyalty
-     * movements and the award). {@code cardPoiTxnId} may be {@code null} on
-     * a retry whose card leg was already reversed — only the stored value
-     * leg and the loyalty refunds run then.
-     *
-     * @param onCardLegReversed invoked right after the card leg reversal
-     *        succeeds, so the caller can record progress before a later leg
-     *        fails and make its retry resumable
+     * Reverses the given movements in order. Each failed step is resolved
+     * by the decider — retry, leave standing, or abort; on abort the
+     * failure is annotated with what was already reversed so the register
+     * can retry (reversed movements are reported via {@code onReversed}
+     * and must be excluded from the retry) or escalate. If no movement at
+     * all was reversed, the last failure is thrown rather than reporting a
+     * void that changed nothing. An empty list is a success: nothing is
+     * left standing — the unwind was drained, or a prior partial void
+     * already reversed every movement.
      */
-    public VoidResult voidTransaction(String cardPoiTxnId, Instant cardPoiTimestamp,
-                                      String storedValuePoiTxnId,
-                                      Instant storedValuePoiTimestamp,
-                                      LoyaltyLegs loyaltyLegs,
-                                      LoyaltyRef loyaltyRef, Runnable onCardLegReversed) {
-        if (cardPoiTxnId == null && storedValuePoiTxnId == null) {
-            throw new IllegalArgumentException("nothing to void: no leg references");
+    public VoidResult voidMovements(List<ReversalMovement> movements, String memberId,
+                                    StepDecider decider,
+                                    Consumer<ReversalMovement> onReversed) {
+        if (movements.isEmpty()) {
+            return VoidResult.builder().success(true).build();
         }
-        ReversalResponse cardLeg = null;
-        if (cardPoiTxnId != null) {
-            cardLeg = reverse(cardPoiTxnId, cardPoiTimestamp);
-            if (onCardLegReversed != null) {
-                onCardLegReversed.run();
+        StepDecider effective = decider != null ? decider : defaultPolicy(
+                movements.stream().anyMatch(movement -> isMoneyLeg(movement.getStep())),
+                movements.size() == 1
+                        && movements.get(0).getStep() == ReversalStep.AWARD);
+        Map<ReversalStep, ReversalResponse> money = new EnumMap<>(ReversalStep.class);
+        Map<ReversalStep, LoyaltyResponse> loyalty = new EnumMap<>(ReversalStep.class);
+        List<ReversalMovement> reversed = new ArrayList<>();
+        SessionException[] lastFailure = new SessionException[1];
+
+        for (ReversalMovement movement : movements) {
+            Boolean sent = runStep(movement.getStep(), effective,
+                    () -> {
+                        execute(movement, memberId, money, loyalty);
+                        return true;
+                    },
+                    e -> {
+                        lastFailure[0] = e;
+                        LOGGER.warning(movement.getStep() + " reversal of "
+                                + movement.poiTransactionId + " skipped, the movement "
+                                + "is still standing (terminal may retry loyalty via "
+                                + "SAF): " + e.getError());
+                    },
+                    e -> abortError(reversed, movement, e));
+            if (sent != null) {
+                reversed.add(movement);
+                onReversed.accept(movement);
             }
         }
-
-        ReversalResponse storedValueLeg = null;
-        if (storedValuePoiTxnId != null) {
-            try {
-                storedValueLeg = reverse(storedValuePoiTxnId, storedValuePoiTimestamp);
-            } catch (SessionException e) {
-                if (cardPoiTxnId == null) {
-                    // stored-value-only retry: nothing new was reversed
-                    throw e;
-                }
-                throw partialUnwind("the card leg", cardPoiTxnId,
-                        "the stored value leg", storedValuePoiTxnId, e);
-            }
+        if (reversed.isEmpty()) {
+            // every movement was skipped: nothing was reversed, so the
+            // void must not report success
+            throw lastFailure[0];
         }
+        return buildVoidResult(money, loyalty);
+    }
 
-        // a full void also returns the sale's committed loyalty movements.
-        // Best-effort, like the award refund below: the tender reversal is
-        // the substance of the void, the terminal can retry loyalty via
-        // SAF, and a failed refund must not strand a half-voided tender
-        LoyaltyLegs legs = loyaltyLegs == null ? LoyaltyLegs.NONE : loyaltyLegs;
-        LoyaltyRef ref = loyaltyRef == null ? LoyaltyRef.NONE : loyaltyRef;
-        bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
-                legs.redemptionPoiTxnId, legs.redemptionPoiTimestamp,
-                ref.memberId, legs.rewardRefsPayload);
-        bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum.REBATE_REFUND,
-                legs.rebatePoiTxnId, legs.rebatePoiTimestamp, ref.memberId, null);
+    private void execute(ReversalMovement movement, String memberId,
+                         Map<ReversalStep, ReversalResponse> money,
+                         Map<ReversalStep, LoyaltyResponse> loyalty) {
+        ReversalStep step = movement.getStep();
+        if (isMoneyLeg(step)) {
+            money.put(step, reverse(
+                    movement.poiTransactionId, movement.poiTransactionTimestamp));
+            return;
+        }
+        LoyaltyTransactionTypeEnum refundType = LOYALTY_REFUND_TYPES.get(step);
+        if (refundType == null) {
+            throw new IllegalArgumentException(step + " is not a void movement");
+        }
+        loyalty.put(step, loyaltyRefund(refundType,
+                movement.poiTransactionId, movement.poiTransactionTimestamp, memberId));
+    }
 
-        LoyaltyReversal loyalty = awardRefund(loyaltyRef,
-                cardPoiTxnId != null ? cardPoiTxnId : storedValuePoiTxnId,
-                cardPoiTxnId != null ? cardPoiTimestamp : storedValuePoiTimestamp);
+    private static VoidResult buildVoidResult(Map<ReversalStep, ReversalResponse> money,
+                                              Map<ReversalStep, LoyaltyResponse> loyalty) {
+        ReversalResponse cardLeg = money.get(ReversalStep.CARD);
+        ReversalResponse storedValueLeg = money.get(ReversalStep.STORED_VALUE);
+        ReversalResponse primaryMoney = cardLeg != null ? cardLeg : storedValueLeg;
+        LoyaltyResponse awardLeg = loyalty.get(ReversalStep.AWARD);
+        LoyaltyReversal points = awardLeg == null ? NO_REVERSAL : parseReversal(awardLeg);
 
-        ReversalResponse primary = cardLeg != null ? cardLeg : storedValueLeg;
-        BigDecimal reversedAmount = sumReversedAmounts(cardLeg, storedValueLeg);
-        TransactionIdentificationType poiTxn = Wire.poiRef(primary.getPoiData());
-        return VoidResult.builder()
+        // the reversed amount is what the money legs report; a void with no
+        // money legs reports the monetary value of the loyalty refunds
+        BigDecimal reversedAmount = primaryMoney == null
+                ? sumLoyaltyAmounts(loyalty.get(ReversalStep.REDEMPTION),
+                        loyalty.get(ReversalStep.REBATE))
+                : sumReversedAmounts(cardLeg, storedValueLeg);
+
+        VoidResult.Builder result = VoidResult.builder()
                 .success(true)
                 .reversedAmount(reversedAmount)
-                .poiTransactionId(poiTxn == null ? null : poiTxn.getTransactionID())
-                .poiTransactionTimestamp(Wire.instant(
-                        poiTxn == null ? null : poiTxn.getTimeStamp()))
-                .customerReceipt(ReceiptMapper.customerReceipt(primary.getPaymentReceipt()))
-                .merchantReceipt(ReceiptMapper.merchantReceipt(primary.getPaymentReceipt()))
-                .pointsReversed(loyalty.pointsReversed)
-                .remainingPointBalance(loyalty.remainingBalance)
-                .build();
-    }
+                .pointsReversed(points.pointsReversed)
+                .remainingPointBalance(points.remainingBalance);
 
-    /**
-     * Voids a checkout that had no payment legs — rewards covered the whole
-     * basket — by refunding the committed loyalty movements: redemption and
-     * rebate strictly, then the award. The redemption and rebate refunds
-     * throw on failure so the caller can retry; {@code onRedemptionReversed}
-     * records progress so a retry resumes at the rebate leg instead of
-     * re-crediting the redemption. When the award is the only movement,
-     * reversing it IS the void, so unlike the payment-void paths it is
-     * strict rather than best-effort.
-     */
-    public VoidResult voidLoyalty(LoyaltyLegs loyaltyLegs,
-                                  LoyaltyRef loyaltyRef, Runnable onRedemptionReversed) {
-        LoyaltyLegs legs = loyaltyLegs == null ? LoyaltyLegs.NONE : loyaltyLegs;
-        LoyaltyRef ref = loyaltyRef == null ? LoyaltyRef.NONE : loyaltyRef;
-        if (legs.redemptionPoiTxnId == null && legs.rebatePoiTxnId == null
-                && ref.awardPoiTransactionId == null) {
-            throw new IllegalArgumentException("nothing to void: no loyalty movement references");
-        }
-
-        LoyaltyResponse redemptionLeg = null;
-        if (legs.redemptionPoiTxnId != null) {
-            redemptionLeg = loyaltyRefund(LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
-                    legs.redemptionPoiTxnId, legs.redemptionPoiTimestamp,
-                    ref.memberId, legs.rewardRefsPayload);
-            if (onRedemptionReversed != null) {
-                onRedemptionReversed.run();
-            }
-        }
-
-        LoyaltyResponse rebateLeg = null;
-        if (legs.rebatePoiTxnId != null) {
-            try {
-                rebateLeg = loyaltyRefund(LoyaltyTransactionTypeEnum.REBATE_REFUND,
-                        legs.rebatePoiTxnId, legs.rebatePoiTimestamp, ref.memberId, null);
-            } catch (SessionException e) {
-                if (redemptionLeg == null) {
-                    // rebate-only (or resumed) void: nothing new was reversed
-                    throw e;
-                }
-                throw partialUnwind("the redemption", legs.redemptionPoiTxnId,
-                        "the rebate", legs.rebatePoiTxnId, e);
-            }
-        }
-
-        LoyaltyReversal loyalty;
-        LoyaltyResponse awardLeg = null;
-        if (redemptionLeg == null && rebateLeg == null) {
-            awardLeg = loyaltyRefund(LoyaltyTransactionTypeEnum.AWARD_REFUND,
-                    ref.awardPoiTransactionId, ref.awardPoiTransactionTimestamp,
-                    ref.memberId, null);
-            loyalty = parseReversal(awardLeg);
+        if (primaryMoney != null) {
+            result.poiTransactionId(Wire.txnId(primaryMoney.getPoiData()))
+                    .poiTransactionTimestamp(Wire.txnTimestamp(primaryMoney.getPoiData()))
+                    .customerReceipt(ReceiptMapper.customerReceipt(
+                            primaryMoney.getPaymentReceipt()))
+                    .merchantReceipt(ReceiptMapper.merchantReceipt(
+                            primaryMoney.getPaymentReceipt()));
         } else {
-            loyalty = awardRefund(ref,
-                    legs.redemptionPoiTxnId != null
-                            ? legs.redemptionPoiTxnId : legs.rebatePoiTxnId,
-                    legs.redemptionPoiTxnId != null
-                            ? legs.redemptionPoiTimestamp : legs.rebatePoiTimestamp);
+            LoyaltyResponse primary = loyalty.values().iterator().next();
+            result.poiTransactionId(Wire.txnId(primary.getPoiData()))
+                    .poiTransactionTimestamp(Wire.txnTimestamp(primary.getPoiData()));
         }
-
-        LoyaltyResponse primary = redemptionLeg != null ? redemptionLeg
-                : rebateLeg != null ? rebateLeg : awardLeg;
-        TransactionIdentificationType poiTxn = Wire.poiRef(primary.getPoiData());
-        return VoidResult.builder()
-                .success(true)
-                .reversedAmount(sumLoyaltyAmounts(redemptionLeg, rebateLeg))
-                .poiTransactionId(poiTxn == null ? null : poiTxn.getTransactionID())
-                .poiTransactionTimestamp(Wire.instant(
-                        poiTxn == null ? null : poiTxn.getTimeStamp()))
-                .pointsReversed(loyalty.pointsReversed)
-                .remainingPointBalance(loyalty.remainingBalance)
-                .build();
+        return result.build();
     }
 
+    // ─── Step mechanics ───
+
     /**
-     * A loyalty refund that accompanies a money movement: logged on
-     * failure, never thrown — the terminal can retry loyalty via SAF.
-     * No-op without a reference. Returns the response, or {@code null}
-     * when skipped or failed.
+     * Runs one reversal step under the decider: {@code RETRY} re-sends,
+     * {@code SKIP} invokes {@code onSkip} and returns {@code null},
+     * {@code ABORT} (or a {@code null} decision) throws via
+     * {@code onAbort}.
      */
-    private LoyaltyResponse bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum refundType,
-                                                    String originalPoiTxnId,
-                                                    Instant originalPoiTimestamp,
-                                                    String memberId, String rewardRefsPayload) {
-        if (originalPoiTxnId == null) {
-            return null;
-        }
-        try {
-            return loyaltyRefund(refundType, originalPoiTxnId, originalPoiTimestamp,
-                    memberId, rewardRefsPayload);
-        } catch (SessionException e) {
-            LOGGER.log(Level.WARNING, refundType
-                    + " failed (terminal may retry via SAF): " + e.getError(), e);
-            return null;
+    private static <T> T runStep(ReversalStep step, StepDecider decider, Supplier<T> action,
+                                 Consumer<SessionException> onSkip,
+                                 UnaryOperator<SessionException> onAbort) {
+        while (true) {
+            try {
+                return action.get();
+            } catch (SessionException e) {
+                ReversalDecision decision = decider.decide(step, e.getError());
+                if (decision == ReversalDecision.RETRY) {
+                    continue;
+                }
+                if (decision == ReversalDecision.SKIP) {
+                    onSkip.accept(e);
+                    return null;
+                }
+                throw onAbort.apply(e);
+            }
         }
     }
 
     /**
-     * A strict loyalty refund: {@code LoyaltyRequest(refundType)} against
-     * the movement's own POI reference, throwing on failure.
+     * The default decision policy, stated once beside the mechanism: money
+     * legs abort; loyalty movements are best-effort when a money leg
+     * anchors the reversal, strict when they are its substance (the award
+     * only when it is the whole reversal — otherwise the terminal can
+     * retry it via store-and-forward).
+     */
+    private static StepDecider defaultPolicy(boolean moneyAnchored, boolean awardIsTheWhole) {
+        return (step, error) -> {
+            switch (step) {
+                case REDEMPTION:
+                case REBATE:
+                    return moneyAnchored ? ReversalDecision.SKIP : ReversalDecision.ABORT;
+                case AWARD:
+                    return awardIsTheWhole ? ReversalDecision.ABORT : ReversalDecision.SKIP;
+                default:  // CARD, STORED_VALUE, REFUND — the money moved
+                    return ReversalDecision.ABORT;
+            }
+        };
+    }
+
+    private static boolean isMoneyLeg(ReversalStep step) {
+        return step == ReversalStep.CARD || step == ReversalStep.STORED_VALUE;
+    }
+
+    /**
+     * A reversal aborted between steps: surface exactly what was reversed
+     * and what remains standing so the register can retry (reversed steps
+     * are skipped on retry) or escalate.
+     */
+    private static SessionException abortError(List<ReversalMovement> reversed,
+                                               ReversalMovement failed,
+                                               SessionException cause) {
+        if (reversed.isEmpty()) {
+            return cause;
+        }
+        String done = reversed.stream()
+                .map(movement -> label(movement.getStep()) + " " + movement.poiTransactionId)
+                .collect(Collectors.joining(" and "));
+        return new SessionException(Wire.annotated(cause.getError(),
+                done + (reversed.size() == 1 ? " was" : " were") + " reversed but "
+                        + label(failed.getStep()) + " " + failed.poiTransactionId
+                        + " was not: " + cause.getError().getMessage(), cause));
+    }
+
+    private static String label(ReversalStep step) {
+        switch (step) {
+            case CARD: return "the card leg";
+            case STORED_VALUE: return "the stored value leg";
+            case REDEMPTION: return "the redemption";
+            case REBATE: return "the rebate";
+            case AWARD: return "the award";
+            default: return "the tender refund";
+        }
+    }
+
+    // ─── Wire verbs ───
+
+    /**
+     * A loyalty refund against the movement's own POI reference, throwing
+     * on failure.
      */
     private LoyaltyResponse loyaltyRefund(LoyaltyTransactionTypeEnum refundType,
                                           String originalPoiTxnId, Instant originalPoiTimestamp,
-                                          String memberId, String saleToPoiData) {
-        SaleData saleData = exchange.factory().saleData();
-        if (saleToPoiData != null) {
-            // the reverse-redemption contract carries the rewardRefs to
-            // re-credit in SaleToPOIData, mirroring the redemption
-            saleData.setSaleToPOIData(saleToPoiData);
-        }
-        LoyaltyRequest.Builder loyaltyRequest = LoyaltyRequest.builder()
-                .saleData(saleData)
-                .loyaltyTransaction(LoyaltyTransaction.builder()
-                        .loyaltyTransactionType(refundType)
-                        .originalPOITransaction(originalTransaction(
-                                originalPoiTxnId, originalPoiTimestamp))
-                        .build());
-        if (memberId != null) {
-            loyaltyRequest.loyaltyData(new LoyaltyData[] {LoyaltyData.builder()
-                    .loyaltyAccountID(Wire.memberAccount(memberId))
-                    .build()});
-        }
-        SaleToPOIRequest request = SaleToPOIRequest.builder()
-                .messageHeader(exchange.factory().header(
-                        MessageClassType.SERVICE, MessageCategoryType.LOYALTY))
-                .loyaltyRequest(loyaltyRequest.build())
-                .build();
+                                          String memberId) {
+        SaleToPOIRequest request = exchange.factory().loyaltyRefundRequest(refundType,
+                Wire.originalTransaction(originalPoiTxnId, originalPoiTimestamp), memberId);
         SaleToPOIResponse response = exchange.sendExpectingBody(
                 MessageCategoryType.LOYALTY, request);
         LoyaltyResponse body = response.getLoyaltyResponse();
@@ -395,10 +421,24 @@ public final class RefundManager {
         return body;
     }
 
+    private ReversalResponse reverse(String originalPoiTxnId, Instant originalPoiTimestamp) {
+        SaleToPOIRequest request = exchange.factory().reversalRequest(
+                Wire.originalTransaction(originalPoiTxnId, originalPoiTimestamp));
+        SaleToPOIResponse response = exchange.sendExpectingBody(
+                MessageCategoryType.REVERSAL, request);
+        ReversalResponse body = response.getReversalResponse();
+        if (body == null) {
+            throw Wire.missing("ReversalResponse");
+        }
+        exchange.requireSuccess(MessageCategoryType.REVERSAL, body.getResponse());
+        return body;
+    }
+
+    // ─── Response parsing ───
+
     /** Points and balance reported by a loyalty reversal response. */
     private static LoyaltyReversal parseReversal(LoyaltyResponse body) {
-        LoyaltyResult result = body.getLoyaltyResult() != null
-                && body.getLoyaltyResult().length > 0 ? body.getLoyaltyResult()[0] : null;
+        LoyaltyResult result = Wire.firstLoyaltyResult(body);
         if (result == null) {
             return NO_REVERSAL;
         }
@@ -413,11 +453,11 @@ public final class RefundManager {
     private static BigDecimal sumLoyaltyAmounts(LoyaltyResponse... legs) {
         BigDecimal sum = null;
         for (LoyaltyResponse leg : legs) {
-            if (leg == null || leg.getLoyaltyResult() == null
-                    || leg.getLoyaltyResult().length == 0) {
+            if (leg == null) {
                 continue;
             }
-            LoyaltyAmount amount = leg.getLoyaltyResult()[0].getLoyaltyAmount();
+            LoyaltyResult result = Wire.firstLoyaltyResult(leg);
+            LoyaltyAmount amount = result == null ? null : result.getLoyaltyAmount();
             if (amount == null || amount.getLoyaltyUnit() == LoyaltyUnitEnum.POINT) {
                 continue;
             }
@@ -425,27 +465,6 @@ public final class RefundManager {
             sum = sum == null ? value : sum.add(value);
         }
         return sum;
-    }
-
-    private ReversalResponse reverse(String originalPoiTxnId, Instant originalPoiTimestamp) {
-        SaleToPOIRequest request = SaleToPOIRequest.builder()
-                .messageHeader(exchange.factory().header(
-                        MessageClassType.SERVICE, MessageCategoryType.REVERSAL))
-                .reversalRequest(ReversalRequest.builder()
-                        .saleData(exchange.factory().saleData())
-                        .originalPOITransaction(originalTransaction(
-                                originalPoiTxnId, originalPoiTimestamp))
-                        .reversalReason(ReversalReasonEnum.MERCHANT_CANCEL)
-                        .build())
-                .build();
-        SaleToPOIResponse response = exchange.sendExpectingBody(
-                MessageCategoryType.REVERSAL, request);
-        ReversalResponse body = response.getReversalResponse();
-        if (body == null) {
-            throw Wire.missing("ReversalResponse");
-        }
-        exchange.requireSuccess(MessageCategoryType.REVERSAL, body.getResponse());
-        return body;
     }
 
     private static BigDecimal sumReversedAmounts(ReversalResponse... legs) {
@@ -457,57 +476,5 @@ public final class RefundManager {
             }
         }
         return sum;
-    }
-
-    /**
-     * {@code LoyaltyRequest(AwardRefund)} against the original transaction.
-     * Best-effort: failures are logged, never thrown — the money movement
-     * already succeeded and the terminal can retry loyalty via SAF.
-     */
-    private LoyaltyReversal awardRefund(LoyaltyRef loyaltyRef, String paymentPoiTxnId,
-                                        Instant paymentPoiTimestamp) {
-        LoyaltyRef ref = loyaltyRef == null ? LoyaltyRef.NONE : loyaltyRef;
-        // the reverse-award contract references the AWARD's own transaction;
-        // fall back to the payment reference (terminal-side resolution) only
-        // when the caller does not have the award reference
-        String originalPoiTxnId = ref.awardPoiTransactionId != null
-                ? ref.awardPoiTransactionId : paymentPoiTxnId;
-        Instant originalPoiTimestamp = ref.awardPoiTransactionId != null
-                ? ref.awardPoiTransactionTimestamp : paymentPoiTimestamp;
-        LoyaltyResponse body = bestEffortLoyaltyRefund(LoyaltyTransactionTypeEnum.AWARD_REFUND,
-                originalPoiTxnId, originalPoiTimestamp, ref.memberId, null);
-        return body == null ? NO_REVERSAL : parseReversal(body);
-    }
-
-    // ─── Internals ───
-
-    /**
-     * A void failed between legs: surface exactly what was reversed and
-     * what remains standing so the register can retry (the reversed leg is
-     * skipped on retry) or escalate.
-     */
-    private static SessionException partialUnwind(String doneLabel, String doneId,
-                                                  String pendingLabel, String pendingId,
-                                                  SessionException cause) {
-        return new SessionException(Wire.annotated(cause.getError(),
-                doneLabel + " " + doneId + " was reversed but " + pendingLabel + " "
-                        + pendingId + " was not: " + cause.getError().getMessage(), cause));
-    }
-
-    private static OriginalPOITransaction originalTransaction(String poiTxnId, Instant timestamp) {
-        return OriginalPOITransaction.builder()
-                .poiTransactionID(TransactionIdentificationType.builder()
-                        .transactionID(poiTxnId)
-                        .timeStamp(timestamp == null ? null : timestamp.toString())
-                        .build())
-                .build();
-    }
-
-    private static String approvalCode(PaymentResponse body) {
-        if (body.getPaymentResult() == null
-                || body.getPaymentResult().getPaymentAcquirerData() == null) {
-            return null;
-        }
-        return body.getPaymentResult().getPaymentAcquirerData().getApprovalCode();
     }
 }

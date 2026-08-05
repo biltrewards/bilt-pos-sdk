@@ -13,8 +13,13 @@ package com.bilt.pos.session.internal;
 
 import com.bilt.pos.nexo.client.BiltNexoClientException;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.model.AbortRequest;
+import com.bilt.pos.nexo.model.AdminRequest;
+import com.bilt.pos.nexo.model.AdminResponse;
 import com.bilt.pos.nexo.model.ErrorConditionType;
 import com.bilt.pos.nexo.model.MessageCategoryType;
+import com.bilt.pos.nexo.model.MessageClassType;
+import com.bilt.pos.nexo.model.MessageReference;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.Response;
 import com.bilt.pos.nexo.model.ResultType;
@@ -26,6 +31,8 @@ import com.bilt.pos.session.SessionException;
 
 import java.io.InterruptedIOException;
 import java.net.SocketTimeoutException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Sends session requests through the {@link DisplayRouter} and translates the
@@ -36,6 +43,8 @@ import java.net.SocketTimeoutException;
  * from another thread.</p>
  */
 public final class NexoExchange {
+
+    private static final Logger LOGGER = Logger.getLogger(NexoExchange.class.getName());
 
     /** The operation currently awaiting a terminal response, if any. */
     public static final class InFlight {
@@ -82,6 +91,58 @@ public final class NexoExchange {
     /** The operation currently awaiting a response, or {@code null}. */
     public InFlight currentInFlight() {
         return inFlight;
+    }
+
+    /**
+     * Sends a Bilt session lifecycle signal as a Nexo {@code AdminRequest}
+     * (see {@link SessionSignalCodec}), requiring success.
+     */
+    public void sendSessionSignal(String serviceIdentification) {
+        SaleToPOIRequest request = SaleToPOIRequest.builder()
+                .messageHeader(factory.header(MessageClassType.SERVICE,
+                        MessageCategoryType.ADMIN))
+                .adminRequest(AdminRequest.builder()
+                        .serviceIdentification(serviceIdentification)
+                        .build())
+                .build();
+        SaleToPOIResponse response = sendExpectingBody(MessageCategoryType.ADMIN, request);
+        AdminResponse body = response.getAdminResponse();
+        if (body == null) {
+            throw Wire.missing("AdminResponse");
+        }
+        requireSuccess(MessageCategoryType.ADMIN, body.getResponse());
+    }
+
+    /**
+     * Best-effort Nexo {@code AbortRequest} for the operation currently
+     * awaiting a response, sent to the device processing it. No-op with
+     * nothing in flight. The session lifecycle signals (the ADMIN category
+     * carries only start/end) are never the abort's target: cancelling an
+     * end exchange would buy nothing and could strand the terminal's
+     * session-scoped data.
+     */
+    public void abortInFlight() {
+        InFlight current = inFlight;
+        if (current == null || current.getCategory() == MessageCategoryType.ADMIN) {
+            return;
+        }
+        SaleToPOIRequest request = SaleToPOIRequest.builder()
+                .messageHeader(factory.header(MessageClassType.SERVICE,
+                        MessageCategoryType.ABORT))
+                .abortRequest(AbortRequest.builder()
+                        .abortReason("MerchantAbort")
+                        .messageReference(MessageReference.builder()
+                                .messageCategory(current.getCategory())
+                                .serviceID(current.getServiceId())
+                                .saleID(factory.getSaleId())
+                                .build())
+                        .build())
+                .build();
+        try {
+            current.getClient().request(factory.envelope(request));
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "abort request failed", e);
+        }
     }
 
     /**

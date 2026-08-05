@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.QueueDispatcher;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,46 @@ class CheckoutSessionTest {
     static final String ADMIN_OK =
             "{\"SaleToPOIResponse\":{\"MessageHeader\":{\"ProtocolVersion\":\"3.0\"},"
                     + "\"AdminResponse\":{\"Response\":{\"Result\":\"Success\"}}}}";
+
+    // canonical terminal replies for the reversal verbs, shared by the
+    // session test classes
+    static final String REVERSAL_OK =
+            "{\"SaleToPOIResponse\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Success\"}}}}";
+
+    static final String LOYALTY_REFUND_OK =
+            "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{\"Response\":{\"Result\":\"Success\"}}}}";
+
+    static final String LOYALTY_REFUND_FAILED =
+            "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnavailableService\"}}}}";
+
+    /** A successful refund reply authorizing the given amount. */
+    static String refundOk(double authorized) {
+        return "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                + "\"Response\":{\"Result\":\"Success\"},"
+                + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-REF-100\","
+                + "\"TimeStamp\":\"2026-03-02T16:00:05+00:00\"}},"
+                + "\"PaymentResult\":{\"AmountsResp\":{\"Currency\":\"USD\","
+                + "\"AuthorizedAmount\":" + authorized + "},"
+                + "\"PaymentAcquirerData\":{\"ApprovalCode\":\"APPR01\"}}}}}";
+    }
+
+    /**
+     * A dispatcher answering the session start/end Admin exchanges out of
+     * band, so tests enqueue their responses in wire order without the
+     * bracket eating them.
+     */
+    static QueueDispatcher adminAnsweringDispatcher() {
+        return new QueueDispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                if (request.getBody().clone().readUtf8().contains("\"AdminRequest\"")) {
+                    return new MockResponse().setBody(ADMIN_OK);
+                }
+                return super.dispatch(request);
+            }
+        };
+    }
 
     private final ObjectMapper mapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
