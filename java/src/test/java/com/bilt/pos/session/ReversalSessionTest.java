@@ -572,6 +572,38 @@ class ReversalSessionTest {
     }
 
     @Test
+    void retryOfAMoneyAnchoredVoidKeepsLoyaltyBestEffort() throws Exception {
+        ReversalSession session = start(fullyReferencedBuilder());
+
+        // first attempt: both money legs reverse, then the register's own
+        // handler aborts on the failing redemption
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));             // card leg
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));             // stored value leg
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // redemption refund
+        assertThrows(SessionException.class, () -> session.voidTransaction()
+                .onError((step, error) -> ReversalDecision.ABORT)
+                .get());
+        recordedRequest();
+        recordedRequest();
+        recordedRequest();
+
+        // the retry under the DEFAULT policy is still the reversal of a
+        // money-anchored sale — the money is already reversed, so a still-
+        // failing loyalty leg stays best-effort instead of turning strict
+        // and stranding the void
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));       // rebate refund
+        server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));         // award refund
+
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+        assertEquals(7, server.getRequestCount(),
+                "the retry sends only the standing loyalty legs "
+                        + "(start, two reversals, redemption, then redemption again, "
+                        + "rebate, award)");
+    }
+
+    @Test
     void loyaltyOnlyVoidIsStrictAboutTheAwardToo() throws Exception {
         ReversalSession session = start(sessionBuilder()
                 .redemptionPoiTransactionId(REDEMPTION_POI_TXN)

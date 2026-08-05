@@ -40,6 +40,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -220,30 +221,39 @@ public final class ReversalManager {
     // ─── Void ───
 
     /**
-     * Reverses the given movements in order. Each failed step is resolved
-     * by the decider — retry, leave standing, or abort; on abort the
-     * failure is annotated with what was already reversed so the register
-     * can retry (reversed movements are reported via {@code onReversed}
-     * and must be excluded from the retry) or escalate. If no movement at
-     * all was reversed, the last failure is thrown rather than reporting a
-     * void that changed nothing. An empty list is a success: nothing is
-     * left standing — the unwind was drained, or a prior partial void
-     * already reversed every movement.
+     * Reverses the sale's movements in order, skipping the steps already
+     * recorded in {@code reversedSteps} so a retried void resumes at the
+     * movements still standing. Each failed step is resolved by the
+     * decider — retry, leave standing, or abort; a step that reverses is
+     * added to {@code reversedSteps}, and on abort the failure is
+     * annotated with what this attempt reversed so the register can retry
+     * or escalate. If no movement at all was reversed, the last failure is
+     * thrown rather than reporting a void that changed nothing; with
+     * nothing left standing (empty target, or every movement already
+     * reversed) the void is a success.
+     *
+     * <p>{@code movements} must be the sale's WHOLE void target, not the
+     * filtered remainder: the default policy judges "money-anchored"
+     * against it, so a retry that already reversed the money leg is still
+     * the reversal of a money-anchored sale and its loyalty legs stay
+     * best-effort.</p>
      */
     public VoidResult voidMovements(List<ReversalMovement> movements, String memberId,
-                                    StepDecider decider,
-                                    Consumer<ReversalMovement> onReversed) {
-        if (movements.isEmpty()) {
-            return VoidResult.builder().success(true).build();
-        }
+                                    StepDecider decider, Set<ReversalStep> reversedSteps) {
         StepDecider effective = decider != null ? decider : defaultPolicy(
                 movements.stream().anyMatch(movement -> isMoneyLeg(movement.getStep())));
+        List<ReversalMovement> remaining = movements.stream()
+                .filter(movement -> !reversedSteps.contains(movement.getStep()))
+                .collect(Collectors.toList());
+        if (remaining.isEmpty()) {
+            return VoidResult.builder().success(true).build();
+        }
         Map<ReversalStep, ReversalResponse> money = new EnumMap<>(ReversalStep.class);
         Map<ReversalStep, LoyaltyResponse> loyalty = new EnumMap<>(ReversalStep.class);
         List<ReversalMovement> reversed = new ArrayList<>();
         SessionException[] lastFailure = new SessionException[1];
 
-        for (ReversalMovement movement : movements) {
+        for (ReversalMovement movement : remaining) {
             Boolean sent = runStep(movement.getStep(), effective,
                     () -> {
                         execute(movement, memberId, money, loyalty);
@@ -259,7 +269,7 @@ public final class ReversalManager {
                     e -> abortError(reversed, movement, e));
             if (sent != null) {
                 reversed.add(movement);
-                onReversed.accept(movement);
+                reversedSteps.add(movement.getStep());
             }
         }
         if (reversed.isEmpty()) {

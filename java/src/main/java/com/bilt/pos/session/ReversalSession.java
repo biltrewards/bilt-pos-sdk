@@ -183,14 +183,14 @@ public final class ReversalSession implements AutoCloseable {
                             + "return the full amount on top of the refund — use "
                             + "refund(amount) for further returns");
         }
-        List<ReversalMovement> movements = referencedMovements();
-        // a retry resumes at the movements still standing
-        movements.removeIf(movement -> voidStepsReversed.contains(movement.getStep()));
         requireState(EnumSet.of(SessionState.IDLE), "voidTransaction");
         stateMachine.transitionTo(SessionState.VOIDING);
         try {
-            VoidResult result = reversalManager.voidMovements(movements, memberId,
-                    flow.decider(), movement -> voidStepsReversed.add(movement.getStep()));
+            // the manager filters against voidStepsReversed (and records
+            // progress into it), so a retry resumes at the movements still
+            // standing while the default policy still sees the whole target
+            VoidResult result = reversalManager.voidMovements(referencedMovements(), memberId,
+                    flow.decider(), voidStepsReversed);
             stateMachine.transitionTo(SessionState.VOIDED);
             return result;
         } catch (RuntimeException e) {

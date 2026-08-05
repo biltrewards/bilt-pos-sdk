@@ -1097,8 +1097,6 @@ public final class CheckoutSession implements AutoCloseable {
                         "voidTransaction requires a completed payment in this "
                                 + "session; to void a prior sale, use ReversalSession");
             }
-            // a retry resumes at the movements still standing
-            movements.removeIf(movement -> voidStepsReversed.contains(movement.getStep()));
         }
         SessionState stateBeforeVoid;
         lock.lock();
@@ -1118,8 +1116,11 @@ public final class CheckoutSession implements AutoCloseable {
             if (resumeRollback) {
                 drainStandingMovements();
             }
+            // the manager filters against voidStepsReversed (and records
+            // progress into it), so a retry resumes at the movements still
+            // standing while the default policy still sees the whole target
             VoidResult result = reversalManager.voidMovements(movements, reversalMemberId(),
-                    flow.decider(), movement -> voidStepsReversed.add(movement.getStep()));
+                    flow.decider(), voidStepsReversed);
             transitionLocked(SessionState.VOIDED);
             return result;
         } catch (RuntimeException e) {
