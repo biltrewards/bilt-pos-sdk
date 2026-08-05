@@ -56,9 +56,9 @@ import java.util.stream.Collectors;
  * aborting the flow; already-reversed steps always stand. A {@code null}
  * decider selects the default policy (see {@link #defaultPolicy}).
  */
-public final class RefundManager {
+public final class ReversalManager {
 
-    private static final Logger LOGGER = Logger.getLogger(RefundManager.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(ReversalManager.class.getName());
 
     private static final Map<ReversalStep, LoyaltyTransactionTypeEnum> LOYALTY_REFUND_TYPES =
             Map.of(ReversalStep.REDEMPTION, LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
@@ -86,7 +86,7 @@ public final class RefundManager {
     private final NexoExchange exchange;
     private final String currency;
 
-    public RefundManager(NexoExchange exchange, String currency) {
+    public ReversalManager(NexoExchange exchange, String currency) {
         this.exchange = exchange;
         this.currency = currency;
     }

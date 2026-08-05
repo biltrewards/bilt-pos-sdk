@@ -13,7 +13,7 @@ import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.session.internal.DisplayRouter;
 import com.bilt.pos.session.internal.NexoExchange;
 import com.bilt.pos.session.internal.NexoMessageFactory;
-import com.bilt.pos.session.internal.RefundManager;
+import com.bilt.pos.session.internal.ReversalManager;
 import com.bilt.pos.session.internal.ReversalMovement;
 import com.bilt.pos.session.internal.SessionSignalCodec;
 import com.bilt.pos.session.internal.SessionStateMachine;
@@ -81,7 +81,7 @@ public final class ReversalSession implements AutoCloseable {
 
     private final BiltNexoTerminalClient client;
     private final NexoExchange exchange;
-    private final RefundManager refundManager;
+    private final ReversalManager reversalManager;
     private final String currency;
     private final String storeLocation;
 
@@ -123,7 +123,7 @@ public final class ReversalSession implements AutoCloseable {
         NexoMessageFactory factory = new NexoMessageFactory(
                 builder.saleId, builder.poiId, builder.storeLocation);
         this.exchange = new NexoExchange(new DisplayRouter(builder.client, null), factory);
-        this.refundManager = new RefundManager(exchange, builder.currency);
+        this.reversalManager = new ReversalManager(exchange, builder.currency);
     }
 
     public static Builder builder() {
@@ -189,7 +189,7 @@ public final class ReversalSession implements AutoCloseable {
         requireState(EnumSet.of(SessionState.IDLE), "voidTransaction");
         stateMachine.transitionTo(SessionState.VOIDING);
         try {
-            VoidResult result = refundManager.voidMovements(movements, memberId,
+            VoidResult result = reversalManager.voidMovements(movements, memberId,
                     flow.decider(), movement -> voidStepsReversed.add(movement.getStep()));
             stateMachine.transitionTo(SessionState.VOIDED);
             return result;
@@ -241,7 +241,7 @@ public final class ReversalSession implements AutoCloseable {
         // not when the flow returns: an ABORT on the award step after the
         // tender refund completed must not leave the sale voidable on top
         // of the refund
-        RefundResult result = refundManager.refund(amount,
+        RefundResult result = reversalManager.refund(amount,
                 poiTransactionId, poiTransactionTimestamp,
                 awardPoiTransactionId, awardPoiTransactionTimestamp,
                 memberId, flow.decider(), () -> refundIssued = true);

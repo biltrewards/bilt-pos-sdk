@@ -9,7 +9,7 @@
  */
 package com.bilt.pos.session;
 
-import com.bilt.pos.session.internal.RefundManager;
+import com.bilt.pos.session.internal.ReversalManager;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -167,7 +167,7 @@ public final class ReversalFlow<T> {
      * The registered handler as a step decider, or {@code null} to select
      * the default policy.
      */
-    RefundManager.StepDecider decider() {
+    ReversalManager.StepDecider decider() {
         if (errorHandler == null) {
             return null;
         }

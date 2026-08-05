@@ -73,7 +73,7 @@ import com.bilt.pos.session.internal.InputManager;
 import com.bilt.pos.session.internal.NexoExchange;
 import com.bilt.pos.session.internal.NexoMessageFactory;
 import com.bilt.pos.session.internal.PaymentOrchestrator;
-import com.bilt.pos.session.internal.RefundManager;
+import com.bilt.pos.session.internal.ReversalManager;
 import com.bilt.pos.session.internal.ReversalMovement;
 import com.bilt.pos.session.internal.SessionSignalCodec;
 import com.bilt.pos.session.internal.SessionStateMachine;
@@ -165,7 +165,7 @@ public final class CheckoutSession implements AutoCloseable {
 
     private final IdentityManager identityManager;
     private final InputManager inputManager;
-    private final RefundManager refundManager;
+    private final ReversalManager reversalManager;
     private final PaymentOrchestrator paymentOrchestrator;
     private final StoredValueManager storedValueManager;
 
@@ -208,7 +208,7 @@ public final class CheckoutSession implements AutoCloseable {
         this.exchange = new NexoExchange(router, factory);
         this.identityManager = new IdentityManager(exchange);
         this.inputManager = new InputManager(exchange);
-        this.refundManager = new RefundManager(exchange, builder.currency);
+        this.reversalManager = new ReversalManager(exchange, builder.currency);
         this.paymentOrchestrator = new PaymentOrchestrator(exchange, builder.currency);
         this.storedValueManager = new StoredValueManager(exchange, builder.currency);
     }
@@ -1006,7 +1006,7 @@ public final class CheckoutSession implements AutoCloseable {
         // top of the refund. It counts even when unlinked — through a
         // checkout session it is almost certainly returning this
         // checkout's money.
-        RefundResult result = refundManager.refund(amount,
+        RefundResult result = reversalManager.refund(amount,
                 paid.poiTransactionId, paid.poiTransactionTimestamp,
                 paid.awardPoiTransactionId, paid.awardPoiTransactionTimestamp,
                 linked ? reversalMemberId() : null,
@@ -1109,7 +1109,7 @@ public final class CheckoutSession implements AutoCloseable {
             if (resumeRollback) {
                 drainStandingMovements();
             }
-            VoidResult result = refundManager.voidMovements(movements, reversalMemberId(),
+            VoidResult result = reversalManager.voidMovements(movements, reversalMemberId(),
                     flow.decider(), movement -> voidStepsReversed.add(movement.getStep()));
             transitionLocked(SessionState.VOIDED);
             return result;
