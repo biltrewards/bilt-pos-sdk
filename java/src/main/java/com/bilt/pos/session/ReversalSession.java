@@ -13,6 +13,7 @@ import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.session.internal.DisplayRouter;
 import com.bilt.pos.session.internal.NexoExchange;
 import com.bilt.pos.session.internal.NexoMessageFactory;
+import com.bilt.pos.session.internal.PoiRef;
 import com.bilt.pos.session.internal.ReversalManager;
 import com.bilt.pos.session.internal.ReversalMovement;
 import com.bilt.pos.session.internal.SessionSignalCodec;
@@ -270,11 +271,11 @@ public final class ReversalSession implements AutoCloseable {
     /** The referenced movements of the original sale, in reversal order. */
     private List<ReversalMovement> referencedMovements() {
         return ReversalMovement.ofSale(
-                poiTransactionId, poiTransactionTimestamp,
-                storedValuePoiTransactionId, storedValuePoiTransactionTimestamp,
-                redemptionPoiTransactionId, redemptionPoiTransactionTimestamp,
-                rebatePoiTransactionId, rebatePoiTransactionTimestamp,
-                awardPoiTransactionId, awardPoiTransactionTimestamp);
+                PoiRef.ofNullable(poiTransactionId, poiTransactionTimestamp),
+                PoiRef.ofNullable(storedValuePoiTransactionId, storedValuePoiTransactionTimestamp),
+                PoiRef.ofNullable(redemptionPoiTransactionId, redemptionPoiTransactionTimestamp),
+                PoiRef.ofNullable(rebatePoiTransactionId, rebatePoiTransactionTimestamp),
+                PoiRef.ofNullable(awardPoiTransactionId, awardPoiTransactionTimestamp));
     }
 
     // ─── Abort ───

@@ -72,6 +72,7 @@ import com.bilt.pos.session.internal.IdentityManager;
 import com.bilt.pos.session.internal.InputManager;
 import com.bilt.pos.session.internal.NexoExchange;
 import com.bilt.pos.session.internal.NexoMessageFactory;
+import com.bilt.pos.session.internal.PoiRef;
 import com.bilt.pos.session.internal.PaymentOrchestrator;
 import com.bilt.pos.session.internal.ReversalManager;
 import com.bilt.pos.session.internal.ReversalMovement;
@@ -1150,11 +1151,13 @@ public final class CheckoutSession implements AutoCloseable {
     private List<ReversalMovement> voidTarget() {
         LastPayment paid = lastPayment;
         return ReversalMovement.ofSale(
-                paid.poiTransactionId, paid.poiTransactionTimestamp,
-                paid.storedValuePoiTransactionId, paid.storedValuePoiTransactionTimestamp,
-                paid.redemptionPoiTransactionId, paid.redemptionPoiTransactionTimestamp,
-                paid.rebatePoiTransactionId, paid.rebatePoiTransactionTimestamp,
-                paid.awardPoiTransactionId, paid.awardPoiTransactionTimestamp);
+                PoiRef.ofNullable(paid.poiTransactionId, paid.poiTransactionTimestamp),
+                PoiRef.ofNullable(paid.storedValuePoiTransactionId,
+                        paid.storedValuePoiTransactionTimestamp),
+                PoiRef.ofNullable(paid.redemptionPoiTransactionId,
+                        paid.redemptionPoiTransactionTimestamp),
+                PoiRef.ofNullable(paid.rebatePoiTransactionId, paid.rebatePoiTransactionTimestamp),
+                PoiRef.ofNullable(paid.awardPoiTransactionId, paid.awardPoiTransactionTimestamp));
     }
 
     private void transitionLocked(SessionState target) {
