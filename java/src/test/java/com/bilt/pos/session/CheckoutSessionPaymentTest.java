@@ -169,6 +169,22 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void throwingSuccessHandlerStaysLoudOnLaterAccessors() {
+        PaymentFlow flow = new PaymentFlow(f -> CheckoutResult.builder().success(true).build())
+                .onSuccess(result -> {
+                    throw new NullPointerException("register bug");
+                });
+
+        NullPointerException first =
+                assertThrows(NullPointerException.class, flow::execute);
+
+        // a throwing success handler is a bug like any other: later
+        // accessors rethrow it instead of reporting a clean success
+        assertSame(first, assertThrows(NullPointerException.class, flow::get));
+        assertSame(first, assertThrows(NullPointerException.class, flow::getOrNull));
+    }
+
+    @Test
     void executeDeliversPreOrchestrationFailuresToOnError() {
         addHundredDollarItem();
         PaymentFlow flow = session.pay();

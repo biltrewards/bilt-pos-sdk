@@ -104,6 +104,25 @@ class ReversalSessionTest {
                 .getSaleToPOIRequest();
     }
 
+    // ─── Flow mechanics ───
+
+    @Test
+    void throwingSuccessHandlerStaysLoudOnLaterAccessors() {
+        ReversalFlow<VoidResult> flow =
+                new ReversalFlow<>(f -> VoidResult.builder().success(true).build());
+        flow.onSuccess(result -> {
+            throw new NullPointerException("register bug");
+        });
+
+        NullPointerException first =
+                assertThrows(NullPointerException.class, flow::execute);
+
+        // a throwing success handler is a bug like any other: later
+        // accessors rethrow it instead of reporting a clean success
+        assertSame(first, assertThrows(NullPointerException.class, flow::get));
+        assertSame(first, assertThrows(NullPointerException.class, flow::getOrNull));
+    }
+
     // ─── Builder ───
 
     @Test

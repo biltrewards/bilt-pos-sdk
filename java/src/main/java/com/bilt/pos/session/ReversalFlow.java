@@ -144,7 +144,16 @@ public final class ReversalFlow<T> {
             throw e;
         }
         if (successHandler != null) {
-            successHandler.accept(result);
+            try {
+                successHandler.accept(result);
+            } catch (RuntimeException handlerFailure) {
+                // a throwing success handler is a bug like any other
+                // unexpected exception (see SessionResult): record it so
+                // later accessors rethrow it instead of reporting the
+                // outcome as a clean success
+                unexpected = handlerFailure;
+                throw handlerFailure;
+            }
         }
     }
 
