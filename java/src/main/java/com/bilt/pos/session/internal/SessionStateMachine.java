@@ -31,9 +31,10 @@ import static com.bilt.pos.session.SessionState.VOIDED;
 import static com.bilt.pos.session.SessionState.VOIDING;
 
 /**
- * Tracks the {@link SessionState} of a checkout session and enforces the
- * legal transition table. Callers are expected to guard access with the
- * session lock; this class itself performs no synchronization.
+ * Tracks the {@link SessionState} of a session and enforces the legal
+ * transition table. This class performs no synchronization; callers guard
+ * access with their session lock, or by confining the session to a single
+ * thread.
  */
 public final class SessionStateMachine {
 

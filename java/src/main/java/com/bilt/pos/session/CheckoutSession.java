@@ -13,9 +13,6 @@ import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.display.DisplayPayloadHelper;
 import com.bilt.pos.nexo.client.BiltNexoClientException;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
-import com.bilt.pos.nexo.model.AbortRequest;
-import com.bilt.pos.nexo.model.AdminRequest;
-import com.bilt.pos.nexo.model.AdminResponse;
 import com.bilt.pos.nexo.model.DiagnosisRequest;
 import com.bilt.pos.nexo.model.DiagnosisResponse;
 import com.bilt.pos.nexo.model.DocumentQualifierEnum;
@@ -73,11 +70,12 @@ import com.bilt.pos.session.internal.BasketEngine;
 import com.bilt.pos.session.internal.DisplayRouter;
 import com.bilt.pos.session.internal.IdentityManager;
 import com.bilt.pos.session.internal.InputManager;
-import com.bilt.pos.session.internal.LoyaltyPayloadCodec;
 import com.bilt.pos.session.internal.NexoExchange;
 import com.bilt.pos.session.internal.NexoMessageFactory;
+import com.bilt.pos.session.internal.PoiRef;
 import com.bilt.pos.session.internal.PaymentOrchestrator;
-import com.bilt.pos.session.internal.RefundManager;
+import com.bilt.pos.session.internal.ReversalManager;
+import com.bilt.pos.session.internal.ReversalMovement;
 import com.bilt.pos.session.internal.SessionSignalCodec;
 import com.bilt.pos.session.internal.SessionStateMachine;
 import com.bilt.pos.session.internal.StoredValueManager;
@@ -100,7 +98,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -153,7 +150,7 @@ public final class CheckoutSession implements AutoCloseable {
     private final String sessionId = UUID.randomUUID().toString();
     private final SessionStateMachine stateMachine = new SessionStateMachine();
     private final ReentrantLock lock = new ReentrantLock();
-    private final AtomicReference<String> unexecutedOperation = new AtomicReference<>();
+    private final SessionOperations operations = new SessionOperations();
 
     private final BiltNexoTerminalClient client;
     private final NexoMessageFactory factory;
@@ -164,16 +161,11 @@ public final class CheckoutSession implements AutoCloseable {
     private final Consumer<Basket> onBasketUpdated;
     private final String currency;
     private final String storeLocation;
-    private final String poiTransactionId;
-    private final Instant poiTransactionTimestamp;
-    private final String awardPoiTransactionId;
-    private final Instant awardPoiTransactionTimestamp;
-    private final String builderMemberId;
     private final boolean autoDisplay;
 
     private final IdentityManager identityManager;
     private final InputManager inputManager;
-    private final RefundManager refundManager;
+    private final ReversalManager reversalManager;
     private final PaymentOrchestrator paymentOrchestrator;
     private final StoredValueManager storedValueManager;
 
@@ -182,18 +174,12 @@ public final class CheckoutSession implements AutoCloseable {
     private volatile IdentifyResult member;
     private volatile StoredValueCard storedValueCard;
     private volatile LastPayment lastPayment = LastPayment.NONE;
-    // Progress and guard flags scoped to the CURRENT VOID TARGET (the
-    // builder reference, or lastPayment for session-fallback voids):
-    //  - voidCardLegReversed / voidRedemptionLegReversed record partial-void
-    //    progress so a retry resumes at the leg still standing. They never
-    //    go stale across payments: a failed void restores COMPLETED, from
-    //    which pay() is blocked.
-    //  - refundIssued blocks voidTransaction() once a refund was issued
-    //    against the target; it is reset when a new completed payment
-    //    replaces the session-fallback target (see executePayment).
-    private volatile boolean voidCardLegReversed;
-    private volatile boolean voidRedemptionLegReversed;
-    private volatile boolean refundIssued;
+    // refund/void mutual exclusion and void-resume progress for this
+    // session's completed payment (see ReversalGuards). Never stale across
+    // payments: a failed void restores COMPLETED, from which pay() is
+    // blocked, and the refund guard is cleared when a new payment
+    // completes (see executePayment).
+    private final ReversalGuards guards = new ReversalGuards("payment");
     // Non-empty = "FAILED with an incomplete rollback", a substate that
     // restricts FAILED's transitions at five sites (see rollbackIncomplete()
     // callers). If this lifecycle grows further, promote it to an explicit
@@ -209,11 +195,6 @@ public final class CheckoutSession implements AutoCloseable {
         this.client = builder.client;
         this.currency = builder.currency;
         this.storeLocation = builder.storeLocation;
-        this.poiTransactionId = builder.poiTransactionId;
-        this.poiTransactionTimestamp = builder.poiTransactionTimestamp;
-        this.awardPoiTransactionId = builder.awardPoiTransactionId;
-        this.awardPoiTransactionTimestamp = builder.awardPoiTransactionTimestamp;
-        this.builderMemberId = builder.memberId;
         this.autoDisplay = builder.autoDisplay;
         this.displayRenderer = builder.displayRenderer != null
                 ? builder.displayRenderer : new BasketDisplayRenderer();
@@ -224,7 +205,7 @@ public final class CheckoutSession implements AutoCloseable {
         this.exchange = new NexoExchange(router, factory);
         this.identityManager = new IdentityManager(exchange);
         this.inputManager = new InputManager(exchange);
-        this.refundManager = new RefundManager(exchange, builder.currency);
+        this.reversalManager = new ReversalManager(exchange, builder.currency);
         this.paymentOrchestrator = new PaymentOrchestrator(exchange, builder.currency);
         this.storedValueManager = new StoredValueManager(exchange, builder.currency);
     }
@@ -870,12 +851,12 @@ public final class CheckoutSession implements AutoCloseable {
             throw new IllegalStateException(
                     "pay() requires a positive basket total (zero-priced items only)");
         }
-        trackUnexecuted("pay");
+        operations.track("pay");
         return new PaymentFlow(flow -> executePayment(flow, options));
     }
 
     private CheckoutResult executePayment(PaymentFlow flow, PaymentOptions options) {
-        unexecutedOperation.compareAndSet("pay", null);
+        operations.begin("pay");
         PaymentOrchestrator.Request request = new PaymentOrchestrator.Request();
         lock.lock();
         try {
@@ -937,14 +918,10 @@ public final class CheckoutSession implements AutoCloseable {
                 // abort() defers to it while the session is PAYING
                 stateMachine.transitionTo(SessionState.COMPLETED);
                 lastPayment = new LastPayment(result);
-                if (poiTransactionId == null) {
-                    // this payment replaced the session-fallback void
-                    // target, so the guard on the previous target lifts; a
-                    // builder-referenced target never changes, so its guard
-                    // persists (the leg-progress flags need no reset — see
-                    // the field declarations)
-                    refundIssued = false;
-                }
+                // this payment replaced the void target, so the guard on
+                // the previous one lifts (the void-progress set needs no
+                // reset — see the field declarations)
+                guards.clearRefundIssued();
             } finally {
                 lock.unlock();
             }
@@ -972,103 +949,85 @@ public final class CheckoutSession implements AutoCloseable {
     // ─── Refund ───
 
     /**
-     * Full linked refund of the prior transaction referenced by the
-     * builder's {@code poiTransactionId}. Also reverses loyalty points
-     * awarded on the original transaction (best-effort).
+     * Full linked refund of this session's completed payment. Also
+     * reverses the loyalty award when one ran — best-effort by default
+     * (override via {@link ReversalFlow#onError}).
      *
      * <p>Linked refunds reference a single transaction: after a split
      * tender this is the card leg — use {@code voidTransaction()} to
      * reverse both legs, or the stored value operations to return funds to
-     * the gift card.</p>
+     * the gift card. A refund reverses the card leg and award only; the
+     * sale's committed rebate and redemption movements are reversed by
+     * {@link #voidTransaction()}. Once a refund has returned money the
+     * payment can no longer be voided; a tender skipped by an
+     * {@code onError} decision leaves it voidable, with an award the flow
+     * reversed remembered so nothing re-credits it. Once a void has
+     * partially reversed the payment's money legs, refunds are refused
+     * until the void is finished. To refund a sale taken by an earlier,
+     * gone session, use {@link ReversalSession}.</p>
      */
-    public SessionResult<RefundResult> refund() {
-        return linkedRefund(null);
+    public ReversalFlow<RefundResult> refund() {
+        operations.track("refund");
+        return new ReversalFlow<>(flow -> executeRefund(flow, "refund", null, true));
     }
 
     /**
-     * Partial linked refund of the prior transaction referenced by the
-     * builder's {@code poiTransactionId}. Also reverses loyalty points
-     * (best-effort).
+     * Partial linked refund of this session's completed payment. Also
+     * reverses the loyalty award when one ran (best-effort by default).
      */
-    public SessionResult<RefundResult> refund(BigDecimal amount) {
+    public ReversalFlow<RefundResult> refund(BigDecimal amount) {
         Objects.requireNonNull(amount, "amount");
         requirePositive(amount);
-        return linkedRefund(amount);
+        operations.track("refund");
+        return new ReversalFlow<>(flow -> executeRefund(flow, "refund", amount, true));
     }
 
     /**
      * Unlinked refund, not tied to a prior transaction. Payment-only — no
      * loyalty reversal.
      */
-    public SessionResult<RefundResult> refundUnlinked(BigDecimal amount) {
+    public ReversalFlow<RefundResult> refundUnlinked(BigDecimal amount) {
         Objects.requireNonNull(amount, "amount");
         requirePositive(amount);
-        return operation("refundUnlinked", () -> {
-            requireRefundable("refundUnlinked");
-            RefundResult result = refundManager.refund(
-                    amount, null, null, RefundManager.LoyaltyRef.NONE);
-            // counts like a linked refund: through a checkout session it is
-            // almost certainly returning this checkout's money
-            refundIssued = true;
-            return result;
-        });
+        operations.track("refundUnlinked");
+        return new ReversalFlow<>(flow -> executeRefund(flow, "refundUnlinked", amount, false));
     }
 
-    private SessionResult<RefundResult> linkedRefund(BigDecimal amount) {
-        return operation("refund", () -> {
-            requireRefundable("refund");
-            String originalId = effectivePoiTransactionId();
-            if (originalId == null) {
-                throw invalidState("a linked refund requires poiTransactionId on the "
-                        + "session builder or a completed payment in this session");
-            }
-            RefundResult result = refundManager.refund(amount, originalId,
-                    effectivePoiTransactionTimestamp(), loyaltyRef());
-            refundIssued = true;
-            return result;
-        });
-    }
-
-    /**
-     * The award reference and member for loyalty reversals: builder-supplied
-     * for external transactions, else this session's completed payment.
-     */
-    private RefundManager.LoyaltyRef loyaltyRef() {
-        if (poiTransactionId != null) {
-            return new RefundManager.LoyaltyRef(
-                    awardPoiTransactionId, awardPoiTransactionTimestamp, builderMemberId);
+    private RefundResult executeRefund(ReversalFlow<RefundResult> flow, String name,
+                                       BigDecimal amount, boolean linked) {
+        operations.begin(name);
+        requireRefundable(name);
+        guards.requireNoReversedMoneyLeg();
+        LastPayment paid = linked ? lastPayment : LastPayment.NONE;
+        if (linked && paid.poiTransactionId == null) {
+            throw invalidState("a linked refund requires a completed payment in this "
+                    + "session; to refund a prior sale, use ReversalSession");
         }
+        // the void guard follows the money (see ReversalGuards) — it counts
+        // even when unlinked, since through a checkout session an unlinked
+        // refund is almost certainly returning this checkout's money
+        boolean awardReversed = guards.awardReversed();
+        return reversalManager.refund(amount,
+                paid.poiTransactionId, paid.poiTransactionTimestamp,
+                awardReversed ? null : paid.awardPoiTransactionId,
+                awardReversed ? null : paid.awardPoiTransactionTimestamp,
+                linked ? reversalMemberId() : null,
+                flow.decider(),
+                guards::markRefunded,
+                guards::markAwardReversed);
+    }
+
+    /** The identified member for a reversal's {@code LoyaltyData}, or {@code null}. */
+    private String reversalMemberId() {
         IdentifyResult currentMember = getMember();
-        return new RefundManager.LoyaltyRef(
-                lastPayment.awardPoiTransactionId, lastPayment.awardPoiTransactionTimestamp,
-                currentMember != null ? currentMember.getMemberId() : builderMemberId);
+        return currentMember != null ? currentMember.getMemberId() : null;
     }
 
     /**
-     * The rewardRefs payload a redemption refund must carry, rebuilt from
-     * the identified member's rewards — the same refs the redemption sent.
-     */
-    private String memberRewardRefsPayload() {
-        IdentifyResult currentMember = getMember();
-        return currentMember == null
-                ? null : LoyaltyPayloadCodec.memberRewardRefs(currentMember.getRewards());
-    }
-
-    /** Builder-supplied prior transaction, else the last completed payment. */
-    private String effectivePoiTransactionId() {
-        return poiTransactionId != null ? poiTransactionId : lastPayment.poiTransactionId;
-    }
-
-    private Instant effectivePoiTransactionTimestamp() {
-        return poiTransactionId != null
-                ? poiTransactionTimestamp : lastPayment.poiTransactionTimestamp;
-    }
-
-    /**
-     * Refunds are allowed on fresh sessions (builder-referenced) and on
-     * sessions whose payment has completed or failed — unlike
-     * {@link #requireNotEnded}, {@code COMPLETED} is a refundable state so a
-     * register can refund the payment it just took.
+     * Refunds are allowed on sessions whose payment has completed or
+     * failed — unlike {@link #requireNotEnded}, {@code COMPLETED} is a
+     * refundable state so a register can refund the payment it just took.
+     * The pre-payment states are allowed for {@code refundUnlinked}.
      */
     private void requireRefundable(String operationName) {
         requireState(EnumSet.of(SessionState.IDLE, SessionState.IDENTIFIED,
@@ -1085,83 +1044,104 @@ public final class CheckoutSession implements AutoCloseable {
     // ─── Void ───
 
     /**
-     * Reverses the completed transaction referenced by the builder's
-     * {@code poiTransactionId} (Nexo {@code ReversalRequest}), including a
-     * best-effort loyalty award reversal. Voiding this session's own
-     * completed payment also refunds its committed loyalty movements
-     * (redemption, rebate) best-effort, and a completed checkout that had
-     * no payment legs — rewards covered the whole basket — is voided by
-     * refunding those movements alone. On a session whose payment failed
-     * with an incomplete rollback, {@code voidTransaction()} finishes the
-     * unwind by retrying the reversals that did not go through. Not allowed
-     * once the payment has been refunded from this session — a void would
-     * return the full amount on top of the refund, so further returns must
-     * use {@link #refund(BigDecimal)}. The session moves to
-     * {@link SessionState#VOIDED} on success.
+     * Reverses this session's completed payment: every movement it
+     * committed — the card and stored value legs (Nexo
+     * {@code ReversalRequest}), then the redemption, rebate, and award
+     * (their {@code LoyaltyRequest} refund types) — in that order. A
+     * checkout fully covered by rewards has no money leg; voiding it
+     * refunds the loyalty movements alone. To void a sale taken by an
+     * earlier, gone session, use {@link ReversalSession}.
+     *
+     * <p>When a step fails, the flow's {@link ReversalFlow#onError onError}
+     * handler decides between retry, skip, and abort — see
+     * {@link ReversalFlow} for the default policy. A retried void resumes
+     * at the first movement still standing — reversed movements are never
+     * re-credited, and the retry's {@link VoidResult} describes only the
+     * movements that call sent.</p>
+     *
+     * <p>On a session whose payment failed with an incomplete rollback,
+     * {@code voidTransaction()} finishes the unwind by retrying the
+     * reversals that did not go through. Not allowed once the payment has
+     * been refunded from this session — a void would return the full amount
+     * on top of the refund, so further returns must use
+     * {@link #refund(BigDecimal)}. The session moves to
+     * {@link SessionState#VOIDED} on success.</p>
      */
-    public SessionResult<VoidResult> voidTransaction() {
-        return operation("voidTransaction", () -> {
-            String originalId = effectivePoiTransactionId();
-            // a failed payment whose rollback was incomplete left movements
-            // standing; voiding that session means finishing the unwind
-            boolean resumeRollback = rollbackIncomplete();
-            boolean loyaltyOnly = false;
-            if (!resumeRollback) {
-                if (refundIssued) {
-                    throw invalidState(
-                            "the payment was already refunded from this session; a void "
-                                    + "would return the full amount on top of the refund — "
-                                    + "use refund(amount) for further returns");
-                }
-                // a checkout fully covered by rewards completes without a
-                // payment leg: there is no transaction to reverse, so the
-                // void refunds the committed loyalty movements instead
-                loyaltyOnly = originalId == null
-                        && (lastPayment.redemptionPoiTransactionId != null
-                                || lastPayment.rebatePoiTransactionId != null
-                                || lastPayment.awardPoiTransactionId != null);
-                if (originalId == null && !loyaltyOnly) {
-                    throw invalidState(
-                            "voidTransaction requires poiTransactionId on the session "
-                                    + "builder or a completed payment in this session");
-                }
+    public ReversalFlow<VoidResult> voidTransaction() {
+        operations.track("voidTransaction");
+        return new ReversalFlow<>(this::executeVoid);
+    }
+
+    private VoidResult executeVoid(ReversalFlow<VoidResult> flow) {
+        operations.begin("voidTransaction");
+        // a failed payment whose rollback was incomplete left movements
+        // standing; voiding that session means finishing the unwind
+        // state first (advisory — the locked check below stays
+        // authoritative): an ended or paying session is reported as such,
+        // not by a guard whose remedy the state would also refuse
+        requireState(EnumSet.of(SessionState.IDLE, SessionState.COMPLETED,
+                SessionState.FAILED), "voidTransaction");
+        boolean resumeRollback = rollbackIncomplete();
+        List<ReversalMovement> movements = List.of();
+        if (!resumeRollback) {
+            guards.requireNotRefunded();
+            movements = voidTarget();
+            if (movements.isEmpty()) {
+                throw invalidState(
+                        "voidTransaction requires a completed payment in this "
+                                + "session; to void a prior sale, use ReversalSession");
             }
-            SessionState stateBeforeVoid;
-            lock.lock();
-            try {
-                SessionError error = stateMachine.requireState(
-                        EnumSet.of(SessionState.IDLE, SessionState.COMPLETED, SessionState.FAILED),
-                        "voidTransaction");
-                if (error != null) {
-                    throw new SessionException(error);
-                }
-                stateBeforeVoid = stateMachine.current();
-                stateMachine.transitionTo(SessionState.VOIDING);
-            } finally {
-                lock.unlock();
+        }
+        SessionState stateBeforeVoid;
+        lock.lock();
+        try {
+            SessionError error = stateMachine.requireState(
+                    EnumSet.of(SessionState.IDLE, SessionState.COMPLETED, SessionState.FAILED),
+                    "voidTransaction");
+            if (error != null) {
+                throw new SessionException(error);
             }
-            try {
-                VoidResult result;
-                if (resumeRollback) {
-                    drainStandingMovements();
-                    result = VoidResult.builder().success(true).build();
-                } else {
-                    result = loyaltyOnly ? voidLoyaltyLegs() : voidPaymentLegs(originalId);
-                }
-                transitionLocked(SessionState.VOIDED);
-                return result;
-            } catch (RuntimeException e) {
-                // a failed void leaves the referenced transaction standing, so
-                // the session returns to its pre-void state — a COMPLETED
-                // payment must not become FAILED, which would let pay() retry
-                // and authorize a second charge on top of the original.
-                // Catching all RuntimeExceptions (not just SessionException)
-                // matters: VOIDING has no other exits, so an unexpected error
-                // must never leave the session stranded there.
-                transitionLocked(stateBeforeVoid);
-                throw e;
+            stateBeforeVoid = stateMachine.current();
+            stateMachine.transitionTo(SessionState.VOIDING);
+        } finally {
+            lock.unlock();
+        }
+        try {
+            if (resumeRollback) {
+                drainStandingMovements();
             }
-        });
+            // the manager filters against the reversed-steps set (and
+            // records progress into it), so a retry resumes at the
+            // movements still standing while the default policy still sees
+            // the whole target
+            VoidResult result = reversalManager.voidMovements(movements, reversalMemberId(),
+                    flow.decider(), guards.reversedSteps());
+            transitionLocked(SessionState.VOIDED);
+            return result;
+        } catch (RuntimeException e) {
+            // a failed void leaves the referenced transaction standing, so
+            // the session returns to its pre-void state — a COMPLETED
+            // payment must not become FAILED, which would let pay() retry
+            // and authorize a second charge on top of the original.
+            // Catching all RuntimeExceptions (not just SessionException)
+            // matters: VOIDING has no other exits, so an unexpected error
+            // must never leave the session stranded there.
+            transitionLocked(stateBeforeVoid);
+            throw e;
+        }
+    }
+
+    /** The completed payment's movements, in reversal order. */
+    private List<ReversalMovement> voidTarget() {
+        LastPayment paid = lastPayment;
+        return ReversalMovement.ofSale(
+                PoiRef.ofNullable(paid.poiTransactionId, paid.poiTransactionTimestamp),
+                PoiRef.ofNullable(paid.storedValuePoiTransactionId,
+                        paid.storedValuePoiTransactionTimestamp),
+                PoiRef.ofNullable(paid.redemptionPoiTransactionId,
+                        paid.redemptionPoiTransactionTimestamp),
+                PoiRef.ofNullable(paid.rebatePoiTransactionId, paid.rebatePoiTransactionTimestamp),
+                PoiRef.ofNullable(paid.awardPoiTransactionId, paid.awardPoiTransactionTimestamp));
     }
 
     private void transitionLocked(SessionState target) {
@@ -1171,17 +1151,6 @@ public final class CheckoutSession implements AutoCloseable {
         } finally {
             lock.unlock();
         }
-    }
-
-    /**
-     * Voids a checkout whose rewards covered everything — no payment legs,
-     * so the committed loyalty movements are refunded instead. A retry
-     * after a partial void resumes at the rebate leg instead of
-     * re-crediting the redemption.
-     */
-    private VoidResult voidLoyaltyLegs() {
-        return refundManager.voidLoyalty(loyaltyLegs(),
-                loyaltyRef(), () -> voidRedemptionLegReversed = true);
     }
 
     /**
@@ -1245,45 +1214,6 @@ public final class CheckoutSession implements AutoCloseable {
     private static SessionException invalidState(String message) {
         return new SessionException(
                 new SessionError(SessionErrorCode.INVALID_STATE, message));
-    }
-
-    /**
-     * The completed payment's committed loyalty movements, for the void
-     * paths. A leg already reversed by a partial void is omitted so a retry
-     * does not re-credit it.
-     */
-    private RefundManager.LoyaltyLegs loyaltyLegs() {
-        LastPayment paid = lastPayment;
-        return new RefundManager.LoyaltyLegs(
-                voidRedemptionLegReversed ? null : paid.redemptionPoiTransactionId,
-                paid.redemptionPoiTransactionTimestamp,
-                memberRewardRefsPayload(),
-                paid.rebatePoiTransactionId, paid.rebatePoiTransactionTimestamp);
-    }
-
-    /**
-     * Reverses the payment legs. A session-fallback void of a split tender
-     * reverses both legs; a builder-referenced void stays single-leg (the
-     * caller controls the reference), and a gift-card-only checkout has one
-     * transaction, not two. A retry after a partial void resumes at the leg
-     * that is still standing instead of re-reversing the card payment.
-     */
-    private VoidResult voidPaymentLegs(String originalId) {
-        LastPayment paid = lastPayment;
-        String storedValueLeg = poiTransactionId == null
-                && paid.storedValuePoiTransactionId != null
-                && !paid.storedValuePoiTransactionId.equals(originalId)
-                ? paid.storedValuePoiTransactionId : null;
-        String cardLeg = voidCardLegReversed ? null : originalId;
-        // like the stored value leg, the loyalty movements are known only
-        // for this session's own payment; a builder-referenced void stays
-        // tender + award (the caller controls the references)
-        RefundManager.LoyaltyLegs loyaltyLegs = poiTransactionId == null
-                ? loyaltyLegs() : RefundManager.LoyaltyLegs.NONE;
-        return refundManager.voidTransaction(
-                cardLeg, effectivePoiTransactionTimestamp(),
-                storedValueLeg, paid.storedValuePoiTransactionTimestamp,
-                loyaltyLegs, loyaltyRef(), () -> voidCardLegReversed = true);
     }
 
     // ─── Display ───
@@ -1393,34 +1323,9 @@ public final class CheckoutSession implements AutoCloseable {
         } finally {
             lock.unlock();
         }
-        NexoExchange.InFlight inFlight = exchange.currentInFlight();
-        // the session lifecycle signals (the ADMIN category carries only
-        // start/end) are never the abort's target: cancelling the end
-        // exchange would buy nothing and could strand the terminal's
-        // session-scoped data — like VOIDING, an in-flight end() always
-        // settles
-        if (inFlight != null && inFlight.getCategory() != MessageCategoryType.ADMIN) {
-            sendAbort(inFlight);
-        }
-    }
-
-    private void sendAbort(NexoExchange.InFlight inFlight) {
-        SaleToPOIRequest request = SaleToPOIRequest.builder()
-                .messageHeader(factory.header(MessageClassType.SERVICE, MessageCategoryType.ABORT))
-                .abortRequest(AbortRequest.builder()
-                        .abortReason("MerchantAbort")
-                        .messageReference(MessageReference.builder()
-                                .messageCategory(inFlight.getCategory())
-                                .serviceID(inFlight.getServiceId())
-                                .saleID(factory.getSaleId())
-                                .build())
-                        .build())
-                .build();
-        try {
-            inFlight.getClient().request(factory.envelope(request));
-        } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "abort request failed", e);
-        }
+        // the session lifecycle signals are never the abort's target — like
+        // VOIDING, an in-flight end() always settles
+        exchange.abortInFlight();
     }
 
     // ─── Session lifecycle ───
@@ -1431,7 +1336,7 @@ public final class CheckoutSession implements AutoCloseable {
      * this succeeds, so an unstarted session never escapes.
      */
     private CheckoutSession started() {
-        sendSessionSignal(SessionSignalCodec.start(sessionId));
+        exchange.sendSessionSignal(SessionSignalCodec.start(sessionId));
         return this;
     }
 
@@ -1472,7 +1377,7 @@ public final class CheckoutSession implements AutoCloseable {
             } finally {
                 lock.unlock();
             }
-            sendSessionSignal(SessionSignalCodec.end(sessionId));
+            exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
             transitionLocked(SessionState.ENDED);
             return null;
         });
@@ -1491,24 +1396,6 @@ public final class CheckoutSession implements AutoCloseable {
         }
         end().onError(e -> LOGGER.warning("close() could not end the session: " + e))
                 .execute();
-    }
-
-    /** Sends a Bilt session signal as a Nexo {@code AdminRequest}. */
-    private void sendSessionSignal(String serviceIdentification) {
-        SaleToPOIRequest request = SaleToPOIRequest.builder()
-                .messageHeader(factory.header(MessageClassType.SERVICE,
-                        MessageCategoryType.ADMIN))
-                .adminRequest(AdminRequest.builder()
-                        .serviceIdentification(serviceIdentification)
-                        .build())
-                .build();
-        SaleToPOIResponse response = exchange.sendExpectingBody(
-                MessageCategoryType.ADMIN, request);
-        AdminResponse body = response.getAdminResponse();
-        if (body == null) {
-            throw Wire.missing("AdminResponse");
-        }
-        exchange.requireSuccess(MessageCategoryType.ADMIN, body.getResponse());
     }
 
     /**
@@ -1835,26 +1722,8 @@ public final class CheckoutSession implements AutoCloseable {
 
     // ─── Internals ───
 
-    /**
-     * Creates a lazy {@link SessionResult}, warning when a previously created
-     * operation was never executed (a forgotten {@code .execute()} is the
-     * most common integration mistake with this API).
-     */
     private <T> SessionResult<T> operation(String name, Supplier<T> body) {
-        trackUnexecuted(name);
-        return new SessionResult<>(name, () -> {
-            unexecutedOperation.compareAndSet(name, null);
-            return body.get();
-        });
-    }
-
-    /** Warns when a previously created operation was never executed. */
-    private void trackUnexecuted(String name) {
-        String pending = unexecutedOperation.getAndSet(name);
-        if (pending != null) {
-            LOGGER.warning("session operation '" + pending + "' was created but never executed; "
-                    + "did you forget to call execute(), get(), or getOrNull()?");
-        }
+        return operations.operation(name, body);
     }
 
     /** Builder for {@link CheckoutSession}. */
@@ -1865,11 +1734,6 @@ public final class CheckoutSession implements AutoCloseable {
         private String poiId;
         private String currency;
         private String storeLocation;
-        private String poiTransactionId;
-        private Instant poiTransactionTimestamp;
-        private String awardPoiTransactionId;
-        private Instant awardPoiTransactionTimestamp;
-        private String memberId;
         private boolean autoDisplay = true;
         private BiltNexoTerminalClient externalDisplayClient;
         private DisplayRenderer displayRenderer;
@@ -1910,52 +1774,6 @@ public final class CheckoutSession implements AutoCloseable {
          */
         public Builder storeLocation(String storeLocation) {
             this.storeLocation = storeLocation;
-            return this;
-        }
-
-        /**
-         * Reference to a prior transaction, required for linked refunds and
-         * {@code voidTransaction()}.
-         */
-        public Builder poiTransactionId(String poiTransactionId) {
-            this.poiTransactionId = poiTransactionId;
-            return this;
-        }
-
-        /** Timestamp of the prior transaction referenced by {@link #poiTransactionId}. */
-        public Builder poiTransactionTimestamp(Instant poiTransactionTimestamp) {
-            this.poiTransactionTimestamp = poiTransactionTimestamp;
-            return this;
-        }
-
-        /**
-         * Terminal reference of the prior transaction's loyalty award (from
-         * {@code CheckoutResult.getAwardPoiTransactionId()}). Lets linked
-         * refunds and voids on this session reverse the award by its own
-         * reference, per the reverse-award contract; without it the payment
-         * reference is sent and the terminal resolves the award.
-         */
-        public Builder awardPoiTransactionId(String awardPoiTransactionId) {
-            this.awardPoiTransactionId = awardPoiTransactionId;
-            return this;
-        }
-
-        /** Timestamp of the award referenced by {@link #awardPoiTransactionId}. */
-        public Builder awardPoiTransactionTimestamp(Instant awardPoiTransactionTimestamp) {
-            this.awardPoiTransactionTimestamp = awardPoiTransactionTimestamp;
-            return this;
-        }
-
-        /**
-         * The member's loyalty account ID from the original sale (from
-         * {@code IdentifyResult.getMemberId()} or
-         * {@code CheckoutResult}/POS records). The reverse-award contract
-         * requires it in {@code LoyaltyData}, so supply it for linked
-         * refunds and voids on builder-referenced sessions — without it the
-         * loyalty reversal is attempted without member identification.
-         */
-        public Builder memberId(String memberId) {
-            this.memberId = memberId;
             return this;
         }
 

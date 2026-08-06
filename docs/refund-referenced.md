@@ -17,6 +17,8 @@ You can make a **full refund** to return the total amount, or a **partial refund
 
 You need the transaction identifier and timestamp of the original payment. These are returned in the payment response as `POIData.POITransactionID.TransactionID` and `POIData.POITransactionID.TimeStamp`. Make sure your POS app stores these when a payment completes.
 
+> Through the session API: `CheckoutSession.refund(...)` refunds the payment the session itself just took, and a `ReversalSession` built with `poiTransactionId` / `poiTransactionTimestamp` (plus `awardPoiTransactionId` / `awardPoiTransactionTimestamp` / `memberId` for the loyalty award reversal) refunds a prior sale. See the [integration guide](./checkout-session-integration.md#reversing-a-prior-sale-reversalsession).
+
 ---
 
 ## Make a referenced refund request

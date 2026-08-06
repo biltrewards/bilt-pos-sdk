@@ -100,10 +100,7 @@ public final class LoyaltyPayloadCodec {
         return earned;
     }
 
-    /**
-     * The {@code rewardRefs} payload for a member's rewards. A redemption
-     * and its refund must carry the same refs — both derive them here.
-     */
+    /** The {@code rewardRefs} payload for a member's rewards. */
     public static String memberRewardRefs(List<Reward> rewards) {
         List<String> refs = new ArrayList<>();
         for (Reward reward : rewards) {

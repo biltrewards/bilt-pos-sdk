@@ -392,33 +392,61 @@ session.mutate(m -> m
 
 ## Refund and void
 
-Linked refunds require `poiTransactionId` / `poiTransactionTimestamp` on the builder (or a payment completed in the same session) and also reverse loyalty points awarded on the original transaction (best-effort). Unlinked refunds are payment-only — no loyalty reversal.
+`CheckoutSession` reverses the payment it took itself: `refund()` and `voidTransaction()` work on the session's completed payment, no references needed. Reversing a sale taken by an earlier, gone session is `ReversalSession`'s job — see [Reversing a prior sale](#reversing-a-prior-sale-reversalsession) below.
+
+- `refund()` / `refund(amount)` — linked refunds of the completed payment; also reverse the loyalty award when one ran, best-effort by default. Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once a refund — linked or unlinked — has returned money, the payment can no longer be voided from that session: a void would return the full amount on top of the refund. Refunds cover the card leg + award only; the sale's committed rebate and redemption movements are reversed by `voidTransaction()`.
+- `refundUnlinked(amount)` — payment-only, not tied to a prior transaction, no loyalty reversal.
+- `voidTransaction()` — reverses every movement the completed payment committed, in order: card and stored value legs (nexo `ReversalRequest`), then the redemption, rebate, and award (their `LoyaltyRequest` refund types). A checkout fully covered by rewards has no money leg; voiding it refunds the loyalty movements alone. And when a failed payment's rollback was incomplete (the error names the movements still standing), `voidTransaction()` on that session finishes the unwind by retrying the reversals that did not go through.
+
+Both return a `ReversalFlow` — lazy like every session operation (`execute()` / `get()` / `getOrNull()`). When a step fails, the `onError` handler decides how to proceed:
 
 ```java
-CheckoutSession refundSession = CheckoutSession.builder()
-    .client(client)
-    .saleId("POS-LANE-3")
-    .poiId("VictaLane-275839164")
-    .currency("USD")
-    .poiTransactionId("POI-TXN-0099")                              // from the original payment
-    .poiTransactionTimestamp(Instant.parse("2026-04-30T14:15:05Z"))
-    .start()
-    .get();
-
-refundSession.refund(new BigDecimal("24.99"))     // partial linked refund
-    .onSuccess(result -> {
-        register.printRefundReceipt(result);
-        if (result.getPointsReversed() > 0) {
-            register.showMessage(result.getPointsReversed() + " points reversed");
-        }
-    })
-    .onError(error -> register.showError(error.getMessage()))
+session.voidTransaction()
+    .onError((step, error) -> step == ReversalStep.AWARD
+            ? ReversalDecision.SKIP      // leave it standing (terminal retries via SAF)
+            : ReversalDecision.ABORT)    // stop; reversed legs stand, session restores
+    .onSuccess(result -> register.printVoidReceipt(result))
     .execute();
 ```
 
-- `refund()` / `refund(amount)` — linked refunds; also reverse loyalty points awarded on the original transaction (best-effort). Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once any refund — linked or unlinked — has been issued from a session, its payment can no longer be voided from it: a void would return the full amount on top of the refund.
-- `refundUnlinked(amount)` — payment-only, no loyalty reversal.
-- `voidTransaction()` — reverses a completed transaction (nexo `ReversalRequest` + loyalty award reversal). On a session that just completed a payment, the transaction reference is remembered — no builder fields needed — and its committed loyalty movements (redemption, rebate) are refunded as well, best-effort. A checkout fully covered by rewards has no payment to reverse; voiding it refunds the committed loyalty movements alone. And when a failed payment's rollback was incomplete (the error names the movements still standing), `voidTransaction()` on that session finishes the unwind by retrying the reversals that did not go through.
+`RETRY` re-sends the failed step, `SKIP` leaves the movement standing and continues, `ABORT` stops the flow (already-reversed steps always stand — there is no compensating re-commit; a later `voidTransaction()` resumes at the first movement still standing). Without a handler the default policy applies: money-leg failures abort; loyalty failures are skipped when a money leg anchors the void, and abort when the loyalty movements are the substance of the void.
+
+---
+
+## Reversing a prior sale (ReversalSession)
+
+Every movement of a completed sale can be reversed from a fresh process — days later, long after the checkout session is gone — by persisting the references from the sale's `CheckoutResult` and supplying them to a `ReversalSession`:
+
+| Movement | Persist from `CheckoutResult` | `ReversalSession.Builder` fields |
+|---|---|---|
+| Card payment | `getPoiTransactionId()` / `getPoiTransactionTimestamp()` | `poiTransactionId` / `poiTransactionTimestamp` |
+| Stored value (gift card) leg | `getStoredValuePoiTransactionId()` / `getStoredValuePoiTransactionTimestamp()` | `storedValuePoiTransactionId` / `storedValuePoiTransactionTimestamp` |
+| Rebate (coupons) | `getRebatePoiTransactionId()` / `getRebatePoiTransactionTimestamp()` | `rebatePoiTransactionId` / `rebatePoiTransactionTimestamp` |
+| Redemption (points) | `getRedemptionPoiTransactionId()` / `getRedemptionPoiTransactionTimestamp()` | `redemptionPoiTransactionId` / `redemptionPoiTransactionTimestamp` |
+| Award | `getAwardPoiTransactionId()` / `getAwardPoiTransactionTimestamp()` | `awardPoiTransactionId` / `awardPoiTransactionTimestamp` |
+| Member | `IdentifyResult.getMemberId()` (or POS records) | `memberId` |
+
+```java
+try (ReversalSession session = ReversalSession.builder()
+        .client(client)
+        .saleId("POS-LANE-3")
+        .poiId("VictaLane-275839164")
+        .currency("USD")
+        .poiTransactionId(stored.cardTxnId).poiTransactionTimestamp(stored.cardTs)
+        .storedValuePoiTransactionId(stored.giftCardTxnId)
+        .storedValuePoiTransactionTimestamp(stored.giftCardTs)
+        .rebatePoiTransactionId(stored.rebateTxnId).rebatePoiTransactionTimestamp(stored.rebateTs)
+        .redemptionPoiTransactionId(stored.redemptionTxnId)
+        .redemptionPoiTransactionTimestamp(stored.redemptionTs)
+        .awardPoiTransactionId(stored.awardTxnId).awardPoiTransactionTimestamp(stored.awardTs)
+        .memberId(stored.memberId)
+        .start()
+        .get()) {
+    session.voidTransaction().execute();   // card, gift card, redemption, rebate, award
+}
+```
+
+A reversal session is bracketed on the terminal like a checkout (session start/end signals; it is `AutoCloseable`), carries only reversal operations — `voidTransaction()`, `refund()`, `refund(amount)` — and requires at least one transaction reference at `start()`. Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. `refund()` requires the card reference and reverses the card leg + award only. The same `ReversalFlow` decision handling applies as on `CheckoutSession`.
 
 ---
 

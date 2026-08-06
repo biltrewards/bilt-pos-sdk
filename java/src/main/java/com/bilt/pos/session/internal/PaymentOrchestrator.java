@@ -22,7 +22,6 @@ import com.bilt.pos.nexo.model.LoyaltyTransactionTypeEnum;
 import com.bilt.pos.nexo.model.LoyaltyUnitEnum;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
-import com.bilt.pos.nexo.model.OriginalPOITransaction;
 import com.bilt.pos.nexo.model.PaymentData;
 import com.bilt.pos.nexo.model.PaymentInstrumentData;
 import com.bilt.pos.nexo.model.PaymentInstrumentTypeEnum;
@@ -30,8 +29,6 @@ import com.bilt.pos.nexo.model.PaymentRequest;
 import com.bilt.pos.nexo.model.PaymentResponse;
 import com.bilt.pos.nexo.model.PaymentTransaction;
 import com.bilt.pos.nexo.model.Rebates;
-import com.bilt.pos.nexo.model.ReversalReasonEnum;
-import com.bilt.pos.nexo.model.ReversalRequest;
 import com.bilt.pos.nexo.model.SaleData;
 import com.bilt.pos.nexo.model.SaleItem;
 import com.bilt.pos.nexo.model.SaleItemRebate;
@@ -352,7 +349,8 @@ public final class PaymentOrchestrator {
 
         List<RedeemedRebate> rebates = new ArrayList<>();
         BigDecimal totalRebate = BigDecimal.ZERO;
-        Rebates wireRebates = firstResult(body) == null ? null : firstResult(body).getRebates();
+        LoyaltyResult firstRebateResult = Wire.firstLoyaltyResult(body);
+        Rebates wireRebates = firstRebateResult == null ? null : firstRebateResult.getRebates();
         if (wireRebates != null) {
             if (wireRebates.getSaleItemRebate() != null) {
                 for (SaleItemRebate itemRebate : wireRebates.getSaleItemRebate()) {
@@ -384,7 +382,7 @@ public final class PaymentOrchestrator {
         commit(committed, TransactionStep.REBATE, saleTxnId, body.getPoiData(),
                 totalRebate.signum() > 0
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REBATE_REFUND,
-                                Wire.poiRef(body.getPoiData()), request.member.getMemberId(), null)
+                                Wire.poiRef(body.getPoiData()), request.member.getMemberId())
                         : null);
         // kept on the result so a checkout with no payment legs (rewards
         // covered everything) can still be voided by reversing this movement
@@ -412,7 +410,7 @@ public final class PaymentOrchestrator {
         LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.REDEMPTION, request, basket,
                 saleTxnId, rewardRefsPayload);
 
-        LoyaltyResult first = firstResult(body);
+        LoyaltyResult first = Wire.firstLoyaltyResult(body);
         BigDecimal monetaryValue = BigDecimal.ZERO;
         int pointsUsed = 0;
         int balance = 0;
@@ -441,8 +439,7 @@ public final class PaymentOrchestrator {
         commit(committed, TransactionStep.POINTS, saleTxnId, body.getPoiData(),
                 monetaryValue.signum() > 0
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
-                                Wire.poiRef(body.getPoiData()), request.member.getMemberId(),
-                                rewardRefsPayload)
+                                Wire.poiRef(body.getPoiData()), request.member.getMemberId())
                         : null);
         // kept on the result so a checkout with no payment legs (rewards
         // covered everything) can still be voided by reversing this movement
@@ -618,7 +615,7 @@ public final class PaymentOrchestrator {
             commit(committed, TransactionStep.AWARD, saleTxnId, body.getPoiData(),
                     awardPoiTxn != null
                             ? loyaltyRollback(LoyaltyTransactionTypeEnum.AWARD_REFUND,
-                                    awardPoiTxn, request.member.getMemberId(), null)
+                                    awardPoiTxn, request.member.getMemberId())
                             : null);
             if (awardPoiTxn != null) {
                 // kept on the result so a later void/refund can reverse the
@@ -626,7 +623,7 @@ public final class PaymentOrchestrator {
                 result.awardPoiTransactionId(awardPoiTxn.getTransactionID());
                 result.awardPoiTransactionTimestamp(Wire.instant(awardPoiTxn.getTimeStamp()));
             }
-            LoyaltyResult first = firstResult(body);
+            LoyaltyResult first = Wire.firstLoyaltyResult(body);
             if (first != null && first.getLoyaltyAmount() != null) {
                 result.totalPointsEarned((int) Math.round(
                         first.getLoyaltyAmount().getAmountValue()));
@@ -839,30 +836,10 @@ public final class PaymentOrchestrator {
 
     private Runnable loyaltyRollback(LoyaltyTransactionTypeEnum refundType,
                                      TransactionIdentificationType originalPoiTxn,
-                                     String memberId, String saleToPoiData) {
+                                     String memberId) {
         return () -> {
-            SaleData saleData = exchange.factory().saleData();
-            if (saleToPoiData != null) {
-                // the reverse-redemption contract carries the rewardRefs to
-                // re-credit in SaleToPOIData, mirroring the redemption
-                saleData.setSaleToPOIData(saleToPoiData);
-            }
-            LoyaltyRequest.Builder loyaltyRequest = LoyaltyRequest.builder()
-                    .saleData(saleData)
-                    .loyaltyTransaction(LoyaltyTransaction.builder()
-                            .loyaltyTransactionType(refundType)
-                            .originalPOITransaction(original(originalPoiTxn))
-                            .build());
-            if (memberId != null) {
-                loyaltyRequest.loyaltyData(new LoyaltyData[] {LoyaltyData.builder()
-                        .loyaltyAccountID(Wire.memberAccount(memberId))
-                        .build()});
-            }
-            SaleToPOIRequest wireRequest = SaleToPOIRequest.builder()
-                    .messageHeader(exchange.factory().header(
-                            MessageClassType.SERVICE, MessageCategoryType.LOYALTY))
-                    .loyaltyRequest(loyaltyRequest.build())
-                    .build();
+            SaleToPOIRequest wireRequest = exchange.factory().loyaltyRefundRequest(
+                    refundType, Wire.originalTransaction(originalPoiTxn), memberId);
             SaleToPOIResponse response = exchange.sendExpectingBody(
                     MessageCategoryType.LOYALTY, wireRequest);
             if (response.getLoyaltyResponse() != null) {
@@ -874,15 +851,8 @@ public final class PaymentOrchestrator {
 
     private Runnable reversalRollback(TransactionIdentificationType originalPoiTxn) {
         return () -> {
-            SaleToPOIRequest wireRequest = SaleToPOIRequest.builder()
-                    .messageHeader(exchange.factory().header(
-                            MessageClassType.SERVICE, MessageCategoryType.REVERSAL))
-                    .reversalRequest(ReversalRequest.builder()
-                            .saleData(exchange.factory().saleData())
-                            .originalPOITransaction(original(originalPoiTxn))
-                            .reversalReason(ReversalReasonEnum.MERCHANT_CANCEL)
-                            .build())
-                    .build();
+            SaleToPOIRequest wireRequest = exchange.factory().reversalRequest(
+                    Wire.originalTransaction(originalPoiTxn));
             SaleToPOIResponse response = exchange.sendExpectingBody(
                     MessageCategoryType.REVERSAL, wireRequest);
             if (response.getReversalResponse() != null) {
@@ -890,12 +860,6 @@ public final class PaymentOrchestrator {
                         response.getReversalResponse().getResponse());
             }
         };
-    }
-
-    private static OriginalPOITransaction original(TransactionIdentificationType poiTxn) {
-        return OriginalPOITransaction.builder()
-                .poiTransactionID(poiTxn)
-                .build();
     }
 
     // ─── Helpers ───
@@ -908,11 +872,6 @@ public final class PaymentOrchestrator {
         } catch (jakarta.xml.bind.JAXBException | RuntimeException e) {
             LOGGER.log(Level.WARNING, "payment processing display failed", e);
         }
-    }
-
-    private static LoyaltyResult firstResult(LoyaltyResponse body) {
-        return body.getLoyaltyResult() != null && body.getLoyaltyResult().length > 0
-                ? body.getLoyaltyResult()[0] : null;
     }
 
     private static Basket applyRebates(Basket basket, List<RedeemedRebate> rebates,
