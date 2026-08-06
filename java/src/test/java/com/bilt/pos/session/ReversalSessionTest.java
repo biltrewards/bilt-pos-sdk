@@ -192,6 +192,79 @@ class ReversalSessionTest {
     }
 
     @Test
+    void refundWithSkippedTenderLeavesTheSaleVoidableWithoutReCreditingTheAward()
+            throws Exception {
+        ReversalSession session = start(sessionBuilder()
+                .poiTransactionId(ORIGINAL_POI_TXN)
+                .poiTransactionTimestamp(ORIGINAL_TS)
+                .rebatePoiTransactionId(REBATE_POI_TXN)
+                .rebatePoiTransactionTimestamp(REBATE_TS)
+                .awardPoiTransactionId(AWARD_POI_TXN));
+
+        // the tender refund is declined and the register skips it; only
+        // the award is reversed — no money moved
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}"));
+        server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
+        RefundResult refund = session.refund(new BigDecimal("10.00"))
+                .onError((step, error) -> step == ReversalStep.CARD
+                        ? ReversalDecision.SKIP : ReversalDecision.ABORT)
+                .get();
+        assertTrue(refund.isSuccess());
+        assertEquals(140, refund.getPointsReversed());
+        assertNull(refund.getRefundedAmount(), "no money moved");
+        recordedRequest();  // the declined tender refund
+        recordedRequest();  // the award reversal
+
+        // no money moved, so the sale stays voidable — and the void sends
+        // the remaining movements without re-crediting the reversed award
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));         // card leg
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // rebate refund
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+
+        SaleToPOIRequest reversal = recordedRequest();
+        assertEquals("Reversal", reversal.getMessageHeader().getMessageCategory().toValue());
+        SaleToPOIRequest rebateRefund = recordedRequest();
+        assertEquals("RebateRefund", rebateRefund.getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals(5, server.getRequestCount(),
+                "no second AwardRefund for the already-reversed award");
+    }
+
+    @Test
+    void refundRetryAfterAwardOnlyReversalRefundsTheTenderOnce() throws Exception {
+        ReversalSession session = cardSessionWithAward();
+
+        // first attempt: tender declined and skipped, award reversed
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}"));
+        server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
+        assertTrue(session.refund(new BigDecimal("10.00"))
+                .onError((step, error) -> step == ReversalStep.CARD
+                        ? ReversalDecision.SKIP : ReversalDecision.ABORT)
+                .get().isSuccess());
+        recordedRequest();
+        recordedRequest();
+
+        // the retry refunds the tender without re-sending the award
+        // reversal, and only now does the void guard rise
+        server.enqueue(new MockResponse().setBody(REFUND_OK));
+        assertTrue(session.refund(new BigDecimal("10.00")).get().isSuccess());
+        recordedRequest();
+        assertEquals(4, server.getRequestCount(),
+                "the reversed award must not be re-credited by the retried refund");
+
+        SessionException e = assertThrows(SessionException.class,
+                () -> session.voidTransaction().get());
+        assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
+        assertTrue(e.getError().getMessage().contains("refund"),
+                "money moved on the retry, so the void guard now holds");
+    }
+
+    @Test
     void voidAfterRefundIsRejectedButFurtherRefundsWork() throws Exception {
         server.enqueue(new MockResponse().setBody(REFUND_OK));
         ReversalSession session = cardSession();

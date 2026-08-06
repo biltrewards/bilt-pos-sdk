@@ -175,11 +175,12 @@ public final class CheckoutSession implements AutoCloseable {
     private volatile StoredValueCard storedValueCard;
     private volatile LastPayment lastPayment = LastPayment.NONE;
     // Progress and guard state for this session's completed payment:
-    //  - voidStepsReversed records partial-void progress so a retry resumes
-    //    at the movements still standing. It never goes stale across
-    //    payments: a failed void restores COMPLETED, from which pay() is
-    //    blocked.
-    //  - refundIssued blocks voidTransaction() once a refund was issued;
+    //  - voidStepsReversed records the movements already reversed — by a
+    //    partial void, or a refund's award reversal — so a void (or its
+    //    retry) sends only the movements still standing. It never goes
+    //    stale across payments: a failed void restores COMPLETED, from
+    //    which pay() is blocked.
+    //  - refundIssued blocks voidTransaction() once a refund moved money;
     //    it is cleared when a new payment completes (see executePayment).
     private final Set<ReversalStep> voidStepsReversed = ConcurrentHashMap.newKeySet();
     private volatile boolean refundIssued;
@@ -961,10 +962,13 @@ public final class CheckoutSession implements AutoCloseable {
      * reverse both legs, or the stored value operations to return funds to
      * the gift card. A refund reverses the card leg and award only; the
      * sale's committed rebate and redemption movements are reversed by
-     * {@link #voidTransaction()}. Once a void has partially reversed the
-     * payment, refunds are refused until the void is finished. To refund a
-     * sale taken by an earlier, gone session, use
-     * {@link ReversalSession}.</p>
+     * {@link #voidTransaction()}. Once a refund has returned money the
+     * payment can no longer be voided; a tender skipped by an
+     * {@code onError} decision leaves it voidable, with an award the flow
+     * reversed remembered so nothing re-credits it. Once a void has
+     * partially reversed the payment's money legs, refunds are refused
+     * until the void is finished. To refund a sale taken by an earlier,
+     * gone session, use {@link ReversalSession}.</p>
      */
     public ReversalFlow<RefundResult> refund() {
         operations.track("refund");
@@ -997,9 +1001,11 @@ public final class CheckoutSession implements AutoCloseable {
                                        BigDecimal amount, boolean linked) {
         operations.begin(name);
         requireRefundable(name);
-        if (!voidStepsReversed.isEmpty()) {
-            // the card leg may be among the reversed movements — a refund
-            // against it would double-return the money
+        if (voidStepsReversed.contains(ReversalStep.CARD)
+                || voidStepsReversed.contains(ReversalStep.STORED_VALUE)) {
+            // a reversed money leg makes a refund a double return; a
+            // reversed loyalty movement alone (e.g. the award, after a
+            // refund whose tender was skipped) leaves the tender refundable
             throw invalidState("a void of this payment is partially complete; "
                     + "finish it with voidTransaction() — a refund cannot mix "
                     + "with a half-reversed sale");
@@ -1009,19 +1015,22 @@ public final class CheckoutSession implements AutoCloseable {
             throw invalidState("a linked refund requires a completed payment in this "
                     + "session; to refund a prior sale, use ReversalSession");
         }
-        // the guard rises the moment money moves (the onRefunded callback),
-        // not when the flow returns: an ABORT on the award step after the
-        // tender refund completed must not leave the payment voidable on
-        // top of the refund. It counts even when unlinked — through a
-        // checkout session it is almost certainly returning this
-        // checkout's money.
-        RefundResult result = reversalManager.refund(amount,
+        // the void guard follows the money: it rises the moment the tender
+        // refund completes (even if a later step aborts the flow, and also
+        // when unlinked — through a checkout session it is almost certainly
+        // returning this checkout's money) and stays down when the tender
+        // was skipped by decision — the payment then remains voidable, with
+        // a reversed award recorded as progress so neither a void nor a
+        // retried refund re-credits it
+        boolean awardReversed = voidStepsReversed.contains(ReversalStep.AWARD);
+        return reversalManager.refund(amount,
                 paid.poiTransactionId, paid.poiTransactionTimestamp,
-                paid.awardPoiTransactionId, paid.awardPoiTransactionTimestamp,
+                awardReversed ? null : paid.awardPoiTransactionId,
+                awardReversed ? null : paid.awardPoiTransactionTimestamp,
                 linked ? reversalMemberId() : null,
-                flow.decider(), () -> refundIssued = true);
-        refundIssued = true;
-        return result;
+                flow.decider(),
+                () -> refundIssued = true,
+                () -> voidStepsReversed.add(ReversalStep.AWARD));
     }
 
     /** The identified member for a reversal's {@code LoyaltyData}, or {@code null}. */

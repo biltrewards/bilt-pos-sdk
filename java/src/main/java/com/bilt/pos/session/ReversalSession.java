@@ -98,9 +98,10 @@ public final class ReversalSession implements AutoCloseable {
     private final String memberId;
 
     // Progress and guard state, scoped to the referenced sale:
-    //  - voidStepsReversed records partial-void progress so a retry resumes
-    //    at the movements still standing.
-    //  - refundIssued blocks voidTransaction() once a refund was issued —
+    //  - voidStepsReversed records the movements already reversed — by a
+    //    partial void, or a refund's award reversal — so a void (or its
+    //    retry) sends only the movements still standing.
+    //  - refundIssued blocks voidTransaction() once a refund moved money —
     //    a void would return the full amount on top of the refund.
     private final Set<ReversalStep> voidStepsReversed = ConcurrentHashMap.newKeySet();
     private volatile boolean refundIssued;
@@ -211,10 +212,13 @@ public final class ReversalSession implements AutoCloseable {
      * <p>Linked refunds reference a single transaction — the card leg. Use
      * {@link #voidTransaction()} to reverse every movement of the sale,
      * including its rebate and redemption. Repeated partial refunds are
-     * allowed (the acquirer enforces the cumulative limit), but once any
-     * refund has been issued from this session the sale can no longer be
-     * voided from it — and once a void has partially reversed the sale,
-     * refunds are refused until the void is finished.</p>
+     * allowed (the acquirer enforces the cumulative limit), but once a
+     * refund has returned money the sale can no longer be voided from this
+     * session. A tender skipped by an {@code onError} decision leaves the
+     * sale voidable, and an award the flow reversed is remembered — neither
+     * a void nor a retried refund re-credits it. Once a void has partially
+     * reversed the sale's money legs, refunds are refused until the void
+     * is finished.</p>
      */
     public ReversalFlow<RefundResult> refund() {
         operations.track("refund");
@@ -234,9 +238,11 @@ public final class ReversalSession implements AutoCloseable {
     private RefundResult executeRefund(ReversalFlow<RefundResult> flow, BigDecimal amount) {
         operations.begin("refund");
         requireState(EnumSet.of(SessionState.IDLE), "refund");
-        if (!voidStepsReversed.isEmpty()) {
-            // the card leg may be among the reversed movements — a refund
-            // against it would double-return the money
+        if (voidStepsReversed.contains(ReversalStep.CARD)
+                || voidStepsReversed.contains(ReversalStep.STORED_VALUE)) {
+            // a reversed money leg makes a refund a double return; a
+            // reversed loyalty movement alone (e.g. the award, after a
+            // refund whose tender was skipped) leaves the tender refundable
             throw invalidState("a void of this sale is partially complete; finish "
                     + "it with voidTransaction() — a refund cannot mix with a "
                     + "half-reversed sale");
@@ -245,16 +251,19 @@ public final class ReversalSession implements AutoCloseable {
             throw invalidState(
                     "a linked refund requires poiTransactionId on the session builder");
         }
-        // the guard rises the moment money moves (the onRefunded callback),
-        // not when the flow returns: an ABORT on the award step after the
-        // tender refund completed must not leave the sale voidable on top
-        // of the refund
-        RefundResult result = reversalManager.refund(amount,
+        // the void guard follows the money: it rises the moment the tender
+        // refund completes (even if a later step aborts the flow) and stays
+        // down when the tender was skipped by decision — the sale then
+        // remains voidable, with a reversed award recorded as progress so
+        // neither a void nor a retried refund re-credits it
+        boolean awardReversed = voidStepsReversed.contains(ReversalStep.AWARD);
+        return reversalManager.refund(amount,
                 poiTransactionId, poiTransactionTimestamp,
-                awardPoiTransactionId, awardPoiTransactionTimestamp,
-                memberId, flow.decider(), () -> refundIssued = true);
-        refundIssued = true;
-        return result;
+                awardReversed ? null : awardPoiTransactionId,
+                awardReversed ? null : awardPoiTransactionTimestamp,
+                memberId, flow.decider(),
+                () -> refundIssued = true,
+                () -> voidStepsReversed.add(ReversalStep.AWARD));
     }
 
     /** The referenced movements of the original sale, in reversal order. */

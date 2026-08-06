@@ -112,12 +112,18 @@ public final class ReversalManager {
      *                         completes, before the award reversal — the
      *                         caller's void guard must rise as soon as
      *                         money moves, even if a later step aborts the
-     *                         flow
+     *                         flow — and only then: a tender skipped by
+     *                         decision leaves the sale voidable
+     * @param onAwardReversed  invoked when the award reversal completes,
+     *                         so the caller records it as reversal
+     *                         progress — a later void must not re-credit
+     *                         it
      */
     public RefundResult refund(BigDecimal amount, String originalPoiTxnId,
                                Instant originalPoiTimestamp,
                                String awardPoiTxnId, Instant awardPoiTimestamp,
-                               String memberId, StepDecider decider, Runnable onRefunded) {
+                               String memberId, StepDecider decider, Runnable onRefunded,
+                               Runnable onAwardReversed) {
         // the tender refund anchors the flow, so the award is best-effort
         StepDecider effective = decider != null ? decider : defaultPolicy(true);
         SessionException[] lastFailure = new SessionException[1];
@@ -152,6 +158,7 @@ public final class ReversalManager {
             if (awardLeg != null) {
                 loyalty = parseReversal(awardLeg);
                 awardReversed = true;
+                onAwardReversed.run();
             }
         }
 

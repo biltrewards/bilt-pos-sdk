@@ -1821,6 +1821,38 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void refundWithSkippedTenderLeavesThePaymentVoidable() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));  // POI-AW-1
+        session.pay(PaymentOptions.builder()
+                .disableRebates(true).disablePoints(true).build()).execute();
+        drainRequests();
+
+        // the tender refund is declined and the register skips it; only
+        // the award is reversed — no money moved
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.refund(new BigDecimal("10.00"))
+                .onError((step, error) -> step == ReversalStep.CARD
+                        ? ReversalDecision.SKIP : ReversalDecision.ABORT)
+                .get().isSuccess());
+        drainRequests();
+
+        // no money moved, so the payment stays voidable — and the void
+        // reverses the card leg without re-crediting the reversed award
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(1, requests.size(),
+                "one reversal, no second AwardRefund for the already-reversed award");
+        assertEquals("POI-PAY-1", requests.get(0).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
     void abortedAwardReversalAfterTheTenderRefundStillRaisesTheVoidGuard() throws Exception {
         identifyMember();
         addHundredDollarItem();
