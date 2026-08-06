@@ -604,6 +604,35 @@ class ReversalSessionTest {
     }
 
     @Test
+    void retryWhoseRemainingLegsAllSkipStillCompletesTheVoid() throws Exception {
+        ReversalSession session = start(fullyReferencedBuilder());
+
+        // first attempt: both money legs reverse, the register aborts on
+        // the failing redemption
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));             // card leg
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));             // stored value leg
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // redemption refund
+        assertThrows(SessionException.class, () -> session.voidTransaction()
+                .onError((step, error) -> ReversalDecision.ABORT)
+                .get());
+        recordedRequest();
+        recordedRequest();
+        recordedRequest();
+
+        // second attempt, default policy: every remaining loyalty leg still
+        // fails and is skipped (money-anchored, SAF-retryable) — the void
+        // must complete on the strength of the already-reversed money legs
+        // instead of stranding the session outside VOIDED
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // redemption refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // rebate refund
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // award refund
+
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+        assertEquals(7, server.getRequestCount());
+    }
+
+    @Test
     void loyaltyOnlyVoidIsStrictAboutTheAwardToo() throws Exception {
         ReversalSession session = start(sessionBuilder()
                 .redemptionPoiTransactionId(REDEMPTION_POI_TXN)

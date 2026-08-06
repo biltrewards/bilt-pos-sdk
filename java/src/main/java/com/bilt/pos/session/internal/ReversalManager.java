@@ -227,8 +227,11 @@ public final class ReversalManager {
      * decider — retry, leave standing, or abort; a step that reverses is
      * added to {@code reversedSteps}, and on abort the failure is
      * annotated with what this attempt reversed so the register can retry
-     * or escalate. If no movement at all was reversed, the last failure is
-     * thrown rather than reporting a void that changed nothing; with
+     * or escalate. If nothing of the sale was ever reversed — this attempt
+     * skipped every step and no prior attempt made progress — the last
+     * failure is thrown rather than reporting a void that changed nothing;
+     * once any movement stands reversed, an attempt that only skips the
+     * remainder is a success, like a skip in a single-attempt void. With
      * nothing left standing (empty target, or every movement already
      * reversed) the void is a success.
      *
@@ -242,6 +245,7 @@ public final class ReversalManager {
                                     StepDecider decider, Set<ReversalStep> reversedSteps) {
         StepDecider effective = decider != null ? decider : defaultPolicy(
                 movements.stream().anyMatch(movement -> isMoneyLeg(movement.getStep())));
+        boolean priorProgress = !reversedSteps.isEmpty();
         List<ReversalMovement> remaining = movements.stream()
                 .filter(movement -> !reversedSteps.contains(movement.getStep()))
                 .collect(Collectors.toList());
@@ -273,9 +277,17 @@ public final class ReversalManager {
             }
         }
         if (reversed.isEmpty()) {
-            // every movement was skipped: nothing was reversed, so the
-            // void must not report success
-            throw lastFailure[0];
+            if (!priorProgress) {
+                // every movement was skipped and nothing of the sale has
+                // ever been reversed: the void changed nothing, so it must
+                // not report success
+                throw lastFailure[0];
+            }
+            // this attempt only skipped legs of a partly-reversed sale —
+            // the movements reversed by the prior attempt stand, and the
+            // skipped ones remain SAF-retryable, exactly like a skip in a
+            // single-attempt void
+            return VoidResult.builder().success(true).build();
         }
         return buildVoidResult(money, loyalty);
     }
