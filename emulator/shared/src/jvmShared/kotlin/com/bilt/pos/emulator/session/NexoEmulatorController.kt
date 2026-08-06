@@ -115,6 +115,14 @@ class NexoEmulatorController(
     @Volatile
     private var connection: Connection? = null
 
+    /** Serialized so overlapping refreshes publish in launch order — each
+     *  refresh is launched after its sale is recorded, so with FIFO
+     *  execution the snapshot published last always includes the newest
+     *  sale; concurrent refreshes could land an older read on top of it.
+     *  Declared before the init block: refreshSales() reads it during
+     *  construction, and property initializers run in textual order. */
+    private val salesRefreshDispatcher = Dispatchers.IO.limitedParallelism(1)
+
     init {
         // SDK diagnostics (client, session, payment internals) log via JUL;
         // surface them on the Detailed tab
@@ -726,12 +734,6 @@ class NexoEmulatorController(
     override fun dismissPaymentOutcome() {
         _state.update { it.copy(paymentOutcome = null) }
     }
-
-    /** Serialized so overlapping refreshes publish in launch order — each
-     *  refresh is launched after its sale is recorded, so with FIFO
-     *  execution the snapshot published last always includes the newest
-     *  sale; concurrent refreshes could land an older read on top of it. */
-    private val salesRefreshDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     /** Reload [EmulatorState.sales] from the store. App scope, not a
      *  connection scope: the stored sales outlive any connection, and
