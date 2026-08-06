@@ -98,7 +98,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -175,16 +174,12 @@ public final class CheckoutSession implements AutoCloseable {
     private volatile IdentifyResult member;
     private volatile StoredValueCard storedValueCard;
     private volatile LastPayment lastPayment = LastPayment.NONE;
-    // Progress and guard state for this session's completed payment:
-    //  - voidStepsReversed records the movements already reversed — by a
-    //    partial void, or a refund's award reversal — so a void (or its
-    //    retry) sends only the movements still standing. It never goes
-    //    stale across payments: a failed void restores COMPLETED, from
-    //    which pay() is blocked.
-    //  - refundIssued blocks voidTransaction() once a refund moved money;
-    //    it is cleared when a new payment completes (see executePayment).
-    private final Set<ReversalStep> voidStepsReversed = ConcurrentHashMap.newKeySet();
-    private volatile boolean refundIssued;
+    // refund/void mutual exclusion and void-resume progress for this
+    // session's completed payment (see ReversalGuards). Never stale across
+    // payments: a failed void restores COMPLETED, from which pay() is
+    // blocked, and the refund guard is cleared when a new payment
+    // completes (see executePayment).
+    private final ReversalGuards guards = new ReversalGuards("payment");
     // Non-empty = "FAILED with an incomplete rollback", a substate that
     // restricts FAILED's transitions at five sites (see rollbackIncomplete()
     // callers). If this lifecycle grows further, promote it to an explicit
@@ -926,7 +921,7 @@ public final class CheckoutSession implements AutoCloseable {
                 // this payment replaced the void target, so the guard on
                 // the previous one lifts (the void-progress set needs no
                 // reset — see the field declarations)
-                refundIssued = false;
+                guards.clearRefundIssued();
             } finally {
                 lock.unlock();
             }
@@ -1002,36 +997,24 @@ public final class CheckoutSession implements AutoCloseable {
                                        BigDecimal amount, boolean linked) {
         operations.begin(name);
         requireRefundable(name);
-        if (voidStepsReversed.contains(ReversalStep.CARD)
-                || voidStepsReversed.contains(ReversalStep.STORED_VALUE)) {
-            // a reversed money leg makes a refund a double return; a
-            // reversed loyalty movement alone (e.g. the award, after a
-            // refund whose tender was skipped) leaves the tender refundable
-            throw invalidState("a void of this payment is partially complete; "
-                    + "finish it with voidTransaction() — a refund cannot mix "
-                    + "with a half-reversed sale");
-        }
+        guards.requireNoReversedMoneyLeg();
         LastPayment paid = linked ? lastPayment : LastPayment.NONE;
         if (linked && paid.poiTransactionId == null) {
             throw invalidState("a linked refund requires a completed payment in this "
                     + "session; to refund a prior sale, use ReversalSession");
         }
-        // the void guard follows the money: it rises the moment the tender
-        // refund completes (even if a later step aborts the flow, and also
-        // when unlinked — through a checkout session it is almost certainly
-        // returning this checkout's money) and stays down when the tender
-        // was skipped by decision — the payment then remains voidable, with
-        // a reversed award recorded as progress so neither a void nor a
-        // retried refund re-credits it
-        boolean awardReversed = voidStepsReversed.contains(ReversalStep.AWARD);
+        // the void guard follows the money (see ReversalGuards) — it counts
+        // even when unlinked, since through a checkout session an unlinked
+        // refund is almost certainly returning this checkout's money
+        boolean awardReversed = guards.awardReversed();
         return reversalManager.refund(amount,
                 paid.poiTransactionId, paid.poiTransactionTimestamp,
                 awardReversed ? null : paid.awardPoiTransactionId,
                 awardReversed ? null : paid.awardPoiTransactionTimestamp,
                 linked ? reversalMemberId() : null,
                 flow.decider(),
-                () -> refundIssued = true,
-                () -> voidStepsReversed.add(ReversalStep.AWARD));
+                guards::markRefunded,
+                guards::markAwardReversed);
     }
 
     /** The identified member for a reversal's {@code LoyaltyData}, or {@code null}. */
@@ -1096,12 +1079,7 @@ public final class CheckoutSession implements AutoCloseable {
         boolean resumeRollback = rollbackIncomplete();
         List<ReversalMovement> movements = List.of();
         if (!resumeRollback) {
-            if (refundIssued) {
-                throw invalidState(
-                        "the payment was already refunded from this session; a void "
-                                + "would return the full amount on top of the refund — "
-                                + "use refund(amount) for further returns");
-            }
+            guards.requireNotRefunded();
             movements = voidTarget();
             if (movements.isEmpty()) {
                 throw invalidState(
@@ -1127,11 +1105,12 @@ public final class CheckoutSession implements AutoCloseable {
             if (resumeRollback) {
                 drainStandingMovements();
             }
-            // the manager filters against voidStepsReversed (and records
-            // progress into it), so a retry resumes at the movements still
-            // standing while the default policy still sees the whole target
+            // the manager filters against the reversed-steps set (and
+            // records progress into it), so a retry resumes at the
+            // movements still standing while the default policy still sees
+            // the whole target
             VoidResult result = reversalManager.voidMovements(movements, reversalMemberId(),
-                    flow.decider(), voidStepsReversed);
+                    flow.decider(), guards.reversedSteps());
             transitionLocked(SessionState.VOIDED);
             return result;
         } catch (RuntimeException e) {

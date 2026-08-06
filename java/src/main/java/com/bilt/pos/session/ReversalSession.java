@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
@@ -98,14 +97,9 @@ public final class ReversalSession implements AutoCloseable {
     private final Instant awardPoiTransactionTimestamp;
     private final String memberId;
 
-    // Progress and guard state, scoped to the referenced sale:
-    //  - voidStepsReversed records the movements already reversed — by a
-    //    partial void, or a refund's award reversal — so a void (or its
-    //    retry) sends only the movements still standing.
-    //  - refundIssued blocks voidTransaction() once a refund moved money —
-    //    a void would return the full amount on top of the refund.
-    private final Set<ReversalStep> voidStepsReversed = ConcurrentHashMap.newKeySet();
-    private volatile boolean refundIssued;
+    // refund/void mutual exclusion and void-resume progress for the
+    // referenced sale (see ReversalGuards)
+    private final ReversalGuards guards = new ReversalGuards("sale");
 
     private ReversalSession(Builder builder) {
         this.client = builder.client;
@@ -180,20 +174,16 @@ public final class ReversalSession implements AutoCloseable {
 
     private VoidResult executeVoid(ReversalFlow<VoidResult> flow) {
         operations.begin("voidTransaction");
-        if (refundIssued) {
-            throw invalidState(
-                    "the sale was already refunded from this session; a void would "
-                            + "return the full amount on top of the refund — use "
-                            + "refund(amount) for further returns");
-        }
+        guards.requireNotRefunded();
         requireState(EnumSet.of(SessionState.IDLE), "voidTransaction");
         stateMachine.transitionTo(SessionState.VOIDING);
         try {
-            // the manager filters against voidStepsReversed (and records
-            // progress into it), so a retry resumes at the movements still
-            // standing while the default policy still sees the whole target
+            // the manager filters against the reversed-steps set (and
+            // records progress into it), so a retry resumes at the
+            // movements still standing while the default policy still sees
+            // the whole target
             VoidResult result = reversalManager.voidMovements(referencedMovements(), memberId,
-                    flow.decider(), voidStepsReversed);
+                    flow.decider(), guards.reversedSteps());
             stateMachine.transitionTo(SessionState.VOIDED);
             return result;
         } catch (RuntimeException e) {
@@ -240,32 +230,20 @@ public final class ReversalSession implements AutoCloseable {
     private RefundResult executeRefund(ReversalFlow<RefundResult> flow, BigDecimal amount) {
         operations.begin("refund");
         requireState(EnumSet.of(SessionState.IDLE), "refund");
-        if (voidStepsReversed.contains(ReversalStep.CARD)
-                || voidStepsReversed.contains(ReversalStep.STORED_VALUE)) {
-            // a reversed money leg makes a refund a double return; a
-            // reversed loyalty movement alone (e.g. the award, after a
-            // refund whose tender was skipped) leaves the tender refundable
-            throw invalidState("a void of this sale is partially complete; finish "
-                    + "it with voidTransaction() — a refund cannot mix with a "
-                    + "half-reversed sale");
-        }
+        guards.requireNoReversedMoneyLeg();
         if (poiTransactionId == null) {
             throw invalidState(
                     "a linked refund requires poiTransactionId on the session builder");
         }
-        // the void guard follows the money: it rises the moment the tender
-        // refund completes (even if a later step aborts the flow) and stays
-        // down when the tender was skipped by decision — the sale then
-        // remains voidable, with a reversed award recorded as progress so
-        // neither a void nor a retried refund re-credits it
-        boolean awardReversed = voidStepsReversed.contains(ReversalStep.AWARD);
+        // the void guard follows the money — see ReversalGuards
+        boolean awardReversed = guards.awardReversed();
         return reversalManager.refund(amount,
                 poiTransactionId, poiTransactionTimestamp,
                 awardReversed ? null : awardPoiTransactionId,
                 awardReversed ? null : awardPoiTransactionTimestamp,
                 memberId, flow.decider(),
-                () -> refundIssued = true,
-                () -> voidStepsReversed.add(ReversalStep.AWARD));
+                guards::markRefunded,
+                guards::markAwardReversed);
     }
 
     /** The referenced movements of the original sale, in reversal order. */
