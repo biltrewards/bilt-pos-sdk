@@ -727,11 +727,17 @@ class NexoEmulatorController(
         _state.update { it.copy(paymentOutcome = null) }
     }
 
+    /** Serialized so overlapping refreshes publish in launch order — each
+     *  refresh is launched after its sale is recorded, so with FIFO
+     *  execution the snapshot published last always includes the newest
+     *  sale; concurrent refreshes could land an older read on top of it. */
+    private val salesRefreshDispatcher = Dispatchers.IO.limitedParallelism(1)
+
     /** Reload [EmulatorState.sales] from the store. App scope, not a
      *  connection scope: the stored sales outlive any connection, and
      *  browsing them must work while disconnected. */
     private fun refreshSales() {
-        scope.launch(Dispatchers.IO) {
+        scope.launch(salesRefreshDispatcher) {
             val sales = try {
                 saleStore.listSales()
             } catch (e: Exception) {
