@@ -44,8 +44,15 @@ public final class ReversalMovement {
     /**
      * The movements of a sale in reversal order — money legs first,
      * mirroring the payment sequence's reverse-commit unwind order — one
-     * per non-null reference. A gift-card-only sale reports the same
-     * reference for both money legs; it yields one movement.
+     * per non-null reference. Every parameter is nullable by design: a
+     * {@code null} reference means the sale has no such leg (a guest sale
+     * has no award, a card-only sale no rebate or redemption, a
+     * rewards-covered sale no card leg), so no movement is produced for
+     * it. Whether the resulting list may be empty is the caller's rule —
+     * the sessions guard it ({@code ReversalSession} requires a reference
+     * at build time, {@code CheckoutSession} a completed payment).
+     * A gift-card-only sale reports the same reference for both money
+     * legs; it yields one movement.
      */
     public static List<ReversalMovement> ofSale(
             String cardPoiTxnId, Instant cardPoiTimestamp,
@@ -65,6 +72,7 @@ public final class ReversalMovement {
         return movements;
     }
 
+    /** Adds the leg's movement; a {@code null} reference means the sale has no such leg. */
     private static void add(List<ReversalMovement> movements, ReversalStep step,
                             String poiTransactionId, Instant timestamp) {
         if (poiTransactionId != null) {
