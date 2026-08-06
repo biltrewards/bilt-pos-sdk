@@ -916,6 +916,23 @@ class ReversalSessionTest {
     // ─── Lifecycle ───
 
     @Test
+    void endedSessionVoidReportsTheStateNotTheRefundGuard() throws Exception {
+        ReversalSession session = cardSession();
+        server.enqueue(new MockResponse().setBody(REFUND_OK));
+        assertTrue(session.refund(new BigDecimal("10.00")).get().isSuccess());
+        recordedRequest();
+        session.end().execute();  // the dispatcher answers the Admin exchange
+
+        SessionException e = assertThrows(SessionException.class,
+                () -> session.voidTransaction().get());
+        assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
+        assertTrue(e.getError().getMessage().contains("ENDED"),
+                "the state refusal must win over the refund guard, whose "
+                        + "'use refund(amount)' remedy ENDED would also refuse: "
+                        + e.getError().getMessage());
+    }
+
+    @Test
     void endedSessionRejectsFurtherReversals() throws Exception {
         // the dispatcher answers the Admin end exchange out of band
         ReversalSession session = cardSession();

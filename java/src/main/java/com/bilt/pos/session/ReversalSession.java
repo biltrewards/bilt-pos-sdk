@@ -174,8 +174,10 @@ public final class ReversalSession implements AutoCloseable {
 
     private VoidResult executeVoid(ReversalFlow<VoidResult> flow) {
         operations.begin("voidTransaction");
-        guards.requireNotRefunded();
+        // state first: an ended or voided session is reported as such,
+        // not by a guard whose remedy the state would also refuse
         requireState(EnumSet.of(SessionState.IDLE), "voidTransaction");
+        guards.requireNotRefunded();
         stateMachine.transitionTo(SessionState.VOIDING);
         try {
             // the manager filters against the reversed-steps set (and

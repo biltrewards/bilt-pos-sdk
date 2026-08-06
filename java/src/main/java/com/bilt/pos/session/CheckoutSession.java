@@ -1076,6 +1076,11 @@ public final class CheckoutSession implements AutoCloseable {
         operations.begin("voidTransaction");
         // a failed payment whose rollback was incomplete left movements
         // standing; voiding that session means finishing the unwind
+        // state first (advisory — the locked check below stays
+        // authoritative): an ended or paying session is reported as such,
+        // not by a guard whose remedy the state would also refuse
+        requireState(EnumSet.of(SessionState.IDLE, SessionState.COMPLETED,
+                SessionState.FAILED), "voidTransaction");
         boolean resumeRollback = rollbackIncomplete();
         List<ReversalMovement> movements = List.of();
         if (!resumeRollback) {
