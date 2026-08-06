@@ -238,7 +238,10 @@ public final class ReversalManager {
      * skipped every step and no prior attempt made progress — the last
      * failure is thrown rather than reporting a void that changed nothing;
      * once any movement stands reversed, an attempt that only skips the
-     * remainder is a success, like a skip in a single-attempt void. With
+     * remainder is a success, like a skip in a single-attempt void. The
+     * returned {@link VoidResult} is built from THIS attempt's responses
+     * only — a resumed void does not restate the amounts, references, or
+     * receipts of movements earlier attempts reversed. With
      * nothing left standing (empty target, or every movement already
      * reversed) the void is a success.
      *

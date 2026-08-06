@@ -1072,7 +1072,8 @@ public final class CheckoutSession implements AutoCloseable {
      * handler decides between retry, skip, and abort — see
      * {@link ReversalFlow} for the default policy. A retried void resumes
      * at the first movement still standing — reversed movements are never
-     * re-credited.</p>
+     * re-credited, and the retry's {@link VoidResult} describes only the
+     * movements that call sent.</p>
      *
      * <p>On a session whose payment failed with an incomplete rollback,
      * {@code voidTransaction()} finishes the unwind by retrying the

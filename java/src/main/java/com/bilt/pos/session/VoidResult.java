@@ -15,6 +15,14 @@ import java.time.Instant;
 /**
  * Outcome of {@code voidTransaction()}: the payment reversal plus a
  * best-effort loyalty award reversal.
+ *
+ * <p>The result describes the movements <em>this call</em> reversed. A
+ * resumed void — a retry after a partial void aborted — does not restate
+ * the movements earlier attempts reversed: its amount, transaction
+ * reference, and receipts cover only the legs sent this time (and may all
+ * be absent when the retry found nothing left to send). A register
+ * printing a void receipt should print it from the attempt that reversed
+ * the money leg, or reprint via the transaction status query.</p>
  */
 public final class VoidResult {
 

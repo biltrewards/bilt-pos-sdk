@@ -167,9 +167,10 @@ public final class ReversalSession implements AutoCloseable {
      * handler decides between retry, skip, and abort — see
      * {@link ReversalFlow} for the default policy. A retried void resumes
      * at the first movement still standing — reversed movements are never
-     * re-credited. Not allowed once a refund has been issued from this
-     * session. The session moves to {@link SessionState#VOIDED} on
-     * success.</p>
+     * re-credited, and the retry's {@link VoidResult} describes only the
+     * movements that call sent. Not allowed once a refund has returned
+     * money from this session. The session moves to
+     * {@link SessionState#VOIDED} on success.</p>
      */
     public ReversalFlow<VoidResult> voidTransaction() {
         operations.track("voidTransaction");
