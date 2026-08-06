@@ -122,7 +122,7 @@ public final class ReversalManager {
         StepDecider effective = decider != null ? decider : defaultPolicy(true);
         SessionException[] lastFailure = new SessionException[1];
 
-        PaymentResponse body = runStep(ReversalStep.REFUND, effective,
+        PaymentResponse body = runStep(ReversalStep.CARD, effective,
                 () -> sendRefund(amount, originalPoiTxnId, originalPoiTimestamp),
                 e -> {
                     lastFailure[0] = e;
@@ -386,7 +386,7 @@ public final class ReversalManager {
                 case REBATE:
                 case AWARD:
                     return moneyAnchored ? ReversalDecision.SKIP : ReversalDecision.ABORT;
-                default:  // CARD, STORED_VALUE, REFUND — the money moved
+                default:  // CARD, STORED_VALUE — the money moved
                     return ReversalDecision.ABORT;
             }
         };
@@ -418,12 +418,11 @@ public final class ReversalManager {
 
     private static String label(ReversalStep step) {
         switch (step) {
-            case CARD: return "the card leg";
             case STORED_VALUE: return "the stored value leg";
             case REDEMPTION: return "the redemption";
             case REBATE: return "the rebate";
             case AWARD: return "the award";
-            default: return "the tender refund";
+            default: return "the card leg";
         }
     }
 

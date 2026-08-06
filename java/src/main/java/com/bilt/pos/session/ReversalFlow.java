@@ -27,9 +27,9 @@ import java.util.function.Function;
  * {@link #getOrNull()} is invoked. When a step fails, the {@code onError}
  * handler decides how to proceed — {@link ReversalDecision#RETRY},
  * {@link ReversalDecision#SKIP}, or {@link ReversalDecision#ABORT}. Without
- * a handler the default policy applies: a failed money movement (card,
- * stored value, refund) aborts; a failed loyalty movement riding along with
- * a money movement is skipped (the terminal can retry it via
+ * a handler the default policy applies: a failed money step (the card or
+ * stored value leg) aborts; a failed loyalty movement riding along with a
+ * money step is skipped (the terminal can retry it via
  * store-and-forward); a failed loyalty movement that is the substance of
  * the reversal aborts.</p>
  *
