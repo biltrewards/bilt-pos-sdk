@@ -328,6 +328,14 @@ private fun RefundDetailsCard(sale: StoredSaleUi, modifier: Modifier = Modifier)
                 )
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            // The two bases deliberately differ while the button is unwired:
+            // FULL is what the terminal charged (authorizedAmount — tax in,
+            // loyalty tenders deducted), ITEMS sums merchandise line totals
+            // (post-rebate, no tax, no points proration) — so selecting every
+            // item shows less than Full amount. How a per-item refund
+            // allocates tax and loyalty value is a decision of the redesigned
+            // refund flow; until that lands the item total is indicative,
+            // not a charge amount.
             val amount = when (mode) {
                 RefundMode.FULL -> sale.totalAmount
                 RefundMode.ITEMS -> minorUnitsToDecimal(
