@@ -22,8 +22,9 @@ data class Product(
 }
 
 /**
- * Formats minor currency units (cents) as a decimal string, e.g. `7999` →
- * `79.99`.
+ * Formats an amount given in [minor] currency units (cents) and returns it
+ * as a plain decimal string — e.g. `7999` → `"79.99"` — the form the SDK's
+ * basket APIs expect and the UI's amount labels use.
  *
  * Assumes a two-decimal (exponent-2) currency, i.e. USD. If the emulator
  * ever handles non-USD currencies, this — and the callers' hardcoded `$` —

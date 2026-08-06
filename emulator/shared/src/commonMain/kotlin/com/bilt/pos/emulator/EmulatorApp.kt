@@ -70,7 +70,9 @@ private val WIDE_LAYOUT_BREAKPOINT = 700.dp
 
 /**
  * Root composable of the terminal emulator, shared by the Android and
- * desktop targets.
+ * desktop targets. All interaction is driven through [controller], whose
+ * [EmulatorController.state] this UI observes; [products] populates the
+ * Sale tab's quick-buy grid.
  */
 @Composable
 fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
