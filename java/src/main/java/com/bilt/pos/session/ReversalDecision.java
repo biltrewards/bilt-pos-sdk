@@ -26,7 +26,13 @@ public enum ReversalDecision {
     /**
      * Leave this movement standing (the terminal may retry loyalty
      * movements via store-and-forward) and continue with the remaining
-     * steps.
+     * steps. A void honors a skipped money leg the same way — the
+     * remaining steps still run — but then fails as incomplete instead of
+     * reaching {@code VOIDED}: a standing card or stored value leg has no
+     * terminal-side retry, so the reversed movements stay recorded and a
+     * retried {@code voidTransaction()} sends only the legs still
+     * standing. A refund flow's tender step may be skipped outright: no
+     * money moves and the sale stays voidable.
      */
     SKIP,
 

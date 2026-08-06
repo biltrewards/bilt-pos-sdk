@@ -231,7 +231,11 @@ public final class ReversalManager {
      * Reverses the sale's movements in order, skipping the steps already
      * recorded in {@code reversedSteps} so a retried void resumes at the
      * movements still standing. Each failed step is resolved by the
-     * decider — retry, leave standing, or abort; a step that reverses is
+     * decider — retry, leave standing, or abort. A skipped money leg is
+     * honored (the remaining steps still run) but leaves the void
+     * incomplete: after the loop the failure is rethrown, since a standing
+     * money leg has no store-and-forward retry and a completed void would
+     * strand the charge beyond a retry's reach. A step that reverses is
      * added to {@code reversedSteps}, and on abort the failure is
      * annotated with what this attempt reversed so the register can retry
      * or escalate. If nothing of the sale was ever reversed — this attempt
@@ -265,7 +269,9 @@ public final class ReversalManager {
         Map<ReversalStep, ReversalResponse> money = new EnumMap<>(ReversalStep.class);
         Map<ReversalStep, LoyaltyResponse> loyalty = new EnumMap<>(ReversalStep.class);
         List<ReversalMovement> reversed = new ArrayList<>();
+        List<ReversalMovement> skippedMoneyLegs = new ArrayList<>();
         SessionException[] lastFailure = new SessionException[1];
+        SessionException[] moneyFailure = new SessionException[1];
 
         for (ReversalMovement movement : remaining) {
             Boolean sent = runStep(movement.getStep(), effective,
@@ -275,16 +281,29 @@ public final class ReversalManager {
                     },
                     e -> {
                         lastFailure[0] = e;
+                        if (isMoneyLeg(movement.getStep())) {
+                            skippedMoneyLegs.add(movement);
+                            moneyFailure[0] = e;
+                        }
                         LOGGER.warning(movement.getStep() + " reversal of "
                                 + movement.poiTransactionId + " skipped, the movement "
-                                + "is still standing (terminal may retry loyalty via "
-                                + "SAF): " + e.getError());
+                                + "is still standing"
+                                + (isMoneyLeg(movement.getStep())
+                                        ? "" : " (terminal may retry loyalty via SAF)")
+                                + ": " + e.getError());
                     },
                     e -> abortError(reversed, movement, e));
             if (sent != null) {
                 reversed.add(movement);
                 reversedSteps.add(movement.getStep());
             }
+        }
+        if (!skippedMoneyLegs.isEmpty()) {
+            // the skip was honored — the remaining legs ran — but a
+            // standing money leg has no store-and-forward retry, and a
+            // completed void would strand the charge, so the void stays
+            // incomplete and retryable
+            throw standingMoneyError(skippedMoneyLegs, moneyFailure[0]);
         }
         if (reversed.isEmpty()) {
             if (!priorProgress) {
@@ -293,13 +312,30 @@ public final class ReversalManager {
                 // not report success
                 throw lastFailure[0];
             }
-            // this attempt only skipped legs of a partly-reversed sale —
-            // the movements reversed by the prior attempt stand, and the
-            // skipped ones remain SAF-retryable, exactly like a skip in a
-            // single-attempt void
+            // this attempt only skipped loyalty legs of a partly-reversed
+            // sale — the movements reversed by the prior attempt stand,
+            // and the skipped ones remain SAF-retryable, exactly like a
+            // skip in a single-attempt void
             return VoidResult.builder().success(true).build();
         }
         return buildVoidResult(money, loyalty);
+    }
+
+    /**
+     * A void whose money leg was skipped and remains charged: the legs
+     * reversed this attempt stand recorded, and the retry sends only what
+     * is still standing.
+     */
+    private static SessionException standingMoneyError(List<ReversalMovement> skipped,
+                                                       SessionException cause) {
+        String legs = skipped.stream()
+                .map(movement -> label(movement.getStep()) + " " + movement.poiTransactionId)
+                .collect(Collectors.joining(" and "));
+        return new SessionException(Wire.annotated(cause.getError(),
+                legs + (skipped.size() == 1 ? " was skipped and remains" : " were skipped and remain")
+                        + " charged — the void is incomplete; retry voidTransaction() to "
+                        + "reverse " + (skipped.size() == 1 ? "it" : "them") + ": "
+                        + cause.getError().getMessage(), cause));
     }
 
     private void execute(ReversalMovement movement, String memberId,

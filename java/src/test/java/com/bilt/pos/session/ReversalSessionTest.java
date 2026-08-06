@@ -885,6 +885,42 @@ class ReversalSessionTest {
     }
 
     @Test
+    void skippedMoneyLegLeavesTheVoidIncomplete() throws Exception {
+        ReversalSession session = start(sessionBuilder()
+                .poiTransactionId(ORIGINAL_POI_TXN)
+                .poiTransactionTimestamp(ORIGINAL_TS)
+                .rebatePoiTransactionId(REBATE_POI_TXN)
+                .rebatePoiTransactionTimestamp(REBATE_TS));
+
+        // the register answers SKIP for the failing card reversal: the
+        // skip is honored — the rebate leg still runs — but a standing
+        // money leg has no SAF retry, so the void must not reach VOIDED
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnreachableHost\"}}}}"));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // rebate refund
+        SessionException failure = assertThrows(SessionException.class,
+                () -> session.voidTransaction()
+                        .onError((step, error) -> ReversalDecision.SKIP)
+                        .get());
+        assertTrue(failure.getError().getMessage().contains("remains charged"),
+                "the error must say the skipped money leg still stands: "
+                        + failure.getError().getMessage());
+        assertEquals(SessionState.IDLE, session.getState(),
+                "VOIDED must imply the referenced money legs are reversed");
+        recordedRequest();  // the failed card reversal
+        recordedRequest();  // the rebate refund — the skip continued the void
+
+        // the retry sends only the standing card leg — the reversed rebate
+        // is not re-credited — and completes once the reversal goes through
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+        assertEquals(4, server.getRequestCount(),
+                "start, failed card + rebate, then the retried card alone");
+    }
+
+    @Test
     void fullySkippedVoidFailsAndDeliversTheTerminalFailure() throws Exception {
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // redemption refund
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));   // rebate refund
