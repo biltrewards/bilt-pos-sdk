@@ -75,6 +75,13 @@ public final class ReversalFlow<T> {
      * a reversal whose every step was skipped and therefore reversed
      * nothing — is delivered with a {@code null} step; the returned
      * decision is then ignored, there is nothing left to resolve.</p>
+     *
+     * <p>Because of that {@code null}-step delivery, a handler that
+     * {@code switch}es on the step must guard for {@code null} first — an
+     * exception thrown from the handler would mask the very failure being
+     * delivered. Null-safe comparisons, as in the class example
+     * ({@code step == ReversalStep.AWARD ? SKIP : ABORT}), need no
+     * guard.</p>
      */
     public ReversalFlow<T> onError(
             BiFunction<ReversalStep, SessionError, ReversalDecision> handler) {
