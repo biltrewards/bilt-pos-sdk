@@ -470,7 +470,7 @@ try (ReversalSession session = ReversalSession.builder()
 }
 ```
 
-The cart is free-form — which items may be returned, and in what quantities, is the register's decision (the acquirer enforces the cumulative refund limit). On success the cart is consumed and the display cleared; on failure it stays intact for a retry. Ring further returns for additional partial refunds.
+The cart is free-form — which items may be returned, and in what quantities, is the register's decision (the acquirer enforces the cumulative refund limit). The cart is consumed (and the display cleared) the moment the tender refund moves money, even if a later award reversal step aborts the flow; while no money has moved — a failed or `onError`-skipped tender — it stays intact for a retry. Ring further returns for additional partial refunds.
 
 **Credit lines on a sale.** The same mechanism marks a return or trade-in rung into a *checkout* basket: `BasketItem.credit(sku, desc, qty, price)` (or `.credit(true)` on the builder) makes the line subtract from the sale's totals and display negative. Quantities and unit prices stay positive — the direction carries the sign — and a credit line never upserts into a sale line of the same SKU: the basket shows both, like a paper receipt. `pay()` still requires a positive grand total.
 

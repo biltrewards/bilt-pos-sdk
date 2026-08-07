@@ -154,7 +154,8 @@ public final class SessionBasket {
 
     /**
      * Overrides the basket's total tax; passing {@code null} restores
-     * item-level computation.
+     * item-level computation. Like every tax value the override is a
+     * magnitude — on a refund cart it subtracts with the returned lines.
      */
     public Basket setTaxTotal(BigDecimal amount) {
         return host.mutate(basket -> basket.setTaxTotal(amount));

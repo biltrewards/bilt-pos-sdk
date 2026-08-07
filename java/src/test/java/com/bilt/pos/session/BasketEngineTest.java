@@ -354,6 +354,19 @@ class BasketEngineTest {
     }
 
     @Test
+    void creditCartNegatesTheTaxTotalOverride() {
+        BasketEngine cart = new BasketEngine(true);
+        cart.addItem(candle(1));
+        cart.setTaxTotal(new BigDecimal("2.00"));
+
+        Basket basket = cart.snapshot();
+        assertEquals(new BigDecimal("-2.00"), basket.getTaxTotal(),
+                "the override is a magnitude; the cart's direction supplies the sign");
+        assertEquals(new BigDecimal("-26.99"), basket.getGrandTotal(),
+                "tax returned with the merchandise, not netted against it");
+    }
+
+    @Test
     void creditCartForcesEveryLineToTheCreditSide() {
         BasketEngine cart = new BasketEngine(true);
         cart.addItem(candle(1));   // a plain sale item — the cart flips it

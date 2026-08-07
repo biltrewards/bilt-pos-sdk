@@ -377,11 +377,14 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  <code>awardPoiTransactionId</code> was supplied — best-effort by default,
  like <a href="#refund()"><code>refund()</code></a>, and subject to the same guards.
 
- <p>On success the cart is consumed (cleared, with a display refresh
- under <code>autoDisplay</code>) so the same items cannot be re-sent; on
- failure it stays intact for a retry. Ring the next return into
- <a href="#basket()"><code>basket()</code></a> for a further partial refund — the acquirer
- enforces the cumulative limit.</p></div>
+ <p>The cart is consumed (cleared, with a display refresh under
+ <code>autoDisplay</code>) the moment the tender refund moves money — even
+ when a later award step aborts the flow, so a retry can never re-send
+ the same returns. While no money has moved — the refund failed, or
+ the tender was skipped by an <code>onError</code> decision — the cart
+ stays intact for a retry. Ring the next return into <a href="#basket()"><code>basket()</code></a>
+ for a further partial refund — the acquirer enforces the cumulative
+ limit.</p></div>
 </section>
 </li>
 <li>

@@ -314,11 +314,14 @@ public final class ReversalSession implements AutoCloseable {
      * {@code awardPoiTransactionId} was supplied — best-effort by default,
      * like {@link #refund()}, and subject to the same guards.
      *
-     * <p>On success the cart is consumed (cleared, with a display refresh
-     * under {@code autoDisplay}) so the same items cannot be re-sent; on
-     * failure it stays intact for a retry. Ring the next return into
-     * {@link #basket()} for a further partial refund — the acquirer
-     * enforces the cumulative limit.</p>
+     * <p>The cart is consumed (cleared, with a display refresh under
+     * {@code autoDisplay}) the moment the tender refund moves money — even
+     * when a later award step aborts the flow, so a retry can never re-send
+     * the same returns. While no money has moved — the refund failed, or
+     * the tender was skipped by an {@code onError} decision — the cart
+     * stays intact for a retry. Ring the next return into {@link #basket()}
+     * for a further partial refund — the acquirer enforces the cumulative
+     * limit.</p>
      */
     public ReversalFlow<RefundResult> refundBasket() {
         operations.track("refundBasket");
@@ -340,21 +343,32 @@ public final class ReversalSession implements AutoCloseable {
                     + "(zero-priced items only); a refund cannot start");
         }
         boolean awardReversed = guards.awardReversed();
-        RefundResult result = reversalManager.refund(amount,
-                SaleItemMapper.toRefundSaleItems(cart),
-                poiTransactionId, poiTransactionTimestamp,
-                awardReversed ? null : awardPoiTransactionId,
-                awardReversed ? null : awardPoiTransactionTimestamp,
-                memberId, flow.decider(),
-                guards::markRefunded,
-                guards::markAwardReversed);
-        // the cart was consumed: clear it so a retry cannot re-send the
-        // same returns, and take the lines off the customer display
-        basketEngine.clear();
-        if (autoDisplay) {
-            display.show(basketEngine.snapshot(), stateMachine.current());
+        // the cart is consumed the moment the tender refund moves money —
+        // even when a later award step aborts the flow, a retry must not
+        // re-send the same returns — and only then: a tender skipped by
+        // decision leaves the cart intact, or the returns could never be
+        // refunded at all
+        boolean[] tenderRefunded = {false};
+        try {
+            return reversalManager.refund(amount,
+                    SaleItemMapper.toRefundSaleItems(cart),
+                    poiTransactionId, poiTransactionTimestamp,
+                    awardReversed ? null : awardPoiTransactionId,
+                    awardReversed ? null : awardPoiTransactionTimestamp,
+                    memberId, flow.decider(),
+                    () -> {
+                        guards.markRefunded();
+                        tenderRefunded[0] = true;
+                    },
+                    guards::markAwardReversed);
+        } finally {
+            if (tenderRefunded[0]) {
+                basketEngine.clear();
+                if (autoDisplay) {
+                    display.show(basketEngine.snapshot(), stateMachine.current());
+                }
+            }
         }
-        return result;
     }
 
     private void requireLinkedRefundable() {

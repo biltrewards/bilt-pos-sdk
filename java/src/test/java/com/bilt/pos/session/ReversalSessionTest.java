@@ -1081,6 +1081,57 @@ class ReversalSessionTest {
     }
 
     @Test
+    void abortedAwardAfterTheTenderRefundStillConsumesTheCart() throws Exception {
+        ReversalSession session = start(sessionBuilder()
+                .poiTransactionId(ORIGINAL_POI_TXN)
+                .poiTransactionTimestamp(ORIGINAL_TS)
+                .awardPoiTransactionId(AWARD_POI_TXN)
+                .autoDisplay(false));
+        session.basket().addItem(
+                BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+
+        // the tender refund succeeds, then the award reversal fails and the
+        // register aborts — the money moved, so the returns are refunded
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.refundOk(24.99)));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));
+        assertThrows(SessionException.class, () -> session.refundBasket()
+                .onError((step, error) -> ReversalDecision.ABORT)
+                .get());
+
+        assertTrue(session.basket().snapshot().isEmpty(),
+                "money moved: a retry must not re-send the same returns");
+        assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
+                () -> session.refundBasket().get()).getError().getCode());
+    }
+
+    @Test
+    void skippedTenderWithReversedAwardKeepsTheCart() throws Exception {
+        ReversalSession session = start(sessionBuilder()
+                .poiTransactionId(ORIGINAL_POI_TXN)
+                .poiTransactionTimestamp(ORIGINAL_TS)
+                .awardPoiTransactionId(AWARD_POI_TXN)
+                .autoDisplay(false));
+        session.basket().addItem(
+                BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+
+        // the tender refund is declined and skipped by decision; only the
+        // award moves — no item money did, so the cart must survive
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}"));
+        server.enqueue(new MockResponse().setBody(AWARD_REFUND_OK));
+        RefundResult result = session.refundBasket()
+                .onError((step, error) -> step == ReversalStep.CARD
+                        ? ReversalDecision.SKIP : ReversalDecision.ABORT)
+                .get();
+
+        assertTrue(result.isSuccess());
+        assertNull(result.getRefundedAmount(), "no money moved");
+        assertEquals(1, session.basket().snapshot().getItemCount(),
+                "the returns were not refunded, so the cart stays for a retry");
+    }
+
+    @Test
     void refundCartCannotBeModifiedAfterAVoid() throws Exception {
         ReversalSession session = cardSession();
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));

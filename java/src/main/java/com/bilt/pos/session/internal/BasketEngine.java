@@ -311,9 +311,18 @@ public final class BasketEngine implements BasketMutation {
                     .metadata(line.metadata)
                     .build());
         }
-        BigDecimal taxTotal = taxTotalOverride != null
-                ? taxTotalOverride.setScale(MONEY_SCALE, ROUNDING)
-                : taxSum;
+        BigDecimal taxTotal;
+        if (taxTotalOverride != null) {
+            taxTotal = taxTotalOverride.setScale(MONEY_SCALE, ROUNDING);
+            if (creditCart) {
+                // tax values are magnitudes everywhere (see setTaxAmount);
+                // on a credit cart the override follows the cart's
+                // direction like every line amount does
+                taxTotal = taxTotal.negate();
+            }
+        } else {
+            taxTotal = taxSum;
+        }
         return Basket.builder()
                 .cartId(cartId)
                 .items(items)
