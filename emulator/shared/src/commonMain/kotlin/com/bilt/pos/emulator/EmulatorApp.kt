@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -61,6 +62,7 @@ import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.PaymentOutcome
 import com.bilt.pos.emulator.session.StoredSaleUi
+import com.bilt.pos.emulator.session.StoredValueOptions
 
 /** Top-level screens of the emulator. */
 internal enum class EmulatorTab(val label: String) { SALE("Sale"), REFUND("Refund") }
@@ -506,6 +508,23 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         Text(if (sessionActive) "End Checkout" else "Start Checkout")
                     }
                 }
+                // Aborts whatever is on the terminal (payment, identify
+                // prompt, card read) — it sits with the connection/session
+                // controls rather than next to Pay because its scope is
+                // wider than the payment
+                val abortButton: @Composable (Modifier) -> Unit = { modifier ->
+                    Button(
+                        onClick = { controller.abort() },
+                        enabled = state.paymentInProgress || state.cardReadInProgress,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ),
+                        modifier = modifier,
+                    ) {
+                        Text("Abort operation")
+                    }
+                }
                 if (compact) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -518,6 +537,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         }
                         connectButton(Modifier.fillMaxWidth())
                         sessionButton(Modifier.fillMaxWidth())
+                        abortButton(Modifier.fillMaxWidth())
                     }
                 } else {
                     Row(
@@ -532,6 +552,8 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         if (encryptionOn) {
                             passphraseField(Modifier.width(240.dp))
                         }
+                        Spacer(Modifier.weight(1f))
+                        abortButton(Modifier)
                     }
                 }
             }
@@ -698,18 +720,23 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
     // Toggles for the next payment. Identify prompts on the terminal before
     // paying; the loyalty steps work without it when the customer
     // self-identifies on the terminal during the flow.
-    var identify by rememberSaveable { mutableStateOf(true) }
-    var rebates by rememberSaveable { mutableStateOf(true) }
-    var redemption by rememberSaveable { mutableStateOf(true) }
-    var award by rememberSaveable { mutableStateOf(true) }
+    var identify by rememberSaveable { mutableStateOf(false) }
+    var rebates by rememberSaveable { mutableStateOf(false) }
+    var redemption by rememberSaveable { mutableStateOf(false) }
+    var award by rememberSaveable { mutableStateOf(false) }
+    // Gift card tender: charged first, remainder goes to the card payment
+    var giftCard by rememberSaveable { mutableStateOf(false) }
+    var giftCardNumber by rememberSaveable { mutableStateOf("") }
 
     // One payment per checkout: pay again only after the next Start Checkout
     val paid = state.lastPayment != null
+    // a card read holds the serialized dispatcher, so a payment started
+    // mid-read would silently queue behind the terminal prompt
     val canPay = state.sessionId != null && state.basket.isNotEmpty() &&
-        !state.paymentInProgress && !paid
+        !state.paymentInProgress && !state.cardReadInProgress && !paid
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        // FlowRow: four labeled checkboxes overflow a narrow card; wrap
+        // FlowRow: five labeled checkboxes overflow a narrow card; wrap
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -718,6 +745,41 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             LoyaltyCheckbox("Rebates", rebates, !state.paymentInProgress) { rebates = it }
             LoyaltyCheckbox("Redemption", redemption, !state.paymentInProgress) { redemption = it }
             LoyaltyCheckbox("Award", award, !state.paymentInProgress) { award = it }
+            LoyaltyCheckbox("Gift card", giftCard, !state.paymentInProgress) { giftCard = it }
+        }
+        if (giftCard) {
+            // Adopt each terminal card read into the field. Tracking the
+            // consumed sequence (saveable, like the field itself) keeps a
+            // re-shown field from resurrecting an old read the operator
+            // already cleared, while a genuine re-read still lands.
+            var consumedReadSequence by rememberSaveable { mutableStateOf(0) }
+            LaunchedEffect(state.acquiredCard) {
+                val read = state.acquiredCard ?: return@LaunchedEffect
+                if (read.sequence > consumedReadSequence) {
+                    consumedReadSequence = read.sequence
+                    giftCardNumber = read.number
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CompactTextField(
+                    value = giftCardNumber,
+                    onValueChange = { giftCardNumber = it },
+                    placeholder = "Gift card number (blank = swipe on terminal)",
+                    enabled = !state.paymentInProgress,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = { controller.acquireCard() },
+                    enabled = state.sessionId != null && !state.paymentInProgress &&
+                        !state.cardReadInProgress,
+                ) {
+                    Text("Read card")
+                }
+            }
         }
         if (paid) {
             // the checkout auto-ends on full payment; the hint covers the
@@ -733,42 +795,28 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                 color = Color(0xFF2E7D32),
             )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Button(
-                onClick = {
-                    controller.pay(
-                        LoyaltyOptions(
-                            identify = identify,
-                            rebates = rebates,
-                            redemption = redemption,
-                            award = award,
-                        )
-                    )
-                },
-                enabled = canPay,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    when {
-                        state.paymentInProgress -> "Paying…"
-                        paid -> "Paid"
-                        else -> "Pay $${state.basketTotal}"
-                    }
+        Button(
+            onClick = {
+                controller.pay(
+                    LoyaltyOptions(
+                        identify = identify,
+                        rebates = rebates,
+                        redemption = redemption,
+                        award = award,
+                    ),
+                    if (giftCard) StoredValueOptions(cardNumber = giftCardNumber) else null,
                 )
-            }
-            Button(
-                onClick = { controller.abortPayment() },
-                enabled = state.paymentInProgress,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError,
-                ),
-            ) {
-                Text("Abort")
-            }
+            },
+            enabled = canPay,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                when {
+                    state.paymentInProgress -> "Paying…"
+                    paid -> "Paid"
+                    else -> "Pay $${state.basketTotal}"
+                }
+            )
         }
     }
 }

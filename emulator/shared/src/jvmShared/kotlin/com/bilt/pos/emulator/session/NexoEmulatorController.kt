@@ -19,11 +19,13 @@ import com.bilt.pos.session.SessionException
 import com.bilt.pos.session.SessionState
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketItem
+import com.bilt.pos.session.identity.CardAcquisitionOptions
 import com.bilt.pos.session.identity.ForceEntryMode
 import com.bilt.pos.session.identity.IdentifyOptions
 import com.bilt.pos.session.identity.IdentifyStatus
 import com.bilt.pos.session.payment.CheckoutResult
 import com.bilt.pos.session.payment.PaymentOptions
+import com.bilt.pos.session.storedvalue.StoredValueCard
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -97,7 +99,12 @@ class NexoEmulatorController(
          *  payment behind the first on the serialized dispatcher. */
         val paymentClaimed = java.util.concurrent.atomic.AtomicBoolean(false)
 
-        /** Set by [abortPayment] for the current payment attempt. SDK
+        /** Claimed synchronously by [acquireCard], like [paymentClaimed]:
+         *  rapid taps must not queue a second terminal prompt behind the
+         *  first before the in-progress flag publishes. */
+        val cardReadClaimed = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /** Set by [abort] for the current payment attempt. SDK
          *  abort() only interrupts what is on the wire — during the
          *  pre-payment identify prompt the session is not yet PAYING, so
          *  without this flag a cancelled prompt would read as a guest
@@ -437,7 +444,7 @@ class NexoEmulatorController(
         }
     }
 
-    override fun pay(loyalty: LoyaltyOptions) {
+    override fun pay(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?) {
         val conn = connection
         if (conn == null) {
             log("No active checkout session — press Start Checkout first")
@@ -492,6 +499,13 @@ class NexoEmulatorController(
                 }
                 if (!currentCoroutineContext().isActive) return@launch
 
+                // Registered per attempt: set when requested, actively
+                // cleared otherwise — the session keeps the card across a
+                // retry, so a toggle switched off between attempts must
+                // remove it rather than silently charge the card again
+                val card = storedValue?.toCard()
+                session.setStoredValueCard(card)
+
                 val options = PaymentOptions.builder()
                     .disableRebates(!loyalty.rebates)
                     .disablePoints(!loyalty.redemption)
@@ -499,7 +513,8 @@ class NexoEmulatorController(
                     .build()
                 log(
                     "Starting payment — rebates ${onOff(loyalty.rebates)}, " +
-                        "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}"
+                        "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}" +
+                        (card?.let { ", gift card ${it.storedValueId ?: "(swipe on terminal)"}" } ?: "")
                 )
                 val flow = session.pay(options)
                     .onRebatesRedeemed { rebates ->
@@ -509,6 +524,15 @@ class NexoEmulatorController(
                     .onPointsRedeemed { points ->
                         log("Points redeemed: ${points.pointsUsed} (−$${points.monetaryValue.toPlainString()}) → total $${points.suggestedTotal.toPlainString()}")
                         points.suggestedTotal
+                    }
+                    .onGiftCardPayment { giftCard ->
+                        val balance = giftCard.remainingCardBalance
+                            ?.let { " (card balance $${it.toPlainString()})" } ?: ""
+                        log(
+                            "Gift card charged: $${giftCard.amountCharged.toPlainString()}$balance" +
+                                " → total $${giftCard.suggestedTotal.toPlainString()}"
+                        )
+                        giftCard.suggestedTotal
                     }
                     .onError { error ->
                         session.updateDisplay(session.basket().snapshot())
@@ -611,7 +635,84 @@ class NexoEmulatorController(
         }
     }
 
-    override fun abortPayment() {
+    override fun acquireCard() {
+        val conn = connection
+        if (conn == null) {
+            log("No active checkout session — press Start Checkout first")
+            return
+        }
+        // Claimed here, not inside the job (same reasoning as pay): two
+        // quick taps would both queue on the serialized dispatcher before
+        // cardReadInProgress publishes, prompting the terminal twice
+        if (!conn.cardReadClaimed.compareAndSet(false, true)) {
+            log("A card read is already in progress")
+            return
+        }
+        _state.update { it.copy(cardReadInProgress = true) }
+        val job = conn.scope.launch(conn.dispatcher) {
+            // Read inside the serialized job (same as the other session
+            // operations) so it can't interleave with an in-flight start/end
+            val session = conn.session
+            if (session == null) {
+                log("No active checkout session — press Start Checkout first")
+                return@launch
+            }
+            log("Reading card on the terminal (CardAcquisition, MagStripe/Scanned)…")
+            // ForceEntryMode is sent explicitly: without it the request
+            // carries no entry-mode element and the terminal arms only its
+            // default reader set, which may not include the stripe.
+            // MagStripe + Scanned are the gift-card capture methods.
+            session.acquireCard(
+                CardAcquisitionOptions.builder()
+                    .forceEntryMode(ForceEntryMode.MAG_STRIPE)
+                    .forceEntryMode(ForceEntryMode.SCANNED)
+                    .build()
+            )
+                .onSuccess { acquired ->
+                    if (!isActive) return@onSuccess
+                    val label = listOfNotNull(
+                        acquired.paymentBrand,
+                        acquired.maskedPan ?: acquired.truncatedPan,
+                        acquired.entryMode?.let { "via $it" },
+                    ).joinToString(" ").ifEmpty { "no card details returned" }
+                    val number = acquired.rawPan
+                    if (number.isNullOrBlank()) {
+                        // Masked/truncated reads carry no chargeable number —
+                        // only PLCC-range cards (gift cards among them)
+                        // return the full PAN
+                        log("Card read: $label — no full card number returned, type it manually")
+                    } else {
+                        _state.update {
+                            it.copy(acquiredCard = AcquiredCard(
+                                number = number,
+                                sequence = (it.acquiredCard?.sequence ?: 0) + 1,
+                            ))
+                        }
+                        log("Card read: $label — filled into the gift card field")
+                    }
+                }
+                .onError { error ->
+                    if (!isActive) return@onError
+                    if (error.code == SessionErrorCode.ABORTED) {
+                        log("Card read aborted")
+                    } else {
+                        log("Card read failed: ${error.message}")
+                        error.cause?.let { detailedLog(it.stackTraceToString()) }
+                    }
+                }
+                .execute()
+        }
+        // Releases on every path, including a job cancelled before it ran
+        // (disconnect racing this call) — mirrors the pay() completion hook
+        job.invokeOnCompletion {
+            conn.cardReadClaimed.set(false)
+            if (connection === conn) {
+                _state.update { it.copy(cardReadInProgress = false) }
+            }
+        }
+    }
+
+    override fun abort() {
         val conn = connection
         val session = conn?.session
         if (conn == null || session == null) {
@@ -621,15 +722,18 @@ class NexoEmulatorController(
         // The attempt flag covers the window the SDK cannot: during the
         // pre-payment identify prompt the session is not PAYING, so abort()
         // only cancels the prompt — the pay job checks this flag before it
-        // lets the payment start.
+        // lets the payment start. Setting it with no payment in flight
+        // (e.g. aborting a card read) is harmless: pay() resets it when
+        // the next attempt is claimed.
         conn.paymentAbortRequested.set(true)
         // Deliberately NOT on the serialized dispatcher: abort() is the
         // SDK's cross-thread entry point, and it must overtake the blocking
-        // payment call it interrupts — queueing it would run it only after
-        // the payment finished on its own. Operation-scoped: the aborted
-        // payment settles FAILED and the session stays retryable.
+        // call it interrupts — queueing it would run it only after that
+        // call finished on its own. Operation-scoped like the SDK's: an
+        // aborted payment settles FAILED and the session stays retryable;
+        // an aborted prompt or card read is simply cancelled.
         conn.scope.launch(Dispatchers.IO) {
-            log("Aborting the payment…")
+            log("Aborting…")
             try {
                 session.abort()
             } catch (e: Exception) {
@@ -787,6 +891,13 @@ class NexoEmulatorController(
         iso
     }
 
+    /** The UI's gift card tender as the SDK's stored value card: a typed
+     *  number is keyed entry; blank hands entry to the terminal's swipe. */
+    private fun StoredValueOptions.toCard(): StoredValueCard {
+        val number = cardNumber.trim()
+        return if (number.isEmpty()) StoredValueCard.swiped() else StoredValueCard.number(number)
+    }
+
     private fun onOff(enabled: Boolean) = if (enabled) "on" else "off"
 
     /** Connectivity probe: a raw nexo Diagnosis request, no session involved. */
@@ -852,6 +963,7 @@ class NexoEmulatorController(
                 basketTotal = "0.00",
                 basketTax = "0.00",
                 paymentInProgress = false,
+                cardReadInProgress = false,
                 lastPayment = null,
                 paymentOutcome = null,
             )
