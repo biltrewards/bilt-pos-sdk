@@ -69,6 +69,29 @@ data class LoyaltyOptions(
     val award: Boolean = true,
 )
 
+/**
+ * Gift (stored value) card tender for a payment. When present, the payment
+ * charges the card first and collects any remainder with a standard card
+ * payment (split tender). SDK-free so commonMain can construct it; the
+ * controller maps it onto the SDK's stored value card.
+ */
+data class StoredValueOptions(
+    /** Card number, charged as keyed entry. Blank means the terminal
+     *  prompts the customer to swipe the card instead. */
+    val cardNumber: String = "",
+)
+
+/**
+ * A card read from the terminal (CardAcquisition request) that returned a
+ * full card number, published for the gift card field to adopt. [sequence]
+ * increments per read so re-reading the same card still counts as a new
+ * value for UI effects keyed on it.
+ */
+data class AcquiredCard(
+    val number: String,
+    val sequence: Int,
+)
+
 /** One cart line of a stored sale, as the Refund tab shows it. */
 data class SaleItemUi(
     val sku: String,
@@ -136,6 +159,8 @@ data class EmulatorState(
     val basketTax: String = "0.00",
     /** True while a payment (and its member identification) is on the wire. */
     val paymentInProgress: Boolean = false,
+    /** True while a terminal card read (CardAcquisition) is on the wire. */
+    val cardReadInProgress: Boolean = false,
     /** One-line summary of the checkout's completed payment; null until
      *  paid. A fully collected payment ends the checkout automatically; the
      *  summary stays visible until the next one starts. */
@@ -143,6 +168,9 @@ data class EmulatorState(
     /** Success/failure of the last payment attempt, rendered as a popup
      *  until dismissed; cleared when a new payment starts. */
     val paymentOutcome: PaymentOutcome? = null,
+    /** Last terminal card read that carried a full card number; the gift
+     *  card field adopts each new read. */
+    val acquiredCard: AcquiredCard? = null,
     /** Stored completed sales, newest first, listed on the Refund tab. */
     val sales: List<StoredSaleUi> = emptyList(),
     /** Curated one-line event feed shown on the Events tab. */
@@ -187,17 +215,29 @@ interface EmulatorController {
      * Run the payment on the active session. [loyalty] picks which loyalty
      * steps run; when [LoyaltyOptions.identify] is enabled and no member is
      * attached yet, the terminal prompts the customer first (a declined
-     * prompt falls back to a guest checkout).
+     * prompt falls back to a guest checkout). [storedValue] adds a gift
+     * card as the first tender — anything it doesn't cover falls through
+     * to the standard card payment.
      */
-    fun pay(loyalty: LoyaltyOptions)
+    fun pay(loyalty: LoyaltyOptions, storedValue: StoredValueOptions? = null)
 
     /**
-     * Abort the in-flight payment (SDK `abort()`): committed steps are
-     * reversed and the session settles retryable — the basket stays intact
-     * and Pay may run again. An abort that lands after the payment
-     * completed leaves the transaction standing.
+     * Read a card on the terminal (nexo CardAcquisition request) without
+     * charging it. A read that returns a full card number is published as
+     * [EmulatorState.acquiredCard] so the gift card field can adopt it; a
+     * masked-only read is just logged.
      */
-    fun abortPayment()
+    fun acquireCard()
+
+    /**
+     * Abort whatever is in flight, mirroring the SDK's operation-scoped
+     * `abort()`: an aborted payment has its committed steps reversed and
+     * the session settles retryable — the basket stays intact and Pay may
+     * run again; an aborted prompt or card read is simply cancelled. An
+     * abort that lands after the payment completed leaves the transaction
+     * standing.
+     */
+    fun abort()
 
     /** Dismiss the payment outcome popup. */
     fun dismissPaymentOutcome()

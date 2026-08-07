@@ -13,6 +13,7 @@ import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.SaleItemUi
 import com.bilt.pos.emulator.session.StoredSaleUi
+import com.bilt.pos.emulator.session.StoredValueOptions
 import com.bilt.pos.emulator.session.TlsStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,8 +39,9 @@ class ScreenshotGenerator {
         override fun startSession() = Unit
         override fun endSession() = Unit
         override fun addProduct(product: Product) = Unit
-        override fun pay(loyalty: LoyaltyOptions) = Unit
-        override fun abortPayment() = Unit
+        override fun pay(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?) = Unit
+        override fun acquireCard() = Unit
+        override fun abort() = Unit
         override fun dismissPaymentOutcome() = Unit
     }
 
