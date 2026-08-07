@@ -18,7 +18,7 @@ import java.util.List;
 /**
  * An immutable snapshot of the session's basket.
  *
- * <p>Basket mutators on {@code CheckoutSession} return a fresh snapshot;
+ * <p>Basket mutators on {@code SessionBasket} return a fresh snapshot;
  * instances never change and can be held freely by register code.</p>
  *
  * <p>The payment breakdown fields ({@code rebateTotal},

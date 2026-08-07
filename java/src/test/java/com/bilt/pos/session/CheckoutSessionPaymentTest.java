@@ -132,7 +132,7 @@ class CheckoutSessionPaymentTest {
     }
 
     private void addHundredDollarItem() {
-        session.addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
     }
 
     private SaleToPOIRequest nextRequest() throws Exception {
@@ -260,7 +260,7 @@ class CheckoutSessionPaymentTest {
         // to pay — a zero total must not mint a COMPLETED checkout
         addHundredDollarItem();
         PaymentFlow flow = session.pay();   // created while the total is positive
-        session.mutate(m -> m
+        session.basket().mutate(m -> m
                 .removeItemBySku("SKU-1")
                 .addItem(BasketItem.of("SKU-FREE", "Comped Item", 1, "0.00")));
 
@@ -288,7 +288,7 @@ class CheckoutSessionPaymentTest {
                 .start()
                 .get();
         server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
-        storeSession.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        storeSession.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 10.00)));
 
         storeSession.pay().execute();
@@ -504,8 +504,8 @@ class CheckoutSessionPaymentTest {
                         + "\"RebateLabel\":\"Fall Promo\"}}]}}}";
 
         identifyMember();
-        session.addItem(BasketItem.of("SKU-1", "Item A", 1, "50.00"));
-        session.addItem(BasketItem.of("SKU-2", "Item B", 1, "25.00"));
+        session.basket().addItem(BasketItem.of("SKU-1", "Item A", 1, "50.00"));
+        session.basket().addItem(BasketItem.of("SKU-2", "Item B", 1, "25.00"));
 
         server.enqueue(new MockResponse().setBody(globalRebate));
         server.enqueue(new MockResponse().setBody(REDEEM_OK));
@@ -595,11 +595,11 @@ class CheckoutSessionPaymentTest {
         assertEquals(SessionState.FAILED, session.getState());
 
         assertThrows(IllegalArgumentException.class,
-                () -> session.removeItemBySku("NO-SUCH-SKU"));
+                () -> session.basket().removeItemBySku("NO-SUCH-SKU"));
 
         assertEquals(SessionState.FAILED, session.getState(),
                 "a mutation that failed must not flip FAILED to ACTIVE");
-        assertEquals(1, session.getBasket().getItemCount());
+        assertEquals(1, session.basket().snapshot().getItemCount());
     }
 
     @Test
@@ -750,9 +750,9 @@ class CheckoutSessionPaymentTest {
         // create the flow while items exist, then empty the basket — the
         // incomplete rollback keeps the session FAILED, not IDLE
         PaymentFlow flow = session.pay();
-        session.removeItemBySku("SKU-1");
+        session.basket().removeItemBySku("SKU-1");
         assertEquals(SessionState.FAILED, session.getState());
-        assertEquals(0, session.getBasket().getItemCount());
+        assertEquals(0, session.basket().snapshot().getItemCount());
 
         // creation-time: pay() must reject the empty basket outright
         assertThrows(IllegalStateException.class, () -> session.pay());
@@ -804,7 +804,7 @@ class CheckoutSessionPaymentTest {
     void basketEditKeepsFailedWhileTheRollbackIsIncomplete() throws Exception {
         failPaymentWithStandingRebate();
 
-        session.updateItemQuantityBySku("SKU-1", 2);
+        session.basket().updateItemQuantityBySku("SKU-1", 2);
         assertEquals(SessionState.FAILED, session.getState(),
                 "an edit must not cut off the void path while a movement stands");
 
@@ -936,7 +936,7 @@ class CheckoutSessionPaymentTest {
 
         identifyMember();
         for (int i = 1; i <= 7; i++) {
-            session.addItem(BasketItem.of("SKU-" + i, "Item " + i, 1, "10.00"));
+            session.basket().addItem(BasketItem.of("SKU-" + i, "Item " + i, 1, "10.00"));
         }
         server.enqueue(new MockResponse().setBody(tinyGlobalRebate));
         server.enqueue(new MockResponse().setBody(REDEEM_OK));                     // -5.00
@@ -1155,8 +1155,8 @@ class CheckoutSessionPaymentTest {
     @Test
     void finalBasketReflectsHandlerRecalculatedTax() throws Exception {
         identifyMember();
-        session.addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
-        session.setTaxRateBySku("SKU-1", new BigDecimal("0.08"));  // grand 108.00
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
+        session.basket().setTaxRateBySku("SKU-1", new BigDecimal("0.08"));  // grand 108.00
 
         server.enqueue(new MockResponse().setBody(REBATE_OK));                    // -10.00
         server.enqueue(new MockResponse().setBody(REDEEM_OK));                    // -5.00
@@ -1455,13 +1455,13 @@ class CheckoutSessionPaymentTest {
     @Test
     void basketCanBeAdjustedAfterAFailedPayment() throws Exception {
         addHundredDollarItem();
-        session.addItem(BasketItem.of("SKU-2", "Expensive Item", 1, "50.00"));
+        session.basket().addItem(BasketItem.of("SKU-2", "Expensive Item", 1, "50.00"));
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         session.pay().getOrNull();
         assertEquals(SessionState.FAILED, session.getState());
 
         // the customer drops an item and the register retries
-        session.removeItemBySku("SKU-2");
+        session.basket().removeItemBySku("SKU-2");
         assertEquals(SessionState.ACTIVE, session.getState());
 
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
@@ -1476,7 +1476,7 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         session.pay().getOrNull();
 
-        session.removeItemBySku("SKU-1");
+        session.basket().removeItemBySku("SKU-1");
         assertEquals(SessionState.IDLE, session.getState());
     }
 

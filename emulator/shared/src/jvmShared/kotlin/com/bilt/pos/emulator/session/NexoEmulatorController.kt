@@ -340,7 +340,7 @@ class NexoEmulatorController(
                 // basket mutations, so the previous checkout's receipt would
                 // linger until the first item is rung in. Best-effort — a
                 // failure logs via JUL (Detailed tab) and never throws.
-                started.updateDisplay(started.basket)
+                started.updateDisplay(started.basket().snapshot())
                 log("Customer display cleared (empty basket)")
             } catch (e: Exception) {
                 if (currentCoroutineContext().isActive) {
@@ -410,7 +410,7 @@ class NexoEmulatorController(
                 return@launch
             }
             try {
-                val existing = current.basket.getItemBySku(product.sku)
+                val existing = current.basket().snapshot().getItemBySku(product.sku)
                 val basket = if (existing == null) {
                     val item = BasketItem.builder()
                         .sku(product.sku)
@@ -420,9 +420,9 @@ class NexoEmulatorController(
                         .unitPrice(BigDecimal(product.priceDecimal))
                         .apply { NjSalesTax.rateFor(product)?.let(::taxRate) }
                         .build()
-                    current.addItem(item)
+                    current.basket().addItem(item)
                 } else {
-                    current.updateItemQuantityBySku(product.sku, existing.quantity + 1)
+                    current.basket().updateItemQuantityBySku(product.sku, existing.quantity + 1)
                 }
                 if (isActive) {
                     publishBasket(basket)
@@ -511,7 +511,7 @@ class NexoEmulatorController(
                         points.suggestedTotal
                     }
                     .onError { error ->
-                        session.updateDisplay(session.basket)
+                        session.updateDisplay(session.basket().snapshot())
                         if (isActive) {
                             log("Payment failed: ${error.code} — ${error.message}")
                             _state.update {
@@ -530,7 +530,7 @@ class NexoEmulatorController(
                     // for the abort); every other failure was already
                     // reported by the handler above
                     if (e.error.code == SessionErrorCode.ABORTED && isActive) {
-                        session.updateDisplay(session.basket)
+                        session.updateDisplay(session.basket().snapshot())
                         log(
                             "Payment aborted; committed steps reversed — " +
                                 "the basket is intact, Pay again to retry"

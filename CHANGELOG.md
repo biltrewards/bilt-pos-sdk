@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (breaking)
 
+- `CheckoutSession`'s basket surface moved behind `basket()`: the item and tax mutators (`addItem`, `removeItem`/`removeItemBySku`, `updateItemQuantity`/`updateItemQuantityBySku`, `setTaxRate`/`setTaxRateBySku`, `setTaxAmount`/`setTaxAmountBySku`, `setTaxTotal`, `mutate`) and the snapshot accessor (`getBasket()` → `basket().snapshot()`) now live on the new `SessionBasket` type returned by `session.basket()`. Behavior is unchanged — mutations follow the same session lifecycle rules and refresh the customer display under `autoDisplay` — but the basket now has a single home that future session types can share.
 - `SessionState.ABORTED` is removed and `abort()` is now operation-scoped: it interrupts the in-flight operation and the session continues — an abort is a register maneuver (cancel a prompt, stop a tender to take a gift card), not an abandonment. An aborted payment unwinds and settles in `FAILED` (basket intact, `pay()` retryable; the error still carries the `ABORTED` code), aborted prompts deliver their aborted/cancelled outcome with the state unchanged, and `abort()` with nothing in flight is a no-op. Abandoning a checkout is `end()`. Terminal-initiated payment aborts likewise settle in `FAILED`.
 - `CheckoutSession.Builder.build()` is replaced by `start()`, which returns a lazy `SessionResult<CheckoutSession>` — finish with `execute()`/`get()`/`getOrNull()` like every other session operation. An unstarted session can no longer exist.
 

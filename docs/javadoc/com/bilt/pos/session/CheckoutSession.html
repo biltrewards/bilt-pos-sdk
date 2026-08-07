@@ -89,9 +89,14 @@ loadScripts(document, 'script');</script>
 <div class="inheritance">com.bilt.pos.session.CheckoutSession</div>
 </div>
 <section class="class-description" id="class-description">
+<dl class="notes">
+<dt>All Implemented Interfaces:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" title="class or interface in java.lang" class="external-link">AutoCloseable</a></code></dd>
+</dl>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">CheckoutSession</span>
-<span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
+<span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a>
+implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" title="class or interface in java.lang" class="external-link">AutoCloseable</a></span></div>
 <div class="block">A stateful, loyalty-enabled checkout on top of <a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client"><code>BiltNexoTerminalClient</code></a>.
 
  <p>The session owns the basket, drives the terminal (or an external
@@ -105,13 +110,25 @@ loadScripts(document, 'script');</script>
  <code>getOrNull()</code> is invoked. All I/O and handlers run blocking on the
  calling thread.</p>
 
+ <p>A session is bracketed on the terminal: the builder's
+ <a href="CheckoutSession.Builder.html#start()"><code>start()</code></a> announces it (Nexo <code>Admin</code> session
+ start signal) and only hands out the session once the terminal
+ acknowledged, and <a href="#end()"><code>end()</code></a> tells the terminal to discard the
+ session-scoped data it accumulated. An ended session cannot be used or
+ restarted — create a new one per checkout. Sessions are
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" title="class or interface in java.lang" class="external-link"><code>AutoCloseable</code></a>, so try-with-resources sends the end signal even on
+ exception paths.</p>
+
  <pre><code>
- CheckoutSession session = CheckoutSession.builder()
-     .client(client)
-     .saleId("POS-LANE-3")
-     .poiId("VictaLane-275839164")
-     .currency("USD")
-     .build();
+ try (CheckoutSession session = CheckoutSession.builder()
+         .client(client)
+         .saleId("POS-LANE-3")
+         .poiId("VictaLane-275839164")
+         .currency("USD")
+         .start()
+         .get()) {
+     ...
+ }
  </code></pre>
 
  <p>Sessions are intended for use from a single register thread.
@@ -151,7 +168,7 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#abort()" class="member-name-link">abort</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Aborts the current operation and the session.</div>
+<div class="block">Aborts the in-flight operation.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="identity/CardAcquisitionResult.html" title="class in com.bilt.pos.session.identity">CardAcquisitionResult</a>&gt;</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#acquireCard()" class="member-name-link">acquireCard</a>()</code></div>
@@ -163,29 +180,34 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Reads card data from the terminal without initiating a payment.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#addItem(com.bilt.pos.session.basket.BasketItem)" class="member-name-link">addItem</a><wbr>(<a href="basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a>&nbsp;item)</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#basket()" class="member-name-link">basket</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Adds an item.</div>
+<div class="block">The session's basket: item and tax mutations, batch edits, and
+ snapshots.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#addItem(com.bilt.pos.session.basket.BasketItem,java.lang.String)" class="member-name-link">addItem</a><wbr>(<a href="basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a>&nbsp;item,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Adds an item with an explicit item ID (numeric string, new SKUs only).</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#builder()" class="member-name-link">builder</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#close()" class="member-name-link">close</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Best-effort <a href="#end()"><code>end()</code></a> for try-with-resources: a failure to send
+ the end signal is logged, not thrown, and an already-ended session is
+ left alone.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#builder()" class="member-name-link">builder</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="DiagnosisResult.html" title="class in com.bilt.pos.session">DiagnosisResult</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#diagnose()" class="member-name-link">diagnose</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Queries terminal health and host reachability.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getBasket()" class="member-name-link">getBasket</a>()</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#end()" class="member-name-link">end</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">An immutable snapshot of the current basket.</div>
+<div class="block">Ends the session: tells the terminal to discard the session-scoped
+ data it accumulated (Nexo <code>Admin</code> session end signal) and moves
+ the session to <a href="SessionState.html#ENDED"><code>SessionState.ENDED</code></a>, from which no operation of
+ any kind — including a restart — is allowed.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getClient()" class="member-name-link">getClient</a>()</code></div>
@@ -253,185 +275,136 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">POS-driven member lookup by an identifier on file; no terminal prompt.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#mutate(java.util.function.Consumer)" class="member-name-link">mutate</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/BasketMutation.html" title="interface in com.bilt.pos.session.basket">BasketMutation</a>&gt;&nbsp;mutation)</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#pay()" class="member-name-link">pay</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Applies a batch of basket mutations atomically, followed by a single
- display update.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#pay()" class="member-name-link">pay</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Starts the payment orchestration chain with default options.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#pay(com.bilt.pos.session.payment.PaymentOptions)" class="member-name-link">pay</a><wbr>(<a href="payment/PaymentOptions.html" title="class in com.bilt.pos.session.payment">PaymentOptions</a>&nbsp;options)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#pay(com.bilt.pos.session.payment.PaymentOptions)" class="member-name-link">pay</a><wbr>(<a href="payment/PaymentOptions.html" title="class in com.bilt.pos.session.payment">PaymentOptions</a>&nbsp;options)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Starts the payment orchestration chain.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#playSound(java.lang.String)" class="member-name-link">playSound</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;soundReferenceId)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#playSound(java.lang.String)" class="member-name-link">playSound</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;soundReferenceId)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Plays a pre-provisioned sound on the terminal by its reference ID.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#playSound(java.lang.String,java.lang.Integer)" class="member-name-link">playSound</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;soundReferenceId,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#playSound(java.lang.String,java.lang.Integer)" class="member-name-link">playSound</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;soundReferenceId,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Integer.html" title="class or interface in java.lang" class="external-link">Integer</a>&nbsp;volumePercent)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Plays a pre-provisioned sound on the terminal.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#print(com.bilt.pos.session.PrintPayload)" class="member-name-link">print</a><wbr>(<a href="PrintPayload.html" title="class in com.bilt.pos.session">PrintPayload</a>&nbsp;payload)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#print(com.bilt.pos.session.PrintPayload)" class="member-name-link">print</a><wbr>(<a href="PrintPayload.html" title="class in com.bilt.pos.session">PrintPayload</a>&nbsp;payload)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Prints a document on the terminal printer.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="ReconciliationResult.html" title="class in com.bilt.pos.session">ReconciliationResult</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#reconcile()" class="member-name-link">reconcile</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="ReconciliationResult.html" title="class in com.bilt.pos.session">ReconciliationResult</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#reconcile()" class="member-name-link">reconcile</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Runs a sale reconciliation (end-of-period totals).</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#refund()" class="member-name-link">refund</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Full linked refund of the prior transaction referenced by the
- builder's <code>poiTransactionId</code>.</div>
-</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#refund(java.math.BigDecimal)" class="member-name-link">refund</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#refund()" class="member-name-link">refund</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Partial linked refund of the prior transaction referenced by the
- builder's <code>poiTransactionId</code>.</div>
+<div class="block">Full linked refund of this session's completed payment.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#refundUnlinked(java.math.BigDecimal)" class="member-name-link">refundUnlinked</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#refund(java.math.BigDecimal)" class="member-name-link">refund</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Partial linked refund of this session's completed payment.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#refundUnlinked(java.math.BigDecimal)" class="member-name-link">refundUnlinked</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Unlinked refund, not tied to a prior transaction.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#removeItem(java.lang.String)" class="member-name-link">removeItem</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Removes the line with the given session-assigned item ID.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#removeItemBySku(java.lang.String)" class="member-name-link">removeItemBySku</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Removes the line with the given SKU.</div>
-</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestAmountConfirmation(java.math.BigDecimal,java.lang.String)" class="member-name-link">requestAmountConfirmation</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestAmountConfirmation(java.math.BigDecimal,java.lang.String)" class="member-name-link">requestAmountConfirmation</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Asks the customer to confirm an amount.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestConfirmation(java.lang.String)" class="member-name-link">requestConfirmation</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestConfirmation(java.lang.String)" class="member-name-link">requestConfirmation</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Prompts the customer for a yes/no confirmation.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestConfirmation(java.lang.String,com.bilt.pos.session.input.ConfirmationOptions)" class="member-name-link">requestConfirmation</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestConfirmation(java.lang.String,com.bilt.pos.session.input.ConfirmationOptions)" class="member-name-link">requestConfirmation</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
  <a href="input/ConfirmationOptions.html" title="class in com.bilt.pos.session.input">ConfirmationOptions</a>&nbsp;options)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestDecimalString(java.lang.String)" class="member-name-link">requestDecimalString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestDecimalString(java.lang.String)" class="member-name-link">requestDecimalString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Prompts the customer for a decimal amount (e.g.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestDecimalString(java.lang.String,com.bilt.pos.session.input.InputOptions)" class="member-name-link">requestDecimalString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestDecimalString(java.lang.String,com.bilt.pos.session.input.InputOptions)" class="member-name-link">requestDecimalString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
  <a href="input/InputOptions.html" title="class in com.bilt.pos.session.input">InputOptions</a>&nbsp;options)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestDigitString(java.lang.String)" class="member-name-link">requestDigitString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestDigitString(java.lang.String)" class="member-name-link">requestDigitString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Prompts the customer for a digit string (e.g.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestDigitString(java.lang.String,com.bilt.pos.session.input.InputOptions)" class="member-name-link">requestDigitString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestDigitString(java.lang.String,com.bilt.pos.session.input.InputOptions)" class="member-name-link">requestDigitString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
  <a href="input/InputOptions.html" title="class in com.bilt.pos.session.input">InputOptions</a>&nbsp;options)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/MenuSelection.html" title="class in com.bilt.pos.session.input">MenuSelection</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestMenuEntry(java.lang.String,java.util.List)" class="member-name-link">requestMenuEntry</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/MenuSelection.html" title="class in com.bilt.pos.session.input">MenuSelection</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestMenuEntry(java.lang.String,java.util.List)" class="member-name-link">requestMenuEntry</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;&nbsp;entries)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Prompts the customer to pick from a menu of entries.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/MenuSelection.html" title="class in com.bilt.pos.session.input">MenuSelection</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestMenuEntry(java.lang.String,java.util.List,com.bilt.pos.session.input.MenuOptions)" class="member-name-link">requestMenuEntry</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/MenuSelection.html" title="class in com.bilt.pos.session.input">MenuSelection</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestMenuEntry(java.lang.String,java.util.List,com.bilt.pos.session.input.MenuOptions)" class="member-name-link">requestMenuEntry</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;&nbsp;entries,
  <a href="input/MenuOptions.html" title="class in com.bilt.pos.session.input">MenuOptions</a>&nbsp;options)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/PinResult.html" title="class in com.bilt.pos.session.input">PinResult</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestPinEntry(com.bilt.pos.session.input.PinOptions)" class="member-name-link">requestPinEntry</a><wbr>(<a href="input/PinOptions.html" title="class in com.bilt.pos.session.input">PinOptions</a>&nbsp;options)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/PinResult.html" title="class in com.bilt.pos.session.input">PinResult</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestPinEntry(com.bilt.pos.session.input.PinOptions)" class="member-name-link">requestPinEntry</a><wbr>(<a href="input/PinOptions.html" title="class in com.bilt.pos.session.input">PinOptions</a>&nbsp;options)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Captures and encrypts a PIN on the secure PIN pad.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/PinResult.html" title="class in com.bilt.pos.session.input">PinResult</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestPinVerify(com.bilt.pos.session.input.PinOptions)" class="member-name-link">requestPinVerify</a><wbr>(<a href="input/PinOptions.html" title="class in com.bilt.pos.session.input">PinOptions</a>&nbsp;options)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/PinResult.html" title="class in com.bilt.pos.session.input">PinResult</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestPinVerify(com.bilt.pos.session.input.PinOptions)" class="member-name-link">requestPinVerify</a><wbr>(<a href="input/PinOptions.html" title="class in com.bilt.pos.session.input">PinOptions</a>&nbsp;options)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Captures a PIN and verifies it, returning the encrypted block.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/PinResult.html" title="class in com.bilt.pos.session.input">PinResult</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestPinVerifyOnly(com.bilt.pos.session.input.PinOptions)" class="member-name-link">requestPinVerifyOnly</a><wbr>(<a href="input/PinOptions.html" title="class in com.bilt.pos.session.input">PinOptions</a>&nbsp;options)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/PinResult.html" title="class in com.bilt.pos.session.input">PinResult</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestPinVerifyOnly(com.bilt.pos.session.input.PinOptions)" class="member-name-link">requestPinVerifyOnly</a><wbr>(<a href="input/PinOptions.html" title="class in com.bilt.pos.session.input">PinOptions</a>&nbsp;options)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Verifies a PIN without returning the block.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/Signature.html" title="class in com.bilt.pos.session.input">Signature</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestSignature(java.lang.String)" class="member-name-link">requestSignature</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="input/Signature.html" title="class in com.bilt.pos.session.input">Signature</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestSignature(java.lang.String)" class="member-name-link">requestSignature</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Captures a handwritten signature on the terminal.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestTextString(java.lang.String)" class="member-name-link">requestTextString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestTextString(java.lang.String)" class="member-name-link">requestTextString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Prompts the customer for free text (e.g.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestTextString(java.lang.String,com.bilt.pos.session.input.InputOptions)" class="member-name-link">requestTextString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#requestTextString(java.lang.String,com.bilt.pos.session.input.InputOptions)" class="member-name-link">requestTextString</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;prompt,
  <a href="input/InputOptions.html" title="class in com.bilt.pos.session.input">InputOptions</a>&nbsp;options)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setStoredValueCard(com.bilt.pos.session.storedvalue.StoredValueCard)" class="member-name-link">setStoredValueCard</a><wbr>(<a href="storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a>&nbsp;card)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Registers a stored value (gift) card charged as part of a split tender
- during <code>pay()</code>.</div>
-</div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setStoredValueCard(java.lang.String)" class="member-name-link">setStoredValueCard</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;cardNumber)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setStoredValueCard(com.bilt.pos.session.storedvalue.StoredValueCard)" class="member-name-link">setStoredValueCard</a><wbr>(<a href="storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a>&nbsp;card)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Registers a stored value (gift) card charged as part of a split tender
  during <code>pay()</code>.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setTaxAmount(java.lang.String,java.math.BigDecimal)" class="member-name-link">setTaxAmount</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setStoredValueCard(java.lang.String)" class="member-name-link">setStoredValueCard</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;cardNumber)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Sets a fixed tax amount on a line, overriding any rate.</div>
-</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setTaxAmountBySku(java.lang.String,java.math.BigDecimal)" class="member-name-link">setTaxAmountBySku</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Sets a fixed tax amount on a line by SKU.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setTaxRate(java.lang.String,java.math.BigDecimal)" class="member-name-link">setTaxRate</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;rate)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Sets the tax rate on a line (<code>taxAmount = adjustedTotal × rate</code>);
- clears any explicit fixed tax amount previously set on it.</div>
-</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setTaxRateBySku(java.lang.String,java.math.BigDecimal)" class="member-name-link">setTaxRateBySku</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;rate)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Sets the tax rate on a line by SKU.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setTaxTotal(java.math.BigDecimal)" class="member-name-link">setTaxTotal</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Overrides the basket's total tax; passing <code>null</code> restores
- item-level computation.</div>
+<div class="block">Registers a stored value (gift) card charged as part of a split tender
+ during <code>pay()</code>.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#stopSound()" class="member-name-link">stopSound</a>()</code></div>
@@ -503,24 +476,13 @@ loadScripts(document, 'script');</script>
 <div class="block">Replaces the display content of the input prompt currently awaiting a
  response (Nexo <code>InputUpdate</code>) — e.g.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#updateItemQuantity(java.lang.String,int)" class="member-name-link">updateItemQuantity</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
- int&nbsp;quantity)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Sets an absolute quantity; <code>0</code> removes the line.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#updateItemQuantityBySku(java.lang.String,int)" class="member-name-link">updateItemQuantityBySku</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
- int&nbsp;quantity)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Sets an absolute quantity by SKU; <code>0</code> removes the line.</div>
-</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a>&gt;</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#voidTransaction()" class="member-name-link">voidTransaction</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Reverses the completed transaction referenced by the builder's
- <code>poiTransactionId</code> (Nexo <code>ReversalRequest</code>), including a
- best-effort loyalty award reversal.</div>
+<div class="block">Reverses this session's completed payment: every movement it
+ committed — the card and stored value legs (Nexo
+ <code>ReversalRequest</code>), then the redemption, rebate, and award
+ (their <code>LoyaltyRequest</code> refund types) — in that order.</div>
 </div>
 </div>
 </div>
@@ -574,112 +536,14 @@ loadScripts(document, 'script');</script>
 </section>
 </li>
 <li>
-<section class="detail" id="getBasket()">
-<h3>getBasket</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">getBasket</span>()</div>
-<div class="block">An immutable snapshot of the current basket.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="addItem(com.bilt.pos.session.basket.BasketItem)">
-<h3>addItem</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">addItem</span><wbr><span class="parameters">(<a href="basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a>&nbsp;item)</span></div>
-<div class="block">Adds an item. When the SKU is already in the basket, its quantity is
- incremented (upsert).</div>
-<dl class="notes">
-<dt>Returns:</dt>
-<dd>the updated basket snapshot</dd>
-<dt>Throws:</dt>
-<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the basket is frozen (payment in
-         progress) or the session has ended</dd>
-</dl>
-</section>
-</li>
-<li>
-<section class="detail" id="addItem(com.bilt.pos.session.basket.BasketItem,java.lang.String)">
-<h3>addItem</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">addItem</span><wbr><span class="parameters">(<a href="basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a>&nbsp;item,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId)</span></div>
-<div class="block">Adds an item with an explicit item ID (numeric string, new SKUs only).</div>
-</section>
-</li>
-<li>
-<section class="detail" id="removeItem(java.lang.String)">
-<h3>removeItem</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">removeItem</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId)</span></div>
-<div class="block">Removes the line with the given session-assigned item ID.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="removeItemBySku(java.lang.String)">
-<h3>removeItemBySku</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">removeItemBySku</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku)</span></div>
-<div class="block">Removes the line with the given SKU.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="updateItemQuantity(java.lang.String,int)">
-<h3>updateItemQuantity</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">updateItemQuantity</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
- int&nbsp;quantity)</span></div>
-<div class="block">Sets an absolute quantity; <code>0</code> removes the line.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="updateItemQuantityBySku(java.lang.String,int)">
-<h3>updateItemQuantityBySku</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">updateItemQuantityBySku</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
- int&nbsp;quantity)</span></div>
-<div class="block">Sets an absolute quantity by SKU; <code>0</code> removes the line.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="mutate(java.util.function.Consumer)">
-<h3>mutate</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">mutate</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/BasketMutation.html" title="interface in com.bilt.pos.session.basket">BasketMutation</a>&gt;&nbsp;mutation)</span></div>
-<div class="block">Applies a batch of basket mutations atomically, followed by a single
- display update.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="setTaxRate(java.lang.String,java.math.BigDecimal)">
-<h3>setTaxRate</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setTaxRate</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;rate)</span></div>
-<div class="block">Sets the tax rate on a line (<code>taxAmount = adjustedTotal × rate</code>);
- clears any explicit fixed tax amount previously set on it.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="setTaxRateBySku(java.lang.String,java.math.BigDecimal)">
-<h3>setTaxRateBySku</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setTaxRateBySku</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;rate)</span></div>
-<div class="block">Sets the tax rate on a line by SKU.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="setTaxAmount(java.lang.String,java.math.BigDecimal)">
-<h3>setTaxAmount</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setTaxAmount</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
-<div class="block">Sets a fixed tax amount on a line, overriding any rate.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="setTaxAmountBySku(java.lang.String,java.math.BigDecimal)">
-<h3>setTaxAmountBySku</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setTaxAmountBySku</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
-<div class="block">Sets a fixed tax amount on a line by SKU.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="setTaxTotal(java.math.BigDecimal)">
-<h3>setTaxTotal</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setTaxTotal</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
-<div class="block">Overrides the basket's total tax; passing <code>null</code> restores
- item-level computation.</div>
+<section class="detail" id="basket()">
+<h3>basket</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></span>&nbsp;<span class="element-name">basket</span>()</div>
+<div class="block">The session's basket: item and tax mutations, batch edits, and
+ snapshots. Mutations follow the session lifecycle — they are rejected
+ while a payment is in flight or after the session has ended, and each
+ one refreshes the customer display when
+ <a href="CheckoutSession.Builder.html#autoDisplay(boolean)"><code>autoDisplay</code></a> is enabled.</div>
 </section>
 </li>
 <li>
@@ -708,7 +572,11 @@ loadScripts(document, 'script');</script>
  <p>Lookup outcomes that simply leave the checkout without a member —
  not found, suspended, customer cancelled — are delivered to
  <code>onSuccess</code> with the corresponding <a href="identity/IdentifyStatus.html" title="enum class in com.bilt.pos.session.identity"><code>IdentifyStatus</code></a>;
- <code>onError</code> fires only for real failures.</p></div>
+ <code>onError</code> fires only for real failures.</p>
+
+ <p>Also allowed while a failed payment awaits retry
+ (<a href="SessionState.html#FAILED"><code>SessionState.FAILED</code></a>), so a declined guest checkout can attach
+ a member and retry with loyalty enabled.</p></div>
 </section>
 </li>
 <li>
@@ -949,30 +817,37 @@ loadScripts(document, 'script');</script>
 <li>
 <section class="detail" id="refund()">
 <h3>refund</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</span>&nbsp;<span class="element-name">refund</span>()</div>
-<div class="block">Full linked refund of the prior transaction referenced by the
- builder's <code>poiTransactionId</code>. Also reverses loyalty points
- awarded on the original transaction (best-effort).
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</span>&nbsp;<span class="element-name">refund</span>()</div>
+<div class="block">Full linked refund of this session's completed payment. Also
+ reverses the loyalty award when one ran — best-effort by default
+ (override via <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a>).
 
  <p>Linked refunds reference a single transaction: after a split
  tender this is the card leg — use <code>voidTransaction()</code> to
  reverse both legs, or the stored value operations to return funds to
- the gift card.</p></div>
+ the gift card. A refund reverses the card leg and award only; the
+ sale's committed rebate and redemption movements are reversed by
+ <a href="#voidTransaction()"><code>voidTransaction()</code></a>. Once a refund has returned money the
+ payment can no longer be voided; a tender skipped by an
+ <code>onError</code> decision leaves it voidable, with an award the flow
+ reversed remembered so nothing re-credits it. Once a void has
+ partially reversed the payment's money legs, refunds are refused
+ until the void is finished. To refund a sale taken by an earlier,
+ gone session, use <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>.</p></div>
 </section>
 </li>
 <li>
 <section class="detail" id="refund(java.math.BigDecimal)">
 <h3>refund</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</span>&nbsp;<span class="element-name">refund</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
-<div class="block">Partial linked refund of the prior transaction referenced by the
- builder's <code>poiTransactionId</code>. Also reverses loyalty points
- (best-effort).</div>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</span>&nbsp;<span class="element-name">refund</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
+<div class="block">Partial linked refund of this session's completed payment. Also
+ reverses the loyalty award when one ran (best-effort by default).</div>
 </section>
 </li>
 <li>
 <section class="detail" id="refundUnlinked(java.math.BigDecimal)">
 <h3>refundUnlinked</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</span>&nbsp;<span class="element-name">refundUnlinked</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</span>&nbsp;<span class="element-name">refundUnlinked</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
 <div class="block">Unlinked refund, not tied to a prior transaction. Payment-only — no
  loyalty reversal.</div>
 </section>
@@ -980,20 +855,29 @@ loadScripts(document, 'script');</script>
 <li>
 <section class="detail" id="voidTransaction()">
 <h3>voidTransaction</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a>&gt;</span>&nbsp;<span class="element-name">voidTransaction</span>()</div>
-<div class="block">Reverses the completed transaction referenced by the builder's
- <code>poiTransactionId</code> (Nexo <code>ReversalRequest</code>), including a
- best-effort loyalty award reversal. Voiding this session's own
- completed payment also refunds its committed loyalty movements
- (redemption, rebate) best-effort, and a completed checkout that had
- no payment legs — rewards covered the whole basket — is voided by
- refunding those movements alone. On a session whose payment failed
- with an incomplete rollback, <code>voidTransaction()</code> finishes the
- unwind by retrying the reversals that did not go through. Not allowed
- once the payment has been refunded from this session — a void would
- return the full amount on top of the refund, so further returns must
- use <a href="#refund(java.math.BigDecimal)"><code>refund(BigDecimal)</code></a>. The session moves to
- <a href="SessionState.html#VOIDED"><code>SessionState.VOIDED</code></a> on success.</div>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;<a href="VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a>&gt;</span>&nbsp;<span class="element-name">voidTransaction</span>()</div>
+<div class="block">Reverses this session's completed payment: every movement it
+ committed — the card and stored value legs (Nexo
+ <code>ReversalRequest</code>), then the redemption, rebate, and award
+ (their <code>LoyaltyRequest</code> refund types) — in that order. A
+ checkout fully covered by rewards has no money leg; voiding it
+ refunds the loyalty movements alone. To void a sale taken by an
+ earlier, gone session, use <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>.
+
+ <p>When a step fails, the flow's <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>onError</code></a>
+ handler decides between retry, skip, and abort — see
+ <a href="ReversalFlow.html" title="class in com.bilt.pos.session"><code>ReversalFlow</code></a> for the default policy. A retried void resumes
+ at the first movement still standing — reversed movements are never
+ re-credited, and the retry's <a href="VoidResult.html" title="class in com.bilt.pos.session"><code>VoidResult</code></a> describes only the
+ movements that call sent.</p>
+
+ <p>On a session whose payment failed with an incomplete rollback,
+ <code>voidTransaction()</code> finishes the unwind by retrying the
+ reversals that did not go through. Not allowed once the payment has
+ been refunded from this session — a void would return the full amount
+ on top of the refund, so further returns must use
+ <a href="#refund(java.math.BigDecimal)"><code>refund(BigDecimal)</code></a>. The session moves to
+ <a href="SessionState.html#VOIDED"><code>SessionState.VOIDED</code></a> on success.</p></div>
 </section>
 </li>
 <li>
@@ -1022,27 +906,66 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="abort()">
 <h3>abort</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">abort</span>()</div>
-<div class="block">Aborts the current operation and the session.
+<div class="block">Aborts the in-flight operation. The session itself continues — an
+ abort is a normal register maneuver (cancel the signature prompt, stop
+ a tender to take a gift card first), not an abandonment; to abandon
+ the checkout, <a href="#end()"><code>end()</code></a> the session.
 
  <p>If a terminal operation is awaiting a response, a Nexo
- <code>AbortRequest</code> referencing it is sent (best-effort) to the device
- that is processing it. The session then moves to
- <a href="SessionState.html#ABORTED"><code>SessionState.ABORTED</code></a>; aborting a session already in a terminal
- state has no effect. An aborted payment whose rollback was incomplete
- settles in <a href="SessionState.html#FAILED"><code>SessionState.FAILED</code></a> instead, so
- <a href="#voidTransaction()"><code>voidTransaction()</code></a> can finish reversing the movements still
- standing.</p>
+ <code>AbortRequest</code> referencing it is sent (best-effort) to the
+ device that is processing it. An aborted payment stops at its next
+ step boundary, reverses the committed steps, and settles in
+ <a href="SessionState.html#FAILED"><code>SessionState.FAILED</code></a> — the basket stays intact and
+ <code>pay()</code> may retry (the thrown error carries
+ <a href="SessionErrorCode.html#ABORTED"><code>SessionErrorCode.ABORTED</code></a>). Aborted prompts (input, PIN, card
+ reads, identification) deliver their aborted/cancelled outcome and
+ leave the session state unchanged. With nothing in flight this is a
+ no-op.</p>
 
- <p>Read-only prompts (input, PIN, card reads, identification) that
- complete after the abort are discarded. Money-moving operations
- (refunds, stored value) are NOT: the movement may have completed on
- the terminal despite the abort, and its outcome is always delivered —
- hiding a real money movement would be worse than reporting it on an
- ended session. Voids are unaffected: <code>VOIDING</code> has no
- transition to <code>ABORTED</code>, so an in-flight void always settles
- normally.</p>
+ <p>Money-moving operations (refunds, stored value) always deliver
+ their outcome even when the abort raced them: the movement may have
+ completed on the terminal, and the register must know. Voids and the
+ session lifecycle signals are never the abort's target — cancelling
+ an in-flight <a href="#end()"><code>end()</code></a> would only strand the terminal's
+ session-scoped data. An abort that lands after the payment completed
+ leaves the transaction standing; use <code>voidTransaction()</code> to
+ reverse it.</p>
 
  <p>Safe to call from any thread.</p></div>
+</section>
+</li>
+<li>
+<section class="detail" id="end()">
+<h3>end</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</span>&nbsp;<span class="element-name">end</span>()</div>
+<div class="block">Ends the session: tells the terminal to discard the session-scoped
+ data it accumulated (Nexo <code>Admin</code> session end signal) and moves
+ the session to <a href="SessionState.html#ENDED"><code>SessionState.ENDED</code></a>, from which no operation of
+ any kind — including a restart — is allowed. Create a new session for
+ the next checkout.
+
+ <p>Allowed from any state except <code>PAYING</code> and <code>VOIDING</code>
+ (money in flight), and refused while a failed payment's rollback is
+ incomplete — finish the unwind with <a href="#voidTransaction()"><code>voidTransaction()</code></a> first,
+ or the terminal would discard state with reversals still standing. If
+ the end signal fails, the session keeps its current state so the call
+ can be retried. A concurrent <a href="#abort()"><code>abort()</code></a> never cancels an
+ in-flight end — the exchange always settles, and its success still
+ moves the session to <code>ENDED</code>.</p></div>
+</section>
+</li>
+<li>
+<section class="detail" id="close()">
+<h3>close</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">close</span>()</div>
+<div class="block">Best-effort <a href="#end()"><code>end()</code></a> for try-with-resources: a failure to send
+ the end signal is logged, not thrown, and an already-ended session is
+ left alone. Registers that need to react to a failed end should call
+ <code>end()</code> directly.</div>
+<dl class="notes">
+<dt>Specified by:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html#close()" title="class or interface in java.lang" class="external-link">close</a></code>&nbsp;in interface&nbsp;<code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" title="class or interface in java.lang" class="external-link">AutoCloseable</a></code></dd>
+</dl>
 </section>
 </li>
 <li>

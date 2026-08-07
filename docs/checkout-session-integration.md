@@ -27,7 +27,7 @@ A few principles explain most of the behavior:
 - **The session owns the basket.** Items, tax, and totals live in one place, and `Basket` is the single source of truth. Every mutation returns the updated basket.
 - **nexo underneath.** Every session operation maps to a standard nexo 3.0 message, but the SDK hides much more than message serialization: it manages the complexity of communicating with the terminal, and it orchestrates payment when the transaction is multi-tender — sequencing rebates, point redemption, stored value, and card, and handling loyalty award and reversal — so the register doesn't have to coordinate any of it.
 - **Terminal operations are lazy.** Methods returning a `SessionResult` or `PaymentFlow` send nothing until you call `.execute()`, `.get()`, or `.getOrNull()`. Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
-- **Cart-building is local + auto-display.** `addItem` / `removeItem` / `updateItemQuantity` update the local basket and (with `autoDisplay=true`, the default) push a `DisplayRequest` to the terminal. The terminal may independently evaluate offers while items are scanned, but those offers are **only committed during `pay()`**.
+- **Cart-building is local + auto-display.** The basket surface lives on `session.basket()`: `addItem` / `removeItem` / `updateItemQuantity` update the local basket and (with `autoDisplay=true`, the default) push a `DisplayRequest` to the terminal. The terminal may independently evaluate offers while items are scanned, but those offers are **only committed during `pay()`**.
 - **`pay()` is a fixed orchestration sequence,** with a blocking callback after each loyalty/stored-value step so the register can update its own model and recompute tax, then return the total that feeds the next step. The shape is fixed, but steps are conditional: loyalty (rebates + points) runs only for identified members and can be disabled via `PaymentOptions`, the stored-value step only runs when a gift card has been registered with `setStoredValueCard`, and card payment runs whenever an amount remains.
 - **Errors and aborts roll back cleanly.** If a step fails or `abort()` is called mid-sequence, everything already committed (rebates, points, stored value) is reversed in the opposite order before the session moves to `FAILED` — basket intact, `pay()` retryable. An abort is a register maneuver, not an abandonment; `end()` abandons the checkout.
 
@@ -202,7 +202,7 @@ CheckoutSession session = CheckoutSession.builder()
     .start()
     .get();
 
-session.addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
 
 session.pay()
     .onSuccess(result -> register.printReceipt(result.getMerchantReceipt()))
@@ -248,20 +248,20 @@ session.identifyMember()
     .execute();
 
 // --- 2. Scan items ---
-Basket basket = session.addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+Basket basket = session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
 register.setTotal(basket.getGrandTotal());  // $49.98
 
-basket = session.addItem(BasketItem.of("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99"));
+basket = session.basket().addItem(BasketItem.of("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99"));
 register.setTotal(basket.getGrandTotal());  // $64.97
 
 // Scan same candle again — upserts, now qty 3
-basket = session.addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+basket = session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
 register.setTotal(basket.getGrandTotal());  // $89.96
 
 // --- 3. Tax ---
-session.setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
-session.setTaxRateBySku("KRK-FRAME-5X7-BLK", new BigDecimal("0.08875"));
-// Or: session.setTaxTotal(new BigDecimal("7.98"));
+session.basket().setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
+session.basket().setTaxRateBySku("KRK-FRAME-5X7-BLK", new BigDecimal("0.08875"));
+// Or: session.basket().setTaxTotal(new BigDecimal("7.98"));
 
 // --- 4. Pay ---
 session.pay()
@@ -275,7 +275,7 @@ session.pay()
         // Recalculate tax on the discounted subtotal if the jurisdiction requires it
         BigDecimal newTax = taxCalculator.compute(rebates.getUpdatedBasket());
         return rebates.getSuggestedTotal()
-            .subtract(session.getBasket().getTaxTotal())
+            .subtract(session.basket().snapshot().getTaxTotal())
             .add(newTax);
     })
     .onPointsRedeemed(points -> {
@@ -370,18 +370,18 @@ session.identifyMember(MemberIdentifier.phoneNumber("555-867-5309")).execute();
 The session owns the basket. Adding an item whose SKU is already present increments its quantity (upsert). With `autoDisplay` (default on), every change refreshes the customer display with an itemised virtual receipt.
 
 ```java
-Basket basket = session.addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+Basket basket = session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
 register.setTotal(basket.getGrandTotal());   // 49.98
 
-session.addItem(BasketItem.of("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99"));
+session.basket().addItem(BasketItem.of("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99"));
 
 // Tax — item-level rate, item-level fixed amount, or basket-level override
-session.setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
-session.setTaxAmountBySku("KRK-FRAME-5X7-BLK", new BigDecimal("2.50"));
-// session.setTaxTotal(new BigDecimal("7.98"));   // overrides item-level computation
+session.basket().setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
+session.basket().setTaxAmountBySku("KRK-FRAME-5X7-BLK", new BigDecimal("2.50"));
+// session.basket().setTaxTotal(new BigDecimal("7.98"));   // overrides item-level computation
 
 // Batch changes with a single display update
-session.mutate(m -> m
+session.basket().mutate(m -> m
     .updateItemQuantityBySku("KRK-CNDL-LRG-VAN", 3)
     .removeItemBySku("KRK-FRAME-5X7-BLK"));
 ```
@@ -522,9 +522,10 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | End the session (terminal discards its data) | `session.end()` |
 | Prompt customer to identify | `session.identifyMember()` |
 | POS-driven member lookup (no prompt) | `session.identifyMember(identifier)` |
-| Add / remove / update item | `addItem(item)`, `removeItemBySku(sku)`, `updateItemQuantityBySku(sku, qty)` |
-| Batch edits, one display update | `session.mutate(m -> ...)` |
-| Set tax | `setTaxRateBySku(...)`, `setTaxAmountBySku(...)`, `setTaxTotal(...)` |
+| Add / remove / update item | `session.basket().addItem(item)`, `.removeItemBySku(sku)`, `.updateItemQuantityBySku(sku, qty)` |
+| Batch edits, one display update | `session.basket().mutate(m -> ...)` |
+| Set tax | `session.basket().setTaxRateBySku(...)`, `.setTaxAmountBySku(...)`, `.setTaxTotal(...)` |
+| Basket snapshot | `session.basket().snapshot()` |
 | Register gift card for split tender | `session.setStoredValueCard(cardNumber)` |
 | Gift card lifecycle | `storedValueBalance / Activate / Load / Unload / Deactivate / Reverse` |
 | Read card without charging | `session.acquireCard()` |

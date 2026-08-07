@@ -904,12 +904,12 @@ public final class Main {
             // the itemised basket (a DisplayRequest); pause so it can be verified
             BigDecimal half = BigDecimal.valueOf(amount / 2).setScale(2, java.math.RoundingMode.HALF_UP);
             com.bilt.pos.session.basket.Basket basket =
-                    session.addItem(com.bilt.pos.session.basket.BasketItem.builder()
+                    session.basket().addItem(com.bilt.pos.session.basket.BasketItem.builder()
                             .sku("CLI-DEMO-1").description("Demo Item A").quantity(1)
                             .unitPrice(half).build());
             LOG.info("Added Demo Item A — basket total " + basket.getGrandTotal() + " " + currency);
             pauseForDisplayCheck("Demo Item A should now be on the terminal display");
-            basket = session.addItem(com.bilt.pos.session.basket.BasketItem.builder()
+            basket = session.basket().addItem(com.bilt.pos.session.basket.BasketItem.builder()
                     .sku("CLI-DEMO-2").description("Demo Item B").quantity(1)
                     .unitPrice(BigDecimal.valueOf(amount).subtract(half)).build());
             LOG.info("Added Demo Item B — basket total " + basket.getGrandTotal() + " " + currency);

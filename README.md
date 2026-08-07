@@ -20,7 +20,7 @@ try (CheckoutSession session = CheckoutSession.builder()
         .start()
         .get()) {
 
-    session.addItem(BasketItem.of("SKU-1", "Large Vanilla Candle", 2, "24.99"));
+    session.basket().addItem(BasketItem.of("SKU-1", "Large Vanilla Candle", 2, "24.99"));
     session.pay()
             .onSuccess(result -> printReceipt(result.getMerchantReceipt()))
             .onError(error -> PaymentOptions.voidAndAbort())
