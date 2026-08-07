@@ -66,7 +66,7 @@ class CheckoutSessionDeviceOpsTest {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"SoundResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
 
-        session.playSound("chime-approved", 80).execute();
+        session.playSound("chime-approved", 80).executeSync();
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("Sound", sent.getMessageHeader().getMessageCategory().toValue());
@@ -82,7 +82,7 @@ class CheckoutSessionDeviceOpsTest {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"SoundResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
 
-        session.stopSound().execute();
+        session.stopSound().executeSync();
 
         assertEquals("StopSound", recordedRequest().getSoundRequest().getSoundAction().toValue());
     }
@@ -124,7 +124,7 @@ class CheckoutSessionDeviceOpsTest {
         session.getTransactionStatus("SVC0000001", TransactionStatusOptions.builder()
                 .originalCategory(MessageCategoryType.LOYALTY)
                 .receiptReprint(true)
-                .build()).execute();
+                .build()).executeSync();
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("Loyalty", sent.getTransactionStatusRequest()
@@ -142,7 +142,7 @@ class CheckoutSessionDeviceOpsTest {
                 "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{"
                         + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
 
-        session.getTransactionStatus("SVC0000001").execute();
+        session.getTransactionStatus("SVC0000001").executeSync();
 
         SaleToPOIRequest sent = recordedRequest();
         assertNull(sent.getTransactionStatusRequest().getReceiptReprintFlag());
@@ -177,7 +177,7 @@ class CheckoutSessionDeviceOpsTest {
         SaleToPOIRequest inputRequest = mapper.readValue(
                 inputRecorded.getBody().readUtf8(), NexoTerminalAPI.class).getSaleToPOIRequest();
 
-        session.updateInputDisplay(DisplayPayloadHelper.standby("updated")).execute();
+        session.updateInputDisplay(DisplayPayloadHelper.standby("updated")).executeSync();
 
         assertTrue(done.await(5, TimeUnit.SECONDS));
         assertEquals("42", inputValue.get());

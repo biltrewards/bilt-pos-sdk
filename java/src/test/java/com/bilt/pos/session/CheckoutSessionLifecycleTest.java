@@ -121,7 +121,7 @@ class CheckoutSessionLifecycleTest {
                     throw new IllegalStateException("register bug");
                 });
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, start::execute);
+        IllegalStateException e = assertThrows(IllegalStateException.class, start::executeSync);
         assertEquals("register bug", e.getMessage());
 
         // the terminal had acknowledged Start; the escaping handler must not
@@ -151,7 +151,7 @@ class CheckoutSessionLifecycleTest {
                     throw new IllegalStateException("register bug");
                 });
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, start::execute);
+        IllegalStateException e = assertThrows(IllegalStateException.class, start::executeSync);
         assertEquals("register bug", e.getMessage(),
                 "the best-effort release must not replace the handler's exception");
     }
@@ -172,7 +172,7 @@ class CheckoutSessionLifecycleTest {
         CheckoutSession session = startedSession();
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
 
-        session.end().execute();
+        session.end().executeSync();
 
         assertEquals(SessionState.ENDED, session.getState());
         assertTrue(session.getState().isTerminal());
@@ -190,7 +190,7 @@ class CheckoutSessionLifecycleTest {
                 "abort is operation-scoped; the session continues until end()");
 
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
-        session.end().execute();
+        session.end().executeSync();
 
         assertEquals(SessionState.ENDED, session.getState());
     }
@@ -199,7 +199,7 @@ class CheckoutSessionLifecycleTest {
     void secondEndFailsWithInvalidState() throws Exception {
         CheckoutSession session = startedSession();
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
-        session.end().execute();
+        session.end().executeSync();
 
         SessionException e = assertThrows(SessionException.class,
                 () -> session.end().get());
@@ -218,7 +218,7 @@ class CheckoutSessionLifecycleTest {
                 "a failed end must leave the session where it was");
 
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
-        session.end().execute();
+        session.end().executeSync();
         assertEquals(SessionState.ENDED, session.getState());
     }
 
@@ -245,7 +245,7 @@ class CheckoutSessionLifecycleTest {
         CheckoutSession session = sessionBuilder().start().get();
 
         AtomicReference<SessionError> failed = new AtomicReference<>();
-        Thread register = new Thread(() -> session.end().onError(failed::set).execute());
+        Thread register = new Thread(() -> session.end().onError(failed::set).executeSync());
         register.start();
         assertTrue(endOnTheWire.await(5, TimeUnit.SECONDS));
 
@@ -268,7 +268,7 @@ class CheckoutSessionLifecycleTest {
     void endedSessionRejectsEveryOperation() throws Exception {
         CheckoutSession session = startedSession();
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
-        session.end().execute();
+        session.end().executeSync();
         int requestsBefore = server.getRequestCount();
 
         assertThrows(IllegalStateException.class,
@@ -302,7 +302,7 @@ class CheckoutSessionLifecycleTest {
     void abortAfterEndLeavesTheSessionEnded() throws Exception {
         CheckoutSession session = startedSession();
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
-        session.end().execute();
+        session.end().executeSync();
 
         assertDoesNotThrow(session::abort);
         assertEquals(SessionState.ENDED, session.getState());
@@ -329,7 +329,7 @@ class CheckoutSessionLifecycleTest {
     void closeAfterEndIsANoOp() throws Exception {
         CheckoutSession session = startedSession();
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
-        session.end().execute();
+        session.end().executeSync();
         int requestsBefore = server.getRequestCount();
 
         assertDoesNotThrow(session::close);

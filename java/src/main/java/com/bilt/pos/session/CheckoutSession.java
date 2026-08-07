@@ -96,6 +96,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -191,6 +192,7 @@ public final class CheckoutSession implements AutoCloseable {
     private volatile boolean drainInFlight;
 
     private CheckoutSession(Builder builder) {
+        this.operations.callbackExecutor(builder.callbackExecutor);
         this.client = builder.client;
         this.currency = builder.currency;
         this.storeLocation = builder.storeLocation;
@@ -777,7 +779,9 @@ public final class CheckoutSession implements AutoCloseable {
                     "pay() requires a positive basket total (zero-priced items only)");
         }
         operations.track("pay");
-        return new PaymentFlow(flow -> executePayment(flow, options));
+        return new PaymentFlow(flow -> executePayment(flow, options))
+                .operationExecutor(operations.executor())
+                .callbackExecutor(operations.callback());
     }
 
     private CheckoutResult executePayment(PaymentFlow flow, PaymentOptions options) {
@@ -893,7 +897,9 @@ public final class CheckoutSession implements AutoCloseable {
      */
     public ReversalFlow<RefundResult> refund() {
         operations.track("refund");
-        return new ReversalFlow<>(flow -> executeRefund(flow, "refund", null, true));
+        return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", null, true))
+                .operationExecutor(operations.executor())
+                .callbackExecutor(operations.callback());
     }
 
     /**
@@ -904,7 +910,9 @@ public final class CheckoutSession implements AutoCloseable {
         Objects.requireNonNull(amount, "amount");
         requirePositive(amount);
         operations.track("refund");
-        return new ReversalFlow<>(flow -> executeRefund(flow, "refund", amount, true));
+        return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", amount, true))
+                .operationExecutor(operations.executor())
+                .callbackExecutor(operations.callback());
     }
 
     /**
@@ -915,7 +923,9 @@ public final class CheckoutSession implements AutoCloseable {
         Objects.requireNonNull(amount, "amount");
         requirePositive(amount);
         operations.track("refundUnlinked");
-        return new ReversalFlow<>(flow -> executeRefund(flow, "refundUnlinked", amount, false));
+        return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refundUnlinked", amount, false))
+                .operationExecutor(operations.executor())
+                .callbackExecutor(operations.callback());
     }
 
     private RefundResult executeRefund(ReversalFlow<RefundResult> flow, String name,
@@ -994,7 +1004,9 @@ public final class CheckoutSession implements AutoCloseable {
      */
     public ReversalFlow<VoidResult> voidTransaction() {
         operations.track("voidTransaction");
-        return new ReversalFlow<>(this::executeVoid);
+        return new ReversalFlow<>(this::executeVoid)
+                .operationExecutor(operations.executor())
+                .callbackExecutor(operations.callback());
     }
 
     private VoidResult executeVoid(ReversalFlow<VoidResult> flow) {
@@ -1271,6 +1283,9 @@ public final class CheckoutSession implements AutoCloseable {
             }
             exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
             transitionLocked(SessionState.ENDED);
+            // no further operations may run; asynchronous submissions after
+            // this fail into their handlers instead of queueing forever
+            operations.shutdown();
             return null;
         });
     }
@@ -1286,8 +1301,11 @@ public final class CheckoutSession implements AutoCloseable {
         if (stateMachine.current() == SessionState.ENDED) {
             return;
         }
+        // synchronous deliberately: close() runs on teardown paths (often
+        // try-with-resources or process exit) where a queued async end
+        // would be lost with the closing scope
         end().onError(e -> LOGGER.warning("close() could not end the session: " + e))
-                .execute();
+                .executeSync();
     }
 
     /**
@@ -1630,6 +1648,7 @@ public final class CheckoutSession implements AutoCloseable {
         private BiltNexoTerminalClient externalDisplayClient;
         private DisplayRenderer displayRenderer;
         private Consumer<Basket> onBasketUpdated;
+        private Executor callbackExecutor;
 
         private Builder() {
         }
@@ -1708,6 +1727,20 @@ public final class CheckoutSession implements AutoCloseable {
         }
 
         /**
+         * Where asynchronously executed operations deliver their handlers —
+         * e.g. an Android main-thread executor so handlers may touch UI
+         * directly. Applies to {@code execute()}; {@code executeSync()} and
+         * the blocking accessors are unaffected. Overridable per call with
+         * {@code callbackOn(executor)}. Without one, handlers run directly
+         * on the session's operation thread and must be fast, non-blocking,
+         * and must never synchronously invoke another session operation.
+         */
+        public Builder callbackExecutor(Executor callbackExecutor) {
+            this.callbackExecutor = callbackExecutor;
+            return this;
+        }
+
+        /**
          * Validates the configuration and returns a lazy operation that
          * announces the session to the terminal (Nexo {@code Admin} session
          * start signal) and yields it once the terminal acknowledged — an
@@ -1744,8 +1777,11 @@ public final class CheckoutSession implements AutoCloseable {
             CheckoutSession session = new CheckoutSession(this);
             // the terminal has acknowledged Start by the time onSuccess
             // runs; a handler that throws would strand that session-scoped
-            // context with no session object to end it, so it is released
-            return new SessionResult<>("start", session::started)
+            // context with no session object to end it, so it is released.
+            // Built through the session's operations so an asynchronous
+            // start runs on (and its handlers deliver like) every other
+            // operation of the session it creates.
+            return session.operations.operation("start", session::started)
                     .releasing(CheckoutSession::close);
         }
     }

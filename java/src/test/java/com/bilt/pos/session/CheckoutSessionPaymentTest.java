@@ -127,7 +127,7 @@ class CheckoutSessionPaymentTest {
     /** Identifies the member (consumes one enqueued response + one request). */
     private void identifyMember() throws Exception {
         server.enqueue(new MockResponse().setBody(IDENTIFY_OK));
-        session.identifyMember().execute();
+        session.identifyMember().executeSync();
         server.takeRequest(5, TimeUnit.SECONDS);
     }
 
@@ -161,7 +161,7 @@ class CheckoutSessionPaymentTest {
         });
 
         IllegalStateException first =
-                assertThrows(IllegalStateException.class, flow::execute);
+                assertThrows(IllegalStateException.class, flow::executeSync);
 
         // later accessors must rethrow the failure, never report success
         assertSame(first, assertThrows(IllegalStateException.class, flow::get));
@@ -176,7 +176,7 @@ class CheckoutSessionPaymentTest {
                 });
 
         NullPointerException first =
-                assertThrows(NullPointerException.class, flow::execute);
+                assertThrows(NullPointerException.class, flow::executeSync);
 
         // a throwing success handler is a bug like any other: later
         // accessors rethrow it instead of reporting a clean success
@@ -196,7 +196,7 @@ class CheckoutSessionPaymentTest {
 
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
         session.end().get();   // the session ends before the flow executes
-        flow.execute();        // must not return silently
+        flow.executeSync();        // must not return silently
 
         assertNotNull(seen.get(), "a failure before the sequence starts must reach onError");
         assertEquals(SessionErrorCode.INVALID_STATE, seen.get().getCode());
@@ -223,7 +223,7 @@ class CheckoutSessionPaymentTest {
                     seen.set(error);
                     return PaymentOptions.voidAndAbort();
                 })
-                .execute();
+                .executeSync();
 
         assertNotNull(seen.get(), "a failed standing-movement drain must reach onError");
         assertTrue(seen.get().getMessage().contains("retry did not start"),
@@ -243,9 +243,9 @@ class CheckoutSessionPaymentTest {
         assertEquals(SessionState.ACTIVE, session.getState());
 
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
-        flow.execute();
+        flow.executeSync();
         assertEquals(SessionState.COMPLETED, session.getState());
-        assertThrows(IllegalStateException.class, flow::execute);
+        assertThrows(IllegalStateException.class, flow::executeSync);
         assertThrows(IllegalStateException.class, () -> flow.onSuccess(r -> { }));
     }
 
@@ -291,7 +291,7 @@ class CheckoutSessionPaymentTest {
         storeSession.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 10.00)));
 
-        storeSession.pay().execute();
+        storeSession.pay().executeSync();
 
         SaleToPOIRequest sent = nextRequest();
         assertEquals("STR-0142", sent.getPaymentRequest().getSaleData()
@@ -973,7 +973,7 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(REDEEM_OK));                    // -5.00
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 85.00)));
         server.enqueue(new MockResponse().setBody(AWARD_OK));
-        session.pay().execute();
+        session.pay().executeSync();
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));         // card leg
@@ -1011,7 +1011,7 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(REDEEM_OK));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 85.00)));
         server.enqueue(new MockResponse().setBody(AWARD_OK));
-        session.pay().execute();
+        session.pay().executeSync();
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));             // card leg
@@ -1195,7 +1195,7 @@ class CheckoutSessionPaymentTest {
 
         session.pay()
                 .beforeStep(ctx -> "TXN-" + ctx.getStep())
-                .execute();
+                .executeSync();
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals("TXN-" + TransactionStep.REBATE, requests.get(0).getLoyaltyRequest()
@@ -1581,7 +1581,7 @@ class CheckoutSessionPaymentTest {
                     fail("award failure must not reach onError");
                     return PaymentOptions.voidAndAbort();
                 })
-                .execute();
+                .executeSync();
 
         assertNotNull(success.get());
         assertEquals(0, success.get().getTotalPointsEarned());
@@ -1817,7 +1817,7 @@ class CheckoutSessionPaymentTest {
     void refundAfterCompletedPaymentUsesLastTransactionReference() throws Exception {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
-        session.pay().execute();
+        session.pay().executeSync();
         drainRequests();
         assertEquals(SessionState.COMPLETED, session.getState());
 
@@ -1843,7 +1843,7 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
         server.enqueue(new MockResponse().setBody(AWARD_OK));  // POI-AW-1
         session.pay(PaymentOptions.builder()
-                .disableRebates(true).disablePoints(true).build()).execute();
+                .disableRebates(true).disablePoints(true).build()).executeSync();
         drainRequests();
 
         // the tender refund is declined and the register skips it; only
@@ -1875,7 +1875,7 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
         server.enqueue(new MockResponse().setBody(AWARD_OK));  // POI-AW-1
         session.pay(PaymentOptions.builder()
-                .disableRebates(true).disablePoints(true).build()).execute();
+                .disableRebates(true).disablePoints(true).build()).executeSync();
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(
@@ -1901,7 +1901,7 @@ class CheckoutSessionPaymentTest {
     void failedVoidAfterPaymentDoesNotAllowRePayment() throws Exception {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
-        session.pay().execute();
+        session.pay().executeSync();
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(
@@ -1929,7 +1929,7 @@ class CheckoutSessionPaymentTest {
                         + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-GC-1\"}},"
                         + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":35.00}}}}}"));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 65.00)));
-        session.pay().execute();
+        session.pay().executeSync();
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(
@@ -1959,11 +1959,11 @@ class CheckoutSessionPaymentTest {
         addHundredDollarItem();
         session.setStoredValueCard("GC-1234-5678");
         server.enqueue(new MockResponse().setBody(paymentOk("POI-GC-1", 100.00)));
-        session.pay().execute();
+        session.pay().executeSync();
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
-        session.voidTransaction().execute();
+        session.voidTransaction().executeSync();
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(1, requests.size(), "one transaction, one reversal — no duplicate");
@@ -1981,7 +1981,7 @@ class CheckoutSessionPaymentTest {
                         + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-GC-1\"}},"
                         + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":35.00}}}}}"));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 65.00)));
-        session.pay().execute();
+        session.pay().executeSync();
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));  // card leg reversed
@@ -2027,12 +2027,12 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
         server.enqueue(new MockResponse().setBody(AWARD_OK));  // POI-AW-1
         session.pay(PaymentOptions.builder()
-                .disableRebates(true).disablePoints(true).build()).execute();
+                .disableRebates(true).disablePoints(true).build()).executeSync();
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
-        session.voidTransaction().execute();
+        session.voidTransaction().executeSync();
 
         List<SaleToPOIRequest> requests = drainRequests();
         SaleToPOIRequest awardRefund = requests.get(1);
@@ -2050,7 +2050,7 @@ class CheckoutSessionPaymentTest {
     void voidAfterPaymentUsesLastTransactionReference() throws Exception {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
-        session.pay().execute();
+        session.pay().executeSync();
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));

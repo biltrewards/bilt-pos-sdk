@@ -171,7 +171,7 @@ class CheckoutSessionIdentityTest {
                 .forceEntryMode(ForceEntryMode.KEYED)
                 .allowedLoyaltyBrand("K-Club")
                 .requireMember(false)
-                .build()).execute();
+                .build()).executeSync();
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("Proposed", sent.getCardAcquisitionRequest()
@@ -243,14 +243,14 @@ class CheckoutSessionIdentityTest {
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
                         + "\"Response\":{\"Result\":\"Success\"},"
                         + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
-        session.identifyMember().execute();
+        session.identifyMember().executeSync();
         assertNotNull(session.getMember());
         assertEquals(SessionState.IDENTIFIED, session.getState());
 
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
                         + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
-        session.identifyMember().execute();
+        session.identifyMember().executeSync();
 
         assertNull(session.getMember(), "a NOT_FOUND re-identify must detach the old member");
         assertEquals(SessionState.IDLE, session.getState());
@@ -262,13 +262,13 @@ class CheckoutSessionIdentityTest {
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
                         + "\"Response\":{\"Result\":\"Success\"},"
                         + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
-        session.identifyMember().execute();
+        session.identifyMember().executeSync();
         session.basket().addItem(com.bilt.pos.session.basket.BasketItem.of("SKU-1", "Item", 1, "10.00"));
 
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
                         + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotAllowed\"}}}}"));
-        session.identifyMember().execute();
+        session.identifyMember().executeSync();
 
         assertNull(session.getMember());
         assertEquals(SessionState.ACTIVE, session.getState());
@@ -284,12 +284,12 @@ class CheckoutSessionIdentityTest {
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
                         + "\"Response\":{\"Result\":\"Success\"},"
                         + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
-        session.identifyMember().execute();
+        session.identifyMember().executeSync();
 
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
                         + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Cancel\"}}}}"));
-        session.identifyMember().execute();
+        session.identifyMember().executeSync();
 
         assertNotNull(session.getMember(), "a dismissed prompt must not drop the identified member");
         assertEquals("98234", session.getMember().getMemberId());
@@ -355,7 +355,7 @@ class CheckoutSessionIdentityTest {
                 "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{"
                         + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
 
-        session.identifyMember(MemberIdentifier.accountNumber("98234").keyedByCashier()).execute();
+        session.identifyMember(MemberIdentifier.accountNumber("98234").keyedByCashier()).executeSync();
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("AccountNumber", sent.getBalanceInquiryRequest()
@@ -401,7 +401,7 @@ class CheckoutSessionIdentityTest {
 
         session.acquireCard(CardAcquisitionOptions.builder()
                 .forceEntryMode(ForceEntryMode.KEYED)
-                .build()).execute();
+                .build()).executeSync();
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("Keyed", sent.getCardAcquisitionRequest()

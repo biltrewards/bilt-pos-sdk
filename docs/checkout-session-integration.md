@@ -26,7 +26,7 @@ A few principles explain most of the behavior:
 - **A session is bracketed on the terminal.** The builder's `start()` announces the session to the terminal and only hands out the `CheckoutSession` once the terminal acknowledged — an unstarted session never exists. `end()` tells the terminal to discard the session-scoped data it accumulated and seals the session: nothing can run on it afterwards, and it cannot be restarted. One session per checkout, always closed with `end()` (or try-with-resources — the session is `AutoCloseable`).
 - **The session owns the basket.** Items, tax, and totals live in one place, and `Basket` is the single source of truth. Every mutation returns the updated basket.
 - **nexo underneath.** Every session operation maps to a standard nexo 3.0 message, but the SDK hides much more than message serialization: it manages the complexity of communicating with the terminal, and it orchestrates payment when the transaction is multi-tender — sequencing rebates, point redemption, stored value, and card, and handling loyalty award and reversal — so the register doesn't have to coordinate any of it.
-- **Terminal operations are lazy.** Methods returning a `SessionResult` or `PaymentFlow` send nothing until you call `.execute()`, `.get()`, or `.getOrNull()`. Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
+- **Terminal operations are lazy.** Methods returning a `SessionResult` or `PaymentFlow` send nothing until you call `.execute()` (asynchronous, handlers deliver the outcome), `.executeSync()`, `.get()`, or `.getOrNull()` (blocking). Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
 - **Cart-building is local + auto-display.** The basket surface lives on `session.basket()`: `addItem` / `removeItem` / `updateItemQuantity` update the local basket and (with `autoDisplay=true`, the default) push a `DisplayRequest` to the terminal. The terminal may independently evaluate offers while items are scanned, but those offers are **only committed during `pay()`**.
 - **`pay()` is a fixed orchestration sequence,** with a blocking callback after each loyalty/stored-value step so the register can update its own model and recompute tax, then return the total that feeds the next step. The shape is fixed, but steps are conditional: loyalty (rebates + points) runs only for identified members and can be disabled via `PaymentOptions`, the stored-value step only runs when a gift card has been registered with `setStoredValueCard`, and card payment runs whenever an amount remains.
 - **Errors and aborts roll back cleanly.** If a step fails or `abort()` is called mid-sequence, everything already committed (rebates, points, stored value) is reversed in the opposite order before the session moves to `FAILED` — basket intact, `pay()` retryable. An abort is a register maneuver, not an abandonment; `end()` abandons the checkout.
@@ -173,10 +173,11 @@ try (CheckoutSession session = CheckoutSession.builder()....start().get()) {
 
 ### Lazy execution
 
-Every terminal operation is **lazy**: methods returning a `SessionResult` or `PaymentFlow` send nothing until you invoke one of the terminal methods:
+Every terminal operation is **lazy**: methods returning a `SessionResult`, `PaymentFlow`, or `ReversalFlow` send nothing until you invoke one of the terminal methods:
 
-- `execute()` — run and deliver the outcome to the registered `onSuccess`/`onError` handlers;
-- `get()` — run and return the value, throwing `SessionException` on failure;
+- `execute()` — run **asynchronously** on the session's operation thread (a single thread per session, so operations run in submission order) and deliver the outcome to the registered `onSuccess`/`onError`/`onComplete` handlers; returns immediately;
+- `executeSync()` — run blocking on the calling thread, handlers dispatched inline;
+- `get()` — run and return the value, throwing `SessionException` on failure (waits for an in-flight `execute()` to settle);
 - `getOrNull()` — like `get()`, but returns `null` on failure.
 
 Always end a fluent chain with one of these — a chain without them never reaches the terminal:
@@ -187,6 +188,10 @@ session.requestConfirmation("Would you like a receipt?")
     .onError(e -> register.showError(e.getMessage()))
     .execute();
 ```
+
+Under `execute()`, handlers are delivered through the **callback executor** — configure a session-wide one with the builder's `callbackExecutor(...)` (e.g. Android's main-thread executor, so handlers may touch UI directly) or override per call with `callbackOn(executor)`. For `PaymentFlow` and `ReversalFlow`, whose handlers are part of the payment/reversal negotiation (step handlers return the running total, `onError` returns the recovery decision), the flow thread **waits for each handler's answer**: the handlers steer the sequence exactly as if they ran inline, just physically on your thread — keep them quick (the payment is paused while they run), and never block the callback thread on the flow's `get()`. Without a callback executor, handlers run directly on the session's operation thread: keep them fast, never block, and never invoke another session operation synchronously from inside one (the operation thread is single — a nested blocking call deadlocks).
+
+`onComplete(...)` registers a cleanup hook that runs exactly once on every completion path — success, failure, even an operation rejected because the session had already ended. Use it for the cleanup that must not leak: re-enabling buttons, releasing claims.
 
 ---
 

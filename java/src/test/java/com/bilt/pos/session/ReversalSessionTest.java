@@ -120,7 +120,7 @@ class ReversalSessionTest {
         });
 
         NullPointerException first =
-                assertThrows(NullPointerException.class, flow::execute);
+                assertThrows(NullPointerException.class, flow::executeSync);
 
         // a throwing success handler is a bug like any other: later
         // accessors rethrow it instead of reporting a clean success
@@ -174,7 +174,7 @@ class ReversalSessionTest {
                     failed.set(error);
                     return ReversalDecision.ABORT;
                 })
-                .execute());
+                .executeSync());
         register.start();
         assertTrue(refundOnTheWire.await(5, TimeUnit.SECONDS));
 
@@ -363,7 +363,7 @@ class ReversalSessionTest {
                 .poiTransactionTimestamp(ORIGINAL_TS)
                 .awardPoiTransactionId(AWARD_POI_TXN)
                 .memberId("98234"))
-                .refund(new BigDecimal("10.00")).execute();
+                .refund(new BigDecimal("10.00")).executeSync();
 
         recordedRequest();  // the refund itself
         SaleToPOIRequest awardRefund = recordedRequest();
@@ -378,7 +378,7 @@ class ReversalSessionTest {
     void fullRefundOmitsAmount() throws Exception {
         server.enqueue(new MockResponse().setBody(REFUND_OK));
 
-        cardSession().refund().execute();
+        cardSession().refund().executeSync();
 
         SaleToPOIRequest refund = recordedRequest();
         assertNull(refund.getPaymentRequest().getPaymentTransaction()
@@ -492,7 +492,7 @@ class ReversalSessionTest {
                 .poiTransactionTimestamp(ORIGINAL_TS)
                 .awardPoiTransactionId(AWARD_POI_TXN)
                 .memberId("98234"))
-                .voidTransaction().execute();
+                .voidTransaction().executeSync();
 
         recordedRequest();  // the reversal
         SaleToPOIRequest awardRefund = recordedRequest();
@@ -505,7 +505,7 @@ class ReversalSessionTest {
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
 
         ReversalSession session = cardSession();
-        session.voidTransaction().execute();
+        session.voidTransaction().executeSync();
 
         assertEquals(SessionState.VOIDED, session.getState());
         SessionException e = assertThrows(SessionException.class,
@@ -962,7 +962,7 @@ class ReversalSessionTest {
         server.enqueue(new MockResponse().setBody(REFUND_OK));
         assertTrue(session.refund(new BigDecimal("10.00")).get().isSuccess());
         recordedRequest();
-        session.end().execute();  // the dispatcher answers the Admin exchange
+        session.end().executeSync();  // the dispatcher answers the Admin exchange
 
         SessionException e = assertThrows(SessionException.class,
                 () -> session.voidTransaction().get());
@@ -977,7 +977,7 @@ class ReversalSessionTest {
     void endedSessionRejectsFurtherReversals() throws Exception {
         // the dispatcher answers the Admin end exchange out of band
         ReversalSession session = cardSession();
-        session.end().execute();
+        session.end().executeSync();
 
         assertEquals(SessionState.ENDED, session.getState());
         assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,

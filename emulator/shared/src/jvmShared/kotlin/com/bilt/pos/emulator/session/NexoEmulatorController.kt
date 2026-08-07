@@ -700,7 +700,11 @@ class NexoEmulatorController(
                         error.cause?.let { detailedLog(it.stackTraceToString()) }
                     }
                 }
-                .execute()
+                // sync: this job already runs on the connection's serialized
+                // dispatcher, which orders the read against pay/end — the
+                // SDK's async execute() would run it on the session's own
+                // thread instead, concurrently with operations here
+                .executeSync()
         }
         // Releases on every path, including a job cancelled before it ran
         // (disconnect racing this call) — mirrors the pay() completion hook

@@ -894,7 +894,7 @@ public final class Main {
                             }
                         })
                         .onError(error -> LOG.warning("Identification failed: " + error))
-                        .execute();
+                        .executeSync();
             } else {
                 LOG.info("Skipping member identification (pass --identify to enable); "
                         + "guest checkout");
@@ -944,7 +944,7 @@ public final class Main {
 
             session.end()
                     .onError(error -> LOG.warning("Session end failed: " + error))
-                    .execute();
+                    .executeSync();
 
             LOG.info("Session finished in state " + session.getState());
             if (checkout == null) {

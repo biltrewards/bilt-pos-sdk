@@ -10,22 +10,33 @@
 package com.bilt.pos.session;
 
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * A lazy, single-shot session operation.
  *
  * <p>Creating a {@code SessionResult} sends nothing to the terminal. Handlers
- * registered via {@link #onSuccess} and {@link #onError} are recorded only;
- * the operation runs — blocking, on the calling thread — when one of the
+ * registered via {@link #onSuccess}, {@link #onError}, and
+ * {@link #onComplete} are recorded only; the operation runs when one of the
  * terminal methods is invoked:</p>
  *
  * <ul>
- *   <li>{@link #execute()} — run and dispatch handlers; returns nothing.</li>
+ *   <li>{@link #execute()} — run asynchronously on the session's operation
+ *       executor (a single thread per session, so operations run in
+ *       submission order) and deliver the handlers through the callback
+ *       executor; returns immediately.</li>
+ *   <li>{@link #executeSync()} — run blocking on the calling thread and
+ *       dispatch handlers inline; returns nothing.</li>
  *   <li>{@link #get()} — run (if not already run) and return the value, or
- *       throw {@link SessionException} on failure.</li>
+ *       throw {@link SessionException} on failure. Waits for an in-flight
+ *       {@link #execute()} to settle.</li>
  *   <li>{@link #getOrNull()} — like {@code get()} but returns {@code null}
  *       on failure.</li>
  *   <li>{@link #isSuccess()} — run (if not already run) and report the outcome.</li>
@@ -38,32 +49,74 @@ import java.util.function.Supplier;
  *     .execute();
  * }</pre>
  *
+ * <p>With {@link #execute()}, handlers are delivered through the callback
+ * executor configured on the session builder ({@code callbackExecutor}), or
+ * the per-call {@link #callbackOn(Executor)} override — e.g. an Android
+ * main-thread executor so handlers may touch UI directly. With neither
+ * configured, handlers run directly on the session's operation thread; such
+ * handlers must be fast, must not block, and must never synchronously invoke
+ * another session operation (the operation thread is single, so a nested
+ * blocking operation deadlocks). {@link #executeSync()} always dispatches
+ * inline on the calling thread and ignores callback executors.</p>
+ *
+ * <p>{@link #onComplete(Runnable)} registers a cleanup hook that runs exactly
+ * once after the outcome handlers, on every path: success, session error,
+ * unexpected exception, a throwing outcome handler, and an operation the
+ * session's executor rejected because the session already ended.</p>
+ *
  * <p>The operation runs at most once; {@code get()}/{@code getOrNull()}/
  * {@code isSuccess()} return the cached outcome afterwards. Calling
- * {@link #execute()} a second time, or registering a handler after the
- * operation has started, throws {@link IllegalStateException}.</p>
- *
- * <p>Instances are not thread-safe; use from a single thread.</p>
+ * {@link #execute()} or {@link #executeSync()} a second time, or registering
+ * a handler after the operation has started, throws
+ * {@link IllegalStateException}.</p>
  *
  * @param <T> the operation's result type
  */
 public final class SessionResult<T> {
 
+    private static final Logger LOGGER = Logger.getLogger(SessionResult.class.getName());
+
     private final String operationName;
     private final Supplier<T> body;
     private final AtomicBoolean started = new AtomicBoolean();
+    private final AtomicBoolean completeDispatched = new AtomicBoolean();
+
+    /** Opens once the outcome fields below are final; accessors await it. */
+    private final CountDownLatch settled = new CountDownLatch(1);
 
     private Consumer<T> successHandler;
     private Consumer<SessionError> errorHandler;
+    private Runnable completeHandler;
     private Consumer<T> handlerFailureCleanup;
 
+    /** The session's single operation thread; null for a detached result. */
+    private Executor operationExecutor;
+    /** Callback delivery: initialized to the session's default when the
+     *  result is created, overwritten by {@link #callbackOn(Executor)};
+     *  null means direct delivery on the operation thread. */
+    private Executor callbackExecutor;
+
+    // value and error are always written before the latch opens, so the
+    // await gives readers their visibility; unexpected alone can also be
+    // written later, by a failing handler on the callback thread — volatile
+    // so a concurrent accessor still sees the recorded bug
     private T value;
     private SessionError error;
-    private RuntimeException unexpected;
+    private volatile RuntimeException unexpected;
 
     SessionResult(String operationName, Supplier<T> body) {
         this.operationName = operationName;
         this.body = body;
+    }
+
+    /** Session wiring: where {@link #execute()} runs and the default
+     *  callback delivery. Applied by the session when the result is
+     *  created — before user code can register a {@link #callbackOn}
+     *  override, so plain assignment suffices. */
+    SessionResult<T> executors(Executor operationExecutor, Executor callbackExecutor) {
+        this.operationExecutor = operationExecutor;
+        this.callbackExecutor = callbackExecutor;
+        return this;
     }
 
     /**
@@ -92,25 +145,91 @@ public final class SessionResult<T> {
     }
 
     /**
-     * Runs the operation on the calling thread and dispatches the registered
-     * handlers.
+     * Registers a hook that runs exactly once after the outcome handlers, on
+     * every completion path — success, error, unexpected exception, a
+     * throwing outcome handler, or rejection because the session ended
+     * before the operation could run. The place for cleanup that must not
+     * leak: re-enabling buttons, releasing claims. A throwing hook is
+     * logged, never propagated, and never masks the operation's outcome.
      *
-     * @throws IllegalStateException if the operation has already run
+     * @throws IllegalStateException if the operation has already started
      */
-    public void execute() {
-        if (!started.compareAndSet(false, true)) {
-            throw new IllegalStateException(operationName + " has already been executed");
-        }
-        run();
+    public SessionResult<T> onComplete(Runnable handler) {
+        Objects.requireNonNull(handler, "handler");
+        checkNotStarted();
+        this.completeHandler = handler;
+        return this;
     }
 
     /**
-     * Runs the operation if it has not run yet and returns its value.
+     * Delivers this operation's handlers through {@code executor} instead of
+     * the session's default callback executor. Affects {@link #execute()}
+     * only — {@link #executeSync()} always dispatches on the calling thread.
+     *
+     * @throws IllegalStateException if the operation has already started
+     */
+    public SessionResult<T> callbackOn(Executor executor) {
+        Objects.requireNonNull(executor, "executor");
+        checkNotStarted();
+        this.callbackExecutor = executor;
+        return this;
+    }
+
+    /**
+     * Runs the operation asynchronously: it is submitted to the session's
+     * operation executor (operations run one at a time, in submission
+     * order) and this call returns immediately. Handlers are delivered
+     * through the callback executor — see the class docs for the delivery
+     * rules. When the session has already ended and its executor rejects
+     * the submission, the operation fails with
+     * {@link SessionErrorCode#INVALID_STATE} through the normal
+     * {@code onError}/{@code onComplete} delivery.
+     *
+     * @throws IllegalStateException if the operation has already run, or if
+     *     this result is not attached to a session (use {@link #executeSync()})
+     */
+    public void execute() {
+        if (operationExecutor == null) {
+            throw new IllegalStateException(operationName + " is not attached to a "
+                    + "session executor; use executeSync()");
+        }
+        claimStart();
+        try {
+            operationExecutor.execute(this::runAsync);
+        } catch (RejectedExecutionException e) {
+            // the session ended and shut its executor down before this
+            // operation ran; deliver the failure through the normal
+            // handler path so onError/onComplete cleanup still happens.
+            // Fire-and-forget: this thread is the caller's, and awaiting a
+            // callback executor the caller itself dispatches would deadlock.
+            error = new SessionError(SessionErrorCode.INVALID_STATE,
+                    operationName + " was not run: the session has ended");
+            settled.countDown();
+            HandlerDispatch.fireAndForget(
+                    callbackExecutor, operationName, this::dispatchHandlers);
+        }
+    }
+
+    /**
+     * Runs the operation on the calling thread — blocking — and dispatches
+     * the registered handlers inline. The deliberate synchronous escape
+     * hatch for callers that own their threading.
+     *
+     * @throws IllegalStateException if the operation has already run
+     */
+    public void executeSync() {
+        claimStart();
+        runSync();
+    }
+
+    /**
+     * Runs the operation if it has not run yet and returns its value. Waits
+     * for an in-flight {@link #execute()} to settle first.
      *
      * @throws SessionException if the operation failed
      */
     public T get() {
-        runIfNeeded();
+        awaitOutcome();
         if (error != null) {
             throw new SessionException(error);
         }
@@ -119,56 +238,138 @@ public final class SessionResult<T> {
 
     /**
      * Runs the operation if it has not run yet and returns its value, or
-     * {@code null} if it failed.
+     * {@code null} if it failed. Waits for an in-flight {@link #execute()}
+     * to settle first.
      */
     public T getOrNull() {
-        runIfNeeded();
+        awaitOutcome();
         return error == null ? value : null;
     }
 
-    /** Runs the operation if it has not run yet and reports whether it succeeded. */
+    /** Runs the operation if it has not run yet and reports whether it
+     *  succeeded. Waits for an in-flight {@link #execute()} to settle first. */
     public boolean isSuccess() {
-        runIfNeeded();
+        awaitOutcome();
         return error == null;
     }
 
-    private void runIfNeeded() {
+    private void awaitOutcome() {
         if (started.compareAndSet(false, true)) {
-            run();
+            runSync();
+        } else {
+            awaitSettled();
         }
-        // a bug recorded by run() stays loud on every later accessor
+        // a bug recorded by a run stays loud on every later accessor
         rethrowUnexpected();
     }
 
-    private void run() {
+    private void awaitSettled() {
+        try {
+            settled.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new SessionException(new SessionError(SessionErrorCode.UNKNOWN,
+                    "interrupted while waiting for " + operationName + " to settle"));
+        }
+    }
+
+    /** The async body: outcome on the session thread, handlers via [deliver]. */
+    private void runAsync() {
         try {
             value = body.get();
         } catch (SessionException e) {
             error = e.getError();
         } catch (RuntimeException e) {
-            // an unexpected exception is a bug, not a terminal outcome:
-            // remember it so later accessors rethrow it instead of
-            // reporting a successful null result, then fail loudly
+            // a bug, not a terminal outcome. There is no caller on this
+            // thread to rethrow to, so it is recorded (later accessors
+            // rethrow it instead of reporting success) and logged loudly.
             unexpected = e;
-            throw e;
+            LOGGER.log(Level.SEVERE, operationName + " threw unexpectedly", e);
+        } finally {
+            settled.countDown();
         }
-        if (error == null) {
-            if (successHandler != null) {
-                try {
-                    successHandler.accept(value);
-                } catch (RuntimeException handlerFailure) {
-                    // a throwing success handler is a bug like any other
-                    // unexpected exception: record it so later accessors
-                    // rethrow it instead of reporting the value as a success
-                    // (for a releasing operation that value is a resource
-                    // the cleanup below has just rendered unusable)
-                    unexpected = handlerFailure;
-                    releaseOnHandlerFailure(handlerFailure);
-                    throw handlerFailure;
+        // awaited: the next queued operation must not start until this
+        // one's handlers (and their cleanup) have finished
+        HandlerDispatch.awaitRun(callbackExecutor, operationName, this::dispatchHandlers);
+    }
+
+    /** Handler dispatch for the async path: nothing here may kill the
+     *  executor thread, so handler failures are recorded and logged. */
+    private void dispatchHandlers() {
+        try {
+            if (unexpected == null) {
+                if (error == null) {
+                    if (successHandler != null) {
+                        successHandler.accept(value);
+                    }
+                } else if (errorHandler != null) {
+                    errorHandler.accept(error);
                 }
             }
-        } else if (errorHandler != null) {
-            errorHandler.accept(error);
+        } catch (RuntimeException handlerFailure) {
+            // recorded so later accessors rethrow instead of reporting the
+            // value as a success (for a releasing operation that value is a
+            // resource the cleanup below has just rendered unusable)
+            unexpected = handlerFailure;
+            releaseOnHandlerFailure(handlerFailure);
+            LOGGER.log(Level.SEVERE,
+                    operationName + "'s handler threw", handlerFailure);
+        } finally {
+            dispatchComplete();
+        }
+    }
+
+    /** The synchronous body: previous {@code execute()} semantics — outcome
+     *  and handlers on the calling thread, bugs rethrown — plus the
+     *  {@code onComplete} guarantee. */
+    private void runSync() {
+        try {
+            try {
+                value = body.get();
+            } catch (SessionException e) {
+                error = e.getError();
+            } catch (RuntimeException e) {
+                // an unexpected exception is a bug, not a terminal outcome:
+                // remember it so later accessors rethrow it instead of
+                // reporting a successful null result, then fail loudly
+                unexpected = e;
+                throw e;
+            } finally {
+                settled.countDown();
+            }
+            if (error == null) {
+                if (successHandler != null) {
+                    try {
+                        successHandler.accept(value);
+                    } catch (RuntimeException handlerFailure) {
+                        // a throwing success handler is a bug like any other
+                        // unexpected exception: record it so later accessors
+                        // rethrow it instead of reporting the value as a
+                        // success (for a releasing operation that value is a
+                        // resource the cleanup has just rendered unusable)
+                        unexpected = handlerFailure;
+                        releaseOnHandlerFailure(handlerFailure);
+                        throw handlerFailure;
+                    }
+                }
+            } else if (errorHandler != null) {
+                errorHandler.accept(error);
+            }
+        } finally {
+            dispatchComplete();
+        }
+    }
+
+    /** Exactly once, on every path; a throwing hook is logged, not thrown —
+     *  it must neither mask the operation's outcome nor skip on retry. */
+    private void dispatchComplete() {
+        if (completeHandler == null || !completeDispatched.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            completeHandler.run();
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.SEVERE, operationName + "'s onComplete hook threw", e);
         }
     }
 
@@ -201,6 +402,12 @@ public final class SessionResult<T> {
     private void rethrowUnexpected() {
         if (unexpected != null) {
             throw unexpected;
+        }
+    }
+
+    private void claimStart() {
+        if (!started.compareAndSet(false, true)) {
+            throw new IllegalStateException(operationName + " has already been executed");
         }
     }
 
