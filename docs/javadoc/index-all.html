@@ -168,6 +168,11 @@ loadScripts(document, 'script');</script>
 <div class="block">Whether basket mutations automatically refresh the customer
  display.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/ReversalSession.Builder.html#autoDisplay(boolean)" class="member-name-link">autoDisplay(boolean)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></dt>
+<dd>
+<div class="block">Whether refund cart mutations automatically refresh the customer
+ display.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/payment/TransactionStep.html#AWARD" class="member-name-link">AWARD</a> - Enum constant in enum class com.bilt.pos.session.payment.<a href="com/bilt/pos/session/payment/TransactionStep.html" title="enum class in com.bilt.pos.session.payment">TransactionStep</a></dt>
 <dd>
 <div class="block">Terminal submits the loyalty award.</div>
@@ -197,6 +202,11 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The session's basket: item and tax mutations, batch edits, and
  snapshots.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ReversalSession.html#basket()" class="member-name-link">basket()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalSession.html" title="class in com.bilt.pos.session">ReversalSession</a></dt>
+<dd>
+<div class="block">The session's refund cart: the items being returned, rung in like a
+ checkout basket.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/basket/Basket.html" class="type-name-link" title="class in com.bilt.pos.session.basket">Basket</a> - Class in <a href="com/bilt/pos/session/basket/package-summary.html">com.bilt.pos.session.basket</a></dt>
 <dd>
@@ -596,6 +606,17 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Create an instance of <a href="com/bilt/pos/display/WaitingType.html" title="class in com.bilt.pos.display"><code>WaitingType</code></a></div>
 </dd>
+<dt><a href="com/bilt/pos/session/basket/BasketItem.Builder.html#credit(boolean)" class="member-name-link">credit(boolean)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></dt>
+<dd>
+<div class="block">Marks the line as a credit: its totals (and tax) subtract from
+ the basket.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html#credit(boolean)" class="member-name-link">credit(boolean)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/basket/BasketItem.html#credit(java.lang.String,java.lang.String,int,java.lang.String)" class="member-name-link">credit(String, String, int, String)</a> - Static method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
+<dd>
+<div class="block">Shorthand factory for a credit (negative) line — a return or trade-in.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/MoneyType.html#currency" class="member-name-link">currency</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/MoneyType.html" title="class in com.bilt.pos.display">MoneyType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#currency" class="member-name-link">currency</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
@@ -732,6 +753,11 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Custom rendering of basket snapshots for the customer display.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/ReversalSession.Builder.html#displayRenderer(com.bilt.pos.session.display.DisplayRenderer)" class="member-name-link">displayRenderer(DisplayRenderer)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></dt>
+<dd>
+<div class="block">Custom rendering of refund cart snapshots for the customer
+ display.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/display/DisplayRenderer.html" class="type-name-link" title="interface in com.bilt.pos.session.display">DisplayRenderer</a> - Interface in <a href="com/bilt/pos/session/display/package-summary.html">com.bilt.pos.session.display</a></dt>
 <dd>
 <div class="block">Renders a basket into the display payload shown on the customer display.</div>
@@ -846,6 +872,10 @@ loadScripts(document, 'script');</script>
 <div class="block">A separate external display device driven by its own client.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.Builder.html#externalDisplayClient(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">externalDisplayClient(BiltNexoTerminalClient)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></dt>
+<dd>
+<div class="block">A second client for an external customer display device.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ReversalSession.Builder.html#externalDisplayClient(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">externalDisplayClient(BiltNexoTerminalClient)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></dt>
 <dd>
 <div class="block">A second client for an external customer display device.</div>
 </dd>
@@ -1557,7 +1587,7 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.html#getOriginalTotal()" class="member-name-link">getOriginalTotal()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></dt>
 <dd>
-<div class="block"><code>unitPrice × quantity</code>.</div>
+<div class="block"><code>unitPrice × quantity</code>, negated on a credit line.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/PaymentFlow.html#getOrNull()" class="member-name-link">getOrNull()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></dt>
 <dd>
@@ -2300,6 +2330,15 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The operation is not valid in the session's current state.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/basket/BasketItem.html#isCredit()" class="member-name-link">isCredit()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
+<dd>
+<div class="block">Whether this line subtracts from the basket (return, trade-in).</div>
+</dd>
+<dt><a href="com/bilt/pos/session/basket/BasketLineItem.html#isCredit()" class="member-name-link">isCredit()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></dt>
+<dd>
+<div class="block">Whether this line subtracts from the basket (return, trade-in); its
+ totals and tax are negative.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/payment/PaymentOptions.html#isDisableAward()" class="member-name-link">isDisableAward()</a> - Method in class com.bilt.pos.session.payment.<a href="com/bilt/pos/session/payment/PaymentOptions.html" title="class in com.bilt.pos.session.payment">PaymentOptions</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/payment/PaymentOptions.html#isDisablePoints()" class="member-name-link">isDisablePoints()</a> - Method in class com.bilt.pos.session.payment.<a href="com/bilt/pos/session/payment/PaymentOptions.html" title="class in com.bilt.pos.session.payment">PaymentOptions</a></dt>
@@ -3000,6 +3039,12 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Partial linked refund of the referenced card leg.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/ReversalSession.html#refundBasket()" class="member-name-link">refundBasket()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalSession.html" title="class in com.bilt.pos.session">ReversalSession</a></dt>
+<dd>
+<div class="block">Item-based linked refund: refunds the refund cart's total against the
+ referenced card leg, with the returned items attached to the refund's
+ <code>PaymentRequest</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/RefundResult.Builder.html#refundedAmount(java.math.BigDecimal)" class="member-name-link">refundedAmount(BigDecimal)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/RefundResult.html" class="type-name-link" title="class in com.bilt.pos.session">RefundResult</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
@@ -3217,8 +3262,9 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/SessionBasket.html" class="type-name-link" title="class in com.bilt.pos.session">SessionBasket</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">The basket surface of a session, obtained via
- <a href="com/bilt/pos/session/CheckoutSession.html#basket()"><code>CheckoutSession.basket()</code></a>: item and tax mutations, batch edits,
- and immutable snapshots.</div>
+ <a href="com/bilt/pos/session/CheckoutSession.html#basket()"><code>CheckoutSession.basket()</code></a> (the sale basket) or
+ <a href="com/bilt/pos/session/ReversalSession.html#basket()"><code>ReversalSession.basket()</code></a> (the refund cart): item and tax
+ mutations, batch edits, and immutable snapshots.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SessionError.html" class="type-name-link" title="class in com.bilt.pos.session">SessionError</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>

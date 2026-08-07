@@ -109,4 +109,35 @@ class BasketDisplayRendererTest {
 
         assertEquals("ZZZ", payload.getReceipt().getTotal().getAmount().getCurrency());
     }
+
+    @Test
+    void creditLinesRenderNegativeAmounts() {
+        // a refund cart (or a sale's return line): the credit line's totals
+        // are negative in the snapshot and flow to the receipt unchanged
+        BasketLineItem returned = BasketLineItem.builder()
+                .itemId("1").sku("SKU-1").description("Returned Item")
+                .quantity(1).unitPrice(new BigDecimal("24.99"))
+                .credit(true)
+                .originalTotal(new BigDecimal("-24.99"))
+                .adjustedTotal(new BigDecimal("-24.99"))
+                .taxAmount(new BigDecimal("-2.22"))
+                .build();
+        Basket basket = Basket.builder()
+                .items(List.of(returned))
+                .originalTotal(new BigDecimal("-24.99"))
+                .taxTotal(new BigDecimal("-2.22"))
+                .grandTotal(new BigDecimal("-27.21"))
+                .build();
+
+        DisplayPayload payload = new BasketDisplayRenderer().render(basket, CONTEXT);
+
+        assertEquals(0, new BigDecimal("-24.99").compareTo(payload.getReceipt()
+                .getLineItems().getLineItem().get(0).getAmount().getValue()));
+        assertEquals(0, new BigDecimal("-24.99").compareTo(
+                payload.getReceipt().getSubtotal().getAmount().getValue()));
+        assertEquals(0, new BigDecimal("-2.22").compareTo(
+                payload.getReceipt().getTax().getTaxTotal().getAmount().getValue()));
+        assertEquals(0, new BigDecimal("-27.21").compareTo(
+                payload.getReceipt().getTotal().getAmount().getValue()));
+    }
 }

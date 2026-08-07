@@ -310,7 +310,9 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getItemBySku(java.lang.String)">
 <h3>getItemBySku</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></span>&nbsp;<span class="element-name">getItemBySku</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku)</span></div>
-<div class="block">The line with the given SKU, or <code>null</code>.</div>
+<div class="block">The line with the given SKU, or <code>null</code>. When the SKU is present
+ in both directions (a sale line and a credit line), the sale line is
+ returned — credit lines are addressed by itemId.</div>
 </section>
 </li>
 <li>

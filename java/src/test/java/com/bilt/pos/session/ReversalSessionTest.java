@@ -1,8 +1,13 @@
 package com.bilt.pos.session;
 
+import com.bilt.pos.display.DisplayPayload;
+import com.bilt.pos.display.DisplayPayloadHelper;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
+import com.bilt.pos.nexo.model.SaleItem;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
+import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.basket.BasketItem;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.mockwebserver.Dispatcher;
@@ -979,5 +984,109 @@ class ReversalSessionTest {
                 () -> session.voidTransaction().get()).getError().getCode());
         assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
                 () -> session.refund().get()).getError().getCode());
+    }
+
+    // ─── Refund cart ───
+
+    private static final String DISPLAY_OK =
+            "{\"SaleToPOIResponse\":{\"DisplayResponse\":{}}}";
+
+    @Test
+    void refundCartMutationSendsANegativeDisplay() throws Exception {
+        ReversalSession session = cardSession();
+        server.enqueue(new MockResponse().setBody(DISPLAY_OK));
+
+        Basket cart = session.basket().addItem(
+                BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+
+        assertTrue(cart.getItem("1").isCredit(), "every refund cart line is a credit");
+        assertEquals(0, new BigDecimal("-24.99").compareTo(cart.getGrandTotal()));
+
+        SaleToPOIRequest sent = recordedRequest();
+        assertEquals("Display", sent.getMessageHeader().getMessageCategory().toValue());
+        DisplayPayload payload = DisplayPayloadHelper.fromBase64(sent.getDisplayRequest()
+                .getDisplayOutput()[0].getOutputContent().getOutputXHTML());
+        assertEquals(0, new BigDecimal("-24.99").compareTo(
+                payload.getReceipt().getTotal().getAmount().getValue()),
+                "the customer sees the return as a negative amount");
+    }
+
+    @Test
+    void refundBasketRefundsTheCartTotalWithItemsAttached() throws Exception {
+        ReversalSession session = start(sessionBuilder()
+                .poiTransactionId(ORIGINAL_POI_TXN)
+                .poiTransactionTimestamp(ORIGINAL_TS)
+                .autoDisplay(false));
+        session.basket().mutate(m -> m
+                .addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"))
+                .addItem(BasketItem.of("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99")));
+
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.refundOk(64.97)));
+        RefundResult result = session.refundBasket().get();
+
+        assertTrue(result.isSuccess());
+        SaleToPOIRequest refund = recordedRequest();
+        assertEquals("Payment", refund.getMessageHeader().getMessageCategory().toValue());
+        assertEquals("Refund",
+                refund.getPaymentRequest().getPaymentData().getPaymentType().toValue());
+        assertEquals(ORIGINAL_POI_TXN, refund.getPaymentRequest().getPaymentTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals(64.97, refund.getPaymentRequest().getPaymentTransaction()
+                .getAmountsReq().getRequestedAmount(),
+                "the refund amount is the cart total's magnitude");
+
+        SaleItem[] items = refund.getPaymentRequest().getPaymentTransaction().getSaleItem();
+        assertEquals(2, items.length);
+        assertEquals(2.0, items[0].getQuantity(),
+                "refund items carry magnitudes — PaymentType=Refund is the direction");
+        assertEquals(49.98, items[0].getItemAmount());
+        assertEquals("KRK-CNDL-LRG-VAN", items[0].getProductCode());
+
+        assertTrue(session.basket().snapshot().isEmpty(),
+                "the cart is consumed by its refund");
+    }
+
+    @Test
+    void refundBasketRequiresItems() throws Exception {
+        ReversalSession session = start(sessionBuilder()
+                .poiTransactionId(ORIGINAL_POI_TXN)
+                .autoDisplay(false));
+
+        SessionException e = assertThrows(SessionException.class,
+                () -> session.refundBasket().get());
+
+        assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
+        assertEquals(1, server.getRequestCount(),
+                "nothing but the session start reached the wire");
+    }
+
+    @Test
+    void failedRefundBasketLeavesTheCartIntactForRetry() throws Exception {
+        ReversalSession session = start(sessionBuilder()
+                .poiTransactionId(ORIGINAL_POI_TXN)
+                .autoDisplay(false));
+        session.basket().addItem(
+                BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}"));
+        assertThrows(SessionException.class, () -> session.refundBasket().get());
+        assertEquals(1, session.basket().snapshot().getItemCount(),
+                "a failed refund must not consume the cart");
+
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.refundOk(24.99)));
+        assertTrue(session.refundBasket().get().isSuccess());
+        assertTrue(session.basket().snapshot().isEmpty());
+    }
+
+    @Test
+    void refundCartCannotBeModifiedAfterAVoid() throws Exception {
+        ReversalSession session = cardSession();
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        session.voidTransaction().execute();
+
+        assertThrows(IllegalStateException.class, () -> session.basket()
+                .addItem(BasketItem.of("SKU-1", "Item", 1, "10.00")));
     }
 }

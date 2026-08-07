@@ -39,6 +39,13 @@ import java.util.UUID;
  *       override was set via {@link #setTaxTotal}.</li>
  * </ol>
  *
+ * <p>Lines are keyed by SKU <em>and</em> direction: a credit line (return,
+ * trade-in) never upserts into a sale line of the same SKU, so a basket may
+ * carry both — like two lines on a paper receipt. Tax values are magnitudes;
+ * a credit line's totals and tax are negated at snapshot time. A
+ * {@code creditCart} engine (a refund cart) puts every added item on the
+ * credit side regardless of the item's own flag.</p>
+ *
  * <p>Callers must guard access with the session lock; this class performs no
  * synchronization. Money is computed at scale 2, {@code HALF_UP}.</p>
  */
@@ -53,17 +60,19 @@ public final class BasketEngine implements BasketMutation {
         final String description;
         final String category;
         final BigDecimal unitPrice;
+        final boolean credit;
         final Map<String, String> metadata;
         int quantity;
         BigDecimal taxRate;
         BigDecimal taxAmount;
 
-        Line(String itemId, BasketItem item) {
+        Line(String itemId, BasketItem item, boolean credit) {
             this.itemId = itemId;
             this.sku = item.getSku();
             this.description = item.getDescription();
             this.category = item.getCategory();
             this.unitPrice = item.getUnitPrice();
+            this.credit = credit;
             this.metadata = item.getMetadata();
             this.quantity = item.getQuantity();
             this.taxRate = item.getTaxRate();
@@ -76,6 +85,7 @@ public final class BasketEngine implements BasketMutation {
             this.description = other.description;
             this.category = other.category;
             this.unitPrice = other.unitPrice;
+            this.credit = other.credit;
             this.metadata = other.metadata;
             this.quantity = other.quantity;
             this.taxRate = other.taxRate;
@@ -84,9 +94,24 @@ public final class BasketEngine implements BasketMutation {
     }
 
     private final String cartId = UUID.randomUUID().toString();
-    private final Map<String, Line> linesBySku = new LinkedHashMap<>();
+    // keyed by (SKU, direction) — see key(); iteration order is insertion order
+    private final Map<String, Line> lines = new LinkedHashMap<>();
+    private final boolean creditCart;
     private int nextItemId = 1;
     private BigDecimal taxTotalOverride;
+
+    public BasketEngine() {
+        this(false);
+    }
+
+    /**
+     * @param creditCart when {@code true}, every added item lands on the
+     *        credit side — the mode of a refund cart, whose lines all
+     *        subtract
+     */
+    public BasketEngine(boolean creditCart) {
+        this.creditCart = creditCart;
+    }
 
     /**
      * Applies a batch of mutations atomically: if any of them throws, the
@@ -95,7 +120,7 @@ public final class BasketEngine implements BasketMutation {
      */
     public void mutateAtomically(Consumer<BasketMutation> mutation) {
         Map<String, Line> savedLines = new LinkedHashMap<>();
-        for (Map.Entry<String, Line> entry : linesBySku.entrySet()) {
+        for (Map.Entry<String, Line> entry : lines.entrySet()) {
             savedLines.put(entry.getKey(), new Line(entry.getValue()));
         }
         int savedNextItemId = nextItemId;
@@ -103,8 +128,8 @@ public final class BasketEngine implements BasketMutation {
         try {
             mutation.accept(this);
         } catch (RuntimeException e) {
-            linesBySku.clear();
-            linesBySku.putAll(savedLines);
+            lines.clear();
+            lines.putAll(savedLines);
             nextItemId = savedNextItemId;
             taxTotalOverride = savedTaxTotalOverride;
             throw e;
@@ -121,7 +146,8 @@ public final class BasketEngine implements BasketMutation {
     @Override
     public BasketEngine addItem(BasketItem item, String explicitItemId) {
         Objects.requireNonNull(item, "item");
-        Line existing = linesBySku.get(item.getSku());
+        boolean credit = creditCart || item.isCredit();
+        Line existing = lines.get(key(item.getSku(), credit));
         if (existing != null) {
             if (explicitItemId != null && !explicitItemId.equals(existing.itemId)) {
                 throw new IllegalArgumentException("SKU " + item.getSku()
@@ -149,12 +175,12 @@ public final class BasketEngine implements BasketMutation {
         }
         String itemId = explicitItemId != null ? explicitItemId : String.valueOf(nextItemId);
         validateItemId(itemId);
-        for (Line line : linesBySku.values()) {
+        for (Line line : lines.values()) {
             if (line.itemId.equals(itemId)) {
                 throw new IllegalArgumentException("itemId " + itemId + " is already in use");
             }
         }
-        linesBySku.put(item.getSku(), new Line(itemId, item));
+        lines.put(key(item.getSku(), credit), new Line(itemId, item, credit));
         // keep generated ids ahead of any explicit numeric id
         nextItemId = Math.max(nextItemId, Integer.parseInt(itemId)) + 1;
         return this;
@@ -162,14 +188,15 @@ public final class BasketEngine implements BasketMutation {
 
     @Override
     public BasketEngine removeItem(String itemId) {
-        linesBySku.remove(requireByItemId(itemId).sku);
+        Line line = requireByItemId(itemId);
+        lines.remove(key(line.sku, line.credit));
         return this;
     }
 
     @Override
     public BasketEngine removeItemBySku(String sku) {
-        requireBySku(sku);
-        linesBySku.remove(sku);
+        Line line = requireBySku(sku);
+        lines.remove(key(line.sku, line.credit));
         return this;
     }
 
@@ -188,7 +215,7 @@ public final class BasketEngine implements BasketMutation {
             throw new IllegalArgumentException("quantity must not be negative");
         }
         if (quantity == 0) {
-            linesBySku.remove(line.sku);
+            lines.remove(key(line.sku, line.credit));
         } else {
             line.quantity = quantity;
         }
@@ -233,6 +260,12 @@ public final class BasketEngine implements BasketMutation {
         return this;
     }
 
+    /** Empties the basket (a refund cart is consumed by its refund). */
+    public void clear() {
+        lines.clear();
+        taxTotalOverride = null;
+    }
+
     /** {@code null} clears the value; a present value must not be negative. */
     private static BigDecimal requireNonNegative(BigDecimal value, String what) {
         if (value != null && value.signum() < 0) {
@@ -244,19 +277,23 @@ public final class BasketEngine implements BasketMutation {
     // ─── Queries ───
 
     public boolean isEmpty() {
-        return linesBySku.isEmpty();
+        return lines.isEmpty();
     }
 
     /** Produces an immutable snapshot of the current basket. */
     public Basket snapshot() {
-        List<BasketLineItem> items = new ArrayList<>(linesBySku.size());
+        List<BasketLineItem> items = new ArrayList<>(lines.size());
         BigDecimal originalTotal = BigDecimal.ZERO;
         BigDecimal taxSum = BigDecimal.ZERO;
-        for (Line line : linesBySku.values()) {
+        for (Line line : lines.values()) {
             BigDecimal lineTotal = line.unitPrice
                     .multiply(BigDecimal.valueOf(line.quantity))
                     .setScale(MONEY_SCALE, ROUNDING);
             BigDecimal lineTax = lineTax(line, lineTotal);
+            if (line.credit) {
+                lineTotal = lineTotal.negate();
+                lineTax = lineTax.negate();
+            }
             originalTotal = originalTotal.add(lineTotal);
             taxSum = taxSum.add(lineTax);
             items.add(BasketLineItem.builder()
@@ -266,6 +303,7 @@ public final class BasketEngine implements BasketMutation {
                     .category(line.category)
                     .quantity(line.quantity)
                     .unitPrice(line.unitPrice)
+                    .credit(line.credit)
                     .originalTotal(lineTotal)
                     .adjustedTotal(lineTotal)
                     .taxRate(line.taxRate)
@@ -287,9 +325,15 @@ public final class BasketEngine implements BasketMutation {
 
     // ─── Internals ───
 
+    private static String key(String sku, boolean credit) {
+        // NUL cannot appear in a real SKU, so the credit-side key can
+        // never collide with a sale-side SKU
+        return credit ? sku + "\0" : sku;
+    }
+
     private Line requireByItemId(String itemId) {
         Objects.requireNonNull(itemId, "itemId");
-        for (Line line : linesBySku.values()) {
+        for (Line line : lines.values()) {
             if (line.itemId.equals(itemId)) {
                 return line;
             }
@@ -297,9 +341,18 @@ public final class BasketEngine implements BasketMutation {
         throw new IllegalArgumentException("no basket item with itemId " + itemId);
     }
 
+    /**
+     * When a SKU is present in both directions the sale line wins — credit
+     * lines are rarer and always deliberate, so they are addressed by
+     * itemId. With one direction present (all lines of a refund cart are
+     * credits) the SKU alone is unambiguous.
+     */
     private Line requireBySku(String sku) {
         Objects.requireNonNull(sku, "sku");
-        Line line = linesBySku.get(sku);
+        Line line = lines.get(key(sku, false));
+        if (line == null) {
+            line = lines.get(key(sku, true));
+        }
         if (line == null) {
             throw new IllegalArgumentException("no basket item with SKU " + sku);
         }

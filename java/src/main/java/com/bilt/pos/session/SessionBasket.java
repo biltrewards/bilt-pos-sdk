@@ -19,8 +19,9 @@ import java.util.function.Consumer;
 
 /**
  * The basket surface of a session, obtained via
- * {@link CheckoutSession#basket()}: item and tax mutations, batch edits,
- * and immutable snapshots.
+ * {@link CheckoutSession#basket()} (the sale basket) or
+ * {@link ReversalSession#basket()} (the refund cart): item and tax
+ * mutations, batch edits, and immutable snapshots.
  *
  * <p>Every mutation is applied atomically and — when the session has
  * automatic display enabled — followed by a customer display refresh showing

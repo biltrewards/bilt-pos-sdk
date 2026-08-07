@@ -25,6 +25,7 @@ import com.bilt.pos.nexo.model.PaymentResponse;
 import com.bilt.pos.nexo.model.PaymentTransaction;
 import com.bilt.pos.nexo.model.PaymentTypeEnum;
 import com.bilt.pos.nexo.model.ReversalResponse;
+import com.bilt.pos.nexo.model.SaleItem;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.session.RefundResult;
@@ -100,6 +101,10 @@ public final class ReversalManager {
      *
      * @param amount           the amount to refund, or {@code null} for a
      *                         full linked refund
+     * @param saleItems        the refunded items, attached to the refund's
+     *                         {@code PaymentTransaction} (magnitudes only —
+     *                         the payment type carries the direction), or
+     *                         {@code null} for an amount-only refund
      * @param originalPoiTxnId original transaction reference; {@code null}
      *                         for an unlinked refund
      * @param awardPoiTxnId    the original sale's award reference (linked
@@ -119,7 +124,8 @@ public final class ReversalManager {
      *                         progress — a later void must not re-credit
      *                         it
      */
-    public RefundResult refund(BigDecimal amount, String originalPoiTxnId,
+    public RefundResult refund(BigDecimal amount, List<SaleItem> saleItems,
+                               String originalPoiTxnId,
                                Instant originalPoiTimestamp,
                                String awardPoiTxnId, Instant awardPoiTimestamp,
                                String memberId, StepDecider decider, Runnable onRefunded,
@@ -129,7 +135,7 @@ public final class ReversalManager {
         SessionException[] lastFailure = new SessionException[1];
 
         PaymentResponse body = runStep(ReversalStep.CARD, effective,
-                () -> sendRefund(amount, originalPoiTxnId, originalPoiTimestamp),
+                () -> sendRefund(amount, saleItems, originalPoiTxnId, originalPoiTimestamp),
                 e -> {
                     lastFailure[0] = e;
                     LOGGER.warning("the tender refund was skipped by decision; "
@@ -191,7 +197,8 @@ public final class ReversalManager {
                 .build();
     }
 
-    private PaymentResponse sendRefund(BigDecimal amount, String originalPoiTxnId,
+    private PaymentResponse sendRefund(BigDecimal amount, List<SaleItem> saleItems,
+                                       String originalPoiTxnId,
                                        Instant originalPoiTimestamp) {
         AmountsReq.Builder amounts = AmountsReq.builder().currency(currency);
         if (amount != null) {
@@ -199,6 +206,9 @@ public final class ReversalManager {
         }
         PaymentTransaction.Builder transaction = PaymentTransaction.builder()
                 .amountsReq(amounts.build());
+        if (saleItems != null && !saleItems.isEmpty()) {
+            transaction.saleItem(saleItems.toArray(new SaleItem[0]));
+        }
         if (originalPoiTxnId != null) {
             transaction.originalPOITransaction(Wire.originalTransaction(
                     originalPoiTxnId, originalPoiTimestamp));

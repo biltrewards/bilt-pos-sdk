@@ -446,7 +446,33 @@ try (ReversalSession session = ReversalSession.builder()
 }
 ```
 
-A reversal session is bracketed on the terminal like a checkout (session start/end signals; it is `AutoCloseable`), carries only reversal operations — `voidTransaction()`, `refund()`, `refund(amount)` — and requires at least one transaction reference at `start()`. Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. `refund()` requires the card reference and reverses the card leg + award only. The same `ReversalFlow` decision handling applies as on `CheckoutSession`.
+A reversal session is bracketed on the terminal like a checkout (session start/end signals; it is `AutoCloseable`), carries the reversal operations — `voidTransaction()`, `refund()`, `refund(amount)`, `refundBasket()` — and requires at least one transaction reference at `start()`. Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. `refund()` requires the card reference and reverses the card leg + award only. The same `ReversalFlow` decision handling applies as on `CheckoutSession`.
+
+### Item-based refunds (the refund cart)
+
+To refund specific items of a prior sale, ring the returns into the session's refund cart — the same `SessionBasket` API as a checkout basket, except every line is a **credit line**: totals are negative, and each mutation refreshes the customer display with the itemised returns at negative amounts (`autoDisplay`, on by default; `externalDisplayClient` and `displayRenderer` route and shape it as on a checkout). `refundBasket()` then refunds the cart total against the referenced card leg, attaching the returned items to the refund's `PaymentRequest`:
+
+```java
+try (ReversalSession session = ReversalSession.builder()
+        .client(client)
+        .saleId("POS-LANE-3")
+        .poiId("VictaLane-275839164")
+        .currency("USD")
+        .poiTransactionId(stored.cardTxnId).poiTransactionTimestamp(stored.cardTs)
+        .start()
+        .get()) {
+    session.basket().addItem(
+            BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+    session.basket().setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
+    // customer display now shows: Large Vanilla Candle −$24.99, Total −$27.21
+
+    RefundResult result = session.refundBasket().get();   // refunds 27.21, items attached
+}
+```
+
+The cart is free-form — which items may be returned, and in what quantities, is the register's decision (the acquirer enforces the cumulative refund limit). On success the cart is consumed and the display cleared; on failure it stays intact for a retry. Ring further returns for additional partial refunds.
+
+**Credit lines on a sale.** The same mechanism marks a return or trade-in rung into a *checkout* basket: `BasketItem.credit(sku, desc, qty, price)` (or `.credit(true)` on the builder) makes the line subtract from the sale's totals and display negative. Quantities and unit prices stay positive — the direction carries the sign — and a credit line never upserts into a sale line of the same SKU: the basket shows both, like a paper receipt. `pay()` still requires a positive grand total.
 
 ---
 
@@ -532,6 +558,7 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | Pay | `session.pay()` → `.beforeStep / .onRebatesRedeemed / .onPointsRedeemed / .onGiftCardPayment / .onSuccess / .onError` → `.execute()` |
 | Sync pay | `session.pay().get()` |
 | Refund | `refund()`, `refund(amount)`, `refundUnlinked(amount)` |
+| Item-based refund of a prior sale | `ReversalSession` → `basket().addItem(...)` → `refundBasket()` |
 | Void a completed txn | `session.voidTransaction()` |
 | Cancel in-progress op | `session.abort()` (safe from any thread) |
 | Collect customer input | `requestConfirmation / requestDigitString / requestMenuEntry / ...` |

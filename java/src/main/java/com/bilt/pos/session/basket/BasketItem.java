@@ -19,10 +19,18 @@ import java.util.Objects;
  * An item added to the basket by the register.
  *
  * <p>The SKU is the primary identifier: adding an item whose SKU is already
- * in the basket increments that line's quantity (upsert).</p>
+ * in the basket increments that line's quantity (upsert). A <em>credit</em>
+ * item subtracts from the basket — a return or trade-in rung into a sale —
+ * and is kept as its own line: the upsert matches on SKU <em>and</em>
+ * direction, so selling and taking back the same SKU produces two lines.
+ * Quantity and unit price are always positive; the direction carries the
+ * sign.</p>
  *
  * <pre>{@code
  * session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+ *
+ * // a return in the same sale: displays and totals as -24.99
+ * session.basket().addItem(BasketItem.credit("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "24.99"));
  *
  * session.basket().addItem(BasketItem.builder()
  *     .sku("KRK-FRAME-5X7-BLK")
@@ -39,6 +47,7 @@ public final class BasketItem {
     private final String description;
     private final int quantity;
     private final BigDecimal unitPrice;
+    private final boolean credit;
     private final String category;
     private final BigDecimal taxRate;
     private final BigDecimal taxAmount;
@@ -49,6 +58,7 @@ public final class BasketItem {
         this.description = builder.description;
         this.quantity = builder.quantity;
         this.unitPrice = builder.unitPrice;
+        this.credit = builder.credit;
         this.category = builder.category;
         this.taxRate = builder.taxRate;
         this.taxAmount = builder.taxAmount;
@@ -64,6 +74,18 @@ public final class BasketItem {
                 .description(description)
                 .quantity(quantity)
                 .unitPrice(new BigDecimal(unitPrice))
+                .build();
+    }
+
+    /** Shorthand factory for a credit (negative) line — a return or trade-in. */
+    public static BasketItem credit(String sku, String description, int quantity,
+                                    String unitPrice) {
+        return builder()
+                .sku(sku)
+                .description(description)
+                .quantity(quantity)
+                .unitPrice(new BigDecimal(unitPrice))
+                .credit(true)
                 .build();
     }
 
@@ -86,6 +108,11 @@ public final class BasketItem {
 
     public BigDecimal getUnitPrice() {
         return unitPrice;
+    }
+
+    /** Whether this line subtracts from the basket (return, trade-in). */
+    public boolean isCredit() {
+        return credit;
     }
 
     /** Optional product category; aids terminal-side offer matching. */
@@ -115,6 +142,7 @@ public final class BasketItem {
         private String description;
         private int quantity = 1;
         private BigDecimal unitPrice;
+        private boolean credit;
         private String category;
         private BigDecimal taxRate;
         private BigDecimal taxAmount;
@@ -141,6 +169,16 @@ public final class BasketItem {
 
         public Builder unitPrice(BigDecimal unitPrice) {
             this.unitPrice = unitPrice;
+            return this;
+        }
+
+        /**
+         * Marks the line as a credit: its totals (and tax) subtract from
+         * the basket. Quantity and unit price stay positive — the
+         * direction carries the sign. Default {@code false}.
+         */
+        public Builder credit(boolean credit) {
+            this.credit = credit;
             return this;
         }
 
