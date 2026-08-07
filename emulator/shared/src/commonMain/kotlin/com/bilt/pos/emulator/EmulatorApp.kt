@@ -29,6 +29,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -53,31 +54,76 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bilt.pos.emulator.catalog.Product
+import com.bilt.pos.emulator.catalog.minorUnitsToDecimal
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.PaymentOutcome
+import com.bilt.pos.emulator.session.StoredSaleUi
+
+/** Top-level screens of the emulator. */
+internal enum class EmulatorTab(val label: String) { SALE("Sale"), REFUND("Refund") }
+
+/** Width at which tab content switches from stacked to side-by-side panes. */
+private val WIDE_LAYOUT_BREAKPOINT = 700.dp
 
 /**
  * Root composable of the terminal emulator, shared by the Android and
- * desktop targets.
+ * desktop targets. All interaction is driven through [controller], whose
+ * [EmulatorController.state] this UI observes; [products] populates the
+ * Sale tab's quick-buy grid.
+ */
+@Composable
+fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
+    EmulatorApp(controller, products, EmulatorTab.SALE)
+}
+
+/**
+ * [initialTab] seeds the tab selection — the screenshot generator renders
+ * the Refund tab through it, since tab state is local and a headless test
+ * cannot switch it after composition. Internal so the production entry
+ * point above stays free of test-shaped surface.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
+internal fun EmulatorApp(
+    controller: EmulatorController,
+    products: List<Product>,
+    initialTab: EmulatorTab,
+) {
     val state by controller.state.collectAsState()
 
     MaterialTheme {
         state.paymentOutcome?.let { outcome ->
             PaymentOutcomeDialog(outcome) { controller.dismissPaymentOutcome() }
         }
+        // ordinal rather than the enum itself so rememberSaveable needs
+        // no custom Saver
+        var selectedTabIndex by rememberSaveable { mutableStateOf(initialTab.ordinal) }
+        val selectedTab = EmulatorTab.entries[selectedTabIndex]
         Scaffold(
             topBar = {
                 TopAppBar(
                     title = { Text("Bilt POS Emulator") },
                     actions = { StatusIndicators(state) },
                 )
+            },
+            bottomBar = {
+                // Same container color as the cards, so the bar reads as a
+                // panel rather than blending into the window background
+                TabRow(
+                    selectedTabIndex = selectedTabIndex,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                ) {
+                    EmulatorTab.entries.forEach { tab ->
+                        Tab(
+                            selected = tab == selectedTab,
+                            onClick = { selectedTabIndex = tab.ordinal },
+                            text = { Text(tab.label) },
+                        )
+                    }
+                }
             },
         ) { padding ->
             Column(
@@ -88,28 +134,262 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
                 // weight(1f), not fillMaxSize(): a non-weighted child measures
                 // against the Column's full height and would overflow by the
                 // connection panel's height
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                    if (maxWidth < 700.dp) {
-                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            ProductGrid(products, controller, Modifier.weight(1.4f))
-                            BasketCard(state, controller, Modifier.weight(0.8f))
-                            EventsCard(state, Modifier.weight(0.8f))
-                        }
-                    } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            ProductGrid(products, controller, Modifier.weight(1f))
-                            Column(
-                                modifier = Modifier.weight(2f),
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                            ) {
-                                BasketCard(state, controller, Modifier.weight(1f))
-                                EventsCard(state, Modifier.weight(1f))
+                when (selectedTab) {
+                    EmulatorTab.SALE ->
+                        SaleTab(state, controller, products, Modifier.fillMaxWidth().weight(1f))
+                    EmulatorTab.REFUND ->
+                        RefundTab(state.sales, Modifier.fillMaxWidth().weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaleTab(
+    state: EmulatorState,
+    controller: EmulatorController,
+    products: List<Product>,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier = modifier) {
+        if (maxWidth < WIDE_LAYOUT_BREAKPOINT) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                ProductGrid(products, controller, Modifier.weight(1.4f))
+                BasketCard(state, controller, Modifier.weight(0.8f))
+                EventsCard(state, Modifier.weight(0.8f))
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                ProductGrid(products, controller, Modifier.weight(1f))
+                Column(
+                    modifier = Modifier.weight(2f),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    BasketCard(state, controller, Modifier.weight(1f))
+                    EventsCard(state, Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RefundTab(sales: List<StoredSaleUi>, modifier: Modifier = Modifier) {
+    var selectedSaleId by rememberSaveable { mutableStateOf<String?>(null) }
+    // resolve against the current list (a refresh may have dropped the
+    // sale); with no explicit pick, default to the newest sale — the one a
+    // refund most likely targets
+    val selected = sales.firstOrNull { it.id == selectedSaleId } ?: sales.firstOrNull()
+
+    val list: @Composable (Modifier) -> Unit = { m ->
+        SalesListCard(sales, selected?.id, { selectedSaleId = it }, m)
+    }
+    // no details card without a sale — that only happens with nothing
+    // stored, and the list's empty message is the single empty state
+    val details: (@Composable (Modifier) -> Unit)? = selected?.let { sale ->
+        { m -> RefundDetailsCard(sale, m) }
+    }
+    BoxWithConstraints(modifier = modifier) {
+        if (maxWidth < WIDE_LAYOUT_BREAKPOINT) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                list(Modifier.weight(1f))
+                details?.invoke(Modifier.weight(1.2f))
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                list(Modifier.weight(1f))
+                details?.invoke(Modifier.weight(2f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SalesListCard(
+    sales: List<StoredSaleUi>,
+    selectedId: String?,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text("Completed sales", style = MaterialTheme.typography.titleMedium)
+            if (sales.isEmpty()) {
+                Text(
+                    "None stored yet — complete a payment on the Sale tab",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 8.dp).weight(1f),
+                ) {
+                    items(sales, key = { it.id }) { sale ->
+                        val isSelected = sale.id == selectedId
+                        Button(
+                            onClick = { onSelect(sale.id) },
+                            colors = if (isSelected) {
+                                ButtonDefaults.buttonColors()
+                            } else {
+                                ButtonDefaults.filledTonalButtonColors()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "$${sale.totalAmount}",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(
+                                        sale.completedAtLabel,
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                }
+                                Text(sale.statusLabel, style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/** What the Refund button returns: everything, or the checked items. */
+private enum class RefundMode { FULL, ITEMS }
+
+@Composable
+private fun RefundDetailsCard(sale: StoredSaleUi, modifier: Modifier = Modifier) {
+    // keyed on the sale so picking another sale resets the selections
+    var mode by remember(sale.id) { mutableStateOf(RefundMode.FULL) }
+    var selectedSkus by remember(sale.id) { mutableStateOf(emptySet<String>()) }
+    // per-item refunds need recorded line items to select from
+    val itemsAvailable = sale.items.isNotEmpty()
+
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text("Refund", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "$${sale.totalAmount} · ${sale.completedAtLabel} · ${sale.memberLabel}",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            when {
+                sale.voided -> Text(
+                    "Voided — nothing left to refund",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                sale.refunded -> Text(
+                    "Already partially refunded",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LabeledRadio("Full amount", mode == RefundMode.FULL, sale.refundable) {
+                    mode = RefundMode.FULL
+                }
+                LabeledRadio(
+                    "Selected items",
+                    mode == RefundMode.ITEMS,
+                    sale.refundable && itemsAvailable,
+                ) {
+                    mode = RefundMode.ITEMS
+                }
+            }
+            if (itemsAvailable) {
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    items(sale.items, key = { it.sku }) { item ->
+                        LineItemRow(item.quantity, item.description, item.lineTotalLabel) {
+                            Checkbox(
+                                checked = item.sku in selectedSkus,
+                                onCheckedChange = { checked ->
+                                    selectedSkus =
+                                        if (checked) selectedSkus + item.sku
+                                        else selectedSkus - item.sku
+                                },
+                                // the refundable guard is not redundant with the
+                                // radio's: a refresh can void the sale while the
+                                // mode is already ITEMS
+                                enabled = mode == RefundMode.ITEMS && sale.refundable,
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    "No line items recorded for this sale — only a full refund is possible",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f).padding(top = 8.dp),
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            // The two bases deliberately differ while the button is unwired:
+            // FULL is what the terminal charged (authorizedAmount — tax in,
+            // loyalty tenders deducted), ITEMS sums merchandise line totals
+            // (post-rebate, no tax, no points proration) — so selecting every
+            // item shows less than Full amount. How a per-item refund
+            // allocates tax and loyalty value is a decision of the redesigned
+            // refund flow; until that lands the item total is indicative,
+            // not a charge amount.
+            val amount = when (mode) {
+                RefundMode.FULL -> sale.totalAmount
+                RefundMode.ITEMS -> minorUnitsToDecimal(
+                    sale.items.filter { it.sku in selectedSkus }.sumOf { it.lineTotalMinor }
+                )
+            }
+            Button(
+                onClick = {
+                    // deliberately unwired: the refund flow is being redesigned
+                    // and will land with it
+                },
+                enabled = sale.refundable &&
+                    (mode == RefundMode.FULL || selectedSkus.isNotEmpty()),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Refund $$amount")
+            }
+        }
+    }
+}
+
+@Composable
+private fun LabeledRadio(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(selected = selected, onClick = onClick, enabled = enabled)
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** One cart line: optional leading control, "qty× description", trailing amount. */
+@Composable
+private fun LineItemRow(
+    quantity: Int,
+    description: String,
+    amountLabel: String,
+    modifier: Modifier = Modifier,
+    leading: @Composable () -> Unit = {},
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        leading()
+        Text(
+            "$quantity× $description",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        Text(amountLabel, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -397,14 +677,12 @@ private fun BasketCard(
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(state.basket, key = { it.sku }) { line ->
-                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                            Text(
-                                "${line.quantity}× ${line.description}",
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text("$${line.lineTotal}", style = MaterialTheme.typography.bodyMedium)
-                        }
+                        LineItemRow(
+                            line.quantity,
+                            line.description,
+                            "$${line.lineTotal}",
+                            Modifier.padding(vertical = 2.dp),
+                        )
                     }
                 }
             }

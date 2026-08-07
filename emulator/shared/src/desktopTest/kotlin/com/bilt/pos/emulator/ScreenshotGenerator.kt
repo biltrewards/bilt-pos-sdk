@@ -11,6 +11,8 @@ import com.bilt.pos.emulator.session.ConnectionStatus
 import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
+import com.bilt.pos.emulator.session.SaleItemUi
+import com.bilt.pos.emulator.session.StoredSaleUi
 import com.bilt.pos.emulator.session.TlsStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,11 +44,11 @@ class ScreenshotGenerator {
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun render(state: EmulatorState, file: File) {
+    private fun render(state: EmulatorState, file: File, initialTab: EmulatorTab = EmulatorTab.SALE) {
         // 1100x800 dp at 2x density — the desktop window's default size,
         // above the 700dp breakpoint so the wide layout renders
         val scene = ImageComposeScene(width = 2200, height = 1600, density = Density(2f)) {
-            EmulatorApp(FakeController(state), MockProductProvider.products())
+            EmulatorApp(FakeController(state), MockProductProvider.products(), initialTab)
         }
         val png = scene.render().encodeToData(EncodedImageFormat.PNG)!!.bytes
         scene.close()
@@ -110,5 +112,37 @@ class ScreenshotGenerator {
             ),
         )
         render(paid, File(dir, "emulator-paid.png"))
+
+        val refund = paid.copy(
+            sales = listOf(
+                StoredSaleUi(
+                    id = "9d1f4c2b-7a53-4e08-b1d9-2c6e91f0a487",
+                    completedAtLabel = "Aug 6, 10:42",
+                    totalAmount = "174.89",
+                    memberId = "98234",
+                    items = listOf(
+                        SaleItemUi("SKU-014", "Wireless Earbuds", 1, 12999),
+                        SaleItemUi("SKU-003", "Sparkling Water 12-pack", 2, 1398),
+                        SaleItemUi("SKU-021", "Desk Lamp", 1, 3499),
+                    ),
+                ),
+                StoredSaleUi(
+                    id = "5b8e03d6-1f27-49c4-a8f2-70b3c9e514d2",
+                    completedAtLabel = "Aug 6, 09:58",
+                    totalAmount = "42.50",
+                    items = listOf(
+                        SaleItemUi("SKU-007", "Coffee Beans 1kg", 1, 4250),
+                    ),
+                    refunded = true,
+                ),
+                StoredSaleUi(
+                    id = "e2c76a91-3d40-4b6f-95c8-1a09d4f7b325",
+                    completedAtLabel = "Aug 5, 17:21",
+                    totalAmount = "89.99",
+                    voided = true,
+                ),
+            ),
+        )
+        render(refund, File(dir, "emulator-refund.png"), initialTab = EmulatorTab.REFUND)
     }
 }

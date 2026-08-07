@@ -1,6 +1,7 @@
 package com.bilt.pos.emulator.session
 
 import com.bilt.pos.emulator.catalog.Product
+import com.bilt.pos.emulator.catalog.minorUnitsToDecimal
 import kotlinx.coroutines.flow.StateFlow
 
 enum class ConnectionPhase { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
@@ -68,6 +69,55 @@ data class LoyaltyOptions(
     val award: Boolean = true,
 )
 
+/** One cart line of a stored sale, as the Refund tab shows it. */
+data class SaleItemUi(
+    val sku: String,
+    val description: String,
+    val quantity: Int,
+    /** Line total in minor currency units (cents), so per-item refund
+     *  selections sum as Longs instead of decimal-string arithmetic. */
+    val lineTotalMinor: Long,
+) {
+    val lineTotalLabel: String get() = "$" + minorUnitsToDecimal(lineTotalMinor)
+}
+
+/**
+ * A completed sale as the Refund tab lists it — a UI projection of the
+ * store's `StoredSale`, mapped in jvmShared so commonMain stays free of the
+ * store types.
+ */
+data class StoredSaleUi(
+    /** The store's record id ([com.bilt.pos.emulator.store.SaleRecord.id]). */
+    val id: String,
+    /** Completion time, already formatted for display in local time. */
+    val completedAtLabel: String,
+    /** Total authorized across all tenders, as a plain decimal string. */
+    val totalAmount: String,
+    /** Loyalty account of the identified member; null for a guest checkout. */
+    val memberId: String? = null,
+    val items: List<SaleItemUi> = emptyList(),
+    /** True when refunds were already recorded against the sale. */
+    val refunded: Boolean = false,
+    val voided: Boolean = false,
+) {
+    /** A voided sale cannot be refunded (mirrors `StoredSale.refundable`). */
+    val refundable: Boolean get() = !voided
+
+    val memberLabel: String get() = memberId?.let { "member $it" } ?: "guest"
+
+    /** One-line badge for the sales list: buyer plus what already happened
+     *  to the sale. */
+    val statusLabel: String
+        get() = listOfNotNull(
+            memberLabel,
+            when {
+                voided -> "voided"
+                refunded -> "refunded"
+                else -> null
+            },
+        ).joinToString(" · ")
+}
+
 data class EmulatorState(
     val terminalAddress: String = "",
     val addressAutodetected: Boolean = false,
@@ -93,6 +143,8 @@ data class EmulatorState(
     /** Success/failure of the last payment attempt, rendered as a popup
      *  until dismissed; cleared when a new payment starts. */
     val paymentOutcome: PaymentOutcome? = null,
+    /** Stored completed sales, newest first, listed on the Refund tab. */
+    val sales: List<StoredSaleUi> = emptyList(),
     /** Curated one-line event feed shown on the Events tab. */
     val events: List<String> = emptyList(),
     /** Raw logger output (SDK java.util.logging records, stack traces) for the Detailed tab. */

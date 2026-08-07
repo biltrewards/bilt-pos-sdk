@@ -2,6 +2,7 @@ package com.bilt.pos.emulator.session
 
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.store.SaleStore
+import com.bilt.pos.emulator.store.StoredSale
 import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient
 import com.bilt.pos.nexo.model.DiagnosisRequest
@@ -41,9 +42,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigDecimal
+import java.math.RoundingMode
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+
+/** Display format for stored sales' completion times. Top-level, not an
+ *  instance property: the constructor-launched sales refresh may format
+ *  labels before instance initializers further down the class have run
+ *  (they execute in textual order), whereas file-level vals are initialized
+ *  on class load, before any access. */
+private val saleTimeFormat =
+    DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(ZoneId.systemDefault())
 
 /**
  * The emulator session engine. A connection to the terminal and a checkout
@@ -110,10 +123,21 @@ class NexoEmulatorController(
     @Volatile
     private var connection: Connection? = null
 
+    /** Serialized so overlapping refreshes publish in launch order — each
+     *  refresh is launched after its sale is recorded, so with FIFO
+     *  execution the snapshot published last always includes the newest
+     *  sale; concurrent refreshes could land an older read on top of it.
+     *  Declared before the init block: refreshSales() reads it during
+     *  construction, and property initializers run in textual order. */
+    private val salesRefreshDispatcher = Dispatchers.IO.limitedParallelism(1)
+
     init {
         // SDK diagnostics (client, session, payment internals) log via JUL;
         // surface them on the Detailed tab
         JulLogCapture.install(::detailedLog)
+        // Populate the Refund tab's list; recordSale keeps it current from
+        // here on, so this initial load is the only pull
+        refreshSales()
     }
 
     override fun autodetectAddress() {
@@ -659,10 +683,13 @@ class NexoEmulatorController(
                 currency = config.currency,
                 memberId = session.member?.memberId,
                 recordId = UUID.randomUUID().toString(),
-                completedAt = java.time.Instant.now(),
+                completedAt = Instant.now(),
             )
             saleStore.recordSale(record)
             log("Sale stored (${record.legs.size} transaction leg(s), id ${record.id})")
+            // keep the Refund tab's list live when a payment lands while
+            // the operator is already looking at it
+            refreshSales()
         } catch (e: Exception) {
             log("Failed to store the sale: ${e.message}")
             detailedLog(e.stackTraceToString())
@@ -714,6 +741,50 @@ class NexoEmulatorController(
 
     override fun dismissPaymentOutcome() {
         _state.update { it.copy(paymentOutcome = null) }
+    }
+
+    /** Reload [EmulatorState.sales] from the store. App scope, not a
+     *  connection scope: the stored sales outlive any connection, and
+     *  browsing them must work while disconnected. */
+    private fun refreshSales() {
+        scope.launch(salesRefreshDispatcher) {
+            val sales = try {
+                saleStore.listSales()
+            } catch (e: Exception) {
+                log("Failed to load stored sales: ${e.message}")
+                detailedLog(e.stackTraceToString())
+                return@launch
+            }
+            _state.update { state -> state.copy(sales = sales.map { it.toUi() }) }
+        }
+    }
+
+    private fun StoredSale.toUi() = StoredSaleUi(
+        id = sale.id,
+        completedAtLabel = formatCompletedAt(sale.completedAt),
+        totalAmount = sale.authorizedAmount,
+        memberId = sale.memberId,
+        items = sale.items.map {
+            SaleItemUi(it.sku, it.description, it.quantity, minorUnits(it.lineTotal))
+        },
+        refunded = refunds.isNotEmpty(),
+        voided = voided != null,
+    )
+
+    /** Cents from the store's plain decimal string; a malformed amount
+     *  degrades to zero rather than dropping the sale. */
+    private fun minorUnits(amount: String): Long = try {
+        BigDecimal(amount).movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValueExact()
+    } catch (e: Exception) {
+        0L
+    }
+
+    /** Local wall-clock label for the stored ISO instant; falls back to the
+     *  raw string rather than dropping the sale over a malformed record. */
+    private fun formatCompletedAt(iso: String): String = try {
+        saleTimeFormat.format(Instant.parse(iso))
+    } catch (e: Exception) {
+        iso
     }
 
     private fun onOff(enabled: Boolean) = if (enabled) "on" else "off"
