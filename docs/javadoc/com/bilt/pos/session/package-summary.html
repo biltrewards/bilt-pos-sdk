@@ -139,6 +139,38 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="RefundResult.html" title="class in com.bilt.pos.session"><code>RefundResult</code></a>.</div>
 </div>
+<div class="col-first even-row-color class-summary class-summary-tab3"><a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab3">
+<div class="block">How a reversal flow proceeds after one of its steps failed, returned by
+ the handler registered with <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a>.</div>
+</div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;T&gt;</div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="block">The reversal chain returned by the <code>voidTransaction()</code> and
+ <code>refund</code> operations of <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> (this session's own
+ payment) and <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a> (a referenced prior sale).</div>
+</div>
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="ReversalSession.html" title="class in com.bilt.pos.session">ReversalSession</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="block">A referenced reversal of a prior sale — void or refund from a fresh
+ session, in a later process, long after the <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> that
+ took the payment is gone.</div>
+</div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="block">Builder for <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>.</div>
+</div>
+<div class="col-first even-row-color class-summary class-summary-tab3"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab3">
+<div class="block">One reversible leg of a sale, as reported to
+ <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a> when a reversal step fails.</div>
+</div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="block">The basket surface of a session, obtained via
+ <a href="CheckoutSession.html#basket()"><code>CheckoutSession.basket()</code></a>: item and tax mutations, batch edits,
+ and immutable snapshots.</div>
+</div>
 <div class="col-first even-row-color class-summary class-summary-tab2"><a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a></div>
 <div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Describes why a session operation failed.</div>
@@ -158,7 +190,9 @@ loadScripts(document, 'script');</script>
 </div>
 <div class="col-first even-row-color class-summary class-summary-tab3"><a href="SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></div>
 <div class="col-last even-row-color class-summary class-summary-tab3">
-<div class="block">Lifecycle state of a <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a>.</div>
+<div class="block">Lifecycle state of a <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> (full diagram below) or a
+ <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>, which only ever moves <code>IDLE → VOIDING →
+ VOIDED</code> (or <code>ENDED</code>).</div>
 </div>
 <div class="col-first odd-row-color class-summary class-summary-tab2"><a href="TransactionStatusOptions.html" title="class in com.bilt.pos.session">TransactionStatusOptions</a></div>
 <div class="col-last odd-row-color class-summary class-summary-tab2">

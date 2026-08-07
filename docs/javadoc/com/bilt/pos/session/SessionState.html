@@ -98,7 +98,9 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public enum </span><span class="element-name type-name-label">SessionState</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Enum.html" title="class or interface in java.lang" class="external-link">Enum</a>&lt;<a href="SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a>&gt;</span></div>
-<div class="block">Lifecycle state of a <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a>.
+<div class="block">Lifecycle state of a <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> (full diagram below) or a
+ <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>, which only ever moves <code>IDLE → VOIDING →
+ VOIDED</code> (or <code>ENDED</code>).
 
  <pre>
  IDLE ── identifyMember() ──► IDENTIFIED
@@ -112,8 +114,11 @@ loadScripts(document, 'script');</script>
                PAYING ── success ──► COMPLETED
                   └────── failure ─────────┘
 
- abort()            ──► ABORTED   (from any non-terminal state)
+ abort()            interrupts the in-flight operation only — an aborted
+                    payment unwinds and settles FAILED; the session state
+                    is otherwise unchanged
  voidTransaction()  ──► VOIDING ──► VOIDED
+ end()              ──► ENDED     (from any state except PAYING/VOIDING)
  </pre></div>
 </section>
 <section class="summary">
@@ -135,21 +140,23 @@ loadScripts(document, 'script');</script>
 <div class="summary-table two-column-summary">
 <div class="table-header col-first">Enum Constant</div>
 <div class="table-header col-last">Description</div>
-<div class="col-first even-row-color"><code><a href="#ABORTED" class="member-name-link">ABORTED</a></code></div>
+<div class="col-first even-row-color"><code><a href="#ACTIVE" class="member-name-link">ACTIVE</a></code></div>
 <div class="col-last even-row-color">
-<div class="block">The session was aborted.</div>
-</div>
-<div class="col-first odd-row-color"><code><a href="#ACTIVE" class="member-name-link">ACTIVE</a></code></div>
-<div class="col-last odd-row-color">
 <div class="block">The basket contains at least one item.</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#COMPLETED" class="member-name-link">COMPLETED</a></code></div>
-<div class="col-last even-row-color">
+<div class="col-first odd-row-color"><code><a href="#COMPLETED" class="member-name-link">COMPLETED</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">The payment sequence completed successfully.</div>
+</div>
+<div class="col-first even-row-color"><code><a href="#ENDED" class="member-name-link">ENDED</a></code></div>
+<div class="col-last even-row-color">
+<div class="block">The session was ended: the terminal was told to discard its
+ session-scoped data, and no further operation of any kind is allowed
+ — create a new session for the next checkout.</div>
 </div>
 <div class="col-first odd-row-color"><code><a href="#FAILED" class="member-name-link">FAILED</a></code></div>
 <div class="col-last odd-row-color">
-<div class="block">The payment sequence failed.</div>
+<div class="block">The payment sequence failed or was aborted.</div>
 </div>
 <div class="col-first even-row-color"><code><a href="#IDENTIFIED" class="member-name-link">IDENTIFIED</a></code></div>
 <div class="col-last even-row-color">
@@ -260,14 +267,7 @@ the order they are declared.</div>
 <section class="detail" id="FAILED">
 <h3>FAILED</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></span>&nbsp;<span class="element-name">FAILED</span></div>
-<div class="block">The payment sequence failed. Retry <code>pay()</code> or void.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="ABORTED">
-<h3>ABORTED</h3>
-<div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></span>&nbsp;<span class="element-name">ABORTED</span></div>
-<div class="block">The session was aborted. Terminal state.</div>
+<div class="block">The payment sequence failed or was aborted. Retry <code>pay()</code> or void.</div>
 </section>
 </li>
 <li>
@@ -282,6 +282,15 @@ the order they are declared.</div>
 <h3>VOIDED</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></span>&nbsp;<span class="element-name">VOIDED</span></div>
 <div class="block">The transaction was voided. Terminal state.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="ENDED">
+<h3>ENDED</h3>
+<div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></span>&nbsp;<span class="element-name">ENDED</span></div>
+<div class="block">The session was ended: the terminal was told to discard its
+ session-scoped data, and no further operation of any kind is allowed
+ — create a new session for the next checkout. Terminal state.</div>
 </section>
 </li>
 </ul>

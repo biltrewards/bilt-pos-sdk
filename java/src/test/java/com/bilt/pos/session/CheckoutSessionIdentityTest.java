@@ -263,7 +263,7 @@ class CheckoutSessionIdentityTest {
                         + "\"Response\":{\"Result\":\"Success\"},"
                         + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
         session.identifyMember().execute();
-        session.addItem(com.bilt.pos.session.basket.BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        session.basket().addItem(com.bilt.pos.session.basket.BasketItem.of("SKU-1", "Item", 1, "10.00"));
 
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
@@ -274,7 +274,7 @@ class CheckoutSessionIdentityTest {
         assertEquals(SessionState.ACTIVE, session.getState());
 
         // emptying the basket now returns to IDLE, not IDENTIFIED
-        session.removeItemBySku("SKU-1");
+        session.basket().removeItemBySku("SKU-1");
         assertEquals(SessionState.IDLE, session.getState());
     }
 

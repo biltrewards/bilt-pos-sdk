@@ -93,7 +93,15 @@ loadScripts(document, 'script');</script>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">VoidResult</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">Outcome of <code>voidTransaction()</code>: the payment reversal plus a
- best-effort loyalty award reversal.</div>
+ best-effort loyalty award reversal.
+
+ <p>The result describes the movements <em>this call</em> reversed. A
+ resumed void — a retry after a partial void aborted — does not restate
+ the movements earlier attempts reversed: its amount, transaction
+ reference, and receipts cover only the legs sent this time (and may all
+ be absent when the retry found nothing left to send). A register
+ printing a void receipt should print it from the attempt that reversed
+ the money leg, or reprint via the transaction status query.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">

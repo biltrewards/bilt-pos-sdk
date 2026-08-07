@@ -46,7 +46,6 @@ import com.bilt.pos.nexo.model.TotalFilter;
 import com.bilt.pos.nexo.model.TransactionStatusRequest;
 import com.bilt.pos.nexo.model.TransactionStatusResponse;
 import com.bilt.pos.session.basket.Basket;
-import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.basket.BasketMutation;
 import com.bilt.pos.session.display.DisplayContext;
 import com.bilt.pos.session.display.DisplayRenderer;
@@ -157,6 +156,7 @@ public final class CheckoutSession implements AutoCloseable {
     private final NexoExchange exchange;
     private final DisplayRouter router;
     private final BasketEngine basketEngine = new BasketEngine();
+    private final SessionBasket basket;
     private final DisplayRenderer displayRenderer;
     private final Consumer<Basket> onBasketUpdated;
     private final String currency;
@@ -208,6 +208,22 @@ public final class CheckoutSession implements AutoCloseable {
         this.reversalManager = new ReversalManager(exchange, builder.currency);
         this.paymentOrchestrator = new PaymentOrchestrator(exchange, builder.currency);
         this.storedValueManager = new StoredValueManager(exchange, builder.currency);
+        this.basket = new SessionBasket(new SessionBasket.Host() {
+            @Override
+            public Basket mutate(Consumer<BasketMutation> mutation) {
+                return mutateBasket(mutation);
+            }
+
+            @Override
+            public Basket snapshot() {
+                lock.lock();
+                try {
+                    return basketEngine.snapshot();
+                } finally {
+                    lock.unlock();
+                }
+            }
+        });
     }
 
     /**
@@ -277,108 +293,17 @@ public final class CheckoutSession implements AutoCloseable {
         return storeLocation;
     }
 
-    /** An immutable snapshot of the current basket. */
-    public Basket getBasket() {
-        lock.lock();
-        try {
-            return basketEngine.snapshot();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    // ─── Basket Operations ───
+    // ─── Basket ───
 
     /**
-     * Adds an item. When the SKU is already in the basket, its quantity is
-     * incremented (upsert).
-     *
-     * @return the updated basket snapshot
-     * @throws IllegalStateException if the basket is frozen (payment in
-     *         progress) or the session has ended
+     * The session's basket: item and tax mutations, batch edits, and
+     * snapshots. Mutations follow the session lifecycle — they are rejected
+     * while a payment is in flight or after the session has ended, and each
+     * one refreshes the customer display when
+     * {@link Builder#autoDisplay(boolean) autoDisplay} is enabled.
      */
-    public Basket addItem(BasketItem item) {
-        Objects.requireNonNull(item, "item");
-        return mutateBasket(basket -> basket.addItem(item));
-    }
-
-    /** Adds an item with an explicit item ID (numeric string, new SKUs only). */
-    public Basket addItem(BasketItem item, String itemId) {
-        Objects.requireNonNull(item, "item");
-        Objects.requireNonNull(itemId, "itemId");
-        return mutateBasket(basket -> basket.addItem(item, itemId));
-    }
-
-    /** Removes the line with the given session-assigned item ID. */
-    public Basket removeItem(String itemId) {
-        Objects.requireNonNull(itemId, "itemId");
-        return mutateBasket(basket -> basket.removeItem(itemId));
-    }
-
-    /** Removes the line with the given SKU. */
-    public Basket removeItemBySku(String sku) {
-        Objects.requireNonNull(sku, "sku");
-        return mutateBasket(basket -> basket.removeItemBySku(sku));
-    }
-
-    /** Sets an absolute quantity; {@code 0} removes the line. */
-    public Basket updateItemQuantity(String itemId, int quantity) {
-        Objects.requireNonNull(itemId, "itemId");
-        return mutateBasket(basket -> basket.updateItemQuantity(itemId, quantity));
-    }
-
-    /** Sets an absolute quantity by SKU; {@code 0} removes the line. */
-    public Basket updateItemQuantityBySku(String sku, int quantity) {
-        Objects.requireNonNull(sku, "sku");
-        return mutateBasket(basket -> basket.updateItemQuantityBySku(sku, quantity));
-    }
-
-    /**
-     * Applies a batch of basket mutations atomically, followed by a single
-     * display update.
-     */
-    public Basket mutate(Consumer<BasketMutation> mutation) {
-        Objects.requireNonNull(mutation, "mutation");
-        return mutateBasket(mutation);
-    }
-
-    // ─── Tax ───
-
-    /** Sets the tax rate on a line ({@code taxAmount = adjustedTotal × rate});
-     * clears any explicit fixed tax amount previously set on it. */
-    public Basket setTaxRate(String itemId, BigDecimal rate) {
-        Objects.requireNonNull(itemId, "itemId");
-        Objects.requireNonNull(rate, "rate");
-        return mutateBasket(basket -> basket.setTaxRate(itemId, rate));
-    }
-
-    /** Sets the tax rate on a line by SKU. */
-    public Basket setTaxRateBySku(String sku, BigDecimal rate) {
-        Objects.requireNonNull(sku, "sku");
-        Objects.requireNonNull(rate, "rate");
-        return mutateBasket(basket -> basket.setTaxRateBySku(sku, rate));
-    }
-
-    /** Sets a fixed tax amount on a line, overriding any rate. */
-    public Basket setTaxAmount(String itemId, BigDecimal amount) {
-        Objects.requireNonNull(itemId, "itemId");
-        Objects.requireNonNull(amount, "amount");
-        return mutateBasket(basket -> basket.setTaxAmount(itemId, amount));
-    }
-
-    /** Sets a fixed tax amount on a line by SKU. */
-    public Basket setTaxAmountBySku(String sku, BigDecimal amount) {
-        Objects.requireNonNull(sku, "sku");
-        Objects.requireNonNull(amount, "amount");
-        return mutateBasket(basket -> basket.setTaxAmountBySku(sku, amount));
-    }
-
-    /**
-     * Overrides the basket's total tax; passing {@code null} restores
-     * item-level computation.
-     */
-    public Basket setTaxTotal(BigDecimal amount) {
-        return mutateBasket(basket -> basket.setTaxTotal(amount));
+    public SessionBasket basket() {
+        return basket;
     }
 
     private Basket mutateBasket(Consumer<BasketMutation> mutation) {

@@ -22,9 +22,9 @@ import java.util.Objects;
  * in the basket increments that line's quantity (upsert).</p>
  *
  * <pre>{@code
- * session.addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+ * session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
  *
- * session.addItem(BasketItem.builder()
+ * session.basket().addItem(BasketItem.builder()
  *     .sku("KRK-FRAME-5X7-BLK")
  *     .description("5x7 Black Frame")
  *     .quantity(1)

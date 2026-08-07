@@ -376,8 +376,9 @@ loadScripts(document, 'script');</script>
                                  throws <span class="exceptions">jakarta.xml.bind.JAXBException</span></div>
 <div class="block">Deserializes an <a href="InputPayload.html" title="class in com.bilt.pos.display"><code>InputPayload</code></a> from an XML string.
  <p>
- This method can parse both the normalized XML format (all elements in urn:bilt:input:v1)
- produced by <a href="#toXml(com.bilt.pos.display.InputPayload)"><code>toXml(InputPayload)</code></a> and the raw JAXB format with separate namespaces.</div>
+ Parsing is namespace-agnostic: both the normalized XML format (all elements
+ in urn:bilt:input:v1) produced by <a href="#toXml(com.bilt.pos.display.InputPayload)"><code>toXml(InputPayload)</code></a> and the raw
+ JAXB format with separate namespaces are accepted.</div>
 <dl class="notes">
 <dt>Parameters:</dt>
 <dd><code>xml</code> - the XML string to deserialize</dd>

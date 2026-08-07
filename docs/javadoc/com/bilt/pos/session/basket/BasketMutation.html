@@ -89,11 +89,11 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public interface </span><span class="element-name type-name-label">BasketMutation</span></div>
 <div class="block">Receiver for batched basket mutations via
- <code>CheckoutSession.mutate(...)</code>: all changes are applied atomically and
+ <code>session.basket().mutate(...)</code>: all changes are applied atomically and
  followed by a single display update.
 
  <pre><code>
- session.mutate(basket -&gt; basket
+ session.basket().mutate(basket -&gt; basket
      .addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"))
      .removeItemBySku("KRK-FRAME-5X7-BLK")
      .setTaxTotal(new BigDecimal("7.43")));

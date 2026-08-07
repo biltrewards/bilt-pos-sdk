@@ -85,30 +85,30 @@ class CheckoutSessionBasketTest {
     @Test
     void negativeTaxValuesAreRejected() throws Exception {
         CheckoutSession session = start(sessionBuilder().autoDisplay(false));
-        session.addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
 
         assertThrows(IllegalArgumentException.class,
-                () -> session.setTaxTotal(new BigDecimal("-100.00")));
+                () -> session.basket().setTaxTotal(new BigDecimal("-100.00")));
         assertThrows(IllegalArgumentException.class,
-                () -> session.setTaxRateBySku("SKU-1", new BigDecimal("-0.08")));
+                () -> session.basket().setTaxRateBySku("SKU-1", new BigDecimal("-0.08")));
         assertThrows(IllegalArgumentException.class,
-                () -> session.setTaxAmountBySku("SKU-1", new BigDecimal("-2.50")));
+                () -> session.basket().setTaxAmountBySku("SKU-1", new BigDecimal("-2.50")));
 
         // the rejected values left no trace on the basket
         assertEquals(0, new BigDecimal("100.00")
-                .compareTo(session.getBasket().getGrandTotal()));
+                .compareTo(session.basket().snapshot().getGrandTotal()));
     }
 
     @Test
     void mutateIsAtomicWhenABatchOperationThrows() throws Exception {
         CheckoutSession session = start(sessionBuilder().autoDisplay(false));
-        session.addItem(BasketItem.of("SKU-1", "Item", 2, "10.00"));
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 2, "10.00"));
 
-        assertThrows(IllegalArgumentException.class, () -> session.mutate(m -> m
+        assertThrows(IllegalArgumentException.class, () -> session.basket().mutate(m -> m
                 .updateItemQuantityBySku("SKU-1", 5)      // applies...
                 .removeItemBySku("NO-SUCH-SKU")));        // ...then throws
 
-        Basket basket = session.getBasket();
+        Basket basket = session.basket().snapshot();
         assertEquals(2, basket.getItem("1").getQuantity(),
                 "a failed batch must leave the basket untouched");
         assertEquals(SessionState.ACTIVE, session.getState());
@@ -119,9 +119,9 @@ class CheckoutSessionBasketTest {
         CheckoutSession session = start(sessionBuilder().autoDisplay(false));
 
         assertEquals(SessionState.IDLE, session.getState());
-        session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
         assertEquals(SessionState.ACTIVE, session.getState());
-        session.removeItemBySku("SKU-1");
+        session.basket().removeItemBySku("SKU-1");
         assertEquals(SessionState.IDLE, session.getState());
     }
 
@@ -132,7 +132,7 @@ class CheckoutSessionBasketTest {
         session.end().get();
 
         assertThrows(IllegalStateException.class,
-                () -> session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00")));
+                () -> session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00")));
     }
 
     // ─── Totals through the session API ───
@@ -141,22 +141,22 @@ class CheckoutSessionBasketTest {
     void designDocScanningExample() throws Exception {
         CheckoutSession session = start(sessionBuilder().autoDisplay(false));
 
-        Basket basket = session.addItem(
+        Basket basket = session.basket().addItem(
                 BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
         assertEquals(new BigDecimal("49.98"), basket.getGrandTotal());
 
-        basket = session.addItem(BasketItem.of("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99"));
+        basket = session.basket().addItem(BasketItem.of("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99"));
         assertEquals(new BigDecimal("64.97"), basket.getGrandTotal());
 
-        basket = session.addItem(
+        basket = session.basket().addItem(
                 BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
         assertEquals(new BigDecimal("89.96"), basket.getGrandTotal());
 
-        session.setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
-        basket = session.setTaxRateBySku("KRK-FRAME-5X7-BLK", new BigDecimal("0.08875"));
+        session.basket().setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
+        basket = session.basket().setTaxRateBySku("KRK-FRAME-5X7-BLK", new BigDecimal("0.08875"));
         assertEquals(new BigDecimal("97.94"), basket.getGrandTotal());
 
-        assertEquals(basket.getGrandTotal(), session.getBasket().getGrandTotal());
+        assertEquals(basket.getGrandTotal(), session.basket().snapshot().getGrandTotal());
     }
 
     // ─── Auto-display ───
@@ -165,7 +165,7 @@ class CheckoutSessionBasketTest {
     void addItemSendsItemisedReceiptDisplay() throws Exception {
         CheckoutSession session = start(sessionBuilder());
 
-        session.addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+        session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
 
         DisplayPayload payload = nextDisplayPayload();
         assertEquals("receipt.xslt", payload.getLayout());
@@ -181,8 +181,8 @@ class CheckoutSessionBasketTest {
     void autoDisplayOffSendsNothing() throws Exception {
         CheckoutSession session = start(sessionBuilder().autoDisplay(false));
 
-        session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
-        session.setTaxTotal(new BigDecimal("1.00"));
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        session.basket().setTaxTotal(new BigDecimal("1.00"));
 
         assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
     }
@@ -191,7 +191,7 @@ class CheckoutSessionBasketTest {
     void mutateBatchesToSingleDisplayUpdate() throws Exception {
         CheckoutSession session = start(sessionBuilder());
 
-        Basket basket = session.mutate(m -> m
+        Basket basket = session.basket().mutate(m -> m
                 .addItem(BasketItem.of("SKU-1", "Item One", 1, "10.00"))
                 .addItem(BasketItem.of("SKU-2", "Item Two", 2, "5.00"))
                 .setTaxTotal(new BigDecimal("1.60")));
@@ -208,7 +208,7 @@ class CheckoutSessionBasketTest {
         CheckoutSession session = start(sessionBuilder()
                 .displayRenderer((basket, context) -> DisplayPayloadHelper.standby("custom")));
 
-        session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
 
         DisplayPayload payload = nextDisplayPayload();
         assertNotNull(payload.getStandby());
@@ -219,7 +219,7 @@ class CheckoutSessionBasketTest {
         CheckoutSession session = start(sessionBuilder());
         server.shutdown();
 
-        Basket basket = session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        Basket basket = session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
 
         assertEquals(new BigDecimal("10.00"), basket.getGrandTotal());
         assertEquals(SessionState.ACTIVE, session.getState());
@@ -232,7 +232,7 @@ class CheckoutSessionBasketTest {
                     throw new IllegalStateException("renderer bug");
                 }));
 
-        assertDoesNotThrow(() -> session.addItem(BasketItem.of("SKU-1", "Item", 1, "10.00")));
+        assertDoesNotThrow(() -> session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00")));
         assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
     }
 }

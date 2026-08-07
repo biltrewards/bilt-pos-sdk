@@ -87,7 +87,7 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color all-classes-table all-classes-table-tab1"><a href="com/bilt/pos/session/basket/BasketMutation.html" title="interface in com.bilt.pos.session.basket">BasketMutation</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab1">
 <div class="block">Receiver for batched basket mutations via
- <code>CheckoutSession.mutate(...)</code>: all changes are applied atomically and
+ <code>session.basket().mutate(...)</code>: all changes are applied atomically and
  followed by a single display update.</div>
 </div>
 <div class="col-first even-row-color all-classes-table all-classes-table-tab5"><a href="com/bilt/pos/nexo/client/BiltNexoClientException.html" title="class in com.bilt.pos.nexo.client">BiltNexoClientException</a></div>
@@ -390,36 +390,68 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Builder for <a href="com/bilt/pos/session/RefundResult.html" title="class in com.bilt.pos.session"><code>RefundResult</code></a>.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/identity/Reward.html" title="class in com.bilt.pos.session.identity">Reward</a></div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab3">
+<div class="block">How a reversal flow proceeds after one of its steps failed, returned by
+ the handler registered with <a href="com/bilt/pos/session/ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a>.</div>
+</div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow&lt;T&gt;</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="block">The reversal chain returned by the <code>voidTransaction()</code> and
+ <code>refund</code> operations of <a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> (this session's own
+ payment) and <a href="com/bilt/pos/session/ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a> (a referenced prior sale).</div>
+</div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/ReversalSession.html" title="class in com.bilt.pos.session">ReversalSession</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="block">A referenced reversal of a prior sale — void or refund from a fresh
+ session, in a later process, long after the <a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> that
+ took the payment is gone.</div>
+</div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="block">Builder for <a href="com/bilt/pos/session/ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>.</div>
+</div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab3">
+<div class="block">One reversible leg of a sale, as reported to
+ <a href="com/bilt/pos/session/ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a> when a reversal step fails.</div>
+</div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/identity/Reward.html" title="class in com.bilt.pos.session.identity">Reward</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">A reward or coupon available to an identified member.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/identity/RewardType.html" title="enum class in com.bilt.pos.session.identity">RewardType</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab3">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/identity/RewardType.html" title="enum class in com.bilt.pos.session.identity">RewardType</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab3">
 <div class="block">Kind of a loyalty <a href="com/bilt/pos/session/identity/Reward.html" title="class in com.bilt.pos.session.identity"><code>Reward</code></a>.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/nexo/security/SaleToPOISecuredMessage.html" title="class in com.bilt.pos.nexo.security">SaleToPOISecuredMessage</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/nexo/security/SaleToPOISecuredMessage.html" title="class in com.bilt.pos.nexo.security">SaleToPOISecuredMessage</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">An encrypted Nexo Sale to POI message using CMS structures.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/SectionItemsType.html" title="class in com.bilt.pos.display">SectionItemsType</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/SectionItemsType.html" title="class in com.bilt.pos.display">SectionItemsType</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Java class for SectionItemsType complex type</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/SectionItemType.html" title="class in com.bilt.pos.display">SectionItemType</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/SectionItemType.html" title="class in com.bilt.pos.display">SectionItemType</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Java class for SectionItemType complex type</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/SectionType.html" title="class in com.bilt.pos.display">SectionType</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/SectionType.html" title="class in com.bilt.pos.display">SectionType</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Java class for SectionType complex type</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/nexo/security/SecurityKey.html" title="class in com.bilt.pos.nexo.security">SecurityKey</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/nexo/security/SecurityKey.html" title="class in com.bilt.pos.nexo.security">SecurityKey</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Holds the shared secret and metadata required for Nexo message encryption.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/nexo/security/SecurityKey.Builder.html" title="class in com.bilt.pos.nexo.security">SecurityKey.Builder</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">&nbsp;</div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/nexo/security/SecurityKey.Builder.html" title="class in com.bilt.pos.nexo.security">SecurityKey.Builder</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">&nbsp;</div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="block">The basket surface of a session, obtained via
+ <a href="com/bilt/pos/session/CheckoutSession.html#basket()"><code>CheckoutSession.basket()</code></a>: item and tax mutations, batch edits,
+ and immutable snapshots.</div>
+</div>
 <div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/SessionError.html" title="class in com.bilt.pos.session">SessionError</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Describes why a session operation failed.</div>
@@ -439,7 +471,9 @@ loadScripts(document, 'script');</script>
 </div>
 <div class="col-first odd-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab3">
-<div class="block">Lifecycle state of a <a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a>.</div>
+<div class="block">Lifecycle state of a <a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> (full diagram below) or a
+ <a href="com/bilt/pos/session/ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>, which only ever moves <code>IDLE → VOIDING →
+ VOIDED</code> (or <code>ENDED</code>).</div>
 </div>
 <div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/input/Signature.html" title="class in com.bilt.pos.session.input">Signature</a></div>
 <div class="col-last even-row-color all-classes-table all-classes-table-tab2">

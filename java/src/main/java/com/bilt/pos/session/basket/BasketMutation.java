@@ -13,11 +13,11 @@ import java.math.BigDecimal;
 
 /**
  * Receiver for batched basket mutations via
- * {@code CheckoutSession.mutate(...)}: all changes are applied atomically and
+ * {@code session.basket().mutate(...)}: all changes are applied atomically and
  * followed by a single display update.
  *
  * <pre>{@code
- * session.mutate(basket -> basket
+ * session.basket().mutate(basket -> basket
  *     .addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"))
  *     .removeItemBySku("KRK-FRAME-5X7-BLK")
  *     .setTaxTotal(new BigDecimal("7.43")));

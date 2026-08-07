@@ -121,17 +121,23 @@ loadScripts(document, 'script');</script>
  amount.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PaymentOptions.Builder.html" title="class in com.bilt.pos.session.payment">PaymentOptions.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#disablePoints(boolean)" class="member-name-link">disablePoints</a><wbr>(boolean&nbsp;disablePoints)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#disableAward(boolean)" class="member-name-link">disableAward</a><wbr>(boolean&nbsp;disableAward)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Skips the loyalty award step, so the member earns no points on
+ this checkout.</div>
+</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PaymentOptions.Builder.html" title="class in com.bilt.pos.session.payment">PaymentOptions.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#disableRebates(boolean)" class="member-name-link">disableRebates</a><wbr>(boolean&nbsp;disableRebates)</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#disablePoints(boolean)" class="member-name-link">disablePoints</a><wbr>(boolean&nbsp;disablePoints)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PaymentOptions.Builder.html" title="class in com.bilt.pos.session.payment">PaymentOptions.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#paymentProcessingDisplay(com.bilt.pos.display.DisplayPayload)" class="member-name-link">paymentProcessingDisplay</a><wbr>(<a href="../../display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a>&nbsp;paymentProcessingDisplay)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#disableRebates(boolean)" class="member-name-link">disableRebates</a><wbr>(boolean&nbsp;disableRebates)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PaymentOptions.Builder.html" title="class in com.bilt.pos.session.payment">PaymentOptions.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#voidAndAbort(boolean)" class="member-name-link">voidAndAbort</a><wbr>(boolean&nbsp;voidAndAbort)</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#paymentProcessingDisplay(com.bilt.pos.display.DisplayPayload)" class="member-name-link">paymentProcessingDisplay</a><wbr>(<a href="../../display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a>&nbsp;paymentProcessingDisplay)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PaymentOptions.Builder.html" title="class in com.bilt.pos.session.payment">PaymentOptions.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#voidAndAbort(boolean)" class="member-name-link">voidAndAbort</a><wbr>(boolean&nbsp;voidAndAbort)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 </div>
 </div>
 </div>
@@ -159,6 +165,16 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="disablePoints(boolean)">
 <h3>disablePoints</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="PaymentOptions.Builder.html" title="class in com.bilt.pos.session.payment">PaymentOptions.Builder</a></span>&nbsp;<span class="element-name">disablePoints</span><wbr><span class="parameters">(boolean&nbsp;disablePoints)</span></div>
+</section>
+</li>
+<li>
+<section class="detail" id="disableAward(boolean)">
+<h3>disableAward</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="PaymentOptions.Builder.html" title="class in com.bilt.pos.session.payment">PaymentOptions.Builder</a></span>&nbsp;<span class="element-name">disableAward</span><wbr><span class="parameters">(boolean&nbsp;disableAward)</span></div>
+<div class="block">Skips the loyalty award step, so the member earns no points on
+ this checkout. Redemptions are unaffected — combine with
+ <a href="#disableRebates(boolean)"><code>disableRebates(boolean)</code></a> and <a href="#disablePoints(boolean)"><code>disablePoints(boolean)</code></a>
+ to run a fully loyalty-free payment.</div>
 </section>
 </li>
 <li>

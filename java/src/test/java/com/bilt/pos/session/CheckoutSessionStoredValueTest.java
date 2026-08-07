@@ -204,7 +204,7 @@ class CheckoutSessionStoredValueTest {
 
     @Test
     void payStoredValueStepCarriesProviderAndEntryMode() throws Exception {
-        session.addItem(BasketItem.of("SKU-1", "Item", 1, "50.00"));
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "50.00"));
         session.setStoredValueCard(StoredValueCard.scanned("GC-9").withProvider("svs"));
 
         server.enqueue(new MockResponse().setBody(
