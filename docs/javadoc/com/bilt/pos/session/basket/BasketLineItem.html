@@ -96,7 +96,11 @@ loadScripts(document, 'script');</script>
 
  <p><code>rebateAmount</code> and <code>rebateLabel</code> are zero/<code>null</code> while
  the cart is being built; they are populated on the baskets delivered during
- payment orchestration, after the terminal commits offers.</p></div>
+ payment orchestration, after the terminal commits offers.</p>
+
+ <p>On a credit line (<a href="#isCredit()"><code>isCredit()</code></a>) the totals — <code>originalTotal</code>,
+ <code>adjustedTotal</code>, and <code>taxAmount</code> — are negative; quantity and
+ unit price stay positive counts and catalog prices.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -157,7 +161,7 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getOriginalTotal()" class="member-name-link">getOriginalTotal</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block"><code>unitPrice × quantity</code>.</div>
+<div class="block"><code>unitPrice × quantity</code>, negated on a credit line.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getQuantity()" class="member-name-link">getQuantity</a>()</code></div>
@@ -188,6 +192,12 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getUnitPrice()" class="member-name-link">getUnitPrice</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isCredit()" class="member-name-link">isCredit</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Whether this line subtracts from the basket (return, trade-in); its
+ totals and tax are negative.</div>
+</div>
 </div>
 </div>
 </div>
@@ -250,10 +260,18 @@ loadScripts(document, 'script');</script>
 </section>
 </li>
 <li>
+<section class="detail" id="isCredit()">
+<h3>isCredit</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">isCredit</span>()</div>
+<div class="block">Whether this line subtracts from the basket (return, trade-in); its
+ totals and tax are negative.</div>
+</section>
+</li>
+<li>
 <section class="detail" id="getOriginalTotal()">
 <h3>getOriginalTotal</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getOriginalTotal</span>()</div>
-<div class="block"><code>unitPrice × quantity</code>.</div>
+<div class="block"><code>unitPrice × quantity</code>, negated on a credit line.</div>
 </section>
 </li>
 <li>

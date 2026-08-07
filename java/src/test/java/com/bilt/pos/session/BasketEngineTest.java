@@ -276,4 +276,106 @@ class BasketEngineTest {
         assertEquals(0, BigDecimal.ZERO.compareTo(basket.getRebateTotal()));
         assertEquals(0, BigDecimal.ZERO.compareTo(basket.getStoredValueTotal()));
     }
+
+    // ─── Credit lines ───
+
+    @Test
+    void creditLineNegatesTotalsAndTax() {
+        BasketEngine engine = new BasketEngine();
+        engine.addItem(BasketItem.builder()
+                .sku("KRK-CNDL-LRG-VAN").description("Large Vanilla Candle")
+                .quantity(2).unitPrice(new BigDecimal("24.99"))
+                .taxRate(new BigDecimal("0.08875"))
+                .credit(true)
+                .build());
+
+        Basket basket = engine.snapshot();
+        BasketLineItem line = basket.getItem("1");
+        assertTrue(line.isCredit());
+        assertEquals(2, line.getQuantity(), "quantity stays a positive count");
+        assertEquals(new BigDecimal("24.99"), line.getUnitPrice(),
+                "unit price stays the catalog price");
+        assertEquals(new BigDecimal("-49.98"), line.getOriginalTotal());
+        assertEquals(new BigDecimal("-4.44"), line.getTaxAmount(),
+                "tax follows the line's direction");
+        assertEquals(new BigDecimal("-54.42"), basket.getGrandTotal());
+    }
+
+    @Test
+    void creditLineWithFixedTaxAmountNegatesTheMagnitude() {
+        BasketEngine engine = new BasketEngine();
+        engine.addItem(BasketItem.credit("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+        engine.setTaxAmountBySku("KRK-CNDL-LRG-VAN", new BigDecimal("2.00"));
+
+        Basket basket = engine.snapshot();
+        assertEquals(new BigDecimal("-2.00"), basket.getItem("1").getTaxAmount(),
+                "tax amounts are set as magnitudes; the direction supplies the sign");
+        assertEquals(new BigDecimal("-26.99"), basket.getGrandTotal());
+    }
+
+    @Test
+    void saleAndCreditLinesOfTheSameSkuStaySeparate() {
+        BasketEngine engine = new BasketEngine();
+        engine.addItem(candle(2));
+        engine.addItem(BasketItem.credit("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+
+        Basket basket = engine.snapshot();
+        assertEquals(2, basket.getItemCount(),
+                "opposite directions never upsert into each other");
+        assertEquals(new BigDecimal("24.99"), basket.getGrandTotal());
+
+        // the upsert keys on (SKU, direction): another credit of the same
+        // SKU lands on the credit line
+        engine.addItem(BasketItem.credit("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+        basket = engine.snapshot();
+        assertEquals(2, basket.getItemCount());
+        assertEquals(new BigDecimal("0.00"), basket.getGrandTotal());
+    }
+
+    @Test
+    void bySkuAddressingPrefersTheSaleLine() {
+        BasketEngine engine = new BasketEngine();
+        engine.addItem(candle(2));                                             // itemId 1
+        engine.addItem(BasketItem.credit(
+                "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));      // itemId 2
+
+        engine.updateItemQuantityBySku("KRK-CNDL-LRG-VAN", 5);
+
+        Basket basket = engine.snapshot();
+        assertEquals(5, basket.getItem("1").getQuantity(),
+                "BySku targets the sale line when both directions exist");
+        assertEquals(1, basket.getItem("2").getQuantity());
+        assertEquals("1", basket.getItemBySku("KRK-CNDL-LRG-VAN").getItemId());
+
+        // with only the credit line left, the SKU alone is unambiguous
+        engine.removeItem("1");
+        engine.updateItemQuantityBySku("KRK-CNDL-LRG-VAN", 3);
+        assertEquals(3, engine.snapshot().getItem("2").getQuantity());
+    }
+
+    @Test
+    void creditCartNegatesTheTaxTotalOverride() {
+        BasketEngine cart = new BasketEngine(true);
+        cart.addItem(candle(1));
+        cart.setTaxTotal(new BigDecimal("2.00"));
+
+        Basket basket = cart.snapshot();
+        assertEquals(new BigDecimal("-2.00"), basket.getTaxTotal(),
+                "the override is a magnitude; the cart's direction supplies the sign");
+        assertEquals(new BigDecimal("-26.99"), basket.getGrandTotal(),
+                "tax returned with the merchandise, not netted against it");
+    }
+
+    @Test
+    void creditCartForcesEveryLineToTheCreditSide() {
+        BasketEngine cart = new BasketEngine(true);
+        cart.addItem(candle(1));   // a plain sale item — the cart flips it
+
+        Basket basket = cart.snapshot();
+        assertTrue(basket.getItem("1").isCredit());
+        assertEquals(new BigDecimal("-24.99"), basket.getGrandTotal());
+
+        cart.clear();
+        assertTrue(cart.snapshot().isEmpty());
+    }
 }

@@ -20,6 +20,10 @@ import java.util.Map;
  * <p>{@code rebateAmount} and {@code rebateLabel} are zero/{@code null} while
  * the cart is being built; they are populated on the baskets delivered during
  * payment orchestration, after the terminal commits offers.</p>
+ *
+ * <p>On a credit line ({@link #isCredit()}) the totals — {@code originalTotal},
+ * {@code adjustedTotal}, and {@code taxAmount} — are negative; quantity and
+ * unit price stay positive counts and catalog prices.</p>
  */
 public final class BasketLineItem {
 
@@ -29,6 +33,7 @@ public final class BasketLineItem {
     private final String category;
     private final int quantity;
     private final BigDecimal unitPrice;
+    private final boolean credit;
     private final BigDecimal originalTotal;
     private final BigDecimal rebateAmount;
     private final String rebateLabel;
@@ -44,6 +49,7 @@ public final class BasketLineItem {
         this.category = builder.category;
         this.quantity = builder.quantity;
         this.unitPrice = builder.unitPrice;
+        this.credit = builder.credit;
         this.originalTotal = builder.originalTotal;
         this.rebateAmount = builder.rebateAmount;
         this.rebateLabel = builder.rebateLabel;
@@ -85,7 +91,15 @@ public final class BasketLineItem {
         return unitPrice;
     }
 
-    /** {@code unitPrice × quantity}. */
+    /**
+     * Whether this line subtracts from the basket (return, trade-in); its
+     * totals and tax are negative.
+     */
+    public boolean isCredit() {
+        return credit;
+    }
+
+    /** {@code unitPrice × quantity}, negated on a credit line. */
     public BigDecimal getOriginalTotal() {
         return originalTotal;
     }
@@ -129,6 +143,7 @@ public final class BasketLineItem {
         private String category;
         private int quantity;
         private BigDecimal unitPrice;
+        private boolean credit;
         private BigDecimal originalTotal;
         private BigDecimal rebateAmount = BigDecimal.ZERO;
         private String rebateLabel;
@@ -167,6 +182,11 @@ public final class BasketLineItem {
 
         public Builder unitPrice(BigDecimal unitPrice) {
             this.unitPrice = unitPrice;
+            return this;
+        }
+
+        public Builder credit(boolean credit) {
+            this.credit = credit;
             return this;
         }
 

@@ -47,9 +47,7 @@ import com.bilt.pos.nexo.model.TransactionStatusRequest;
 import com.bilt.pos.nexo.model.TransactionStatusResponse;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketMutation;
-import com.bilt.pos.session.display.DisplayContext;
 import com.bilt.pos.session.display.DisplayRenderer;
-import com.bilt.pos.session.display.DisplayTarget;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
 import com.bilt.pos.session.identity.CardAcquisitionResult;
 import com.bilt.pos.session.identity.IdentifyOptions;
@@ -64,6 +62,7 @@ import com.bilt.pos.session.input.PinMode;
 import com.bilt.pos.session.input.PinOptions;
 import com.bilt.pos.session.input.PinResult;
 import com.bilt.pos.session.input.Signature;
+import com.bilt.pos.session.internal.BasketDisplay;
 import com.bilt.pos.session.internal.BasketDisplayRenderer;
 import com.bilt.pos.session.internal.BasketEngine;
 import com.bilt.pos.session.internal.DisplayRouter;
@@ -100,7 +99,6 @@ import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -157,6 +155,7 @@ public final class CheckoutSession implements AutoCloseable {
     private final DisplayRouter router;
     private final BasketEngine basketEngine = new BasketEngine();
     private final SessionBasket basket;
+    private final BasketDisplay display;
     private final DisplayRenderer displayRenderer;
     private final Consumer<Basket> onBasketUpdated;
     private final String currency;
@@ -208,6 +207,7 @@ public final class CheckoutSession implements AutoCloseable {
         this.reversalManager = new ReversalManager(exchange, builder.currency);
         this.paymentOrchestrator = new PaymentOrchestrator(exchange, builder.currency);
         this.storedValueManager = new StoredValueManager(exchange, builder.currency);
+        this.display = new BasketDisplay(exchange, displayRenderer, builder.currency);
         this.basket = new SessionBasket(new SessionBasket.Host() {
             @Override
             public Basket mutate(Consumer<BasketMutation> mutation) {
@@ -932,7 +932,7 @@ public final class CheckoutSession implements AutoCloseable {
         // even when unlinked, since through a checkout session an unlinked
         // refund is almost certainly returning this checkout's money
         boolean awardReversed = guards.awardReversed();
-        return reversalManager.refund(amount,
+        return reversalManager.refund(amount, null,
                 paid.poiTransactionId, paid.poiTransactionTimestamp,
                 awardReversed ? null : paid.awardPoiTransactionId,
                 awardReversed ? null : paid.awardPoiTransactionTimestamp,
@@ -1156,19 +1156,7 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     private void showBasket(Basket basket) {
-        DisplayContext context = new DisplayContext(stateMachine.current(),
-                router.hasExternalDisplay() ? DisplayTarget.EXTERNAL : DisplayTarget.TERMINAL,
-                currency);
-        DisplayPayload payload;
-        try {
-            payload = displayRenderer.render(basket, context);
-        } catch (RuntimeException e) {
-            LOGGER.log(Level.WARNING, "display renderer failed", e);
-            return;
-        }
-        if (payload != null) {
-            updateDisplay(payload);
-        }
+        display.show(basket, stateMachine.current());
     }
 
     /**
@@ -1180,28 +1168,7 @@ public final class CheckoutSession implements AutoCloseable {
      */
     public void updateDisplay(DisplayPayload payload) {
         Objects.requireNonNull(payload, "payload");
-        String base64;
-        try {
-            base64 = DisplayPayloadHelper.toBase64(payload);
-        } catch (JAXBException e) {
-            LOGGER.log(Level.WARNING, "failed to serialize display payload", e);
-            return;
-        }
-        sendDisplay(base64);
-    }
-
-    private void sendDisplay(String base64Xhtml) {
-        // display is best-effort and never throws, so an ended session skips
-        // quietly instead of failing like the SessionResult operations do
-        if (stateMachine.current() == SessionState.ENDED) {
-            LOGGER.warning("display update skipped: the session has ended");
-            return;
-        }
-        try {
-            exchange.send(MessageCategoryType.DISPLAY, factory.displayRequest(base64Xhtml));
-        } catch (SessionException e) {
-            LOGGER.log(Level.WARNING, "display update failed: " + e.getError(), e);
-        }
+        display.send(payload, stateMachine.current());
     }
 
     // ─── Abort ───

@@ -10,12 +10,19 @@
 package com.bilt.pos.session;
 
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.basket.BasketMutation;
+import com.bilt.pos.session.display.DisplayRenderer;
+import com.bilt.pos.session.internal.BasketDisplay;
+import com.bilt.pos.session.internal.BasketDisplayRenderer;
+import com.bilt.pos.session.internal.BasketEngine;
 import com.bilt.pos.session.internal.DisplayRouter;
 import com.bilt.pos.session.internal.NexoExchange;
 import com.bilt.pos.session.internal.NexoMessageFactory;
 import com.bilt.pos.session.internal.PoiRef;
 import com.bilt.pos.session.internal.ReversalManager;
 import com.bilt.pos.session.internal.ReversalMovement;
+import com.bilt.pos.session.internal.SaleItemMapper;
 import com.bilt.pos.session.internal.SessionSignalCodec;
 import com.bilt.pos.session.internal.SessionStateMachine;
 
@@ -26,6 +33,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
@@ -42,6 +50,14 @@ import java.util.logging.Logger;
  * money against the card leg and reverse the award. Reversing the payment
  * this session's own checkout just took needs no references —
  * {@code CheckoutSession} does that itself.</p>
+ *
+ * <p>For an item-based refund, ring the returned items into the session's
+ * refund cart ({@link #basket()}) — every line is a credit line, so each
+ * mutation refreshes the customer display with negative amounts — and
+ * execute with {@link #refundBasket()}, which refunds the cart total
+ * against the card leg with the returned items attached. Which items and
+ * quantities may be returned is the register's call; the cart itself is
+ * free-form.</p>
  *
  * <p>Like a checkout, the session is bracketed on the terminal: the
  * builder's {@link Builder#start() start()} announces it (Nexo {@code Admin}
@@ -82,6 +98,11 @@ public final class ReversalSession implements AutoCloseable {
     private final BiltNexoTerminalClient client;
     private final NexoExchange exchange;
     private final ReversalManager reversalManager;
+    // the refund cart: a credit-side engine — every ring is a return
+    private final BasketEngine basketEngine = new BasketEngine(true);
+    private final SessionBasket basket;
+    private final BasketDisplay display;
+    private final boolean autoDisplay;
     private final String currency;
     private final String storeLocation;
 
@@ -118,8 +139,35 @@ public final class ReversalSession implements AutoCloseable {
         this.memberId = builder.memberId;
         NexoMessageFactory factory = new NexoMessageFactory(
                 builder.saleId, builder.poiId, builder.storeLocation);
-        this.exchange = new NexoExchange(new DisplayRouter(builder.client, null), factory);
+        this.exchange = new NexoExchange(
+                new DisplayRouter(builder.client, builder.externalDisplayClient), factory);
         this.reversalManager = new ReversalManager(exchange, builder.currency);
+        this.autoDisplay = builder.autoDisplay;
+        this.display = new BasketDisplay(exchange,
+                builder.displayRenderer != null
+                        ? builder.displayRenderer : new BasketDisplayRenderer(),
+                builder.currency);
+        this.basket = new SessionBasket(new SessionBasket.Host() {
+            @Override
+            public Basket mutate(Consumer<BasketMutation> mutation) {
+                SessionState state = stateMachine.current();
+                if (state != SessionState.IDLE) {
+                    throw new IllegalStateException(
+                            "the refund cart cannot be modified in state " + state);
+                }
+                basketEngine.mutateAtomically(mutation);
+                Basket snapshot = basketEngine.snapshot();
+                if (autoDisplay) {
+                    display.show(snapshot, stateMachine.current());
+                }
+                return snapshot;
+            }
+
+            @Override
+            public Basket snapshot() {
+                return basketEngine.snapshot();
+            }
+        });
     }
 
     public static Builder builder() {
@@ -146,6 +194,22 @@ public final class ReversalSession implements AutoCloseable {
     /** Store location identifier, or {@code null} if not configured. */
     public String getStoreLocation() {
         return storeLocation;
+    }
+
+    // ─── Refund cart ───
+
+    /**
+     * The session's refund cart: the items being returned, rung in like a
+     * checkout basket. Every line is a credit line — totals are negative
+     * and, with {@link Builder#autoDisplay(boolean) autoDisplay} enabled
+     * (the default), each mutation refreshes the customer display with the
+     * itemised returns. Mutations are allowed until a void or {@code end()}
+     * seals the session; {@link #refundBasket()} consumes the cart. The
+     * cart is free-form — whether an item may be returned, and in what
+     * quantity, is the register's decision.
+     */
+    public SessionBasket basket() {
+        return basket;
     }
 
     // ─── Void ───
@@ -231,21 +295,89 @@ public final class ReversalSession implements AutoCloseable {
 
     private RefundResult executeRefund(ReversalFlow<RefundResult> flow, BigDecimal amount) {
         operations.begin("refund");
-        requireState(EnumSet.of(SessionState.IDLE), "refund");
-        guards.requireNoReversedMoneyLeg();
-        if (poiTransactionId == null) {
-            throw invalidState(
-                    "a linked refund requires poiTransactionId on the session builder");
-        }
+        requireLinkedRefundable();
         // the void guard follows the money — see ReversalGuards
         boolean awardReversed = guards.awardReversed();
-        return reversalManager.refund(amount,
+        return reversalManager.refund(amount, null,
                 poiTransactionId, poiTransactionTimestamp,
                 awardReversed ? null : awardPoiTransactionId,
                 awardReversed ? null : awardPoiTransactionTimestamp,
                 memberId, flow.decider(),
                 guards::markRefunded,
                 guards::markAwardReversed);
+    }
+
+    /**
+     * Item-based linked refund: refunds the refund cart's total against the
+     * referenced card leg, with the returned items attached to the refund's
+     * {@code PaymentRequest}. Also reverses the loyalty award when
+     * {@code awardPoiTransactionId} was supplied — best-effort by default,
+     * like {@link #refund()}, and subject to the same guards.
+     *
+     * <p>The cart is consumed (cleared, with a display refresh under
+     * {@code autoDisplay}) the moment the tender refund moves money — even
+     * when a later award step aborts the flow, so a retry can never re-send
+     * the same returns. While no money has moved — the refund failed, or
+     * the tender was skipped by an {@code onError} decision — the cart
+     * stays intact for a retry. Ring the next return into {@link #basket()}
+     * for a further partial refund — the acquirer enforces the cumulative
+     * limit.</p>
+     */
+    public ReversalFlow<RefundResult> refundBasket() {
+        operations.track("refundBasket");
+        return new ReversalFlow<>(this::executeRefundBasket);
+    }
+
+    private RefundResult executeRefundBasket(ReversalFlow<RefundResult> flow) {
+        operations.begin("refundBasket");
+        requireLinkedRefundable();
+        Basket cart = basketEngine.snapshot();
+        if (cart.isEmpty()) {
+            throw invalidState("refundBasket() requires items in the refund cart");
+        }
+        // cart lines are credits, so the total is negative; the refund
+        // amount is its magnitude
+        BigDecimal amount = cart.getGrandTotal().negate();
+        if (amount.signum() <= 0) {
+            throw invalidState("the refund cart total is not positive "
+                    + "(zero-priced items only); a refund cannot start");
+        }
+        boolean awardReversed = guards.awardReversed();
+        // the cart is consumed the moment the tender refund moves money —
+        // even when a later award step aborts the flow, a retry must not
+        // re-send the same returns — and only then: a tender skipped by
+        // decision leaves the cart intact, or the returns could never be
+        // refunded at all
+        boolean[] tenderRefunded = {false};
+        try {
+            return reversalManager.refund(amount,
+                    SaleItemMapper.toRefundSaleItems(cart),
+                    poiTransactionId, poiTransactionTimestamp,
+                    awardReversed ? null : awardPoiTransactionId,
+                    awardReversed ? null : awardPoiTransactionTimestamp,
+                    memberId, flow.decider(),
+                    () -> {
+                        guards.markRefunded();
+                        tenderRefunded[0] = true;
+                    },
+                    guards::markAwardReversed);
+        } finally {
+            if (tenderRefunded[0]) {
+                basketEngine.clear();
+                if (autoDisplay) {
+                    display.show(basketEngine.snapshot(), stateMachine.current());
+                }
+            }
+        }
+    }
+
+    private void requireLinkedRefundable() {
+        requireState(EnumSet.of(SessionState.IDLE), "refund");
+        guards.requireNoReversedMoneyLeg();
+        if (poiTransactionId == null) {
+            throw invalidState(
+                    "a linked refund requires poiTransactionId on the session builder");
+        }
     }
 
     /** The referenced movements of the original sale, in reversal order. */
@@ -353,6 +485,9 @@ public final class ReversalSession implements AutoCloseable {
         private String poiId;
         private String currency;
         private String storeLocation;
+        private boolean autoDisplay = true;
+        private BiltNexoTerminalClient externalDisplayClient;
+        private DisplayRenderer displayRenderer;
         private String poiTransactionId;
         private Instant poiTransactionTimestamp;
         private String storedValuePoiTransactionId;
@@ -399,6 +534,35 @@ public final class ReversalSession implements AutoCloseable {
          */
         public Builder storeLocation(String storeLocation) {
             this.storeLocation = storeLocation;
+            return this;
+        }
+
+        /**
+         * Whether refund cart mutations automatically refresh the customer
+         * display. Default {@code true}.
+         */
+        public Builder autoDisplay(boolean autoDisplay) {
+            this.autoDisplay = autoDisplay;
+            return this;
+        }
+
+        /**
+         * A second client for an external customer display device. When set,
+         * {@code Display} messages are routed to it, while the money and
+         * loyalty operations stay on the terminal.
+         */
+        public Builder externalDisplayClient(BiltNexoTerminalClient externalDisplayClient) {
+            this.externalDisplayClient = externalDisplayClient;
+            return this;
+        }
+
+        /**
+         * Custom rendering of refund cart snapshots for the customer
+         * display. Rarely necessary; defaults to the standard itemised
+         * receipt, whose credit lines print negative.
+         */
+        public Builder displayRenderer(DisplayRenderer displayRenderer) {
+            this.displayRenderer = displayRenderer;
             return this;
         }
 

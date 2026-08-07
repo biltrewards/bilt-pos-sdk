@@ -117,14 +117,24 @@ public final class Basket {
         return null;
     }
 
-    /** The line with the given SKU, or {@code null}. */
+    /**
+     * The line with the given SKU, or {@code null}. When the SKU is present
+     * in both directions (a sale line and a credit line), the sale line is
+     * returned — credit lines are addressed by itemId.
+     */
     public BasketLineItem getItemBySku(String sku) {
+        BasketLineItem creditLine = null;
         for (BasketLineItem item : items) {
             if (item.getSku().equals(sku)) {
-                return item;
+                if (!item.isCredit()) {
+                    return item;
+                }
+                if (creditLine == null) {
+                    creditLine = item;
+                }
             }
         }
-        return null;
+        return creditLine;
     }
 
     public boolean isEmpty() {
