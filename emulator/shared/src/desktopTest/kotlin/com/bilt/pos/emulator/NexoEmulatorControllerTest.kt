@@ -10,6 +10,7 @@ import com.bilt.pos.emulator.store.TransactionLeg
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -77,6 +78,11 @@ class NexoEmulatorControllerTest {
             assertEquals("2.10", sale.totalAmount)
             assertEquals("member-42", sale.memberId)
             assertEquals(210L, sale.items.single().lineTotalMinor)
+            // the label must be formatted, not the raw-ISO fallback that a
+            // not-yet-initialized formatter would silently produce (the
+            // exact text depends on the system zone, so only assert the
+            // fallback didn't happen)
+            assertNotEquals("2026-08-06T10:15:30Z", sale.completedAtLabel)
         } finally {
             scope.cancel()
         }

@@ -50,6 +50,14 @@ import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
+/** Display format for stored sales' completion times. Top-level, not an
+ *  instance property: the constructor-launched sales refresh may format
+ *  labels before instance initializers further down the class have run
+ *  (they execute in textual order), whereas file-level vals are initialized
+ *  on class load, before any access. */
+private val saleTimeFormat =
+    DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(ZoneId.systemDefault())
+
 /**
  * The emulator session engine. A connection to the terminal and a checkout
  * session are separate lifecycles:
@@ -778,9 +786,6 @@ class NexoEmulatorController(
     } catch (e: Exception) {
         iso
     }
-
-    private val saleTimeFormat =
-        DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(ZoneId.systemDefault())
 
     private fun onOff(enabled: Boolean) = if (enabled) "on" else "off"
 
