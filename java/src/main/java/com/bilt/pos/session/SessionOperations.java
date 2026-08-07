@@ -9,9 +9,12 @@
  */
 package com.bilt.pos.session;
 
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,13 +27,21 @@ import java.util.logging.Logger;
  * session types.
  *
  * <p>Owns the session's operation executor: a single lazily-created thread,
- * so {@code execute()}d operations run one at a time in submission order —
- * the session is a stateful machine and concurrent operations on it are
- * invalid. The thread spins up on the first asynchronous operation and idles
- * out when unused, so a session that only ever runs synchronously (or a
- * refused {@code start()}) never costs a thread. {@link #shutdown()} is
- * called when the session ends; operations submitted after that are rejected
- * and fail through their handlers.</p>
+ * so operations run one at a time in submission order — the session is a
+ * stateful machine and concurrent operations on it are invalid. Every
+ * execution funnels through it: {@code execute()} submits and returns,
+ * while the synchronous paths ({@code executeSync()}, first-run
+ * {@code get()}) submit through {@link #callOrdered} and block for their
+ * turn — a sync call issued while an asynchronous operation is in flight
+ * queues behind it instead of racing it. A sync call made from the
+ * operation thread itself (an operation body or a direct-delivered handler
+ * invoking another operation) runs inline: it is already serialized, and
+ * waiting on its own thread would deadlock. The thread spins up on first
+ * use and idles out when unused, so a session that never executes (or a
+ * refused {@code start()}) never costs one. {@link #shutdown()} is called
+ * when the session ends; asynchronous submissions after that are rejected
+ * into their handlers, synchronous ones run inline and fail their own
+ * session-ended checks.</p>
  *
  * <p>Also tracks unexecuted operations: a forgotten {@code .execute()} is
  * the most common integration mistake with this API, so creating an
@@ -58,6 +69,24 @@ final class SessionOperations {
                 return thread;
             });
 
+    /** True while the current thread is running this session's operations —
+     *  the reentrancy marker [callOrdered] consults. Per instance: a sync
+     *  call into a DIFFERENT session from this session's thread must still
+     *  queue on that session's executor, not run inline. */
+    private final ThreadLocal<Boolean> onOperationThread =
+            ThreadLocal.withInitial(() -> false);
+
+    /** [operationExecutor] with the on-thread marker around every task; all
+     *  submissions — async and ordered-sync — go through this. */
+    private final Executor marked = task -> operationExecutor.execute(() -> {
+        onOperationThread.set(true);
+        try {
+            task.run();
+        } finally {
+            onOperationThread.set(false);
+        }
+    });
+
     private Executor callbackExecutor;
 
     /** Session-wide default delivery for asynchronous operations' handlers;
@@ -72,17 +101,57 @@ final class SessionOperations {
         return new SessionResult<>(name, () -> {
             begin(name);
             return body.get();
-        }).executors(operationExecutor, callbackExecutor);
+        }).session(this, callbackExecutor);
     }
 
-    /** The session's operation thread, for flows built outside [operation]. */
+    /** The session's operation thread; where asynchronous executions run. */
     Executor executor() {
-        return operationExecutor;
+        return marked;
     }
 
-    /** The session-wide callback delivery default, for the same flows. */
+    /** The session-wide callback delivery default. */
     Executor callback() {
         return callbackExecutor;
+    }
+
+    /**
+     * Runs {@code body} on the operation thread and waits for its answer —
+     * the synchronous paths' turnstile: they take their place in the same
+     * queue as asynchronous executions instead of racing them from the
+     * calling thread. Runs inline when already on the operation thread
+     * (see the class docs) or when the executor has shut down — the body's
+     * own session-ended checks then produce the right error.
+     */
+    <T> T callOrdered(Supplier<T> body) {
+        if (onOperationThread.get()) {
+            return body.get();
+        }
+        FutureTask<T> task = new FutureTask<>(body::get);
+        try {
+            marked.execute(task);
+        } catch (RejectedExecutionException e) {
+            return body.get();
+        }
+        try {
+            return task.get();
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new IllegalStateException(cause);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            // best-effort: keep a not-yet-started body from running with
+            // nobody left to consume its outcome; one already on the wire
+            // is allowed to finish
+            task.cancel(false);
+            throw new SessionException(new SessionError(SessionErrorCode.UNKNOWN,
+                    "interrupted while waiting for the session's operation thread"));
+        }
     }
 
     /** Stops accepting asynchronous operations; called when the session

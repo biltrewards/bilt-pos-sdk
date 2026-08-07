@@ -24,14 +24,13 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class FlowAsyncExecutionTest {
 
-    private final ExecutorService operationExecutor =
-            Executors.newSingleThreadExecutor(r -> new Thread(r, "op-thread"));
+    private final SessionOperations operations = new SessionOperations();
     private final ExecutorService callbackExecutor =
             Executors.newSingleThreadExecutor(r -> new Thread(r, "cb-thread"));
 
     @AfterEach
     void shutDownExecutors() {
-        operationExecutor.shutdownNow();
+        operations.shutdown();
         callbackExecutor.shutdownNow();
     }
 
@@ -48,13 +47,14 @@ class FlowAsyncExecutionTest {
         AtomicReference<String> handlerThread = new AtomicReference<>();
 
         new PaymentFlow(flow -> result)
-                .operationExecutor(operationExecutor)
+                .session(operations)
                 .onSuccess(r -> handlerThread.set(Thread.currentThread().getName()))
                 .onComplete(complete::countDown)
                 .execute();
 
         await(complete);
-        assertEquals("op-thread", handlerThread.get());
+        assertTrue(handlerThread.get().startsWith("bilt-session-"),
+                "delivered on " + handlerThread.get());
     }
 
     @Test
@@ -73,7 +73,7 @@ class FlowAsyncExecutionTest {
                     new BigDecimal("12.00"), new BigDecimal("7.00"))));
             return CheckoutResult.builder().build();
         });
-        flow.operationExecutor(operationExecutor)
+        flow.session(operations)
                 .callbackExecutor(callbackExecutor)
                 .onGiftCardPayment(giftCard -> {
                     stepThread.set(Thread.currentThread().getName());
@@ -99,12 +99,12 @@ class FlowAsyncExecutionTest {
 
     @Test
     void paymentRejectionAfterShutdownFailsThroughTheHandlers() throws Exception {
-        operationExecutor.shutdown();
+        operations.shutdown();
         CountDownLatch complete = new CountDownLatch(1);
         AtomicReference<SessionError> received = new AtomicReference<>();
 
         PaymentFlow flow = new PaymentFlow(f -> CheckoutResult.builder().build())
-                .operationExecutor(operationExecutor)
+                .session(operations)
                 .onError(error -> {
                     received.set(error);
                     return null;
@@ -128,7 +128,7 @@ class FlowAsyncExecutionTest {
                 Thread.currentThread().interrupt();
             }
             return result;
-        }).operationExecutor(operationExecutor);
+        }).session(operations);
         flow.execute();
 
         Thread releaser = new Thread(bodyMayFinish::countDown);
@@ -145,24 +145,25 @@ class FlowAsyncExecutionTest {
         AtomicReference<String> handlerThread = new AtomicReference<>();
 
         new ReversalFlow<String>(flow -> "reversed")
-                .operationExecutor(operationExecutor)
+                .session(operations)
                 .onSuccess(r -> handlerThread.set(Thread.currentThread().getName()))
                 .onComplete(complete::countDown)
                 .execute();
 
         await(complete);
-        assertEquals("op-thread", handlerThread.get());
+        assertTrue(handlerThread.get().startsWith("bilt-session-"),
+                "delivered on " + handlerThread.get());
     }
 
     @Test
     void reversalRejectionDeliversANullStepError() throws Exception {
-        operationExecutor.shutdown();
+        operations.shutdown();
         CountDownLatch complete = new CountDownLatch(1);
         AtomicReference<ReversalStep> step = new AtomicReference<>(ReversalStep.CARD);
         AtomicReference<SessionError> received = new AtomicReference<>();
 
         ReversalFlow<String> flow = new ReversalFlow<String>(f -> "reversed")
-                .operationExecutor(operationExecutor)
+                .session(operations)
                 .onError((s, error) -> {
                     step.set(s);
                     received.set(error);
@@ -189,7 +190,7 @@ class FlowAsyncExecutionTest {
                     new SessionError(SessionErrorCode.DECLINED, "declined")));
             return "reversed";
         });
-        flow.operationExecutor(operationExecutor)
+        flow.session(operations)
                 .callbackExecutor(callbackExecutor)
                 .onError((step, error) -> {
                     decisionThread.set(Thread.currentThread().getName());

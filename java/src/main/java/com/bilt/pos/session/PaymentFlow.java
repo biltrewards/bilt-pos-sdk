@@ -84,8 +84,9 @@ public final class PaymentFlow {
     private Function<SessionError, PaymentOptions> errorHandler;
     private Runnable completeHandler;
 
-    /** The session's single operation thread; where {@link #execute()} runs. */
-    private Executor operationExecutor;
+    /** The owning session's execution machinery; null for a detached
+     *  flow, which runs everything inline. */
+    private SessionOperations session;
     /** Callback delivery: initialized to the session's default by
      *  {@code pay()} — before user code can call {@link #callbackOn} —
      *  and overwritten by it; null means delivery on the payment thread. */
@@ -107,9 +108,11 @@ public final class PaymentFlow {
         this.executor = executor;
     }
 
-    /** Session wiring for {@link #execute()}; applied by {@code pay()}. */
-    PaymentFlow operationExecutor(Executor operationExecutor) {
-        this.operationExecutor = operationExecutor;
+    /** Session wiring: execution and default callback delivery. Applied
+     *  by {@code pay()} — before user code can call {@link #callbackOn}. */
+    PaymentFlow session(SessionOperations session) {
+        this.session = session;
+        this.callbackExecutor = session.callback();
         return this;
     }
 
@@ -198,14 +201,14 @@ public final class PaymentFlow {
      *     not attached to a session executor (use {@link #executeSync()})
      */
     public void execute() {
-        if (operationExecutor == null) {
+        if (session == null) {
             throw new IllegalStateException("this payment is not attached to a "
                     + "session executor; use executeSync()");
         }
         claimStart();
         asyncRun = true;
         try {
-            operationExecutor.execute(this::runAsync);
+            session.executor().execute(this::runAsync);
         } catch (RejectedExecutionException e) {
             failure = new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
                     "the payment was not run: the session has ended"));
@@ -333,7 +336,9 @@ public final class PaymentFlow {
     private void run() {
         try {
             try {
-                result = executor.apply(this);
+                result = session != null
+                        ? session.callOrdered(() -> executor.apply(this))
+                        : executor.apply(this);
             } catch (SessionException e) {
                 failure = e;
             } catch (RuntimeException e) {

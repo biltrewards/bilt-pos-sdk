@@ -73,8 +73,9 @@ public final class ReversalFlow<T> {
     private BiFunction<ReversalStep, SessionError, ReversalDecision> errorHandler;
     private Runnable completeHandler;
 
-    /** The session's single operation thread; where {@link #execute()} runs. */
-    private Executor operationExecutor;
+    /** The owning session's execution machinery; null for a detached
+     *  flow, which runs everything inline. */
+    private SessionOperations session;
     /** Callback delivery: initialized to the session's default at creation
      *  — before user code can call {@link #callbackOn} — and overwritten by
      *  it; null means delivery on the reversal thread. */
@@ -94,9 +95,11 @@ public final class ReversalFlow<T> {
         this.executor = executor;
     }
 
-    /** Session wiring for {@link #execute()}; applied by the session. */
-    ReversalFlow<T> operationExecutor(Executor operationExecutor) {
-        this.operationExecutor = operationExecutor;
+    /** Session wiring: execution and default callback delivery. Applied
+     *  by the session — before user code can call {@link #callbackOn}. */
+    ReversalFlow<T> session(SessionOperations session) {
+        this.session = session;
+        this.callbackExecutor = session.callback();
         return this;
     }
 
@@ -167,14 +170,14 @@ public final class ReversalFlow<T> {
      *     not attached to a session executor (use {@link #executeSync()})
      */
     public void execute() {
-        if (operationExecutor == null) {
+        if (session == null) {
             throw new IllegalStateException("this reversal is not attached to a "
                     + "session executor; use executeSync()");
         }
         claimStart();
         asyncRun = true;
         try {
-            operationExecutor.execute(this::runAsync);
+            session.executor().execute(this::runAsync);
         } catch (RejectedExecutionException e) {
             failure = new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
                     "the reversal was not run: the session has ended"));
@@ -300,7 +303,9 @@ public final class ReversalFlow<T> {
     private void run() {
         try {
             try {
-                result = executor.apply(this);
+                result = session != null
+                        ? session.callOrdered(() -> executor.apply(this))
+                        : executor.apply(this);
             } catch (SessionException e) {
                 failure = e;
             } catch (RuntimeException e) {

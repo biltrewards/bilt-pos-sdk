@@ -20,14 +20,13 @@ class SessionResultTest {
     private static final SessionError ERROR =
             new SessionError(SessionErrorCode.DECLINED, "declined");
 
-    private final ExecutorService operationExecutor =
-            Executors.newSingleThreadExecutor(r -> new Thread(r, "op-thread"));
+    private final SessionOperations operations = new SessionOperations();
     private final ExecutorService callbackExecutor =
             Executors.newSingleThreadExecutor(r -> new Thread(r, "cb-thread"));
 
     @AfterEach
     void shutDownExecutors() {
-        operationExecutor.shutdownNow();
+        operations.shutdown();
         callbackExecutor.shutdownNow();
     }
 
@@ -36,7 +35,7 @@ class SessionResultTest {
     }
 
     private <T> SessionResult<T> attached(Supplier<T> body) {
-        return result(body).executors(operationExecutor, null);
+        return result(body).session(operations, null);
     }
 
     private static <T> SessionResult<T> failing() {
@@ -171,6 +170,50 @@ class SessionResultTest {
     // ─── Asynchronous execution ───
 
     @Test
+    void syncCallsQueueBehindAnInFlightExecute() throws Exception {
+        List<String> order = java.util.Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch firstMayFinish = new CountDownLatch(1);
+        attached(() -> {
+            try {
+                firstMayFinish.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            order.add("first");
+            return "a";
+        }).execute();
+
+        // were the sync path not ordered through the session executor, this
+        // get() would run "second" on the calling thread immediately, while
+        // "first" is still held open — the exact race being prevented
+        Thread releaser = new Thread(() -> {
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            firstMayFinish.countDown();
+        });
+        releaser.start();
+        assertEquals("b", attached(() -> {
+            order.add("second");
+            return "b";
+        }).get());
+        releaser.join();
+
+        assertEquals(List.of("first", "second"), order);
+    }
+
+    @Test
+    void nestedSyncCallFromTheOperationThreadRunsInline() {
+        // an operation body invoking another operation synchronously is
+        // already on the session thread — it must run inline, not deadlock
+        // waiting for its own thread
+        String outcome = attached(() -> attached(() -> "inner").get() + "-outer").get();
+        assertEquals("inner-outer", outcome);
+    }
+
+    @Test
     void executeWithoutSessionExecutorPointsToExecuteSync() {
         IllegalStateException e =
                 assertThrows(IllegalStateException.class, () -> result(() -> "ok").execute());
@@ -195,7 +238,8 @@ class SessionResultTest {
         bodyMayFinish.countDown();
 
         assertEquals("ok", result.get());
-        assertEquals("op-thread", bodyThread.get());
+        assertTrue(bodyThread.get().startsWith("bilt-session-"),
+                "ran on " + bodyThread.get());
     }
 
     @Test
@@ -203,7 +247,7 @@ class SessionResultTest {
         CountDownLatch delivered = new CountDownLatch(1);
         AtomicReference<String> handlerThread = new AtomicReference<>();
         result(() -> "ok")
-                .executors(operationExecutor, callbackExecutor)
+                .session(operations, callbackExecutor)
                 .onSuccess(v -> {
                     handlerThread.set(Thread.currentThread().getName());
                     delivered.countDown();
@@ -222,7 +266,7 @@ class SessionResultTest {
             CountDownLatch delivered = new CountDownLatch(1);
             AtomicReference<String> handlerThread = new AtomicReference<>();
             result(() -> "ok")
-                    .executors(operationExecutor, callbackExecutor)
+                    .session(operations, callbackExecutor)
                     .callbackOn(override)
                     .onSuccess(v -> {
                         handlerThread.set(Thread.currentThread().getName());
@@ -245,7 +289,7 @@ class SessionResultTest {
 
         CountDownLatch errorComplete = new CountDownLatch(1);
         SessionResultTest.<String>failing()
-                .executors(operationExecutor, null)
+                .session(operations, null)
                 .onComplete(errorComplete::countDown)
                 .execute();
         await(errorComplete);
@@ -281,7 +325,7 @@ class SessionResultTest {
 
     @Test
     void rejectionAfterShutdownFailsThroughTheHandlers() throws Exception {
-        operationExecutor.shutdown();
+        operations.shutdown();
         CountDownLatch complete = new CountDownLatch(1);
         AtomicReference<SessionError> received = new AtomicReference<>();
         SessionResult<String> result = attached(() -> "ok")

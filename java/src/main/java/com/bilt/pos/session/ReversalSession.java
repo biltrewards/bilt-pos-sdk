@@ -236,8 +236,7 @@ public final class ReversalSession implements AutoCloseable {
     public ReversalFlow<VoidResult> voidTransaction() {
         operations.track("voidTransaction");
         return new ReversalFlow<>(this::executeVoid)
-                .operationExecutor(operations.executor())
-                .callbackExecutor(operations.callback());
+                .session(operations);
     }
 
     private VoidResult executeVoid(ReversalFlow<VoidResult> flow) {
@@ -285,8 +284,7 @@ public final class ReversalSession implements AutoCloseable {
     public ReversalFlow<RefundResult> refund() {
         operations.track("refund");
         return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, null))
-                .operationExecutor(operations.executor())
-                .callbackExecutor(operations.callback());
+                .session(operations);
     }
 
     /** Partial linked refund of the referenced card leg. */
@@ -297,8 +295,7 @@ public final class ReversalSession implements AutoCloseable {
         }
         operations.track("refund");
         return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, amount))
-                .operationExecutor(operations.executor())
-                .callbackExecutor(operations.callback());
+                .session(operations);
     }
 
     private RefundResult executeRefund(ReversalFlow<RefundResult> flow, BigDecimal amount) {
@@ -334,8 +331,7 @@ public final class ReversalSession implements AutoCloseable {
     public ReversalFlow<RefundResult> refundBasket() {
         operations.track("refundBasket");
         return new ReversalFlow<>(this::executeRefundBasket)
-                .operationExecutor(operations.executor())
-                .callbackExecutor(operations.callback());
+                .session(operations);
     }
 
     private RefundResult executeRefundBasket(ReversalFlow<RefundResult> flow) {

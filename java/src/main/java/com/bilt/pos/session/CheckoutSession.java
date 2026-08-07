@@ -780,8 +780,7 @@ public final class CheckoutSession implements AutoCloseable {
         }
         operations.track("pay");
         return new PaymentFlow(flow -> executePayment(flow, options))
-                .operationExecutor(operations.executor())
-                .callbackExecutor(operations.callback());
+                .session(operations);
     }
 
     private CheckoutResult executePayment(PaymentFlow flow, PaymentOptions options) {
@@ -898,8 +897,7 @@ public final class CheckoutSession implements AutoCloseable {
     public ReversalFlow<RefundResult> refund() {
         operations.track("refund");
         return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", null, true))
-                .operationExecutor(operations.executor())
-                .callbackExecutor(operations.callback());
+                .session(operations);
     }
 
     /**
@@ -911,8 +909,7 @@ public final class CheckoutSession implements AutoCloseable {
         requirePositive(amount);
         operations.track("refund");
         return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", amount, true))
-                .operationExecutor(operations.executor())
-                .callbackExecutor(operations.callback());
+                .session(operations);
     }
 
     /**
@@ -924,8 +921,7 @@ public final class CheckoutSession implements AutoCloseable {
         requirePositive(amount);
         operations.track("refundUnlinked");
         return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refundUnlinked", amount, false))
-                .operationExecutor(operations.executor())
-                .callbackExecutor(operations.callback());
+                .session(operations);
     }
 
     private RefundResult executeRefund(ReversalFlow<RefundResult> flow, String name,
@@ -1005,8 +1001,7 @@ public final class CheckoutSession implements AutoCloseable {
     public ReversalFlow<VoidResult> voidTransaction() {
         operations.track("voidTransaction");
         return new ReversalFlow<>(this::executeVoid)
-                .operationExecutor(operations.executor())
-                .callbackExecutor(operations.callback());
+                .session(operations);
     }
 
     private VoidResult executeVoid(ReversalFlow<VoidResult> flow) {
@@ -1469,7 +1464,10 @@ public final class CheckoutSession implements AutoCloseable {
      */
     public SessionResult<Void> updateInputDisplay(DisplayPayload payload) {
         Objects.requireNonNull(payload, "payload");
-        return operation("updateInputDisplay", () -> {
+        // unordered: this operation exists to overlap the in-flight input
+        // occupying the operation thread — queued behind it, it would wait
+        // on the very prompt it amends
+        return this.<Void>operation("updateInputDisplay", () -> {
             NexoExchange.InFlight inFlight = exchange.currentInFlight();
             if (inFlight == null || inFlight.getCategory() != MessageCategoryType.INPUT) {
                 throw invalidState(
@@ -1505,7 +1503,7 @@ public final class CheckoutSession implements AutoCloseable {
                         "input update failed: " + e.getMessage(), null, e));
             }
             return null;
-        });
+        }).unordered();
     }
 
     // ─── Diagnostics & Admin ───

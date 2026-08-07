@@ -32,8 +32,13 @@ import java.util.logging.Logger;
  *       executor (a single thread per session, so operations run in
  *       submission order) and deliver the handlers through the callback
  *       executor; returns immediately.</li>
- *   <li>{@link #executeSync()} — run blocking on the calling thread and
- *       dispatch handlers inline; returns nothing.</li>
+ *   <li>{@link #executeSync()} — run blocking: the operation takes its
+ *       turn on the same operation thread (queueing behind anything in
+ *       flight, so a sync call can never race an asynchronous one) while
+ *       the caller waits; handlers dispatch on the calling thread. Called
+ *       from the operation thread itself — an operation body or a
+ *       direct-delivered handler invoking another operation — it runs
+ *       inline.</li>
  *   <li>{@link #get()} — run (if not already run) and return the value, or
  *       throw {@link SessionException} on failure. Waits for an in-flight
  *       {@link #execute()} to settle.</li>
@@ -89,8 +94,16 @@ public final class SessionResult<T> {
     private Runnable completeHandler;
     private Consumer<T> handlerFailureCleanup;
 
-    /** The session's single operation thread; null for a detached result. */
-    private Executor operationExecutor;
+    /** The owning session's execution machinery; null for a detached
+     *  result, which runs everything inline. */
+    private SessionOperations session;
+
+    /** False for the rare operation that must overlap an in-flight one —
+     *  {@code updateInputDisplay} targets the very input holding the
+     *  operation thread, so queueing it there would wait on the thing it
+     *  updates. Unordered operations run inline (sync) or on their own
+     *  short-lived thread (async). */
+    private boolean ordered = true;
     /** Callback delivery: initialized to the session's default when the
      *  result is created, overwritten by {@link #callbackOn(Executor)};
      *  null means direct delivery on the operation thread. */
@@ -109,13 +122,20 @@ public final class SessionResult<T> {
         this.body = body;
     }
 
-    /** Session wiring: where {@link #execute()} runs and the default
-     *  callback delivery. Applied by the session when the result is
-     *  created — before user code can register a {@link #callbackOn}
-     *  override, so plain assignment suffices. */
-    SessionResult<T> executors(Executor operationExecutor, Executor callbackExecutor) {
-        this.operationExecutor = operationExecutor;
+    /** Session wiring: where executions run and the default callback
+     *  delivery. Applied by the session when the result is created —
+     *  before user code can register a {@link #callbackOn} override, so
+     *  plain assignment suffices. */
+    SessionResult<T> session(SessionOperations session, Executor callbackExecutor) {
+        this.session = session;
         this.callbackExecutor = callbackExecutor;
+        return this;
+    }
+
+    /** Opts this operation out of the session's one-at-a-time ordering —
+     *  see [ordered] for the why. */
+    SessionResult<T> unordered() {
+        this.ordered = false;
         return this;
     }
 
@@ -189,13 +209,21 @@ public final class SessionResult<T> {
      *     this result is not attached to a session (use {@link #executeSync()})
      */
     public void execute() {
-        if (operationExecutor == null) {
+        if (session == null) {
             throw new IllegalStateException(operationName + " is not attached to a "
                     + "session executor; use executeSync()");
         }
         claimStart();
+        if (!ordered) {
+            // deliberately concurrent (see [ordered]): its own short-lived
+            // thread instead of the session queue it must overlap
+            Thread runner = new Thread(this::runAsync, "bilt-" + operationName);
+            runner.setDaemon(true);
+            runner.start();
+            return;
+        }
         try {
-            operationExecutor.execute(this::runAsync);
+            session.executor().execute(this::runAsync);
         } catch (RejectedExecutionException e) {
             // the session ended and shut its executor down before this
             // operation ran; deliver the failure through the normal
@@ -211,9 +239,11 @@ public final class SessionResult<T> {
     }
 
     /**
-     * Runs the operation on the calling thread — blocking — and dispatches
-     * the registered handlers inline. The deliberate synchronous escape
-     * hatch for callers that own their threading.
+     * Runs the operation blocking — the deliberate synchronous spelling
+     * for callers that own their threading. The operation still takes its
+     * turn on the session's operation thread, queueing behind anything in
+     * flight (a sync call can never race an asynchronous one); the caller
+     * waits, and handlers dispatch on the calling thread.
      *
      * @throws IllegalStateException if the operation has already run
      */
@@ -319,13 +349,16 @@ public final class SessionResult<T> {
         }
     }
 
-    /** The synchronous body: previous {@code execute()} semantics — outcome
-     *  and handlers on the calling thread, bugs rethrown — plus the
-     *  {@code onComplete} guarantee. */
+    /** The synchronous body: previous {@code execute()} semantics — the
+     *  caller blocks, handlers dispatch on the calling thread, bugs
+     *  rethrown — plus the {@code onComplete} guarantee. The operation
+     *  itself takes its turn on the session's operation thread (via
+     *  [SessionOperations.callOrdered]), so it cannot race an in-flight
+     *  asynchronous execution. */
     private void runSync() {
         try {
             try {
-                value = body.get();
+                value = session != null && ordered ? session.callOrdered(body) : body.get();
             } catch (SessionException e) {
                 error = e.getError();
             } catch (RuntimeException e) {

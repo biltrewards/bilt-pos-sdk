@@ -176,7 +176,7 @@ try (CheckoutSession session = CheckoutSession.builder()....start().get()) {
 Every terminal operation is **lazy**: methods returning a `SessionResult`, `PaymentFlow`, or `ReversalFlow` send nothing until you invoke one of the terminal methods:
 
 - `execute()` — run **asynchronously** on the session's operation thread (a single thread per session, so operations run in submission order) and deliver the outcome to the registered `onSuccess`/`onError`/`onComplete` handlers; returns immediately;
-- `executeSync()` — run blocking on the calling thread, handlers dispatched inline;
+- `executeSync()` — run blocking; the operation still takes its turn on the session's operation thread (queueing behind anything in flight — a sync call never races an async one), handlers dispatched on the calling thread;
 - `get()` — run and return the value, throwing `SessionException` on failure (waits for an in-flight `execute()` to settle);
 - `getOrNull()` — like `get()`, but returns `null` on failure.
 
