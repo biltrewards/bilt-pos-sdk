@@ -95,14 +95,12 @@ class NexoEmulatorController(
         @Volatile var client: BiltNexoTerminalClient? = null,
         @Volatile var session: CheckoutSession? = null,
     ) {
-        /** Claimed synchronously by [pay] so rapid taps can't queue a second
-         *  payment behind the first on the serialized dispatcher. */
-        val paymentClaimed = java.util.concurrent.atomic.AtomicBoolean(false)
-
-        /** Claimed synchronously by [acquireCard], like [paymentClaimed]:
-         *  rapid taps must not queue a second terminal prompt behind the
-         *  first before the in-progress flag publishes. */
-        val cardReadClaimed = java.util.concurrent.atomic.AtomicBoolean(false)
+        /** Claimed synchronously by [pay] and [acquireCard] — one claim
+         *  across both, not one each: the UI's disabled states publish only
+         *  on recomposition, so a quick tap on the other button would
+         *  otherwise claim its own flag and silently queue behind the
+         *  in-flight operation on the serialized dispatcher. */
+        val operationClaimed = java.util.concurrent.atomic.AtomicBoolean(false)
 
         /** Set by [abort] for the current payment attempt. SDK
          *  abort() only interrupts what is on the wire — during the
@@ -453,9 +451,10 @@ class NexoEmulatorController(
         // Claimed here, not inside the job: two quick Pay taps would both
         // queue on the serialized dispatcher (paymentInProgress publishes
         // asynchronously), and the second would reach the already-completed
-        // session only to log a spurious failure.
-        if (!conn.paymentClaimed.compareAndSet(false, true)) {
-            log("A payment is already in progress")
+        // session only to log a spurious failure. Shared with acquireCard —
+        // a Pay tap during a card read must not queue behind the prompt.
+        if (!conn.operationClaimed.compareAndSet(false, true)) {
+            log("Another operation is already in progress")
             return
         }
         conn.paymentAbortRequested.set(false)
@@ -628,7 +627,7 @@ class NexoEmulatorController(
         // a NEW connection's payment is on the wire (the disconnect itself
         // already reset the flag via updateDisconnectedState).
         job.invokeOnCompletion {
-            conn.paymentClaimed.set(false)
+            conn.operationClaimed.set(false)
             if (connection === conn) {
                 _state.update { it.copy(paymentInProgress = false) }
             }
@@ -643,9 +642,10 @@ class NexoEmulatorController(
         }
         // Claimed here, not inside the job (same reasoning as pay): two
         // quick taps would both queue on the serialized dispatcher before
-        // cardReadInProgress publishes, prompting the terminal twice
-        if (!conn.cardReadClaimed.compareAndSet(false, true)) {
-            log("A card read is already in progress")
+        // cardReadInProgress publishes, prompting the terminal twice. The
+        // claim is shared with pay for the same reason across buttons.
+        if (!conn.operationClaimed.compareAndSet(false, true)) {
+            log("Another operation is already in progress")
             return
         }
         _state.update { it.copy(cardReadInProgress = true) }
@@ -705,7 +705,7 @@ class NexoEmulatorController(
         // Releases on every path, including a job cancelled before it ran
         // (disconnect racing this call) — mirrors the pay() completion hook
         job.invokeOnCompletion {
-            conn.cardReadClaimed.set(false)
+            conn.operationClaimed.set(false)
             if (connection === conn) {
                 _state.update { it.copy(cardReadInProgress = false) }
             }
