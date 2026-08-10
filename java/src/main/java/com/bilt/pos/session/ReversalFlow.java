@@ -136,8 +136,7 @@ public final class ReversalFlow<T> extends SessionFlow<T> {
         // skipped — is delivered here with a null step, so
         // execute()-style registers are not left in silence
         if (errorHandler != null && !failureResolved) {
-            HandlerDispatch.awaitCall(handlerExecutor(), name(),
-                    () -> errorHandler.apply(null, failure.getError()));
+            awaitHandlerCall(() -> errorHandler.apply(null, failure.getError()));
         }
     }
 
@@ -173,17 +172,16 @@ public final class ReversalFlow<T> extends SessionFlow<T> {
         if (errorHandler == null) {
             return null;
         }
-        return (step, error) -> HandlerDispatch.awaitCall(handlerExecutor(), name(),
-                () -> {
-                    ReversalDecision decision = errorHandler.apply(step, error);
-                    // only an ABORT (explicit, or defaulted from null)
-                    // resolves the failure about to be thrown; a SKIP/RETRY
-                    // answer leaves a later terminal failure — e.g. every
-                    // step skipped — still owed to the handler
-                    if (decision == null || decision == ReversalDecision.ABORT) {
-                        failureResolved = true;
-                    }
-                    return decision;
-                });
+        return (step, error) -> awaitHandlerCall(() -> {
+            ReversalDecision decision = errorHandler.apply(step, error);
+            // only an ABORT (explicit, or defaulted from null) resolves
+            // the failure about to be thrown; a SKIP/RETRY answer leaves
+            // a later terminal failure — e.g. every step skipped — still
+            // owed to the handler
+            if (decision == null || decision == ReversalDecision.ABORT) {
+                failureResolved = true;
+            }
+            return decision;
+        });
     }
 }

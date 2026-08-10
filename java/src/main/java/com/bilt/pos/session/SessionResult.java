@@ -58,10 +58,17 @@ import java.util.logging.Logger;
  * executor configured on the session builder ({@code callbackExecutor}), or
  * the per-call {@link #callbackOn(Executor)} override — e.g. an Android
  * main-thread executor so handlers may touch UI directly. With neither
- * configured, handlers run directly on the session's operation thread; such
- * handlers must be fast, must not block, and must never synchronously invoke
- * another session operation (the operation thread is single, so a nested
- * blocking operation deadlocks). {@link #executeSync()} always dispatches
+ * configured, handlers run directly on the session's operation thread and
+ * must be fast and non-blocking. Handlers may invoke further session
+ * operations synchronously: an operation started from inside a handler
+ * runs inline, as part of the operation being handled. What must be
+ * avoided is blocking the callback executor's thread on a session call
+ * <em>outside</em> a handler while operations are in flight — an in-flight
+ * operation may need that thread to deliver its handlers before it can
+ * finish, and both sides would wait forever. From such a thread (a UI
+ * thread, typically), use {@code execute()} with an {@code onComplete} —
+ * teardown included: prefer {@code end().execute()} over the blocking
+ * {@code close()}. {@link #executeSync()} always dispatches handlers
  * inline on the calling thread and ignores callback executors.</p>
  *
  * <p>{@link #onComplete(Runnable)} registers a cleanup hook that runs exactly
@@ -320,8 +327,20 @@ public final class SessionResult<T> {
                 LOGGER.log(Level.SEVERE, operationName + " threw unexpectedly", e);
             }
             // awaited: the next queued operation must not start until this
-            // one's handlers (and their cleanup) have finished
-            HandlerDispatch.awaitRun(callbackExecutor, operationName, this::dispatchHandlers);
+            // one's handlers (and their cleanup) have finished. Marshalled
+            // dispatches carry the awaited-handler marker so a blocking
+            // session call inside the handler runs inline instead of
+            // deadlocking against this parked thread.
+            Supplier<Void> dispatch = () -> {
+                dispatchHandlers();
+                return null;
+            };
+            // marker only for ordered operations: an unordered one runs on
+            // its own thread, so the operation thread is NOT parked on this
+            // dispatch and a nested inline call could race it
+            HandlerDispatch.awaitCall(callbackExecutor, operationName,
+                    callbackExecutor != null && ordered
+                            ? session.awaitedHandler(dispatch) : dispatch);
         } finally {
             // only now is the outcome final — a throwing handler is
             // recorded during the dispatch above, and an accessor released

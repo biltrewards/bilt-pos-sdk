@@ -174,8 +174,7 @@ public final class PaymentFlow extends SessionFlow<CheckoutResult> {
         if (errorHandler != null
                 && (!errorHandlerConsulted || retryRequested)
                 && failure.getError().getCode() != SessionErrorCode.ABORTED) {
-            HandlerDispatch.awaitCall(handlerExecutor(), name(),
-                    () -> errorHandler.apply(failure.getError()));
+            awaitHandlerCall(() -> errorHandler.apply(failure.getError()));
         }
     }
 

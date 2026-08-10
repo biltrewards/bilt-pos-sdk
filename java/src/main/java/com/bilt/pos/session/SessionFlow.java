@@ -15,6 +15,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -142,8 +143,27 @@ abstract class SessionFlow<T> {
         if (handler == null) {
             return null;
         }
-        return argument -> HandlerDispatch.awaitCall(
-                handlerExecutor(), name, () -> handler.apply(argument));
+        return argument -> awaitHandlerCall(() -> handler.apply(argument));
+    }
+
+    /** Delivers a handler on the callback executor and waits for its
+     *  answer. The dispatch carries the session's awaited-handler marker,
+     *  so a blocking session call made inside the handler runs inline —
+     *  this thread is parked on the handler, and queueing behind it would
+     *  deadlock. */
+    final <R> R awaitHandlerCall(Supplier<R> handler) {
+        Supplier<R> dispatch = session != null && handlerExecutor() != null
+                ? session.awaitedHandler(handler)
+                : handler;
+        return HandlerDispatch.awaitCall(handlerExecutor(), name, dispatch);
+    }
+
+    /** [awaitHandlerCall] for handlers without an answer. */
+    final void awaitHandlerRun(Runnable handler) {
+        awaitHandlerCall(() -> {
+            handler.run();
+            return null;
+        });
     }
 
     // ─── Terminal methods ───
@@ -271,8 +291,7 @@ abstract class SessionFlow<T> {
             }
             if (successHandler != null) {
                 try {
-                    HandlerDispatch.awaitRun(handlerExecutor(), name,
-                            () -> successHandler.accept(result));
+                    awaitHandlerRun(() -> successHandler.accept(result));
                 } catch (RuntimeException handlerFailure) {
                     // a throwing success handler is a bug like any other
                     // unexpected exception (see SessionResult): record it so
@@ -309,7 +328,7 @@ abstract class SessionFlow<T> {
         if (completeHandler == null) {
             return;
         }
-        HandlerDispatch.awaitRun(handlerExecutor(), name, this::dispatchComplete);
+        awaitHandlerRun(this::dispatchComplete);
     }
 
     /** Exactly once, on every path; a throwing hook is logged, not thrown. */

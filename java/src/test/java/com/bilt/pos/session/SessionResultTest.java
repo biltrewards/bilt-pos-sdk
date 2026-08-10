@@ -214,6 +214,25 @@ class SessionResultTest {
     }
 
     @Test
+    void nestedSyncCallFromAMarshalledHandlerRunsInline() throws Exception {
+        // a handler the operation thread is awaiting is a synchronous
+        // extension of the in-flight operation: a blocking session call
+        // made from it must run inline on the callback thread — queueing
+        // it behind the parked operation thread would deadlock
+        CountDownLatch complete = new CountDownLatch(1);
+        AtomicReference<String> nested = new AtomicReference<>();
+        result(() -> "outer")
+                .session(operations)
+                .callbackOn(callbackExecutor)
+                .onSuccess(v -> nested.set(attached(() -> "inner").get()))
+                .onComplete(complete::countDown)
+                .execute();
+
+        await(complete);
+        assertEquals("inner", nested.get());
+    }
+
+    @Test
     void executeWithoutSessionExecutorPointsToExecuteSync() {
         IllegalStateException e =
                 assertThrows(IllegalStateException.class, () -> result(() -> "ok").execute());

@@ -451,6 +451,12 @@ public final class ReversalSession implements AutoCloseable {
      * Best-effort {@link #end()} for try-with-resources: a failure to send
      * the end signal is logged, not thrown, and an already-ended session is
      * left alone.
+     *
+     * <p>Blocking, and queued behind any in-flight operation — with a
+     * callback executor configured, never call it from that executor's
+     * thread while operations may be in flight (see
+     * {@code CheckoutSession#close()}); use {@code end().execute()} there
+     * instead.</p>
      */
     @Override
     public void close() {

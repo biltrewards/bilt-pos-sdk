@@ -76,6 +76,16 @@ final class SessionOperations {
     private final ThreadLocal<Boolean> onOperationThread =
             ThreadLocal.withInitial(() -> false);
 
+    /** True while the current thread runs a handler the operation thread is
+     *  awaiting (marshalled callback delivery). Such a handler is a
+     *  synchronous extension of the in-flight operation — the operation
+     *  thread is parked on this very handler — so a blocking session call
+     *  made from it must run inline: queueing it behind the parked
+     *  operation would deadlock, and running inline is race-free because
+     *  nothing else of this session can be executing. */
+    private final ThreadLocal<Boolean> inAwaitedHandler =
+            ThreadLocal.withInitial(() -> false);
+
     /** [operationExecutor] with the on-thread marker around every task; all
      *  submissions — async and ordered-sync — go through this. */
     private final Executor marked = task -> operationExecutor.execute(() -> {
@@ -123,7 +133,7 @@ final class SessionOperations {
      * own session-ended checks then produce the right error.
      */
     <T> T callOrdered(Supplier<T> body) {
-        if (onOperationThread.get()) {
+        if (onOperationThread.get() || inAwaitedHandler.get()) {
             return body.get();
         }
         FutureTask<T> task = new FutureTask<>(body::get);
@@ -152,6 +162,21 @@ final class SessionOperations {
             throw new SessionException(new SessionError(SessionErrorCode.UNKNOWN,
                     "interrupted while waiting for the session's operation thread"));
         }
+    }
+
+    /** Wraps a handler dispatch the operation thread will await, so
+     *  blocking session calls made inside the handler run inline — see
+     *  [inAwaitedHandler]. Applied only to marshalled (callback-executor)
+     *  dispatches: those are the ones that park the operation thread. */
+    <R> Supplier<R> awaitedHandler(Supplier<R> handler) {
+        return () -> {
+            inAwaitedHandler.set(true);
+            try {
+                return handler.get();
+            } finally {
+                inAwaitedHandler.set(false);
+            }
+        };
     }
 
     /** Stops accepting asynchronous operations; called when the session

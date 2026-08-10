@@ -1290,6 +1290,14 @@ public final class CheckoutSession implements AutoCloseable {
      * the end signal is logged, not thrown, and an already-ended session is
      * left alone. Registers that need to react to a failed end should call
      * {@code end()} directly.
+     *
+     * <p>Blocking, and queued behind any in-flight operation — so with a
+     * callback executor configured, never call it from that executor's
+     * thread while operations may be in flight: the in-flight operation
+     * may need this thread for its handlers before it can finish, and
+     * both would wait forever. UI-driven teardown should use
+     * {@code end().execute()} with an {@code onComplete} instead; close()
+     * is for try-with-resources and process-exit paths.</p>
      */
     @Override
     public void close() {

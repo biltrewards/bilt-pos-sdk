@@ -118,6 +118,35 @@ class FlowAsyncExecutionTest {
     }
 
     @Test
+    void paymentStepHandlersMayInvokeNestedSessionOperations() throws Exception {
+        // a mid-payment prompt from a step handler is legitimate: the
+        // handler is awaited by the payment thread, so the nested blocking
+        // operation runs inline on the callback thread instead of
+        // deadlocking behind the parked payment
+        CountDownLatch complete = new CountDownLatch(1);
+        AtomicReference<String> prompted = new AtomicReference<>();
+
+        PaymentFlow flow = new PaymentFlow(f -> {
+            f.giftCardHandler().apply(new GiftCardPaymentResult(
+                    BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.TEN, BigDecimal.ONE));
+            return CheckoutResult.builder().build();
+        });
+        flow.session(operations)
+                .callbackOn(callbackExecutor)
+                .onGiftCardPayment(giftCard -> {
+                    prompted.set(new SessionResult<>("prompt", () -> "confirmed")
+                            .session(operations)
+                            .get());
+                    return giftCard.getSuggestedTotal();
+                })
+                .onComplete(complete::countDown)
+                .execute();
+
+        await(complete);
+        assertEquals("confirmed", prompted.get());
+    }
+
+    @Test
     void paymentAccessorsSurfaceAsyncHandlerFailures() {
         // same guarantee as SessionResult: get() must not report a clean
         // success while a throwing onSuccess is still being recorded
