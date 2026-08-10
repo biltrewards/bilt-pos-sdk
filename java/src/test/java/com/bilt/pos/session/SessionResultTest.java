@@ -233,6 +233,88 @@ class SessionResultTest {
     }
 
     @Test
+    void interruptWhileQueuedCancelsTheBodyAndReportsInterruption() throws Exception {
+        CountDownLatch firstMayFinish = new CountDownLatch(1);
+        SessionResult<String> first = attached(() -> {
+            try {
+                firstMayFinish.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return "a";
+        });
+        first.execute();
+
+        // the second op queues behind the held-open first; interrupting its
+        // waiting caller must cancel the never-started body — "interrupted,
+        // nothing ran" is then the true outcome
+        AtomicInteger secondRuns = new AtomicInteger();
+        SessionResult<String> second = attached(() -> {
+            secondRuns.incrementAndGet();
+            return "b";
+        });
+        AtomicReference<Throwable> outcome = new AtomicReference<>();
+        Thread caller = new Thread(() -> {
+            try {
+                second.get();
+            } catch (Throwable t) {
+                outcome.set(t);
+            }
+        });
+        caller.start();
+        Thread.sleep(200);  // let the caller block behind the first op
+        caller.interrupt();
+        caller.join(5000);
+        assertFalse(caller.isAlive(), "the interrupted caller must return");
+        assertTrue(outcome.get() instanceof SessionException);
+
+        firstMayFinish.countDown();
+        assertEquals("a", first.get());
+        // a third ordered call drains the queue past the cancelled task
+        assertEquals("c", attached(() -> "c").get());
+        assertEquals(0, secondRuns.get(), "the cancelled body must never run");
+    }
+
+    @Test
+    void interruptWhileRunningStillYieldsTheRealOutcome() throws Exception {
+        // once the body is on the wire an interrupt cannot stop it — the
+        // caller must receive the real result (recording an interrupt while
+        // the terminal completes a payment would invite a double charge),
+        // with the interrupt flag re-asserted
+        CountDownLatch bodyStarted = new CountDownLatch(1);
+        CountDownLatch bodyMayFinish = new CountDownLatch(1);
+        SessionResult<String> result = attached(() -> {
+            bodyStarted.countDown();
+            try {
+                bodyMayFinish.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return "ok";
+        });
+
+        AtomicReference<Object> outcome = new AtomicReference<>();
+        AtomicReference<Boolean> flagRestored = new AtomicReference<>();
+        Thread caller = new Thread(() -> {
+            try {
+                outcome.set(result.get());
+            } catch (Throwable t) {
+                outcome.set(t);
+            }
+            flagRestored.set(Thread.currentThread().isInterrupted());
+        });
+        caller.start();
+        await(bodyStarted);
+        caller.interrupt();
+        Thread.sleep(100);  // let the interrupt land in the waiting get()
+        bodyMayFinish.countDown();
+        caller.join(5000);
+
+        assertEquals("ok", outcome.get());
+        assertEquals(Boolean.TRUE, flagRestored.get(), "the interrupt must be re-asserted");
+    }
+
+    @Test
     void executeWithoutSessionExecutorPointsToExecuteSync() {
         IllegalStateException e =
                 assertThrows(IllegalStateException.class, () -> result(() -> "ok").execute());

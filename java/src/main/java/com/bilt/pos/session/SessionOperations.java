@@ -17,6 +17,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -136,31 +137,54 @@ final class SessionOperations {
         if (onOperationThread.get() || inAwaitedHandler.get()) {
             return body.get();
         }
-        FutureTask<T> task = new FutureTask<>(body::get);
+        // own started flag: FutureTask cannot tell queued from running —
+        // its state stays NEW while the callable executes, so cancel(false)
+        // "succeeds" against a body already on the wire
+        AtomicBoolean bodyStarted = new AtomicBoolean();
+        FutureTask<T> task = new FutureTask<>(() -> {
+            bodyStarted.set(true);
+            return body.get();
+        });
         try {
             marked.execute(task);
         } catch (RejectedExecutionException e) {
             return body.get();
         }
+        // An interrupt cannot stop the body — the old synchronous API
+        // simply carried the wire call to completion on the calling thread,
+        // interrupt flag set. A task that has not started is cancelled and
+        // reported as interrupted (nothing ran, so that IS the outcome);
+        // one already running must yield its real result — reporting an
+        // interrupt while the terminal completes a payment would have the
+        // register retry money that already moved. The wait continues
+        // uninterruptibly and the flag is re-asserted on the way out.
+        boolean interrupted = false;
         try {
-            return task.get();
-        } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
+            while (true) {
+                try {
+                    return task.get();
+                } catch (InterruptedException e) {
+                    if (!bodyStarted.get() && task.cancel(false)) {
+                        interrupted = true;
+                        throw new SessionException(new SessionError(SessionErrorCode.UNKNOWN,
+                                "interrupted while waiting for the session's operation thread"));
+                    }
+                    interrupted = true;
+                } catch (ExecutionException e) {
+                    Throwable cause = e.getCause();
+                    if (cause instanceof RuntimeException) {
+                        throw (RuntimeException) cause;
+                    }
+                    if (cause instanceof Error) {
+                        throw (Error) cause;
+                    }
+                    throw new IllegalStateException(cause);
+                }
             }
-            if (cause instanceof Error) {
-                throw (Error) cause;
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
-            throw new IllegalStateException(cause);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            // best-effort: keep a not-yet-started body from running with
-            // nobody left to consume its outcome; one already on the wire
-            // is allowed to finish
-            task.cancel(false);
-            throw new SessionException(new SessionError(SessionErrorCode.UNKNOWN,
-                    "interrupted while waiting for the session's operation thread"));
         }
     }
 
