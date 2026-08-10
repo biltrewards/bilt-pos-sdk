@@ -118,6 +118,21 @@ class FlowAsyncExecutionTest {
     }
 
     @Test
+    void paymentAccessorsSurfaceAsyncHandlerFailures() {
+        // same guarantee as SessionResult: get() must not report a clean
+        // success while a throwing onSuccess is still being recorded
+        IllegalStateException handlerBug = new IllegalStateException("handler bug");
+        PaymentFlow flow = new PaymentFlow(f -> CheckoutResult.builder().build())
+                .session(operations)
+                .onSuccess(r -> {
+                    throw handlerBug;
+                });
+        flow.execute();
+
+        assertSame(handlerBug, assertThrows(IllegalStateException.class, flow::get));
+    }
+
+    @Test
     void paymentGetAwaitsAnInFlightExecute() throws Exception {
         CheckoutResult result = CheckoutResult.builder().build();
         CountDownLatch bodyMayFinish = new CountDownLatch(1);

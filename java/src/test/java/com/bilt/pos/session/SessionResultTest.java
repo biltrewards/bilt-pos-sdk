@@ -312,6 +312,22 @@ class SessionResultTest {
     }
 
     @Test
+    void accessorsSurfaceAsyncHandlerFailures() {
+        // the settled latch must not open before handler dispatch: a get()
+        // racing a throwing onSuccess would otherwise report a clean
+        // success that later accessors contradict
+        IllegalStateException handlerBug = new IllegalStateException("handler bug");
+        SessionResult<String> result = attached(() -> "ok")
+                .onSuccess(v -> {
+                    throw handlerBug;
+                });
+        result.execute();
+
+        assertSame(handlerBug, assertThrows(IllegalStateException.class, result::get));
+        assertSame(handlerBug, assertThrows(IllegalStateException.class, result::isSuccess));
+    }
+
+    @Test
     void onCompleteFiresWhenTheSuccessHandlerThrows() throws Exception {
         CountDownLatch complete = new CountDownLatch(1);
         SessionResult<String> result = attached(() -> "ok")

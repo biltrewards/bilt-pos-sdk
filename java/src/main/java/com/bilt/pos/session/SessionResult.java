@@ -86,7 +86,8 @@ public final class SessionResult<T> {
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean completeDispatched = new AtomicBoolean();
 
-    /** Opens once the outcome fields below are final; accessors await it. */
+    /** Opens once the outcome is final — body AND handler dispatch, since
+     *  a throwing handler is recorded as the outcome; accessors await it. */
     private final CountDownLatch settled = new CountDownLatch(1);
 
     private Consumer<T> successHandler;
@@ -303,24 +304,30 @@ public final class SessionResult<T> {
         }
     }
 
-    /** The async body: outcome on the session thread, handlers via [deliver]. */
+    /** The async body: outcome on the session thread, handlers via the
+     *  callback executor. */
     private void runAsync() {
         try {
-            value = body.get();
-        } catch (SessionException e) {
-            error = e.getError();
-        } catch (RuntimeException e) {
-            // a bug, not a terminal outcome. There is no caller on this
-            // thread to rethrow to, so it is recorded (later accessors
-            // rethrow it instead of reporting success) and logged loudly.
-            unexpected = e;
-            LOGGER.log(Level.SEVERE, operationName + " threw unexpectedly", e);
+            try {
+                value = body.get();
+            } catch (SessionException e) {
+                error = e.getError();
+            } catch (RuntimeException e) {
+                // a bug, not a terminal outcome. There is no caller on this
+                // thread to rethrow to, so it is recorded (later accessors
+                // rethrow it instead of reporting success) and logged loudly.
+                unexpected = e;
+                LOGGER.log(Level.SEVERE, operationName + " threw unexpectedly", e);
+            }
+            // awaited: the next queued operation must not start until this
+            // one's handlers (and their cleanup) have finished
+            HandlerDispatch.awaitRun(callbackExecutor, operationName, this::dispatchHandlers);
         } finally {
+            // only now is the outcome final — a throwing handler is
+            // recorded during the dispatch above, and an accessor released
+            // earlier could report a clean success it must not
             settled.countDown();
         }
-        // awaited: the next queued operation must not start until this
-        // one's handlers (and their cleanup) have finished
-        HandlerDispatch.awaitRun(callbackExecutor, operationName, this::dispatchHandlers);
     }
 
     /** Handler dispatch for the async path: nothing here may kill the
@@ -367,8 +374,6 @@ public final class SessionResult<T> {
                 // reporting a successful null result, then fail loudly
                 unexpected = e;
                 throw e;
-            } finally {
-                settled.countDown();
             }
             if (error == null) {
                 if (successHandler != null) {
@@ -390,6 +395,9 @@ public final class SessionResult<T> {
             }
         } finally {
             dispatchComplete();
+            // after the handlers: a concurrent accessor released earlier
+            // could report a clean success past a recorded handler bug
+            settled.countDown();
         }
     }
 

@@ -47,7 +47,8 @@ abstract class SessionFlow<T> {
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean completeDispatched = new AtomicBoolean();
 
-    /** Opens once result/failure below are final; accessors await it. */
+    /** Opens once the outcome is final — body AND handler dispatch, since
+     *  a throwing handler is recorded as the outcome; accessors await it. */
     private final CountDownLatch settled = new CountDownLatch(1);
 
     private Consumer<T> successHandler;
@@ -263,8 +264,6 @@ abstract class SessionFlow<T> {
                 // reporting a successful null result, then fail loudly
                 unexpected = e;
                 throw e;
-            } finally {
-                settled.countDown();
             }
             if (failure != null) {
                 deliverFailure(failure);
@@ -285,6 +284,10 @@ abstract class SessionFlow<T> {
             }
         } finally {
             deliverComplete();
+            // only now is the outcome final — a throwing handler is
+            // recorded as the outcome above, and an accessor released
+            // earlier could report a clean success it must not
+            settled.countDown();
         }
     }
 
