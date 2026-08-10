@@ -101,7 +101,7 @@ final class SessionOperations {
         return new SessionResult<>(name, () -> {
             begin(name);
             return body.get();
-        }).session(this, callbackExecutor);
+        }).session(this);
     }
 
     /** The session's operation thread; where asynchronous executions run. */

@@ -35,7 +35,7 @@ class SessionResultTest {
     }
 
     private <T> SessionResult<T> attached(Supplier<T> body) {
-        return result(body).session(operations, null);
+        return result(body).session(operations);
     }
 
     private static <T> SessionResult<T> failing() {
@@ -247,7 +247,8 @@ class SessionResultTest {
         CountDownLatch delivered = new CountDownLatch(1);
         AtomicReference<String> handlerThread = new AtomicReference<>();
         result(() -> "ok")
-                .session(operations, callbackExecutor)
+                .session(operations)
+                .callbackOn(callbackExecutor)
                 .onSuccess(v -> {
                     handlerThread.set(Thread.currentThread().getName());
                     delivered.countDown();
@@ -266,7 +267,8 @@ class SessionResultTest {
             CountDownLatch delivered = new CountDownLatch(1);
             AtomicReference<String> handlerThread = new AtomicReference<>();
             result(() -> "ok")
-                    .session(operations, callbackExecutor)
+                    .session(operations)
+                .callbackOn(callbackExecutor)
                     .callbackOn(override)
                     .onSuccess(v -> {
                         handlerThread.set(Thread.currentThread().getName());
@@ -289,7 +291,7 @@ class SessionResultTest {
 
         CountDownLatch errorComplete = new CountDownLatch(1);
         SessionResultTest.<String>failing()
-                .session(operations, null)
+                .session(operations)
                 .onComplete(errorComplete::countDown)
                 .execute();
         await(errorComplete);

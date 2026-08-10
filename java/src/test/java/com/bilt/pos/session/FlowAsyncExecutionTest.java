@@ -74,7 +74,7 @@ class FlowAsyncExecutionTest {
             return CheckoutResult.builder().build();
         });
         flow.session(operations)
-                .callbackExecutor(callbackExecutor)
+                .callbackOn(callbackExecutor)
                 .onGiftCardPayment(giftCard -> {
                     stepThread.set(Thread.currentThread().getName());
                     return giftCard.getSuggestedTotal();
@@ -191,7 +191,7 @@ class FlowAsyncExecutionTest {
             return "reversed";
         });
         flow.session(operations)
-                .callbackExecutor(callbackExecutor)
+                .callbackOn(callbackExecutor)
                 .onError((step, error) -> {
                     decisionThread.set(Thread.currentThread().getName());
                     return ReversalDecision.SKIP;

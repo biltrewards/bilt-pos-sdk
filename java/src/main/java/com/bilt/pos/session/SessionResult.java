@@ -122,13 +122,13 @@ public final class SessionResult<T> {
         this.body = body;
     }
 
-    /** Session wiring: where executions run and the default callback
-     *  delivery. Applied by the session when the result is created —
-     *  before user code can register a {@link #callbackOn} override, so
-     *  plain assignment suffices. */
-    SessionResult<T> session(SessionOperations session, Executor callbackExecutor) {
+    /** Session wiring: where executions run, and the session's callback
+     *  delivery default. Applied when the result is created — before user
+     *  code can register a {@link #callbackOn} override, so plain
+     *  assignment suffices. */
+    SessionResult<T> session(SessionOperations session) {
         this.session = session;
-        this.callbackExecutor = callbackExecutor;
+        this.callbackExecutor = session.callback();
         return this;
     }
 
