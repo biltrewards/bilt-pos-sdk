@@ -57,18 +57,25 @@ final class SessionOperations {
 
     private final AtomicReference<String> unexecuted = new AtomicReference<>();
 
-    /** Core size 0 with max 1: single-threaded semantics, but the thread is
-     *  created on first use and reclaimed after idling — a session whose
-     *  operations all run synchronously never owns one. */
-    private final ExecutorService operationExecutor = new ThreadPoolExecutor(
-            0, 1, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
-            runnable -> {
-                Thread thread = new Thread(runnable,
-                        "bilt-session-" + SESSION_COUNTER.incrementAndGet());
-                // a leaked session must not keep the JVM alive
-                thread.setDaemon(true);
-                return thread;
-            });
+    /** Exactly one thread, created on first use and reclaimed after
+     *  idling — a session whose operations all run synchronously never
+     *  owns one. */
+    private final ExecutorService operationExecutor = singleIdleThreadExecutor();
+
+    private static ExecutorService singleIdleThreadExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                1, 1, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
+                runnable -> {
+                    Thread thread = new Thread(runnable,
+                            "bilt-session-" + SESSION_COUNTER.incrementAndGet());
+                    // a leaked session must not keep the JVM alive
+                    thread.setDaemon(true);
+                    return thread;
+                });
+        // reclaimed when idle, still exactly one
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
+    }
 
     /** True while the current thread is running this session's operations —
      *  the reentrancy marker [callOrdered] consults. Per instance: a sync
