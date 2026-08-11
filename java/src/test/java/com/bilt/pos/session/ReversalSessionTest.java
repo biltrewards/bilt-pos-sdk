@@ -986,6 +986,22 @@ class ReversalSessionTest {
                 () -> session.refund().get()).getError().getCode());
     }
 
+    // ─── Terminal accessor ───
+
+    @Test
+    void terminalIsCachedAndIndependentOfTheSessionBracket() throws Exception {
+        ReversalSession session = cardSession();
+        assertSame(session.terminal(), session.terminal());
+        session.end().executeSync();  // the dispatcher answers the Admin exchange
+
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"DiagnosisResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"POIStatus\":{\"GlobalStatus\":\"OK\"}}}}"));
+        assertNotNull(session.terminal().diagnose().get().getPoiStatus(),
+                "the terminal keeps working after end()");
+    }
+
     // ─── Refund cart ───
 
     private static final String DISPLAY_OK =

@@ -132,11 +132,11 @@ class CheckoutSessionTest {
 
     @Test
     void creatingAnOperationSendsNothing() {
-        session.diagnose().onSuccess(r -> { }).onError(e -> { });
+        session.terminal().diagnose().onSuccess(r -> { }).onError(e -> { });
         assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
     }
 
-    // ─── Diagnose ───
+    // ─── Diagnose (via the session's Terminal) ───
 
     @Test
     void diagnoseSendsWellFormedRequestAndMapsResponse() throws Exception {
@@ -146,7 +146,7 @@ class CheckoutSessionTest {
                         + "\"POIStatus\":{\"GlobalStatus\":\"OK\",\"PrinterStatus\":\"OK\"},"
                         + "\"HostStatus\":[{\"AcquirerID\":\"ACQ1\",\"IsReachableFlag\":true}]}}}"));
 
-        DiagnosisResult result = session.diagnose().get();
+        DiagnosisResult result = session.terminal().diagnose().get();
 
         assertNotNull(result.getPoiStatus());
         assertEquals(1, result.getHostStatuses().size());
@@ -172,7 +172,7 @@ class CheckoutSessionTest {
                         + "{\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnavailableDevice\"}}}}"));
 
         AtomicReference<SessionError> error = new AtomicReference<>();
-        session.diagnose().onError(error::set).executeSync();
+        session.terminal().diagnose().onError(error::set).executeSync();
 
         assertNotNull(error.get());
         assertEquals(SessionErrorCode.TERMINAL_ERROR, error.get().getCode());
@@ -183,11 +183,12 @@ class CheckoutSessionTest {
     void transportFailureIsMappedToNetworkError() throws Exception {
         server.shutdown();
 
-        SessionException e = assertThrows(SessionException.class, () -> session.diagnose().get());
+        SessionException e = assertThrows(SessionException.class,
+                () -> session.terminal().diagnose().get());
         assertEquals(SessionErrorCode.NETWORK, e.getError().getCode());
     }
 
-    // ─── Reconcile ───
+    // ─── Reconcile (via the session's Terminal) ───
 
     @Test
     void reconcileSendsSaleReconciliationAndMapsTotals() throws Exception {
@@ -197,7 +198,7 @@ class CheckoutSessionTest {
                         + "\"POIReconciliationID\":\"REC-42\","
                         + "\"TransactionTotals\":[{\"PaymentCurrency\":\"USD\"}]}}}"));
 
-        ReconciliationResult result = session.reconcile().get();
+        ReconciliationResult result = session.terminal().reconcile().get();
 
         assertEquals("REC-42", result.getPoiReconciliationId());
         assertEquals(1, result.getTransactionTotals().size());
@@ -208,14 +209,14 @@ class CheckoutSessionTest {
                 sent.getReconciliationRequest().getReconciliationType().toValue());
     }
 
-    // ─── Print ───
+    // ─── Print (via the session's Terminal) ───
 
     @Test
     void printSendsTextContent() throws Exception {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"PrintResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
 
-        session.print(PrintPayload.text("THANK YOU")).executeSync();
+        session.terminal().print(PrintPayload.text("THANK YOU")).executeSync();
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("Print", sent.getMessageHeader().getMessageCategory().toValue());

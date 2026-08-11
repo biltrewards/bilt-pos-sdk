@@ -13,36 +13,19 @@ import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.display.DisplayPayloadHelper;
 import com.bilt.pos.nexo.client.BiltNexoClientException;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
-import com.bilt.pos.nexo.model.DiagnosisRequest;
-import com.bilt.pos.nexo.model.DiagnosisResponse;
 import com.bilt.pos.nexo.model.DocumentQualifierEnum;
 import com.bilt.pos.nexo.model.ErrorConditionType;
-import com.bilt.pos.nexo.model.GetTotalsRequest;
-import com.bilt.pos.nexo.model.GetTotalsResponse;
 import com.bilt.pos.nexo.model.InputUpdate;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
 import com.bilt.pos.nexo.model.MessageReference;
 import com.bilt.pos.nexo.model.OutputContent;
 import com.bilt.pos.nexo.model.OutputFormatEnum;
-import com.bilt.pos.nexo.model.OutputText;
-import com.bilt.pos.nexo.model.PrintOutput;
-import com.bilt.pos.nexo.model.PrintRequest;
-import com.bilt.pos.nexo.model.PrintResponse;
-import com.bilt.pos.nexo.model.ReconciliationRequest;
-import com.bilt.pos.nexo.model.ReconciliationResponse;
-import com.bilt.pos.nexo.model.ReconciliationTypeEnum;
 import com.bilt.pos.nexo.model.RepeatedResponseMessageBody;
-import com.bilt.pos.nexo.model.ResponseModeEnum;
 import com.bilt.pos.nexo.model.ResultType;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
-import com.bilt.pos.nexo.model.SoundActionEnum;
-import com.bilt.pos.nexo.model.SoundContent;
-import com.bilt.pos.nexo.model.SoundFormatEnum;
-import com.bilt.pos.nexo.model.SoundRequest;
 import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
-import com.bilt.pos.nexo.model.TotalFilter;
 import com.bilt.pos.nexo.model.TransactionStatusRequest;
 import com.bilt.pos.nexo.model.TransactionStatusResponse;
 import com.bilt.pos.session.basket.Basket;
@@ -89,7 +72,6 @@ import jakarta.xml.bind.JAXBException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
@@ -109,7 +91,9 @@ import java.util.logging.Logger;
  * customer display), and orchestrates the payment sequence — rebate
  * redemption, point redemption, stored value, card payment, and reward award
  * — as a single flow. Every operation maps to standard Nexo Sale to POI 3.0
- * messages; the raw client remains available via {@link #getClient()}.</p>
+ * messages; the raw client remains available via {@link #getClient()}, and
+ * the session-less device and admin operations (diagnostics, totals,
+ * printing, sound) via {@link #terminal()}.</p>
  *
  * <p>Terminal operations are lazy: methods returning {@link SessionResult}
  * (or a payment flow) send nothing until {@code execute()}, {@code get()}, or
@@ -190,6 +174,11 @@ public final class CheckoutSession implements AutoCloseable {
     // standing" and "claimed by an in-flight drain", and sealing the session
     // on the latter would strand the movements if the drain then fails
     private volatile boolean drainInFlight;
+
+    // the session's Terminal facade, created lazily by terminal(); it has
+    // its own executor and exchange, so the session's lifecycle never
+    // constrains it (and vice versa)
+    private volatile Terminal terminal;
 
     private CheckoutSession(Builder builder) {
         this.operations = new SessionOperations(builder.callbackExecutor);
@@ -1312,11 +1301,11 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     /**
-     * Guard for the diagnostics/device operations that deliberately keep
-     * working after a checkout settles in {@code COMPLETED} or
-     * {@code VOIDED} (receipt reprints, status queries, totals): the one
-     * state that shuts them off is {@link SessionState#ENDED} — the register
-     * said goodbye and the terminal discarded the session.
+     * Guard for operations that deliberately keep working after a checkout
+     * settles in {@code COMPLETED} or {@code VOIDED} (status queries for
+     * receipt reprints): the one state that shuts them off is
+     * {@link SessionState#ENDED} — the register said goodbye and the
+     * terminal discarded the session.
      */
     private void requireSessionNotEnded(String operationName) {
         if (stateMachine.current() == SessionState.ENDED) {
@@ -1400,64 +1389,6 @@ public final class CheckoutSession implements AutoCloseable {
                 repeated.getReversalResponse());
     }
 
-    // ─── Sound ───
-
-    /** Plays a pre-provisioned sound on the terminal by its reference ID. */
-    public SessionResult<Void> playSound(String soundReferenceId) {
-        return playSound(soundReferenceId, null);
-    }
-
-    /**
-     * Plays a pre-provisioned sound on the terminal.
-     *
-     * @param volumePercent volume 0–100, or {@code null} for the terminal default
-     */
-    public SessionResult<Void> playSound(String soundReferenceId, Integer volumePercent) {
-        Objects.requireNonNull(soundReferenceId, "soundReferenceId");
-        if (volumePercent != null && (volumePercent < 0 || volumePercent > 100)) {
-            throw new IllegalArgumentException("volumePercent must be between 0 and 100");
-        }
-        return operation("playSound", () -> {
-            requireSessionNotEnded("playSound");
-            return sendSound(SoundActionEnum.START_SOUND,
-                    SoundContent.builder()
-                            .soundFormat(SoundFormatEnum.SOUND_REF)
-                            .referenceID(soundReferenceId)
-                            .build(),
-                    volumePercent);
-        });
-    }
-
-    /** Stops any sound currently playing on the terminal. */
-    public SessionResult<Void> stopSound() {
-        return operation("stopSound", () -> {
-            requireSessionNotEnded("stopSound");
-            return sendSound(SoundActionEnum.STOP_SOUND, null, null);
-        });
-    }
-
-    private Void sendSound(SoundActionEnum action, SoundContent content, Integer volumePercent) {
-        SoundRequest.Builder soundRequest = SoundRequest.builder()
-                .soundAction(action)
-                .responseMode(ResponseModeEnum.IMMEDIATE);
-        if (content != null) {
-            soundRequest.soundContent(content);
-        }
-        if (volumePercent != null) {
-            soundRequest.soundVolume(volumePercent.longValue());
-        }
-        SaleToPOIRequest request = SaleToPOIRequest.builder()
-                .messageHeader(factory.header(MessageClassType.DEVICE, MessageCategoryType.SOUND))
-                .soundRequest(soundRequest.build())
-                .build();
-        SaleToPOIResponse response = exchange.send(MessageCategoryType.SOUND, request);
-        if (response != null && response.getSoundResponse() != null) {
-            exchange.requireSuccess(MessageCategoryType.SOUND,
-                    response.getSoundResponse().getResponse());
-        }
-        return null;
-    }
-
     // ─── Input update ───
 
     /**
@@ -1514,119 +1445,43 @@ public final class CheckoutSession implements AutoCloseable {
         }).unordered();
     }
 
-    // ─── Diagnostics & Admin ───
+    // ─── Terminal (device & admin operations) ───
 
     /**
-     * Queries the terminal's running totals since the last reconciliation
-     * (Nexo {@code GetTotals}) — lighter than {@link #reconcile()}, which
-     * closes the period.
+     * The device and admin operations of this session's terminal —
+     * {@code diagnose()}, {@code getTotals()}, {@code reconcile()},
+     * {@code print()}, {@code playSound()}/{@code stopSound()} — built from
+     * this session's client, identifiers, and callback executor. Created
+     * lazily and cached; see {@link Terminal}.
+     *
+     * <p>The terminal is deliberately independent of the session: it has its
+     * own operation thread and exchange, so its operations do not queue
+     * behind an in-flight payment (a connectivity check mid-payment works),
+     * they keep working after {@link #end()}, and its {@link Terminal#close()
+     * close()} does not touch the session. For the same reason
+     * {@link #abort()} does not target terminal operations — they run on a
+     * separate exchange.</p>
      */
-    public SessionResult<ReconciliationResult> getTotals() {
-        return operation("getTotals", () -> {
-            requireSessionNotEnded("getTotals");
-            SaleToPOIRequest request = SaleToPOIRequest.builder()
-                    .messageHeader(factory.header(MessageClassType.SERVICE,
-                            MessageCategoryType.GET_TOTALS))
-                    .getTotalsRequest(GetTotalsRequest.builder()
-                            .totalFilter(TotalFilter.builder()
-                                    .saleID(factory.getSaleId())
-                                    .totalsGroupID(storeLocation)
-                                    .build())
-                            .build())
-                    .build();
-            SaleToPOIResponse response = exchange.sendExpectingBody(
-                    MessageCategoryType.GET_TOTALS, request);
-            GetTotalsResponse body = response.getGetTotalsResponse();
-            if (body == null) {
-                throw Wire.missing("GetTotalsResponse");
+    public Terminal terminal() {
+        Terminal current = terminal;
+        if (current != null) {
+            return current;
+        }
+        lock.lock();
+        try {
+            if (terminal == null) {
+                terminal = Terminal.builder()
+                        .client(client)
+                        .saleId(factory.getSaleId())
+                        .poiId(factory.getPoiId())
+                        .storeLocation(storeLocation)
+                        .callbackExecutor(operations.callback())
+                        .build();
             }
-            exchange.requireSuccess(MessageCategoryType.GET_TOTALS, body.getResponse());
-            return new ReconciliationResult(body.getPoiReconciliationID(),
-                    body.getTransactionTotals() == null
-                            ? null : Arrays.asList(body.getTransactionTotals()));
-        });
-    }
-
-    /** Queries terminal health and host reachability. */
-    public SessionResult<DiagnosisResult> diagnose() {
-        return operation("diagnose", () -> {
-            requireSessionNotEnded("diagnose");
-            SaleToPOIRequest request = SaleToPOIRequest.builder()
-                    .messageHeader(factory.header(MessageClassType.SERVICE,
-                            MessageCategoryType.DIAGNOSIS))
-                    .diagnosisRequest(DiagnosisRequest.builder().build())
-                    .build();
-            SaleToPOIResponse response = exchange.sendExpectingBody(
-                    MessageCategoryType.DIAGNOSIS, request);
-            DiagnosisResponse body = response.getDiagnosisResponse();
-            if (body == null) {
-                throw Wire.missing("DiagnosisResponse");
-            }
-            exchange.requireSuccess(MessageCategoryType.DIAGNOSIS, body.getResponse());
-            return new DiagnosisResult(body.getPoiStatus(),
-                    body.getHostStatus() == null ? null : Arrays.asList(body.getHostStatus()));
-        });
-    }
-
-    /** Runs a sale reconciliation (end-of-period totals). */
-    public SessionResult<ReconciliationResult> reconcile() {
-        return operation("reconcile", () -> {
-            requireSessionNotEnded("reconcile");
-            SaleToPOIRequest request = SaleToPOIRequest.builder()
-                    .messageHeader(factory.header(MessageClassType.SERVICE,
-                            MessageCategoryType.RECONCILIATION))
-                    .reconciliationRequest(ReconciliationRequest.builder()
-                            .reconciliationType(ReconciliationTypeEnum.SALE_RECONCILIATION)
-                            .build())
-                    .build();
-            SaleToPOIResponse response = exchange.sendExpectingBody(
-                    MessageCategoryType.RECONCILIATION, request);
-            ReconciliationResponse body = response.getReconciliationResponse();
-            if (body == null) {
-                throw Wire.missing("ReconciliationResponse");
-            }
-            exchange.requireSuccess(MessageCategoryType.RECONCILIATION, body.getResponse());
-            return new ReconciliationResult(body.getPoiReconciliationID(),
-                    body.getTransactionTotals() == null
-                            ? null : Arrays.asList(body.getTransactionTotals()));
-        });
-    }
-
-    /** Prints a document on the terminal printer. */
-    public SessionResult<Void> print(PrintPayload payload) {
-        Objects.requireNonNull(payload, "payload");
-        return operation("print", () -> {
-            requireSessionNotEnded("print");
-            OutputContent.Builder content = OutputContent.builder();
-            if (payload.getFormat() == PrintPayload.Format.TEXT) {
-                content.outputFormat(OutputFormatEnum.TEXT)
-                        .outputText(new OutputText[] {OutputText.builder()
-                                .text(payload.getContent())
-                                .build()});
-            } else {
-                content.outputFormat(OutputFormatEnum.XHTML)
-                        .outputXHTML(payload.getContent());
-            }
-            SaleToPOIRequest request = SaleToPOIRequest.builder()
-                    .messageHeader(factory.header(MessageClassType.DEVICE,
-                            MessageCategoryType.PRINT))
-                    .printRequest(PrintRequest.builder()
-                            .printOutput(PrintOutput.builder()
-                                    .documentQualifier(payload.getDocumentQualifier())
-                                    .responseMode(ResponseModeEnum.PRINT_END)
-                                    .outputContent(content.build())
-                                    .build())
-                            .build())
-                    .build();
-            SaleToPOIResponse response = exchange.sendExpectingBody(
-                    MessageCategoryType.PRINT, request);
-            PrintResponse body = response.getPrintResponse();
-            if (body == null) {
-                throw Wire.missing("PrintResponse");
-            }
-            exchange.requireSuccess(MessageCategoryType.PRINT, body.getResponse());
-            return null;
-        });
+            return terminal;
+        } finally {
+            lock.unlock();
+        }
     }
 
     // ─── Escape hatch ───

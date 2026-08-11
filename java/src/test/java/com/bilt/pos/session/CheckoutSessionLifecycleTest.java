@@ -281,15 +281,10 @@ class CheckoutSessionLifecycleTest {
         assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
                 () -> session.voidTransaction().get()).getError().getCode());
         assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
-                () -> session.diagnose().get()).getError().getCode());
-        assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
-                () -> session.getTotals().get()).getError().getCode());
-        assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
-                () -> session.print(PrintPayload.text("x")).get()).getError().getCode());
-        assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
-                () -> session.playSound("chime").get()).getError().getCode());
-        assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
                 () -> session.getTransactionStatus("SVC1").get()).getError().getCode());
+        // the device/admin operations are deliberately absent: they live on
+        // session.terminal(), which is independent of the session bracket
+        // and keeps working after end()
 
         // display is best-effort and never throws — it skips quietly
         assertDoesNotThrow(() -> session.updateDisplay(DisplayPayloadHelper.standby("bye")));
