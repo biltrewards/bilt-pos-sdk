@@ -95,13 +95,16 @@ final class SessionOperations {
             ThreadLocal.withInitial(() -> false);
 
     /** [operationExecutor] with the on-thread marker around every task; all
-     *  submissions — async and ordered-sync — go through this. */
+     *  submissions — async and ordered-sync — go through this. Tasks never
+     *  nest on the pool thread (a nested execute() queues), so a plain
+     *  remove() restores exactly; remove() rather than set(false) so no
+     *  stale entry outlives the work. */
     private final Executor marked = task -> operationExecutor.execute(() -> {
         onOperationThread.set(true);
         try {
             task.run();
         } finally {
-            onOperationThread.set(false);
+            onOperationThread.remove();
         }
     });
 
@@ -201,11 +204,21 @@ final class SessionOperations {
      *  dispatches: those are the ones that park the operation thread. */
     <R> Supplier<R> awaitedHandler(Supplier<R> handler) {
         return () -> {
+            // the outermost frame owns the marker: a re-entrant wrap (a
+            // direct callback executor can run dispatches inline on one
+            // thread) passes through, so unwinding cannot drop an outer
+            // frame's marker. remove() rather than set(false): this runs
+            // on the integrator's callback thread — typically a UI thread
+            // that outlives every session — and must not leave an entry
+            // behind per session that ever dispatched there.
+            if (inAwaitedHandler.get()) {
+                return handler.get();
+            }
             inAwaitedHandler.set(true);
             try {
                 return handler.get();
             } finally {
-                inAwaitedHandler.set(false);
+                inAwaitedHandler.remove();
             }
         };
     }
