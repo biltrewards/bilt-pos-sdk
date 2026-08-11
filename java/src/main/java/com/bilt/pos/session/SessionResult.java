@@ -11,7 +11,9 @@ package com.bilt.pos.session;
 
 import java.util.Objects;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -85,6 +87,19 @@ import java.util.logging.Logger;
 public final class SessionResult<T> {
 
     private static final Logger LOGGER = Logger.getLogger(SessionResult.class.getName());
+
+    private static final AtomicInteger UNORDERED_COUNTER = new AtomicInteger();
+
+    /** Shared lane for unordered operations (see [ordered]): a cached pool
+     *  reuses an idle thread across rapid re-executions — an input prompt
+     *  amended per keystroke — instead of creating a thread per call.
+     *  Daemon threads that idle out, so a quiet pool holds nothing. */
+    private static final Executor UNORDERED = Executors.newCachedThreadPool(runnable -> {
+        Thread thread = new Thread(runnable,
+                "bilt-unordered-" + UNORDERED_COUNTER.incrementAndGet());
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private final String operationName;
     private final Supplier<T> body;
@@ -217,11 +232,9 @@ public final class SessionResult<T> {
         }
         lifecycle.claimStart();
         if (!ordered) {
-            // deliberately concurrent (see [ordered]): its own short-lived
-            // thread instead of the session queue it must overlap
-            Thread runner = new Thread(this::runAsync, "bilt-" + operationName);
-            runner.setDaemon(true);
-            runner.start();
+            // deliberately concurrent (see [ordered]): the shared unordered
+            // lane instead of the session queue it must overlap
+            UNORDERED.execute(this::runAsync);
             return;
         }
         try {
