@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
@@ -93,7 +94,7 @@ public final class ReversalSession implements AutoCloseable {
 
     private final String sessionId = UUID.randomUUID().toString();
     private final SessionStateMachine stateMachine = new SessionStateMachine();
-    private final SessionOperations operations = new SessionOperations();
+    private final SessionOperations operations;
 
     private final BiltNexoTerminalClient client;
     private final NexoExchange exchange;
@@ -123,6 +124,7 @@ public final class ReversalSession implements AutoCloseable {
     private final ReversalGuards guards = new ReversalGuards("sale");
 
     private ReversalSession(Builder builder) {
+        this.operations = new SessionOperations(builder.callbackExecutor);
         this.client = builder.client;
         this.currency = builder.currency;
         this.storeLocation = builder.storeLocation;
@@ -233,7 +235,8 @@ public final class ReversalSession implements AutoCloseable {
      */
     public ReversalFlow<VoidResult> voidTransaction() {
         operations.track("voidTransaction");
-        return new ReversalFlow<>(this::executeVoid);
+        return new ReversalFlow<>(this::executeVoid)
+                .session(operations);
     }
 
     private VoidResult executeVoid(ReversalFlow<VoidResult> flow) {
@@ -280,7 +283,8 @@ public final class ReversalSession implements AutoCloseable {
      */
     public ReversalFlow<RefundResult> refund() {
         operations.track("refund");
-        return new ReversalFlow<>(flow -> executeRefund(flow, null));
+        return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, null))
+                .session(operations);
     }
 
     /** Partial linked refund of the referenced card leg. */
@@ -290,7 +294,8 @@ public final class ReversalSession implements AutoCloseable {
             throw new IllegalArgumentException("refund amount must be positive");
         }
         operations.track("refund");
-        return new ReversalFlow<>(flow -> executeRefund(flow, amount));
+        return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, amount))
+                .session(operations);
     }
 
     private RefundResult executeRefund(ReversalFlow<RefundResult> flow, BigDecimal amount) {
@@ -325,7 +330,8 @@ public final class ReversalSession implements AutoCloseable {
      */
     public ReversalFlow<RefundResult> refundBasket() {
         operations.track("refundBasket");
-        return new ReversalFlow<>(this::executeRefundBasket);
+        return new ReversalFlow<>(this::executeRefundBasket)
+                .session(operations);
     }
 
     private RefundResult executeRefundBasket(ReversalFlow<RefundResult> flow) {
@@ -434,6 +440,9 @@ public final class ReversalSession implements AutoCloseable {
             }
             exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
             stateMachine.transitionTo(SessionState.ENDED);
+            // no further operations may run; asynchronous submissions after
+            // this fail into their handlers instead of queueing forever
+            operations.shutdown();
             return null;
         });
     }
@@ -442,14 +451,22 @@ public final class ReversalSession implements AutoCloseable {
      * Best-effort {@link #end()} for try-with-resources: a failure to send
      * the end signal is logged, not thrown, and an already-ended session is
      * left alone.
+     *
+     * <p>Blocking, and queued behind any in-flight operation — with a
+     * callback executor configured, never call it from that executor's
+     * thread while operations may be in flight (see
+     * {@code CheckoutSession#close()}); use {@code end().execute()} there
+     * instead.</p>
      */
     @Override
     public void close() {
         if (stateMachine.current() == SessionState.ENDED) {
             return;
         }
+        // synchronous deliberately: close() runs on teardown paths where a
+        // queued async end would be lost with the closing scope
         end().onError(e -> LOGGER.warning("close() could not end the session: " + e))
-                .execute();
+                .executeSync();
     }
 
     // ─── Escape hatch ───
@@ -499,6 +516,7 @@ public final class ReversalSession implements AutoCloseable {
         private String awardPoiTransactionId;
         private Instant awardPoiTransactionTimestamp;
         private String memberId;
+        private Executor callbackExecutor;
 
         private Builder() {
         }
@@ -667,6 +685,17 @@ public final class ReversalSession implements AutoCloseable {
         }
 
         /**
+         * Where asynchronously executed operations deliver their handlers —
+         * see {@code CheckoutSession.Builder#callbackExecutor}. Applies to
+         * {@code execute()}; {@code executeSync()} and the blocking
+         * accessors are unaffected.
+         */
+        public Builder callbackExecutor(Executor callbackExecutor) {
+            this.callbackExecutor = callbackExecutor;
+            return this;
+        }
+
+        /**
          * Validates the configuration and returns a lazy operation that
          * announces the session to the terminal (Nexo {@code Admin} session
          * start signal) and yields it once the terminal acknowledged.
@@ -703,7 +732,9 @@ public final class ReversalSession implements AutoCloseable {
                                 + "or awardPoiTransactionId)");
             }
             ReversalSession session = new ReversalSession(this);
-            return new SessionResult<>("start", session::started)
+            // built through the session's operations so an asynchronous
+            // start runs on (and delivers like) the session it creates
+            return session.operations.operation("start", session::started)
                     .releasing(ReversalSession::close);
         }
     }

@@ -107,12 +107,12 @@ class CheckoutSessionStoredValueTest {
     @Test
     void loadAndUnloadSendCorrespondingTypes() throws Exception {
         server.enqueue(new MockResponse().setBody(storedValueOk("Load", 10.00, 35.00)));
-        session.storedValueLoad(StoredValueCard.number("GC-1"), new BigDecimal("10.00")).execute();
+        session.storedValueLoad(StoredValueCard.number("GC-1"), new BigDecimal("10.00")).executeSync();
         assertEquals("Load", recordedRequest().getStoredValueRequest()
                 .getStoredValueData()[0].getStoredValueTransactionType().toValue());
 
         server.enqueue(new MockResponse().setBody(storedValueOk("Unload", 5.00, 30.00)));
-        session.storedValueUnload(StoredValueCard.number("GC-1"), new BigDecimal("5.00")).execute();
+        session.storedValueUnload(StoredValueCard.number("GC-1"), new BigDecimal("5.00")).executeSync();
         StoredValueData unload = recordedRequest().getStoredValueRequest().getStoredValueData()[0];
         assertEquals("Unload", unload.getStoredValueTransactionType().toValue());
         assertEquals(5.00, unload.getItemAmount());
@@ -122,7 +122,7 @@ class CheckoutSessionStoredValueTest {
     void deactivateIsUnloadWithZeroAmount() throws Exception {
         server.enqueue(new MockResponse().setBody(storedValueOk("Unload", 0.00, 0.00)));
 
-        session.storedValueDeactivate(StoredValueCard.number("GC-1")).execute();
+        session.storedValueDeactivate(StoredValueCard.number("GC-1")).executeSync();
 
         StoredValueData data = recordedRequest().getStoredValueRequest().getStoredValueData()[0];
         assertEquals("Unload", data.getStoredValueTransactionType().toValue());
@@ -133,7 +133,7 @@ class CheckoutSessionStoredValueTest {
     void swipedCardOmitsStoredValueId() throws Exception {
         server.enqueue(new MockResponse().setBody(storedValueOk("Load", 10.00, 10.00)));
 
-        session.storedValueLoad(StoredValueCard.swiped(), new BigDecimal("10.00")).execute();
+        session.storedValueLoad(StoredValueCard.swiped(), new BigDecimal("10.00")).executeSync();
 
         StoredValueData data = recordedRequest().getStoredValueRequest().getStoredValueData()[0];
         assertNull(data.getStoredValueAccountID().getStoredValueID());
@@ -144,7 +144,7 @@ class CheckoutSessionStoredValueTest {
     void reverseReferencesOriginalTransaction() throws Exception {
         server.enqueue(new MockResponse().setBody(storedValueOk("Reverse", 10.00, 20.00)));
 
-        session.storedValueReverse("POI-SV-1", Instant.parse("2026-07-27T10:00:00Z")).execute();
+        session.storedValueReverse("POI-SV-1", Instant.parse("2026-07-27T10:00:00Z")).executeSync();
 
         StoredValueData data = recordedRequest().getStoredValueRequest().getStoredValueData()[0];
         assertEquals("Reverse", data.getStoredValueTransactionType().toValue());
@@ -213,7 +213,7 @@ class CheckoutSessionStoredValueTest {
                         + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-GC-1\"}},"
                         + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":50.00}}}}}"));
 
-        session.pay().execute();
+        session.pay().executeSync();
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("svs", sent.getPaymentRequest().getPaymentData().getPaymentInstrumentData()

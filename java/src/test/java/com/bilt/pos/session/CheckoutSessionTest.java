@@ -172,7 +172,7 @@ class CheckoutSessionTest {
                         + "{\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnavailableDevice\"}}}}"));
 
         AtomicReference<SessionError> error = new AtomicReference<>();
-        session.diagnose().onError(error::set).execute();
+        session.diagnose().onError(error::set).executeSync();
 
         assertNotNull(error.get());
         assertEquals(SessionErrorCode.TERMINAL_ERROR, error.get().getCode());
@@ -215,7 +215,7 @@ class CheckoutSessionTest {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"PrintResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
 
-        session.print(PrintPayload.text("THANK YOU")).execute();
+        session.print(PrintPayload.text("THANK YOU")).executeSync();
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("Print", sent.getMessageHeader().getMessageCategory().toValue());

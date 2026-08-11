@@ -1,9 +1,14 @@
 package com.bilt.pos.session;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -15,14 +20,33 @@ class SessionResultTest {
     private static final SessionError ERROR =
             new SessionError(SessionErrorCode.DECLINED, "declined");
 
+    private final SessionOperations operations = new SessionOperations(null);
+    private final ExecutorService callbackExecutor =
+            Executors.newSingleThreadExecutor(r -> new Thread(r, "cb-thread"));
+
+    @AfterEach
+    void shutDownExecutors() {
+        operations.shutdown();
+        callbackExecutor.shutdownNow();
+    }
+
     private static <T> SessionResult<T> result(Supplier<T> body) {
         return new SessionResult<>("testOp", body);
+    }
+
+    private <T> SessionResult<T> attached(Supplier<T> body) {
+        return result(body).session(operations);
     }
 
     private static <T> SessionResult<T> failing() {
         return result(() -> {
             throw new SessionException(ERROR);
         });
+    }
+
+    /** Fails the test if [latch] does not open within five seconds. */
+    private static void await(CountDownLatch latch) throws InterruptedException {
+        assertTrue(latch.await(5, TimeUnit.SECONDS), "timed out waiting for dispatch");
     }
 
     @Test
@@ -32,7 +56,7 @@ class SessionResultTest {
         });
 
         IllegalStateException first =
-                assertThrows(IllegalStateException.class, result::execute);
+                assertThrows(IllegalStateException.class, result::executeSync);
 
         // later accessors must rethrow the failure, never report success
         assertSame(first, assertThrows(IllegalStateException.class, result::get));
@@ -51,7 +75,7 @@ class SessionResultTest {
         result.onError(e -> { });
 
         assertEquals(0, invocations.get());
-        result.execute();
+        result.executeSync();
         assertEquals(1, invocations.get());
     }
 
@@ -62,7 +86,7 @@ class SessionResultTest {
         result(() -> "hello")
                 .onSuccess(received::set)
                 .onError(e -> errors.add(e.getMessage()))
-                .execute();
+                .executeSync();
 
         assertEquals("hello", received.get());
         assertTrue(errors.isEmpty());
@@ -74,7 +98,7 @@ class SessionResultTest {
         SessionResult<String> result = SessionResultTest.<String>failing()
                 .onSuccess(v -> fail("success handler must not run"))
                 .onError(received::set);
-        result.execute();
+        result.executeSync();
 
         assertSame(ERROR, received.get());
     }
@@ -117,21 +141,21 @@ class SessionResultTest {
     @Test
     void getAfterExecuteReturnsCachedOutcome() {
         SessionResult<String> result = result(() -> "ok");
-        result.execute();
+        result.executeSync();
         assertEquals("ok", result.get());
     }
 
     @Test
     void doubleExecuteThrows() {
         SessionResult<String> result = result(() -> "ok");
-        result.execute();
-        assertThrows(IllegalStateException.class, result::execute);
+        result.executeSync();
+        assertThrows(IllegalStateException.class, result::executeSync);
     }
 
     @Test
     void registeringHandlerAfterExecutionThrows() {
         SessionResult<String> result = result(() -> "ok");
-        result.execute();
+        result.executeSync();
         assertThrows(IllegalStateException.class, () -> result.onSuccess(v -> { }));
         assertThrows(IllegalStateException.class, () -> result.onError(e -> { }));
     }
@@ -139,7 +163,342 @@ class SessionResultTest {
     @Test
     void errorHandlerIsOptionalOnFailure() {
         SessionResult<String> result = failing();
-        assertDoesNotThrow(result::execute);
+        assertDoesNotThrow(result::executeSync);
         assertNull(result.getOrNull());
+    }
+
+    // ─── Asynchronous execution ───
+
+    @Test
+    void syncCallsQueueBehindAnInFlightExecute() throws Exception {
+        List<String> order = java.util.Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch firstMayFinish = new CountDownLatch(1);
+        attached(() -> {
+            try {
+                firstMayFinish.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            order.add("first");
+            return "a";
+        }).execute();
+
+        // were the sync path not ordered through the session executor, this
+        // get() would run "second" on the calling thread immediately, while
+        // "first" is still held open — the exact race being prevented
+        Thread releaser = new Thread(() -> {
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            firstMayFinish.countDown();
+        });
+        releaser.start();
+        assertEquals("b", attached(() -> {
+            order.add("second");
+            return "b";
+        }).get());
+        releaser.join();
+
+        assertEquals(List.of("first", "second"), order);
+    }
+
+    @Test
+    void nestedSyncCallFromTheOperationThreadRunsInline() {
+        // an operation body invoking another operation synchronously is
+        // already on the session thread — it must run inline, not deadlock
+        // waiting for its own thread
+        String outcome = attached(() -> attached(() -> "inner").get() + "-outer").get();
+        assertEquals("inner-outer", outcome);
+    }
+
+    @Test
+    void nestedSyncCallFromAMarshalledHandlerRunsInline() throws Exception {
+        // a handler the operation thread is awaiting is a synchronous
+        // extension of the in-flight operation: a blocking session call
+        // made from it must run inline on the callback thread — queueing
+        // it behind the parked operation thread would deadlock
+        CountDownLatch complete = new CountDownLatch(1);
+        AtomicReference<String> nested = new AtomicReference<>();
+        result(() -> "outer")
+                .session(operations)
+                .callbackOn(callbackExecutor)
+                .onSuccess(v -> nested.set(attached(() -> "inner").get()))
+                .onComplete(complete::countDown)
+                .execute();
+
+        await(complete);
+        assertEquals("inner", nested.get());
+    }
+
+    @Test
+    void interruptWhileQueuedCancelsTheBodyAndReportsInterruption() throws Exception {
+        CountDownLatch firstMayFinish = new CountDownLatch(1);
+        SessionResult<String> first = attached(() -> {
+            try {
+                firstMayFinish.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return "a";
+        });
+        first.execute();
+
+        // the second op queues behind the held-open first; interrupting its
+        // waiting caller must cancel the never-started body — "interrupted,
+        // nothing ran" is then the true outcome
+        AtomicInteger secondRuns = new AtomicInteger();
+        SessionResult<String> second = attached(() -> {
+            secondRuns.incrementAndGet();
+            return "b";
+        });
+        AtomicReference<Throwable> outcome = new AtomicReference<>();
+        Thread caller = new Thread(() -> {
+            try {
+                second.get();
+            } catch (Throwable t) {
+                outcome.set(t);
+            }
+        });
+        caller.start();
+        Thread.sleep(200);  // let the caller block behind the first op
+        caller.interrupt();
+        caller.join(5000);
+        assertFalse(caller.isAlive(), "the interrupted caller must return");
+        assertTrue(outcome.get() instanceof SessionException);
+
+        firstMayFinish.countDown();
+        assertEquals("a", first.get());
+        // a third ordered call drains the queue past the cancelled task
+        assertEquals("c", attached(() -> "c").get());
+        assertEquals(0, secondRuns.get(), "the cancelled body must never run");
+    }
+
+    @Test
+    void interruptWhileRunningStillYieldsTheRealOutcome() throws Exception {
+        // once the body is on the wire an interrupt cannot stop it — the
+        // caller must receive the real result (recording an interrupt while
+        // the terminal completes a payment would invite a double charge),
+        // with the interrupt flag re-asserted
+        CountDownLatch bodyStarted = new CountDownLatch(1);
+        CountDownLatch bodyMayFinish = new CountDownLatch(1);
+        SessionResult<String> result = attached(() -> {
+            bodyStarted.countDown();
+            try {
+                bodyMayFinish.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return "ok";
+        });
+
+        AtomicReference<Object> outcome = new AtomicReference<>();
+        AtomicReference<Boolean> flagRestored = new AtomicReference<>();
+        Thread caller = new Thread(() -> {
+            try {
+                outcome.set(result.get());
+            } catch (Throwable t) {
+                outcome.set(t);
+            }
+            flagRestored.set(Thread.currentThread().isInterrupted());
+        });
+        caller.start();
+        await(bodyStarted);
+        caller.interrupt();
+        Thread.sleep(100);  // let the interrupt land in the waiting get()
+        bodyMayFinish.countDown();
+        caller.join(5000);
+
+        assertEquals("ok", outcome.get());
+        assertEquals(Boolean.TRUE, flagRestored.get(), "the interrupt must be re-asserted");
+    }
+
+    @Test
+    void executeWithoutSessionExecutorPointsToExecuteSync() {
+        IllegalStateException e =
+                assertThrows(IllegalStateException.class, () -> result(() -> "ok").execute());
+        assertTrue(e.getMessage().contains("executeSync"));
+    }
+
+    @Test
+    void executeRunsOnTheOperationExecutorAndReturnsImmediately() throws Exception {
+        CountDownLatch bodyMayFinish = new CountDownLatch(1);
+        AtomicReference<String> bodyThread = new AtomicReference<>();
+        SessionResult<String> result = attached(() -> {
+            bodyThread.set(Thread.currentThread().getName());
+            try {
+                bodyMayFinish.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return "ok";
+        });
+
+        result.execute();          // must not block on the held-open body
+        bodyMayFinish.countDown();
+
+        assertEquals("ok", result.get());
+        assertTrue(bodyThread.get().startsWith("bilt-session-"),
+                "ran on " + bodyThread.get());
+    }
+
+    @Test
+    void handlersDeliverOnTheCallbackExecutor() throws Exception {
+        CountDownLatch delivered = new CountDownLatch(1);
+        AtomicReference<String> handlerThread = new AtomicReference<>();
+        result(() -> "ok")
+                .session(operations)
+                .callbackOn(callbackExecutor)
+                .onSuccess(v -> {
+                    handlerThread.set(Thread.currentThread().getName());
+                    delivered.countDown();
+                })
+                .execute();
+
+        await(delivered);
+        assertEquals("cb-thread", handlerThread.get());
+    }
+
+    @Test
+    void callbackOnOverridesTheSessionDefault() throws Exception {
+        ExecutorService override = Executors.newSingleThreadExecutor(
+                r -> new Thread(r, "override-thread"));
+        try {
+            CountDownLatch delivered = new CountDownLatch(1);
+            AtomicReference<String> handlerThread = new AtomicReference<>();
+            result(() -> "ok")
+                    .session(operations)
+                .callbackOn(callbackExecutor)
+                    .callbackOn(override)
+                    .onSuccess(v -> {
+                        handlerThread.set(Thread.currentThread().getName());
+                        delivered.countDown();
+                    })
+                    .execute();
+
+            await(delivered);
+            assertEquals("override-thread", handlerThread.get());
+        } finally {
+            override.shutdownNow();
+        }
+    }
+
+    @Test
+    void onCompleteFiresOnSuccessAndError() throws Exception {
+        CountDownLatch successComplete = new CountDownLatch(1);
+        attached(() -> "ok").onComplete(successComplete::countDown).execute();
+        await(successComplete);
+
+        CountDownLatch errorComplete = new CountDownLatch(1);
+        SessionResultTest.<String>failing()
+                .session(operations)
+                .onComplete(errorComplete::countDown)
+                .execute();
+        await(errorComplete);
+    }
+
+    @Test
+    void onCompleteFiresOnUnexpectedExceptionAndStaysLoud() throws Exception {
+        CountDownLatch complete = new CountDownLatch(1);
+        IllegalStateException boom = new IllegalStateException("boom");
+        SessionResult<String> result = this.<String>attached(() -> {
+            throw boom;
+        }).onComplete(complete::countDown);
+
+        result.execute();
+
+        await(complete);
+        assertSame(boom, assertThrows(IllegalStateException.class, result::get));
+    }
+
+    @Test
+    void accessorsSurfaceAsyncHandlerFailures() {
+        // the settled latch must not open before handler dispatch: a get()
+        // racing a throwing onSuccess would otherwise report a clean
+        // success that later accessors contradict
+        IllegalStateException handlerBug = new IllegalStateException("handler bug");
+        SessionResult<String> result = attached(() -> "ok")
+                .onSuccess(v -> {
+                    throw handlerBug;
+                });
+        result.execute();
+
+        assertSame(handlerBug, assertThrows(IllegalStateException.class, result::get));
+        assertSame(handlerBug, assertThrows(IllegalStateException.class, result::isSuccess));
+    }
+
+    @Test
+    void onCompleteFiresWhenTheSuccessHandlerThrows() throws Exception {
+        CountDownLatch complete = new CountDownLatch(1);
+        SessionResult<String> result = attached(() -> "ok")
+                .onSuccess(v -> {
+                    throw new IllegalStateException("handler bug");
+                })
+                .onComplete(complete::countDown);
+
+        result.execute();
+
+        await(complete);
+    }
+
+    @Test
+    void rejectionAfterShutdownFailsThroughTheHandlers() throws Exception {
+        operations.shutdown();
+        CountDownLatch complete = new CountDownLatch(1);
+        AtomicReference<SessionError> received = new AtomicReference<>();
+        SessionResult<String> result = attached(() -> "ok")
+                .onSuccess(v -> fail("success handler must not run"))
+                .onError(received::set)
+                .onComplete(complete::countDown);
+
+        result.execute();
+
+        await(complete);
+        assertEquals(SessionErrorCode.INVALID_STATE, received.get().getCode());
+        assertThrows(SessionException.class, result::get);
+    }
+
+    @Test
+    void getAwaitsAnInFlightExecute() throws Exception {
+        CountDownLatch bodyMayFinish = new CountDownLatch(1);
+        SessionResult<String> result = attached(() -> {
+            try {
+                bodyMayFinish.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return "ok";
+        });
+        result.execute();
+
+        Thread releaser = new Thread(bodyMayFinish::countDown);
+        releaser.start();
+        assertEquals("ok", result.get());
+        releaser.join();
+    }
+
+    @Test
+    void registeringOnCompleteOrCallbackOnAfterStartThrows() {
+        SessionResult<String> result = result(() -> "ok");
+        result.executeSync();
+        assertThrows(IllegalStateException.class, () -> result.onComplete(() -> { }));
+        assertThrows(IllegalStateException.class,
+                () -> result.callbackOn(Runnable::run));
+    }
+
+    @Test
+    void onCompleteFiresOnTheSyncPathsToo() {
+        AtomicInteger completions = new AtomicInteger();
+        SessionResult<String> result = result(() -> "ok")
+                .onComplete(completions::incrementAndGet);
+        result.executeSync();
+        assertEquals(1, completions.get());
+
+        AtomicInteger failureCompletions = new AtomicInteger();
+        SessionResult<String> failing = SessionResultTest.<String>failing()
+                .onComplete(failureCompletions::incrementAndGet);
+        assertNull(failing.getOrNull());
+        assertEquals(1, failureCompletions.get());
     }
 }

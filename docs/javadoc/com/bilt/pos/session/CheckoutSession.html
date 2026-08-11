@@ -961,7 +961,15 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="block">Best-effort <a href="#end()"><code>end()</code></a> for try-with-resources: a failure to send
  the end signal is logged, not thrown, and an already-ended session is
  left alone. Registers that need to react to a failed end should call
- <code>end()</code> directly.</div>
+ <code>end()</code> directly.
+
+ <p>Blocking, and queued behind any in-flight operation — so with a
+ callback executor configured, never call it from that executor's
+ thread while operations may be in flight: the in-flight operation
+ may need this thread for its handlers before it can finish, and
+ both would wait forever. UI-driven teardown should use
+ <code>end().execute()</code> with an <code>onComplete</code> instead; close()
+ is for try-with-resources and process-exit paths.</p></div>
 <dl class="notes">
 <dt>Specified by:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html#close()" title="class or interface in java.lang" class="external-link">close</a></code>&nbsp;in interface&nbsp;<code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" title="class or interface in java.lang" class="external-link">AutoCloseable</a></code></dd>

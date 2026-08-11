@@ -12,7 +12,7 @@ package com.bilt.pos.session;
 import com.bilt.pos.session.internal.ReversalManager;
 
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.Executor;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -22,10 +22,11 @@ import java.util.function.Function;
  * {@code refund} operations of {@link CheckoutSession} (this session's own
  * payment) and {@link ReversalSession} (a referenced prior sale).
  *
- * <p>Registering handlers sends nothing; the reversal steps run blocking on
- * the calling thread when {@link #execute()}, {@link #get()}, or
- * {@link #getOrNull()} is invoked. When a step fails, the {@code onError}
- * handler decides how to proceed — {@link ReversalDecision#RETRY},
+ * <p>Registering handlers sends nothing; the reversal steps run when
+ * {@link #execute()} (asynchronously, on the session's operation thread) or
+ * {@link #executeSync()}, {@link #get()}, or {@link #getOrNull()}
+ * (blocking) is invoked. When a step fails, the {@code onError} handler
+ * decides how to proceed — {@link ReversalDecision#RETRY},
  * {@link ReversalDecision#SKIP}, or {@link ReversalDecision#ABORT}. Without
  * a handler the default policy applies: a failed money step (the card or
  * stored value leg) aborts; a failed loyalty movement riding along with a
@@ -41,28 +42,49 @@ import java.util.function.Function;
  *     .execute();
  * }</pre>
  *
+ * <p>With {@link #execute()}, handlers are delivered through the callback
+ * executor (the session builder's {@code callbackExecutor}, or the per-flow
+ * {@link #callbackOn(Executor)} override) and the reversal thread waits for
+ * each answer — the {@code onError} step decisions steer the flow exactly
+ * as if they ran inline, just physically on the integrator's thread. Keep
+ * handlers quick, and never block a callback thread on this flow's
+ * {@code get()}. Without a callback executor, handlers run directly on the
+ * thread executing the reversal.</p>
+ *
  * @param <T> the reversal's result type
  */
-public final class ReversalFlow<T> {
+public final class ReversalFlow<T> extends SessionFlow<T> {
 
     private final Function<ReversalFlow<T>, T> executor;
-    private final AtomicBoolean started = new AtomicBoolean();
 
-    private Consumer<T> successHandler;
     private BiFunction<ReversalStep, SessionError, ReversalDecision> errorHandler;
-
-    private T result;
-    private SessionException failure;
-    private RuntimeException unexpected;
     private boolean failureResolved;
 
     ReversalFlow(Function<ReversalFlow<T>, T> executor) {
+        super("the reversal");
         this.executor = executor;
+    }
+
+    /** Session wiring: execution and default callback delivery. Applied
+     *  by the session — before user code can call {@link #callbackOn}. */
+    ReversalFlow<T> session(SessionOperations session) {
+        attach(session);
+        return this;
+    }
+
+    /**
+     * Delivers this flow's handlers through {@code executor} instead of the
+     * session's default callback executor. Affects {@link #execute()} only —
+     * the synchronous paths always dispatch on the calling thread.
+     */
+    public ReversalFlow<T> callbackOn(Executor executor) {
+        Objects.requireNonNull(executor, "executor");
+        return register(() -> overrideCallback(executor));
     }
 
     /** Called after every step completed (or was skipped by decision). */
     public ReversalFlow<T> onSuccess(Consumer<T> handler) {
-        return register(() -> this.successHandler = requireHandler(handler));
+        return register(() -> successHandler(requireHandler(handler)));
     }
 
     /**
@@ -89,86 +111,45 @@ public final class ReversalFlow<T> {
     }
 
     /**
-     * Runs the reversal and dispatches the registered handlers.
-     *
-     * @throws IllegalStateException if the flow has already run
+     * Registers a hook that runs exactly once after the reversal settles,
+     * on every path — success, failure, unexpected exception, or rejection
+     * because the session ended before the reversal could run. The place
+     * for cleanup that must not leak. A throwing hook is logged, never
+     * propagated.
      */
-    public void execute() {
-        if (!started.compareAndSet(false, true)) {
-            throw new IllegalStateException("this reversal has already been executed");
-        }
-        run();
+    public ReversalFlow<T> onComplete(Runnable handler) {
+        return register(() -> completeHandler(requireHandler(handler)));
     }
 
-    /**
-     * Runs the reversal if it has not run yet and returns the result.
-     *
-     * @throws SessionException if the reversal failed
-     */
-    public T get() {
-        runIfNeeded();
-        if (failure != null) {
-            throw failure;
-        }
-        return result;
+    // ─── SessionFlow hooks ───
+
+    @Override
+    T runBody() {
+        return executor.apply(this);
     }
 
-    /** Like {@link #get()} but returns {@code null} on failure. */
-    public T getOrNull() {
-        runIfNeeded();
-        return failure == null ? result : null;
-    }
-
-    private void runIfNeeded() {
-        if (started.compareAndSet(false, true)) {
-            run();
-        }
-        // a bug recorded by run() stays loud on every later accessor
-        if (unexpected != null) {
-            throw unexpected;
+    @Override
+    void deliverFailure(SessionException failure) {
+        // a failure the handler has not resolved with an ABORT — one
+        // before the first step (a state rejection, a missing reference),
+        // or the terminal failure of a reversal whose every step was
+        // skipped — is delivered here with a null step, so
+        // execute()-style registers are not left in silence
+        if (errorHandler != null && !failureResolved) {
+            awaitHandlerCall(() -> errorHandler.apply(null, failure.getError()));
         }
     }
 
-    private void run() {
-        try {
-            result = executor.apply(this);
-        } catch (SessionException e) {
-            failure = e;
-            // a failure the handler has not resolved with an ABORT — one
-            // before the first step (a state rejection, a missing
-            // reference), or the terminal failure of a reversal whose
-            // every step was skipped — is delivered here with a null step,
-            // so execute()-style registers are not left in silence
-            if (errorHandler != null && !failureResolved) {
-                errorHandler.apply(null, e.getError());
-            }
-            return;
-        } catch (RuntimeException e) {
-            // an unexpected exception is a bug, not a terminal outcome:
-            // remember it so later accessors rethrow it instead of
-            // reporting a successful null result, then fail loudly
-            unexpected = e;
-            throw e;
-        }
-        if (successHandler != null) {
-            try {
-                successHandler.accept(result);
-            } catch (RuntimeException handlerFailure) {
-                // a throwing success handler is a bug like any other
-                // unexpected exception (see SessionResult): record it so
-                // later accessors rethrow it instead of reporting the
-                // outcome as a clean success
-                unexpected = handlerFailure;
-                throw handlerFailure;
-            }
+    @Override
+    void notifyRejection(SessionError error) {
+        // null step: nothing ran
+        if (errorHandler != null) {
+            errorHandler.apply(null, error);
         }
     }
 
     private ReversalFlow<T> register(Runnable assignment) {
-        if (started.get()) {
-            throw new IllegalStateException(
-                    "handlers must be registered before the reversal is executed");
-        }
+        guardRegistration();
         assignment.run();
         return this;
     }
@@ -181,13 +162,17 @@ public final class ReversalFlow<T> {
 
     /**
      * The registered handler as a step decider, or {@code null} to select
-     * the default policy.
+     * the default policy. Invocations — from the reversal manager,
+     * mid-flow, on the operation thread — deliver on the callback executor
+     * and wait for the decision (see the class docs); the resolved flag
+     * rides inside the marshalled call, so the awaited hand-off publishes
+     * it back to the operation thread.
      */
     ReversalManager.StepDecider decider() {
         if (errorHandler == null) {
             return null;
         }
-        return (step, error) -> {
+        return (step, error) -> awaitHandlerCall(() -> {
             ReversalDecision decision = errorHandler.apply(step, error);
             // only an ABORT (explicit, or defaulted from null) resolves
             // the failure about to be thrown; a SKIP/RETRY answer leaves
@@ -197,6 +182,6 @@ public final class ReversalFlow<T> {
                 failureResolved = true;
             }
             return decision;
-        };
+        });
     }
 }
