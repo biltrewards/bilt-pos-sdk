@@ -87,8 +87,10 @@ abstract class SessionFlow<T> {
      */
     abstract void notifyRejection(SessionError error);
 
-    /** This flow's name in messages and dispatch logs. */
-    final String name() {
+    /** This flow's name in messages and dispatch logs. Private: the
+     *  subclasses' own messages go through [awaitHandlerCall] and the
+     *  lifecycle, which carry the name themselves. */
+    private String name() {
         return lifecycle.name();
     }
 
