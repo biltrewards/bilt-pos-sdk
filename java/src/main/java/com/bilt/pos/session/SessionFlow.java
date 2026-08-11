@@ -157,7 +157,7 @@ abstract class SessionFlow<T> {
 
     /**
      * Runs the flow asynchronously on the session's operation thread —
-     * handlers included, see the subclass docs — and returns immediately.
+     * handlers included, see the class docs — and returns immediately.
      * When the session has already ended and its executor rejects the
      * submission, the flow fails with
      * {@link SessionErrorCode#INVALID_STATE} through {@code onError} and
@@ -211,7 +211,10 @@ abstract class SessionFlow<T> {
         return result;
     }
 
-    /** Like {@link #get()} but returns {@code null} on failure. */
+    // {@code}, not {@link}: this doc is pulled up onto the public subclass
+    // pages, where a link into the package-private declaring type is
+    // inaccessible and javadoc warns
+    /** Like {@code get()} but returns {@code null} on failure. */
     public final T getOrNull() {
         runIfNeeded();
         return failure == null ? result : null;

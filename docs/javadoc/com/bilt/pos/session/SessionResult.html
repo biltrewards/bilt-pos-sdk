@@ -99,14 +99,25 @@ loadScripts(document, 'script');</script>
 <div class="block">A lazy, single-shot session operation.
 
  <p>Creating a <code>SessionResult</code> sends nothing to the terminal. Handlers
- registered via <a href="#onSuccess(java.util.function.Consumer)"><code>onSuccess(java.util.function.Consumer&lt;T&gt;)</code></a> and <a href="#onError(java.util.function.Consumer)"><code>onError(java.util.function.Consumer&lt;com.bilt.pos.session.SessionError&gt;)</code></a> are recorded only;
- the operation runs — blocking, on the calling thread — when one of the
+ registered via <a href="#onSuccess(java.util.function.Consumer)"><code>onSuccess(java.util.function.Consumer&lt;T&gt;)</code></a>, <a href="#onError(java.util.function.Consumer)"><code>onError(java.util.function.Consumer&lt;com.bilt.pos.session.SessionError&gt;)</code></a>, and
+ <a href="#onComplete(java.lang.Runnable)"><code>onComplete(java.lang.Runnable)</code></a> are recorded only; the operation runs when one of the
  terminal methods is invoked:</p>
 
  <ul>
-   <li><a href="#execute()"><code>execute()</code></a> — run and dispatch handlers; returns nothing.</li>
+   <li><a href="#execute()"><code>execute()</code></a> — run asynchronously on the session's operation
+       executor (a single thread per session, so operations run in
+       submission order) and deliver the handlers through the callback
+       executor; returns immediately.</li>
+   <li><a href="#executeSync()"><code>executeSync()</code></a> — run blocking: the operation takes its
+       turn on the same operation thread (queueing behind anything in
+       flight, so a sync call can never race an asynchronous one) while
+       the caller waits; handlers dispatch on the calling thread. Called
+       from the operation thread itself — an operation body or a
+       direct-delivered handler invoking another operation — it runs
+       inline.</li>
    <li><a href="#get()"><code>get()</code></a> — run (if not already run) and return the value, or
-       throw <a href="SessionException.html" title="class in com.bilt.pos.session"><code>SessionException</code></a> on failure.</li>
+       throw <a href="SessionException.html" title="class in com.bilt.pos.session"><code>SessionException</code></a> on failure. Waits for an in-flight
+       <a href="#execute()"><code>execute()</code></a> to settle.</li>
    <li><a href="#getOrNull()"><code>getOrNull()</code></a> — like <code>get()</code> but returns <code>null</code>
        on failure.</li>
    <li><a href="#isSuccess()"><code>isSuccess()</code></a> — run (if not already run) and report the outcome.</li>
@@ -119,12 +130,33 @@ loadScripts(document, 'script');</script>
      .execute();
  </code></pre>
 
+ <p>With <a href="#execute()"><code>execute()</code></a>, handlers are delivered through the callback
+ executor configured on the session builder (<code>callbackExecutor</code>), or
+ the per-call <a href="#callbackOn(java.util.concurrent.Executor)"><code>callbackOn(Executor)</code></a> override — e.g. an Android
+ main-thread executor so handlers may touch UI directly. With neither
+ configured, handlers run directly on the session's operation thread and
+ must be fast and non-blocking. Handlers may invoke further session
+ operations synchronously: an operation started from inside a handler
+ runs inline, as part of the operation being handled. What must be
+ avoided is blocking the callback executor's thread on a session call
+ <em>outside</em> a handler while operations are in flight — an in-flight
+ operation may need that thread to deliver its handlers before it can
+ finish, and both sides would wait forever. From such a thread (a UI
+ thread, typically), use <code>execute()</code> with an <code>onComplete</code> —
+ teardown included: prefer <code>end().execute()</code> over the blocking
+ <code>close()</code>. <a href="#executeSync()"><code>executeSync()</code></a> always dispatches handlers
+ inline on the calling thread and ignores callback executors.</p>
+
+ <p><a href="#onComplete(java.lang.Runnable)"><code>onComplete(Runnable)</code></a> registers a cleanup hook that runs exactly
+ once after the outcome handlers, on every path: success, session error,
+ unexpected exception, a throwing outcome handler, and an operation the
+ session's executor rejected because the session already ended.</p>
+
  <p>The operation runs at most once; <code>get()</code>/<code>getOrNull()</code>/
  <code>isSuccess()</code> return the cached outcome afterwards. Calling
- <a href="#execute()"><code>execute()</code></a> a second time, or registering a handler after the
- operation has started, throws <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link"><code>IllegalStateException</code></a>.</p>
-
- <p>Instances are not thread-safe; use from a single thread.</p></div>
+ <a href="#execute()"><code>execute()</code></a> or <a href="#executeSync()"><code>executeSync()</code></a> a second time, or registering
+ a handler after the operation has started, throws
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link"><code>IllegalStateException</code></a>.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -139,11 +171,24 @@ loadScripts(document, 'script');</script>
 <div class="table-header col-first">Modifier and Type</div>
 <div class="table-header col-second">Method</div>
 <div class="table-header col-last">Description</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#execute()" class="member-name-link">execute</a>()</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="SessionResult.html" title="type parameter in SessionResult">T</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#callbackOn(java.util.concurrent.Executor)" class="member-name-link">callbackOn</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;executor)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Runs the operation on the calling thread and dispatches the registered
- handlers.</div>
+<div class="block">Delivers this operation's handlers through <code>executor</code> instead of
+ the session's default callback executor.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#execute()" class="member-name-link">execute</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Runs the operation asynchronously: it is submitted to the session's
+ operation executor (operations run one at a time, in submission
+ order) and this call returns immediately.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#executeSync()" class="member-name-link">executeSync</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Runs the operation blocking — the deliberate synchronous spelling
+ for callers that own their threading.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="type parameter in SessionResult">T</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#get()" class="member-name-link">get</a>()</code></div>
@@ -159,17 +204,26 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isSuccess()" class="member-name-link">isSuccess</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Runs the operation if it has not run yet and reports whether it succeeded.</div>
+<div class="block">Runs the operation if it has not run yet and reports whether it
+  succeeded.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="SessionResult.html" title="type parameter in SessionResult">T</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onError(java.util.function.Consumer)" class="member-name-link">onError</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>&gt;&nbsp;handler)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onComplete(java.lang.Runnable)" class="member-name-link">onComplete</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Runnable.html" title="class or interface in java.lang" class="external-link">Runnable</a>&nbsp;handler)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Registers a hook that runs exactly once after the outcome handlers, on
+ every completion path — success, error, unexpected exception, a
+ throwing outcome handler, or rejection because the session ended
+ before the operation could run.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="SessionResult.html" title="type parameter in SessionResult">T</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onError(java.util.function.Consumer)" class="member-name-link">onError</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>&gt;&nbsp;handler)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Registers a handler invoked with the <a href="SessionError.html" title="class in com.bilt.pos.session"><code>SessionError</code></a> when the
  operation fails.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="SessionResult.html" title="type parameter in SessionResult">T</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onSuccess(java.util.function.Consumer)" class="member-name-link">onSuccess</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionResult.html" title="type parameter in SessionResult">T</a>&gt;&nbsp;handler)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="SessionResult.html" title="type parameter in SessionResult">T</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onSuccess(java.util.function.Consumer)" class="member-name-link">onSuccess</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionResult.html" title="type parameter in SessionResult">T</a>&gt;&nbsp;handler)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Registers a handler invoked with the result when the operation succeeds.</div>
 </div>
 </div>
@@ -213,11 +267,62 @@ loadScripts(document, 'script');</script>
 </section>
 </li>
 <li>
+<section class="detail" id="onComplete(java.lang.Runnable)">
+<h3>onComplete</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="SessionResult.html" title="type parameter in SessionResult">T</a>&gt;</span>&nbsp;<span class="element-name">onComplete</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Runnable.html" title="class or interface in java.lang" class="external-link">Runnable</a>&nbsp;handler)</span></div>
+<div class="block">Registers a hook that runs exactly once after the outcome handlers, on
+ every completion path — success, error, unexpected exception, a
+ throwing outcome handler, or rejection because the session ended
+ before the operation could run. The place for cleanup that must not
+ leak: re-enabling buttons, releasing claims. A throwing hook is
+ logged, never propagated, and never masks the operation's outcome.</div>
+<dl class="notes">
+<dt>Throws:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the operation has already started</dd>
+</dl>
+</section>
+</li>
+<li>
+<section class="detail" id="callbackOn(java.util.concurrent.Executor)">
+<h3>callbackOn</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="SessionResult.html" title="type parameter in SessionResult">T</a>&gt;</span>&nbsp;<span class="element-name">callbackOn</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;executor)</span></div>
+<div class="block">Delivers this operation's handlers through <code>executor</code> instead of
+ the session's default callback executor. Affects <a href="#execute()"><code>execute()</code></a>
+ only — <a href="#executeSync()"><code>executeSync()</code></a> always dispatches on the calling thread.</div>
+<dl class="notes">
+<dt>Throws:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the operation has already started</dd>
+</dl>
+</section>
+</li>
+<li>
 <section class="detail" id="execute()">
 <h3>execute</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">execute</span>()</div>
-<div class="block">Runs the operation on the calling thread and dispatches the registered
- handlers.</div>
+<div class="block">Runs the operation asynchronously: it is submitted to the session's
+ operation executor (operations run one at a time, in submission
+ order) and this call returns immediately. Handlers are delivered
+ through the callback executor — see the class docs for the delivery
+ rules. When the session has already ended and its executor rejects
+ the submission, the operation fails with
+ <a href="SessionErrorCode.html#INVALID_STATE"><code>SessionErrorCode.INVALID_STATE</code></a> through the normal
+ <code>onError</code>/<code>onComplete</code> delivery.</div>
+<dl class="notes">
+<dt>Throws:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the operation has already run, or if
+     this result is not attached to a session (use <a href="#executeSync()"><code>executeSync()</code></a>)</dd>
+</dl>
+</section>
+</li>
+<li>
+<section class="detail" id="executeSync()">
+<h3>executeSync</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">executeSync</span>()</div>
+<div class="block">Runs the operation blocking — the deliberate synchronous spelling
+ for callers that own their threading. The operation still takes its
+ turn on the session's operation thread, queueing behind anything in
+ flight (a sync call can never race an asynchronous one); the caller
+ waits, and handlers dispatch on the calling thread.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the operation has already run</dd>
@@ -228,7 +333,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="get()">
 <h3>get</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="type parameter in SessionResult">T</a></span>&nbsp;<span class="element-name">get</span>()</div>
-<div class="block">Runs the operation if it has not run yet and returns its value.</div>
+<div class="block">Runs the operation if it has not run yet and returns its value. Waits
+ for an in-flight <a href="#execute()"><code>execute()</code></a> to settle first.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code><a href="SessionException.html" title="class in com.bilt.pos.session">SessionException</a></code> - if the operation failed</dd>
@@ -240,14 +346,16 @@ loadScripts(document, 'script');</script>
 <h3>getOrNull</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="type parameter in SessionResult">T</a></span>&nbsp;<span class="element-name">getOrNull</span>()</div>
 <div class="block">Runs the operation if it has not run yet and returns its value, or
- <code>null</code> if it failed.</div>
+ <code>null</code> if it failed. Waits for an in-flight <a href="#execute()"><code>execute()</code></a>
+ to settle first.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="isSuccess()">
 <h3>isSuccess</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">isSuccess</span>()</div>
-<div class="block">Runs the operation if it has not run yet and reports whether it succeeded.</div>
+<div class="block">Runs the operation if it has not run yet and reports whether it
+  succeeded. Waits for an in-flight <a href="#execute()"><code>execute()</code></a> to settle first.</div>
 </section>
 </li>
 </ul>

@@ -416,7 +416,13 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">close</span>()</div>
 <div class="block">Best-effort <a href="#end()"><code>end()</code></a> for try-with-resources: a failure to send
  the end signal is logged, not thrown, and an already-ended session is
- left alone.</div>
+ left alone.
+
+ <p>Blocking, and queued behind any in-flight operation — with a
+ callback executor configured, never call it from that executor's
+ thread while operations may be in flight (see
+ <code>CheckoutSession#close()</code>); use <code>end().execute()</code> there
+ instead.</p></div>
 <dl class="notes">
 <dt>Specified by:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html#close()" title="class or interface in java.lang" class="external-link">close</a></code>&nbsp;in interface&nbsp;<code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" title="class or interface in java.lang" class="external-link">AutoCloseable</a></code></dd>

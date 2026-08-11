@@ -348,6 +348,31 @@ loadScripts(document, 'script');</script>
 </dl>
 <h2 class="title" id="I:C">C</h2>
 <dl class="index">
+<dt><a href="com/bilt/pos/session/CheckoutSession.Builder.html#callbackExecutor(java.util.concurrent.Executor)" class="member-name-link">callbackExecutor(Executor)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></dt>
+<dd>
+<div class="block">Where asynchronously executed operations deliver their handlers —
+ e.g.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ReversalSession.Builder.html#callbackExecutor(java.util.concurrent.Executor)" class="member-name-link">callbackExecutor(Executor)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></dt>
+<dd>
+<div class="block">Where asynchronously executed operations deliver their handlers —
+ see <code>CheckoutSession.Builder#callbackExecutor</code>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/PaymentFlow.html#callbackOn(java.util.concurrent.Executor)" class="member-name-link">callbackOn(Executor)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></dt>
+<dd>
+<div class="block">Delivers this flow's handlers through <code>executor</code> instead of the
+ session's default callback executor.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ReversalFlow.html#callbackOn(java.util.concurrent.Executor)" class="member-name-link">callbackOn(Executor)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a></dt>
+<dd>
+<div class="block">Delivers this flow's handlers through <code>executor</code> instead of the
+ session's default callback executor.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/SessionResult.html#callbackOn(java.util.concurrent.Executor)" class="member-name-link">callbackOn(Executor)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a></dt>
+<dd>
+<div class="block">Delivers this operation's handlers through <code>executor</code> instead of
+ the session's default callback executor.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/QrCodeType.html#callToAction" class="member-name-link">callToAction</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/QrCodeType.html" title="class in com.bilt.pos.display">QrCodeType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/ButtonsType.html#cancelButton" class="member-name-link">cancelButton</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/ButtonsType.html" title="class in com.bilt.pos.display">ButtonsType</a></dt>
@@ -845,16 +870,38 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/PaymentFlow.html#execute()" class="member-name-link">execute()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></dt>
 <dd>
-<div class="block">Runs the payment sequence and dispatches the registered handlers.</div>
+<div class="block">Runs the flow asynchronously on the session's operation thread —
+ handlers included, see the class docs — and returns immediately.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/ReversalFlow.html#execute()" class="member-name-link">execute()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a></dt>
 <dd>
-<div class="block">Runs the reversal and dispatches the registered handlers.</div>
+<div class="block">Runs the flow asynchronously on the session's operation thread —
+ handlers included, see the class docs — and returns immediately.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SessionResult.html#execute()" class="member-name-link">execute()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a></dt>
 <dd>
-<div class="block">Runs the operation on the calling thread and dispatches the registered
- handlers.</div>
+<div class="block">Runs the operation asynchronously: it is submitted to the session's
+ operation executor (operations run one at a time, in submission
+ order) and this call returns immediately.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/PaymentFlow.html#executeSync()" class="member-name-link">executeSync()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></dt>
+<dd>
+<div class="block">Runs the flow blocking — the operation takes its turn on the
+ session's operation thread (queueing behind anything in flight, so
+ a sync call never races an asynchronous one) while the caller
+ waits; handlers dispatch on the calling thread.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ReversalFlow.html#executeSync()" class="member-name-link">executeSync()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a></dt>
+<dd>
+<div class="block">Runs the flow blocking — the operation takes its turn on the
+ session's operation thread (queueing behind anything in flight, so
+ a sync call never races an asynchronous one) while the caller
+ waits; handlers dispatch on the calling thread.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/SessionResult.html#executeSync()" class="member-name-link">executeSync()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a></dt>
+<dd>
+<div class="block">Runs the operation blocking — the deliberate synchronous spelling
+ for callers that own their threading.</div>
 </dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html#expectedHostnamePattern(java.lang.String)" class="member-name-link">expectedHostnamePattern(String)</a> - Method in class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient.Builder</a></dt>
 <dd>
@@ -980,11 +1027,11 @@ loadScripts(document, 'script');</script>
 <dl class="index">
 <dt><a href="com/bilt/pos/session/PaymentFlow.html#get()" class="member-name-link">get()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></dt>
 <dd>
-<div class="block">Runs the payment sequence if it has not run yet and returns the result.</div>
+<div class="block">Runs the flow if it has not run yet and returns the result.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/ReversalFlow.html#get()" class="member-name-link">get()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a></dt>
 <dd>
-<div class="block">Runs the reversal if it has not run yet and returns the result.</div>
+<div class="block">Runs the flow if it has not run yet and returns the result.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SessionResult.html#get()" class="member-name-link">get()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a></dt>
 <dd>
@@ -1591,11 +1638,11 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/PaymentFlow.html#getOrNull()" class="member-name-link">getOrNull()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></dt>
 <dd>
-<div class="block">Like <a href="com/bilt/pos/session/PaymentFlow.html#get()"><code>PaymentFlow.get()</code></a> but returns <code>null</code> on failure.</div>
+<div class="block">Like <code>get()</code> but returns <code>null</code> on failure.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/ReversalFlow.html#getOrNull()" class="member-name-link">getOrNull()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a></dt>
 <dd>
-<div class="block">Like <a href="com/bilt/pos/session/ReversalFlow.html#get()"><code>ReversalFlow.get()</code></a> but returns <code>null</code> on failure.</div>
+<div class="block">Like <code>get()</code> but returns <code>null</code> on failure.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SessionResult.html#getOrNull()" class="member-name-link">getOrNull()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a></dt>
 <dd>
@@ -2381,7 +2428,8 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SessionResult.html#isSuccess()" class="member-name-link">isSuccess()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a></dt>
 <dd>
-<div class="block">Runs the operation if it has not run yet and reports whether it succeeded.</div>
+<div class="block">Runs the operation if it has not run yet and reports whether it
+  succeeded.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/VoidResult.html#isSuccess()" class="member-name-link">isSuccess()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a></dt>
 <dd>&nbsp;</dd>
@@ -2643,6 +2691,25 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/CheckoutSession.Builder.html#onBasketUpdated(java.util.function.Consumer)" class="member-name-link">onBasketUpdated(Consumer&lt;Basket&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></dt>
 <dd>
 <div class="block">Out-of-band basket update callback.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/PaymentFlow.html#onComplete(java.lang.Runnable)" class="member-name-link">onComplete(Runnable)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></dt>
+<dd>
+<div class="block">Registers a hook that runs exactly once after the payment settles, on
+ every path — success, failure, unexpected exception, or rejection
+ because the session ended before the payment could run.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ReversalFlow.html#onComplete(java.lang.Runnable)" class="member-name-link">onComplete(Runnable)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a></dt>
+<dd>
+<div class="block">Registers a hook that runs exactly once after the reversal settles,
+ on every path — success, failure, unexpected exception, or rejection
+ because the session ended before the reversal could run.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/SessionResult.html#onComplete(java.lang.Runnable)" class="member-name-link">onComplete(Runnable)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a></dt>
+<dd>
+<div class="block">Registers a hook that runs exactly once after the outcome handlers, on
+ every completion path — success, error, unexpected exception, a
+ throwing outcome handler, or rejection because the session ended
+ before the operation could run.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/ReversalFlow.html#onError(java.util.function.BiFunction)" class="member-name-link">onError(BiFunction&lt;ReversalStep, SessionError, ReversalDecision&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a></dt>
 <dd>
