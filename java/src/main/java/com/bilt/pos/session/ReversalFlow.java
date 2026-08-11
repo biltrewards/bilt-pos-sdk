@@ -61,7 +61,7 @@ public final class ReversalFlow<T> extends SessionFlow<T> {
     private boolean failureResolved;
 
     ReversalFlow(Function<ReversalFlow<T>, T> executor) {
-        super("reversal");
+        super("the reversal");
         this.executor = executor;
     }
 

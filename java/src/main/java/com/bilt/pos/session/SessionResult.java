@@ -10,10 +10,8 @@
 package com.bilt.pos.session;
 
 import java.util.Objects;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -90,16 +88,11 @@ public final class SessionResult<T> {
 
     private final String operationName;
     private final Supplier<T> body;
-    private final AtomicBoolean started = new AtomicBoolean();
-    private final AtomicBoolean completeDispatched = new AtomicBoolean();
-
-    /** Opens once the outcome is final — body AND handler dispatch, since
-     *  a throwing handler is recorded as the outcome; accessors await it. */
-    private final CountDownLatch settled = new CountDownLatch(1);
+    /** The claim/latch/onComplete invariants, shared with the flows. */
+    private final OperationLifecycle lifecycle;
 
     private Consumer<T> successHandler;
     private Consumer<SessionError> errorHandler;
-    private Runnable completeHandler;
     private Consumer<T> handlerFailureCleanup;
 
     /** The owning session's execution machinery; null for a detached
@@ -128,6 +121,7 @@ public final class SessionResult<T> {
     SessionResult(String operationName, Supplier<T> body) {
         this.operationName = operationName;
         this.body = body;
+        this.lifecycle = new OperationLifecycle(operationName);
     }
 
     /** Session wiring: where executions run, and the session's callback
@@ -154,7 +148,7 @@ public final class SessionResult<T> {
      */
     public SessionResult<T> onSuccess(Consumer<T> handler) {
         Objects.requireNonNull(handler, "handler");
-        checkNotStarted();
+        lifecycle.guardRegistration();
         this.successHandler = handler;
         return this;
     }
@@ -167,7 +161,7 @@ public final class SessionResult<T> {
      */
     public SessionResult<T> onError(Consumer<SessionError> handler) {
         Objects.requireNonNull(handler, "handler");
-        checkNotStarted();
+        lifecycle.guardRegistration();
         this.errorHandler = handler;
         return this;
     }
@@ -184,8 +178,8 @@ public final class SessionResult<T> {
      */
     public SessionResult<T> onComplete(Runnable handler) {
         Objects.requireNonNull(handler, "handler");
-        checkNotStarted();
-        this.completeHandler = handler;
+        lifecycle.guardRegistration();
+        lifecycle.completeHandler(handler);
         return this;
     }
 
@@ -198,7 +192,7 @@ public final class SessionResult<T> {
      */
     public SessionResult<T> callbackOn(Executor executor) {
         Objects.requireNonNull(executor, "executor");
-        checkNotStarted();
+        lifecycle.guardRegistration();
         this.callbackExecutor = executor;
         return this;
     }
@@ -221,7 +215,7 @@ public final class SessionResult<T> {
             throw new IllegalStateException(operationName + " is not attached to a "
                     + "session executor; use executeSync()");
         }
-        claimStart();
+        lifecycle.claimStart();
         if (!ordered) {
             // deliberately concurrent (see [ordered]): its own short-lived
             // thread instead of the session queue it must overlap
@@ -238,9 +232,8 @@ public final class SessionResult<T> {
             // handler path so onError/onComplete cleanup still happens.
             // Fire-and-forget: this thread is the caller's, and awaiting a
             // callback executor the caller itself dispatches would deadlock.
-            error = new SessionError(SessionErrorCode.INVALID_STATE,
-                    operationName + " was not run: the session has ended");
-            settled.countDown();
+            error = lifecycle.rejected();
+            lifecycle.openSettled();
             HandlerDispatch.fireAndForget(
                     callbackExecutor, operationName, this::dispatchHandlers);
         }
@@ -256,7 +249,7 @@ public final class SessionResult<T> {
      * @throws IllegalStateException if the operation has already run
      */
     public void executeSync() {
-        claimStart();
+        lifecycle.claimStart();
         runSync();
     }
 
@@ -292,23 +285,13 @@ public final class SessionResult<T> {
     }
 
     private void awaitOutcome() {
-        if (started.compareAndSet(false, true)) {
+        if (lifecycle.claim()) {
             runSync();
         } else {
-            awaitSettled();
+            lifecycle.awaitSettled();
         }
         // a bug recorded by a run stays loud on every later accessor
         rethrowUnexpected();
-    }
-
-    private void awaitSettled() {
-        try {
-            settled.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new SessionException(new SessionError(SessionErrorCode.UNKNOWN,
-                    "interrupted while waiting for " + operationName + " to settle"));
-        }
     }
 
     /** The async body: outcome on the session thread, handlers via the
@@ -345,7 +328,7 @@ public final class SessionResult<T> {
             // only now is the outcome final — a throwing handler is
             // recorded during the dispatch above, and an accessor released
             // earlier could report a clean success it must not
-            settled.countDown();
+            lifecycle.openSettled();
         }
     }
 
@@ -371,7 +354,7 @@ public final class SessionResult<T> {
             LOGGER.log(Level.SEVERE,
                     operationName + "'s handler threw", handlerFailure);
         } finally {
-            dispatchComplete();
+            lifecycle.dispatchComplete();
         }
     }
 
@@ -413,23 +396,10 @@ public final class SessionResult<T> {
                 errorHandler.accept(error);
             }
         } finally {
-            dispatchComplete();
+            lifecycle.dispatchComplete();
             // after the handlers: a concurrent accessor released earlier
             // could report a clean success past a recorded handler bug
-            settled.countDown();
-        }
-    }
-
-    /** Exactly once, on every path; a throwing hook is logged, not thrown —
-     *  it must neither mask the operation's outcome nor skip on retry. */
-    private void dispatchComplete() {
-        if (completeHandler == null || !completeDispatched.compareAndSet(false, true)) {
-            return;
-        }
-        try {
-            completeHandler.run();
-        } catch (RuntimeException e) {
-            LOGGER.log(Level.SEVERE, operationName + "'s onComplete hook threw", e);
+            lifecycle.openSettled();
         }
     }
 
@@ -465,16 +435,4 @@ public final class SessionResult<T> {
         }
     }
 
-    private void claimStart() {
-        if (!started.compareAndSet(false, true)) {
-            throw new IllegalStateException(operationName + " has already been executed");
-        }
-    }
-
-    private void checkNotStarted() {
-        if (started.get()) {
-            throw new IllegalStateException(
-                    "handlers must be registered before " + operationName + " is executed");
-        }
-    }
 }

@@ -74,7 +74,7 @@ public final class PaymentFlow extends SessionFlow<CheckoutResult> {
     private boolean retryRequested;
 
     PaymentFlow(Function<PaymentFlow, CheckoutResult> executor) {
-        super("payment");
+        super("the payment");
         this.executor = executor;
     }
 

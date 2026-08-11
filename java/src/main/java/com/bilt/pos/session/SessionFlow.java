@@ -9,10 +9,8 @@
  */
 package com.bilt.pos.session;
 
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -42,18 +40,10 @@ abstract class SessionFlow<T> {
 
     private static final Logger LOGGER = Logger.getLogger(SessionFlow.class.getName());
 
-    /** Human-readable flow name ("payment", "reversal") for messages. */
-    private final String name;
-
-    private final AtomicBoolean started = new AtomicBoolean();
-    private final AtomicBoolean completeDispatched = new AtomicBoolean();
-
-    /** Opens once the outcome is final — body AND handler dispatch, since
-     *  a throwing handler is recorded as the outcome; accessors await it. */
-    private final CountDownLatch settled = new CountDownLatch(1);
+    /** The claim/latch/onComplete invariants, shared with SessionResult. */
+    private final OperationLifecycle lifecycle;
 
     private Consumer<T> successHandler;
-    private Runnable completeHandler;
 
     /** The owning session's execution machinery; null for a detached
      *  flow, which runs everything inline. */
@@ -74,7 +64,7 @@ abstract class SessionFlow<T> {
     private volatile RuntimeException unexpected;
 
     SessionFlow(String name) {
-        this.name = name;
+        this.lifecycle = new OperationLifecycle(name);
     }
 
     // ─── Subclass surface ───
@@ -99,7 +89,7 @@ abstract class SessionFlow<T> {
 
     /** This flow's name in messages and dispatch logs. */
     final String name() {
-        return name;
+        return lifecycle.name();
     }
 
     /** Wiring: the owning session, and its callback delivery default. */
@@ -120,15 +110,12 @@ abstract class SessionFlow<T> {
     }
 
     final void completeHandler(Runnable handler) {
-        this.completeHandler = handler;
+        lifecycle.completeHandler(handler);
     }
 
     /** Guard for the subclass's fluent registration methods. */
     final void guardRegistration() {
-        if (started.get()) {
-            throw new IllegalStateException(
-                    "handlers must be registered before the " + name + " is executed");
-        }
+        lifecycle.guardRegistration();
     }
 
     /** Where handlers deliver: the callback executor for an asynchronous
@@ -155,7 +142,7 @@ abstract class SessionFlow<T> {
         Supplier<R> dispatch = session != null && handlerExecutor() != null
                 ? session.awaitedHandler(handler)
                 : handler;
-        return HandlerDispatch.awaitCall(handlerExecutor(), name, dispatch);
+        return HandlerDispatch.awaitCall(handlerExecutor(), name(), dispatch);
     }
 
     /** [awaitHandlerCall] for handlers without an answer. */
@@ -181,20 +168,19 @@ abstract class SessionFlow<T> {
      */
     public final void execute() {
         if (session == null) {
-            throw new IllegalStateException("this " + name + " is not attached to a "
+            throw new IllegalStateException(name() + " is not attached to a "
                     + "session executor; use executeSync()");
         }
-        claimStart();
+        lifecycle.claimStart();
         asyncRun = true;
         try {
             session.executor().execute(this::runAsync);
         } catch (RejectedExecutionException e) {
-            failure = new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
-                    "the " + name + " was not run: the session has ended"));
-            settled.countDown();
+            failure = new SessionException(lifecycle.rejected());
+            lifecycle.openSettled();
             // fire-and-forget: this thread is the caller's, and awaiting a
             // callback executor the caller itself dispatches would deadlock
-            HandlerDispatch.fireAndForget(callbackExecutor, name, this::dispatchRejection);
+            HandlerDispatch.fireAndForget(callbackExecutor, name(), this::dispatchRejection);
         }
     }
 
@@ -207,7 +193,7 @@ abstract class SessionFlow<T> {
      * @throws IllegalStateException if the flow has already run
      */
     public final void executeSync() {
-        claimStart();
+        lifecycle.claimStart();
         run();
     }
 
@@ -233,32 +219,15 @@ abstract class SessionFlow<T> {
 
     // ─── Internals ───
 
-    private void claimStart() {
-        if (!started.compareAndSet(false, true)) {
-            throw new IllegalStateException(
-                    "this " + name + " has already been executed");
-        }
-    }
-
     private void runIfNeeded() {
-        if (started.compareAndSet(false, true)) {
+        if (lifecycle.claim()) {
             run();
         } else {
-            awaitSettled();
+            lifecycle.awaitSettled();
         }
         // a bug recorded by run() stays loud on every later accessor
         if (unexpected != null) {
             throw unexpected;
-        }
-    }
-
-    private void awaitSettled() {
-        try {
-            settled.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new SessionException(new SessionError(SessionErrorCode.UNKNOWN,
-                    "interrupted while waiting for the " + name + " to settle"));
         }
     }
 
@@ -268,7 +237,7 @@ abstract class SessionFlow<T> {
         try {
             run();
         } catch (RuntimeException e) {
-            LOGGER.log(Level.SEVERE, "the " + name + " threw unexpectedly", e);
+            LOGGER.log(Level.SEVERE, name() + " threw unexpectedly", e);
         }
     }
 
@@ -306,7 +275,7 @@ abstract class SessionFlow<T> {
             // only now is the outcome final — a throwing handler is
             // recorded as the outcome above, and an accessor released
             // earlier could report a clean success it must not
-            settled.countDown();
+            lifecycle.openSettled();
         }
     }
 
@@ -317,29 +286,18 @@ abstract class SessionFlow<T> {
         try {
             notifyRejection(failure.getError());
         } catch (RuntimeException e) {
-            LOGGER.log(Level.SEVERE, "the " + name + "'s onError handler threw", e);
+            LOGGER.log(Level.SEVERE, name() + "'s onError handler threw", e);
         } finally {
-            dispatchComplete();
+            lifecycle.dispatchComplete();
         }
     }
 
-    /** [dispatchComplete] on the callback executor when running async. */
+    /** [OperationLifecycle.dispatchComplete] on the callback executor when
+     *  running async. */
     private void deliverComplete() {
-        if (completeHandler == null) {
+        if (!lifecycle.hasCompleteHandler()) {
             return;
         }
-        awaitHandlerRun(this::dispatchComplete);
-    }
-
-    /** Exactly once, on every path; a throwing hook is logged, not thrown. */
-    private void dispatchComplete() {
-        if (completeHandler == null || !completeDispatched.compareAndSet(false, true)) {
-            return;
-        }
-        try {
-            completeHandler.run();
-        } catch (RuntimeException e) {
-            LOGGER.log(Level.SEVERE, "the " + name + "'s onComplete hook threw", e);
-        }
+        awaitHandlerRun(lifecycle::dispatchComplete);
     }
 }
