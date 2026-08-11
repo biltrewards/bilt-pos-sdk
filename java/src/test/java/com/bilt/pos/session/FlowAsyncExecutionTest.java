@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class FlowAsyncExecutionTest {
 
-    private final SessionOperations operations = new SessionOperations();
+    private final SessionOperations operations = new SessionOperations(null);
     private final ExecutorService callbackExecutor =
             Executors.newSingleThreadExecutor(r -> new Thread(r, "cb-thread"));
 

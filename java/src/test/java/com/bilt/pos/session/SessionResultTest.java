@@ -20,7 +20,7 @@ class SessionResultTest {
     private static final SessionError ERROR =
             new SessionError(SessionErrorCode.DECLINED, "declined");
 
-    private final SessionOperations operations = new SessionOperations();
+    private final SessionOperations operations = new SessionOperations(null);
     private final ExecutorService callbackExecutor =
             Executors.newSingleThreadExecutor(r -> new Thread(r, "cb-thread"));
 

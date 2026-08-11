@@ -108,11 +108,12 @@ final class SessionOperations {
         }
     });
 
-    private Executor callbackExecutor;
-
     /** Session-wide default delivery for asynchronous operations' handlers;
-     *  null means direct delivery on the operation thread. */
-    void callbackExecutor(Executor callbackExecutor) {
+     *  null means direct delivery on the operation thread. Final — it is
+     *  configuration, fixed at session construction. */
+    private final Executor callbackExecutor;
+
+    SessionOperations(Executor callbackExecutor) {
         this.callbackExecutor = callbackExecutor;
     }
 

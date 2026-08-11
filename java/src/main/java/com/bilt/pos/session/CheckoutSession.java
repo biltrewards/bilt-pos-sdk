@@ -148,7 +148,7 @@ public final class CheckoutSession implements AutoCloseable {
     private final String sessionId = UUID.randomUUID().toString();
     private final SessionStateMachine stateMachine = new SessionStateMachine();
     private final ReentrantLock lock = new ReentrantLock();
-    private final SessionOperations operations = new SessionOperations();
+    private final SessionOperations operations;
 
     private final BiltNexoTerminalClient client;
     private final NexoMessageFactory factory;
@@ -192,7 +192,7 @@ public final class CheckoutSession implements AutoCloseable {
     private volatile boolean drainInFlight;
 
     private CheckoutSession(Builder builder) {
-        this.operations.callbackExecutor(builder.callbackExecutor);
+        this.operations = new SessionOperations(builder.callbackExecutor);
         this.client = builder.client;
         this.currency = builder.currency;
         this.storeLocation = builder.storeLocation;
