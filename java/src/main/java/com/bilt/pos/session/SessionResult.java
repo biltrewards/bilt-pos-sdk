@@ -222,10 +222,12 @@ public final class SessionResult<T> {
      * {@link SessionErrorCode#INVALID_STATE} through the normal
      * {@code onError}/{@code onComplete} delivery.
      *
-     * @throws IllegalStateException if the operation has already run, or if
-     *     this result is not attached to a session (use {@link #executeSync()})
+     * @throws IllegalStateException if the operation has already run
      */
     public void execute() {
+        // unreachable through the public API — every SDK factory attaches
+        // a session — so the published @throws above omits it; the guard
+        // covers direct construction (tests)
         if (session == null) {
             throw new IllegalStateException(operationName + " is not attached to a "
                     + "session executor; use executeSync()");

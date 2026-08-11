@@ -165,10 +165,12 @@ abstract class SessionFlow<T> {
      * {@link SessionErrorCode#INVALID_STATE} through {@code onError} and
      * {@code onComplete}.
      *
-     * @throws IllegalStateException if the flow has already run, or if it is
-     *     not attached to a session executor (use {@link #executeSync()})
+     * @throws IllegalStateException if the flow has already run
      */
     public final void execute() {
+        // unreachable through the public API — every SDK factory attaches
+        // a session — so the published @throws above omits it; the guard
+        // covers direct construction (tests)
         if (session == null) {
             throw new IllegalStateException(name() + " is not attached to a "
                     + "session executor; use executeSync()");
