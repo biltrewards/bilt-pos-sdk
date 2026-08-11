@@ -19,10 +19,10 @@ import java.util.logging.Logger;
 /**
  * Delivery of handlers to a callback executor.
  *
- * <p>The awaited forms run the handler on the callback executor and wait for
- * it, so a handler behaves exactly as if invoked inline — same ordering,
+ * <p>{@link #awaitCall} runs the handler on the callback executor and waits
+ * for it, so a handler behaves exactly as if invoked inline — same ordering,
  * same exception propagation, and a returned value can steer the flow that
- * asked — while physically running on the integrator's thread. They must
+ * asked — while physically running on the integrator's thread. It must
  * only be called from a session's operation thread: awaiting from the very
  * thread the callback executor dispatches to would deadlock.</p>
  *
@@ -72,13 +72,12 @@ final class HandlerDispatch {
         }
     }
 
-    /** Runs {@code dispatch} on {@code callback} and waits for it. */
-    static void awaitRun(Executor callback, String operationName, Runnable dispatch) {
-        awaitCall(callback, operationName, () -> {
-            dispatch.run();
-            return null;
-        });
-    }
+    // no Runnable-shaped await variant on purpose: awaited dispatches must
+    // carry the session's awaited-handler marker, and the owners attach it
+    // around the Supplier they hand to awaitCall (SessionFlow's
+    // awaitHandlerCall/awaitHandlerRun, SessionResult's async dispatch) —
+    // a bare convenience here would invite marker-less awaits, which is
+    // exactly the deadlock the marker prevents
 
     /** Runs {@code dispatch} on {@code callback} without waiting. */
     static void fireAndForget(Executor callback, String operationName, Runnable dispatch) {
