@@ -15,7 +15,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Outcome of {@link CheckoutSession#reconcile()}.
+ * Outcome of {@link Terminal#reconcile()} and {@link Terminal#getTotals()}.
  */
 public final class ReconciliationResult {
 

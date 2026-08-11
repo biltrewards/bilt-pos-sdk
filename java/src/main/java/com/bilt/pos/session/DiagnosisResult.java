@@ -16,7 +16,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Outcome of {@link CheckoutSession#diagnose()}.
+ * Outcome of {@link Terminal#diagnose()}.
  */
 public final class DiagnosisResult {
 
