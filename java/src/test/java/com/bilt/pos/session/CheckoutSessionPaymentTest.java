@@ -251,7 +251,21 @@ class CheckoutSessionPaymentTest {
 
     @Test
     void payRequiresItems() {
-        assertThrows(IllegalStateException.class, () -> session.pay());
+        // verified at execute time, not at pay(): a violation must reach
+        // the flow's onError handler, which does not exist yet when pay()
+        // itself runs
+        AtomicReference<SessionError> error = new AtomicReference<>();
+        session.pay()
+                .onError(e -> {
+                    error.set(e);
+                    return PaymentOptions.voidAndAbort();
+                })
+                .executeSync();
+
+        assertNotNull(error.get());
+        assertEquals(SessionErrorCode.INVALID_STATE, error.get().getCode());
+        assertEquals(1, server.getRequestCount(),
+                "nothing beyond the session start may reach the wire");
     }
 
     @Test
@@ -263,8 +277,6 @@ class CheckoutSessionPaymentTest {
         session.basket().mutate(m -> m
                 .removeItemBySku("SKU-1")
                 .addItem(BasketItem.of("SKU-FREE", "Comped Item", 1, "0.00")));
-
-        assertThrows(IllegalStateException.class, () -> session.pay());
 
         SessionException failure = assertThrows(SessionException.class, flow::get);
         assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
@@ -753,9 +765,6 @@ class CheckoutSessionPaymentTest {
         session.basket().removeItemBySku("SKU-1");
         assertEquals(SessionState.FAILED, session.getState());
         assertEquals(0, session.basket().snapshot().getItemCount());
-
-        // creation-time: pay() must reject the empty basket outright
-        assertThrows(IllegalStateException.class, () -> session.pay());
 
         // execute-time: the lazy flow must not run a zero-amount checkout
         int requestsBefore = server.getRequestCount();
@@ -1911,7 +1920,8 @@ class CheckoutSessionPaymentTest {
 
         // the payment still stands: no second charge may be authorized
         assertEquals(SessionState.COMPLETED, session.getState());
-        assertThrows(IllegalStateException.class, () -> session.pay());
+        assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
+                () -> session.pay().get()).getError().getCode());
 
         // but the void can be retried
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));

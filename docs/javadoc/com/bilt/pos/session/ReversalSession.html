@@ -246,9 +246,18 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  referenced card leg, with the returned items attached to the refund's
  <code>PaymentRequest</code>.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#voidTransaction()" class="member-name-link">voidTransaction</a>()</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Terminal.html" title="class in com.bilt.pos.session">Terminal</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#terminal()" class="member-name-link">terminal</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The device and admin operations of this session's terminal — see
+ <a href="CheckoutSession.html#terminal()"><code>CheckoutSession.terminal()</code></a>, whose semantics apply here
+ unchanged: created lazily and cached, with its own operation thread
+ and exchange, so the session's lifecycle (including <a href="#end()"><code>end()</code></a>
+ and <a href="#abort()"><code>abort()</code></a>) never touches it.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#voidTransaction()" class="member-name-link">voidTransaction</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Reverses every referenced movement of the original sale, in order:
  the card and stored value legs (Nexo <code>ReversalRequest</code>), then
  the committed redemption, rebate, and award (their
@@ -427,6 +436,17 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <dt>Specified by:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html#close()" title="class or interface in java.lang" class="external-link">close</a></code>&nbsp;in interface&nbsp;<code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" title="class or interface in java.lang" class="external-link">AutoCloseable</a></code></dd>
 </dl>
+</section>
+</li>
+<li>
+<section class="detail" id="terminal()">
+<h3>terminal</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Terminal.html" title="class in com.bilt.pos.session">Terminal</a></span>&nbsp;<span class="element-name">terminal</span>()</div>
+<div class="block">The device and admin operations of this session's terminal — see
+ <a href="CheckoutSession.html#terminal()"><code>CheckoutSession.terminal()</code></a>, whose semantics apply here
+ unchanged: created lazily and cached, with its own operation thread
+ and exchange, so the session's lifecycle (including <a href="#end()"><code>end()</code></a>
+ and <a href="#abort()"><code>abort()</code></a>) never touches it.</div>
 </section>
 </li>
 <li>

@@ -59,14 +59,14 @@ class CheckoutSessionDeviceOpsTest {
                 .getSaleToPOIRequest();
     }
 
-    // ─── Sound ───
+    // ─── Sound (via the session's Terminal) ───
 
     @Test
     void playSoundSendsStartSoundWithReferenceAndVolume() throws Exception {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"SoundResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
 
-        session.playSound("chime-approved", 80).executeSync();
+        session.terminal().playSound("chime-approved", 80).executeSync();
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("Sound", sent.getMessageHeader().getMessageCategory().toValue());
@@ -82,18 +82,18 @@ class CheckoutSessionDeviceOpsTest {
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"SoundResponse\":{\"Response\":{\"Result\":\"Success\"}}}}"));
 
-        session.stopSound().executeSync();
+        session.terminal().stopSound().executeSync();
 
         assertEquals("StopSound", recordedRequest().getSoundRequest().getSoundAction().toValue());
     }
 
     @Test
     void playSoundValidatesVolume() {
-        assertThrows(IllegalArgumentException.class, () -> session.playSound("x", 101));
-        assertThrows(IllegalArgumentException.class, () -> session.playSound("x", -1));
+        assertThrows(IllegalArgumentException.class, () -> session.terminal().playSound("x", 101));
+        assertThrows(IllegalArgumentException.class, () -> session.terminal().playSound("x", -1));
     }
 
-    // ─── GetTotals ───
+    // ─── GetTotals (via the session's Terminal) ───
 
     @Test
     void getTotalsFiltersBySaleIdAndMapsTotals() throws Exception {
@@ -103,7 +103,7 @@ class CheckoutSessionDeviceOpsTest {
                         + "\"POIReconciliationID\":\"REC-7\","
                         + "\"TransactionTotals\":[{\"PaymentCurrency\":\"USD\"}]}}}"));
 
-        ReconciliationResult totals = session.getTotals().get();
+        ReconciliationResult totals = session.terminal().getTotals().get();
 
         assertEquals("REC-7", totals.getPoiReconciliationId());
         assertEquals(1, totals.getTransactionTotals().size());
@@ -111,6 +111,30 @@ class CheckoutSessionDeviceOpsTest {
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("GetTotals", sent.getMessageHeader().getMessageCategory().toValue());
         assertEquals("POS-LANE-3", sent.getGetTotalsRequest().getTotalFilter().getSaleID());
+    }
+
+    // ─── The session's Terminal accessor ───
+
+    @Test
+    void terminalIsCachedAndSendsNothingOnAccess() {
+        assertSame(session.terminal(), session.terminal());
+        assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
+    }
+
+    @Test
+    void terminalOperationsKeepWorkingAfterEnd() throws Exception {
+        Terminal terminal = session.terminal();
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+        session.end().executeSync();
+        server.takeRequest(5, TimeUnit.SECONDS); // drain the session-end Admin request
+
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"DiagnosisResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"POIStatus\":{\"GlobalStatus\":\"OK\"}}}}"));
+
+        assertNotNull(terminal.diagnose().get().getPoiStatus(),
+                "the terminal is independent of the session bracket");
     }
 
     // ─── Transaction status options ───

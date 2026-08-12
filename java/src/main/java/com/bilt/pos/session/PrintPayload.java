@@ -14,7 +14,7 @@ import com.bilt.pos.nexo.model.DocumentQualifierEnum;
 import java.util.Objects;
 
 /**
- * Content for {@link CheckoutSession#print(PrintPayload)}.
+ * Content for {@link Terminal#print(PrintPayload)}.
  *
  * <p>Create with {@link #text(String)} for plain text or
  * {@link #xhtml(String)} for a Base64-encoded XHTML document, optionally

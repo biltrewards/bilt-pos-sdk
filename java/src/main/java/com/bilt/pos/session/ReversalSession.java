@@ -97,6 +97,7 @@ public final class ReversalSession implements AutoCloseable {
     private final SessionOperations operations;
 
     private final BiltNexoTerminalClient client;
+    private final NexoMessageFactory factory;
     private final NexoExchange exchange;
     private final ReversalManager reversalManager;
     // the refund cart: a credit-side engine — every ring is a return
@@ -123,6 +124,11 @@ public final class ReversalSession implements AutoCloseable {
     // referenced sale (see ReversalGuards)
     private final ReversalGuards guards = new ReversalGuards("sale");
 
+    // the session's Terminal facade, created lazily by terminal(); it has
+    // its own executor and exchange, so the session's lifecycle never
+    // constrains it (and vice versa)
+    private volatile Terminal terminal;
+
     private ReversalSession(Builder builder) {
         this.operations = new SessionOperations(builder.callbackExecutor);
         this.client = builder.client;
@@ -139,7 +145,7 @@ public final class ReversalSession implements AutoCloseable {
         this.awardPoiTransactionId = builder.awardPoiTransactionId;
         this.awardPoiTransactionTimestamp = builder.awardPoiTransactionTimestamp;
         this.memberId = builder.memberId;
-        NexoMessageFactory factory = new NexoMessageFactory(
+        this.factory = new NexoMessageFactory(
                 builder.saleId, builder.poiId, builder.storeLocation);
         this.exchange = new NexoExchange(
                 new DisplayRouter(builder.client, builder.externalDisplayClient), factory);
@@ -467,6 +473,34 @@ public final class ReversalSession implements AutoCloseable {
         // queued async end would be lost with the closing scope
         end().onError(e -> LOGGER.warning("close() could not end the session: " + e))
                 .executeSync();
+    }
+
+    // ─── Terminal (device & admin operations) ───
+
+    /**
+     * The device and admin operations of this session's terminal — see
+     * {@link CheckoutSession#terminal()}, whose semantics apply here
+     * unchanged: created lazily and cached, with its own operation thread
+     * and exchange, so the session's lifecycle (including {@link #end()}
+     * and {@link #abort()}) never touches it.
+     */
+    public Terminal terminal() {
+        Terminal current = terminal;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            if (terminal == null) {
+                terminal = Terminal.builder()
+                        .client(client)
+                        .saleId(factory.getSaleId())
+                        .poiId(factory.getPoiId())
+                        .storeLocation(storeLocation)
+                        .callbackExecutor(operations.callback())
+                        .build();
+            }
+            return terminal;
+        }
     }
 
     // ─── Escape hatch ───

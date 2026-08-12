@@ -518,7 +518,7 @@ session.requestPinEntry(PinOptions.builder().timeout(Duration.ofSeconds(30)).bui
 
 `updateDisplay(basket)` refreshes the itemised receipt manually; `updateDisplay(payload)` sends a custom [display payload](./display-helpers.md). Display is best-effort and never interrupts a checkout.
 
-While an input prompt is awaiting a response, `updateInputDisplay(payload)` — safe from another thread, like `abort()` — replaces its display content (nexo `InputUpdate`). `playSound("chime-approved", 80)` / `stopSound()` drive the terminal speaker, and `getTotals()` returns the running totals since the last reconciliation without closing the period.
+While an input prompt is awaiting a response, `updateInputDisplay(payload)` — safe from another thread, like `abort()` — replaces its display content (nexo `InputUpdate`). The device operations that used to sit alongside it — sound, printing, diagnostics, totals — live on [`Terminal`](#terminal-device--admin-operations-without-a-session), one call away via `session.terminal()`.
 
 ---
 
@@ -540,6 +540,33 @@ CheckoutSession session = CheckoutSession.builder()
 session.updateDisplay(basket);            // goes to the external display
 session.updateDisplay(promotionalPayload);
 ```
+
+---
+
+## Terminal (device & admin operations without a session)
+
+Diagnostics, totals, reconciliation, printing, and sound are SERVICE/DEVICE-class nexo messages that carry no session reference on the wire, so they don't need — or belong to — a session. They live on `Terminal`, which has no bracket: `build()` sends nothing, and `close()` sends nothing (it only stops the object accepting operations).
+
+```java
+Terminal terminal = Terminal.builder()
+    .client(client)
+    .saleId("POS-LANE-3")
+    .poiId("VictaLane-275839164")
+    .storeLocation("STR-0142")     // optional; the TotalsGroupID getTotals() filters by
+    .callbackExecutor(uiExecutor)  // optional; same semantics as the session builders
+    .build();                      // sends nothing
+
+terminal.diagnose().onSuccess(d -> register.showStatus(d.getPoiStatus())).execute();
+terminal.getTotals().onSuccess(t -> register.showTotals(t)).execute();      // running totals
+terminal.reconcile().execute();                                             // closes the period
+terminal.print(PrintPayload.text("THANK YOU")).execute();
+terminal.playSound("chime-approved", 80).execute();
+terminal.stopSound().execute();
+```
+
+Use it for a connectivity ping before the first checkout, end-of-day reconciliation with no customer present, or a receipt reprint after the session that took the payment has ended. Operations are lazy `SessionResult`s like everything else — nothing is sent until `execute()`/`executeSync()`/`get()`/`getOrNull()`.
+
+Mid-checkout, `session.terminal()` (on `CheckoutSession` and `ReversalSession` alike) returns a cached `Terminal` built from the session's client, identifiers, and callback executor. It is deliberately independent of the session: it has its own operation thread and exchange, so its operations don't queue behind an in-flight payment (a connectivity check mid-payment works), they keep working after `end()`, and `session.abort()` never targets them. Its `close()` likewise doesn't touch the session.
 
 ---
 
@@ -567,6 +594,8 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | Void a completed txn | `session.voidTransaction()` |
 | Cancel in-progress op | `session.abort()` (safe from any thread) |
 | Collect customer input | `requestConfirmation / requestDigitString / requestMenuEntry / ...` |
+| Device & admin ops (no session needed) | `Terminal.builder()...build()` → `diagnose / getTotals / reconcile / print / playSound / stopSound` |
+| Device & admin ops mid-checkout | `session.terminal().diagnose()` etc. |
 | Drop to raw nexo | `session.getClient()` |
 
 **Upsert:** `addItem` with a SKU already in the basket increments its quantity. Use `updateItemQuantityBySku` to set an absolute quantity.
