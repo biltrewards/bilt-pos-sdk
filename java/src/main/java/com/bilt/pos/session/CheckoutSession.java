@@ -772,11 +772,7 @@ public final class CheckoutSession implements AutoCloseable {
             if (error != null) {
                 throw new SessionException(error);
             }
-            // the preconditions are checked here, at execute time, and not
-            // in pay(): the flow is lazy (the basket may change between
-            // creation and execution), and a violation must reach the
-            // registered onError handler — pay() runs before any handler
-            // exists to receive it
+            // Verify preconditions
             if (basketEngine.isEmpty()) {
                 throw invalidState("the basket is empty; a payment cannot start");
             }
