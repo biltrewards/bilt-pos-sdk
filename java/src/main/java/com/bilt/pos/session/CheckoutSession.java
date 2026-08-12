@@ -744,29 +744,19 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     /**
-     * Starts the payment orchestration chain. Nothing is sent until the
-     * returned {@link PaymentFlow}'s {@code execute()}, {@code get()}, or
-     * {@code getOrNull()} is invoked.
-     *
-     * @throws IllegalStateException if the basket is empty or the session is
-     *         not in a payable state
+     * Starts the payment orchestration chain. Nothing is sent — and no
+     * precondition is verified — until the returned {@link PaymentFlow}'s
+     * {@code execute()}, {@code executeSync()}, {@code get()}, or
+     * {@code getOrNull()} is invoked: the session must then be in a payable
+     * state ({@code ACTIVE}, or {@code FAILED} for a retry) with a
+     * non-empty basket and a positive grand total. A violation is delivered
+     * with {@link SessionErrorCode#INVALID_STATE} through the flow's
+     * {@code onError} handler like any other payment failure (the blocking
+     * accessors throw the {@link SessionException}), so a register driving
+     * the checkout through handlers needs no try/catch around this call.
      */
     public PaymentFlow pay(PaymentOptions options) {
         Objects.requireNonNull(options, "options");
-        SessionState state = stateMachine.current();
-        if (state != SessionState.ACTIVE && state != SessionState.FAILED) {
-            throw new IllegalStateException("pay() is not allowed in state " + state);
-        }
-        // the state alone does not imply items: a FAILED session with an
-        // incomplete rollback keeps its state across edits, so the basket
-        // can be empty here
-        if (basketEngine.isEmpty()) {
-            throw new IllegalStateException("pay() requires items in the basket");
-        }
-        if (basketEngine.snapshot().getGrandTotal().signum() <= 0) {
-            throw new IllegalStateException(
-                    "pay() requires a positive basket total (zero-priced items only)");
-        }
         operations.track("pay");
         return new PaymentFlow(flow -> executePayment(flow, options))
                 .session(operations);
@@ -782,8 +772,11 @@ public final class CheckoutSession implements AutoCloseable {
             if (error != null) {
                 throw new SessionException(error);
             }
-            // re-checked at execute time: the flow is lazy, and the basket
-            // may have been emptied since pay() created it
+            // the preconditions are checked here, at execute time, and not
+            // in pay(): the flow is lazy (the basket may change between
+            // creation and execution), and a violation must reach the
+            // registered onError handler — pay() runs before any handler
+            // exists to receive it
             if (basketEngine.isEmpty()) {
                 throw invalidState("the basket is empty; a payment cannot start");
             }

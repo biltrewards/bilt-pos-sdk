@@ -273,7 +273,8 @@ class CheckoutSessionLifecycleTest {
 
         assertThrows(IllegalStateException.class,
                 () -> session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00")));
-        assertThrows(IllegalStateException.class, session::pay);
+        assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
+                () -> session.pay().get()).getError().getCode());
         assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
                 () -> session.identifyMember().get()).getError().getCode());
         assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
