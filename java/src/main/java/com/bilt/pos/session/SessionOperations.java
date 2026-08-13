@@ -20,7 +20,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -113,8 +115,17 @@ final class SessionOperations {
      *  configuration, fixed at session construction. */
     private final Executor callbackExecutor;
 
+    /** The builders' {@code onBackgroundError} handler, or null; see
+     *  [backgroundError]. Like [callbackExecutor], fixed at construction. */
+    private final Consumer<SessionError> onBackgroundError;
+
     SessionOperations(Executor callbackExecutor) {
+        this(callbackExecutor, null);
+    }
+
+    SessionOperations(Executor callbackExecutor, Consumer<SessionError> onBackgroundError) {
         this.callbackExecutor = callbackExecutor;
+        this.onBackgroundError = onBackgroundError;
     }
 
     /** Creates a lazy {@link SessionResult} tracked against this session. */
@@ -222,6 +233,35 @@ final class SessionOperations {
                 inAwaitedHandler.remove();
             }
         };
+    }
+
+    /**
+     * Reports a failure of work the session performed on its own behalf —
+     * work with no {@link SessionResult} whose {@code onError} could carry
+     * it. Always logged; additionally delivered to the session's
+     * {@code onBackgroundError} handler through the callback executor.
+     * Fire-and-forget, with a throwing handler contained: background work
+     * must never interrupt whatever the session is doing.
+     *
+     * @param what the failed work, article included, for the log line
+     */
+    void backgroundError(String what, RuntimeException failure) {
+        SessionError error = failure instanceof SessionException
+                ? ((SessionException) failure).getError()
+                : new SessionError(SessionErrorCode.UNKNOWN,
+                        what + " failed unexpectedly", null, failure);
+        LOGGER.log(Level.WARNING, what + " failed: " + error, failure);
+        if (onBackgroundError == null) {
+            return;
+        }
+        HandlerDispatch.fireAndForget(callbackExecutor, what, () -> {
+            try {
+                onBackgroundError.accept(error);
+            } catch (RuntimeException handlerFailure) {
+                LOGGER.log(Level.SEVERE, "the onBackgroundError handler threw "
+                        + "handling '" + what + "'", handlerFailure);
+            }
+        });
     }
 
     /** Stops accepting asynchronous operations; called when the session

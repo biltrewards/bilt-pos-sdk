@@ -108,9 +108,11 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  printing, sound) via <a href="#terminal()"><code>terminal()</code></a>.</p>
 
  <p>Terminal operations are lazy: methods returning <a href="SessionResult.html" title="class in com.bilt.pos.session"><code>SessionResult</code></a>
- (or a payment flow) send nothing until <code>execute()</code>, <code>get()</code>, or
- <code>getOrNull()</code> is invoked. All I/O and handlers run blocking on the
- calling thread.</p>
+ (or a payment flow) send nothing until <code>execute()</code> (asynchronous,
+ outcome through the registered handlers), <code>executeSync()</code>,
+ <code>get()</code>, or <code>getOrNull()</code> (blocking) is invoked. Basket
+ mutations are pure local compute — the automatic display refresh they
+ trigger is asynchronous and conflated.</p>
 
  <p>A session is bracketed on the terminal: the builder's
  <a href="CheckoutSession.Builder.html#start()"><code>start()</code></a> announces it (Nexo <code>Admin</code> session
@@ -167,7 +169,7 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="table-header col-first">Modifier and Type</div>
 <div class="table-header col-second">Method</div>
 <div class="table-header col-last">Description</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#abort()" class="member-name-link">abort</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Aborts the in-flight operation.</div>
@@ -430,13 +432,13 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  <code>print()</code>, <code>playSound()</code>/<code>stopSound()</code> — built from
  this session's client, identifiers, and callback executor.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#updateDisplay(com.bilt.pos.display.DisplayPayload)" class="member-name-link">updateDisplay</a><wbr>(<a href="../display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a>&nbsp;payload)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Sends a custom display payload to the customer display (or the external
  display when configured).</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#updateDisplay(com.bilt.pos.session.basket.Basket)" class="member-name-link">updateDisplay</a><wbr>(<a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;basket)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Refreshes the customer display from the given basket snapshot using the
@@ -513,9 +515,12 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></span>&nbsp;<span class="element-name">basket</span>()</div>
 <div class="block">The session's basket: item and tax mutations, batch edits, and
  snapshots. Mutations follow the session lifecycle — they are rejected
- while a payment is in flight or after the session has ended, and each
- one refreshes the customer display when
- <a href="CheckoutSession.Builder.html#autoDisplay(boolean)"><code>autoDisplay</code></a> is enabled.</div>
+ while a payment is in flight or after the session has ended. Each one
+ returns the updated snapshot without touching the wire; with
+ <a href="CheckoutSession.Builder.html#autoDisplay(boolean)"><code>autoDisplay</code></a> enabled it also
+ enqueues an asynchronous, conflated customer-display refresh (a
+ failed refresh reports through
+ <a href="CheckoutSession.Builder.html#onBackgroundError(java.util.function.Consumer)"><code>onBackgroundError</code></a>).</div>
 </section>
 </li>
 <li>
@@ -857,29 +862,27 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <li>
 <section class="detail" id="updateDisplay(com.bilt.pos.session.basket.Basket)">
 <h3>updateDisplay</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">updateDisplay</span><wbr><span class="parameters">(<a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;basket)</span></div>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</span>&nbsp;<span class="element-name">updateDisplay</span><wbr><span class="parameters">(<a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;basket)</span></div>
 <div class="block">Refreshes the customer display from the given basket snapshot using the
- configured <a href="display/DisplayRenderer.html" title="interface in com.bilt.pos.session.display"><code>DisplayRenderer</code></a>.
-
- <p>Display is best-effort: failures are logged and never interrupt the
- checkout.</p></div>
+ configured <a href="display/DisplayRenderer.html" title="interface in com.bilt.pos.session.display"><code>DisplayRenderer</code></a>. Failures are delivered through the
+ returned result's <code>onError</code>, not the session's
+ <code>onBackgroundError</code> — that handler is only for pushes the
+ session initiates itself. Allowed until the session has ended.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="updateDisplay(com.bilt.pos.display.DisplayPayload)">
 <h3>updateDisplay</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">updateDisplay</span><wbr><span class="parameters">(<a href="../display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a>&nbsp;payload)</span></div>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</span>&nbsp;<span class="element-name">updateDisplay</span><wbr><span class="parameters">(<a href="../display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a>&nbsp;payload)</span></div>
 <div class="block">Sends a custom display payload to the customer display (or the external
- display when configured).
-
- <p>Display is best-effort: failures are logged and never interrupt the
- checkout.</p></div>
+ display when configured). Same contract as
+ <a href="#updateDisplay(com.bilt.pos.session.basket.Basket)"><code>updateDisplay(Basket)</code></a>.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="abort()">
 <h3>abort</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">abort</span>()</div>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</span>&nbsp;<span class="element-name">abort</span>()</div>
 <div class="block">Aborts the in-flight operation. The session itself continues — an
  abort is a normal register maneuver (cancel the signature prompt, stop
  a tender to take a gift card first), not an abandonment; to abandon
@@ -905,7 +908,9 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  leaves the transaction standing; use <code>voidTransaction()</code> to
  reverse it.</p>
 
- <p>Safe to call from any thread.</p></div>
+ <p>Deliberately <em>unordered</em>: queued on the session's operation
+ lane, the abort would wait on the very operation it cancels, so it
+ overtakes it instead. Safe to call from any thread.</p></div>
 </section>
 </li>
 <li>

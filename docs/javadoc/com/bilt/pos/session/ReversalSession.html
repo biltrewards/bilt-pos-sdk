@@ -123,8 +123,8 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  session start signal) and <a href="#end()"><code>end()</code></a> tells the terminal to discard its
  session-scoped data; try-with-resources sends the end signal even on
  exception paths. All operations are lazy — nothing is sent until
- <code>execute()</code>, <code>get()</code>, or <code>getOrNull()</code> is invoked — and
- run blocking on the calling thread.</p>
+ <code>execute()</code> (asynchronous), <code>executeSync()</code>, <code>get()</code>,
+ or <code>getOrNull()</code> (blocking) is invoked.</p>
 
  <pre><code>
  try (ReversalSession session = ReversalSession.builder()
@@ -176,7 +176,7 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="table-header col-first">Modifier and Type</div>
 <div class="table-header col-second">Method</div>
 <div class="table-header col-last">Description</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#abort()" class="member-name-link">abort</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Best-effort abort of the in-flight request.</div>
@@ -321,8 +321,10 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="block">The session's refund cart: the items being returned, rung in like a
  checkout basket. Every line is a credit line — totals are negative
  and, with <a href="ReversalSession.Builder.html#autoDisplay(boolean)"><code>autoDisplay</code></a> enabled
- (the default), each mutation refreshes the customer display with the
- itemised returns. Mutations are allowed until a void or <code>end()</code>
+ (the default), each mutation enqueues an asynchronous, conflated
+ display refresh with the itemised returns (failures report through
+ <a href="ReversalSession.Builder.html#onBackgroundError(java.util.function.Consumer)"><code>onBackgroundError</code></a>).
+ Mutations are allowed until a void or <code>end()</code>
  seals the session; <a href="#refundBasket()"><code>refundBasket()</code></a> consumes the cart. The
  cart is free-form — whether an item may be returned, and in what
  quantity, is the register's decision.</div>
@@ -399,12 +401,15 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <li>
 <section class="detail" id="abort()">
 <h3>abort</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">abort</span>()</div>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</span>&nbsp;<span class="element-name">abort</span>()</div>
 <div class="block">Best-effort abort of the in-flight request. Money-moving operations
  always deliver their outcome even when the abort raced them: the
  movement may have completed on the terminal, and the register must
- know. Safe to call from any thread; with nothing in flight this is a
- no-op.</div>
+ know. With nothing in flight this is a no-op.
+
+ <p>Deliberately unordered: queued on the session's operation lane,
+ the abort would wait on the very operation it cancels, so it
+ overtakes it instead. Safe to call from any thread.</p></div>
 </section>
 </li>
 <li>

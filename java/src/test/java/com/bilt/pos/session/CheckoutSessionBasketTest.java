@@ -197,7 +197,7 @@ class CheckoutSessionBasketTest {
                 .setTaxTotal(new BigDecimal("1.60")));
 
         assertEquals(new BigDecimal("21.60"), basket.getGrandTotal());
-        // give the (synchronous) send a moment to be recorded, then assert exactly one request
+        // await the (asynchronous) push, then assert exactly one request
         DisplayPayload payload = nextDisplayPayload();
         assertEquals(2, payload.getReceipt().getLineItems().getLineItem().size());
         assertEquals(2, server.getRequestCount(), "session start plus exactly one display update");

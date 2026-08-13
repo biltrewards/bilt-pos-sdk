@@ -96,9 +96,11 @@ import java.util.logging.Logger;
  * printing, sound) via {@link #terminal()}.</p>
  *
  * <p>Terminal operations are lazy: methods returning {@link SessionResult}
- * (or a payment flow) send nothing until {@code execute()}, {@code get()}, or
- * {@code getOrNull()} is invoked. All I/O and handlers run blocking on the
- * calling thread.</p>
+ * (or a payment flow) send nothing until {@code execute()} (asynchronous,
+ * outcome through the registered handlers), {@code executeSync()},
+ * {@code get()}, or {@code getOrNull()} (blocking) is invoked. Basket
+ * mutations are pure local compute — the automatic display refresh they
+ * trigger is asynchronous and conflated.</p>
  *
  * <p>A session is bracketed on the terminal: the builder's
  * {@link Builder#start() start()} announces it (Nexo {@code Admin} session
@@ -129,6 +131,12 @@ public final class CheckoutSession implements AutoCloseable {
 
     private static final Logger LOGGER = Logger.getLogger(CheckoutSession.class.getName());
 
+    /** The states in which the basket accepts mutations — and, by the same
+     *  token, in which a queued auto-display push is still current. */
+    private static final Set<SessionState> BASKET_LIVE_STATES = EnumSet.of(
+            SessionState.IDLE, SessionState.IDENTIFIED,
+            SessionState.ACTIVE, SessionState.FAILED);
+
     private final String sessionId = UUID.randomUUID().toString();
     private final SessionStateMachine stateMachine = new SessionStateMachine();
     private final ReentrantLock lock = new ReentrantLock();
@@ -141,6 +149,7 @@ public final class CheckoutSession implements AutoCloseable {
     private final BasketEngine basketEngine = new BasketEngine();
     private final SessionBasket basket;
     private final BasketDisplay display;
+    private final AutoDisplayPush autoDisplayPush;
     private final DisplayRenderer displayRenderer;
     private final Consumer<Basket> onBasketUpdated;
     private final String currency;
@@ -181,7 +190,8 @@ public final class CheckoutSession implements AutoCloseable {
     private volatile Terminal terminal;
 
     private CheckoutSession(Builder builder) {
-        this.operations = new SessionOperations(builder.callbackExecutor);
+        this.operations = new SessionOperations(builder.callbackExecutor,
+                builder.onBackgroundError);
         this.client = builder.client;
         this.currency = builder.currency;
         this.storeLocation = builder.storeLocation;
@@ -199,6 +209,8 @@ public final class CheckoutSession implements AutoCloseable {
         this.paymentOrchestrator = new PaymentOrchestrator(exchange, builder.currency);
         this.storedValueManager = new StoredValueManager(exchange, builder.currency);
         this.display = new BasketDisplay(exchange, displayRenderer, builder.currency);
+        this.autoDisplayPush = new AutoDisplayPush(operations, display,
+                stateMachine::current, BASKET_LIVE_STATES);
         this.basket = new SessionBasket(new SessionBasket.Host() {
             @Override
             public Basket mutate(Consumer<BasketMutation> mutation) {
@@ -289,9 +301,12 @@ public final class CheckoutSession implements AutoCloseable {
     /**
      * The session's basket: item and tax mutations, batch edits, and
      * snapshots. Mutations follow the session lifecycle — they are rejected
-     * while a payment is in flight or after the session has ended, and each
-     * one refreshes the customer display when
-     * {@link Builder#autoDisplay(boolean) autoDisplay} is enabled.
+     * while a payment is in flight or after the session has ended. Each one
+     * returns the updated snapshot without touching the wire; with
+     * {@link Builder#autoDisplay(boolean) autoDisplay} enabled it also
+     * enqueues an asynchronous, conflated customer-display refresh (a
+     * failed refresh reports through
+     * {@link Builder#onBackgroundError(Consumer) onBackgroundError}).
      */
     public SessionBasket basket() {
         return basket;
@@ -302,8 +317,7 @@ public final class CheckoutSession implements AutoCloseable {
         lock.lock();
         try {
             SessionState state = stateMachine.current();
-            if (state != SessionState.IDLE && state != SessionState.IDENTIFIED
-                    && state != SessionState.ACTIVE && state != SessionState.FAILED) {
+            if (!BASKET_LIVE_STATES.contains(state)) {
                 throw new IllegalStateException(
                         "the basket cannot be modified in state " + state);
             }
@@ -319,11 +333,13 @@ public final class CheckoutSession implements AutoCloseable {
             }
             syncStateWithBasket();
             snapshot = basketEngine.snapshot();
+            if (autoDisplay) {
+                // under the lock so concurrent mutations cannot enter the
+                // conflated push out of snapshot order
+                autoDisplayPush.push(snapshot);
+            }
         } finally {
             lock.unlock();
-        }
-        if (autoDisplay) {
-            showBasket(snapshot);
         }
         return snapshot;
     }
@@ -1130,30 +1146,38 @@ public final class CheckoutSession implements AutoCloseable {
 
     /**
      * Refreshes the customer display from the given basket snapshot using the
-     * configured {@link DisplayRenderer}.
-     *
-     * <p>Display is best-effort: failures are logged and never interrupt the
-     * checkout.</p>
+     * configured {@link DisplayRenderer}. Failures are delivered through the
+     * returned result's {@code onError}, not the session's
+     * {@code onBackgroundError} — that handler is only for pushes the
+     * session initiates itself. Allowed until the session has ended.
      */
-    public void updateDisplay(Basket basket) {
+    public SessionResult<Void> updateDisplay(Basket basket) {
         Objects.requireNonNull(basket, "basket");
-        showBasket(basket);
+        return this.<Void>operation("updateDisplay", () -> {
+            requireSessionNotEnded("updateDisplay");
+            display.show(basket, stateMachine.current());
+            return null;
+        });
     }
 
+    /** The payment sequence's final display refresh; the orchestrator
+     *  catches its failures. */
     private void showBasket(Basket basket) {
         display.show(basket, stateMachine.current());
     }
 
     /**
      * Sends a custom display payload to the customer display (or the external
-     * display when configured).
-     *
-     * <p>Display is best-effort: failures are logged and never interrupt the
-     * checkout.</p>
+     * display when configured). Same contract as
+     * {@link #updateDisplay(Basket)}.
      */
-    public void updateDisplay(DisplayPayload payload) {
+    public SessionResult<Void> updateDisplay(DisplayPayload payload) {
         Objects.requireNonNull(payload, "payload");
-        display.send(payload, stateMachine.current());
+        return this.<Void>operation("updateDisplay", () -> {
+            requireSessionNotEnded("updateDisplay");
+            display.send(payload);
+            return null;
+        });
     }
 
     // ─── Abort ───
@@ -1184,25 +1208,31 @@ public final class CheckoutSession implements AutoCloseable {
      * leaves the transaction standing; use {@code voidTransaction()} to
      * reverse it.</p>
      *
-     * <p>Safe to call from any thread.</p>
+     * <p>Deliberately <em>unordered</em>: queued on the session's operation
+     * lane, the abort would wait on the very operation it cancels, so it
+     * overtakes it instead. Safe to call from any thread.</p>
      */
-    public void abort() {
-        lock.lock();
-        try {
-            // flag and state check share this critical section, so the
-            // reset a starting payment performs entering PAYING cannot eat
-            // a live abort. Outside PAYING the flag stays clear: a stale
-            // abort must not kill the next payment at its first checkAbort,
-            // and prompts are aborted via the wire request below.
-            if (stateMachine.current() == SessionState.PAYING) {
-                abortRequested = true;
+    public SessionResult<Void> abort() {
+        return this.<Void>operation("abort", () -> {
+            lock.lock();
+            try {
+                // flag and state check share this critical section, so the
+                // reset a starting payment performs entering PAYING cannot
+                // eat a live abort. Outside PAYING the flag stays clear: a
+                // stale abort must not kill the next payment at its first
+                // checkAbort, and prompts are aborted via the wire request
+                // below.
+                if (stateMachine.current() == SessionState.PAYING) {
+                    abortRequested = true;
+                }
+            } finally {
+                lock.unlock();
             }
-        } finally {
-            lock.unlock();
-        }
-        // the session lifecycle signals are never the abort's target — like
-        // VOIDING, an in-flight end() always settles
-        exchange.abortInFlight();
+            // the session lifecycle signals are never the abort's target —
+            // like VOIDING, an in-flight end() always settles
+            exchange.abortInFlight();
+            return null;
+        }).unordered();
     }
 
     // ─── Session lifecycle ───
@@ -1392,9 +1422,10 @@ public final class CheckoutSession implements AutoCloseable {
      */
     public SessionResult<Void> updateInputDisplay(DisplayPayload payload) {
         Objects.requireNonNull(payload, "payload");
-        // unordered: this operation exists to overlap the in-flight input
-        // occupying the operation thread — queued behind it, it would wait
-        // on the very prompt it amends
+        // unordered, like abort(): both exist to overlap the in-flight
+        // operation occupying the operation thread — queued behind it,
+        // this would wait on the very prompt it amends, and an abort on
+        // the very operation it cancels
         return this.<Void>operation("updateInputDisplay", () -> {
             NexoExchange.InFlight inFlight = exchange.currentInFlight();
             if (inFlight == null || inFlight.getCategory() != MessageCategoryType.INPUT) {
@@ -1499,6 +1530,7 @@ public final class CheckoutSession implements AutoCloseable {
         private DisplayRenderer displayRenderer;
         private Consumer<Basket> onBasketUpdated;
         private Executor callbackExecutor;
+        private Consumer<SessionError> onBackgroundError;
 
         private Builder() {
         }
@@ -1587,6 +1619,25 @@ public final class CheckoutSession implements AutoCloseable {
          */
         public Builder callbackExecutor(Executor callbackExecutor) {
             this.callbackExecutor = callbackExecutor;
+            return this;
+        }
+
+        /**
+         * Handler for failures of work the session performs on its own
+         * behalf, with no result object to report through: today the
+         * automatic display push after a basket mutation
+         * ({@link #autoDisplay(boolean)}), in the future also the reactive
+         * {@link #onBasketUpdated(Consumer)} channel. Manual
+         * {@code updateDisplay(...)} failures are not delivered here — they
+         * report through their own per-call {@code onError}.
+         *
+         * <p>Background failures never interrupt the checkout and are
+         * logged whether or not a handler is registered. Delivered through
+         * the {@link #callbackExecutor(Executor) callbackExecutor} when one
+         * is configured, directly on the failing thread otherwise.</p>
+         */
+        public Builder onBackgroundError(Consumer<SessionError> onBackgroundError) {
+            this.onBackgroundError = onBackgroundError;
             return this;
         }
 

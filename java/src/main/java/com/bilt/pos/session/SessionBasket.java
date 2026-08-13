@@ -23,8 +23,9 @@ import java.util.function.Consumer;
  * {@link ReversalSession#basket()} (the refund cart): item and tax
  * mutations, batch edits, and immutable snapshots.
  *
- * <p>Every mutation is applied atomically and — when the session has
- * automatic display enabled — followed by a customer display refresh showing
+ * <p>Every mutation is applied atomically, returning the updated snapshot
+ * synchronously; when the session has automatic display enabled it also
+ * enqueues an asynchronous, conflated customer display refresh showing
  * the itemised basket. The owning session decides when mutations are
  * allowed: a basket frozen by an in-flight payment, or one whose session has
  * ended, rejects them with {@code IllegalStateException}.</p>
@@ -113,8 +114,8 @@ public final class SessionBasket {
     }
 
     /**
-     * Applies a batch of basket mutations atomically, followed by a single
-     * display update.
+     * Applies a batch of basket mutations atomically, with a single
+     * display update for the whole batch.
      */
     public Basket mutate(Consumer<BasketMutation> mutation) {
         Objects.requireNonNull(mutation, "mutation");

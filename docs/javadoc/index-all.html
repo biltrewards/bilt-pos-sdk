@@ -2654,8 +2654,8 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SessionBasket.html#mutate(java.util.function.Consumer)" class="member-name-link">mutate(Consumer&lt;BasketMutation&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></dt>
 <dd>
-<div class="block">Applies a batch of basket mutations atomically, followed by a single
- display update.</div>
+<div class="block">Applies a batch of basket mutations atomically, with a single
+ display update for the whole batch.</div>
 </dd>
 </dl>
 <h2 class="title" id="I:N">N</h2>
@@ -2711,6 +2711,21 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#offlineDeletedTimeStamp" class="member-name-link">offlineDeletedTimeStamp</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/CheckoutSession.Builder.html#onBackgroundError(java.util.function.Consumer)" class="member-name-link">onBackgroundError(Consumer&lt;SessionError&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></dt>
+<dd>
+<div class="block">Handler for failures of work the session performs on its own
+ behalf, with no result object to report through: today the
+ automatic display push after a basket mutation
+ (<a href="com/bilt/pos/session/CheckoutSession.Builder.html#autoDisplay(boolean)"><code>CheckoutSession.Builder.autoDisplay(boolean)</code></a>), in the future also the reactive
+ <a href="com/bilt/pos/session/CheckoutSession.Builder.html#onBasketUpdated(java.util.function.Consumer)"><code>CheckoutSession.Builder.onBasketUpdated(Consumer)</code></a> channel.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ReversalSession.Builder.html#onBackgroundError(java.util.function.Consumer)" class="member-name-link">onBackgroundError(Consumer&lt;SessionError&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></dt>
+<dd>
+<div class="block">Handler for failures of work the session performs on its own
+ behalf, with no result object to report through — here the
+ automatic display push after a refund cart mutation
+ (<a href="com/bilt/pos/session/ReversalSession.Builder.html#autoDisplay(boolean)"><code>ReversalSession.Builder.autoDisplay(boolean)</code></a>).</div>
+</dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.Builder.html#onBasketUpdated(java.util.function.Consumer)" class="member-name-link">onBasketUpdated(Consumer&lt;Basket&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></dt>
 <dd>
 <div class="block">Out-of-band basket update callback.</div>

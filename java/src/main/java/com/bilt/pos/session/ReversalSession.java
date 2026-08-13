@@ -65,8 +65,8 @@ import java.util.logging.Logger;
  * session start signal) and {@link #end()} tells the terminal to discard its
  * session-scoped data; try-with-resources sends the end signal even on
  * exception paths. All operations are lazy — nothing is sent until
- * {@code execute()}, {@code get()}, or {@code getOrNull()} is invoked — and
- * run blocking on the calling thread.</p>
+ * {@code execute()} (asynchronous), {@code executeSync()}, {@code get()},
+ * or {@code getOrNull()} (blocking) is invoked.</p>
  *
  * <pre>{@code
  * try (ReversalSession session = ReversalSession.builder()
@@ -104,6 +104,7 @@ public final class ReversalSession implements AutoCloseable {
     private final BasketEngine basketEngine = new BasketEngine(true);
     private final SessionBasket basket;
     private final BasketDisplay display;
+    private final AutoDisplayPush autoDisplayPush;
     private final boolean autoDisplay;
     private final String currency;
     private final String storeLocation;
@@ -130,7 +131,8 @@ public final class ReversalSession implements AutoCloseable {
     private volatile Terminal terminal;
 
     private ReversalSession(Builder builder) {
-        this.operations = new SessionOperations(builder.callbackExecutor);
+        this.operations = new SessionOperations(builder.callbackExecutor,
+                builder.onBackgroundError);
         this.client = builder.client;
         this.currency = builder.currency;
         this.storeLocation = builder.storeLocation;
@@ -155,6 +157,8 @@ public final class ReversalSession implements AutoCloseable {
                 builder.displayRenderer != null
                         ? builder.displayRenderer : new BasketDisplayRenderer(),
                 builder.currency);
+        this.autoDisplayPush = new AutoDisplayPush(operations, display,
+                stateMachine::current, EnumSet.of(SessionState.IDLE));
         this.basket = new SessionBasket(new SessionBasket.Host() {
             @Override
             public Basket mutate(Consumer<BasketMutation> mutation) {
@@ -166,7 +170,7 @@ public final class ReversalSession implements AutoCloseable {
                 basketEngine.mutateAtomically(mutation);
                 Basket snapshot = basketEngine.snapshot();
                 if (autoDisplay) {
-                    display.show(snapshot, stateMachine.current());
+                    autoDisplayPush.push(snapshot);
                 }
                 return snapshot;
             }
@@ -210,8 +214,10 @@ public final class ReversalSession implements AutoCloseable {
      * The session's refund cart: the items being returned, rung in like a
      * checkout basket. Every line is a credit line — totals are negative
      * and, with {@link Builder#autoDisplay(boolean) autoDisplay} enabled
-     * (the default), each mutation refreshes the customer display with the
-     * itemised returns. Mutations are allowed until a void or {@code end()}
+     * (the default), each mutation enqueues an asynchronous, conflated
+     * display refresh with the itemised returns (failures report through
+     * {@link Builder#onBackgroundError(Consumer) onBackgroundError}).
+     * Mutations are allowed until a void or {@code end()}
      * seals the session; {@link #refundBasket()} consumes the cart. The
      * cart is free-form — whether an item may be returned, and in what
      * quantity, is the register's decision.
@@ -377,7 +383,9 @@ public final class ReversalSession implements AutoCloseable {
             if (tenderRefunded[0]) {
                 basketEngine.clear();
                 if (autoDisplay) {
-                    display.show(basketEngine.snapshot(), stateMachine.current());
+                    // asynchronous, so a display failure cannot throw from
+                    // this finally block and mask the refund's own outcome
+                    autoDisplayPush.push(basketEngine.snapshot());
                 }
             }
         }
@@ -408,11 +416,17 @@ public final class ReversalSession implements AutoCloseable {
      * Best-effort abort of the in-flight request. Money-moving operations
      * always deliver their outcome even when the abort raced them: the
      * movement may have completed on the terminal, and the register must
-     * know. Safe to call from any thread; with nothing in flight this is a
-     * no-op.
+     * know. With nothing in flight this is a no-op.
+     *
+     * <p>Deliberately unordered: queued on the session's operation lane,
+     * the abort would wait on the very operation it cancels, so it
+     * overtakes it instead. Safe to call from any thread.</p>
      */
-    public void abort() {
-        exchange.abortInFlight();
+    public SessionResult<Void> abort() {
+        return this.<Void>operation("abort", () -> {
+            exchange.abortInFlight();
+            return null;
+        }).unordered();
     }
 
     // ─── Session lifecycle ───
@@ -551,6 +565,7 @@ public final class ReversalSession implements AutoCloseable {
         private Instant awardPoiTransactionTimestamp;
         private String memberId;
         private Executor callbackExecutor;
+        private Consumer<SessionError> onBackgroundError;
 
         private Builder() {
         }
@@ -726,6 +741,18 @@ public final class ReversalSession implements AutoCloseable {
          */
         public Builder callbackExecutor(Executor callbackExecutor) {
             this.callbackExecutor = callbackExecutor;
+            return this;
+        }
+
+        /**
+         * Handler for failures of work the session performs on its own
+         * behalf, with no result object to report through — here the
+         * automatic display push after a refund cart mutation
+         * ({@link #autoDisplay(boolean)}). Same semantics as
+         * {@code CheckoutSession.Builder#onBackgroundError}.
+         */
+        public Builder onBackgroundError(Consumer<SessionError> onBackgroundError) {
+            this.onBackgroundError = onBackgroundError;
             return this;
         }
 
