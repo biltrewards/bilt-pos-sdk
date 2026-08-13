@@ -11,7 +11,9 @@ import com.bilt.pos.emulator.store.JsonlSaleStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import java.awt.EventQueue
 import java.io.File
+import java.util.concurrent.Executor
 
 fun main() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -20,6 +22,7 @@ fun main() {
         saleStore = JsonlSaleStore.inDirectory(
             File(System.getProperty("user.home"), ".bilt-pos-emulator")
         ),
+        callbackExecutor = Executor(EventQueue::invokeLater),
     )
     controller.autodetectAddress()
 

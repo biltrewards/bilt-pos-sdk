@@ -8,6 +8,7 @@ import com.bilt.pos.emulator.store.SaleItem
 import com.bilt.pos.emulator.store.SaleRecord
 import com.bilt.pos.emulator.store.TransactionLeg
 import java.nio.file.Files
+import java.util.concurrent.Executors
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -66,6 +67,10 @@ class NexoEmulatorControllerTest {
                     hostnamePattern = "*",
                 ),
                 saleStore = store,
+                // serial stand-in for the app's UI thread
+                callbackExecutor = Executors.newSingleThreadExecutor { task ->
+                    Thread(task, "test-ui").apply { isDaemon = true }
+                },
             )
             // the init-time load runs on a background dispatcher
             val sales = runBlocking {

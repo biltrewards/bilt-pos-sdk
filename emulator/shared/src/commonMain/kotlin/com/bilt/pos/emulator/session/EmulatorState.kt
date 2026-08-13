@@ -53,14 +53,10 @@ data class PaymentOutcome(
 
 /**
  * Payment configuration. The SDK-side loyalty steps run only for a member
- * attached to the session, but identification is a separate choice:
- * [identify] prompts on the terminal before the payment, while the loyalty
- * toggles keep working without it when the customer self-identifies on the
- * terminal during the flow.
+ * attached to the session — identified at Start Checkout, or by the
+ * customer self-identifying on the terminal during the flow.
  */
 data class LoyaltyOptions(
-    /** Prompt for member identification on the terminal before the payment. */
-    val identify: Boolean = true,
     /** Rebate (coupon) redemption. */
     val rebates: Boolean = true,
     /** Point/reward redemption for monetary value. */
@@ -202,8 +198,14 @@ interface EmulatorController {
 
     fun disconnect()
 
-    /** Start a new checkout session (terminal Start bracket) on the connection. */
-    fun startSession()
+    /**
+     * Start a new checkout session (terminal Start bracket) on the
+     * connection. With [identifyMember], the terminal prompts for member
+     * identification right after the start acknowledges — its own
+     * operation, not part of the bracket; a failed or declined prompt
+     * degrades to a guest checkout.
+     */
+    fun startSession(identifyMember: Boolean = false)
 
     /** End the active checkout session (terminal End bracket). */
     fun endSession()
@@ -213,11 +215,8 @@ interface EmulatorController {
 
     /**
      * Run the payment on the active session. [loyalty] picks which loyalty
-     * steps run; when [LoyaltyOptions.identify] is enabled and no member is
-     * attached yet, the terminal prompts the customer first (a declined
-     * prompt falls back to a guest checkout). [storedValue] adds a gift
-     * card as the first tender — anything it doesn't cover falls through
-     * to the standard card payment.
+     * steps run; [storedValue] adds a gift card as the first tender —
+     * anything it doesn't cover falls through to the standard card payment.
      */
     fun pay(loyalty: LoyaltyOptions, storedValue: StoredValueOptions? = null)
 

@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -420,6 +421,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
     var terminalIp by rememberSaveable { mutableStateOf("") }
     var encryptionOn by rememberSaveable { mutableStateOf(state.encryptionEnabled) }
     var passphrase by remember { mutableStateOf("") }
+    var identifyOnStart by rememberSaveable { mutableStateOf(false) }
 
     // Adopt the autodetected address unless the operator already typed one
     LaunchedEffect(state.terminalAddress, state.addressAutodetected) {
@@ -500,12 +502,28 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                     val sessionActive = state.sessionId != null
                     Button(
                         onClick = {
-                            if (sessionActive) controller.endSession() else controller.startSession()
+                            if (sessionActive) {
+                                controller.endSession()
+                            } else {
+                                controller.startSession(identifyOnStart)
+                            }
                         },
                         enabled = connected,
                         modifier = modifier,
                     ) {
                         Text(if (sessionActive) "End Checkout" else "Start Checkout")
+                    }
+                }
+                // Read at Start Checkout: prompts for member identification
+                // right after the session starts
+                val identifyToggle: @Composable () -> Unit = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = identifyOnStart,
+                            onCheckedChange = { identifyOnStart = it },
+                            enabled = state.sessionId == null,
+                        )
+                        Text("Identify", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 // Aborts whatever is on the terminal (payment, identify
@@ -536,6 +554,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                             passphraseField(Modifier.fillMaxWidth())
                         }
                         connectButton(Modifier.fillMaxWidth())
+                        identifyToggle()
                         sessionButton(Modifier.fillMaxWidth())
                         abortButton(Modifier.fillMaxWidth())
                     }
@@ -548,6 +567,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         ipField(Modifier.width(160.dp))
                         connectButton(Modifier)
                         sessionButton(Modifier)
+                        identifyToggle()
                         encryptToggle()
                         if (encryptionOn) {
                             passphraseField(Modifier.width(240.dp))
@@ -717,10 +737,9 @@ private fun BasketCard(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PaymentControls(state: EmulatorState, controller: EmulatorController) {
-    // Toggles for the next payment. Identify prompts on the terminal before
-    // paying; the loyalty steps work without it when the customer
-    // self-identifies on the terminal during the flow.
-    var identify by rememberSaveable { mutableStateOf(false) }
+    // Toggles for the next payment; the loyalty steps run only for an
+    // identified member (at Start Checkout, or self-identified on the
+    // terminal during the flow)
     var rebates by rememberSaveable { mutableStateOf(false) }
     var redemption by rememberSaveable { mutableStateOf(false) }
     var award by rememberSaveable { mutableStateOf(false) }
@@ -730,8 +749,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
 
     // One payment per checkout: pay again only after the next Start Checkout
     val paid = state.lastPayment != null
-    // a card read holds the serialized dispatcher, so a payment started
-    // mid-read would silently queue behind the terminal prompt
+    // no Pay during a card read: the shared operation claim would refuse it
     val canPay = state.sessionId != null && state.basket.isNotEmpty() &&
         !state.paymentInProgress && !state.cardReadInProgress && !paid
 
@@ -741,7 +759,6 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            LoyaltyCheckbox("Identify", identify, !state.paymentInProgress) { identify = it }
             LoyaltyCheckbox("Rebates", rebates, !state.paymentInProgress) { rebates = it }
             LoyaltyCheckbox("Redemption", redemption, !state.paymentInProgress) { redemption = it }
             LoyaltyCheckbox("Award", award, !state.paymentInProgress) { award = it }
@@ -799,7 +816,6 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             onClick = {
                 controller.pay(
                     LoyaltyOptions(
-                        identify = identify,
                         rebates = rebates,
                         redemption = redemption,
                         award = award,
@@ -859,13 +875,15 @@ private fun EventsCard(state: EmulatorState, modifier: Modifier = Modifier) {
             }
             HorizontalDivider(modifier = Modifier.padding(bottom = 8.dp))
             val lines = if (selectedTab == 0) state.events else state.detailedEvents
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(lines.asReversed()) { event ->
-                    Text(
-                        event,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                    )
+            SelectionContainer(modifier = Modifier.weight(1f)) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(lines.asReversed()) { event ->
+                        Text(
+                            event,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
                 }
             }
         }
