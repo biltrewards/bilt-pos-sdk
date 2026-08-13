@@ -333,7 +333,11 @@ class NexoEmulatorController(
                 if (connection !== conn) {
                     // disconnected while starting; end the orphan on its own
                     // operation thread rather than block the callback thread
-                    started.end().execute()
+                    started.end()
+                        .onError { error ->
+                            detailedLog("End bracket for the orphaned session failed: ${error.message}")
+                        }
+                        .execute()
                     return@onSuccess
                 }
                 conn.session = started
