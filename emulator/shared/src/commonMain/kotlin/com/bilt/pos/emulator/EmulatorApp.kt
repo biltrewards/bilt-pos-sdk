@@ -533,7 +533,8 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                 val abortButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
                         onClick = { controller.abort() },
-                        enabled = state.paymentInProgress || state.cardReadInProgress,
+                        enabled = state.paymentInProgress || state.cardReadInProgress ||
+                            state.identifyInProgress,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError,
@@ -749,9 +750,11 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
 
     // One payment per checkout: pay again only after the next Start Checkout
     val paid = state.lastPayment != null
-    // no Pay during a card read: the shared operation claim would refuse it
+    // no Pay during a card read or identify prompt: the shared operation
+    // claim would refuse it
     val canPay = state.sessionId != null && state.basket.isNotEmpty() &&
-        !state.paymentInProgress && !state.cardReadInProgress && !paid
+        !state.paymentInProgress && !state.cardReadInProgress &&
+        !state.identifyInProgress && !paid
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // FlowRow: five labeled checkboxes overflow a narrow card; wrap
@@ -792,7 +795,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                 Button(
                     onClick = { controller.acquireCard() },
                     enabled = state.sessionId != null && !state.paymentInProgress &&
-                        !state.cardReadInProgress,
+                        !state.cardReadInProgress && !state.identifyInProgress,
                 ) {
                     Text("Read card")
                 }

@@ -438,6 +438,16 @@ class NexoEmulatorController(
      * a guest checkout.
      */
     private fun identifyMember(conn: Connection, session: CheckoutSession) {
+        // Claimed like pay/acquireCard: without the claim, a Pay tapped
+        // during the prompt would queue behind it on the session's
+        // operation thread — and an abort would cancel only the prompt
+        // while the queued payment went on to charge
+        if (!conn.operationClaimed.compareAndSet(false, true)) {
+            log("Another operation is already in progress — continuing as guest")
+            clearCustomerDisplay(session)
+            return
+        }
+        _state.update { it.copy(identifyInProgress = true) }
         log("Identifying member on the terminal…")
         // The terminal's keyed loyalty capture engages only with
         // ForceEntryMode=Keyed; without it the terminal waits on the card
@@ -464,8 +474,14 @@ class NexoEmulatorController(
                 log("Member identification failed: ${error.message} — continuing as guest")
                 error.cause?.let { detailedLog(it.stackTraceToString()) }
             }
-            // after the prompt settles, so the clear can't race it
-            .onComplete { clearCustomerDisplay(session) }
+            .onComplete {
+                conn.operationClaimed.set(false)
+                if (connection === conn) {
+                    _state.update { it.copy(identifyInProgress = false) }
+                    // after the prompt settles, so the clear can't race it
+                    clearCustomerDisplay(session)
+                }
+            }
             .execute()
     }
 
@@ -879,6 +895,7 @@ class NexoEmulatorController(
                 basketTax = "0.00",
                 paymentInProgress = false,
                 cardReadInProgress = false,
+                identifyInProgress = false,
                 lastPayment = null,
                 paymentOutcome = null,
             )

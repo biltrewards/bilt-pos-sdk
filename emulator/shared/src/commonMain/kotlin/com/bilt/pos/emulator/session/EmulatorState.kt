@@ -153,10 +153,13 @@ data class EmulatorState(
     val basket: List<BasketLine> = emptyList(),
     val basketTotal: String = "0.00",
     val basketTax: String = "0.00",
-    /** True while a payment (and its member identification) is on the wire. */
+    /** True while a payment is on the wire. */
     val paymentInProgress: Boolean = false,
     /** True while a terminal card read (CardAcquisition) is on the wire. */
     val cardReadInProgress: Boolean = false,
+    /** True while the session-start member identification prompt is on the
+     *  wire. */
+    val identifyInProgress: Boolean = false,
     /** One-line summary of the checkout's completed payment; null until
      *  paid. A fully collected payment ends the checkout automatically; the
      *  summary stays visible until the next one starts. */
