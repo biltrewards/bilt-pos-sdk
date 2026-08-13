@@ -92,8 +92,9 @@ public final class SessionResult<T> {
 
     /** Shared lane for unordered operations (see [ordered]): a cached pool
      *  reuses an idle thread across rapid re-executions — an input prompt
-     *  amended per keystroke — instead of creating a thread per call.
-     *  Daemon threads that idle out, so a quiet pool holds nothing. */
+     *  amended per keystroke, a register mashing abort — instead of
+     *  creating a thread per call. Daemon threads that idle out, so a
+     *  quiet pool holds nothing. */
     private static final Executor UNORDERED = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable,
                 "bilt-unordered-" + UNORDERED_COUNTER.incrementAndGet());
@@ -114,11 +115,12 @@ public final class SessionResult<T> {
      *  result, which runs everything inline. */
     private SessionOperations session;
 
-    /** False for the rare operation that must overlap an in-flight one —
-     *  {@code updateInputDisplay} targets the very input holding the
-     *  operation thread, so queueing it there would wait on the thing it
-     *  updates. Unordered operations run inline (sync) or on their own
-     *  short-lived thread (async). */
+    /** False for the rare operation that must overlap an in-flight one.
+     *  The club has two members: {@code updateInputDisplay} targets the
+     *  very input holding the operation thread, and {@code abort()} the
+     *  very operation it interrupts — queued behind them, each would wait
+     *  on the thing it acts on. Unordered operations run inline (sync) or
+     *  on the shared cached lane (async). */
     private boolean ordered = true;
     /** Callback delivery: initialized to the session's default when the
      *  result is created, overwritten by {@link #callbackOn(Executor)};

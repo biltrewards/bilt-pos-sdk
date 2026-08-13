@@ -287,7 +287,7 @@ class CheckoutSessionTest {
                     .poiId("VictaLane-275839164")
                     .currency("USD"));
 
-            dual.updateDisplay(DisplayPayloadHelper.standby("welcome"));
+            dual.updateDisplay(DisplayPayloadHelper.standby("welcome")).executeSync();
 
             RecordedRequest recorded = displayServer.takeRequest(5, TimeUnit.SECONDS);
             assertNotNull(recorded, "display request must hit the external display");
@@ -305,10 +305,16 @@ class CheckoutSessionTest {
     }
 
     @Test
-    void updateDisplayFailureDoesNotThrow() throws Exception {
+    void updateDisplayFailureReachesItsOwnOnError() throws Exception {
         server.shutdown();
-        assertDoesNotThrow(() ->
-                session.updateDisplay(DisplayPayloadHelper.standby("welcome")));
+
+        AtomicReference<SessionError> failed = new AtomicReference<>();
+        assertDoesNotThrow(() -> session.updateDisplay(DisplayPayloadHelper.standby("welcome"))
+                .onError(failed::set)
+                .executeSync());
+
+        assertNotNull(failed.get(), "a manual display update reports through onError");
+        assertEquals(SessionErrorCode.NETWORK, failed.get().getCode());
     }
 
     // ─── Abort ───
@@ -316,11 +322,11 @@ class CheckoutSessionTest {
     @Test
     void abortWithoutInFlightOperationIsANoOp() {
         SessionState before = session.getState();
-        session.abort();
+        session.abort().executeSync();
 
         assertEquals(before, session.getState(),
                 "abort is operation-scoped; with nothing in flight the session is untouched");
         assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
-        assertDoesNotThrow(session::abort);
+        assertDoesNotThrow(() -> session.abort().executeSync());
     }
 }

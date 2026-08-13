@@ -185,7 +185,7 @@ class CheckoutSessionLifecycleTest {
     @Test
     void endIsAllowedAfterAnAbort() throws Exception {
         CheckoutSession session = startedSession();
-        session.abort();
+        session.abort().executeSync();
         assertEquals(SessionState.IDLE, session.getState(),
                 "abort is operation-scoped; the session continues until end()");
 
@@ -249,7 +249,7 @@ class CheckoutSessionLifecycleTest {
         register.start();
         assertTrue(endOnTheWire.await(5, TimeUnit.SECONDS));
 
-        session.abort();
+        session.abort().executeSync();
         abortIssued.countDown();
         register.join(5_000);
         assertFalse(register.isAlive());
@@ -287,8 +287,13 @@ class CheckoutSessionLifecycleTest {
         // session.terminal(), which is independent of the session bracket
         // and keeps working after end()
 
-        // display is best-effort and never throws — it skips quietly
-        assertDoesNotThrow(() -> session.updateDisplay(DisplayPayloadHelper.standby("bye")));
+        // display fails like every other operation, through its own onError
+        AtomicReference<SessionError> displayFailed = new AtomicReference<>();
+        session.updateDisplay(DisplayPayloadHelper.standby("bye"))
+                .onError(displayFailed::set)
+                .executeSync();
+        assertNotNull(displayFailed.get());
+        assertEquals(SessionErrorCode.INVALID_STATE, displayFailed.get().getCode());
 
         assertEquals(requestsBefore, server.getRequestCount(),
                 "nothing may reach the wire after end()");
@@ -300,7 +305,7 @@ class CheckoutSessionLifecycleTest {
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
         session.end().executeSync();
 
-        assertDoesNotThrow(session::abort);
+        assertDoesNotThrow(() -> session.abort().executeSync());
         assertEquals(SessionState.ENDED, session.getState());
     }
 

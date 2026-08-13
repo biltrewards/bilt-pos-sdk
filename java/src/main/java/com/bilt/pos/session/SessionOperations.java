@@ -20,7 +20,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -113,8 +115,19 @@ final class SessionOperations {
      *  configuration, fixed at session construction. */
     private final Executor callbackExecutor;
 
+    /** The session's handler for failures of work it performs on its own
+     *  behalf, with no result object to report through (the builders'
+     *  {@code onBackgroundError}); null when the integrator registered
+     *  none. Like [callbackExecutor], fixed at session construction. */
+    private final Consumer<SessionError> onBackgroundError;
+
     SessionOperations(Executor callbackExecutor) {
+        this(callbackExecutor, null);
+    }
+
+    SessionOperations(Executor callbackExecutor, Consumer<SessionError> onBackgroundError) {
         this.callbackExecutor = callbackExecutor;
+        this.onBackgroundError = onBackgroundError;
     }
 
     /** Creates a lazy {@link SessionResult} tracked against this session. */
@@ -222,6 +235,39 @@ final class SessionOperations {
                 inAwaitedHandler.remove();
             }
         };
+    }
+
+    /**
+     * Reports a failure of work the session performed on its own behalf —
+     * work with no {@link SessionResult} whose {@code onError} could carry
+     * it (the automatic display push today; a reactive basket-update
+     * channel later). Always logged; additionally delivered to the
+     * session's {@code onBackgroundError} handler when one is registered,
+     * through the callback executor like any handler (directly on the
+     * failing thread when none is configured). Fire-and-forget, and a
+     * throwing handler is contained: background work is best-effort and
+     * must never interrupt whatever the session is doing.
+     *
+     * @param what the failed work, article included ("the automatic
+     *             display push"), for the log line
+     */
+    void backgroundError(String what, RuntimeException failure) {
+        SessionError error = failure instanceof SessionException
+                ? ((SessionException) failure).getError()
+                : new SessionError(SessionErrorCode.UNKNOWN,
+                        what + " failed unexpectedly", null, failure);
+        LOGGER.log(Level.WARNING, what + " failed: " + error, failure);
+        if (onBackgroundError == null) {
+            return;
+        }
+        HandlerDispatch.fireAndForget(callbackExecutor, what, () -> {
+            try {
+                onBackgroundError.accept(error);
+            } catch (RuntimeException handlerFailure) {
+                LOGGER.log(Level.SEVERE, "the onBackgroundError handler threw "
+                        + "handling '" + what + "'", handlerFailure);
+            }
+        });
     }
 
     /** Stops accepting asynchronous operations; called when the session

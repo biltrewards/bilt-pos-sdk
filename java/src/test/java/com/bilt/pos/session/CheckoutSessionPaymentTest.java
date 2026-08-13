@@ -721,7 +721,7 @@ class CheckoutSessionPaymentTest {
         SessionException failure = assertThrows(SessionException.class, () ->
                 session.pay()
                         .onPointsRedeemed(points -> {
-                            session.abort();               // customer cancelled mid-payment
+                            session.abort().executeSync();               // customer cancelled mid-payment
                             return points.getSuggestedTotal();
                         })
                         .get());
@@ -828,7 +828,7 @@ class CheckoutSessionPaymentTest {
         failPaymentWithStandingRebate();
 
         int requestsBefore = server.getRequestCount();
-        session.abort();
+        session.abort().executeSync();
 
         // abort is operation-scoped: with nothing in flight it neither
         // drains nor changes state — finishing the unwind is the job of
@@ -1450,7 +1450,7 @@ class CheckoutSessionPaymentTest {
         // abort() races a decline: the payment settles FAILED on its own
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         session.pay().onError(error -> {
-            session.abort();  // deferred: the payment thread owns the outcome
+            session.abort().executeSync();  // deferred: the payment thread owns the outcome
             return PaymentOptions.voidAndAbort();
         }).getOrNull();
         assertEquals(SessionState.FAILED, session.getState());
@@ -1563,8 +1563,11 @@ class CheckoutSessionPaymentTest {
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue(),
                 "the committed rebate must be unwound");
 
-        // and the register can retry once the bug is out of the way
+        // and the register can retry once the bug is out of the way —
+        // retryWithoutLoyalty disables rebates and points but not the
+        // award, which still runs for the identified member
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
         assertTrue(session.pay(PaymentOptions.retryWithoutLoyalty()).get().isSuccess());
         assertEquals(SessionState.COMPLETED, session.getState());
     }
@@ -1670,7 +1673,7 @@ class CheckoutSessionPaymentTest {
 
         PaymentFlow flow = session.pay()
                 .onPointsRedeemed(points -> {
-                    session.abort();  // register cancels this payment attempt
+                    session.abort().executeSync();  // register cancels this payment attempt
                     return points.getSuggestedTotal();
                 });
 
@@ -1705,7 +1708,7 @@ class CheckoutSessionPaymentTest {
 
         PaymentFlow flow = session.pay()
                 .onPointsRedeemed(points -> {
-                    session.abort();  // customer walked away
+                    session.abort().executeSync();  // customer walked away
                     // abort() defers to the payment thread while PAYING: the
                     // state must not flip mid-run (that would race the
                     // COMPLETED/FAILED decision after orchestration returns)
@@ -1747,7 +1750,7 @@ class CheckoutSessionPaymentTest {
         PaymentFlow flow = session.pay()
                 .beforeStep(ctx -> {
                     if (ctx.getStep() == TransactionStep.AWARD) {
-                        session.abort();  // lands while the award is being submitted
+                        session.abort().executeSync();  // lands while the award is being submitted
                     }
                     return ctx.getDefaultTransactionId();
                 })
@@ -1788,7 +1791,7 @@ class CheckoutSessionPaymentTest {
 
         PaymentFlow flow = session.pay()
                 .beforeStep(ctx -> {
-                    session.abort();  // lands while the card request is in flight
+                    session.abort().executeSync();  // lands while the card request is in flight
                     return ctx.getDefaultTransactionId();
                 })
                 .onError(error -> {

@@ -27,7 +27,7 @@ A few principles explain most of the behavior:
 - **The session owns the basket.** Items, tax, and totals live in one place, and `Basket` is the single source of truth. Every mutation returns the updated basket.
 - **nexo underneath.** Every session operation maps to a standard nexo 3.0 message, but the SDK hides much more than message serialization: it manages the complexity of communicating with the terminal, and it orchestrates payment when the transaction is multi-tender — sequencing rebates, point redemption, stored value, and card, and handling loyalty award and reversal — so the register doesn't have to coordinate any of it.
 - **Terminal operations are lazy.** Methods returning a `SessionResult` or `PaymentFlow` send nothing until you call `.execute()` (asynchronous, handlers deliver the outcome), `.executeSync()`, `.get()`, or `.getOrNull()` (blocking). Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
-- **Cart-building is local + auto-display.** The basket surface lives on `session.basket()`: `addItem` / `removeItem` / `updateItemQuantity` update the local basket and (with `autoDisplay=true`, the default) push a `DisplayRequest` to the terminal. The terminal may independently evaluate offers while items are scanned, but those offers are **only committed during `pay()`**.
+- **Cart-building is local + auto-display.** The basket surface lives on `session.basket()`: `addItem` / `removeItem` / `updateItemQuantity` update the local basket and return the updated `Basket` immediately — pure local compute, safe to call from a UI thread. With `autoDisplay=true` (the default) each mutation also enqueues an **asynchronous, conflated** `DisplayRequest` push: pushes run on the session's operation lane (ordered against payments — a `pay()` executed after ring-up queues behind the pending push and waits at most one roundtrip), and a fast ring-up conflates to the newest snapshot, so the customer display skips straight to the current state instead of replaying every tap. Push failures are best-effort — logged, never interrupting the checkout — and report through the builder's `onBackgroundError` handler when one is registered. The terminal may independently evaluate offers while items are scanned, but those offers are **only committed during `pay()`**.
 - **`pay()` is a fixed orchestration sequence,** with a blocking callback after each loyalty/stored-value step so the register can update its own model and recompute tax, then return the total that feeds the next step. The shape is fixed, but steps are conditional: loyalty (rebates + points) runs only for identified members and can be disabled via `PaymentOptions`, the stored-value step only runs when a gift card has been registered with `setStoredValueCard`, and card payment runs whenever an amount remains.
 - **Errors and aborts roll back cleanly.** If a step fails or `abort()` is called mid-sequence, everything already committed (rebates, points, stored value) is reversed in the opposite order before the session moves to `FAILED` — basket intact, `pay()` retryable. An abort is a register maneuver, not an abandonment; `end()` abandons the checkout.
 
@@ -102,7 +102,7 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 | `onSuccess` | No-op (the result is still available via `.get()`). |
 | `onError` | `PaymentOptions.voidAndAbort()` — roll back and fail the payment. |
 
-**Abort / error rollback.** `abort()` is operation-scoped: it interrupts the in-flight operation and the session continues. If it fires mid-payment (e.g. after rebates committed but before card payment), the session reverses everything committed so far — rebate refunds, redemption refunds, stored-value reversals — and settles in `FAILED` with the basket intact, so `pay()` can retry (the thrown error carries the `ABORTED` code); if a reversal fails, `voidTransaction()` finishes the unwind. Aborted prompts (input, PIN, identification) deliver their aborted/cancelled outcome and leave the state unchanged; with nothing in flight `abort()` is a no-op. `abort()` is safe to call from any thread. An operation that completes on the terminal despite a racing abort always delivers its outcome — a prompt was genuinely answered, money may have genuinely moved, and the register must know. On error the `PaymentOptions` returned by `onError` decides what happens next:
+**Abort / error rollback.** `abort()` returns a lazy `SessionResult<Void>` like every terminal operation — `abort().execute()` returns immediately, `abort().executeSync()` blocks for the roundtrip — and is deliberately **unordered**: it exists to interrupt the operation occupying the session's operation lane, so it overtakes whatever is in flight instead of queueing behind the very thing it cancels (`updateInputDisplay` shares this lane for the same reason). It is operation-scoped: it interrupts the in-flight operation and the session continues. If it fires mid-payment (e.g. after rebates committed but before card payment), the session reverses everything committed so far — rebate refunds, redemption refunds, stored-value reversals — and settles in `FAILED` with the basket intact, so `pay()` can retry (the thrown error carries the `ABORTED` code); if a reversal fails, `voidTransaction()` finishes the unwind. Aborted prompts (input, PIN, identification) deliver their aborted/cancelled outcome and leave the state unchanged; with nothing in flight `abort()` is a no-op. `abort()` is safe to call from any thread. An operation that completes on the terminal despite a racing abort always delivers its outcome — a prompt was genuinely answered, money may have genuinely moved, and the register must know. On error the `PaymentOptions` returned by `onError` decides what happens next:
 
 - `PaymentOptions.voidAndAbort()` (the default) — roll back committed steps in reverse order and fail; the session moves to `FAILED`, from which `pay()` can be retried. If the rollback itself was incomplete, a retried `pay()` first finishes the standing reversals — and refuses to start if one still cannot go through.
 - `PaymentOptions.retryWithoutLoyalty()` — roll back the loyalty steps and restart the sequence with rebates and points disabled.
@@ -372,7 +372,7 @@ session.identifyMember(MemberIdentifier.phoneNumber("555-867-5309")).execute();
 
 ## Build the basket
 
-The session owns the basket. Adding an item whose SKU is already present increments its quantity (upsert). With `autoDisplay` (default on), every change refreshes the customer display with an itemised virtual receipt.
+The session owns the basket. Adding an item whose SKU is already present increments its quantity (upsert). Every mutation is local compute returning the updated `Basket` synchronously; with `autoDisplay` (default on) it also enqueues an asynchronous refresh of the customer display with an itemised virtual receipt — conflated, so rapid scanning sends the newest snapshot rather than one roundtrip per item, and ordered on the session's operation lane, so a `pay()` executed after ring-up runs after the display is current. A failed refresh never interrupts the checkout; register `onBackgroundError` on the builder to observe those failures.
 
 ```java
 Basket basket = session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
@@ -516,7 +516,13 @@ session.requestAmountConfirmation(basket.getGrandTotal(), "Confirm total").execu
 session.requestPinEntry(PinOptions.builder().timeout(Duration.ofSeconds(30)).build()).execute();
 ```
 
-`updateDisplay(basket)` refreshes the itemised receipt manually; `updateDisplay(payload)` sends a custom [display payload](./display-helpers.md). Display is best-effort and never interrupts a checkout.
+`updateDisplay(basket)` refreshes the itemised receipt manually; `updateDisplay(payload)` sends a custom [display payload](./display-helpers.md). Both are lazy `SessionResult<Void>`s like every other terminal operation — finish with `.execute()` (asynchronous) or `.executeSync()` — and a failure is delivered through the call's own `onError` (unlike the automatic push, whose failures report through the builder's `onBackgroundError`):
+
+```java
+session.updateDisplay(DisplayPayloadHelper.standby("Welcome!"))
+    .onError(e -> log.warn("display update failed: {}", e))
+    .execute();
+```
 
 While an input prompt is awaiting a response, `updateInputDisplay(payload)` — safe from another thread, like `abort()` — replaces its display content (nexo `InputUpdate`). The device operations that used to sit alongside it — sound, printing, diagnostics, totals — live on [`Terminal`](#terminal-device--admin-operations-without-a-session), one call away via `session.terminal()`.
 
@@ -537,8 +543,8 @@ CheckoutSession session = CheckoutSession.builder()
     .start()
     .get();
 
-session.updateDisplay(basket);            // goes to the external display
-session.updateDisplay(promotionalPayload);
+session.updateDisplay(basket).execute();            // goes to the external display
+session.updateDisplay(promotionalPayload).execute();
 ```
 
 ---
@@ -592,7 +598,9 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | Refund | `refund()`, `refund(amount)`, `refundUnlinked(amount)` |
 | Item-based refund of a prior sale | `ReversalSession` → `basket().addItem(...)` → `refundBasket()` |
 | Void a completed txn | `session.voidTransaction()` |
-| Cancel in-progress op | `session.abort()` (safe from any thread) |
+| Cancel in-progress op | `session.abort().execute()` (safe from any thread; overtakes the operation lane) |
+| Refresh customer display manually | `session.updateDisplay(basket)` / `.updateDisplay(payload)` → `.execute()` |
+| Observe auto-display failures | `builder.onBackgroundError(handler)` |
 | Collect customer input | `requestConfirmation / requestDigitString / requestMenuEntry / ...` |
 | Device & admin ops (no session needed) | `Terminal.builder()...build()` → `diagnose / getTotals / reconcile / print / playSound / stopSound` |
 | Device & admin ops mid-checkout | `session.terminal().diagnose()` etc. |

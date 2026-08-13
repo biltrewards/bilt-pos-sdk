@@ -2711,6 +2711,18 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#offlineDeletedTimeStamp" class="member-name-link">offlineDeletedTimeStamp</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/CheckoutSession.Builder.html#onBackgroundError(java.util.function.Consumer)" class="member-name-link">onBackgroundError(Consumer&lt;SessionError&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></dt>
+<dd>
+<div class="block">Handler for failures of work the session performs on its own
+ behalf, with no result object to report through.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ReversalSession.Builder.html#onBackgroundError(java.util.function.Consumer)" class="member-name-link">onBackgroundError(Consumer&lt;SessionError&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></dt>
+<dd>
+<div class="block">Handler for failures of work the session performs on its own
+ behalf, with no result object to report through — here the
+ automatic customer-display push after a refund cart mutation
+ (see <a href="com/bilt/pos/session/ReversalSession.Builder.html#autoDisplay(boolean)"><code>ReversalSession.Builder.autoDisplay(boolean)</code></a>).</div>
+</dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.Builder.html#onBasketUpdated(java.util.function.Consumer)" class="member-name-link">onBasketUpdated(Consumer&lt;Basket&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></dt>
 <dd>
 <div class="block">Out-of-band basket update callback.</div>

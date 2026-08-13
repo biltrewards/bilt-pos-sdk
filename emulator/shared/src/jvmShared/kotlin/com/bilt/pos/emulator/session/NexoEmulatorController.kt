@@ -344,8 +344,10 @@ class NexoEmulatorController(
                 // Blank the customer display: autoDisplay only fires on
                 // basket mutations, so the previous checkout's receipt would
                 // linger until the first item is rung in. Best-effort — a
-                // failure logs via JUL (Detailed tab) and never throws.
+                // failure logs to the feed and never interrupts the session.
                 started.updateDisplay(started.basket().snapshot())
+                    .onError { error -> log("Display clear failed: ${error.message}") }
+                    .executeSync()
                 log("Customer display cleared (empty basket)")
             } catch (e: Exception) {
                 if (currentCoroutineContext().isActive) {
@@ -534,7 +536,12 @@ class NexoEmulatorController(
                         giftCard.suggestedTotal
                     }
                     .onError { error ->
+                        // restore the basket on the customer display over the
+                        // failed payment screen; sync is safe inside a handler
+                        // (it runs inline as part of the operation being handled)
                         session.updateDisplay(session.basket().snapshot())
+                            .onError { e -> detailedLog("Display restore failed: $e") }
+                            .executeSync()
                         if (isActive) {
                             log("Payment failed: ${error.code} — ${error.message}")
                             _state.update {
@@ -554,6 +561,8 @@ class NexoEmulatorController(
                     // reported by the handler above
                     if (e.error.code == SessionErrorCode.ABORTED && isActive) {
                         session.updateDisplay(session.basket().snapshot())
+                            .onError { err -> detailedLog("Display restore failed: $err") }
+                            .executeSync()
                         log(
                             "Payment aborted; committed steps reversed — " +
                                 "the basket is intact, Pay again to retry"
@@ -730,23 +739,21 @@ class NexoEmulatorController(
         // (e.g. aborting a card read) is harmless: pay() resets it when
         // the next attempt is claimed.
         conn.paymentAbortRequested.set(true)
-        // Deliberately NOT on the serialized dispatcher: abort() is the
-        // SDK's cross-thread entry point, and it must overtake the blocking
-        // call it interrupts — queueing it would run it only after that
-        // call finished on its own. Operation-scoped like the SDK's: an
-        // aborted payment settles FAILED and the session stays retryable;
-        // an aborted prompt or card read is simply cancelled.
-        conn.scope.launch(Dispatchers.IO) {
-            log("Aborting…")
-            try {
-                session.abort()
-            } catch (e: Exception) {
-                if (isActive) {
-                    log("Abort failed: ${e.message}")
-                    detailedLog(e.stackTraceToString())
-                }
+        // Deliberately NOT on the serialized dispatcher: abort() must
+        // overtake the blocking call it interrupts — queueing it would run
+        // it only after that call finished on its own. The SDK's async
+        // execute() does exactly that (abort is unordered — it bypasses
+        // the session's operation lane), so no coroutine hop is needed.
+        // Operation-scoped like the SDK's: an aborted payment settles
+        // FAILED and the session stays retryable; an aborted prompt or
+        // card read is simply cancelled.
+        log("Aborting…")
+        session.abort()
+            .onError { error ->
+                log("Abort failed: ${error.message}")
+                error.cause?.let { detailedLog(it.stackTraceToString()) }
             }
-        }
+            .execute()
     }
 
     /** Terminal member-identification prompt; failures degrade to guest. */

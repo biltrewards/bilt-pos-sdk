@@ -176,7 +176,7 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="table-header col-first">Modifier and Type</div>
 <div class="table-header col-second">Method</div>
 <div class="table-header col-last">Description</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#abort()" class="member-name-link">abort</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Best-effort abort of the in-flight request.</div>
@@ -321,8 +321,9 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="block">The session's refund cart: the items being returned, rung in like a
  checkout basket. Every line is a credit line — totals are negative
  and, with <a href="ReversalSession.Builder.html#autoDisplay(boolean)"><code>autoDisplay</code></a> enabled
- (the default), each mutation refreshes the customer display with the
- itemised returns. Mutations are allowed until a void or <code>end()</code>
+ (the default), each mutation enqueues an asynchronous, conflated
+ customer-display refresh with the itemised returns (failures report
+ through <a href="ReversalSession.Builder.html#onBackgroundError(java.util.function.Consumer)"><code>onBackgroundError</code></a>). Mutations are allowed until a void or <code>end()</code>
  seals the session; <a href="#refundBasket()"><code>refundBasket()</code></a> consumes the cart. The
  cart is free-form — whether an item may be returned, and in what
  quantity, is the register's decision.</div>
@@ -399,12 +400,18 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <li>
 <section class="detail" id="abort()">
 <h3>abort</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">abort</span>()</div>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</span>&nbsp;<span class="element-name">abort</span>()</div>
 <div class="block">Best-effort abort of the in-flight request. Money-moving operations
  always deliver their outcome even when the abort raced them: the
  movement may have completed on the terminal, and the register must
- know. Safe to call from any thread; with nothing in flight this is a
- no-op.</div>
+ know. With nothing in flight this is a no-op.
+
+ <p>Lazy like every terminal operation — nothing happens until
+ <code>execute()</code> (returns immediately) or <code>executeSync()</code>
+ (blocks for the roundtrip) — and deliberately unordered: an abort
+ exists to interrupt the operation occupying the session's operation
+ lane, so it runs on the shared unordered lane instead of queueing
+ behind the very thing it cancels. Safe to call from any thread.</p></div>
 </section>
 </li>
 <li>

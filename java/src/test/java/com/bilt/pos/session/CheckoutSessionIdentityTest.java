@@ -113,7 +113,7 @@ class CheckoutSessionIdentityTest {
         register.start();
         assertTrue(identifyOnTheWire.await(5, TimeUnit.SECONDS));
 
-        session.abort();
+        session.abort().executeSync();
         aborted.countDown();
         register.join(5_000);
         assertFalse(register.isAlive());

@@ -14,6 +14,8 @@ package com.bilt.pos.session.internal;
 import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.display.DisplayPayloadHelper;
 import com.bilt.pos.nexo.model.MessageCategoryType;
+import com.bilt.pos.session.SessionError;
+import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.SessionState;
 import com.bilt.pos.session.basket.Basket;
@@ -23,9 +25,6 @@ import com.bilt.pos.session.display.DisplayTarget;
 
 import jakarta.xml.bind.JAXBException;
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 /**
  * The customer-display side of a session: renders basket snapshots through
  * the configured {@link DisplayRenderer} and sends the payload as a Nexo
@@ -33,13 +32,14 @@ import java.util.logging.Logger;
  * a checkout's sale basket and a reversal's refund cart go through the
  * same pipeline; a refund cart's credit lines simply render negative.
  *
- * <p>Display is best-effort throughout: renderer and wire failures are
- * logged and never interrupt the session, and an ended session skips the
- * send quietly.</p>
+ * <p>Failures — renderer, serialization, or wire — surface as
+ * {@link SessionException}; whether a display update is best-effort is the
+ * caller's policy, not this class's. The automatic push contains the
+ * failure (logging it and reporting it to the session's background-error
+ * handler), while a manual {@code updateDisplay(...)} delivers it through
+ * its own {@code onError}.</p>
  */
 public final class BasketDisplay {
-
-    private static final Logger LOGGER = Logger.getLogger(BasketDisplay.class.getName());
 
     private final NexoExchange exchange;
     private final DisplayRenderer renderer;
@@ -51,7 +51,10 @@ public final class BasketDisplay {
         this.currency = currency;
     }
 
-    /** Renders the basket and sends it to the customer display. */
+    /**
+     * Renders the basket and sends it to the customer display. A renderer
+     * returning {@code null} means "nothing to show" and skips the send.
+     */
     public void show(Basket basket, SessionState state) {
         DisplayContext context = new DisplayContext(state,
                 exchange.router().hasExternalDisplay()
@@ -61,34 +64,24 @@ public final class BasketDisplay {
         try {
             payload = renderer.render(basket, context);
         } catch (RuntimeException e) {
-            LOGGER.log(Level.WARNING, "display renderer failed", e);
-            return;
+            throw new SessionException(new SessionError(SessionErrorCode.UNKNOWN,
+                    "the display renderer failed: " + e.getMessage(), null, e));
         }
         if (payload != null) {
-            send(payload, state);
+            send(payload);
         }
     }
 
     /** Sends a custom display payload to the customer display. */
-    public void send(DisplayPayload payload, SessionState state) {
+    public void send(DisplayPayload payload) {
         String base64;
         try {
             base64 = DisplayPayloadHelper.toBase64(payload);
         } catch (JAXBException e) {
-            LOGGER.log(Level.WARNING, "failed to serialize display payload", e);
-            return;
+            throw new SessionException(new SessionError(SessionErrorCode.UNKNOWN,
+                    "failed to serialize the display payload", null, e));
         }
-        // display is best-effort and never throws, so an ended session skips
-        // quietly instead of failing like the SessionResult operations do
-        if (state == SessionState.ENDED) {
-            LOGGER.warning("display update skipped: the session has ended");
-            return;
-        }
-        try {
-            exchange.send(MessageCategoryType.DISPLAY,
-                    exchange.factory().displayRequest(base64));
-        } catch (SessionException e) {
-            LOGGER.log(Level.WARNING, "display update failed: " + e.getError(), e);
-        }
+        exchange.send(MessageCategoryType.DISPLAY,
+                exchange.factory().displayRequest(base64));
     }
 }
