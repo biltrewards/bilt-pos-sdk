@@ -153,10 +153,7 @@ class NexoEmulatorController(
     }
 
     override fun connect(address: String, encryptionEnabled: Boolean, passphraseOverride: String?) {
-        disconnect()
-        if (connection != null) {
-            // the disconnect was refused (payment in flight) — keep the
-            // current connection rather than stacking a second one
+        if (!tryDisconnect()) {
             return
         }
 
@@ -252,14 +249,22 @@ class NexoEmulatorController(
     }
 
     override fun disconnect() {
-        val conn = connection ?: return updateDisconnectedState()
-        // Refused mid-payment: unlike end(), which queues behind the
-        // payment on the session's operation thread, a disconnect tears
-        // down immediately and would free the register while the charge is
-        // still landing. Abort first, or wait.
+        tryDisconnect()
+    }
+
+    /** Tears the connection down; returns false when the disconnect was
+     *  refused because a payment is in flight — unlike end(), which queues
+     *  behind the payment on the session's operation thread, a disconnect
+     *  tears down immediately and would free the register while the charge
+     *  is still landing. */
+    private fun tryDisconnect(): Boolean {
+        val conn = connection ?: run {
+            updateDisconnectedState()
+            return true
+        }
         if (_state.value.paymentInProgress) {
             log("A payment is in progress — abort it or wait for it to finish before disconnecting")
-            return
+            return false
         }
         connection = null
         conn.scope.cancel()
@@ -271,6 +276,7 @@ class NexoEmulatorController(
         }?.execute()
         log("Disconnected")
         updateDisconnectedState()
+        return true
     }
 
     /**
