@@ -30,7 +30,14 @@ class EmulatorViewModel(application: Application) : AndroidViewModel(application
     )
 
     override fun onCleared() {
-        controller.disconnect()
+        // Teardown, not a user action: disconnect()'s mid-payment refusal
+        // has no one to read it here. shutdown() instead queues the End
+        // bracket behind any in-flight payment — off the main thread, since
+        // it blocks for the client's timeouts; best-effort, bounded by
+        // process death like the desktop exit path.
+        Thread(controller::shutdown, "emulator-shutdown")
+            .apply { isDaemon = true }
+            .start()
         scope.cancel()
     }
 }
