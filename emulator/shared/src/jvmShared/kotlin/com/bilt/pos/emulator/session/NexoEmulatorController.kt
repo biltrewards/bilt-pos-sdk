@@ -86,6 +86,10 @@ class NexoEmulatorController(
     private val callbackExecutor: Executor,
 ) : EmulatorController {
 
+    /** A payment attempt's settled outcome; [pay]'s onComplete reads
+     *  RUNNING as aborted (no outcome handler fired). */
+    private enum class PaymentAttempt { RUNNING, SUCCEEDED, FAILED }
+
     private class Connection(
         val scope: CoroutineScope,
         val dispatcher: CoroutineDispatcher,
@@ -495,14 +499,13 @@ class NexoEmulatorController(
             return
         }
         _state.update { it.copy(paymentInProgress = true, paymentOutcome = null) }
-        // Outcome markers for onComplete: an attempt that settles with
-        // neither set was aborted — the SDK bypasses onError by design when
-        // the register asked for the abort. Plain vars are safe on ANY
-        // executor, pool included: the payment thread awaits each handler
-        // and only then submits the next, so handlers never overlap and
-        // each submission carries a happens-before edge.
-        var succeeded = false
-        var failed = false
+        // Still RUNNING when the flow completes means aborted: the SDK
+        // bypasses onError by design when the register asked for the abort.
+        // A plain var is safe on ANY executor, pool included: the payment
+        // thread awaits each handler and only then submits the next, so
+        // handlers never overlap and each submission carries a
+        // happens-before edge.
+        var attempt = PaymentAttempt.RUNNING
         // Set or actively cleared each attempt: the session keeps the card
         // across a retry, and a toggle switched off in between must not
         // silently charge the card again
@@ -538,7 +541,7 @@ class NexoEmulatorController(
                 giftCard.suggestedTotal
             }
             .onError { error ->
-                failed = true
+                attempt = PaymentAttempt.FAILED
                 if (connection === conn) {
                     log("Payment failed: ${error.code} — ${error.message}")
                     _state.update {
@@ -551,7 +554,7 @@ class NexoEmulatorController(
                 PaymentOptions.voidAndAbort()
             }
             .onSuccess { result ->
-                succeeded = true
+                attempt = PaymentAttempt.SUCCEEDED
                 // Not gated on the connection: the charge stands even if
                 // the operator disconnected mid-payment, and an unrecorded
                 // sale could never be refunded or voided. Session facts are
@@ -565,8 +568,8 @@ class NexoEmulatorController(
                 }
             }
             .onComplete {
-                if (!succeeded && connection === conn) {
-                    if (!failed) {
+                if (attempt != PaymentAttempt.SUCCEEDED && connection === conn) {
+                    if (attempt == PaymentAttempt.RUNNING) {
                         log(
                             "Payment aborted; committed steps reversed — " +
                                 "the basket is intact, Pay again to retry"
