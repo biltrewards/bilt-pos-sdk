@@ -203,12 +203,12 @@ interface EmulatorController {
 
     /**
      * Start a new checkout session (terminal Start bracket) on the
-     * connection. With [identifyMember], the terminal prompts for member
+     * connection. With [identifyOnStart], the terminal prompts for member
      * identification right after the start acknowledges — its own
      * operation, not part of the bracket; a failed or declined prompt
      * degrades to a guest checkout.
      */
-    fun startSession(identifyMember: Boolean = false)
+    fun startSession(identifyOnStart: Boolean = false)
 
     /** End the active checkout session (terminal End bracket). */
     fun endSession()

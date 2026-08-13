@@ -301,7 +301,7 @@ class NexoEmulatorController(
         }
     }
 
-    override fun startSession(identifyMember: Boolean) {
+    override fun startSession(identifyOnStart: Boolean) {
         val conn = connection ?: run {
             log("Not connected — connect before starting a session")
             return
@@ -341,7 +341,7 @@ class NexoEmulatorController(
                     it.withCheckoutCleared(sessionId = started.sessionId, lastPayment = null)
                 }
                 log("Checkout session started (id ${started.sessionId})")
-                if (identifyMember) {
+                if (identifyOnStart) {
                     identifyMember(conn, started)
                 } else {
                     clearCustomerDisplay(started)
