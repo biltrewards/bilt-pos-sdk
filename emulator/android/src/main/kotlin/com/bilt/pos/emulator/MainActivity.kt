@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import com.bilt.pos.emulator.catalog.MockProductProvider
 import com.bilt.pos.emulator.session.NexoEmulatorController
@@ -25,10 +26,18 @@ class EmulatorViewModel(application: Application) : AndroidViewModel(application
     val controller = NexoEmulatorController(
         scope = scope,
         saleStore = JsonlSaleStore.inDirectory(application.filesDir),
+        callbackExecutor = ContextCompat.getMainExecutor(application),
     )
 
     override fun onCleared() {
-        controller.disconnect()
+        // Teardown, not a user action: disconnect()'s mid-payment refusal
+        // has no one to read it here. shutdown() instead queues the End
+        // bracket behind any in-flight payment — off the main thread, since
+        // it blocks for the client's timeouts; best-effort, bounded by
+        // process death like the desktop exit path.
+        Thread(controller::shutdown, "emulator-shutdown")
+            .apply { isDaemon = true }
+            .start()
         scope.cancel()
     }
 }

@@ -5,18 +5,10 @@ import com.bilt.pos.emulator.store.SaleStore
 import com.bilt.pos.emulator.store.StoredSale
 import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient
-import com.bilt.pos.nexo.model.DiagnosisRequest
-import com.bilt.pos.nexo.model.MessageCategoryType
-import com.bilt.pos.nexo.model.MessageClassType
-import com.bilt.pos.nexo.model.MessageHeader
-import com.bilt.pos.nexo.model.MessageTypeType
-import com.bilt.pos.nexo.model.NexoTerminalAPI
-import com.bilt.pos.nexo.model.SaleToPOIRequest
 import com.bilt.pos.nexo.security.SecurityKey
 import com.bilt.pos.session.CheckoutSession
 import com.bilt.pos.session.SessionErrorCode
-import com.bilt.pos.session.SessionException
-import com.bilt.pos.session.SessionState
+import com.bilt.pos.session.Terminal
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketItem
 import com.bilt.pos.session.identity.CardAcquisitionOptions
@@ -33,7 +25,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,14 +40,14 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-/** Display format for stored sales' completion times. Top-level, not an
- *  instance property: the constructor-launched sales refresh may format
- *  labels before instance initializers further down the class have run
- *  (they execute in textual order), whereas file-level vals are initialized
- *  on class load, before any access. */
+/** Top-level, not an instance property: initialized on class load, before
+ *  the constructor-launched sales refresh can format labels (instance
+ *  initializers only run in textual order). */
 private val saleTimeFormat =
     DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(ZoneId.systemDefault())
 
@@ -64,21 +55,19 @@ private val saleTimeFormat =
  * The emulator session engine. A connection to the terminal and a checkout
  * session are separate lifecycles:
  *
- * - **Connect** builds the client and runs the periodic diagnostics loop
- *   (raw nexo Diagnosis requests — pure connectivity, no session involved).
+ * - **Connect** builds the client and a device-level [Terminal] handle, and
+ *   runs the periodic diagnostics loop on it (pure connectivity — no
+ *   session involved, and none required).
  * - **Start Checkout** opens a [CheckoutSession] (terminal Start bracket) on
  *   that connection: one session per customer checkout. **End Checkout**
  *   closes it (End bracket). Disconnect ends any active session best-effort.
  *
- * Each connection is a self-contained [Connection]: its own scope (child of
- * the app scope, cancelled wholesale on disconnect), its own single-threaded
- * dispatcher (SDK calls are serialized per connection — the session is a
- * stateful machine — but a reconnect never queues behind the previous
- * connection's in-flight blocking call), the client, and the session.
- *
- * Because the SDK calls block rather than suspend, cancellation alone can't
- * stop one mid-call — so each job re-checks that it is still active after a
- * blocking call returns, before touching [state].
+ * Session operations run through the SDK's asynchronous `execute()`:
+ * outcomes arrive via `onSuccess`/`onError` on [callbackExecutor], and
+ * `onComplete` releases claims and busy flags on every completion path. A
+ * callback that lands after a disconnect recognizes it by
+ * `connection !== conn` and skips the UI updates; facts that must survive
+ * the disconnect (a charged sale, the claim release) stay ungated.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class NexoEmulatorController(
@@ -87,35 +76,45 @@ class NexoEmulatorController(
     private val diagnosticsInterval: Duration = 60.seconds,
     /** Persists completed sales for later referenced refunds/voids. */
     private val saleStore: SaleStore,
+    /**
+     * The UI-thread executor session handlers deliver on (Android main
+     * executor, AWT event dispatch on desktop; headless harnesses pass a
+     * serial stand-in). Handlers may touch UI directly; sale persistence
+     * is handed off to an IO coroutine. Must never be blocked on a session
+     * call outside a handler.
+     */
+    private val callbackExecutor: Executor,
 ) : EmulatorController {
+
+    /** A payment attempt's settled outcome; [pay]'s onComplete reads
+     *  RUNNING as aborted (no outcome handler fired). */
+    private enum class PaymentAttempt { RUNNING, SUCCEEDED, FAILED }
 
     private class Connection(
         val scope: CoroutineScope,
         val dispatcher: CoroutineDispatcher,
-        @Volatile var client: BiltNexoTerminalClient? = null,
+        val client: BiltNexoTerminalClient,
+        val terminal: Terminal,
         @Volatile var session: CheckoutSession? = null,
     ) {
-        /** Claimed synchronously by [pay] and [acquireCard] — one claim
-         *  across both, not one each: the UI's disabled states publish only
-         *  on recomposition, so a quick tap on the other button would
-         *  otherwise claim its own flag and silently queue behind the
-         *  in-flight operation on the serialized dispatcher. */
-        val operationClaimed = java.util.concurrent.atomic.AtomicBoolean(false)
+        /** Guards against a double-tap bracketing two terminal sessions:
+         *  [session] is only installed once the Start roundtrip acknowledges. */
+        val startClaimed = AtomicBoolean(false)
 
-        /** Set by [abort] for the current payment attempt. SDK
-         *  abort() only interrupts what is on the wire — during the
-         *  pre-payment identify prompt the session is not yet PAYING, so
-         *  without this flag a cancelled prompt would read as a guest
-         *  outcome and the payment would continue to charge. */
-        val paymentAbortRequested = java.util.concurrent.atomic.AtomicBoolean(false)
+        /** One claim across [pay] and [acquireCard]: the UI's disabled
+         *  states publish only on recomposition, so a quick second tap
+         *  would otherwise queue its prompt behind the in-flight operation.
+         *  Released by each operation's `onComplete`. */
+        val operationClaimed = AtomicBoolean(false)
+
     }
 
     /**
-     * Runs End brackets during teardown. Deliberately NOT a child of [scope]:
-     * a ViewModel clearing its scope right after disconnect() must not kill
-     * the in-flight best-effort end signal.
+     * Sale writes happen here, off the UI callback thread — and NOT as a
+     * child of [scope]: teardown must not kill the record of a charged
+     * transaction. [shutdown] joins it before process exit.
      */
-    private val teardownScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val persistenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _state = MutableStateFlow(
         EmulatorState(
@@ -128,20 +127,15 @@ class NexoEmulatorController(
     @Volatile
     private var connection: Connection? = null
 
-    /** Serialized so overlapping refreshes publish in launch order — each
-     *  refresh is launched after its sale is recorded, so with FIFO
-     *  execution the snapshot published last always includes the newest
-     *  sale; concurrent refreshes could land an older read on top of it.
-     *  Declared before the init block: refreshSales() reads it during
-     *  construction, and property initializers run in textual order. */
+    /** Serial, so overlapping refreshes publish in launch order and the
+     *  newest sale wins. Declared before the init block, which triggers
+     *  refreshSales(). */
     private val salesRefreshDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     init {
-        // SDK diagnostics (client, session, payment internals) log via JUL;
-        // surface them on the Detailed tab
+        // SDK internals log via JUL; surface them on the Detailed tab
         JulLogCapture.install(::detailedLog)
-        // Populate the Refund tab's list; recordSale keeps it current from
-        // here on, so this initial load is the only pull
+        // recordSale keeps the list current from here on
         refreshSales()
     }
 
@@ -151,10 +145,8 @@ class NexoEmulatorController(
             if (detected != null) {
                 _state.update { it.copy(terminalAddress = detected, addressAutodetected = true) }
                 log("Autodetected terminal address $detected via adb")
-                // The operator's next move after a successful detect is
-                // always Connect — do it for them. Only from DISCONNECTED:
-                // autodetect runs at startup and must never tear down a
-                // connection the operator made while adb was probing.
+                // Auto-connect only from DISCONNECTED: never tear down a
+                // connection the operator made while adb was probing
                 if (_state.value.connection.phase == ConnectionPhase.DISCONNECTED) {
                     log("Connecting automatically to the detected terminal")
                     connect(detected, _state.value.encryptionEnabled, null)
@@ -166,7 +158,9 @@ class NexoEmulatorController(
     }
 
     override fun connect(address: String, encryptionEnabled: Boolean, passphraseOverride: String?) {
-        disconnect()
+        if (!tryDisconnect()) {
+            return
+        }
 
         val passphrase = passphraseOverride?.takeIf { it.isNotBlank() } ?: config.passphrase
         val encrypt = encryptionEnabled && !passphrase.isNullOrBlank()
@@ -185,59 +179,33 @@ class NexoEmulatorController(
         val endpoint = "https://$address:8443/nexo"
         log("Connecting to $endpoint (encryption=$encrypt)")
 
+        val client = createNexoClient(endpoint, encrypt, passphrase) ?: return
+        // The device-level handle: diagnose() is session-free, so the
+        // connectivity loop needs no checkout session — just the terminal
+        val terminal = Terminal.builder()
+            .client(client)
+            .saleId(config.saleId)
+            .poiId(config.poiId)
+            .callbackExecutor(callbackExecutor)
+            .build()
         val conn = Connection(
             scope = CoroutineScope(
                 scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
             ),
             dispatcher = Dispatchers.IO.limitedParallelism(1),
+            client = client,
+            terminal = terminal,
         )
         connection = conn
 
-        conn.scope.launch(conn.dispatcher) {
-            val client = try {
-                // Payload channel: always permissive, so a failing certificate
-                // is reported (below) but never blocks terminal communication.
-                val clientBuilder = BiltNexoTerminalClient.builder()
-                    .endpoint(endpoint)
-                    .trustAllCertificates()
-                if (encrypt) {
-                    clientBuilder.securityKey(
-                        SecurityKey.builder()
-                            .passphrase(passphrase)
-                            .keyIdentifier(config.keyId)
-                            .keyVersion(config.keyVersion)
-                            .build()
-                    )
-                }
-                clientBuilder.build()
-            } catch (e: Exception) {
-                // e.g. an unparsable address making the endpoint URL invalid —
-                // without this the job dies silently and the chip stays on Connecting
-                if (isActive) {
-                    _state.update {
-                        it.copy(
-                            connection = ConnectionStatus(
-                                ConnectionPhase.ERROR,
-                                e.message ?: "client setup failed",
-                            )
-                        )
-                    }
-                    log("Failed to set up the client: ${e.message}")
-                    detailedLog(e.stackTraceToString())
-                }
-                return@launch
-            }
-            conn.client = client
+        runDiagnosisLoop(conn, terminal)
+        verifyTls(conn, address)
+    }
 
-            while (isActive) {
-                runDiagnosis(client)
-                delay(diagnosticsInterval)
-            }
-        }
-
-        // Strict verification probe, independent of the payload channel. A CA
-        // that was configured but failed to load reports as a TLS failure —
-        // not as "no CA configured", which would mask the misconfiguration.
+    /** Strict TLS probe, independent of the always-permissive payload
+     *  channel. A CA that was configured but failed to load reports as a
+     *  TLS failure, not as "no CA configured". */
+    private fun verifyTls(conn: Connection, address: String) {
         conn.scope.launch(Dispatchers.IO) {
             val tls = config.caError?.let { TlsStatus.Failed(it) }
                 ?: TlsVerifier.verify(address, 8443, config.caPem, config.hostnamePattern)
@@ -248,479 +216,472 @@ class NexoEmulatorController(
         }
     }
 
+    private fun createNexoClient(
+        endpoint: String,
+        encrypt: Boolean,
+        passphrase: String?
+    ): BiltNexoTerminalClient? {
+        return try {
+            // Always permissive: a failing certificate is reported by the
+            // TLS probe but never blocks terminal communication
+            val clientBuilder = BiltNexoTerminalClient.builder()
+                .endpoint(endpoint)
+                .trustAllCertificates()
+            if (encrypt) {
+                clientBuilder.securityKey(
+                    SecurityKey.builder()
+                        .passphrase(passphrase)
+                        .keyIdentifier(config.keyId)
+                        .keyVersion(config.keyVersion)
+                        .build()
+                )
+            }
+            clientBuilder.build()
+        } catch (e: Exception) {
+            // e.g. an unparsable address; reported instead of thrown
+            _state.update {
+                it.copy(
+                    connection = ConnectionStatus(
+                        ConnectionPhase.ERROR,
+                        e.message ?: "client setup failed",
+                    )
+                )
+            }
+            log("Failed to set up the client: ${e.message}")
+            detailedLog(e.stackTraceToString())
+            null
+        }
+    }
+
     override fun disconnect() {
-        val conn = connection ?: return updateDisconnectedState()
+        tryDisconnect()
+    }
+
+    /** Tears the connection down; returns false when the disconnect was
+     *  refused because a payment is in flight — unlike end(), which queues
+     *  behind the payment on the session's operation thread, a disconnect
+     *  tears down immediately and would free the register while the charge
+     *  is still landing. */
+    private fun tryDisconnect(): Boolean {
+        val conn = connection ?: run {
+            updateDisconnectedState()
+            return true
+        }
+        if (_state.value.paymentInProgress) {
+            log("A payment is in progress — abort it or wait for it to finish before disconnecting")
+            return false
+        }
         connection = null
         conn.scope.cancel()
-        val active = conn.session
-        conn.session = null
-        if (active != null) {
-            // Session End bracket, best-effort; teardownScope so a ViewModel
-            // cancelling the app scope right after doesn't kill it. Like
-            // shutdown(), wait for the serialized jobs first: an in-flight
-            // payment's blocking call survives the cancel and holds the
-            // session in PAYING, where end() is rejected — closing right
-            // away would lose the End bracket for good once the payment
-            // lands. The cap must outlast the client's read timeout (120s
-            // default) so the join covers a terminal that answers late.
-            teardownScope.launch {
-                withTimeoutOrNull(180_000) { conn.scope.coroutineContext[Job]?.join() }
-                runCatching { active.close() }
-            }
-        }
+        conn.terminal.close()
+        // End bracket, best-effort: the async end() queues behind anything
+        // still in flight on the session's operation thread
+        conn.session?.end()?.onError { error ->
+            detailedLog("End bracket on disconnect failed: ${error.message}")
+        }?.execute()
         log("Disconnected")
         updateDisconnectedState()
+        return true
     }
 
     /**
-     * Blocking best-effort teardown for process-exit paths (desktop window
-     * close): ends the active session synchronously so the End bracket isn't
-     * lost to the exiting process. Bounded by the client's timeouts plus a
-     * join cap.
+     * Blocking teardown for process-exit paths (desktop window close): the
+     * session's operation threads are daemons, so an asynchronous end would
+     * race the exit. close() queues behind anything in flight, bounded by
+     * the client's timeouts.
      */
     fun shutdown() {
-        val conn = connection ?: return
-        connection = null
-        conn.scope.cancel()
-        // Wait (bounded) for the serialized jobs to settle before reading the
-        // session: an in-flight start() may have already succeeded on the
-        // terminal without conn.session being set yet. After the join it has
-        // either installed the session (closed below) or taken the cancelled
-        // path and closed its own orphan — both need the process alive.
-        runBlocking {
-            withTimeoutOrNull(10_000) { conn.scope.coroutineContext[Job]?.join() }
+        val conn = connection
+        if (conn != null) {
+            connection = null
+            conn.scope.cancel()
+            conn.terminal.close()
+            conn.session?.let { runCatching { it.close() } }
         }
-        val active = conn.session ?: return
-        conn.session = null
-        runCatching { active.close() }
+        // a just-landed sale may still be writing; it must reach disk
+        runBlocking {
+            withTimeoutOrNull(10_000) {
+                persistenceScope.coroutineContext[Job]?.children?.forEach { it.join() }
+            }
+        }
     }
 
-    override fun startSession() {
-        val conn = connection
-        val client = conn?.client
-        if (conn == null || client == null) {
+    override fun startSession(identifyOnStart: Boolean) {
+        val conn = connection ?: run {
             log("Not connected — connect before starting a session")
             return
         }
-        conn.scope.launch(conn.dispatcher) {
-            // The authoritative already-active check lives INSIDE the
-            // serialized job: a second quick press queues behind the first
-            // start() and sees the installed session — checking only before
-            // launch would let both presses start (and orphan) a terminal
-            // session, since conn.session stays null until start() returns.
-            if (conn.session != null) {
-                log("A checkout session is already active — end it first")
-                return@launch
+        if (conn.session != null) {
+            log("A checkout session is already active — end it first")
+            return
+        }
+        if (!conn.startClaimed.compareAndSet(false, true)) {
+            log("A checkout session is already being started")
+            return
+        }
+        // Logged before the roundtrip: an unresponsive terminal blocks the
+        // Start bracket for the read timeout, and the UI would be silent
+        log("Starting checkout session (Start bracket)…")
+        CheckoutSession.builder()
+            .client(conn.client)
+            .saleId(config.saleId)
+            .poiId(config.poiId)
+            .currency(config.currency)
+            .callbackExecutor(callbackExecutor)
+            // auto-display pushes fail out-of-band (no result to hold);
+            // surface them like any other event
+            .onBackgroundError { error ->
+                log("Customer display update failed: ${error.message}")
             }
-            // Visible before the roundtrip: a terminal that never answers the
-            // Start bracket blocks here for the client's read timeout (120s
-            // default), and the serialized dispatcher queues diagnostics
-            // behind it — without this line the UI is silent the whole time
-            log("Starting checkout session (Start bracket)…")
-            try {
-                val started = CheckoutSession.builder()
-                    .client(client)
-                    .saleId(config.saleId)
-                    .poiId(config.poiId)
-                    .currency(config.currency)
-                    .start()
-                    .get()
-                if (!currentCoroutineContext().isActive) {
-                    // disconnected while starting; end the orphaned session
-                    runCatching { started.close() }
-                    return@launch
+            .start()
+            .onSuccess { started ->
+                if (connection !== conn) {
+                    // disconnected while starting; end the orphan on its own
+                    // operation thread rather than block the callback thread
+                    started.end()
+                        .onError { error ->
+                            detailedLog("End bracket for the orphaned session failed: ${error.message}")
+                        }
+                        .execute()
+                    return@onSuccess
                 }
                 conn.session = started
                 _state.update {
-                    it.copy(
-                        sessionId = started.sessionId,
-                        basket = emptyList(),
-                        basketTotal = "0.00",
-                        basketTax = "0.00",
-                        lastPayment = null,
-                    )
+                    it.withCheckoutCleared(sessionId = started.sessionId, lastPayment = null)
                 }
                 log("Checkout session started (id ${started.sessionId})")
-                // Blank the customer display: autoDisplay only fires on
-                // basket mutations, so the previous checkout's receipt would
-                // linger until the first item is rung in.
-                started.updateDisplay(started.basket().snapshot())
-                    .onError { error -> log("Display clear failed: ${error.message}") }
-                    .executeSync()
-                log("Customer display cleared (empty basket)")
-            } catch (e: Exception) {
-                if (currentCoroutineContext().isActive) {
-                    log("Failed to start a checkout session: ${e.message}")
-                    detailedLog(e.stackTraceToString())
+                if (identifyOnStart) {
+                    identifyMember(conn, started)
+                } else {
+                    clearCustomerDisplay(started)
                 }
             }
-        }
+            .onError { error ->
+                if (connection === conn) {
+                    log("Failed to start a checkout session: ${error.message}")
+                    error.cause?.let { detailedLog(it.stackTraceToString()) }
+                }
+            }
+            .onComplete { conn.startClaimed.set(false) }
+            .execute()
     }
 
     override fun endSession() {
         val conn = connection
-        if (conn == null) {
+        val active = conn?.session
+        if (conn == null || active == null) {
             log("No active checkout session")
             return
         }
-        conn.scope.launch(conn.dispatcher) {
-            // Read inside the serialized job so it can't interleave with an
-            // in-flight startSession installing the session
-            val active = conn.session
-            if (active == null) {
-                log("No active checkout session")
-                return@launch
-            }
-            log("Ending checkout session (End bracket)…")
-            try {
-                active.end().get()
-                // Clear only on a successful End bracket — a failed end keeps
-                // the session held and retryable (the SDK doesn't seal it),
-                // instead of orphaning terminal session state with the UI
-                // offering Start Checkout. Disconnect remains the escape hatch.
+        log("Ending checkout session (End bracket)…")
+        active.end()
+            .onSuccess {
+                // cleared only on success: a failed end keeps the session
+                // held and retryable instead of orphaning terminal state
                 conn.session = null
-                if (currentCoroutineContext().isActive) {
-                    _state.update {
-                        it.copy(
-                            sessionId = null,
-                            basket = emptyList(),
-                            basketTotal = "0.00",
-                            basketTax = "0.00",
-                            lastPayment = null,
-                        )
-                    }
+                if (connection === conn) {
+                    _state.update { it.withCheckoutCleared(lastPayment = null) }
                     log("Checkout session ended")
                 }
-            } catch (e: Exception) {
-                if (currentCoroutineContext().isActive) {
-                    log("Failed to end the session: ${e.message} — still active, retry or disconnect")
-                    detailedLog(e.stackTraceToString())
+            }
+            .onError { error ->
+                if (connection === conn) {
+                    log("Failed to end the session: ${error.message} — still active, retry or disconnect")
+                    error.cause?.let { detailedLog(it.stackTraceToString()) }
                 }
             }
-        }
+            .execute()
     }
 
     override fun addProduct(product: Product) {
-        val conn = connection
-        if (conn == null) {
+        // Basket mutations are eager local calls, safe on the UI thread —
+        // the auto-display push they trigger runs asynchronously in the SDK
+        val session = connection?.session
+        if (session == null) {
             log("No active checkout session — press Start Checkout first")
             return
         }
-        conn.scope.launch(conn.dispatcher) {
-            // Read inside the serialized job (same as start/endSession) so an
-            // End-then-tap sequence can't ring an item into a session already
-            // cleared for its End bracket
-            val current = conn.session
-            if (current == null) {
-                log("No active checkout session — press Start Checkout first")
-                return@launch
+        try {
+            val existing = session.basket().snapshot().getItemBySku(product.sku)
+            val basket = if (existing == null) {
+                val item = BasketItem.builder()
+                    .sku(product.sku)
+                    .description(product.name)
+                    .category(product.category)
+                    .quantity(1)
+                    .unitPrice(BigDecimal(product.priceDecimal))
+                    .apply { NjSalesTax.rateFor(product)?.let(::taxRate) }
+                    .build()
+                session.basket().addItem(item)
+            } else {
+                session.basket().updateItemQuantityBySku(product.sku, existing.quantity + 1)
             }
-            try {
-                val existing = current.basket().snapshot().getItemBySku(product.sku)
-                val basket = if (existing == null) {
-                    val item = BasketItem.builder()
-                        .sku(product.sku)
-                        .description(product.name)
-                        .category(product.category)
-                        .quantity(1)
-                        .unitPrice(BigDecimal(product.priceDecimal))
-                        .apply { NjSalesTax.rateFor(product)?.let(::taxRate) }
-                        .build()
-                    current.basket().addItem(item)
-                } else {
-                    current.basket().updateItemQuantityBySku(product.sku, existing.quantity + 1)
-                }
-                if (isActive) {
-                    publishBasket(basket)
-                    log("Added ${product.name} (${product.priceLabel})")
-                }
-            } catch (e: Exception) {
-                if (isActive) {
-                    log("Failed to add ${product.name}: ${e.message}")
-                    detailedLog(e.stackTraceToString())
-                }
-            }
+            publishBasket(basket)
+            log("Added ${product.name} (${product.priceLabel})")
+        } catch (e: Exception) {
+            log("Failed to add ${product.name}: ${e.message}")
+            detailedLog(e.stackTraceToString())
         }
+    }
+
+    /**
+     * The post-start member-identification prompt (its own operation, not
+     * part of the Start bracket); a failed or declined prompt degrades to
+     * a guest checkout.
+     */
+    private fun identifyMember(conn: Connection, session: CheckoutSession) {
+        // Claimed like pay/acquireCard: without the claim, a Pay tapped
+        // during the prompt would queue behind it on the session's
+        // operation thread — and an abort would cancel only the prompt
+        // while the queued payment went on to charge
+        if (!conn.operationClaimed.compareAndSet(false, true)) {
+            log("Another operation is already in progress — continuing as guest")
+            clearCustomerDisplay(session)
+            return
+        }
+        _state.update { it.copy(identifyInProgress = true) }
+        log("Identifying member on the terminal…")
+        // The terminal's keyed loyalty capture engages only with
+        // ForceEntryMode=Keyed; without it the terminal waits on the card
+        // reader instead of showing the input form
+        session.identifyMember(
+            IdentifyOptions.builder()
+                .forceEntryMode(ForceEntryMode.KEYED)
+                .build()
+        )
+            .onSuccess { outcome ->
+                if (connection !== conn) return@onSuccess
+                if (outcome.status == IdentifyStatus.FOUND) {
+                    log(
+                        "Member identified: ${outcome.memberId}" +
+                            (outcome.loyaltyBrand?.let { " ($it)" } ?: "") +
+                            ", ${outcome.pointBalance} pts, ${outcome.rewards.size} reward(s)"
+                    )
+                } else {
+                    log("No member (${outcome.status}) — loyalty steps will be skipped")
+                }
+            }
+            .onError { error ->
+                if (connection !== conn) return@onError
+                log("Member identification failed: ${error.message} — continuing as guest")
+                error.cause?.let { detailedLog(it.stackTraceToString()) }
+            }
+            .onComplete {
+                conn.operationClaimed.set(false)
+                if (connection === conn) {
+                    _state.update { it.copy(identifyInProgress = false) }
+                    // after the prompt settles, so the clear can't race it
+                    clearCustomerDisplay(session)
+                }
+            }
+            .execute()
+    }
+
+    /** Blank the customer display — autoDisplay only fires on basket
+     *  mutations, so the previous checkout's receipt (or the identify
+     *  prompt's leftovers) would linger. */
+    private fun clearCustomerDisplay(session: CheckoutSession) {
+        session.updateDisplay(session.basket().snapshot())
+            .onSuccess { log("Customer display cleared (empty basket)") }
+            .onError { error -> log("Display clear failed: ${error.message}") }
+            .execute()
     }
 
     override fun pay(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?) {
         val conn = connection
-        if (conn == null) {
+        val session = conn?.session
+        if (conn == null || session == null) {
             log("No active checkout session — press Start Checkout first")
             return
         }
-        // Claimed here, not inside the job: two quick Pay taps would both
-        // queue on the serialized dispatcher (paymentInProgress publishes
-        // asynchronously), and the second would reach the already-completed
-        // session only to log a spurious failure. Shared with acquireCard —
-        // a Pay tap during a card read must not queue behind the prompt.
         if (!conn.operationClaimed.compareAndSet(false, true)) {
             log("Another operation is already in progress")
             return
         }
-        conn.paymentAbortRequested.set(false)
         _state.update { it.copy(paymentInProgress = true, paymentOutcome = null) }
-        val job = conn.scope.launch(conn.dispatcher) {
-            val session = conn.session
-            if (session == null) {
-                log("No active checkout session — press Start Checkout first")
-                return@launch
+        // Still RUNNING when the flow completes means aborted: the SDK
+        // bypasses onError by design when the register asked for the abort.
+        // A plain var is safe on ANY executor, pool included: the payment
+        // thread awaits each handler and only then submits the next, so
+        // handlers never overlap and each submission carries a
+        // happens-before edge.
+        var attempt = PaymentAttempt.RUNNING
+        // Set or actively cleared each attempt: the session keeps the card
+        // across a retry, and a toggle switched off in between must not
+        // silently charge the card again
+        val card = storedValue?.toCard()
+        session.setStoredValueCard(card)
+
+        val options = PaymentOptions.builder()
+            .disableRebates(!loyalty.rebates)
+            .disablePoints(!loyalty.redemption)
+            .disableAward(!loyalty.award)
+            .build()
+        log(
+            "Starting payment — rebates ${onOff(loyalty.rebates)}, " +
+                "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}" +
+                (card?.let { ", gift card ${it.storedValueId ?: "(swipe on terminal)"}" } ?: "")
+        )
+        session.pay(options)
+            .onRebatesRedeemed { rebates ->
+                log("Rebates applied: −$${rebates.totalRebateAmount.toPlainString()} → total $${rebates.suggestedTotal.toPlainString()}")
+                rebates.suggestedTotal
             }
-            try {
-                // The prompt runs only when the operator asked for it — the
-                // loyalty toggles alone don't force it, since the customer
-                // may self-identify on the terminal during the flow. A
-                // no-member outcome (not found, cancelled) degrades to a
-                // guest checkout instead of blocking the payment. FAILED is
-                // included: a declined/cancelled payment retried with
-                // identification switched on prompts before the retry.
-                if (conn.paymentAbortRequested.get()) {
-                    log("Payment aborted before it started — nothing charged")
-                    return@launch
-                }
-                if (loyalty.identify && session.member == null) {
-                    when (session.state) {
-                        SessionState.IDLE, SessionState.IDENTIFIED, SessionState.ACTIVE,
-                        SessionState.FAILED,
-                        -> identifyMember(session)
-                        else -> log(
-                            "Member identification is unavailable in state " +
-                                "${session.state} — paying as a guest checkout"
-                        )
-                    }
-                }
-                // An abort during the identify prompt cancels only the
-                // prompt on the wire (the session is not PAYING yet), which
-                // would otherwise read as a guest outcome — the attempt
-                // flag is what stops the charge
-                if (conn.paymentAbortRequested.get()) {
-                    log("Payment aborted during member identification — nothing charged")
-                    return@launch
-                }
-                if (!currentCoroutineContext().isActive) return@launch
-
-                // Registered per attempt: set when requested, actively
-                // cleared otherwise — the session keeps the card across a
-                // retry, so a toggle switched off between attempts must
-                // remove it rather than silently charge the card again
-                val card = storedValue?.toCard()
-                session.setStoredValueCard(card)
-
-                val options = PaymentOptions.builder()
-                    .disableRebates(!loyalty.rebates)
-                    .disablePoints(!loyalty.redemption)
-                    .disableAward(!loyalty.award)
-                    .build()
+            .onPointsRedeemed { points ->
+                log("Points redeemed: ${points.pointsUsed} (−$${points.monetaryValue.toPlainString()}) → total $${points.suggestedTotal.toPlainString()}")
+                points.suggestedTotal
+            }
+            .onGiftCardPayment { giftCard ->
+                val balance = giftCard.remainingCardBalance
+                    ?.let { " (card balance $${it.toPlainString()})" } ?: ""
                 log(
-                    "Starting payment — rebates ${onOff(loyalty.rebates)}, " +
-                        "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}" +
-                        (card?.let { ", gift card ${it.storedValueId ?: "(swipe on terminal)"}" } ?: "")
+                    "Gift card charged: $${giftCard.amountCharged.toPlainString()}$balance" +
+                        " → total $${giftCard.suggestedTotal.toPlainString()}"
                 )
-                val flow = session.pay(options)
-                    .onRebatesRedeemed { rebates ->
-                        log("Rebates applied: −$${rebates.totalRebateAmount.toPlainString()} → total $${rebates.suggestedTotal.toPlainString()}")
-                        rebates.suggestedTotal
+                giftCard.suggestedTotal
+            }
+            .onError { error ->
+                attempt = PaymentAttempt.FAILED
+                if (connection === conn) {
+                    log("Payment failed: ${error.code} — ${error.message}")
+                    _state.update {
+                        it.copy(paymentOutcome = PaymentOutcome(
+                            success = false,
+                            message = "${error.code}\n${error.message}",
+                        ))
                     }
-                    .onPointsRedeemed { points ->
-                        log("Points redeemed: ${points.pointsUsed} (−$${points.monetaryValue.toPlainString()}) → total $${points.suggestedTotal.toPlainString()}")
-                        points.suggestedTotal
-                    }
-                    .onGiftCardPayment { giftCard ->
-                        val balance = giftCard.remainingCardBalance
-                            ?.let { " (card balance $${it.toPlainString()})" } ?: ""
-                        log(
-                            "Gift card charged: $${giftCard.amountCharged.toPlainString()}$balance" +
-                                " → total $${giftCard.suggestedTotal.toPlainString()}"
-                        )
-                        giftCard.suggestedTotal
-                    }
-                    .onError { error ->
-                        // restore the basket over the failed payment screen;
-                        // sync from a handler runs inline, so it cannot deadlock
-                        session.updateDisplay(session.basket().snapshot())
-                            .onError { e -> detailedLog("Display restore failed: $e") }
-                            .executeSync()
-                        if (isActive) {
-                            log("Payment failed: ${error.code} — ${error.message}")
-                            _state.update {
-                                it.copy(paymentOutcome = PaymentOutcome(
-                                    success = false,
-                                    message = "${error.code}\n${error.message}",
-                                ))
-                            }
-                        }
-                        PaymentOptions.voidAndAbort()
-                    }
-                val result = try {
-                    flow.get()
-                } catch (e: SessionException) {
-                    // ABORTED bypasses onError by design (the register asked
-                    // for the abort); every other failure was already
-                    // reported by the handler above
-                    if (e.error.code == SessionErrorCode.ABORTED && isActive) {
-                        session.updateDisplay(session.basket().snapshot())
-                            .onError { err -> detailedLog("Display restore failed: $err") }
-                            .executeSync()
+                }
+                PaymentOptions.voidAndAbort()
+            }
+            .onSuccess { result ->
+                attempt = PaymentAttempt.SUCCEEDED
+                // Not gated on the connection: the charge stands even if
+                // the operator disconnected mid-payment, and an unrecorded
+                // sale could never be refunded or voided. Session facts are
+                // captured now — the chained end() clears the member before
+                // the IO write runs.
+                persistSale(session.sessionId, session.member?.memberId, result)
+                if (connection === conn) {
+                    publishPaymentResult(result)
+                    log("Payment complete — ending the checkout automatically")
+                    endCompletedCheckout(conn, session)
+                }
+            }
+            .onComplete {
+                if (attempt != PaymentAttempt.SUCCEEDED && connection === conn) {
+                    if (attempt == PaymentAttempt.RUNNING) {
                         log(
                             "Payment aborted; committed steps reversed — " +
                                 "the basket is intact, Pay again to retry"
                         )
                     }
-                    null
+                    // reset the customer display to the intact basket
+                    session.updateDisplay(session.basket().snapshot())
+                        .onError { error -> detailedLog("Display restore failed: ${error.message}") }
+                        .execute()
                 }
-                // Today a non-null result IS a success (the orchestrator's
-                // only return site follows the last step; failures throw),
-                // so the isSuccess guard is defense in depth against the SDK
-                // ever returning a failed result — a declined attempt must
-                // not enter the store as a refundable sale.
-                if (result != null && result.isSuccess) {
-                    // The terminal charged the customer, so the sale is
-                    // recorded even when a disconnect cancelled this job
-                    // mid-call (cancellation can't stop the blocking SDK
-                    // call, and the charge stands) — deliberately NOT gated
-                    // on isActive like the UI updates below: a charged
-                    // transaction without its stored references could never
-                    // be refunded or voided later. Before the session ends
-                    // for the same reason: end() clears the member the
-                    // record captures, and a failed end must not cost the
-                    // sale its references either.
-                    persistSale(session, result)
-                }
-                if (result != null && isActive) {
-                    publishPaymentResult(result)
-                    // The checkout is collected in full (pay() completes
-                    // only then) — end the session for the operator. The
-                    // basket clears like any other end; the payment summary
-                    // stays visible until the next Start Checkout.
-                    log("Payment complete — ending the checkout automatically")
-                    try {
-                        session.end().get()
-                        conn.session = null
-                        _state.update {
-                            it.copy(
-                                sessionId = null,
-                                basket = emptyList(),
-                                basketTotal = "0.00",
-                                basketTax = "0.00",
-                            )
-                        }
-                        log("Checkout ended")
-                    } catch (e: Exception) {
-                        log("Failed to end the checkout: ${e.message} — press End Checkout to retry")
-                        detailedLog(e.stackTraceToString())
-                    }
-                }
-            } catch (e: Exception) {
-                // e.g. pay() rejecting an empty basket or a completed session
-                if (isActive) {
-                    log("Payment not started: ${e.message}")
-                    _state.update {
-                        it.copy(paymentOutcome = PaymentOutcome(
-                            success = false,
-                            message = "Payment not started\n${e.message}",
-                        ))
-                    }
-                    detailedLog(e.stackTraceToString())
+                finishPaymentAttempt(conn)
+            }
+            .execute()
+    }
+
+    /**
+     * The auto-end after a completed payment. Submitted from the payment's
+     * `onSuccess`, it queues behind the settling payment on the session's
+     * operation thread; the payment summary stays visible until the next
+     * Start Checkout.
+     */
+    private fun endCompletedCheckout(conn: Connection, session: CheckoutSession) {
+        session.end()
+            .onSuccess {
+                conn.session = null
+                if (connection === conn) {
+                    _state.update { it.withCheckoutCleared() }
+                    log("Checkout ended")
                 }
             }
-        }
-        // Releases on every path, including a job the scope cancelled before
-        // it ever ran (disconnect racing this call) — a finally inside the
-        // job would never execute then and the claim would wedge the Pay
-        // button. The claim is per-connection and always released; the
-        // shared UI flag is cleared only while this connection is still
-        // current — a cancelled job's blocking call can outlive a
-        // disconnect, and its late completion must not re-enable Pay while
-        // a NEW connection's payment is on the wire (the disconnect itself
-        // already reset the flag via updateDisconnectedState).
-        job.invokeOnCompletion {
-            conn.operationClaimed.set(false)
-            if (connection === conn) {
-                _state.update { it.copy(paymentInProgress = false) }
+            .onError { error ->
+                if (connection === conn) {
+                    log("Failed to end the checkout: ${error.message} — press End Checkout to retry")
+                    error.cause?.let { detailedLog(it.stackTraceToString()) }
+                }
             }
+            .execute()
+    }
+
+    /**
+     * Releases the payment claim and busy flag. The claim always (it is
+     * per-connection); the shared UI flag only while this connection is
+     * still current — a late completion must not re-enable Pay while a NEW
+     * connection's payment is on the wire.
+     */
+    private fun finishPaymentAttempt(conn: Connection) {
+        conn.operationClaimed.set(false)
+        if (connection === conn) {
+            _state.update { it.copy(paymentInProgress = false) }
         }
     }
 
     override fun acquireCard() {
         val conn = connection
-        if (conn == null) {
+        val session = conn?.session
+        if (conn == null || session == null) {
             log("No active checkout session — press Start Checkout first")
             return
         }
-        // Claimed here, not inside the job (same reasoning as pay): two
-        // quick taps would both queue on the serialized dispatcher before
-        // cardReadInProgress publishes, prompting the terminal twice. The
-        // claim is shared with pay for the same reason across buttons.
         if (!conn.operationClaimed.compareAndSet(false, true)) {
             log("Another operation is already in progress")
             return
         }
         _state.update { it.copy(cardReadInProgress = true) }
-        val job = conn.scope.launch(conn.dispatcher) {
-            // Read inside the serialized job (same as the other session
-            // operations) so it can't interleave with an in-flight start/end
-            val session = conn.session
-            if (session == null) {
-                log("No active checkout session — press Start Checkout first")
-                return@launch
-            }
-            log("Reading card on the terminal (CardAcquisition, MagStripe/Scanned)…")
-            // ForceEntryMode is sent explicitly: without it the request
-            // carries no entry-mode element and the terminal arms only its
-            // default reader set, which may not include the stripe.
-            // MagStripe + Scanned are the gift-card capture methods.
-            session.acquireCard(
-                CardAcquisitionOptions.builder()
-                    .forceEntryMode(ForceEntryMode.MAG_STRIPE)
-                    .forceEntryMode(ForceEntryMode.SCANNED)
-                    .build()
-            )
-                .onSuccess { acquired ->
-                    if (!isActive) return@onSuccess
-                    val label = listOfNotNull(
-                        acquired.paymentBrand,
-                        acquired.maskedPan ?: acquired.truncatedPan,
-                        acquired.entryMode?.let { "via $it" },
-                    ).joinToString(" ").ifEmpty { "no card details returned" }
-                    val number = acquired.rawPan
-                    if (number.isNullOrBlank()) {
-                        // Masked/truncated reads carry no chargeable number —
-                        // only PLCC-range cards (gift cards among them)
-                        // return the full PAN
-                        log("Card read: $label — no full card number returned, type it manually")
-                    } else {
-                        _state.update {
-                            it.copy(acquiredCard = AcquiredCard(
-                                number = number,
-                                sequence = (it.acquiredCard?.sequence ?: 0) + 1,
-                            ))
-                        }
-                        log("Card read: $label — filled into the gift card field")
+        log("Reading card on the terminal (CardAcquisition, MagStripe/Scanned)…")
+        // ForceEntryMode is sent explicitly: without it the terminal arms
+        // only its default reader set, which may not include the stripe —
+        // MagStripe + Scanned are the gift-card capture methods
+        session.acquireCard(
+            CardAcquisitionOptions.builder()
+                .forceEntryMode(ForceEntryMode.MAG_STRIPE)
+                .forceEntryMode(ForceEntryMode.SCANNED)
+                .build()
+        )
+            .onSuccess { acquired ->
+                if (connection !== conn) return@onSuccess
+                val label = listOfNotNull(
+                    acquired.paymentBrand,
+                    acquired.maskedPan ?: acquired.truncatedPan,
+                    acquired.entryMode?.let { "via $it" },
+                ).joinToString(" ").ifEmpty { "no card details returned" }
+                val number = acquired.rawPan
+                if (number.isNullOrBlank()) {
+                    // only PLCC-range cards (gift cards among them) return
+                    // the full PAN; masked reads carry no chargeable number
+                    log("Card read: $label — no full card number returned, type it manually")
+                } else {
+                    _state.update {
+                        it.copy(acquiredCard = AcquiredCard(
+                            number = number,
+                            sequence = (it.acquiredCard?.sequence ?: 0) + 1,
+                        ))
                     }
+                    log("Card read: $label — filled into the gift card field")
                 }
-                .onError { error ->
-                    if (!isActive) return@onError
-                    if (error.code == SessionErrorCode.ABORTED) {
-                        log("Card read aborted")
-                    } else {
-                        log("Card read failed: ${error.message}")
-                        error.cause?.let { detailedLog(it.stackTraceToString()) }
-                    }
-                }
-                // sync: this job already runs on the connection's serialized
-                // dispatcher, which orders the read against pay/end — the
-                // SDK's async execute() would run it on the session's own
-                // thread instead, concurrently with operations here
-                .executeSync()
-        }
-        // Releases on every path, including a job cancelled before it ran
-        // (disconnect racing this call) — mirrors the pay() completion hook
-        job.invokeOnCompletion {
-            conn.operationClaimed.set(false)
-            if (connection === conn) {
-                _state.update { it.copy(cardReadInProgress = false) }
             }
-        }
+            .onError { error ->
+                if (connection !== conn) return@onError
+                if (error.code == SessionErrorCode.ABORTED) {
+                    log("Card read aborted")
+                } else {
+                    log("Card read failed: ${error.message}")
+                    error.cause?.let { detailedLog(it.stackTraceToString()) }
+                }
+            }
+            .onComplete {
+                conn.operationClaimed.set(false)
+                if (connection === conn) {
+                    _state.update { it.copy(cardReadInProgress = false) }
+                }
+            }
+            .execute()
     }
 
     override fun abort() {
@@ -730,17 +691,8 @@ class NexoEmulatorController(
             log("No active checkout session")
             return
         }
-        // The attempt flag covers the window the SDK cannot: during the
-        // pre-payment identify prompt the session is not PAYING, so abort()
-        // only cancels the prompt — the pay job checks this flag before it
-        // lets the payment start. Setting it with no payment in flight
-        // (e.g. aborting a card read) is harmless: pay() resets it when
-        // the next attempt is claimed.
-        conn.paymentAbortRequested.set(true)
-        // Not on the serialized dispatcher: an abort queued there would run
-        // only after the operation it interrupts finished on its own. The
-        // SDK's execute() already overtakes (abort is unordered), so no
-        // coroutine hop is needed.
+        // abort() is unordered: execute() overtakes the in-flight call
+        // instead of queueing behind it
         log("Aborting…")
         session.abort()
             .onError { error ->
@@ -750,58 +702,32 @@ class NexoEmulatorController(
             .execute()
     }
 
-    /** Terminal member-identification prompt; failures degrade to guest. */
-    private fun identifyMember(session: CheckoutSession) {
-        log("Identifying member on the terminal…")
-        try {
-            // The terminal's keyed loyalty capture (loyalty ID input form)
-            // engages only for LoyaltyHandling=Required (the SDK default)
-            // with ForceEntryMode containing Keyed — without Keyed it waits
-            // on the card reader instead of showing the input form
-            val outcome = session.identifyMember(
-                IdentifyOptions.builder()
-                    .forceEntryMode(ForceEntryMode.KEYED)
-                    .build()
-            ).get()
-            if (outcome.status == IdentifyStatus.FOUND) {
-                log(
-                    "Member identified: ${outcome.memberId}" +
-                        (outcome.loyaltyBrand?.let { " ($it)" } ?: "") +
-                        ", ${outcome.pointBalance} pts, ${outcome.rewards.size} reward(s)"
-                )
-            } else {
-                log("No member (${outcome.status}) — loyalty steps will be skipped")
-            }
-        } catch (e: Exception) {
-            log("Member identification failed: ${e.message} — continuing as guest")
-            detailedLog(e.stackTraceToString())
-        }
-    }
-
     /**
      * Stores the completed sale with every transaction leg's POI reference,
-     * so referenced refunds/voids can run after the session is gone.
-     * Best-effort: a storage failure must never fail the checkout.
+     * so referenced refunds/voids can run after the session is gone. The
+     * session facts arrive as arguments because the write runs later, on
+     * [persistenceScope]. Best-effort: a storage failure must never fail
+     * the checkout.
      */
-    private fun persistSale(session: CheckoutSession, result: CheckoutResult) {
-        try {
-            val record = result.toSaleRecord(
-                sessionId = session.sessionId,
-                saleId = config.saleId,
-                poiId = config.poiId,
-                currency = config.currency,
-                memberId = session.member?.memberId,
-                recordId = UUID.randomUUID().toString(),
-                completedAt = Instant.now(),
-            )
-            saleStore.recordSale(record)
-            log("Sale stored (${record.legs.size} transaction leg(s), id ${record.id})")
-            // keep the Refund tab's list live when a payment lands while
-            // the operator is already looking at it
-            refreshSales()
-        } catch (e: Exception) {
-            log("Failed to store the sale: ${e.message}")
-            detailedLog(e.stackTraceToString())
+    private fun persistSale(sessionId: String, memberId: String?, result: CheckoutResult) {
+        persistenceScope.launch {
+            try {
+                val record = result.toSaleRecord(
+                    sessionId = sessionId,
+                    saleId = config.saleId,
+                    poiId = config.poiId,
+                    currency = config.currency,
+                    memberId = memberId,
+                    recordId = UUID.randomUUID().toString(),
+                    completedAt = Instant.now(),
+                )
+                saleStore.recordSale(record)
+                log("Sale stored (${record.legs.size} transaction leg(s), id ${record.id})")
+                refreshSales()
+            } catch (e: Exception) {
+                log("Failed to store the sale: ${e.message}")
+                detailedLog(e.stackTraceToString())
+            }
         }
     }
 
@@ -829,8 +755,8 @@ class NexoEmulatorController(
         }
         val summary = "Paid $${result.authorizedAmount.toPlainString()}" +
             (if (parts.isEmpty()) "" else " — " + parts.joinToString(", "))
-        // the popup breaks the breakdown into lines and carries the promo
-        // messages and warnings that otherwise live only in the event log
+        // the popup carries the promo messages and warnings that otherwise
+        // live only in the event log
         val popup = buildList {
             add("Paid $${result.authorizedAmount.toPlainString()}")
             addAll(parts)
@@ -853,8 +779,7 @@ class NexoEmulatorController(
     }
 
     /** Reload [EmulatorState.sales] from the store. App scope, not a
-     *  connection scope: the stored sales outlive any connection, and
-     *  browsing them must work while disconnected. */
+     *  connection scope: browsing stored sales must work while disconnected. */
     private fun refreshSales() {
         scope.launch(salesRefreshDispatcher) {
             val sales = try {
@@ -896,8 +821,7 @@ class NexoEmulatorController(
         iso
     }
 
-    /** The UI's gift card tender as the SDK's stored value card: a typed
-     *  number is keyed entry; blank hands entry to the terminal's swipe. */
+    /** A typed number is keyed entry; blank hands entry to the terminal. */
     private fun StoredValueOptions.toCard(): StoredValueCard {
         val number = cardNumber.trim()
         return if (number.isEmpty()) StoredValueCard.swiped() else StoredValueCard.number(number)
@@ -905,75 +829,74 @@ class NexoEmulatorController(
 
     private fun onOff(enabled: Boolean) = if (enabled) "on" else "off"
 
-    /** Connectivity probe: a raw nexo Diagnosis request, no session involved. */
-    private suspend fun runDiagnosis(client: BiltNexoTerminalClient) {
-        val previous = _state.value.connection.phase
-        try {
-            val request = NexoTerminalAPI.builder()
-                .saleToPOIRequest(
-                    SaleToPOIRequest.builder()
-                        .messageHeader(
-                            MessageHeader.builder()
-                                .protocolVersion("3.0")
-                                .messageClass(MessageClassType.SERVICE)
-                                .messageCategory(MessageCategoryType.DIAGNOSIS)
-                                .messageType(MessageTypeType.REQUEST)
-                                .serviceID(UUID.randomUUID().toString().substring(0, 8))
-                                .saleID(config.saleId)
-                                .poiid(config.poiId)
-                                .build()
-                        )
-                        .diagnosisRequest(DiagnosisRequest.builder().build())
-                        .build()
-                )
-                .build()
-            val response = client.request(request)
-            if (!currentCoroutineContext().isActive) {
-                return // disconnected while the request was in flight
+    /**
+     * The periodic connectivity loop on the device-level [Terminal] — no
+     * session involved. Each probe runs blocking (`executeSync()`): the
+     * loop owns its thread and its pacing, so a slow terminal never stacks
+     * probes, and cancellation (disconnect) lands at [delay].
+     */
+    private fun runDiagnosisLoop(conn: Connection, terminal: Terminal) {
+        conn.scope.launch(conn.dispatcher) {
+            while (true) {
+                val previous = _state.value.connection.phase
+                terminal.diagnose()
+                    .onSuccess { result ->
+                        if (connection !== conn) return@onSuccess
+                        val poi = result.poiStatus?.globalStatus?.toString() ?: "OK"
+                        _state.update {
+                            it.copy(connection = ConnectionStatus(ConnectionPhase.CONNECTED, "POI $poi"))
+                        }
+                        if (previous != ConnectionPhase.CONNECTED) {
+                            log("Terminal connected (POI status: $poi)")
+                        }
+                    }
+                    .onError { error ->
+                        if (connection !== conn) return@onError
+                        _state.update {
+                            it.copy(
+                                connection = ConnectionStatus(
+                                    ConnectionPhase.ERROR,
+                                    error.message ?: "diagnosis failed",
+                                )
+                            )
+                        }
+                        if (previous == ConnectionPhase.CONNECTED || previous == ConnectionPhase.CONNECTING) {
+                            log("Terminal unreachable: ${error.message}")
+                        }
+                        error.cause?.let { detailedLog(it.stackTraceToString()) }
+                    }
+                    .executeSync()
+                delay(diagnosticsInterval)
             }
-            val poi = response?.saleToPOIResponse?.diagnosisResponse
-                ?.poiStatus?.globalStatus?.toString() ?: "OK"
-            _state.update {
-                it.copy(connection = ConnectionStatus(ConnectionPhase.CONNECTED, "POI $poi"))
-            }
-            if (previous != ConnectionPhase.CONNECTED) {
-                log("Terminal connected (POI status: $poi)")
-            }
-        } catch (e: Exception) {
-            if (!currentCoroutineContext().isActive) {
-                return
-            }
-            _state.update {
-                it.copy(
-                    connection = ConnectionStatus(
-                        ConnectionPhase.ERROR,
-                        e.message ?: "diagnosis failed",
-                    )
-                )
-            }
-            if (previous == ConnectionPhase.CONNECTED || previous == ConnectionPhase.CONNECTING) {
-                log("Terminal unreachable: ${e.message}")
-            }
-            detailedLog(e.stackTraceToString())
         }
     }
 
     private fun updateDisconnectedState() {
         _state.update {
-            it.copy(
+            it.withCheckoutCleared(lastPayment = null).copy(
                 connection = ConnectionStatus(ConnectionPhase.DISCONNECTED),
                 tls = TlsStatus.Unknown, // per-connection fact; stale FAILED would outlive it
-                sessionId = null,
-                basket = emptyList(),
-                basketTotal = "0.00",
-                basketTax = "0.00",
                 paymentInProgress = false,
                 cardReadInProgress = false,
-                lastPayment = null,
+                identifyInProgress = false,
                 paymentOutcome = null,
             )
         }
     }
+
+    /** The checkout-scoped fields, reset for a fresh or ended checkout.
+     *  [lastPayment] survives by default: the payment summary stays visible
+     *  until the next checkout starts. */
+    private fun EmulatorState.withCheckoutCleared(
+        sessionId: String? = null,
+        lastPayment: String? = this.lastPayment,
+    ) = copy(
+        sessionId = sessionId,
+        basket = emptyList(),
+        basketTotal = "0.00",
+        basketTax = "0.00",
+        lastPayment = lastPayment,
+    )
 
     private fun publishBasket(basket: Basket) {
         _state.update { state ->

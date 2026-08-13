@@ -36,7 +36,7 @@ class ScreenshotGenerator {
         override fun autodetectAddress() = Unit
         override fun connect(address: String, encryptionEnabled: Boolean, passphraseOverride: String?) = Unit
         override fun disconnect() = Unit
-        override fun startSession() = Unit
+        override fun startSession(identifyOnStart: Boolean) = Unit
         override fun endSession() = Unit
         override fun addProduct(product: Product) = Unit
         override fun pay(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?) = Unit
