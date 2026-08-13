@@ -500,7 +500,10 @@ class NexoEmulatorController(
         _state.update { it.copy(paymentInProgress = true, paymentOutcome = null) }
         // Outcome markers for onComplete: an attempt that settles with
         // neither set was aborted — the SDK bypasses onError by design when
-        // the register asked for the abort.
+        // the register asked for the abort. Plain vars are safe on ANY
+        // executor, pool included: the payment thread awaits each handler
+        // and only then submits the next, so handlers never overlap and
+        // each submission carries a happens-before edge.
         var succeeded = false
         var failed = false
         // Set or actively cleared each attempt: the session keeps the card
