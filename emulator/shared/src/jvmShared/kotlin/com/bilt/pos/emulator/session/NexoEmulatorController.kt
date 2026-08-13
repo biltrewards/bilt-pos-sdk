@@ -290,9 +290,7 @@ class NexoEmulatorController(
             conn.terminal = null
             val active = conn.session
             conn.session = null
-            if (active != null) {
-                runCatching { active.close() }
-            }
+            active?.let { runCatching { it.close() } }
         }
         // a just-landed sale may still be writing; it must reach disk
         runBlocking {
