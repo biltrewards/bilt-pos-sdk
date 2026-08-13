@@ -56,6 +56,10 @@ class NexoEmulatorControllerTest {
             )
         )
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        // serial stand-in for the app's UI thread
+        val callbackExecutor = Executors.newSingleThreadExecutor { task ->
+            Thread(task, "test-ui").apply { isDaemon = true }
+        }
         try {
             val controller = NexoEmulatorController(
                 scope = scope,
@@ -67,10 +71,7 @@ class NexoEmulatorControllerTest {
                     hostnamePattern = "*",
                 ),
                 saleStore = store,
-                // serial stand-in for the app's UI thread
-                callbackExecutor = Executors.newSingleThreadExecutor { task ->
-                    Thread(task, "test-ui").apply { isDaemon = true }
-                },
+                callbackExecutor = callbackExecutor,
             )
             // the init-time load runs on a background dispatcher
             val sales = runBlocking {
@@ -90,6 +91,7 @@ class NexoEmulatorControllerTest {
             assertNotEquals("2026-08-06T10:15:30Z", sale.completedAtLabel)
         } finally {
             scope.cancel()
+            callbackExecutor.shutdown()
         }
     }
 }
