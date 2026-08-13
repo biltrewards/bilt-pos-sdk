@@ -174,6 +174,61 @@ class CheckoutSessionAutoDisplayTest {
         assertTrue(isDisplay(requests.get(2)));
     }
 
+    @Test
+    void lateMutationPushDoesNotOverwriteThePaymentsFinalDisplay() throws Exception {
+        CountDownLatch firstPushOnTheWire = new CountDownLatch(1);
+        CountDownLatch lateItemRung = new CountDownLatch(1);
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                String body = request.getBody().clone().readUtf8();
+                if (body.contains("\"DisplayRequest\"")) {
+                    if (firstPushOnTheWire.getCount() > 0) {
+                        firstPushOnTheWire.countDown();
+                        // park the first push so both the payment and the
+                        // late mutation queue behind it
+                        lateItemRung.await(5, TimeUnit.SECONDS);
+                    }
+                    return new MockResponse().setBody(DISPLAY_OK);
+                }
+                if (body.contains("\"PaymentRequest\"")) {
+                    return new MockResponse().setBody(
+                            "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                                    + "\"Response\":{\"Result\":\"Success\"},"
+                                    + "\"POIData\":{\"POITransactionID\":{"
+                                    + "\"TransactionID\":\"POI-PAY-1\","
+                                    + "\"TimeStamp\":\"2026-07-20T10:00:03Z\"}},"
+                                    + "\"PaymentResult\":{\"AmountsResp\":{"
+                                    + "\"Currency\":\"USD\",\"AuthorizedAmount\":60.00}}}}}");
+                }
+                return new MockResponse().setBody(ADMIN_OK);
+            }
+        });
+        CheckoutSession session = start(sessionBuilder());
+
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "50.00"));
+        assertTrue(firstPushOnTheWire.await(5, TimeUnit.SECONDS));
+        CountDownLatch paid = new CountDownLatch(1);
+        session.pay().onComplete(paid::countDown).execute();
+        // accepted — the queued payment has not started, so the session is
+        // still ACTIVE. The item is part of the charged basket; its push,
+        // queued behind the payment, must not run at COMPLETED.
+        session.basket().addItem(BasketItem.of("SKU-2", "Item", 1, "10.00"));
+        lateItemRung.countDown();
+        assertTrue(paid.await(5, TimeUnit.SECONDS));
+        session.end().get();
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(4, requests.size(),
+                "push, payment, final display, end — no stale cart display after the "
+                        + "payment settled");
+        assertEquals(1, lineItemCount(requests.get(0)));
+        assertNotNull(requests.get(1).getPaymentRequest());
+        assertEquals(2, lineItemCount(requests.get(2)),
+                "the final display carries the basket the payment charged");
+        assertNotNull(requests.get(3).getAdminRequest());
+    }
+
     // ─── No push after end ───
 
     @Test

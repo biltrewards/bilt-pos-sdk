@@ -131,6 +131,12 @@ public final class CheckoutSession implements AutoCloseable {
 
     private static final Logger LOGGER = Logger.getLogger(CheckoutSession.class.getName());
 
+    /** The states in which the basket accepts mutations — and, by the same
+     *  token, in which a queued auto-display push is still current. */
+    private static final Set<SessionState> BASKET_LIVE_STATES = EnumSet.of(
+            SessionState.IDLE, SessionState.IDENTIFIED,
+            SessionState.ACTIVE, SessionState.FAILED);
+
     private final String sessionId = UUID.randomUUID().toString();
     private final SessionStateMachine stateMachine = new SessionStateMachine();
     private final ReentrantLock lock = new ReentrantLock();
@@ -203,7 +209,8 @@ public final class CheckoutSession implements AutoCloseable {
         this.paymentOrchestrator = new PaymentOrchestrator(exchange, builder.currency);
         this.storedValueManager = new StoredValueManager(exchange, builder.currency);
         this.display = new BasketDisplay(exchange, displayRenderer, builder.currency);
-        this.autoDisplayPush = new AutoDisplayPush(operations, display, stateMachine::current);
+        this.autoDisplayPush = new AutoDisplayPush(operations, display,
+                stateMachine::current, BASKET_LIVE_STATES);
         this.basket = new SessionBasket(new SessionBasket.Host() {
             @Override
             public Basket mutate(Consumer<BasketMutation> mutation) {
@@ -310,8 +317,7 @@ public final class CheckoutSession implements AutoCloseable {
         lock.lock();
         try {
             SessionState state = stateMachine.current();
-            if (state != SessionState.IDLE && state != SessionState.IDENTIFIED
-                    && state != SessionState.ACTIVE && state != SessionState.FAILED) {
+            if (!BASKET_LIVE_STATES.contains(state)) {
                 throw new IllegalStateException(
                         "the basket cannot be modified in state " + state);
             }

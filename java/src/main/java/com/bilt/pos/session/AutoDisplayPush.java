@@ -12,6 +12,7 @@ package com.bilt.pos.session;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.internal.BasketDisplay;
 
+import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -42,12 +43,22 @@ final class AutoDisplayPush {
     private final SessionOperations operations;
     private final BasketDisplay display;
     private final Supplier<SessionState> state;
+    private final Set<SessionState> basketLiveStates;
 
+    /**
+     * @param basketLiveStates the states in which the owner's basket is
+     *        live — the same set that accepts mutations. A push that runs
+     *        outside them outlived its basket (the payment completed, a
+     *        void sealed the cart, or the session ended between enqueue
+     *        and run) and sends nothing: the settled screen — a payment's
+     *        final display, the End bracket — supersedes the snapshot.
+     */
     AutoDisplayPush(SessionOperations operations, BasketDisplay display,
-                    Supplier<SessionState> state) {
+                    Supplier<SessionState> state, Set<SessionState> basketLiveStates) {
         this.operations = operations;
         this.display = display;
         this.state = state;
+        this.basketLiveStates = basketLiveStates;
     }
 
     void push(Basket snapshot) {
@@ -69,9 +80,7 @@ final class AutoDisplayPush {
             return;
         }
         SessionState current = state.get();
-        if (current == SessionState.ENDED) {
-            // queued tasks still run after the executor's shutdown, but a
-            // push after the End bracket is pointless wire noise
+        if (!basketLiveStates.contains(current)) {
             return;
         }
         try {

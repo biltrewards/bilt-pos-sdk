@@ -157,7 +157,8 @@ public final class ReversalSession implements AutoCloseable {
                 builder.displayRenderer != null
                         ? builder.displayRenderer : new BasketDisplayRenderer(),
                 builder.currency);
-        this.autoDisplayPush = new AutoDisplayPush(operations, display, stateMachine::current);
+        this.autoDisplayPush = new AutoDisplayPush(operations, display,
+                stateMachine::current, EnumSet.of(SessionState.IDLE));
         this.basket = new SessionBasket(new SessionBasket.Host() {
             @Override
             public Basket mutate(Consumer<BasketMutation> mutation) {
