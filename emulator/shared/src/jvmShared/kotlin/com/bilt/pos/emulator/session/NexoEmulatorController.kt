@@ -41,6 +41,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -94,13 +95,13 @@ class NexoEmulatorController(
     ) {
         /** Guards against a double-tap bracketing two terminal sessions:
          *  [session] is only installed once the Start roundtrip acknowledges. */
-        val startClaimed = java.util.concurrent.atomic.AtomicBoolean(false)
+        val startClaimed = AtomicBoolean(false)
 
         /** One claim across [pay] and [acquireCard]: the UI's disabled
          *  states publish only on recomposition, so a quick second tap
          *  would otherwise queue its prompt behind the in-flight operation.
          *  Released by each operation's `onComplete`. */
-        val operationClaimed = java.util.concurrent.atomic.AtomicBoolean(false)
+        val operationClaimed = AtomicBoolean(false)
 
     }
 
