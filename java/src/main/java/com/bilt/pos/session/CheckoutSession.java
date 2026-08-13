@@ -295,11 +295,10 @@ public final class CheckoutSession implements AutoCloseable {
      * The session's basket: item and tax mutations, batch edits, and
      * snapshots. Mutations follow the session lifecycle — they are rejected
      * while a payment is in flight or after the session has ended. Each one
-     * is pure local compute returning the updated snapshot; with
+     * returns the updated snapshot without touching the wire; with
      * {@link Builder#autoDisplay(boolean) autoDisplay} enabled it also
-     * enqueues an asynchronous, conflated customer-display refresh on the
-     * session's operation lane (rapid mutations collapse to the newest
-     * snapshot; a failed push reports through
+     * enqueues an asynchronous, conflated customer-display refresh (a
+     * failed refresh reports through
      * {@link Builder#onBackgroundError(Consumer) onBackgroundError}).
      */
     public SessionBasket basket() {
@@ -329,11 +328,8 @@ public final class CheckoutSession implements AutoCloseable {
             syncStateWithBasket();
             snapshot = basketEngine.snapshot();
             if (autoDisplay) {
-                // enqueued under the lock so rapid mutations enter the
-                // (conflated) push in mutation order; the send itself is
-                // asynchronous, so a mutation is pure local compute and a
-                // register can ring items from its UI thread without paying
-                // a terminal roundtrip per tap
+                // under the lock so concurrent mutations cannot enter the
+                // conflated push out of snapshot order
                 autoDisplayPush.push(snapshot);
             }
         } finally {
@@ -1144,13 +1140,10 @@ public final class CheckoutSession implements AutoCloseable {
 
     /**
      * Refreshes the customer display from the given basket snapshot using the
-     * configured {@link DisplayRenderer}. Lazy like every terminal
-     * operation: nothing is sent until {@code execute()},
-     * {@code executeSync()}, {@code get()}, or {@code getOrNull()} is
-     * invoked, and a failure is delivered through the returned result's
-     * {@code onError} (never the session's {@code onBackgroundError}, which
-     * is for pushes the session initiates itself). Allowed until the
-     * session has ended.
+     * configured {@link DisplayRenderer}. Failures are delivered through the
+     * returned result's {@code onError}, not the session's
+     * {@code onBackgroundError} — that handler is only for pushes the
+     * session initiates itself. Allowed until the session has ended.
      */
     public SessionResult<Void> updateDisplay(Basket basket) {
         Objects.requireNonNull(basket, "basket");
@@ -1161,18 +1154,16 @@ public final class CheckoutSession implements AutoCloseable {
         });
     }
 
-    /** The payment sequence's final display refresh; best-effort at the
-     *  call site (the orchestrator logs and continues on failure). */
+    /** The payment sequence's final display refresh; the orchestrator
+     *  catches its failures. */
     private void showBasket(Basket basket) {
         display.show(basket, stateMachine.current());
     }
 
     /**
      * Sends a custom display payload to the customer display (or the external
-     * display when configured). Lazy, with the same contract as
-     * {@link #updateDisplay(Basket)}: executes via {@code execute()}/
-     * {@code executeSync()}, fails into its own {@code onError}, and is
-     * allowed until the session has ended.
+     * display when configured). Same contract as
+     * {@link #updateDisplay(Basket)}.
      */
     public SessionResult<Void> updateDisplay(DisplayPayload payload) {
         Objects.requireNonNull(payload, "payload");
@@ -1211,13 +1202,9 @@ public final class CheckoutSession implements AutoCloseable {
      * leaves the transaction standing; use {@code voidTransaction()} to
      * reverse it.</p>
      *
-     * <p>Lazy like every terminal operation — nothing happens until
-     * {@code execute()} (returns immediately) or {@code executeSync()}
-     * (blocks for the roundtrip) — and deliberately <em>unordered</em>: an
-     * abort exists to interrupt the operation occupying the session's
-     * operation lane, so queueing it there would have it wait on the very
-     * thing it cancels. It runs on the shared unordered lane instead,
-     * overtaking whatever is in flight. Safe to call from any thread.</p>
+     * <p>Deliberately <em>unordered</em>: queued on the session's operation
+     * lane, the abort would wait on the very operation it cancels, so it
+     * overtakes it instead. Safe to call from any thread.</p>
      */
     public SessionResult<Void> abort() {
         return this.<Void>operation("abort", () -> {
@@ -1631,19 +1618,17 @@ public final class CheckoutSession implements AutoCloseable {
 
         /**
          * Handler for failures of work the session performs on its own
-         * behalf, with no result object to report through. Today that is
-         * the automatic customer-display push after a basket mutation
-         * (see {@link #autoDisplay(boolean)}); the future reactive
-         * {@link #onBasketUpdated(Consumer)} channel will report here too.
-         * Failures of manual {@code updateDisplay(...)} calls are not
-         * delivered here — those report through their own per-call
-         * {@code onError}.
+         * behalf, with no result object to report through: today the
+         * automatic display push after a basket mutation
+         * ({@link #autoDisplay(boolean)}), in the future also the reactive
+         * {@link #onBasketUpdated(Consumer)} channel. Manual
+         * {@code updateDisplay(...)} failures are not delivered here — they
+         * report through their own per-call {@code onError}.
          *
-         * <p>Background failures are best-effort by definition: they never
-         * interrupt the checkout and are logged whether or not a handler is
-         * registered. Delivered through the {@link #callbackExecutor(Executor)
-         * callbackExecutor} when one is configured, directly on the failing
-         * thread otherwise — the usual handler delivery rules.</p>
+         * <p>Background failures never interrupt the checkout and are
+         * logged whether or not a handler is registered. Delivered through
+         * the {@link #callbackExecutor(Executor) callbackExecutor} when one
+         * is configured, directly on the failing thread otherwise.</p>
          */
         public Builder onBackgroundError(Consumer<SessionError> onBackgroundError) {
             this.onBackgroundError = onBackgroundError;

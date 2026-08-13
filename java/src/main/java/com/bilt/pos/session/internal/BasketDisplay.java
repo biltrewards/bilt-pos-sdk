@@ -34,10 +34,7 @@ import jakarta.xml.bind.JAXBException;
  *
  * <p>Failures — renderer, serialization, or wire — surface as
  * {@link SessionException}; whether a display update is best-effort is the
- * caller's policy, not this class's. The automatic push contains the
- * failure (logging it and reporting it to the session's background-error
- * handler), while a manual {@code updateDisplay(...)} delivers it through
- * its own {@code onError}.</p>
+ * caller's policy, not this class's.</p>
  */
 public final class BasketDisplay {
 

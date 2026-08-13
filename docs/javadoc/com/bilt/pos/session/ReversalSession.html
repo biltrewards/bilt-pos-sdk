@@ -123,8 +123,8 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  session start signal) and <a href="#end()"><code>end()</code></a> tells the terminal to discard its
  session-scoped data; try-with-resources sends the end signal even on
  exception paths. All operations are lazy — nothing is sent until
- <code>execute()</code>, <code>get()</code>, or <code>getOrNull()</code> is invoked — and
- run blocking on the calling thread.</p>
+ <code>execute()</code> (asynchronous), <code>executeSync()</code>, <code>get()</code>,
+ or <code>getOrNull()</code> (blocking) is invoked.</p>
 
  <pre><code>
  try (ReversalSession session = ReversalSession.builder()
@@ -322,8 +322,9 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  checkout basket. Every line is a credit line — totals are negative
  and, with <a href="ReversalSession.Builder.html#autoDisplay(boolean)"><code>autoDisplay</code></a> enabled
  (the default), each mutation enqueues an asynchronous, conflated
- customer-display refresh with the itemised returns (failures report
- through <a href="ReversalSession.Builder.html#onBackgroundError(java.util.function.Consumer)"><code>onBackgroundError</code></a>). Mutations are allowed until a void or <code>end()</code>
+ display refresh with the itemised returns (failures report through
+ <a href="ReversalSession.Builder.html#onBackgroundError(java.util.function.Consumer)"><code>onBackgroundError</code></a>).
+ Mutations are allowed until a void or <code>end()</code>
  seals the session; <a href="#refundBasket()"><code>refundBasket()</code></a> consumes the cart. The
  cart is free-form — whether an item may be returned, and in what
  quantity, is the register's decision.</div>
@@ -406,12 +407,9 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  movement may have completed on the terminal, and the register must
  know. With nothing in flight this is a no-op.
 
- <p>Lazy like every terminal operation — nothing happens until
- <code>execute()</code> (returns immediately) or <code>executeSync()</code>
- (blocks for the roundtrip) — and deliberately unordered: an abort
- exists to interrupt the operation occupying the session's operation
- lane, so it runs on the shared unordered lane instead of queueing
- behind the very thing it cancels. Safe to call from any thread.</p></div>
+ <p>Deliberately unordered: queued on the session's operation lane,
+ the abort would wait on the very operation it cancels, so it
+ overtakes it instead. Safe to call from any thread.</p></div>
 </section>
 </li>
 <li>

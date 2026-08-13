@@ -343,8 +343,7 @@ class NexoEmulatorController(
                 log("Checkout session started (id ${started.sessionId})")
                 // Blank the customer display: autoDisplay only fires on
                 // basket mutations, so the previous checkout's receipt would
-                // linger until the first item is rung in. Best-effort — a
-                // failure logs to the feed and never interrupts the session.
+                // linger until the first item is rung in.
                 started.updateDisplay(started.basket().snapshot())
                     .onError { error -> log("Display clear failed: ${error.message}") }
                     .executeSync()
@@ -536,9 +535,8 @@ class NexoEmulatorController(
                         giftCard.suggestedTotal
                     }
                     .onError { error ->
-                        // restore the basket on the customer display over the
-                        // failed payment screen; sync is safe inside a handler
-                        // (it runs inline as part of the operation being handled)
+                        // restore the basket over the failed payment screen;
+                        // sync from a handler runs inline, so it cannot deadlock
                         session.updateDisplay(session.basket().snapshot())
                             .onError { e -> detailedLog("Display restore failed: $e") }
                             .executeSync()
@@ -739,14 +737,10 @@ class NexoEmulatorController(
         // (e.g. aborting a card read) is harmless: pay() resets it when
         // the next attempt is claimed.
         conn.paymentAbortRequested.set(true)
-        // Deliberately NOT on the serialized dispatcher: abort() must
-        // overtake the blocking call it interrupts — queueing it would run
-        // it only after that call finished on its own. The SDK's async
-        // execute() does exactly that (abort is unordered — it bypasses
-        // the session's operation lane), so no coroutine hop is needed.
-        // Operation-scoped like the SDK's: an aborted payment settles
-        // FAILED and the session stays retryable; an aborted prompt or
-        // card read is simply cancelled.
+        // Not on the serialized dispatcher: an abort queued there would run
+        // only after the operation it interrupts finished on its own. The
+        // SDK's execute() already overtakes (abort is unordered), so no
+        // coroutine hop is needed.
         log("Aborting…")
         session.abort()
             .onError { error ->

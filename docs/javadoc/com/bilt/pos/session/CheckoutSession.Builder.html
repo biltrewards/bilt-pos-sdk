@@ -147,7 +147,10 @@ loadScripts(document, 'script');</script>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onBackgroundError(java.util.function.Consumer)" class="member-name-link">onBackgroundError</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>&gt;&nbsp;onBackgroundError)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Handler for failures of work the session performs on its own
- behalf, with no result object to report through.</div>
+ behalf, with no result object to report through: today the
+ automatic display push after a basket mutation
+ (<a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>), in the future also the reactive
+ <a href="#onBasketUpdated(java.util.function.Consumer)"><code>onBasketUpdated(Consumer)</code></a> channel.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onBasketUpdated(java.util.function.Consumer)" class="member-name-link">onBasketUpdated</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&gt;&nbsp;onBasketUpdated)</code></div>
@@ -288,18 +291,17 @@ loadScripts(document, 'script');</script>
 <h3>onBackgroundError</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></span>&nbsp;<span class="element-name">onBackgroundError</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>&gt;&nbsp;onBackgroundError)</span></div>
 <div class="block">Handler for failures of work the session performs on its own
- behalf, with no result object to report through. Today that is
- the automatic customer-display push after a basket mutation
- (see <a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>); the future reactive
- <a href="#onBasketUpdated(java.util.function.Consumer)"><code>onBasketUpdated(Consumer)</code></a> channel will report here too.
- Failures of manual <code>updateDisplay(...)</code> calls are not
- delivered here — those report through their own per-call
- <code>onError</code>.
+ behalf, with no result object to report through: today the
+ automatic display push after a basket mutation
+ (<a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>), in the future also the reactive
+ <a href="#onBasketUpdated(java.util.function.Consumer)"><code>onBasketUpdated(Consumer)</code></a> channel. Manual
+ <code>updateDisplay(...)</code> failures are not delivered here — they
+ report through their own per-call <code>onError</code>.
 
- <p>Background failures are best-effort by definition: they never
- interrupt the checkout and are logged whether or not a handler is
- registered. Delivered through the <a href="#callbackExecutor(java.util.concurrent.Executor)"><code>callbackExecutor</code></a> when one is configured, directly on the failing
- thread otherwise — the usual handler delivery rules.</p></div>
+ <p>Background failures never interrupt the checkout and are
+ logged whether or not a handler is registered. Delivered through
+ the <a href="#callbackExecutor(java.util.concurrent.Executor)"><code>callbackExecutor</code></a> when one
+ is configured, directly on the failing thread otherwise.</p></div>
 </section>
 </li>
 <li>

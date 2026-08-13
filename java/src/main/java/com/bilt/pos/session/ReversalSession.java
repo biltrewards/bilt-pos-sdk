@@ -169,9 +169,6 @@ public final class ReversalSession implements AutoCloseable {
                 basketEngine.mutateAtomically(mutation);
                 Basket snapshot = basketEngine.snapshot();
                 if (autoDisplay) {
-                    // asynchronous and conflated, like a checkout basket's
-                    // auto-display (see AutoDisplayPush): the mutation
-                    // returns immediately, the send takes the operation lane
                     autoDisplayPush.push(snapshot);
                 }
                 return snapshot;
@@ -217,9 +214,9 @@ public final class ReversalSession implements AutoCloseable {
      * checkout basket. Every line is a credit line — totals are negative
      * and, with {@link Builder#autoDisplay(boolean) autoDisplay} enabled
      * (the default), each mutation enqueues an asynchronous, conflated
-     * customer-display refresh with the itemised returns (failures report
-     * through {@link Builder#onBackgroundError(Consumer)
-     * onBackgroundError}). Mutations are allowed until a void or {@code end()}
+     * display refresh with the itemised returns (failures report through
+     * {@link Builder#onBackgroundError(Consumer) onBackgroundError}).
+     * Mutations are allowed until a void or {@code end()}
      * seals the session; {@link #refundBasket()} consumes the cart. The
      * cart is free-form — whether an item may be returned, and in what
      * quantity, is the register's decision.
@@ -385,10 +382,8 @@ public final class ReversalSession implements AutoCloseable {
             if (tenderRefunded[0]) {
                 basketEngine.clear();
                 if (autoDisplay) {
-                    // through the conflated push (it queues right behind
-                    // this refund on the operation lane), so a display
-                    // failure cannot throw from this finally block and
-                    // mask the refund's own outcome
+                    // asynchronous, so a display failure cannot throw from
+                    // this finally block and mask the refund's own outcome
                     autoDisplayPush.push(basketEngine.snapshot());
                 }
             }
@@ -422,12 +417,9 @@ public final class ReversalSession implements AutoCloseable {
      * movement may have completed on the terminal, and the register must
      * know. With nothing in flight this is a no-op.
      *
-     * <p>Lazy like every terminal operation — nothing happens until
-     * {@code execute()} (returns immediately) or {@code executeSync()}
-     * (blocks for the roundtrip) — and deliberately unordered: an abort
-     * exists to interrupt the operation occupying the session's operation
-     * lane, so it runs on the shared unordered lane instead of queueing
-     * behind the very thing it cancels. Safe to call from any thread.</p>
+     * <p>Deliberately unordered: queued on the session's operation lane,
+     * the abort would wait on the very operation it cancels, so it
+     * overtakes it instead. Safe to call from any thread.</p>
      */
     public SessionResult<Void> abort() {
         return this.<Void>operation("abort", () -> {
@@ -754,11 +746,9 @@ public final class ReversalSession implements AutoCloseable {
         /**
          * Handler for failures of work the session performs on its own
          * behalf, with no result object to report through — here the
-         * automatic customer-display push after a refund cart mutation
-         * (see {@link #autoDisplay(boolean)}). Semantics as on
-         * {@code CheckoutSession.Builder#onBackgroundError}: best-effort
-         * failures, always logged, delivered through the callback executor
-         * when one is configured.
+         * automatic display push after a refund cart mutation
+         * ({@link #autoDisplay(boolean)}). Same semantics as
+         * {@code CheckoutSession.Builder#onBackgroundError}.
          */
         public Builder onBackgroundError(Consumer<SessionError> onBackgroundError) {
             this.onBackgroundError = onBackgroundError;

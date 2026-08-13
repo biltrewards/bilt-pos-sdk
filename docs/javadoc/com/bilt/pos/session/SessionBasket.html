@@ -97,8 +97,9 @@ loadScripts(document, 'script');</script>
  <a href="ReversalSession.html#basket()"><code>ReversalSession.basket()</code></a> (the refund cart): item and tax
  mutations, batch edits, and immutable snapshots.
 
- <p>Every mutation is applied atomically and — when the session has
- automatic display enabled — followed by a customer display refresh showing
+ <p>Every mutation is applied atomically, returning the updated snapshot
+ synchronously; when the session has automatic display enabled it also
+ enqueues an asynchronous, conflated customer display refresh showing
  the itemised basket. The owning session decides when mutations are
  allowed: a basket frozen by an in-flight payment, or one whose session has
  ended, rejects them with <code>IllegalStateException</code>.</p>
@@ -140,8 +141,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#mutate(java.util.function.Consumer)" class="member-name-link">mutate</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/BasketMutation.html" title="interface in com.bilt.pos.session.basket">BasketMutation</a>&gt;&nbsp;mutation)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Applies a batch of basket mutations atomically, followed by a single
- display update.</div>
+<div class="block">Applies a batch of basket mutations atomically, with a single
+ display update for the whole batch.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#removeItem(java.lang.String)" class="member-name-link">removeItem</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId)</code></div>
@@ -282,8 +283,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="mutate(java.util.function.Consumer)">
 <h3>mutate</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">mutate</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/BasketMutation.html" title="interface in com.bilt.pos.session.basket">BasketMutation</a>&gt;&nbsp;mutation)</span></div>
-<div class="block">Applies a batch of basket mutations atomically, followed by a single
- display update.</div>
+<div class="block">Applies a batch of basket mutations atomically, with a single
+ display update for the whole batch.</div>
 </section>
 </li>
 <li>

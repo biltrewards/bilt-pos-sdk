@@ -115,10 +115,8 @@ final class SessionOperations {
      *  configuration, fixed at session construction. */
     private final Executor callbackExecutor;
 
-    /** The session's handler for failures of work it performs on its own
-     *  behalf, with no result object to report through (the builders'
-     *  {@code onBackgroundError}); null when the integrator registered
-     *  none. Like [callbackExecutor], fixed at session construction. */
+    /** The builders' {@code onBackgroundError} handler, or null; see
+     *  [backgroundError]. Like [callbackExecutor], fixed at construction. */
     private final Consumer<SessionError> onBackgroundError;
 
     SessionOperations(Executor callbackExecutor) {
@@ -240,16 +238,12 @@ final class SessionOperations {
     /**
      * Reports a failure of work the session performed on its own behalf —
      * work with no {@link SessionResult} whose {@code onError} could carry
-     * it (the automatic display push today; a reactive basket-update
-     * channel later). Always logged; additionally delivered to the
-     * session's {@code onBackgroundError} handler when one is registered,
-     * through the callback executor like any handler (directly on the
-     * failing thread when none is configured). Fire-and-forget, and a
-     * throwing handler is contained: background work is best-effort and
+     * it. Always logged; additionally delivered to the session's
+     * {@code onBackgroundError} handler through the callback executor.
+     * Fire-and-forget, with a throwing handler contained: background work
      * must never interrupt whatever the session is doing.
      *
-     * @param what the failed work, article included ("the automatic
-     *             display push"), for the log line
+     * @param what the failed work, article included, for the log line
      */
     void backgroundError(String what, RuntimeException failure) {
         SessionError error = failure instanceof SessionException

@@ -30,11 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * The asynchronous, conflated auto-display push and the session-level
- * background-error handler: mutations are pure local compute, the send
- * takes the session's operation lane (conflated to the newest snapshot,
- * never after the End bracket), failures report through
- * {@code onBackgroundError} — and only pushes the session initiates
- * itself, never a manual {@code updateDisplay(...)}.
+ * background-error handler.
  */
 class CheckoutSessionAutoDisplayTest {
 
@@ -247,8 +243,8 @@ class CheckoutSessionAutoDisplayTest {
             assertNotNull(error.get());
             assertEquals("register-ui", deliveryThread.get(),
                     "background errors deliver on the callback executor");
-            // the failure never interrupts the checkout
-            assertEquals(SessionState.ACTIVE, session.getState());
+            assertEquals(SessionState.ACTIVE, session.getState(),
+                    "a failed push never interrupts the checkout");
             assertEquals(new BigDecimal("20.00"), session.basket()
                     .addItem(BasketItem.of("SKU-2", "Item", 1, "10.00")).getGrandTotal());
         } finally {
@@ -294,9 +290,8 @@ class CheckoutSessionAutoDisplayTest {
                 String body = request.getBody().clone().readUtf8();
                 if (body.contains("\"PaymentRequest\"")) {
                     paymentOnTheWire.countDown();
-                    // parked until the abort has reached the wire — the very
-                    // overtake the unordered lane exists for. Declined, so
-                    // the aborted payment settles without a rollback leg.
+                    // parked until the abort reaches the wire; declined, so
+                    // the aborted payment settles without a rollback leg
                     abortSeen.await(5, TimeUnit.SECONDS);
                     return new MockResponse().setBody(
                             "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"

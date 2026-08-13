@@ -166,8 +166,8 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Handler for failures of work the session performs on its own
  behalf, with no result object to report through — here the
- automatic customer-display push after a refund cart mutation
- (see <a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>).</div>
+ automatic display push after a refund cart mutation
+ (<a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>).</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#poiId(java.lang.String)" class="member-name-link">poiId</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;poiId)</code></div>
@@ -432,11 +432,9 @@ loadScripts(document, 'script');</script>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></span>&nbsp;<span class="element-name">onBackgroundError</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>&gt;&nbsp;onBackgroundError)</span></div>
 <div class="block">Handler for failures of work the session performs on its own
  behalf, with no result object to report through — here the
- automatic customer-display push after a refund cart mutation
- (see <a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>). Semantics as on
- <code>CheckoutSession.Builder#onBackgroundError</code>: best-effort
- failures, always logged, delivered through the callback executor
- when one is configured.</div>
+ automatic display push after a refund cart mutation
+ (<a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>). Same semantics as
+ <code>CheckoutSession.Builder#onBackgroundError</code>.</div>
 </section>
 </li>
 <li>
