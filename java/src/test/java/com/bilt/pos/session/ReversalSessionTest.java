@@ -1151,7 +1151,9 @@ class ReversalSessionTest {
     void refundCartCannotBeModifiedAfterAVoid() throws Exception {
         ReversalSession session = cardSession();
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
-        session.voidTransaction().execute();
+        // sync: an async execute() would race the mutation below — the cart
+        // only seals once the void takes the session out of IDLE
+        session.voidTransaction().executeSync();
 
         assertThrows(IllegalStateException.class, () -> session.basket()
                 .addItem(BasketItem.of("SKU-1", "Item", 1, "10.00")));
