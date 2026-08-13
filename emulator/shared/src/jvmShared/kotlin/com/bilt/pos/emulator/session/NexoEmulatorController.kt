@@ -88,8 +88,8 @@ class NexoEmulatorController(
     private class Connection(
         val scope: CoroutineScope,
         val dispatcher: CoroutineDispatcher,
-        val client: BiltNexoTerminalClient?,
-        @Volatile var terminal: Terminal? = null,
+        val client: BiltNexoTerminalClient,
+        val terminal: Terminal,
         @Volatile var session: CheckoutSession? = null,
     ) {
         /** Guards against a double-tap bracketing two terminal sessions:
@@ -178,22 +178,23 @@ class NexoEmulatorController(
         log("Connecting to $endpoint (encryption=$encrypt)")
 
         val client = createNexoClient(endpoint, encrypt, passphrase) ?: return
-        val conn = Connection(
-            scope = CoroutineScope(
-                scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
-            ),
-            dispatcher = Dispatchers.IO.limitedParallelism(1),
-            client = client,
-        )
-        connection = conn
-
+        // The device-level handle: diagnose() is session-free, so the
+        // connectivity loop needs no checkout session — just the terminal
         val terminal = Terminal.builder()
             .client(client)
             .saleId(config.saleId)
             .poiId(config.poiId)
             .callbackExecutor(callbackExecutor)
             .build()
-        conn.terminal = terminal
+        val conn = Connection(
+            scope = CoroutineScope(
+                scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+            ),
+            dispatcher = Dispatchers.IO.limitedParallelism(1),
+            client = client,
+            terminal = terminal,
+        )
+        connection = conn
 
         runDiagnosisLoop(conn, terminal)
         verifyTls(conn, address)
@@ -262,13 +263,10 @@ class NexoEmulatorController(
         }
         connection = null
         conn.scope.cancel()
-        conn.terminal?.close()
-        conn.terminal = null
-        val active = conn.session
-        conn.session = null
+        conn.terminal.close()
         // End bracket, best-effort: the async end() queues behind anything
         // still in flight on the session's operation thread
-        active?.end()?.onError { error ->
+        conn.session?.end()?.onError { error ->
             detailedLog("End bracket on disconnect failed: ${error.message}")
         }?.execute()
         log("Disconnected")
@@ -286,11 +284,8 @@ class NexoEmulatorController(
         if (conn != null) {
             connection = null
             conn.scope.cancel()
-            conn.terminal?.close()
-            conn.terminal = null
-            val active = conn.session
-            conn.session = null
-            active?.let { runCatching { it.close() } }
+            conn.terminal.close()
+            conn.session?.let { runCatching { it.close() } }
         }
         // a just-landed sale may still be writing; it must reach disk
         runBlocking {
@@ -301,9 +296,7 @@ class NexoEmulatorController(
     }
 
     override fun startSession(identifyMember: Boolean) {
-        val conn = connection
-        val client = conn?.client
-        if (conn == null || client == null) {
+        val conn = connection ?: run {
             log("Not connected — connect before starting a session")
             return
         }
@@ -319,7 +312,7 @@ class NexoEmulatorController(
         // Start bracket for the read timeout, and the UI would be silent
         log("Starting checkout session (Start bracket)…")
         CheckoutSession.builder()
-            .client(client)
+            .client(conn.client)
             .saleId(config.saleId)
             .poiId(config.poiId)
             .currency(config.currency)
