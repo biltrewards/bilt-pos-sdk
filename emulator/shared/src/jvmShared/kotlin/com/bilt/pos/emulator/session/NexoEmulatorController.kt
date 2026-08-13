@@ -332,13 +332,7 @@ class NexoEmulatorController(
                 }
                 conn.session = started
                 _state.update {
-                    it.copy(
-                        sessionId = started.sessionId,
-                        basket = emptyList(),
-                        basketTotal = "0.00",
-                        basketTax = "0.00",
-                        lastPayment = null,
-                    )
+                    it.withCheckoutCleared(sessionId = started.sessionId, lastPayment = null)
                 }
                 log("Checkout session started (id ${started.sessionId})")
                 if (identifyMember) {
@@ -371,15 +365,7 @@ class NexoEmulatorController(
                 // held and retryable instead of orphaning terminal state
                 conn.session = null
                 if (connection === conn) {
-                    _state.update {
-                        it.copy(
-                            sessionId = null,
-                            basket = emptyList(),
-                            basketTotal = "0.00",
-                            basketTax = "0.00",
-                            lastPayment = null,
-                        )
-                    }
+                    _state.update { it.withCheckoutCleared(lastPayment = null) }
                     log("Checkout session ended")
                 }
             }
@@ -596,14 +582,7 @@ class NexoEmulatorController(
             .onSuccess {
                 conn.session = null
                 if (connection === conn) {
-                    _state.update {
-                        it.copy(
-                            sessionId = null,
-                            basket = emptyList(),
-                            basketTotal = "0.00",
-                            basketTax = "0.00",
-                        )
-                    }
+                    _state.update { it.withCheckoutCleared() }
                     log("Checkout ended")
                 }
             }
@@ -880,21 +859,30 @@ class NexoEmulatorController(
 
     private fun updateDisconnectedState() {
         _state.update {
-            it.copy(
+            it.withCheckoutCleared(lastPayment = null).copy(
                 connection = ConnectionStatus(ConnectionPhase.DISCONNECTED),
                 tls = TlsStatus.Unknown, // per-connection fact; stale FAILED would outlive it
-                sessionId = null,
-                basket = emptyList(),
-                basketTotal = "0.00",
-                basketTax = "0.00",
                 paymentInProgress = false,
                 cardReadInProgress = false,
                 identifyInProgress = false,
-                lastPayment = null,
                 paymentOutcome = null,
             )
         }
     }
+
+    /** The checkout-scoped fields, reset for a fresh or ended checkout.
+     *  [lastPayment] survives by default: the payment summary stays visible
+     *  until the next checkout starts. */
+    private fun EmulatorState.withCheckoutCleared(
+        sessionId: String? = null,
+        lastPayment: String? = this.lastPayment,
+    ) = copy(
+        sessionId = sessionId,
+        basket = emptyList(),
+        basketTotal = "0.00",
+        basketTax = "0.00",
+        lastPayment = lastPayment,
+    )
 
     private fun publishBasket(basket: Basket) {
         _state.update { state ->
