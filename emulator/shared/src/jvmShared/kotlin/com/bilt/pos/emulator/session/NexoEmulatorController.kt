@@ -117,6 +117,14 @@ class NexoEmulatorController(
          *  outside a refund. */
         @Volatile var reversal: ReversalSession? = null,
     ) {
+        /** Set by [abort] for the current refund attempt. It covers the
+         *  windows the SDK's abort cannot: during the store lookup, the
+         *  reversal session's start roundtrip, and between the legs of a
+         *  split tender nothing abortable is on the wire — the refund job
+         *  checks this flag before every money movement. Cleared when the
+         *  next refund attempt is claimed. */
+        val refundAbortRequested = AtomicBoolean(false)
+
         /** Guards against a double-tap bracketing two terminal sessions:
          *  [session] is only installed once the Start roundtrip acknowledges. */
         val startClaimed = AtomicBoolean(false)
@@ -860,6 +868,7 @@ class NexoEmulatorController(
             log("Another operation is already in progress")
             return
         }
+        conn.refundAbortRequested.set(false)
         _state.update { it.copy(refundInProgress = true, paymentOutcome = null) }
         // An IO coroutine, not conn.dispatcher (that lane is the diagnostics
         // poller's): the store lookup and the reversal roundtrips all block
@@ -982,8 +991,16 @@ class NexoEmulatorController(
         // record of the reversal is what a retry checks
         var awardPending = award
         for (leg in legs) {
+            // the abort flag is the only brake while nothing is on the wire
+            // — an abort during the store lookup or between legs must stop
+            // the next money movement here
+            if (conn.refundAbortRequested.get()) {
+                publishRefundAborted(conn, results.size, legs.size)
+                return
+            }
             val attached = awardPending
-            val run = refundLeg(conn, sale, leg, items, attached) ?: return
+            val run = refundLeg(conn, sale, leg, items, attached, results.size, legs.size)
+                ?: return
             val awardReversed = attached != null && !run.awardFailed
             if (awardReversed) {
                 awardPending = null
@@ -999,6 +1016,27 @@ class NexoEmulatorController(
         }
     }
 
+    /** The outcome popup for a refund stopped by the abort flag: what
+     *  already landed stands (and is recorded); the rest was not sent. */
+    private fun publishRefundAborted(conn: Connection, completedLegs: Int, totalLegs: Int) {
+        val message = if (completedLegs == 0) {
+            "Refund aborted before any money moved"
+        } else {
+            "Refund aborted after $completedLegs of $totalLegs leg(s) — " +
+                "the completed refunds stand; the rest was not sent"
+        }
+        log(message)
+        if (connection === conn) {
+            _state.update {
+                it.copy(paymentOutcome = PaymentOutcome(
+                    success = false,
+                    title = "Refund aborted",
+                    message = message,
+                ))
+            }
+        }
+    }
+
     /** One leg's outcome: the terminal's result, and whether the attached
      *  award reversal failed (and was skipped) rather than committed. */
     private class LegRun(val result: RefundResult, val awardFailed: Boolean)
@@ -1011,6 +1049,8 @@ class NexoEmulatorController(
         leg: TransactionLeg,
         items: List<SaleItem>?,
         award: TransactionLeg?,
+        completedLegs: Int,
+        totalLegs: Int,
     ): LegRun? {
         log(
             "Starting referenced refund of sale ${sale.id.take(8)} " +
@@ -1037,6 +1077,14 @@ class NexoEmulatorController(
             conn.reversal = session
             try {
                 session.use {
+                    // an abort during the start roundtrip had nothing to
+                    // cancel (the reversal was not published yet) — this
+                    // check is what keeps the money from moving; from here
+                    // on the SDK abort reaches the flow itself
+                    if (conn.refundAbortRequested.get()) {
+                        publishRefundAborted(conn, completedLegs, totalLegs)
+                        return null
+                    }
                     return runLegFlow(session, items)
                 }
             } finally {
@@ -1226,16 +1274,20 @@ class NexoEmulatorController(
         // A refund in flight takes precedence — while one runs, no checkout
         // session can be active (they refuse to start together). abort() is
         // unordered on both session kinds: execute() overtakes the in-flight
-        // call instead of queueing behind it.
-        val reversal = conn.reversal
-        if (reversal != null) {
+        // call instead of queueing behind it. The flag is set regardless of
+        // whether a reversal is on the wire: an abort landing during the
+        // store lookup, a session start, or between split-tender legs has
+        // nothing to cancel, and the flag is what stops the refund before
+        // its next money movement.
+        if (_state.value.refundInProgress || conn.reversal != null) {
+            conn.refundAbortRequested.set(true)
             log("Aborting the refund…")
-            reversal.abort()
-                .onError { error ->
+            conn.reversal?.abort()
+                ?.onError { error ->
                     log("Abort failed: ${error.message}")
                     error.cause?.let { detailedLog(it.stackTraceToString()) }
                 }
-                .execute()
+                ?.execute()
             return
         }
         val session = conn.session

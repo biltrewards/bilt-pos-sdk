@@ -151,6 +151,24 @@ class NexoEmulatorControllerRefundTest {
         return store
     }
 
+    /** A store whose lookup blocks until released — pins an abort into the
+     *  window where the refund has nothing on the wire yet. */
+    private class LatchedLookupStore(private val delegate: SaleStore) : SaleStore {
+        val lookupEntered = java.util.concurrent.CountDownLatch(1)
+        val lookupRelease = java.util.concurrent.CountDownLatch(1)
+        override fun recordSale(sale: SaleRecord) = delegate.recordSale(sale)
+        override fun recordRefund(saleId: String, refund: RefundRecord) =
+            delegate.recordRefund(saleId, refund)
+        override fun recordVoid(saleId: String, voidRecord: VoidRecord) =
+            delegate.recordVoid(saleId, voidRecord)
+        override fun findSale(saleId: String): StoredSale? {
+            lookupEntered.countDown()
+            lookupRelease.await()
+            return delegate.findSale(saleId)
+        }
+        override fun listSales(limit: Int): List<StoredSale> = delegate.listSales(limit)
+    }
+
     /** A store whose refund write always fails — the disk-full case the
      *  outcome popup must not stay quiet about. */
     private class RefundWriteFailingStore(private val delegate: SaleStore) : SaleStore {
@@ -240,6 +258,34 @@ class NexoEmulatorControllerRefundTest {
             }
             assertEquals(paymentsBefore, requests.count { "\"PaymentRequest\"" in it })
             assertEquals(1, assertNotNull(store.findSale("sale-1")).refunds.size)
+        }
+    }
+
+    @Test
+    fun abortBeforeAnythingIsOnTheWireStopsTheRefund() {
+        val store = LatchedLookupStore(storeWithOneSale())
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+
+            controller.refundSale("sale-1")
+            // the refund is now parked in the store lookup: nothing on the
+            // wire, no reversal session yet — the flag is the only brake
+            assertTrue(store.lookupEntered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            controller.abort()
+            store.lookupRelease.countDown()
+
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertEquals("Refund aborted", outcome.title)
+            assertTrue("before any money moved" in outcome.message, outcome.message)
+            // no refund reached the terminal and nothing was recorded
+            assertTrue(requests.none { "\"PaymentRequest\"" in it })
+            assertTrue(assertNotNull(store.findSale("sale-1")).refunds.isEmpty())
         }
     }
 
