@@ -73,6 +73,14 @@ data class SaleRecord(
     fun leg(type: LegType): TransactionLeg? = legs.firstOrNull { it.type == type }
 }
 
+/** One returned line of an item-based refund: how much of the sold
+ *  quantity of [sku] this refund gave back. */
+@Serializable
+data class RefundedItem(
+    val sku: String,
+    val quantity: Int,
+)
+
 /** A refund issued against a stored sale. */
 @Serializable
 data class RefundRecord(
@@ -82,6 +90,12 @@ data class RefundRecord(
     val poiTransactionId: String? = null,
     val poiTimestamp: String? = null,
     val recordedAt: String,
+    /** True for a full-amount refund of the money leg — the sale has
+     *  nothing left to refund after it. */
+    val full: Boolean = false,
+    /** The returned items of an item-based refund; empty for a full-amount
+     *  refund. What was already returned is not returnable again. */
+    val items: List<RefundedItem> = emptyList(),
 )
 
 /** A void issued against a stored sale. */
@@ -107,5 +121,15 @@ data class StoredSale(
     /** A void must not run on a voided or already partially refunded sale. */
     val voidable: Boolean get() = voided == null && refunds.isEmpty()
 
-    val refundable: Boolean get() = voided == null
+    /** A full-amount refund exhausts the sale for good. Refund records
+     *  from before the flag existed count as partial — they may enable a
+     *  refund the acquirer then declines, never the other way around. */
+    val fullyRefunded: Boolean get() = refunds.any { it.full }
+
+    val refundable: Boolean get() = voided == null && !fullyRefunded
+
+    /** How much of the sold quantity of [sku] earlier refunds already
+     *  returned; what remains is the most a further refund may return. */
+    fun refundedQuantity(sku: String): Int =
+        refunds.sumOf { refund -> refund.items.filter { it.sku == sku }.sumOf { it.quantity } }
 }

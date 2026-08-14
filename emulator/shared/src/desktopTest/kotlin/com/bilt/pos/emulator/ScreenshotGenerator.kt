@@ -34,22 +34,28 @@ class ScreenshotGenerator {
     private class FakeController(state: EmulatorState) : EmulatorController {
         override val state: StateFlow<EmulatorState> = MutableStateFlow(state)
         override fun autodetectAddress() = Unit
-        override fun connect(address: String, encryptionEnabled: Boolean, passphraseOverride: String?) = Unit
+        override fun connect(
+            address: String,
+            encryptionEnabled: Boolean,
+            passphraseOverride: String?,
+            adbTunnel: Boolean,
+        ) = Unit
         override fun disconnect() = Unit
         override fun startSession(identifyOnStart: Boolean) = Unit
         override fun endSession() = Unit
         override fun addProduct(product: Product) = Unit
         override fun settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?) = Unit
         override fun acquireCard() = Unit
+        override fun refundSale(saleId: String, skus: Set<String>?) = Unit
         override fun abort() = Unit
         override fun dismissPaymentOutcome() = Unit
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
     private fun render(state: EmulatorState, file: File, initialTab: EmulatorTab = EmulatorTab.SALE) {
-        // 1100x800 dp at 2x density — the desktop window's default size,
+        // 1100x900 dp at 2x density — the desktop window's default size,
         // above the 700dp breakpoint so the wide layout renders
-        val scene = ImageComposeScene(width = 2200, height = 1600, density = Density(2f)) {
+        val scene = ImageComposeScene(width = 2200, height = 1800, density = Density(2f)) {
             EmulatorApp(FakeController(state), MockProductProvider.products(), initialTab)
         }
         val png = scene.render().encodeToData(EncodedImageFormat.PNG)!!.bytes
@@ -136,6 +142,7 @@ class ScreenshotGenerator {
                         SaleItemUi("SKU-007", "Coffee Beans 1kg", 1, 4250),
                     ),
                     refunded = true,
+                    fullyRefunded = true,
                 ),
                 StoredSaleUi(
                     id = "e2c76a91-3d40-4b6f-95c8-1a09d4f7b325",

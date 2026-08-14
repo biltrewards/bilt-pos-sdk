@@ -45,10 +45,17 @@ data class BasketLine(
     val lineTotal: String,
 )
 
-/** Outcome of the last payment attempt, shown as a popup until dismissed. */
+/** Outcome of the last payment or refund attempt, shown as a popup until
+ *  dismissed. */
 data class PaymentOutcome(
     val success: Boolean,
+    /** Dialog title, e.g. "Payment successful" or "Refund failed". */
+    val title: String,
     val message: String,
+    /** The transaction's receipt as the terminal rendered it (customer
+     *  copy, falling back to the merchant copy); null when the terminal
+     *  returned none. */
+    val receipt: String? = null,
 )
 
 /**
@@ -92,12 +99,20 @@ data class AcquiredCard(
 data class SaleItemUi(
     val sku: String,
     val description: String,
+    /** Quantity sold. */
     val quantity: Int,
-    /** Line total in minor currency units (cents), so per-item refund
-     *  selections sum as Longs instead of decimal-string arithmetic. */
-    val lineTotalMinor: Long,
+    /** What an item-based refund returns for this line — shelf price plus
+     *  tax of the [remainingQuantity], matching the credit line the refund
+     *  cart will ring — in minor currency units (cents), so selections sum
+     *  as Longs instead of decimal-string arithmetic. */
+    val refundMinor: Long,
+    /** Quantity earlier refunds have not returned yet; zero means the line
+     *  cannot be refunded again. */
+    val remainingQuantity: Int = quantity,
 ) {
-    val lineTotalLabel: String get() = "$" + minorUnitsToDecimal(lineTotalMinor)
+    val refundLabel: String get() = "$" + minorUnitsToDecimal(refundMinor)
+
+    val refundedQuantity: Int get() = quantity - remainingQuantity
 }
 
 /**
@@ -117,10 +132,13 @@ data class StoredSaleUi(
     val items: List<SaleItemUi> = emptyList(),
     /** True when refunds were already recorded against the sale. */
     val refunded: Boolean = false,
+    /** True once a full-amount refund ran — nothing left to refund. */
+    val fullyRefunded: Boolean = false,
     val voided: Boolean = false,
 ) {
-    /** A voided sale cannot be refunded (mirrors `StoredSale.refundable`). */
-    val refundable: Boolean get() = !voided
+    /** A voided or fully refunded sale cannot be refunded again (mirrors
+     *  `StoredSale.refundable`). */
+    val refundable: Boolean get() = !voided && !fullyRefunded
 
     val memberLabel: String get() = memberId?.let { "member $it" } ?: "guest"
 
@@ -131,7 +149,8 @@ data class StoredSaleUi(
             memberLabel,
             when {
                 voided -> "voided"
-                refunded -> "refunded"
+                fullyRefunded -> "refunded"
+                refunded -> "partially refunded"
                 else -> null
             },
         ).joinToString(" · ")
@@ -160,12 +179,14 @@ data class EmulatorState(
     /** True while the session-start member identification prompt is on the
      *  wire. */
     val identifyInProgress: Boolean = false,
+    /** True while a referenced refund (ReversalSession) is on the wire. */
+    val refundInProgress: Boolean = false,
     /** One-line summary of the checkout's completed payment; null until
      *  paid. A fully collected payment ends the checkout automatically; the
      *  summary stays visible until the next one starts. */
     val lastPayment: String? = null,
-    /** Success/failure of the last payment attempt, rendered as a popup
-     *  until dismissed; cleared when a new payment starts. */
+    /** Success/failure of the last payment or refund attempt, rendered as
+     *  a popup until dismissed; cleared when a new attempt starts. */
     val paymentOutcome: PaymentOutcome? = null,
     /** Last terminal card read that carried a full card number; the gift
      *  card field adopts each new read. */
@@ -196,8 +217,17 @@ interface EmulatorController {
      * @param encryptionEnabled whether to encrypt messages on this connection
      * @param passphraseOverride passphrase entered in the UI; blank/null falls
      *   back to the configured `NEXO_PASSPHRASE`
+     * @param adbTunnel connect through a localhost `adb forward` tunnel to
+     *   the device instead of dialing it directly — the way around macOS
+     *   denying the JVM process local-network access. Requires the terminal
+     *   attached via adb (USB, or wifi adb at the same address).
      */
-    fun connect(address: String, encryptionEnabled: Boolean, passphraseOverride: String? = null)
+    fun connect(
+        address: String,
+        encryptionEnabled: Boolean,
+        passphraseOverride: String? = null,
+        adbTunnel: Boolean = false,
+    )
 
     fun disconnect()
 
@@ -230,6 +260,18 @@ interface EmulatorController {
      * masked-only read is just logged.
      */
     fun acquireCard()
+
+    /**
+     * Referenced refund of the stored sale [saleId], run on a fresh
+     * ReversalSession against the connected terminal — the originating
+     * checkout is long gone; the stored transaction references identify
+     * what to reverse. A null [skus] refunds the sale's money leg in full;
+     * otherwise the selected items are rung into the session's refund cart
+     * (shelf price plus tax per line) and refunded item-based. Requires a
+     * connection with no active checkout session. The outcome reports as
+     * [EmulatorState.paymentOutcome], like a payment.
+     */
+    fun refundSale(saleId: String, skus: Set<String>? = null)
 
     /**
      * Abort whatever is in flight, mirroring the SDK's operation-scoped

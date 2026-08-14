@@ -94,12 +94,23 @@ public final class ReceiptHelper {
     /**
      * Deserializes a {@link ReceiptType} from a Base64-encoded XML string.
      *
-     * @param base64 the Base64-encoded XML string (as found in {@code OutputXHTML})
+     * <p>Some terminals put the receipt XML into {@code OutputXHTML} raw,
+     * skipping the Base64 encoding the schema calls for. A payload opening
+     * with {@code '<'} cannot be Base64 ({@code '<'} is outside the
+     * alphabet), so it is unambiguously the raw form and parsed as XML
+     * directly.
+     *
+     * @param base64 the Base64-encoded (or raw) XML string, as found in
+     *        {@code OutputXHTML}
      * @return the deserialized receipt
      * @throws JAXBException if deserialization fails
      */
     public static ReceiptType fromBase64(String base64) throws JAXBException {
-        String xml = new String(Base64.getDecoder().decode(base64), StandardCharsets.UTF_8);
+        String payload = base64.trim();
+        if (payload.startsWith("<")) {
+            return fromXml(payload);
+        }
+        String xml = new String(Base64.getDecoder().decode(payload), StandardCharsets.UTF_8);
         return fromXml(xml);
     }
 

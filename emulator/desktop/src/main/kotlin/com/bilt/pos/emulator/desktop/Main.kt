@@ -30,7 +30,7 @@ fun main() {
         Window(
             onCloseRequest = ::exitApplication,
             title = "Bilt POS Emulator",
-            state = rememberWindowState(width = 1100.dp, height = 800.dp),
+            state = rememberWindowState(width = 1100.dp, height = 900.dp),
         ) {
             EmulatorApp(controller, MockProductProvider.products())
         }

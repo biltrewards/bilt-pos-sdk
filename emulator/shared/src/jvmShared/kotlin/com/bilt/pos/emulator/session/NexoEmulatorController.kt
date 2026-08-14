@@ -1,13 +1,25 @@
 package com.bilt.pos.emulator.session
 
 import com.bilt.pos.emulator.catalog.Product
+import com.bilt.pos.emulator.store.LegType
+import com.bilt.pos.emulator.store.RefundRecord
+import com.bilt.pos.emulator.store.RefundedItem
+import com.bilt.pos.emulator.store.SaleItem
+import com.bilt.pos.emulator.store.SaleRecord
 import com.bilt.pos.emulator.store.SaleStore
 import com.bilt.pos.emulator.store.StoredSale
+import com.bilt.pos.emulator.store.TransactionLeg
 import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient
 import com.bilt.pos.nexo.security.SecurityKey
 import com.bilt.pos.session.CheckoutSession
+import com.bilt.pos.session.Receipt
+import com.bilt.pos.session.RefundResult
+import com.bilt.pos.session.ReversalDecision
+import com.bilt.pos.session.ReversalSession
+import com.bilt.pos.session.ReversalStep
 import com.bilt.pos.session.SessionErrorCode
+import com.bilt.pos.session.SessionException
 import com.bilt.pos.session.Terminal
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketItem
@@ -96,6 +108,9 @@ class NexoEmulatorController(
         val dispatcher: CoroutineDispatcher,
         val client: BiltNexoTerminalClient,
         val terminal: Terminal,
+        /** The adb forward this connection runs through; null for a direct
+         *  connection. Removed from the adb server on teardown. */
+        val tunnel: AdbTunnel.Tunnel? = null,
         @Volatile var session: CheckoutSession? = null,
     ) {
         /** Guards against a double-tap bracketing two terminal sessions:
@@ -128,14 +143,27 @@ class NexoEmulatorController(
     @Volatile
     private var connection: Connection? = null
 
+    /** Bumped by every teardown, captured by connect(): the tunnel comes up
+     *  on an IO coroutine, and its continuation must not install a
+     *  connection the operator has since disconnected or replaced. */
+    private val connectEpoch = java.util.concurrent.atomic.AtomicInteger()
+
     /** Serial, so overlapping refreshes publish in launch order and the
      *  newest sale wins. Declared before the init block, which triggers
      *  refreshSales(). */
     private val salesRefreshDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     init {
-        // SDK internals log via JUL; surface them on the Detailed tab
-        JulLogCapture.install(::detailedLog)
+        // SDK internals log via JUL; surface them on the Detailed tab —
+        // and warnings on the curated Events feed too, first line only: an
+        // operator watching Events must not miss a WARNING that scrolled
+        // past among Detailed's FINE-level protocol chatter
+        JulLogCapture.install { message ->
+            detailedLog(message)
+            if (message.startsWith("WARNING") || message.startsWith("SEVERE")) {
+                log("SDK ${message.lineSequence().first()}")
+            }
+        }
         // recordSale keeps the list current from here on
         refreshSales()
     }
@@ -158,10 +186,16 @@ class NexoEmulatorController(
         }
     }
 
-    override fun connect(address: String, encryptionEnabled: Boolean, passphraseOverride: String?) {
+    override fun connect(
+        address: String,
+        encryptionEnabled: Boolean,
+        passphraseOverride: String?,
+        adbTunnel: Boolean,
+    ) {
         if (!tryDisconnect()) {
             return
         }
+        val epoch = connectEpoch.get()
 
         val passphrase = passphraseOverride?.takeIf { it.isNotBlank() } ?: config.passphrase
         val encrypt = encryptionEnabled && !passphrase.isNullOrBlank()
@@ -177,10 +211,59 @@ class NexoEmulatorController(
                 encryptionEnabled = encrypt,
             )
         }
-        val endpoint = "https://$address:8443/nexo"
+
+        if (!adbTunnel) {
+            openConnection(host = address, port = 8443, tunnel = null,
+                encrypt = encrypt, passphrase = passphrase)
+            return
+        }
+        // The forward comes up on an IO coroutine — adb is a subprocess and
+        // may first have to start its server; connect() runs on the UI thread
+        log("Opening adb tunnel to $address port 8443…")
+        scope.launch(Dispatchers.IO) {
+            val tunnel = try {
+                AdbTunnel.open(address)
+            } catch (e: Exception) {
+                if (connectEpoch.get() == epoch) {
+                    _state.update {
+                        it.copy(connection = ConnectionStatus(
+                            ConnectionPhase.ERROR,
+                            e.message ?: "adb tunnel failed",
+                        ))
+                    }
+                    log("adb tunnel failed: ${e.message}")
+                }
+                return@launch
+            }
+            // disconnected or reconnected while the forward was coming up —
+            // this connect attempt is stale, remove its forward again
+            if (connectEpoch.get() != epoch) {
+                AdbTunnel.close(tunnel)
+                return@launch
+            }
+            log("adb tunnel up — localhost:${tunnel.localPort} → ${tunnel.serial} port 8443")
+            openConnection(host = "127.0.0.1", port = tunnel.localPort, tunnel = tunnel,
+                encrypt = encrypt, passphrase = passphrase)
+        }
+    }
+
+    /** Builds the client and installs the connection against
+     *  `https://[host]:[port]/nexo` — the terminal itself, or the local end
+     *  of [tunnel]. */
+    private fun openConnection(
+        host: String,
+        port: Int,
+        tunnel: AdbTunnel.Tunnel?,
+        encrypt: Boolean,
+        passphrase: String?,
+    ) {
+        val endpoint = "https://$host:$port/nexo"
         log("Connecting to $endpoint (encryption=$encrypt)")
 
-        val client = createNexoClient(endpoint, encrypt, passphrase) ?: return
+        val client = createNexoClient(endpoint, encrypt, passphrase) ?: run {
+            tunnel?.let { t -> scope.launch(Dispatchers.IO) { AdbTunnel.close(t) } }
+            return
+        }
         // The device-level handle: diagnose() is session-free, so the
         // connectivity loop needs no checkout session — just the terminal
         val terminal = Terminal.builder()
@@ -196,20 +279,25 @@ class NexoEmulatorController(
             dispatcher = Dispatchers.IO.limitedParallelism(1),
             client = client,
             terminal = terminal,
+            tunnel = tunnel,
         )
         connection = conn
 
         runDiagnosisLoop(conn, terminal)
-        verifyTls(conn, address)
+        // Probed at the endpoint actually used: through a tunnel the direct
+        // route is exactly what macOS blocks for this process. The SAN
+        // pattern check is unaffected — it reads the certificate, not the
+        // address dialed.
+        verifyTls(conn, host, port)
     }
 
     /** Strict TLS probe, independent of the always-permissive payload
      *  channel. A CA that was configured but failed to load reports as a
      *  TLS failure, not as "no CA configured". */
-    private fun verifyTls(conn: Connection, address: String) {
+    private fun verifyTls(conn: Connection, host: String, port: Int) {
         conn.scope.launch(Dispatchers.IO) {
             val tls = config.caError?.let { TlsStatus.Failed(it) }
-                ?: TlsVerifier.verify(address, 8443, config.caPem, config.hostnamePattern)
+                ?: TlsVerifier.verify(host, port, config.caPem, config.hostnamePattern)
             if (isActive) {
                 _state.update { it.copy(tls = tls) }
                 log(tls.label)
@@ -265,6 +353,9 @@ class NexoEmulatorController(
      *  is still landing. */
     private fun tryDisconnect(): Boolean {
         val conn = connection ?: run {
+            // still an epoch bump: a tunnel may be coming up with no
+            // connection installed yet, and it must see this teardown
+            connectEpoch.incrementAndGet()
             updateDisconnectedState()
             return true
         }
@@ -272,7 +363,13 @@ class NexoEmulatorController(
             log("A payment is in progress — abort it or wait for it to finish before disconnecting")
             return false
         }
+        if (_state.value.refundInProgress) {
+            log("A refund is in progress — wait for it to finish before disconnecting")
+            return false
+        }
+        connectEpoch.incrementAndGet()
         connection = null
+        val hadSession = conn.session != null
         conn.scope.cancel()
         conn.terminal.close()
         // End bracket, best-effort: the async end() queues behind anything
@@ -280,6 +377,17 @@ class NexoEmulatorController(
         conn.session?.end()?.onError { error ->
             detailedLog("End bracket on disconnect failed: ${error.message}")
         }?.execute()
+        conn.tunnel?.let { tunnel ->
+            scope.launch(Dispatchers.IO) {
+                // the End bracket above still crosses this forward — give it
+                // a grace before pulling the road out from under it
+                if (hadSession) {
+                    delay(10.seconds)
+                }
+                AdbTunnel.close(tunnel)
+                log("adb tunnel closed (localhost:${tunnel.localPort})")
+            }
+        }
         log("Disconnected")
         updateDisconnectedState()
         return true
@@ -294,10 +402,15 @@ class NexoEmulatorController(
     fun shutdown() {
         val conn = connection
         if (conn != null) {
+            connectEpoch.incrementAndGet()
             connection = null
             conn.scope.cancel()
             conn.terminal.close()
             conn.session?.let { runCatching { it.close() } }
+            // after the blocking session close — its End bracket crossed the
+            // forward; an unremoved forward would outlive the process in the
+            // adb server
+            conn.tunnel?.let { AdbTunnel.close(it) }
         }
         // a just-landed sale may still be writing; it must reach disk
         runBlocking {
@@ -314,6 +427,12 @@ class NexoEmulatorController(
         }
         if (conn.session != null) {
             log("A checkout session is already active — end it first")
+            return
+        }
+        // the reversal session brackets the terminal too — refundSale's
+        // mirror guard refuses while a checkout is active or starting
+        if (_state.value.refundInProgress) {
+            log("A refund is in progress — wait for it to finish")
             return
         }
         if (!conn.startClaimed.compareAndSet(false, true)) {
@@ -548,6 +667,7 @@ class NexoEmulatorController(
                     _state.update {
                         it.copy(paymentOutcome = PaymentOutcome(
                             success = false,
+                            title = "Payment failed",
                             message = "${error.code}\n${error.message}",
                         ))
                     }
@@ -685,6 +805,258 @@ class NexoEmulatorController(
             .execute()
     }
 
+    override fun refundSale(saleId: String, skus: Set<String>?) {
+        val conn = connection
+        if (conn == null) {
+            log("Not connected — connect before refunding")
+            return
+        }
+        // A reversal session brackets the terminal the way a checkout does,
+        // so one must not open while a checkout is active (or starting —
+        // startSession refuses while refundInProgress for the same reason)
+        if (conn.session != null || conn.startClaimed.get()) {
+            log("A checkout session is active — end it before refunding")
+            return
+        }
+        // Shares the operation claim with pay/acquireCard/identify so a
+        // refund can't run concurrently with a checkout operation
+        if (!conn.operationClaimed.compareAndSet(false, true)) {
+            log("Another operation is already in progress")
+            return
+        }
+        _state.update { it.copy(refundInProgress = true, paymentOutcome = null) }
+        // An IO coroutine, not conn.dispatcher (that lane is the diagnostics
+        // poller's): the store lookup and the reversal roundtrips all block
+        val job = conn.scope.launch(Dispatchers.IO) {
+            val stored = try {
+                saleStore.findSale(saleId)
+            } catch (e: Exception) {
+                log("Failed to load the stored sale: ${e.message}")
+                detailedLog(e.stackTraceToString())
+                return@launch
+            }
+            if (stored == null) {
+                log("Sale $saleId is not in the store")
+                return@launch
+            }
+            if (!stored.refundable) {
+                log(
+                    if (stored.voided != null) {
+                        "The sale was voided — nothing left to refund"
+                    } else {
+                        "The sale was already refunded in full — nothing left to refund"
+                    }
+                )
+                return@launch
+            }
+            val sale = stored.sale
+            // The linked refund references the sale's money leg: the card
+            // leg, or — for a gift-card-only sale, which has no card leg —
+            // the stored value leg (the same reference the SDK designates
+            // as primary for same-session reversals)
+            val moneyLeg = sale.leg(LegType.CARD) ?: sale.leg(LegType.STORED_VALUE)
+            if (moneyLeg == null) {
+                log("The sale has no money leg (rewards covered everything) — only a void could reverse it")
+                return@launch
+            }
+            // Ring only what earlier refunds have not returned yet — the
+            // store's refund history caps every line
+            val items = skus?.let { picked ->
+                sale.items.filter { it.sku in picked }.mapNotNull { item ->
+                    val remaining = item.quantity - stored.refundedQuantity(item.sku)
+                    when {
+                        remaining >= item.quantity -> item
+                        remaining > 0 -> {
+                            log(
+                                "${item.description}: ${item.quantity - remaining} of " +
+                                    "${item.quantity} already refunded — returning the remaining $remaining"
+                            )
+                            item.copy(quantity = remaining)
+                        }
+                        else -> {
+                            log("${item.description} is already fully refunded — skipped")
+                            null
+                        }
+                    }
+                }
+            }
+            if (items != null && items.isEmpty()) {
+                log("Nothing left to refund among the selected items")
+                return@launch
+            }
+            executeRefund(conn, sale, moneyLeg, items)
+        }
+        // Releases on every path, including a job cancelled before it ran
+        // (disconnect racing this call). The claim always (per-connection);
+        // the shared UI flag only while this connection is still current —
+        // mirrors finishPaymentAttempt.
+        job.invokeOnCompletion {
+            conn.operationClaimed.set(false)
+            if (connection === conn) {
+                _state.update { it.copy(refundInProgress = false) }
+            }
+        }
+    }
+
+    /**
+     * Runs the referenced refund on a fresh [ReversalSession], blocking the
+     * calling IO coroutine: a full linked refund of [moneyLeg] when [items]
+     * is null, otherwise an item-based refund of the returned [items] via
+     * the session's refund cart. Records the refund into the store when
+     * money moved.
+     */
+    private fun executeRefund(
+        conn: Connection,
+        sale: SaleRecord,
+        moneyLeg: TransactionLeg,
+        items: List<SaleItem>?,
+    ) {
+        val award = sale.leg(LegType.AWARD)
+        log(
+            "Starting referenced refund of sale ${sale.id.take(8)} " +
+                "(${moneyLeg.type} leg ${moneyLeg.poiTransactionId}" +
+                (award?.let { ", award ${it.poiTransactionId}" } ?: "") + ")…"
+        )
+        try {
+            val builder = ReversalSession.builder()
+                .client(conn.client)
+                // the record persisted the original sale's identity exactly
+                // so a later referenced reversal can present it
+                .saleId(sale.saleId)
+                .poiId(sale.poiId)
+                .currency(sale.currency)
+                .poiTransactionId(moneyLeg.poiTransactionId)
+            parseInstant(moneyLeg.poiTimestamp)?.let(builder::poiTransactionTimestamp)
+            award?.let {
+                builder.awardPoiTransactionId(it.poiTransactionId)
+                parseInstant(it.poiTimestamp)?.let(builder::awardPoiTransactionTimestamp)
+            }
+            sale.memberId?.let(builder::memberId)
+            builder.start().get().use { session ->
+                val flow = if (items == null) {
+                    session.refund()
+                } else {
+                    items.forEach { item ->
+                        // rung exactly as sold — shelf price and tax rate —
+                        // so the credit total is price plus tax of the
+                        // returns; rebate/points proration is deliberately
+                        // out of scope, like the all-or-nothing award
+                        session.basket().addItem(
+                            BasketItem.builder()
+                                .sku(item.sku)
+                                .description(item.description)
+                                .quantity(item.quantity)
+                                .unitPrice(BigDecimal(item.unitPrice))
+                                .apply { item.category?.let(::category) }
+                                .apply { item.taxRate?.let { rate -> taxRate(BigDecimal(rate)) } }
+                                .build()
+                        )
+                    }
+                    session.refundBasket()
+                }
+                val result = flow
+                    .onError { step, error ->
+                        log("Refund step ${step ?: "(none ran)"} failed: ${error.message}")
+                        // the SDK's default policy, replicated so logging
+                        // doesn't change behavior: the award reversal is
+                        // best-effort, a failed tender refund aborts
+                        if (step == ReversalStep.AWARD) ReversalDecision.SKIP
+                        else ReversalDecision.ABORT
+                    }
+                    .get()
+                if (result.isSuccess) {
+                    // Money moved on the terminal, so the refund is recorded
+                    // even when the operator disconnected mid-call — same
+                    // rationale as persistSale
+                    recordRefund(sale.id, result, items)
+                    if (connection === conn) {
+                        publishRefundResult(result)
+                    }
+                }
+            }
+        } catch (e: SessionException) {
+            if (connection === conn) {
+                log("Refund failed: ${e.error.code} — ${e.error.message}")
+                _state.update {
+                    it.copy(paymentOutcome = PaymentOutcome(
+                        success = false,
+                        title = "Refund failed",
+                        message = "${e.error.code}\n${e.error.message}",
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            // e.g. the session start being rejected by the terminal
+            if (connection === conn) {
+                log("Refund not completed: ${e.message}")
+                _state.update {
+                    it.copy(paymentOutcome = PaymentOutcome(
+                        success = false,
+                        title = "Refund failed",
+                        message = "Refund not completed\n${e.message}",
+                    ))
+                }
+                detailedLog(e.stackTraceToString())
+            }
+        }
+    }
+
+    /** Stores the refund against its sale — including what it covered, so a
+     *  later refund can't return the same thing again; best-effort, like
+     *  persistSale. */
+    private fun recordRefund(saleId: String, result: RefundResult, items: List<SaleItem>?) {
+        try {
+            saleStore.recordRefund(saleId, RefundRecord(
+                amount = result.refundedAmount?.toPlainString(),
+                poiTransactionId = result.poiTransactionId,
+                poiTimestamp = result.poiTransactionTimestamp?.toString(),
+                recordedAt = Instant.now().toString(),
+                full = items == null,
+                items = items.orEmpty().map { RefundedItem(it.sku, it.quantity) },
+            ))
+            // keep the Refund tab's list (refunded badges) current
+            refreshSales()
+        } catch (e: Exception) {
+            log("Failed to store the refund: ${e.message}")
+            detailedLog(e.stackTraceToString())
+        }
+    }
+
+    private fun publishRefundResult(result: RefundResult) {
+        val parts = buildList {
+            // the terminal does not always echo the refunded amount
+            add("Refunded" + (result.refundedAmount?.let { " $${it.toPlainString()}" } ?: ""))
+            if (result.pointsReversed > 0) {
+                add(
+                    "reversed ${result.pointsReversed} pts" +
+                        " (balance ${result.remainingPointBalance})"
+                )
+            }
+            result.approvalCode?.let { add("approval $it") }
+        }
+        val summary = parts.joinToString(", ")
+        _state.update {
+            it.copy(paymentOutcome = PaymentOutcome(
+                success = true,
+                title = "Refund complete",
+                message = parts.joinToString("\n"),
+                receipt = receiptText(result.customerReceipt, result.merchantReceipt),
+            ))
+        }
+        log(summary)
+    }
+
+    /** The popup's receipt block: the customer copy when the terminal
+     *  returned one, else the merchant copy; the plain-text rendering
+     *  preferred over the HTML body. */
+    private fun receiptText(customer: Receipt?, merchant: Receipt?): String? =
+        (customer ?: merchant)?.let { it.plainText ?: it.html }
+
+    /** The stored ISO instant, or null for a malformed record — the refund
+     *  then runs on the transaction id alone rather than not at all. */
+    private fun parseInstant(iso: String?): Instant? =
+        iso?.let { runCatching { Instant.parse(it) }.getOrNull() }
+
     override fun abort() {
         val conn = connection
         val session = conn?.session
@@ -767,7 +1139,12 @@ class NexoEmulatorController(
         _state.update {
             it.copy(
                 lastPayment = summary,
-                paymentOutcome = PaymentOutcome(success = true, message = popup),
+                paymentOutcome = PaymentOutcome(
+                    success = true,
+                    title = "Payment successful",
+                    message = popup,
+                    receipt = receiptText(result.customerReceipt, result.merchantReceipt),
+                ),
             )
         }
         log(summary)
@@ -799,17 +1176,33 @@ class NexoEmulatorController(
         completedAtLabel = formatCompletedAt(sale.completedAt),
         totalAmount = sale.authorizedAmount,
         memberId = sale.memberId,
-        items = sale.items.map {
-            SaleItemUi(it.sku, it.description, it.quantity, minorUnits(it.lineTotal))
+        items = sale.items.map { item ->
+            val remaining = (item.quantity - refundedQuantity(item.sku))
+                .coerceIn(0, item.quantity)
+            SaleItemUi(
+                sku = item.sku,
+                description = item.description,
+                quantity = item.quantity,
+                refundMinor = refundMinor(item, remaining),
+                remainingQuantity = remaining,
+            )
         },
         refunded = refunds.isNotEmpty(),
+        fullyRefunded = fullyRefunded,
         voided = voided != null,
     )
 
-    /** Cents from the store's plain decimal string; a malformed amount
+    /** What an item-based refund of [quantity] units of this line returns,
+     *  in cents: shelf price plus tax, computed exactly like the refund
+     *  cart's credit line (gross × rate, HALF_UP at scale 2) so the amount
+     *  shown on the Refund button is the amount charged. A malformed amount
      *  degrades to zero rather than dropping the sale. */
-    private fun minorUnits(amount: String): Long = try {
-        BigDecimal(amount).movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValueExact()
+    private fun refundMinor(item: SaleItem, quantity: Int): Long = try {
+        val gross = BigDecimal(item.unitPrice).multiply(BigDecimal(quantity))
+        val tax = item.taxRate
+            ?.let { gross.multiply(BigDecimal(it)).setScale(2, RoundingMode.HALF_UP) }
+            ?: BigDecimal.ZERO
+        gross.add(tax).movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValueExact()
     } catch (e: Exception) {
         0L
     }
@@ -880,6 +1273,7 @@ class NexoEmulatorController(
                 paymentInProgress = false,
                 cardReadInProgress = false,
                 identifyInProgress = false,
+                refundInProgress = false,
                 paymentOutcome = null,
             )
         }

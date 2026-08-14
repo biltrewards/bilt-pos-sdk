@@ -68,6 +68,20 @@ class ReceiptHelperTest {
     }
 
     @Test
+    void rawXmlPayloadIsParsedWithoutBase64Encoding() throws JAXBException {
+        // some terminals skip the Base64 encoding and put the receipt XML
+        // into OutputXHTML raw; '<' is outside the Base64 alphabet, so the
+        // raw form is detected and parsed directly
+        ReceiptType original = createSampleReceipt();
+        String rawXml = ReceiptHelper.toXml(original);
+
+        ReceiptType parsed = ReceiptHelper.fromBase64(rawXml);
+
+        assertEquals(original.getPlainTextReceipt(), parsed.getPlainTextReceipt());
+        assertEquals(original.getType(), parsed.getType());
+    }
+
+    @Test
     void htmlReceiptShouldRoundTripAsBase64Binary() throws JAXBException {
         ReceiptType original = new ReceiptType();
         original.setType(ReceiptCopyEnum.CUSTOMER);
