@@ -90,9 +90,13 @@ data class RefundRecord(
     val poiTransactionId: String? = null,
     val poiTimestamp: String? = null,
     val recordedAt: String,
-    /** True for a full-amount refund of the money leg — the sale has
-     *  nothing left to refund after it. */
+    /** True for a full refund of [leg] — that leg has nothing left to
+     *  refund after it. */
     val full: Boolean = false,
+    /** The original tender leg this refund drew from. Null on records from
+     *  before leg tracking; a legless full record counts for the whole
+     *  sale. */
+    val leg: LegType? = null,
     /** The returned items of an item-based refund; empty for a full-amount
      *  refund. What was already returned is not returnable again. */
     val items: List<RefundedItem> = emptyList(),
@@ -121,10 +125,25 @@ data class StoredSale(
     /** A void must not run on a voided or already partially refunded sale. */
     val voidable: Boolean get() = voided == null && refunds.isEmpty()
 
-    /** A full-amount refund exhausts the sale for good. Refund records
-     *  from before the flag existed count as partial — they may enable a
-     *  refund the acquirer then declines, never the other way around. */
-    val fullyRefunded: Boolean get() = refunds.any { it.full }
+    /** The sale's tender legs — what full refunds must cover. A split
+     *  tender has a card AND a stored value leg; refunding only one of
+     *  them leaves money charged. */
+    val moneyLegs: List<TransactionLeg>
+        get() = sale.legs.filter {
+            it.type == LegType.CARD || it.type == LegType.STORED_VALUE
+        }
+
+    /** True once full refunds returned every tender leg. A legless full
+     *  record predates leg tracking and counts for the whole sale; refund
+     *  records from before the flag existed count as partial — either may
+     *  enable a refund the acquirer then declines, never the other way
+     *  around. */
+    val fullyRefunded: Boolean
+        get() = refunds.any { it.full && it.leg == null } ||
+            (moneyLegs.isNotEmpty() && moneyLegs.all { legRefunded(it.type) })
+
+    /** Whether a full refund already returned the [type] tender leg. */
+    fun legRefunded(type: LegType): Boolean = refunds.any { it.full && it.leg == type }
 
     val refundable: Boolean get() = voided == null && !fullyRefunded
 

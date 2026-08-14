@@ -850,41 +850,52 @@ class NexoEmulatorController(
                 return@launch
             }
             val sale = stored.sale
-            // The linked refund references the sale's money leg: the card
-            // leg, or — for a gift-card-only sale, which has no card leg —
-            // the stored value leg (the same reference the SDK designates
-            // as primary for same-session reversals)
-            val moneyLeg = sale.leg(LegType.CARD) ?: sale.leg(LegType.STORED_VALUE)
-            if (moneyLeg == null) {
+            if (stored.moneyLegs.isEmpty()) {
                 log("The sale has no money leg (rewards covered everything) — only a void could reverse it")
                 return@launch
             }
-            // Ring only what earlier refunds have not returned yet — the
-            // store's refund history caps every line
-            val items = skus?.let { picked ->
-                sale.items.filter { it.sku in picked }.mapNotNull { item ->
-                    val remaining = item.quantity - stored.refundedQuantity(item.sku)
-                    when {
-                        remaining >= item.quantity -> item
-                        remaining > 0 -> {
-                            log(
-                                "${item.description}: ${item.quantity - remaining} of " +
-                                    "${item.quantity} already refunded — returning the remaining $remaining"
-                            )
-                            item.copy(quantity = remaining)
-                        }
-                        else -> {
-                            log("${item.description} is already fully refunded — skipped")
-                            null
-                        }
+            if (skus == null) {
+                // A full refund returns EVERY tender leg still standing — a
+                // split tender refunds the card and the gift card legs, each
+                // by its own linked refund; a leg an earlier full refund
+                // already returned is skipped, so a partial failure retries
+                // only what is outstanding
+                executeRefund(
+                    conn, sale,
+                    legs = stored.moneyLegs.filterNot { stored.legRefunded(it.type) },
+                    items = null,
+                )
+                return@launch
+            }
+            // Item refunds draw from the primary tender: the card leg, or —
+            // for a gift-card-only sale — the stored value leg (the same
+            // reference the SDK designates as primary for same-session
+            // reversals). Ring only what earlier refunds have not returned
+            // yet — the store's refund history caps every line.
+            val primaryLeg = stored.moneyLegs.firstOrNull { it.type == LegType.CARD }
+                ?: stored.moneyLegs.first()
+            val items = sale.items.filter { it.sku in skus }.mapNotNull { item ->
+                val remaining = item.quantity - stored.refundedQuantity(item.sku)
+                when {
+                    remaining >= item.quantity -> item
+                    remaining > 0 -> {
+                        log(
+                            "${item.description}: ${item.quantity - remaining} of " +
+                                "${item.quantity} already refunded — returning the remaining $remaining"
+                        )
+                        item.copy(quantity = remaining)
+                    }
+                    else -> {
+                        log("${item.description} is already fully refunded — skipped")
+                        null
                     }
                 }
             }
-            if (items != null && items.isEmpty()) {
+            if (items.isEmpty()) {
                 log("Nothing left to refund among the selected items")
                 return@launch
             }
-            executeRefund(conn, sale, moneyLeg, items)
+            executeRefund(conn, sale, legs = listOf(primaryLeg), items = items)
         }
         // Releases on every path, including a job cancelled before it ran
         // (disconnect racing this call). The claim always (per-connection);
@@ -899,22 +910,51 @@ class NexoEmulatorController(
     }
 
     /**
-     * Runs the referenced refund on a fresh [ReversalSession], blocking the
-     * calling IO coroutine: a full linked refund of [moneyLeg] when [items]
-     * is null, otherwise an item-based refund of the returned [items] via
-     * the session's refund cart. Records the refund into the store when
-     * money moved.
+     * Runs the referenced refund, blocking the calling IO coroutine: one
+     * fresh [ReversalSession] per tender leg in [legs] — a full linked
+     * refund of each when [items] is null, otherwise an item-based refund
+     * of the returned [items] via the (single) leg's refund cart. Each
+     * leg's refund is recorded into the store as its money moves, so a
+     * failure mid-way keeps what already landed and a retry covers only
+     * the outstanding legs. The success popup publishes once every leg is
+     * through; a failure publishes its own popup and stops the sequence.
      */
     private fun executeRefund(
         conn: Connection,
         sale: SaleRecord,
-        moneyLeg: TransactionLeg,
+        legs: List<TransactionLeg>,
         items: List<SaleItem>?,
     ) {
         val award = sale.leg(LegType.AWARD)
+        val results = mutableListOf<Pair<TransactionLeg, RefundResult>>()
+        for ((index, leg) in legs.withIndex()) {
+            // one award, one reversal: the award references ride the first
+            // leg's session only
+            val result = refundLeg(conn, sale, leg, items, award.takeIf { index == 0 })
+                ?: return
+            // Money moved on the terminal, so the refund is recorded even
+            // when the operator disconnected mid-call — same rationale as
+            // persistSale
+            recordRefund(sale.id, leg, result, items)
+            results += leg to result
+        }
+        if (connection === conn) {
+            publishRefundResult(results)
+        }
+    }
+
+    /** One leg's linked refund on its own [ReversalSession]; null after a
+     *  failure, which is logged and published as the outcome popup. */
+    private fun refundLeg(
+        conn: Connection,
+        sale: SaleRecord,
+        leg: TransactionLeg,
+        items: List<SaleItem>?,
+        award: TransactionLeg?,
+    ): RefundResult? {
         log(
             "Starting referenced refund of sale ${sale.id.take(8)} " +
-                "(${moneyLeg.type} leg ${moneyLeg.poiTransactionId}" +
+                "(${leg.type} leg ${leg.poiTransactionId}" +
                 (award?.let { ", award ${it.poiTransactionId}" } ?: "") + ")…"
         )
         try {
@@ -925,8 +965,8 @@ class NexoEmulatorController(
                 .saleId(sale.saleId)
                 .poiId(sale.poiId)
                 .currency(sale.currency)
-                .poiTransactionId(moneyLeg.poiTransactionId)
-            parseInstant(moneyLeg.poiTimestamp)?.let(builder::poiTransactionTimestamp)
+                .poiTransactionId(leg.poiTransactionId)
+            parseInstant(leg.poiTimestamp)?.let(builder::poiTransactionTimestamp)
             award?.let {
                 builder.awardPoiTransactionId(it.poiTransactionId)
                 parseInstant(it.poiTimestamp)?.let(builder::awardPoiTransactionTimestamp)
@@ -964,19 +1004,11 @@ class NexoEmulatorController(
                         else ReversalDecision.ABORT
                     }
                     .get()
-                if (result.isSuccess) {
-                    // Money moved on the terminal, so the refund is recorded
-                    // even when the operator disconnected mid-call — same
-                    // rationale as persistSale
-                    recordRefund(sale.id, result, items)
-                    if (connection === conn) {
-                        publishRefundResult(result)
-                    }
-                }
+                return result.takeIf { it.isSuccess }
             }
         } catch (e: SessionException) {
             if (connection === conn) {
-                log("Refund failed: ${e.error.code} — ${e.error.message}")
+                log("Refund failed (${leg.type} leg): ${e.error.code} — ${e.error.message}")
                 _state.update {
                     it.copy(paymentOutcome = PaymentOutcome(
                         success = false,
@@ -985,10 +1017,11 @@ class NexoEmulatorController(
                     ))
                 }
             }
+            return null
         } catch (e: Exception) {
             // e.g. the session start being rejected by the terminal
             if (connection === conn) {
-                log("Refund not completed: ${e.message}")
+                log("Refund not completed (${leg.type} leg): ${e.message}")
                 _state.update {
                     it.copy(paymentOutcome = PaymentOutcome(
                         success = false,
@@ -998,13 +1031,19 @@ class NexoEmulatorController(
                 }
                 detailedLog(e.stackTraceToString())
             }
+            return null
         }
     }
 
-    /** Stores the refund against its sale — including what it covered, so a
-     *  later refund can't return the same thing again; best-effort, like
-     *  persistSale. */
-    private fun recordRefund(saleId: String, result: RefundResult, items: List<SaleItem>?) {
+    /** Stores the refund against its sale — including which tender leg it
+     *  drew from and what it covered, so a later refund can't return the
+     *  same thing again; best-effort, like persistSale. */
+    private fun recordRefund(
+        saleId: String,
+        leg: TransactionLeg,
+        result: RefundResult,
+        items: List<SaleItem>?,
+    ) {
         try {
             saleStore.recordRefund(saleId, RefundRecord(
                 amount = result.refundedAmount?.toPlainString(),
@@ -1012,6 +1051,7 @@ class NexoEmulatorController(
                 poiTimestamp = result.poiTransactionTimestamp?.toString(),
                 recordedAt = Instant.now().toString(),
                 full = items == null,
+                leg = leg.type,
                 items = items.orEmpty().map { RefundedItem(it.sku, it.quantity) },
             ))
             // keep the Refund tab's list (refunded badges) current
@@ -1022,29 +1062,40 @@ class NexoEmulatorController(
         }
     }
 
-    private fun publishRefundResult(result: RefundResult) {
+    /** Publishes the outcome of a completed refund — one entry per tender
+     *  leg refunded (a split tender lists both). */
+    private fun publishRefundResult(results: List<Pair<TransactionLeg, RefundResult>>) {
         val parts = buildList {
-            // the terminal does not always echo the refunded amount
-            add("Refunded" + (result.refundedAmount?.let { " $${it.toPlainString()}" } ?: ""))
-            if (result.pointsReversed > 0) {
+            results.forEach { (leg, result) ->
                 add(
-                    "reversed ${result.pointsReversed} pts" +
-                        " (balance ${result.remainingPointBalance})"
+                    // the terminal does not always echo the refunded amount
+                    "Refunded" + (result.refundedAmount?.let { " $${it.toPlainString()}" } ?: "") +
+                        (if (results.size > 1) " (${legLabel(leg.type)})" else "")
                 )
             }
-            result.approvalCode?.let { add("approval $it") }
+            results.map { it.second }.firstOrNull { it.pointsReversed > 0 }?.let {
+                add("reversed ${it.pointsReversed} pts (balance ${it.remainingPointBalance})")
+            }
+            results.mapNotNull { it.second.approvalCode }.forEach { add("approval $it") }
         }
         val summary = parts.joinToString(", ")
+        // the receipt of the first leg — the primary tender's copy
+        val receipt = results.firstNotNullOfOrNull { (_, result) ->
+            receiptText(result.customerReceipt, result.merchantReceipt)
+        }
         _state.update {
             it.copy(paymentOutcome = PaymentOutcome(
                 success = true,
                 title = "Refund complete",
                 message = parts.joinToString("\n"),
-                receipt = receiptText(result.customerReceipt, result.merchantReceipt),
+                receipt = receipt,
             ))
         }
         log(summary)
     }
+
+    private fun legLabel(type: LegType): String =
+        if (type == LegType.STORED_VALUE) "gift card" else "card"
 
     /** The popup's receipt block: the customer copy when the terminal
      *  returned one, else the merchant copy; the plain-text rendering

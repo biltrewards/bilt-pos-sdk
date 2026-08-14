@@ -224,6 +224,60 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
+    fun splitTenderFullRefundReturnsEveryTenderLeg() {
+        val store = JsonlSaleStore(
+            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
+        )
+        store.recordSale(
+            SaleRecord(
+                id = "sale-2",
+                sessionId = "session-2",
+                saleId = "bilt-emulator",
+                poiId = "EMULATOR",
+                currency = "USD",
+                completedAt = "2026-08-06T11:00:00Z",
+                authorizedAmount = "30.00",
+                legs = listOf(
+                    TransactionLeg(LegType.CARD, "poi-card-2", amount = "20.00"),
+                    TransactionLeg(LegType.STORED_VALUE, "poi-sv-2", amount = "10.00"),
+                ),
+            )
+        )
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+
+            controller.refundSale("sale-2")
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(outcome.success, "expected a successful refund, got: ${outcome.message}")
+            assertTrue("card" in outcome.message && "gift card" in outcome.message,
+                "expected both tender legs in the outcome: ${outcome.message}")
+
+            // one linked refund per tender leg, each referencing its own
+            // original transaction
+            val payments = requests.filter { "\"PaymentRequest\"" in it }
+            assertEquals(2, payments.size, "expected a refund per tender leg")
+            assertTrue(payments.any { "poi-card-2" in it }, "card leg not refunded")
+            assertTrue(payments.any { "poi-sv-2" in it }, "stored value leg not refunded")
+
+            // both legs recorded as fully returned — only then is the sale
+            // exhausted
+            val stored = assertNotNull(store.findSale("sale-2"))
+            assertEquals(
+                setOf(LegType.CARD, LegType.STORED_VALUE),
+                stored.refunds.mapNotNull { it.leg }.toSet(),
+            )
+            assertTrue(stored.refunds.all { it.full })
+            assertTrue(stored.fullyRefunded)
+        }
+    }
+
+    @Test
     fun itemRefundSendsTheReturnedItemsAndTheCartTotal() {
         val store = storeWithOneSale()
         val controller = controller(store)

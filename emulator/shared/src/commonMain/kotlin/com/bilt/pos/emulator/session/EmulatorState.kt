@@ -262,13 +262,15 @@ interface EmulatorController {
     fun acquireCard()
 
     /**
-     * Referenced refund of the stored sale [saleId], run on a fresh
-     * ReversalSession against the connected terminal — the originating
+     * Referenced refund of the stored sale [saleId], run on fresh
+     * ReversalSessions against the connected terminal — the originating
      * checkout is long gone; the stored transaction references identify
-     * what to reverse. A null [skus] refunds the sale's money leg in full;
-     * otherwise the selected items are rung into the session's refund cart
-     * (shelf price plus tax per line) and refunded item-based. Requires a
-     * connection with no active checkout session. The outcome reports as
+     * what to reverse. A null [skus] refunds every outstanding tender leg
+     * in full (a split tender refunds the card and the gift card legs,
+     * each by its own linked refund); otherwise the selected items are
+     * rung into the primary leg's refund cart (shelf price plus tax per
+     * line) and refunded item-based. Requires a connection with no active
+     * checkout session. The outcome reports as
      * [EmulatorState.paymentOutcome], like a payment.
      */
     fun refundSale(saleId: String, skus: Set<String>? = null)

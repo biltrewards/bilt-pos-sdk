@@ -357,9 +357,10 @@ private fun RefundDetailsCard(
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             // The two bases differ by design: FULL asks the terminal for a
-            // full linked refund of the money leg, so the label shows what
-            // was charged (authorizedAmount) and the outcome popup reports
-            // what actually came back; ITEMS charges the refund cart total —
+            // full linked refund of every outstanding tender leg, so the
+            // label shows what was charged (authorizedAmount) and the
+            // outcome popup reports what actually came back per leg; ITEMS
+            // charges the refund cart total —
             // shelf price plus tax of each selected return, the same figure
             // its rows show. Rebate/points proration is out of scope, like
             // the all-or-nothing award reversal.
