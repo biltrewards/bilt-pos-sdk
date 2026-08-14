@@ -112,6 +112,10 @@ class NexoEmulatorController(
          *  connection. Removed from the adb server on teardown. */
         val tunnel: AdbTunnel.Tunnel? = null,
         @Volatile var session: CheckoutSession? = null,
+        /** The reversal session of the refund leg currently on the wire, so
+         *  [abort] can reach a refund the way it reaches a payment; null
+         *  outside a refund. */
+        @Volatile var reversal: ReversalSession? = null,
     ) {
         /** Guards against a double-tap bracketing two terminal sessions:
          *  [session] is only installed once the Start roundtrip acknowledges. */
@@ -1005,43 +1009,23 @@ class NexoEmulatorController(
                 parseInstant(it.poiTimestamp)?.let(builder::awardPoiTransactionTimestamp)
             }
             sale.memberId?.let(builder::memberId)
-            builder.start().get().use { session ->
-                val flow = if (items == null) {
-                    session.refund()
-                } else {
-                    items.forEach { item ->
-                        // rung exactly as sold — shelf price and tax rate —
-                        // so the credit total is price plus tax of the
-                        // returns; rebate/points proration is deliberately
-                        // out of scope, like the all-or-nothing award
-                        session.basket().addItem(
-                            BasketItem.builder()
-                                .sku(item.sku)
-                                .description(item.description)
-                                .quantity(item.quantity)
-                                .unitPrice(BigDecimal(item.unitPrice))
-                                .apply { item.category?.let(::category) }
-                                .apply { item.taxRate?.let { rate -> taxRate(BigDecimal(rate)) } }
-                                .build()
-                        )
-                    }
-                    session.refundBasket()
+            val session = builder.start().get()
+            // published for abort() while this leg is on the wire
+            conn.reversal = session
+            try {
+                session.use {
+                    return runLegFlow(session, items)
                 }
-                val result = flow
-                    .onError { step, error ->
-                        log("Refund step ${step ?: "(none ran)"} failed: ${error.message}")
-                        // the SDK's default policy, replicated so logging
-                        // doesn't change behavior: the award reversal is
-                        // best-effort, a failed tender refund aborts
-                        if (step == ReversalStep.AWARD) ReversalDecision.SKIP
-                        else ReversalDecision.ABORT
-                    }
-                    .get()
-                return result.takeIf { it.isSuccess }
+            } finally {
+                conn.reversal = null
             }
         } catch (e: SessionException) {
             if (connection === conn) {
-                log("Refund failed (${leg.type} leg): ${e.error.code} — ${e.error.message}")
+                if (e.error.code == SessionErrorCode.ABORTED) {
+                    log("Refund aborted (${leg.type} leg) — this leg was not refunded")
+                } else {
+                    log("Refund failed (${leg.type} leg): ${e.error.code} — ${e.error.message}")
+                }
                 _state.update {
                     it.copy(paymentOutcome = PaymentOutcome(
                         success = false,
@@ -1066,6 +1050,46 @@ class NexoEmulatorController(
             }
             return null
         }
+    }
+
+    /** The leg's refund flow on its started [session]: full linked refund,
+     *  or item-based via the refund cart. Failures throw to [refundLeg]. */
+    private fun runLegFlow(
+        session: ReversalSession,
+        items: List<SaleItem>?,
+    ): RefundResult? {
+        val flow = if (items == null) {
+            session.refund()
+        } else {
+            items.forEach { item ->
+                // rung exactly as sold — shelf price and tax rate — so the
+                // credit total is price plus tax of the returns;
+                // rebate/points proration is deliberately out of scope,
+                // like the all-or-nothing award
+                session.basket().addItem(
+                    BasketItem.builder()
+                        .sku(item.sku)
+                        .description(item.description)
+                        .quantity(item.quantity)
+                        .unitPrice(BigDecimal(item.unitPrice))
+                        .apply { item.category?.let(::category) }
+                        .apply { item.taxRate?.let { rate -> taxRate(BigDecimal(rate)) } }
+                        .build()
+                )
+            }
+            session.refundBasket()
+        }
+        val result = flow
+            .onError { step, error ->
+                log("Refund step ${step ?: "(none ran)"} failed: ${error.message}")
+                // the SDK's default policy, replicated so logging doesn't
+                // change behavior: the award reversal is best-effort, a
+                // failed tender refund aborts
+                if (step == ReversalStep.AWARD) ReversalDecision.SKIP
+                else ReversalDecision.ABORT
+            }
+            .get()
+        return result.takeIf { it.isSuccess }
     }
 
     /** Stores the refund against its sale — including which tender leg it
@@ -1162,13 +1186,30 @@ class NexoEmulatorController(
 
     override fun abort() {
         val conn = connection
-        val session = conn?.session
-        if (conn == null || session == null) {
+        if (conn == null) {
+            log("Nothing to abort")
+            return
+        }
+        // A refund in flight takes precedence — while one runs, no checkout
+        // session can be active (they refuse to start together). abort() is
+        // unordered on both session kinds: execute() overtakes the in-flight
+        // call instead of queueing behind it.
+        val reversal = conn.reversal
+        if (reversal != null) {
+            log("Aborting the refund…")
+            reversal.abort()
+                .onError { error ->
+                    log("Abort failed: ${error.message}")
+                    error.cause?.let { detailedLog(it.stackTraceToString()) }
+                }
+                .execute()
+            return
+        }
+        val session = conn.session
+        if (session == null) {
             log("No active checkout session")
             return
         }
-        // abort() is unordered: execute() overtakes the in-flight call
-        // instead of queueing behind it
         log("Aborting…")
         session.abort()
             .onError { error ->

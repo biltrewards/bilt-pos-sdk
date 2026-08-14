@@ -614,7 +614,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                     Button(
                         onClick = { controller.abort() },
                         enabled = state.paymentInProgress || state.cardReadInProgress ||
-                            state.identifyInProgress,
+                            state.identifyInProgress || state.refundInProgress,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError,
