@@ -145,8 +145,14 @@ class NexoEmulatorController(
 
     /** Bumped by every teardown, captured by connect(): the tunnel comes up
      *  on an IO coroutine, and its continuation must not install a
-     *  connection the operator has since disconnected or replaced. */
+     *  connection the operator has since disconnected or replaced. Bumps
+     *  and installs happen under [connectionLock], so a teardown between an
+     *  epoch check and the install cannot slip through. */
     private val connectEpoch = java.util.concurrent.atomic.AtomicInteger()
+
+    /** Linearizes [connection] installs against teardowns — held only for
+     *  the field mutation and epoch check, never across I/O. */
+    private val connectionLock = Any()
 
     /** Serial, so overlapping refreshes publish in launch order and the
      *  newest sale wins. Declared before the init block, which triggers
@@ -214,7 +220,7 @@ class NexoEmulatorController(
 
         if (!adbTunnel) {
             openConnection(host = address, port = 8443, tunnel = null,
-                encrypt = encrypt, passphrase = passphrase)
+                encrypt = encrypt, passphrase = passphrase, epoch = epoch)
             return
         }
         // The forward comes up on an IO coroutine — adb is a subprocess and
@@ -236,31 +242,36 @@ class NexoEmulatorController(
                 return@launch
             }
             // disconnected or reconnected while the forward was coming up —
-            // this connect attempt is stale, remove its forward again
+            // this connect attempt is stale, remove its forward again. Just
+            // an early exit; the authoritative check is the locked one at
+            // install time.
             if (connectEpoch.get() != epoch) {
                 AdbTunnel.close(tunnel)
                 return@launch
             }
             log("adb tunnel up — localhost:${tunnel.localPort} → ${tunnel.serial} port 8443")
             openConnection(host = "127.0.0.1", port = tunnel.localPort, tunnel = tunnel,
-                encrypt = encrypt, passphrase = passphrase)
+                encrypt = encrypt, passphrase = passphrase, epoch = epoch)
         }
     }
 
     /** Builds the client and installs the connection against
      *  `https://[host]:[port]/nexo` — the terminal itself, or the local end
-     *  of [tunnel]. */
+     *  of [tunnel]. The install is atomic with the [epoch] check: an
+     *  attempt a teardown has since invalidated dismantles what it built
+     *  instead of installing a connection the operator dismissed. */
     private fun openConnection(
         host: String,
         port: Int,
         tunnel: AdbTunnel.Tunnel?,
         encrypt: Boolean,
         passphrase: String?,
+        epoch: Int,
     ) {
         val endpoint = "https://$host:$port/nexo"
         log("Connecting to $endpoint (encryption=$encrypt)")
 
-        val client = createNexoClient(endpoint, encrypt, passphrase) ?: run {
+        val client = createNexoClient(endpoint, encrypt, passphrase, epoch) ?: run {
             tunnel?.let { t -> scope.launch(Dispatchers.IO) { AdbTunnel.close(t) } }
             return
         }
@@ -281,7 +292,21 @@ class NexoEmulatorController(
             terminal = terminal,
             tunnel = tunnel,
         )
-        connection = conn
+        val installed = synchronized(connectionLock) {
+            (connectEpoch.get() == epoch).also { current ->
+                if (current) {
+                    connection = conn
+                }
+            }
+        }
+        if (!installed) {
+            // torn down (or replaced) while the client was being built:
+            // nothing launched yet, just release what this attempt created
+            conn.scope.cancel()
+            terminal.close()
+            tunnel?.let { AdbTunnel.close(it) }
+            return
+        }
 
         runDiagnosisLoop(conn, terminal)
         // Probed at the endpoint actually used: through a tunnel the direct
@@ -308,7 +333,8 @@ class NexoEmulatorController(
     private fun createNexoClient(
         endpoint: String,
         encrypt: Boolean,
-        passphrase: String?
+        passphrase: String?,
+        epoch: Int,
     ): BiltNexoTerminalClient? {
         return try {
             // Always permissive: a failing certificate is reported by the
@@ -327,14 +353,18 @@ class NexoEmulatorController(
             }
             clientBuilder.build()
         } catch (e: Exception) {
-            // e.g. an unparsable address; reported instead of thrown
-            _state.update {
-                it.copy(
-                    connection = ConnectionStatus(
-                        ConnectionPhase.ERROR,
-                        e.message ?: "client setup failed",
+            // e.g. an unparsable address; reported instead of thrown — but
+            // only while this attempt is still the current one, so a stale
+            // tunnel connect can't stamp ERROR over a newer attempt's state
+            if (connectEpoch.get() == epoch) {
+                _state.update {
+                    it.copy(
+                        connection = ConnectionStatus(
+                            ConnectionPhase.ERROR,
+                            e.message ?: "client setup failed",
+                        )
                     )
-                )
+                }
             }
             log("Failed to set up the client: ${e.message}")
             detailedLog(e.stackTraceToString())
@@ -352,13 +382,6 @@ class NexoEmulatorController(
      *  tears down immediately and would free the register while the charge
      *  is still landing. */
     private fun tryDisconnect(): Boolean {
-        val conn = connection ?: run {
-            // still an epoch bump: a tunnel may be coming up with no
-            // connection installed yet, and it must see this teardown
-            connectEpoch.incrementAndGet()
-            updateDisconnectedState()
-            return true
-        }
         if (_state.value.paymentInProgress) {
             log("A payment is in progress — abort it or wait for it to finish before disconnecting")
             return false
@@ -367,8 +390,16 @@ class NexoEmulatorController(
             log("A refund is in progress — wait for it to finish before disconnecting")
             return false
         }
-        connectEpoch.incrementAndGet()
-        connection = null
+        // Bump and take under the lock, atomically with any concurrent
+        // install — and bump even with nothing installed: a tunnel may be
+        // coming up, and it must see this teardown
+        val conn = synchronized(connectionLock) {
+            connectEpoch.incrementAndGet()
+            connection.also { connection = null }
+        } ?: run {
+            updateDisconnectedState()
+            return true
+        }
         val hadSession = conn.session != null
         conn.scope.cancel()
         conn.terminal.close()
@@ -400,10 +431,11 @@ class NexoEmulatorController(
      * the client's timeouts.
      */
     fun shutdown() {
-        val conn = connection
-        if (conn != null) {
+        val conn = synchronized(connectionLock) {
             connectEpoch.incrementAndGet()
-            connection = null
+            connection.also { connection = null }
+        }
+        if (conn != null) {
             conn.scope.cancel()
             conn.terminal.close()
             conn.session?.let { runCatching { it.close() } }
