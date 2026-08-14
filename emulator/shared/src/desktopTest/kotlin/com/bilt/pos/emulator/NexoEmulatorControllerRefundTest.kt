@@ -266,6 +266,69 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
+    fun itemRefundDrawsFromTheOutstandingLegWhenTheCardLegWasReturned() {
+        val store = JsonlSaleStore(
+            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
+        )
+        store.recordSale(
+            SaleRecord(
+                id = "sale-3",
+                sessionId = "session-3",
+                saleId = "bilt-emulator",
+                poiId = "EMULATOR",
+                currency = "USD",
+                completedAt = "2026-08-06T12:00:00Z",
+                items = listOf(
+                    SaleItem(
+                        sku = "SKU-1",
+                        description = "Water",
+                        quantity = 2,
+                        unitPrice = "1.05",
+                        lineTotal = "2.10",
+                    )
+                ),
+                authorizedAmount = "30.00",
+                legs = listOf(
+                    TransactionLeg(LegType.CARD, "poi-card-3", amount = "20.00"),
+                    TransactionLeg(LegType.STORED_VALUE, "poi-sv-3", amount = "10.00"),
+                ),
+            )
+        )
+        // the state a split-tender full refund leaves behind when the card
+        // leg succeeded and the gift card leg failed
+        store.recordRefund(
+            "sale-3",
+            RefundRecord(recordedAt = "2026-08-06T12:30:00Z", full = true, leg = LegType.CARD),
+        )
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+
+            controller.refundSale("sale-3", skus = setOf("SKU-1"))
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(outcome.success, "expected a successful refund, got: ${outcome.message}")
+
+            // the item refund must not touch the already-returned card
+            // transaction — it draws from the outstanding gift card leg
+            val payment = assertNotNull(
+                requests.firstOrNull { "\"PaymentRequest\"" in it },
+                "no refund PaymentRequest reached the terminal",
+            )
+            assertTrue("poi-sv-3" in payment, "expected the stored value reference: $payment")
+            assertTrue("poi-card-3" !in payment, "the returned card leg was referenced: $payment")
+            assertEquals(
+                LegType.STORED_VALUE,
+                assertNotNull(store.findSale("sale-3")).refunds.last().leg,
+            )
+        }
+    }
+
+    @Test
     fun splitTenderFullRefundReturnsEveryTenderLeg() {
         val store = JsonlSaleStore(
             Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()

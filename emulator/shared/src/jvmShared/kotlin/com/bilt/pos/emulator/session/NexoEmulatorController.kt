@@ -903,13 +903,20 @@ class NexoEmulatorController(
                 )
                 return@launch
             }
-            // Item refunds draw from the primary tender: the card leg, or —
-            // for a gift-card-only sale — the stored value leg (the same
-            // reference the SDK designates as primary for same-session
-            // reversals). Ring only what earlier refunds have not returned
-            // yet — the store's refund history caps every line.
-            val primaryLeg = stored.moneyLegs.firstOrNull { it.type == LegType.CARD }
-                ?: stored.moneyLegs.first()
+            // Item refunds draw from the primary OUTSTANDING tender: the
+            // card leg unless a full refund already returned it (a split
+            // tender whose card leg was refunded but whose gift card leg
+            // failed must not touch the card transaction again), else the
+            // stored value leg. Ring only what earlier refunds have not
+            // returned yet — the store's refund history caps every line.
+            val outstanding = stored.moneyLegs.filterNot { stored.legRefunded(it.type) }
+            val primaryLeg = outstanding.firstOrNull { it.type == LegType.CARD }
+                ?: outstanding.firstOrNull()
+            if (primaryLeg == null) {
+                // unreachable while refundable, kept against future drift
+                log("Every tender leg was already refunded in full — nothing left to draw from")
+                return@launch
+            }
             val items = sale.items.filter { it.sku in skus }.mapNotNull { item ->
                 val remaining = item.quantity - stored.refundedQuantity(item.sku)
                 when {
