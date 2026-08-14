@@ -201,6 +201,10 @@ class NexoEmulatorControllerRefundTest {
             assertEquals("24.99", refund.amount)
             assertEquals("POI-REF-100", refund.poiTransactionId)
             assertTrue(refund.full, "a full-amount refund must be recorded as full")
+            assertTrue(
+                refund.awardReversed,
+                "the committed award reversal must be recorded, or a retry would repeat it",
+            )
             assertTrue(assertNotNull(store.findSale("sale-1")).fullyRefunded)
 
             // the sales list refreshed, so the UI shows the refunded badge,
@@ -291,14 +295,21 @@ class NexoEmulatorControllerRefundTest {
                 legs = listOf(
                     TransactionLeg(LegType.CARD, "poi-card-3", amount = "20.00"),
                     TransactionLeg(LegType.STORED_VALUE, "poi-sv-3", amount = "10.00"),
+                    TransactionLeg(LegType.AWARD, "poi-award-3"),
                 ),
             )
         )
         // the state a split-tender full refund leaves behind when the card
-        // leg succeeded and the gift card leg failed
+        // leg succeeded (reversing the award with it) and the gift card leg
+        // failed
         store.recordRefund(
             "sale-3",
-            RefundRecord(recordedAt = "2026-08-06T12:30:00Z", full = true, leg = LegType.CARD),
+            RefundRecord(
+                recordedAt = "2026-08-06T12:30:00Z",
+                full = true,
+                leg = LegType.CARD,
+                awardReversed = true,
+            ),
         )
         val controller = controller(store)
         runBlocking {
@@ -324,6 +335,14 @@ class NexoEmulatorControllerRefundTest {
             assertEquals(
                 LegType.STORED_VALUE,
                 assertNotNull(store.findSale("sale-3")).refunds.last().leg,
+            )
+
+            // the award was already reversed by the earlier refund — a
+            // fresh session must not carry the references and reverse it
+            // again (the SDK's own guard only lives inside one session)
+            assertTrue(
+                requests.none { "\"LoyaltyRequest\"" in it },
+                "the already-reversed award was sent for reversal again",
             )
         }
     }

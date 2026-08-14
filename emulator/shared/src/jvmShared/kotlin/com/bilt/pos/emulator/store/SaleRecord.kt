@@ -97,6 +97,11 @@ data class RefundRecord(
      *  before leg tracking; a legless full record counts for the whole
      *  sale. */
     val leg: LegType? = null,
+    /** True when this refund also reversed the sale's loyalty award. The
+     *  SDK's own award guard lives inside one ReversalSession; across
+     *  sessions this record is what keeps a retry or a later refund from
+     *  reversing the same award again. */
+    val awardReversed: Boolean = false,
     /** The returned items of an item-based refund; empty for a full-amount
      *  refund. What was already returned is not returnable again. */
     val items: List<RefundedItem> = emptyList(),
@@ -144,6 +149,10 @@ data class StoredSale(
 
     /** Whether a full refund already returned the [type] tender leg. */
     fun legRefunded(type: LegType): Boolean = refunds.any { it.full && it.leg == type }
+
+    /** Whether an earlier refund already reversed the loyalty award —
+     *  reversing it again would debit the member's points twice. */
+    val awardReversed: Boolean get() = refunds.any { it.awardReversed }
 
     val refundable: Boolean get() = voided == null && !fullyRefunded
 

@@ -890,6 +890,11 @@ class NexoEmulatorController(
                 log("The sale has no money leg (rewards covered everything) — only a void could reverse it")
                 return@launch
             }
+            // Attached only while the store says the award is standing: the
+            // SDK's own guard lives inside one ReversalSession, so without
+            // this a retry (or a later partial refund) would reverse the
+            // same award again on a fresh session
+            val award = sale.leg(LegType.AWARD)?.takeUnless { stored.awardReversed }
             if (skus == null) {
                 // A full refund returns EVERY tender leg still standing — a
                 // split tender refunds the card and the gift card legs, each
@@ -900,6 +905,7 @@ class NexoEmulatorController(
                     conn, sale,
                     legs = stored.moneyLegs.filterNot { stored.legRefunded(it.type) },
                     items = null,
+                    award = award,
                 )
                 return@launch
             }
@@ -938,7 +944,7 @@ class NexoEmulatorController(
                 log("Nothing left to refund among the selected items")
                 return@launch
             }
-            executeRefund(conn, sale, legs = listOf(primaryLeg), items = items)
+            executeRefund(conn, sale, legs = listOf(primaryLeg), items = items, award = award)
         }
         // Releases on every path, including a job cancelled before it ran
         // (disconnect racing this call). The claim always (per-connection);
@@ -967,25 +973,35 @@ class NexoEmulatorController(
         sale: SaleRecord,
         legs: List<TransactionLeg>,
         items: List<SaleItem>?,
+        award: TransactionLeg?,
     ) {
-        val award = sale.leg(LegType.AWARD)
         val results = mutableListOf<Pair<TransactionLeg, RefundResult>>()
         var recorded = true
-        for ((index, leg) in legs.withIndex()) {
-            // one award, one reversal: the award references ride the first
-            // leg's session only
-            val result = refundLeg(conn, sale, leg, items, award.takeIf { index == 0 })
-                ?: return
+        // one award, one reversal: the references ride along until a leg's
+        // session actually reverses the award, then never again — the
+        // record of the reversal is what a retry checks
+        var awardPending = award
+        for (leg in legs) {
+            val attached = awardPending
+            val run = refundLeg(conn, sale, leg, items, attached) ?: return
+            val awardReversed = attached != null && !run.awardFailed
+            if (awardReversed) {
+                awardPending = null
+            }
             // Money moved on the terminal, so the refund is recorded even
             // when the operator disconnected mid-call — same rationale as
             // persistSale
-            recorded = recordRefund(sale.id, leg, result, items) && recorded
-            results += leg to result
+            recorded = recordRefund(sale.id, leg, run.result, items, awardReversed) && recorded
+            results += leg to run.result
         }
         if (connection === conn) {
             publishRefundResult(results, recorded)
         }
     }
+
+    /** One leg's outcome: the terminal's result, and whether the attached
+     *  award reversal failed (and was skipped) rather than committed. */
+    private class LegRun(val result: RefundResult, val awardFailed: Boolean)
 
     /** One leg's linked refund on its own [ReversalSession]; null after a
      *  failure, which is logged and published as the outcome popup. */
@@ -995,7 +1011,7 @@ class NexoEmulatorController(
         leg: TransactionLeg,
         items: List<SaleItem>?,
         award: TransactionLeg?,
-    ): RefundResult? {
+    ): LegRun? {
         log(
             "Starting referenced refund of sale ${sale.id.take(8)} " +
                 "(${leg.type} leg ${leg.poiTransactionId}" +
@@ -1064,7 +1080,11 @@ class NexoEmulatorController(
     private fun runLegFlow(
         session: ReversalSession,
         items: List<SaleItem>?,
-    ): RefundResult? {
+    ): LegRun? {
+        // Handlers of the blocking accessors run inline on this thread, so
+        // a plain var sees the write; set when the award step failed and
+        // was skipped — the award then stands, and the record must say so
+        var awardFailed = false
         val flow = if (items == null) {
             session.refund()
         } else {
@@ -1092,11 +1112,15 @@ class NexoEmulatorController(
                 // the SDK's default policy, replicated so logging doesn't
                 // change behavior: the award reversal is best-effort, a
                 // failed tender refund aborts
-                if (step == ReversalStep.AWARD) ReversalDecision.SKIP
-                else ReversalDecision.ABORT
+                if (step == ReversalStep.AWARD) {
+                    awardFailed = true
+                    ReversalDecision.SKIP
+                } else {
+                    ReversalDecision.ABORT
+                }
             }
             .get()
-        return result.takeIf { it.isSuccess }
+        return result.takeIf { it.isSuccess }?.let { LegRun(it, awardFailed) }
     }
 
     /** Stores the refund against its sale — including which tender leg it
@@ -1111,6 +1135,7 @@ class NexoEmulatorController(
         leg: TransactionLeg,
         result: RefundResult,
         items: List<SaleItem>?,
+        awardReversed: Boolean,
     ): Boolean {
         return try {
             saleStore.recordRefund(saleId, RefundRecord(
@@ -1120,6 +1145,7 @@ class NexoEmulatorController(
                 recordedAt = Instant.now().toString(),
                 full = items == null,
                 leg = leg.type,
+                awardReversed = awardReversed,
                 items = items.orEmpty().map { RefundedItem(it.sku, it.quantity) },
             ))
             // keep the Refund tab's list (refunded badges) current
