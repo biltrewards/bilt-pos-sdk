@@ -5,8 +5,12 @@ import com.bilt.pos.emulator.session.EmulatorConfig
 import com.bilt.pos.emulator.session.NexoEmulatorController
 import com.bilt.pos.emulator.store.JsonlSaleStore
 import com.bilt.pos.emulator.store.LegType
+import com.bilt.pos.emulator.store.RefundRecord
 import com.bilt.pos.emulator.store.RefundedItem
 import com.bilt.pos.emulator.store.SaleItem
+import com.bilt.pos.emulator.store.SaleStore
+import com.bilt.pos.emulator.store.StoredSale
+import com.bilt.pos.emulator.store.VoidRecord
 import com.bilt.pos.emulator.store.SaleRecord
 import com.bilt.pos.emulator.store.TransactionLeg
 import kotlinx.coroutines.CoroutineScope
@@ -147,7 +151,19 @@ class NexoEmulatorControllerRefundTest {
         return store
     }
 
-    private fun controller(store: JsonlSaleStore) = NexoEmulatorController(
+    /** A store whose refund write always fails — the disk-full case the
+     *  outcome popup must not stay quiet about. */
+    private class RefundWriteFailingStore(private val delegate: SaleStore) : SaleStore {
+        override fun recordSale(sale: SaleRecord) = delegate.recordSale(sale)
+        override fun recordRefund(saleId: String, refund: RefundRecord): Unit =
+            throw IllegalStateException("disk full")
+        override fun recordVoid(saleId: String, voidRecord: VoidRecord) =
+            delegate.recordVoid(saleId, voidRecord)
+        override fun findSale(saleId: String): StoredSale? = delegate.findSale(saleId)
+        override fun listSales(limit: Int): List<StoredSale> = delegate.listSales(limit)
+    }
+
+    private fun controller(store: SaleStore) = NexoEmulatorController(
         scope = scope,
         config = EmulatorConfig(
             passphrase = null,
@@ -220,6 +236,32 @@ class NexoEmulatorControllerRefundTest {
             }
             assertEquals(paymentsBefore, requests.count { "\"PaymentRequest\"" in it })
             assertEquals(1, assertNotNull(store.findSale("sale-1")).refunds.size)
+        }
+    }
+
+    @Test
+    fun failedRefundRecordWarnsOnTheOutcome() {
+        val store = storeWithOneSale()
+        val controller = controller(RefundWriteFailingStore(store))
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+
+            controller.refundSale("sale-1")
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+
+            // the money moved, so the outcome stays a success — but it must
+            // warn that the unrecorded refund will be offered again
+            assertTrue(outcome.success, "the refund itself succeeded: ${outcome.message}")
+            assertTrue(
+                "could NOT be recorded" in outcome.message,
+                "expected the unrecorded-refund warning: ${outcome.message}",
+            )
+            assertTrue(assertNotNull(store.findSale("sale-1")).refunds.isEmpty())
         }
     }
 

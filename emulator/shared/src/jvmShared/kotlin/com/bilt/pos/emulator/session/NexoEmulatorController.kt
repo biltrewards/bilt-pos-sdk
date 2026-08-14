@@ -927,6 +927,7 @@ class NexoEmulatorController(
     ) {
         val award = sale.leg(LegType.AWARD)
         val results = mutableListOf<Pair<TransactionLeg, RefundResult>>()
+        var recorded = true
         for ((index, leg) in legs.withIndex()) {
             // one award, one reversal: the award references ride the first
             // leg's session only
@@ -935,11 +936,11 @@ class NexoEmulatorController(
             // Money moved on the terminal, so the refund is recorded even
             // when the operator disconnected mid-call — same rationale as
             // persistSale
-            recordRefund(sale.id, leg, result, items)
+            recorded = recordRefund(sale.id, leg, result, items) && recorded
             results += leg to result
         }
         if (connection === conn) {
-            publishRefundResult(results)
+            publishRefundResult(results, recorded)
         }
     }
 
@@ -1037,14 +1038,18 @@ class NexoEmulatorController(
 
     /** Stores the refund against its sale — including which tender leg it
      *  drew from and what it covered, so a later refund can't return the
-     *  same thing again; best-effort, like persistSale. */
+     *  same thing again. A storage failure cannot fail the refund (the
+     *  money already moved) but must not stay quiet either — without the
+     *  record the sale offers the same refund again, and a terminal that
+     *  accepts it would return the money twice. False on failure, so the
+     *  outcome popup carries the warning. */
     private fun recordRefund(
         saleId: String,
         leg: TransactionLeg,
         result: RefundResult,
         items: List<SaleItem>?,
-    ) {
-        try {
+    ): Boolean {
+        return try {
             saleStore.recordRefund(saleId, RefundRecord(
                 amount = result.refundedAmount?.toPlainString(),
                 poiTransactionId = result.poiTransactionId,
@@ -1056,15 +1061,23 @@ class NexoEmulatorController(
             ))
             // keep the Refund tab's list (refunded badges) current
             refreshSales()
+            true
         } catch (e: Exception) {
             log("Failed to store the refund: ${e.message}")
             detailedLog(e.stackTraceToString())
+            false
         }
     }
 
     /** Publishes the outcome of a completed refund — one entry per tender
-     *  leg refunded (a split tender lists both). */
-    private fun publishRefundResult(results: List<Pair<TransactionLeg, RefundResult>>) {
+     *  leg refunded (a split tender lists both). [recorded] false means the
+     *  refund history write failed: the money moved, so the popup stays a
+     *  success, but it must warn that the sale will offer this refund
+     *  again. */
+    private fun publishRefundResult(
+        results: List<Pair<TransactionLeg, RefundResult>>,
+        recorded: Boolean,
+    ) {
         val parts = buildList {
             results.forEach { (leg, result) ->
                 add(
@@ -1077,6 +1090,13 @@ class NexoEmulatorController(
                 add("reversed ${it.pointsReversed} pts (balance ${it.remainingPointBalance})")
             }
             results.mapNotNull { it.second.approvalCode }.forEach { add("approval $it") }
+            if (!recorded) {
+                add(
+                    "WARNING: the refund could NOT be recorded — the sale " +
+                        "will still offer what was just refunded; refunding " +
+                        "it again would return the money twice"
+                )
+            }
         }
         val summary = parts.joinToString(", ")
         // the receipt of the first leg — the primary tender's copy
