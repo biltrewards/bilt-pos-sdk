@@ -345,6 +345,25 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void settleChargesBasketLevelTaxTotalOverride() throws Exception {
+        addHundredDollarItem();
+        session.basket().setTaxTotal(new BigDecimal("8.88"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 108.88)));
+
+        SettlementResult result = session.settle().get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(0, new BigDecimal("108.88").compareTo(result.getCardAmountCharged()));
+        assertEquals(0, new BigDecimal("8.88").compareTo(
+                result.getFinalBasket().getTaxTotal()));
+
+        SaleToPOIRequest sent = nextRequest();
+        assertEquals(108.88, sent.getPaymentRequest().getPaymentTransaction()
+                .getAmountsReq().getRequestedAmount(),
+                "basket-level tax overrides must be included in the charge amount");
+    }
+
+    @Test
     void earnedRewardsFromTheAwardResponseReachTheResult() throws Exception {
         String earnedB64 = java.util.Base64.getEncoder().encodeToString(
                 ("{\"pointsEarned\":89,\"earnedRewards\":[{\"rewardRef\":\"rwd:RWD-90001\","

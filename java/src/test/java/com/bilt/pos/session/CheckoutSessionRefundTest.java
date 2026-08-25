@@ -275,6 +275,40 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
+    void exchangeSettlementPreservesBasketTaxTotalOverrideAcrossSaleAndReturnSides()
+            throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.of("BUY-1", "New item", 1, "100.00"));
+        session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
+        session.basket().setTaxTotal(new BigDecimal("5.40"));
+
+        server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 43.60)));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-CARD-SALE-1", 109.00)));
+
+        SettlementResult result = session.settle(SettlementOptions.builder()
+                .addRefundAllocation(RefundAllocation.card(new BigDecimal("43.60"),
+                        "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
+                .build()).get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(0, new BigDecimal("43.60").compareTo(result.getCardRefundedAmount()));
+        assertEquals(0, new BigDecimal("109.00").compareTo(result.getCardAmountCharged()));
+        assertEquals(0, new BigDecimal("65.40").compareTo(
+                result.getFinalBasket().getGrandTotal()));
+        assertEquals(0, new BigDecimal("5.40").compareTo(
+                result.getFinalBasket().getTaxTotal()));
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size());
+        assertEquals(43.60, requests.get(0).getPaymentRequest().getPaymentTransaction()
+                .getAmountsReq().getRequestedAmount(),
+                "return allocations must include the return side's tax share");
+        assertEquals(109.00, requests.get(1).getPaymentRequest().getPaymentTransaction()
+                .getAmountsReq().getRequestedAmount(),
+                "sale-side tax share must be included in the card charge");
+    }
+
+    @Test
     void settlementRequiresRefundAllocationsToMatchReturnTotal() throws Exception {
         CheckoutSession session = session();
         session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));

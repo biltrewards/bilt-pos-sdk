@@ -77,6 +77,7 @@ import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
 import jakarta.xml.bind.JAXBException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -138,6 +139,7 @@ import java.util.logging.Logger;
 public final class CheckoutSession implements AutoCloseable {
 
     private static final Logger LOGGER = Logger.getLogger(CheckoutSession.class.getName());
+    private static final int MONEY_SCALE = 2;
 
     /** The states in which the basket accepts mutations — and, by the same
      *  token, in which a queued auto-display push is still current. */
@@ -1146,30 +1148,29 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     private static BigDecimal returnTotal(Basket basket) {
-        BigDecimal total = BigDecimal.ZERO;
-        for (com.bilt.pos.session.basket.BasketLineItem line : basket.getItems()) {
-            if (line.isCredit()) {
-                total = total.add(line.getAdjustedTotal()).add(line.getTaxAmount());
-            }
-        }
-        return total.abs();
+        return filteredBasket(basket, true).getGrandTotal().abs();
     }
 
     private static Basket nonCreditBasket(Basket basket) {
+        if (!hasCreditLines(basket)) {
+            return basket;
+        }
         return filteredBasket(basket, false);
     }
 
     private static Basket filteredBasket(Basket basket, boolean credit) {
         List<com.bilt.pos.session.basket.BasketLineItem> items = new ArrayList<>();
         BigDecimal originalTotal = BigDecimal.ZERO;
-        BigDecimal taxTotal = BigDecimal.ZERO;
+        BigDecimal lineTaxTotal = BigDecimal.ZERO;
         for (com.bilt.pos.session.basket.BasketLineItem line : basket.getItems()) {
             if (line.isCredit() == credit) {
                 items.add(line);
                 originalTotal = originalTotal.add(line.getOriginalTotal());
-                taxTotal = taxTotal.add(line.getTaxAmount());
+                lineTaxTotal = lineTaxTotal.add(line.getTaxAmount());
             }
         }
+        BigDecimal taxTotal = filteredTaxTotal(basket, credit, originalTotal,
+                lineTaxTotal, !items.isEmpty());
         return Basket.builder()
                 .cartId(basket.getCartId())
                 .items(items)
@@ -1177,6 +1178,54 @@ public final class CheckoutSession implements AutoCloseable {
                 .taxTotal(taxTotal)
                 .grandTotal(originalTotal.add(taxTotal))
                 .build();
+    }
+
+    private static BigDecimal filteredTaxTotal(Basket basket, boolean credit,
+            BigDecimal originalTotal, BigDecimal lineTaxTotal, boolean hasItems) {
+        if (!hasItems) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal fullLineTaxTotal = lineTaxTotal(basket);
+        if (basket.getTaxTotal().compareTo(fullLineTaxTotal) == 0) {
+            return lineTaxTotal;
+        }
+        boolean hasSaleLines = hasLines(basket, false);
+        boolean hasReturnLines = hasLines(basket, true);
+        if (!(hasSaleLines && hasReturnLines)) {
+            return basket.getTaxTotal();
+        }
+
+        // A basket-level override supersedes item tax, so splitting the
+        // basket must preserve that override instead of falling back to
+        // per-line taxes. Treat it as net basket tax and split by signed
+        // subtotals; the return side therefore receives a negative share.
+        BigDecimal basketOriginalTotal = basket.getOriginalTotal();
+        if (basketOriginalTotal.compareTo(BigDecimal.ZERO) == 0) {
+            return credit ? BigDecimal.ZERO : basket.getTaxTotal();
+        }
+        BigDecimal saleOriginalTotal = originalTotal(basket, false);
+        BigDecimal saleTaxTotal = basket.getTaxTotal()
+                .multiply(saleOriginalTotal)
+                .divide(basketOriginalTotal, MONEY_SCALE, RoundingMode.HALF_UP);
+        return credit ? basket.getTaxTotal().subtract(saleTaxTotal) : saleTaxTotal;
+    }
+
+    private static BigDecimal lineTaxTotal(Basket basket) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (com.bilt.pos.session.basket.BasketLineItem line : basket.getItems()) {
+            total = total.add(line.getTaxAmount());
+        }
+        return total;
+    }
+
+    private static BigDecimal originalTotal(Basket basket, boolean credit) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (com.bilt.pos.session.basket.BasketLineItem line : basket.getItems()) {
+            if (line.isCredit() == credit) {
+                total = total.add(line.getOriginalTotal());
+            }
+        }
+        return total;
     }
 
     private static SettlementResult combineSettlementResult(Basket fullBasket,
@@ -1245,19 +1294,15 @@ public final class CheckoutSession implements AutoCloseable {
             return purchaseBasket;
         }
         List<com.bilt.pos.session.basket.BasketLineItem> items = new ArrayList<>();
-        BigDecimal creditOriginalTotal = BigDecimal.ZERO;
-        BigDecimal creditTaxTotal = BigDecimal.ZERO;
+        Basket creditBasket = filteredBasket(fullBasket, true);
         for (com.bilt.pos.session.basket.BasketLineItem line : fullBasket.getItems()) {
             com.bilt.pos.session.basket.BasketLineItem paidLine =
                     purchaseBasket.getItem(line.getItemId());
             items.add(paidLine != null ? paidLine : line);
-            if (line.isCredit()) {
-                creditOriginalTotal = creditOriginalTotal.add(line.getOriginalTotal());
-                creditTaxTotal = creditTaxTotal.add(line.getTaxAmount());
-            }
         }
-        BigDecimal originalTotal = purchaseBasket.getOriginalTotal().add(creditOriginalTotal);
-        BigDecimal taxTotal = purchaseBasket.getTaxTotal().add(creditTaxTotal);
+        BigDecimal originalTotal = purchaseBasket.getOriginalTotal()
+                .add(creditBasket.getOriginalTotal());
+        BigDecimal taxTotal = purchaseBasket.getTaxTotal().add(creditBasket.getTaxTotal());
         return Basket.builder()
                 .cartId(fullBasket.getCartId())
                 .items(items)
@@ -1272,8 +1317,12 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     private static boolean hasCreditLines(Basket basket) {
+        return hasLines(basket, true);
+    }
+
+    private static boolean hasLines(Basket basket, boolean credit) {
         for (com.bilt.pos.session.basket.BasketLineItem line : basket.getItems()) {
-            if (line.isCredit()) {
+            if (line.isCredit() == credit) {
                 return true;
             }
         }
