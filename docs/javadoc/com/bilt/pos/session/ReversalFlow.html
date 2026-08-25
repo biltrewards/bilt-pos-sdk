@@ -96,9 +96,8 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">ReversalFlow&lt;T&gt;</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">The reversal chain returned by the <code>voidTransaction()</code> and
- <code>refund</code> operations of <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> (this session's own
- payment) and <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a> (a referenced prior sale).
+<div class="block">The reversal chain returned by <a href="CheckoutSession.html#voidTransaction()"><code>CheckoutSession.voidTransaction()</code></a>,
+ prior-sale voids, and same-session refund operations.
 
  <p>Registering handlers sends nothing; the reversal steps run when
  <a href="#execute()"><code>execute()</code></a> (asynchronously, on the session's operation thread) or

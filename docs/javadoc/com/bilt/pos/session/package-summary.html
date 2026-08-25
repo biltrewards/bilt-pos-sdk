@@ -87,8 +87,10 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color">&nbsp;</div>
 <div class="col-first even-row-color"><a href="payment/package-summary.html">com.bilt.pos.session.payment</a></div>
 <div class="col-last even-row-color">&nbsp;</div>
-<div class="col-first odd-row-color"><a href="storedvalue/package-summary.html">com.bilt.pos.session.storedvalue</a></div>
+<div class="col-first odd-row-color"><a href="settlement/package-summary.html">com.bilt.pos.session.settlement</a></div>
 <div class="col-last odd-row-color">&nbsp;</div>
+<div class="col-first even-row-color"><a href="storedvalue/package-summary.html">com.bilt.pos.session.storedvalue</a></div>
+<div class="col-last even-row-color">&nbsp;</div>
 </div>
 </div>
 </li>
@@ -111,89 +113,74 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Outcome of <a href="Terminal.html#diagnose()"><code>Terminal.diagnose()</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="PrintPayload.html" title="class in com.bilt.pos.session">PrintPayload</a></div>
 <div class="col-last odd-row-color class-summary class-summary-tab2">
-<div class="block">The payment orchestration chain returned by <code>CheckoutSession.pay()</code>.</div>
-</div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="PrintPayload.html" title="class in com.bilt.pos.session">PrintPayload</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Content for <a href="Terminal.html#print(com.bilt.pos.session.PrintPayload)"><code>Terminal.print(PrintPayload)</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="PrintPayload.Format.html" title="enum class in com.bilt.pos.session">PrintPayload.Format</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab3">
+<div class="col-first even-row-color class-summary class-summary-tab3"><a href="PrintPayload.Format.html" title="enum class in com.bilt.pos.session">PrintPayload.Format</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab3">
 <div class="block">Content encoding of the payload.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">A rendered receipt returned from a payment, refund, or void operation.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="ReconciliationResult.html" title="class in com.bilt.pos.session">ReconciliationResult</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="ReconciliationResult.html" title="class in com.bilt.pos.session">ReconciliationResult</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Outcome of <a href="Terminal.html#reconcile()"><code>Terminal.reconcile()</code></a> and <a href="Terminal.html#getTotals()"><code>Terminal.getTotals()</code></a>.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Outcome of a refund.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="RefundResult.html" title="class in com.bilt.pos.session"><code>RefundResult</code></a>.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab3"><a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab3">
+<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab3">
 <div class="block">How a reversal flow proceeds after one of its steps failed, returned by
  the handler registered with <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;T&gt;</div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
-<div class="block">The reversal chain returned by the <code>voidTransaction()</code> and
- <code>refund</code> operations of <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> (this session's own
- payment) and <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a> (a referenced prior sale).</div>
-</div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="ReversalSession.html" title="class in com.bilt.pos.session">ReversalSession</a></div>
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;T&gt;</div>
 <div class="col-last even-row-color class-summary class-summary-tab2">
-<div class="block">A referenced reversal of a prior sale — void or refund from a fresh
- session, in a later process, long after the <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> that
- took the payment is gone.</div>
+<div class="block">The reversal chain returned by <a href="CheckoutSession.html#voidTransaction()"><code>CheckoutSession.voidTransaction()</code></a>,
+ prior-sale voids, and same-session refund operations.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
-<div class="block">Builder for <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>.</div>
-</div>
-<div class="col-first even-row-color class-summary class-summary-tab3"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab3">
+<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab3">
 <div class="block">One reversible leg of a sale, as reported to
  <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a> when a reversal step fails.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
-<div class="block">The basket surface of a session, obtained via
- <a href="CheckoutSession.html#basket()"><code>CheckoutSession.basket()</code></a> (the sale basket) or
- <a href="ReversalSession.html#basket()"><code>ReversalSession.basket()</code></a> (the refund cart): item and tax
- mutations, batch edits, and immutable snapshots.</div>
-</div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a></div>
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></div>
 <div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="block">The basket surface of a checkout session: item and tax mutations, batch
+ edits, and immutable snapshots.</div>
+</div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Describes why a session operation failed.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab3">
+<div class="col-first even-row-color class-summary class-summary-tab3"><a href="SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab3">
 <div class="block">High-level error category for a failed session operation.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab5"><a href="SessionException.html" title="class in com.bilt.pos.session">SessionException</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab5">
+<div class="col-first odd-row-color class-summary class-summary-tab5"><a href="SessionException.html" title="class in com.bilt.pos.session">SessionException</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab5">
 <div class="block">Unchecked exception thrown when a failed session operation is unwrapped
  via <a href="SessionResult.html#get()"><code>SessionResult.get()</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;T&gt;</div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;T&gt;</div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">A lazy, single-shot session operation.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab3"><a href="SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab3">
-<div class="block">Lifecycle state of a <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> (full diagram below) or a
- <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>, which only ever moves <code>IDLE → VOIDING →
- VOIDED</code> (or <code>ENDED</code>).</div>
+<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab3">
+<div class="block">Lifecycle state of a <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a>.</div>
+</div>
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="block">The settlement orchestration chain returned by <code>CheckoutSession.settle()</code>.</div>
 </div>
 <div class="col-first odd-row-color class-summary class-summary-tab2"><a href="Terminal.html" title="class in com.bilt.pos.session">Terminal</a></div>
 <div class="col-last odd-row-color class-summary class-summary-tab2">

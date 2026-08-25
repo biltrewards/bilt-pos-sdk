@@ -100,15 +100,15 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="block">A stateful, loyalty-enabled checkout on top of <a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client"><code>BiltNexoTerminalClient</code></a>.
 
  <p>The session owns the basket, drives the terminal (or an external
- customer display), and orchestrates the payment sequence — rebate
- redemption, point redemption, stored value, card payment, and reward award
- — as a single flow. Every operation maps to standard Nexo Sale to POI 3.0
+ customer display), and orchestrates settlement — return allocations,
+ rebate redemption, point redemption, stored value/card charge, and reward
+ award — as a single flow. Every operation maps to standard Nexo Sale to POI 3.0
  messages; the raw client remains available via <a href="#getClient()"><code>getClient()</code></a>, and
  the session-less device and admin operations (diagnostics, totals,
  printing, sound) via <a href="#terminal()"><code>terminal()</code></a>.</p>
 
  <p>Terminal operations are lazy: methods returning <a href="SessionResult.html" title="class in com.bilt.pos.session"><code>SessionResult</code></a>
- (or a payment flow) send nothing until <code>execute()</code> (asynchronous,
+ (or <a href="SettlementFlow.html" title="class in com.bilt.pos.session"><code>SettlementFlow</code></a>) send nothing until <code>execute()</code> (asynchronous,
  outcome through the registered handlers), <code>executeSync()</code>,
  <code>get()</code>, or <code>getOrNull()</code> (blocking) is invoked. Basket
  mutations are pure local compute — the automatic display refresh they
@@ -267,16 +267,6 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">POS-driven member lookup by an identifier on file; no terminal prompt.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#pay()" class="member-name-link">pay</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Starts the payment orchestration chain with default options.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#pay(com.bilt.pos.session.payment.PaymentOptions)" class="member-name-link">pay</a><wbr>(<a href="payment/PaymentOptions.html" title="class in com.bilt.pos.session.payment">PaymentOptions</a>&nbsp;options)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Starts the payment orchestration chain.</div>
-</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#refund()" class="member-name-link">refund</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
@@ -369,13 +359,23 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setStoredValueCard(com.bilt.pos.session.storedvalue.StoredValueCard)" class="member-name-link">setStoredValueCard</a><wbr>(<a href="storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a>&nbsp;card)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Registers a stored value (gift) card charged as part of a split tender
- during <code>pay()</code>.</div>
+ during <code>settle()</code>.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setStoredValueCard(java.lang.String)" class="member-name-link">setStoredValueCard</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;cardNumber)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Registers a stored value (gift) card charged as part of a split tender
- during <code>pay()</code>.</div>
+ during <code>settle()</code>.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#settle()" class="member-name-link">settle</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Starts the settlement orchestration chain with default options.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#settle(com.bilt.pos.session.settlement.SettlementOptions)" class="member-name-link">settle</a><wbr>(<a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a>&nbsp;options)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Starts the settlement orchestration chain.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="storedvalue/StoredValueOperationResult.html" title="class in com.bilt.pos.session.storedvalue">StoredValueOperationResult</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#storedValueActivate(com.bilt.pos.session.storedvalue.StoredValueCard,java.math.BigDecimal)" class="member-name-link">storedValueActivate</a><wbr>(<a href="storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a>&nbsp;card,
@@ -457,6 +457,11 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  committed — the card and stored value legs (Nexo
  <code>ReversalRequest</code>), then the redemption, rebate, and award
  (their <code>LoyaltyRequest</code> refund types) — in that order.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#voidTransaction(com.bilt.pos.session.settlement.OriginalSaleRecord)" class="member-name-link">voidTransaction</a><wbr>(<a href="settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a>&nbsp;originalSale)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Voids a prior sale by its persisted original-sale record.</div>
 </div>
 </div>
 </div>
@@ -690,7 +695,7 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <h3>setStoredValueCard</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">setStoredValueCard</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;cardNumber)</span></div>
 <div class="block">Registers a stored value (gift) card charged as part of a split tender
- during <code>pay()</code>. The card number is treated as keyed
+ during <code>settle()</code>. The card number is treated as keyed
  (<code>PAN</code>); use <a href="#setStoredValueCard(com.bilt.pos.session.storedvalue.StoredValueCard)"><code>setStoredValueCard(StoredValueCard)</code></a> for
  scanned or swiped cards or to set a provider.</div>
 </section>
@@ -700,7 +705,7 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <h3>setStoredValueCard</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">setStoredValueCard</span><wbr><span class="parameters">(<a href="storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a>&nbsp;card)</span></div>
 <div class="block">Registers a stored value (gift) card charged as part of a split tender
- during <code>pay()</code>. Pass <code>null</code> to clear.</div>
+ during <code>settle()</code>. Pass <code>null</code> to clear.</div>
 </section>
 </li>
 <li>
@@ -771,26 +776,24 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 </section>
 </li>
 <li>
-<section class="detail" id="pay()">
-<h3>pay</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></span>&nbsp;<span class="element-name">pay</span>()</div>
-<div class="block">Starts the payment orchestration chain with default options.</div>
+<section class="detail" id="settle()">
+<h3>settle</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">settle</span>()</div>
+<div class="block">Starts the settlement orchestration chain with default options.</div>
 </section>
 </li>
 <li>
-<section class="detail" id="pay(com.bilt.pos.session.payment.PaymentOptions)">
-<h3>pay</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></span>&nbsp;<span class="element-name">pay</span><wbr><span class="parameters">(<a href="payment/PaymentOptions.html" title="class in com.bilt.pos.session.payment">PaymentOptions</a>&nbsp;options)</span></div>
-<div class="block">Starts the payment orchestration chain. Nothing is sent — and no
- precondition is verified — until the returned <a href="PaymentFlow.html" title="class in com.bilt.pos.session"><code>PaymentFlow</code></a>'s
+<section class="detail" id="settle(com.bilt.pos.session.settlement.SettlementOptions)">
+<h3>settle</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">settle</span><wbr><span class="parameters">(<a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a>&nbsp;options)</span></div>
+<div class="block">Starts the settlement orchestration chain. Nothing is sent — and no
+ precondition is verified — until the returned <a href="SettlementFlow.html" title="class in com.bilt.pos.session"><code>SettlementFlow</code></a>'s
  <code>execute()</code>, <code>executeSync()</code>, <code>get()</code>, or
- <code>getOrNull()</code> is invoked: the session must then be in a payable
- state (<code>ACTIVE</code>, or <code>FAILED</code> for a retry) with a
- non-empty basket and a positive grand total. A violation is delivered
- with <a href="SessionErrorCode.html#INVALID_STATE"><code>SessionErrorCode.INVALID_STATE</code></a> through the flow's
- <code>onError</code> handler like any other payment failure (the blocking
- accessors throw the <a href="SessionException.html" title="class in com.bilt.pos.session"><code>SessionException</code></a>), so a register driving
- the checkout through handlers needs no try/catch around this call.</div>
+ <code>getOrNull()</code> is invoked: the session must then be in a
+ settlable state (<code>ACTIVE</code>, or <code>FAILED</code> for a retry) with a
+ non-empty basket. Sale lines are charged through the normal tender
+ sequence; credit lines must be covered by the register-supplied
+ refund allocations in <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>.</div>
 </section>
 </li>
 <li>
@@ -811,8 +814,9 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  <code>onError</code> decision leaves it voidable, with an award the flow
  reversed remembered so nothing re-credits it. Once a void has
  partially reversed the payment's money legs, refunds are refused
- until the void is finished. To refund a sale taken by an earlier,
- gone session, use <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>.</p></div>
+ until the void is finished. To refund a sale taken by an earlier
+ session, ring return lines into a new checkout session and provide
+ refund allocations on <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>.</p></div>
 </section>
 </li>
 <li>
@@ -841,7 +845,8 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  (their <code>LoyaltyRequest</code> refund types) — in that order. A
  checkout fully covered by rewards has no money leg; voiding it
  refunds the loyalty movements alone. To void a sale taken by an
- earlier, gone session, use <a href="ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>.
+ earlier session, use <a href="#voidTransaction(com.bilt.pos.session.settlement.OriginalSaleRecord)"><code>voidTransaction(OriginalSaleRecord)</code></a> on
+ a fresh idle checkout session.
 
  <p>When a step fails, the flow's <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>onError</code></a>
  handler decides between retry, skip, and abort — see
@@ -857,6 +862,18 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  on top of the refund, so further returns must use
  <a href="#refund(java.math.BigDecimal)"><code>refund(BigDecimal)</code></a>. The session moves to
  <a href="SessionState.html#VOIDED"><code>SessionState.VOIDED</code></a> on success.</p></div>
+</section>
+</li>
+<li>
+<section class="detail" id="voidTransaction(com.bilt.pos.session.settlement.OriginalSaleRecord)">
+<h3>voidTransaction</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;<a href="VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a>&gt;</span>&nbsp;<span class="element-name">voidTransaction</span><wbr><span class="parameters">(<a href="settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a>&nbsp;originalSale)</span></div>
+<div class="block">Voids a prior sale by its persisted original-sale record. This is a
+ whole-transaction void: every referenced card, stored value, rebate,
+ redemption, and award movement is reversed in the same order as a
+ same-session void. Use this from a fresh idle checkout session; mixed
+ sale/return settlements should use <a href="#settle(com.bilt.pos.session.settlement.SettlementOptions)"><code>settle(SettlementOptions)</code></a>
+ with refund allocations instead.</div>
 </section>
 </li>
 <li>
@@ -893,7 +910,7 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  device that is processing it. An aborted payment stops at its next
  step boundary, reverses the committed steps, and settles in
  <a href="SessionState.html#FAILED"><code>SessionState.FAILED</code></a> — the basket stays intact and
- <code>pay()</code> may retry (the thrown error carries
+ <code>settle()</code> may retry (the thrown error carries
  <a href="SessionErrorCode.html#ABORTED"><code>SessionErrorCode.ABORTED</code></a>). Aborted prompts (input, PIN, card
  reads, identification) deliver their aborted/cancelled outcome and
  leave the session state unchanged. With nothing in flight this is a
@@ -923,7 +940,7 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  any kind — including a restart — is allowed. Create a new session for
  the next checkout.
 
- <p>Allowed from any state except <code>PAYING</code> and <code>VOIDING</code>
+ <p>Allowed from any state except <code>SETTLING</code> and <code>VOIDING</code>
  (money in flight), and refused while a failed payment's rollback is
  incomplete — finish the unwind with <a href="#voidTransaction()"><code>voidTransaction()</code></a> first,
  or the terminal would discard state with reversals still standing. If

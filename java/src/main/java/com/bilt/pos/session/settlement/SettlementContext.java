@@ -7,7 +7,7 @@
  *
  *   Bilt POS SDK
  */
-package com.bilt.pos.session.payment;
+package com.bilt.pos.session.settlement;
 
 import com.bilt.pos.session.basket.Basket;
 
@@ -18,15 +18,15 @@ import java.util.List;
 /**
  * Context handed to the {@code beforeStep} handler before each payment step.
  */
-public final class TransactionContext {
+public final class SettlementContext {
 
-    private final TransactionStep step;
+    private final SettlementStep step;
     private final Basket currentBasket;
     private final BigDecimal currentTotal;
     private final String defaultTransactionId;
     private final List<CommittedStep> priorSteps;
 
-    public TransactionContext(TransactionStep step, Basket currentBasket,
+    public SettlementContext(SettlementStep step, Basket currentBasket,
                               BigDecimal currentTotal, String defaultTransactionId,
                               List<CommittedStep> priorSteps) {
         this.step = step;
@@ -37,7 +37,7 @@ public final class TransactionContext {
     }
 
     /** The step about to run. */
-    public TransactionStep getStep() {
+    public SettlementStep getStep() {
         return step;
     }
 

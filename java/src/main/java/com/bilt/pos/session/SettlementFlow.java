@@ -9,12 +9,14 @@
  */
 package com.bilt.pos.session;
 
-import com.bilt.pos.session.payment.CheckoutResult;
+import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
-import com.bilt.pos.session.payment.PaymentOptions;
+import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.payment.PointRedemptionResult;
 import com.bilt.pos.session.payment.RebateRedemptionResult;
-import com.bilt.pos.session.payment.TransactionContext;
+import com.bilt.pos.session.settlement.SettlementContext;
+import com.bilt.pos.session.settlement.SettlementMovement;
+import com.bilt.pos.session.settlement.SettlementStep;
 
 import java.math.BigDecimal;
 import java.util.Objects;
@@ -23,10 +25,10 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * The payment orchestration chain returned by {@code CheckoutSession.pay()}.
+ * The settlement orchestration chain returned by {@code CheckoutSession.settle()}.
  *
- * <p>Registering handlers sends nothing; the sequence — rebate redemption,
- * point redemption, stored value, card payment, award — runs when
+ * <p>Registering handlers sends nothing; the sequence — refund allocations,
+ * rebate redemption, point redemption, stored value, card charge, award — runs when
  * {@link #execute()} (asynchronously, on the session's operation thread),
  * {@link #executeSync()} (blocking), {@link #get()}, or {@link #getOrNull()}
  * is invoked. Each step handler receives that step's result and returns the
@@ -34,11 +36,11 @@ import java.util.function.Function;
  * discounted amounts).</p>
  *
  * <pre>{@code
- * session.pay()
+ * session.settle()
  *     .onRebatesRedeemed(rebates -> rebates.getSuggestedTotal())
  *     .onPointsRedeemed(points -> points.getSuggestedTotal())
  *     .onSuccess(result -> register.printReceipt(result.getMerchantReceipt()))
- *     .onError(error -> PaymentOptions.voidAndAbort())
+ *     .onError(error -> SettlementOptions.voidAndAbort())
  *     .execute();
  * }</pre>
  *
@@ -46,41 +48,49 @@ import java.util.function.Function;
  * {@code onSuccess}, {@code onError}, and {@code onComplete} — is delivered
  * through the callback executor (the session builder's
  * {@code callbackExecutor}, or the per-flow {@link #callbackOn(Executor)}
- * override), and the payment thread <em>waits for each answer</em>: the
- * handlers are part of the payment negotiation, so their return values
+ * override), and the settlement thread <em>waits for each answer</em>: the
+ * handlers are part of the settlement negotiation, so their return values
  * steer the sequence exactly as if they ran inline — they just physically
- * run on the integrator's thread. Keep them quick (the payment is paused
+ * run on the integrator's thread. Keep them quick (settlement is paused
  * while they run), and never block a callback thread on this flow's
  * {@code get()} — the flow would be waiting on that thread's handler while
  * it waits on the flow. Without a callback executor, handlers run directly
  * on the thread executing the sequence.</p>
  *
  * <p>If a step fails, the {@code onError} handler decides how to recover via
- * the {@link PaymentOptions} it returns; committed steps are reversed before
+ * the {@link SettlementOptions} it returns; committed steps are reversed before
  * a retry or failure. The default (no handler) is
- * {@link PaymentOptions#voidAndAbort()}.</p>
+ * {@link SettlementOptions#voidAndAbort()}.</p>
  */
-public final class PaymentFlow extends SessionFlow<CheckoutResult> {
+public final class SettlementFlow extends SessionFlow<SettlementResult> {
 
-    private final Function<PaymentFlow, CheckoutResult> executor;
+    private final Function<SettlementFlow, SettlementResult> executor;
 
-    private Function<TransactionContext, String> beforeStepHandler;
+    private Function<SettlementContext, String> beforeStepHandler;
     private Function<RebateRedemptionResult, BigDecimal> rebatesHandler;
     private Function<PointRedemptionResult, BigDecimal> pointsHandler;
     private Function<GiftCardPaymentResult, BigDecimal> giftCardHandler;
-    private Function<SessionError, PaymentOptions> errorHandler;
+    private Consumer<SettlementMovement> cardChargeHandler;
+    private Consumer<SettlementMovement> awardHandler;
+    private Consumer<SettlementMovement> cardRefundHandler;
+    private Consumer<SettlementMovement> giftCardRefundHandler;
+    private Consumer<SettlementMovement> pointsRefundHandler;
+    private Consumer<SettlementMovement> rebateRefundHandler;
+    private Consumer<SettlementMovement> awardRefundHandler;
+    private Consumer<SettlementMovement> movementHandler;
+    private Function<SessionError, SettlementOptions> errorHandler;
 
     private boolean errorHandlerConsulted;
     private boolean retryRequested;
 
-    PaymentFlow(Function<PaymentFlow, CheckoutResult> executor) {
-        super("the payment");
+    SettlementFlow(Function<SettlementFlow, SettlementResult> executor) {
+        super("the settlement");
         this.executor = executor;
     }
 
     /** Session wiring: execution and default callback delivery. Applied
-     *  by {@code pay()} — before user code can call {@link #callbackOn}. */
-    PaymentFlow session(SessionOperations session) {
+     *  by {@code settle()} — before user code can call {@link #callbackOn}. */
+    SettlementFlow session(SessionOperations session) {
         attach(session);
         return this;
     }
@@ -90,7 +100,7 @@ public final class PaymentFlow extends SessionFlow<CheckoutResult> {
      * session's default callback executor. Affects {@link #execute()} only —
      * the synchronous paths always dispatch on the calling thread.
      */
-    public PaymentFlow callbackOn(Executor executor) {
+    public SettlementFlow callbackOn(Executor executor) {
         Objects.requireNonNull(executor, "executor");
         return register(() -> overrideCallback(executor));
     }
@@ -99,7 +109,7 @@ public final class PaymentFlow extends SessionFlow<CheckoutResult> {
      * Called before each step; returns the {@code SaleTransactionID} to use.
      * Default: a fresh UUID per step.
      */
-    public PaymentFlow beforeStep(Function<TransactionContext, String> handler) {
+    public SettlementFlow beforeStep(Function<SettlementContext, String> handler) {
         return register(() -> this.beforeStepHandler = requireHandler(handler));
     }
 
@@ -107,7 +117,7 @@ public final class PaymentFlow extends SessionFlow<CheckoutResult> {
      * Called when rebates/coupons are committed. Returns the updated total
      * for the next step. Default: accept, {@code previousTotal − rebates}.
      */
-    public PaymentFlow onRebatesRedeemed(Function<RebateRedemptionResult, BigDecimal> handler) {
+    public SettlementFlow onRebatesRedeemed(Function<RebateRedemptionResult, BigDecimal> handler) {
         return register(() -> this.rebatesHandler = requireHandler(handler));
     }
 
@@ -115,7 +125,7 @@ public final class PaymentFlow extends SessionFlow<CheckoutResult> {
      * Called when points/rewards are redeemed for monetary value. Returns
      * the updated total. Default: accept, subtract the monetary value.
      */
-    public PaymentFlow onPointsRedeemed(Function<PointRedemptionResult, BigDecimal> handler) {
+    public SettlementFlow onPointsRedeemed(Function<PointRedemptionResult, BigDecimal> handler) {
         return register(() -> this.pointsHandler = requireHandler(handler));
     }
 
@@ -123,39 +133,79 @@ public final class PaymentFlow extends SessionFlow<CheckoutResult> {
      * Called when the stored value card is charged. Returns the updated
      * total. Default: accept, subtract the charged amount.
      */
-    public PaymentFlow onGiftCardPayment(Function<GiftCardPaymentResult, BigDecimal> handler) {
+    public SettlementFlow onGiftCardPayment(Function<GiftCardPaymentResult, BigDecimal> handler) {
         return register(() -> this.giftCardHandler = requireHandler(handler));
     }
 
+    /** Called when the card charge leg commits. */
+    public SettlementFlow onCardCharged(Consumer<SettlementMovement> handler) {
+        return register(() -> this.cardChargeHandler = requireHandler(handler));
+    }
+
+    /** Called when the loyalty award leg commits. */
+    public SettlementFlow onAwarded(Consumer<SettlementMovement> handler) {
+        return register(() -> this.awardHandler = requireHandler(handler));
+    }
+
+    /** Called when a card refund allocation commits. */
+    public SettlementFlow onCardRefunded(Consumer<SettlementMovement> handler) {
+        return register(() -> this.cardRefundHandler = requireHandler(handler));
+    }
+
+    /** Called when a stored value refund allocation commits. */
+    public SettlementFlow onGiftCardRefunded(Consumer<SettlementMovement> handler) {
+        return register(() -> this.giftCardRefundHandler = requireHandler(handler));
+    }
+
+    /** Called when a point/reward redemption refund allocation commits. */
+    public SettlementFlow onPointsRefunded(Consumer<SettlementMovement> handler) {
+        return register(() -> this.pointsRefundHandler = requireHandler(handler));
+    }
+
+    /** Called when a rebate/coupon refund allocation commits. */
+    public SettlementFlow onRebateRefunded(Consumer<SettlementMovement> handler) {
+        return register(() -> this.rebateRefundHandler = requireHandler(handler));
+    }
+
+    /** Called when an award refund allocation commits. */
+    public SettlementFlow onAwardRefunded(Consumer<SettlementMovement> handler) {
+        return register(() -> this.awardRefundHandler = requireHandler(handler));
+    }
+
+    /** Called after any externally visible money or loyalty movement commits. */
+    public SettlementFlow onMovement(Consumer<SettlementMovement> handler) {
+        return register(() -> this.movementHandler = requireHandler(handler));
+    }
+
     /** Called after the full sequence completes successfully. */
-    public PaymentFlow onSuccess(Consumer<CheckoutResult> handler) {
+    public SettlementFlow onSuccess(Consumer<SettlementResult> handler) {
         return register(() -> successHandler(requireHandler(handler)));
     }
 
     /**
-     * Called when a step fails; the returned {@link PaymentOptions} controls
+     * Called when a step fails; the returned {@link SettlementOptions} controls
      * recovery — retry (e.g. {@code retryWithoutLoyalty()}) or
      * {@code voidAndAbort()}. Default: {@code voidAndAbort()}.
      */
-    public PaymentFlow onError(Function<SessionError, PaymentOptions> handler) {
+    public SettlementFlow onError(Function<SessionError, SettlementOptions> handler) {
         return register(() -> this.errorHandler = requireHandler(handler));
     }
 
     /**
-     * Registers a hook that runs exactly once after the payment settles, on
+     * Registers a hook that runs exactly once after settlement completes, on
      * every path — success, failure, unexpected exception, or rejection
-     * because the session ended before the payment could run. The place for
+     * because the session ended before settlement could run. The place for
      * cleanup that must not leak. A throwing hook is logged, never
      * propagated.
      */
-    public PaymentFlow onComplete(Runnable handler) {
+    public SettlementFlow onComplete(Runnable handler) {
         return register(() -> completeHandler(requireHandler(handler)));
     }
 
     // ─── SessionFlow hooks ───
 
     @Override
-    CheckoutResult runBody() {
+    SettlementResult runBody() {
         return executor.apply(this);
     }
 
@@ -185,7 +235,7 @@ public final class PaymentFlow extends SessionFlow<CheckoutResult> {
         }
     }
 
-    private PaymentFlow register(Runnable assignment) {
+    private SettlementFlow register(Runnable assignment) {
         guardRegistration();
         assignment.run();
         return this;
@@ -200,7 +250,7 @@ public final class PaymentFlow extends SessionFlow<CheckoutResult> {
     // mid-sequence, on the operation thread — deliver on the callback
     // executor and wait for the answer (see the class docs).
 
-    Function<TransactionContext, String> beforeStepHandler() {
+    Function<SettlementContext, String> beforeStepHandler() {
         return marshalled(beforeStepHandler);
     }
 
@@ -216,7 +266,29 @@ public final class PaymentFlow extends SessionFlow<CheckoutResult> {
         return marshalled(giftCardHandler);
     }
 
-    Function<SessionError, PaymentOptions> errorHandler() {
+    Consumer<SettlementMovement> movementHandler() {
+        if (movementHandler == null
+                && cardChargeHandler == null
+                && awardHandler == null
+                && cardRefundHandler == null
+                && giftCardRefundHandler == null
+                && pointsRefundHandler == null
+                && rebateRefundHandler == null
+                && awardRefundHandler == null) {
+            return null;
+        }
+        return movement -> awaitHandlerRun(() -> {
+            if (movementHandler != null) {
+                movementHandler.accept(movement);
+            }
+            Consumer<SettlementMovement> specific = specificMovementHandler(movement.getStep());
+            if (specific != null) {
+                specific.accept(movement);
+            }
+        });
+    }
+
+    Function<SessionError, SettlementOptions> errorHandler() {
         if (errorHandler == null) {
             return null;
         }
@@ -224,11 +296,32 @@ public final class PaymentFlow extends SessionFlow<CheckoutResult> {
         // awaited hand-off publishes them back to the operation thread
         return marshalled(error -> {
             errorHandlerConsulted = true;
-            PaymentOptions resolution = errorHandler.apply(error);
-            // a retry answer obliges us to tell the register if the payment
+            SettlementOptions resolution = errorHandler.apply(error);
+            // a retry answer obliges us to tell the register if settlement
             // ends in failure anyway (see deliverFailure)
             retryRequested = resolution != null && !resolution.isVoidAndAbort();
             return resolution;
         });
+    }
+
+    private Consumer<SettlementMovement> specificMovementHandler(SettlementStep step) {
+        switch (step) {
+            case CARD_CHARGE:
+                return cardChargeHandler;
+            case AWARD:
+                return awardHandler;
+            case CARD_REFUND:
+                return cardRefundHandler;
+            case STORED_VALUE_REFUND:
+                return giftCardRefundHandler;
+            case POINT_REDEMPTION_REFUND:
+                return pointsRefundHandler;
+            case REBATE_REFUND:
+                return rebateRefundHandler;
+            case AWARD_REFUND:
+                return awardRefundHandler;
+            default:
+                return null;
+        }
     }
 }

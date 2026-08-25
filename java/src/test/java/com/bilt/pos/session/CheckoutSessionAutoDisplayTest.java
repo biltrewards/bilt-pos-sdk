@@ -161,7 +161,7 @@ class CheckoutSessionAutoDisplayTest {
 
         CountDownLatch paid = new CountDownLatch(1);
         session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "50.00"));
-        session.pay().onComplete(paid::countDown).execute();
+        session.settle().onComplete(paid::countDown).execute();
         assertTrue(paid.await(5, TimeUnit.SECONDS));
 
         // three requests: the pending push, the payment queued behind it,
@@ -209,7 +209,7 @@ class CheckoutSessionAutoDisplayTest {
         session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "50.00"));
         assertTrue(firstPushOnTheWire.await(5, TimeUnit.SECONDS));
         CountDownLatch paid = new CountDownLatch(1);
-        session.pay().onComplete(paid::countDown).execute();
+        session.settle().onComplete(paid::countDown).execute();
         // accepted — the queued payment has not started, so the session is
         // still ACTIVE. The item is part of the charged basket; its push,
         // queued behind the payment, must not run at COMPLETED.
@@ -364,7 +364,7 @@ class CheckoutSessionAutoDisplayTest {
         session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "50.00"));
 
         CountDownLatch paymentSettled = new CountDownLatch(1);
-        session.pay().onComplete(paymentSettled::countDown).execute();
+        session.settle().onComplete(paymentSettled::countDown).execute();
         assertTrue(paymentOnTheWire.await(5, TimeUnit.SECONDS));
 
         session.abort().execute();

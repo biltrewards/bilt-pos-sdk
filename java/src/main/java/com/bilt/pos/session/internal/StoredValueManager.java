@@ -61,6 +61,14 @@ public final class StoredValueManager {
                                                 StoredValueCard card, BigDecimal amount,
                                                 String originalPoiTxnId,
                                                 Instant originalPoiTimestamp) {
+        return operation(type, card, amount, originalPoiTxnId, originalPoiTimestamp, null);
+    }
+
+    public StoredValueOperationResult operation(StoredValueTransactionTypeEnum type,
+                                                StoredValueCard card, BigDecimal amount,
+                                                String originalPoiTxnId,
+                                                Instant originalPoiTimestamp,
+                                                String saleTransactionId) {
         StoredValueData.Builder data = StoredValueData.builder()
                 .storedValueTransactionType(type)
                 .currency(currency)
@@ -79,7 +87,9 @@ public final class StoredValueManager {
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.STORED_VALUE))
                 .storedValueRequest(StoredValueRequest.builder()
-                        .saleData(exchange.factory().saleData())
+                        .saleData(saleTransactionId == null || saleTransactionId.isEmpty()
+                                ? exchange.factory().saleData()
+                                : exchange.factory().saleData(saleTransactionId))
                         .storedValueData(new StoredValueData[] {data.build()})
                         .build())
                 .build();

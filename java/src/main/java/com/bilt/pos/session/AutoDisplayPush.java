@@ -25,7 +25,7 @@ import java.util.function.Supplier;
  * pushes cannot race their snapshots out of order and never land mid-payment
  * over the terminal's payment screen. Pushes are conflated: since mutations
  * return without waiting, a fast ring-up outruns the terminal roundtrips,
- * and an uncapped queue would grow with stale sends that a {@code pay()}
+ * and an uncapped queue would grow with stale sends that a {@code settle()}
  * must wait behind. Conflation bounds this to at most one send queued plus
  * one in flight, whichever runs sending the newest snapshot.</p>
  *

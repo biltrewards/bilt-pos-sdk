@@ -10,27 +10,25 @@
 package com.bilt.pos.session;
 
 /**
- * Lifecycle state of a {@link CheckoutSession} (full diagram below) or a
- * {@link ReversalSession}, which only ever moves {@code IDLE → VOIDING →
- * VOIDED} (or {@code ENDED}).
+ * Lifecycle state of a {@link CheckoutSession}.
  *
  * <pre>
  * IDLE ── identifyMember() ──► IDENTIFIED
  *   │                              │
  *   └────────── addItem() ◄────────┘
  *                  │
- *               ACTIVE ◄── retry pay() ── FAILED
+ *               ACTIVE ◄── retry settle() ── FAILED
  *                  │                        ▲
- *               pay().execute()             │
+ *               settle().execute()          │
  *                  │                        │
- *               PAYING ── success ──► COMPLETED
+ *               SETTLING ── success ──► COMPLETED
  *                  └────── failure ─────────┘
  *
  * abort()            interrupts the in-flight operation only — an aborted
- *                    payment unwinds and settles FAILED; the session state
+ *                    settlement unwinds and settles FAILED; the session state
  *                    is otherwise unchanged
  * voidTransaction()  ──► VOIDING ──► VOIDED
- * end()              ──► ENDED     (from any state except PAYING/VOIDING)
+ * end()              ──► ENDED     (from any state except SETTLING/VOIDING)
  * </pre>
  */
 public enum SessionState {
@@ -44,13 +42,13 @@ public enum SessionState {
     /** The basket contains at least one item. */
     ACTIVE,
 
-    /** Payment orchestration is in progress; the basket is frozen. */
-    PAYING,
+    /** Settlement orchestration is in progress; the basket is frozen. */
+    SETTLING,
 
-    /** The payment sequence completed successfully. Terminal state. */
+    /** The settlement sequence completed successfully. Terminal state. */
     COMPLETED,
 
-    /** The payment sequence failed or was aborted. Retry {@code pay()} or void. */
+    /** The settlement sequence failed or was aborted. Retry {@code settle()} or void. */
     FAILED,
 
     /** A void of the completed transaction is in progress. */

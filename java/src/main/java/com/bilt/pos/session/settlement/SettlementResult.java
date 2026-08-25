@@ -7,10 +7,12 @@
  *
  *   Bilt POS SDK
  */
-package com.bilt.pos.session.payment;
+package com.bilt.pos.session.settlement;
 
 import com.bilt.pos.session.Receipt;
 import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.payment.EarnedReward;
+import com.bilt.pos.session.payment.RedeemedRebate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -19,18 +21,18 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Final outcome of a successful payment orchestration.
+ * Final outcome of a successful settlement orchestration.
  *
  * <p>The loyalty award is best-effort (the terminal stores-and-forwards when
  * the loyalty host is down): a failed award does not fail the checkout but is
  * reported in {@link #getWarnings()}.</p>
  */
-public final class CheckoutResult {
+public final class SettlementResult {
 
     private final boolean success;
     private final Basket finalBasket;
 
-    // Payment breakdown
+    // Charge-side breakdown
     private final BigDecimal authorizedAmount;
     private final BigDecimal storedValueAmountUsed;
     private final BigDecimal cardAmountCharged;
@@ -38,7 +40,7 @@ public final class CheckoutResult {
     private final String acquirerTransactionId;
     private final String paymentBrand;
 
-    // Loyalty — redeemed during payment
+    // Loyalty — redeemed during charge-side settlement
     private final List<RedeemedRebate> redeemedRebates;
     private final BigDecimal totalRebateAmount;
     private final int pointsRedeemed;
@@ -66,9 +68,13 @@ public final class CheckoutResult {
     private final String redemptionPoiTransactionId;
     private final Instant redemptionPoiTransactionTimestamp;
 
+    private final BigDecimal cardRefundedAmount;
+    private final BigDecimal storedValueRefundedAmount;
+    private final BigDecimal loyaltyRefundedAmount;
+    private final List<SettlementMovement> movements;
     private final List<String> warnings;
 
-    private CheckoutResult(Builder builder) {
+    private SettlementResult(Builder builder) {
         this.success = builder.success;
         this.finalBasket = builder.finalBasket;
         this.authorizedAmount = builder.authorizedAmount;
@@ -97,6 +103,10 @@ public final class CheckoutResult {
         this.rebatePoiTransactionTimestamp = builder.rebatePoiTransactionTimestamp;
         this.redemptionPoiTransactionId = builder.redemptionPoiTransactionId;
         this.redemptionPoiTransactionTimestamp = builder.redemptionPoiTransactionTimestamp;
+        this.cardRefundedAmount = builder.cardRefundedAmount;
+        this.storedValueRefundedAmount = builder.storedValueRefundedAmount;
+        this.loyaltyRefundedAmount = builder.loyaltyRefundedAmount;
+        this.movements = Collections.unmodifiableList(new ArrayList<>(builder.movements));
         this.warnings = Collections.unmodifiableList(new ArrayList<>(builder.warnings));
     }
 
@@ -108,7 +118,7 @@ public final class CheckoutResult {
         return success;
     }
 
-    /** Basket with the payment breakdown totals populated. */
+    /** Basket with settlement breakdown totals populated. */
     public Basket getFinalBasket() {
         return finalBasket;
     }
@@ -242,12 +252,37 @@ public final class CheckoutResult {
         return redemptionPoiTransactionTimestamp;
     }
 
+    /** Total returned to payment cards during this settlement. */
+    public BigDecimal getCardRefundedAmount() {
+        return cardRefundedAmount;
+    }
+
+    /** Total restored to stored value cards during this settlement. */
+    public BigDecimal getStoredValueRefundedAmount() {
+        return storedValueRefundedAmount;
+    }
+
+    /** Monetary value restored by loyalty refund movements. */
+    public BigDecimal getLoyaltyRefundedAmount() {
+        return loyaltyRefundedAmount;
+    }
+
+    /** Every externally visible money/loyalty movement this settlement executed. */
+    public List<SettlementMovement> getMovements() {
+        return movements;
+    }
+
     /** Non-fatal problems, e.g. a failed loyalty award. */
     public List<String> getWarnings() {
         return warnings;
     }
 
-    /** Builder for {@link CheckoutResult}. Intended for SDK use. */
+    /** References needed to void or refund against this completed settlement later. */
+    public OriginalSaleRecord toOriginalSaleRecord(String memberId) {
+        return OriginalSaleRecord.from(this, memberId);
+    }
+
+    /** Builder for {@link SettlementResult}. Intended for SDK use. */
     public static final class Builder {
 
         private boolean success;
@@ -278,6 +313,10 @@ public final class CheckoutResult {
         private Instant rebatePoiTransactionTimestamp;
         private String redemptionPoiTransactionId;
         private Instant redemptionPoiTransactionTimestamp;
+        private BigDecimal cardRefundedAmount = BigDecimal.ZERO;
+        private BigDecimal storedValueRefundedAmount = BigDecimal.ZERO;
+        private BigDecimal loyaltyRefundedAmount = BigDecimal.ZERO;
+        private List<SettlementMovement> movements = new ArrayList<>();
         private List<String> warnings = new ArrayList<>();
 
         private Builder() {
@@ -423,13 +462,38 @@ public final class CheckoutResult {
             return this;
         }
 
+        public Builder cardRefundedAmount(BigDecimal cardRefundedAmount) {
+            this.cardRefundedAmount = cardRefundedAmount;
+            return this;
+        }
+
+        public Builder storedValueRefundedAmount(BigDecimal storedValueRefundedAmount) {
+            this.storedValueRefundedAmount = storedValueRefundedAmount;
+            return this;
+        }
+
+        public Builder loyaltyRefundedAmount(BigDecimal loyaltyRefundedAmount) {
+            this.loyaltyRefundedAmount = loyaltyRefundedAmount;
+            return this;
+        }
+
+        public Builder movements(List<SettlementMovement> movements) {
+            this.movements = movements == null ? new ArrayList<>() : new ArrayList<>(movements);
+            return this;
+        }
+
+        public Builder movement(SettlementMovement movement) {
+            this.movements.add(movement);
+            return this;
+        }
+
         public Builder warning(String warning) {
             this.warnings.add(warning);
             return this;
         }
 
-        public CheckoutResult build() {
-            return new CheckoutResult(this);
+        public SettlementResult build() {
+            return new SettlementResult(this);
         }
     }
 }

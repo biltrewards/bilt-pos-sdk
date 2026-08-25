@@ -43,8 +43,8 @@ import java.util.UUID;
  * trade-in) never upserts into a sale line of the same SKU, so a basket may
  * carry both — like two lines on a paper receipt. Tax values are magnitudes;
  * a credit line's totals and tax are negated at snapshot time. A
- * {@code creditCart} engine (a refund cart) puts every added item on the
- * credit side regardless of the item's own flag.</p>
+ * {@code creditCart} engine puts every added item on the credit side
+ * regardless of the item's own flag.</p>
  *
  * <p>Callers must guard access with the session lock; this class performs no
  * synchronization. Money is computed at scale 2, {@code HALF_UP}.</p>
@@ -106,8 +106,7 @@ public final class BasketEngine implements BasketMutation {
 
     /**
      * @param creditCart when {@code true}, every added item lands on the
-     *        credit side — the mode of a refund cart, whose lines all
-     *        subtract
+     *        credit side and subtracts from the basket total
      */
     public BasketEngine(boolean creditCart) {
         this.creditCart = creditCart;
@@ -260,7 +259,7 @@ public final class BasketEngine implements BasketMutation {
         return this;
     }
 
-    /** Empties the basket (a refund cart is consumed by its refund). */
+    /** Empties the basket. */
     public void clear() {
         lines.clear();
         taxTotalOverride = null;
@@ -353,8 +352,7 @@ public final class BasketEngine implements BasketMutation {
     /**
      * When a SKU is present in both directions the sale line wins — credit
      * lines are rarer and always deliberate, so they are addressed by
-     * itemId. With one direction present (all lines of a refund cart are
-     * credits) the SKU alone is unambiguous.
+     * itemId. With one direction present, the SKU alone is unambiguous.
      */
     private Line requireBySku(String sku) {
         Objects.requireNonNull(sku, "sku");

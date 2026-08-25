@@ -92,10 +92,9 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">SessionBasket</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">The basket surface of a session, obtained via
- <a href="CheckoutSession.html#basket()"><code>CheckoutSession.basket()</code></a> (the sale basket) or
- <a href="ReversalSession.html#basket()"><code>ReversalSession.basket()</code></a> (the refund cart): item and tax
- mutations, batch edits, and immutable snapshots.
+<div class="block">The basket surface of a checkout session: item and tax mutations, batch
+ edits, and immutable snapshots. Credit items represent returns in the
+ same basket as sale items.
 
  <p>Every mutation is applied atomically, returning the updated snapshot
  synchronously; when the session has automatic display enabled it also
@@ -326,7 +325,8 @@ loadScripts(document, 'script');</script>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setTaxTotal</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
 <div class="block">Overrides the basket's total tax; passing <code>null</code> restores
  item-level computation. Like every tax value the override is a
- magnitude — on a refund cart it subtracts with the returned lines.</div>
+ magnitude; credit-side basket engines subtract it with their returned
+ lines.</div>
 </section>
 </li>
 </ul>

@@ -19,7 +19,7 @@ import java.util.logging.Logger;
 
 /**
  * The execution machinery shared by the negotiation flows —
- * {@link PaymentFlow} and {@link ReversalFlow}: a lazy, single-shot run
+ * {@link SettlementFlow} and {@link ReversalFlow}: a lazy, single-shot run
  * with an asynchronous {@link #execute()} on the session's operation
  * thread, blocking {@link #executeSync()}/{@link #get()}/{@link
  * #getOrNull()} ordered through the same thread, handlers marshalled to

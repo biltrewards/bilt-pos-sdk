@@ -26,7 +26,7 @@ import static com.bilt.pos.session.SessionState.ENDED;
 import static com.bilt.pos.session.SessionState.FAILED;
 import static com.bilt.pos.session.SessionState.IDENTIFIED;
 import static com.bilt.pos.session.SessionState.IDLE;
-import static com.bilt.pos.session.SessionState.PAYING;
+import static com.bilt.pos.session.SessionState.SETTLING;
 import static com.bilt.pos.session.SessionState.VOIDED;
 import static com.bilt.pos.session.SessionState.VOIDING;
 
@@ -44,20 +44,20 @@ public final class SessionStateMachine {
     static {
         // ENDED — the register said goodbye and the terminal discarded its
         // session data — is reachable from every state except the two with
-        // money in flight (PAYING, VOIDING); the other terminal states allow
+        // money in flight (SETTLING, VOIDING); the other terminal states allow
         // it so a finished checkout can still be ended, but nothing leaves it
         TRANSITIONS.put(IDLE, EnumSet.of(IDENTIFIED, ACTIVE, VOIDING, ENDED));
         TRANSITIONS.put(IDENTIFIED, EnumSet.of(ACTIVE, IDLE, ENDED));
-        TRANSITIONS.put(ACTIVE, EnumSet.of(PAYING, IDLE, IDENTIFIED, ENDED));
-        // an aborted payment lands in FAILED like any other unwound failure
-        TRANSITIONS.put(PAYING, EnumSet.of(COMPLETED, FAILED));
+        TRANSITIONS.put(ACTIVE, EnumSet.of(SETTLING, IDLE, IDENTIFIED, ENDED));
+        // an aborted settlement lands in FAILED like any other unwound failure
+        TRANSITIONS.put(SETTLING, EnumSet.of(COMPLETED, FAILED));
         TRANSITIONS.put(COMPLETED, EnumSet.of(VOIDING, ENDED));
         // FAILED -> ACTIVE: the tender was fully unwound, so the register
-        // may adjust the basket before retrying pay()
-        TRANSITIONS.put(FAILED, EnumSet.of(PAYING, ACTIVE, VOIDING, ENDED));
+        // may adjust the basket before retrying settle()
+        TRANSITIONS.put(FAILED, EnumSet.of(SETTLING, ACTIVE, VOIDING, ENDED));
         // a failed void restores the pre-void state (IDLE/COMPLETED/FAILED):
         // the referenced transaction still stands, so e.g. a COMPLETED
-        // payment must not degrade to FAILED where pay() could re-charge
+        // payment must not degrade to FAILED where settle() could re-charge
         TRANSITIONS.put(VOIDING, EnumSet.of(VOIDED, IDLE, COMPLETED, FAILED));
         TRANSITIONS.put(VOIDED, EnumSet.of(ENDED));
         TRANSITIONS.put(ENDED, EnumSet.noneOf(SessionState.class));

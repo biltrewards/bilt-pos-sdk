@@ -148,8 +148,16 @@ public final class NexoMessageFactory {
     public SaleToPOIRequest loyaltyRefundRequest(LoyaltyTransactionTypeEnum refundType,
                                                  OriginalPOITransaction original,
                                                  String memberId) {
+        return loyaltyRefundRequest(refundType, original, memberId, null);
+    }
+
+    public SaleToPOIRequest loyaltyRefundRequest(LoyaltyTransactionTypeEnum refundType,
+                                                 OriginalPOITransaction original,
+                                                 String memberId,
+                                                 String saleTransactionId) {
         LoyaltyRequest.Builder loyaltyRequest = LoyaltyRequest.builder()
-                .saleData(saleData())
+                .saleData(saleTransactionId == null || saleTransactionId.isEmpty()
+                        ? saleData() : saleData(saleTransactionId))
                 .loyaltyTransaction(LoyaltyTransaction.builder()
                         .loyaltyTransactionType(refundType)
                         .originalPOITransaction(original)

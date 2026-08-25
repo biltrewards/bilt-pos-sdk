@@ -15,8 +15,8 @@ import com.bilt.pos.session.identity.CardAcquisitionOptions
 import com.bilt.pos.session.identity.ForceEntryMode
 import com.bilt.pos.session.identity.IdentifyOptions
 import com.bilt.pos.session.identity.IdentifyStatus
-import com.bilt.pos.session.payment.CheckoutResult
-import com.bilt.pos.session.payment.PaymentOptions
+import com.bilt.pos.session.settlement.SettlementResult
+import com.bilt.pos.session.settlement.SettlementOptions
 import com.bilt.pos.session.storedvalue.StoredValueCard
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -487,7 +487,7 @@ class NexoEmulatorController(
             .execute()
     }
 
-    override fun pay(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?) {
+    override fun settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?) {
         val conn = connection
         val session = conn?.session
         if (conn == null || session == null) {
@@ -512,7 +512,7 @@ class NexoEmulatorController(
         val card = storedValue?.toCard()
         session.setStoredValueCard(card)
 
-        val options = PaymentOptions.builder()
+        val options = SettlementOptions.builder()
             .disableRebates(!loyalty.rebates)
             .disablePoints(!loyalty.redemption)
             .disableAward(!loyalty.award)
@@ -522,7 +522,7 @@ class NexoEmulatorController(
                 "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}" +
                 (card?.let { ", gift card ${it.storedValueId ?: "(swipe on terminal)"}" } ?: "")
         )
-        session.pay(options)
+        session.settle(options)
             .onRebatesRedeemed { rebates ->
                 log("Rebates applied: −$${rebates.totalRebateAmount.toPlainString()} → total $${rebates.suggestedTotal.toPlainString()}")
                 rebates.suggestedTotal
@@ -551,7 +551,7 @@ class NexoEmulatorController(
                         ))
                     }
                 }
-                PaymentOptions.voidAndAbort()
+                SettlementOptions.voidAndAbort()
             }
             .onSuccess { result ->
                 attempt = PaymentAttempt.SUCCEEDED
@@ -709,7 +709,7 @@ class NexoEmulatorController(
      * [persistenceScope]. Best-effort: a storage failure must never fail
      * the checkout.
      */
-    private fun persistSale(sessionId: String, memberId: String?, result: CheckoutResult) {
+    private fun persistSale(sessionId: String, memberId: String?, result: SettlementResult) {
         persistenceScope.launch {
             try {
                 val record = result.toSaleRecord(
@@ -731,7 +731,7 @@ class NexoEmulatorController(
         }
     }
 
-    private fun publishPaymentResult(result: CheckoutResult) {
+    private fun publishPaymentResult(result: SettlementResult) {
         result.finalBasket?.let(::publishBasket)
         val parts = buildList {
             if (result.cardAmountCharged.signum() > 0) {

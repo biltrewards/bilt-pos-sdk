@@ -18,10 +18,9 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * The basket surface of a session, obtained via
- * {@link CheckoutSession#basket()} (the sale basket) or
- * {@link ReversalSession#basket()} (the refund cart): item and tax
- * mutations, batch edits, and immutable snapshots.
+ * The basket surface of a checkout session: item and tax mutations, batch
+ * edits, and immutable snapshots. Credit items represent returns in the
+ * same basket as sale items.
  *
  * <p>Every mutation is applied atomically, returning the updated snapshot
  * synchronously; when the session has automatic display enabled it also
@@ -156,7 +155,8 @@ public final class SessionBasket {
     /**
      * Overrides the basket's total tax; passing {@code null} restores
      * item-level computation. Like every tax value the override is a
-     * magnitude — on a refund cart it subtracts with the returned lines.
+     * magnitude; credit-side basket engines subtract it with their returned
+     * lines.
      */
     public Basket setTaxTotal(BigDecimal amount) {
         return host.mutate(basket -> basket.setTaxTotal(amount));

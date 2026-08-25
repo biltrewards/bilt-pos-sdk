@@ -14,6 +14,8 @@ package com.bilt.pos.session.internal;
 import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.display.AdjustmentsType;
 import com.bilt.pos.display.DisplayPayloadHelper;
+import com.bilt.pos.display.LineItemKindType;
+import com.bilt.pos.display.LineItemType;
 import com.bilt.pos.display.LineItemsType;
 import com.bilt.pos.display.ReceiptType;
 import com.bilt.pos.display.TaxType;
@@ -41,12 +43,16 @@ public final class BasketDisplayRenderer implements DisplayRenderer {
 
         LineItemsType lineItems = new LineItemsType();
         for (BasketLineItem line : basket.getItems()) {
-            lineItems.getLineItem().add(DisplayPayloadHelper.productItem(
+            LineItemType item = DisplayPayloadHelper.productItem(
                     line.getDescription(),
                     BigDecimal.valueOf(line.getQuantity()),
                     currency,
                     line.getUnitPrice(),
-                    line.getAdjustedTotal()));
+                    line.getAdjustedTotal());
+            if (line.isCredit()) {
+                item.setKind(LineItemKindType.RETURN);
+            }
+            lineItems.getLineItem().add(item);
         }
 
         // line items render at adjustedTotal (post-rebate), so the printed

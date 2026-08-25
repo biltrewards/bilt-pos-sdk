@@ -1,6 +1,6 @@
 package com.bilt.pos.session;
 
-import com.bilt.pos.session.payment.CheckoutResult;
+import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -38,15 +38,15 @@ class FlowAsyncExecutionTest {
         assertTrue(latch.await(5, TimeUnit.SECONDS), "timed out waiting for dispatch");
     }
 
-    // ─── PaymentFlow ───
+    // ─── SettlementFlow ───
 
     @Test
     void paymentExecuteRunsAsyncWithHandlersOnTheOperationThread() throws Exception {
-        CheckoutResult result = CheckoutResult.builder().build();
+        SettlementResult result = SettlementResult.builder().build();
         CountDownLatch complete = new CountDownLatch(1);
         AtomicReference<String> handlerThread = new AtomicReference<>();
 
-        new PaymentFlow(flow -> result)
+        new SettlementFlow(flow -> result)
                 .session(operations)
                 .onSuccess(r -> handlerThread.set(Thread.currentThread().getName()))
                 .onComplete(complete::countDown)
@@ -67,11 +67,11 @@ class FlowAsyncExecutionTest {
         // the executor function plays the orchestrator: it consults the
         // marshalled gift card step handler mid-flow and records the total
         // the register answered with
-        PaymentFlow flow = new PaymentFlow(f -> {
+        SettlementFlow flow = new SettlementFlow(f -> {
             steered.set(f.giftCardHandler().apply(new GiftCardPaymentResult(
                     new BigDecimal("5.00"), BigDecimal.ZERO,
                     new BigDecimal("12.00"), new BigDecimal("7.00"))));
-            return CheckoutResult.builder().build();
+            return SettlementResult.builder().build();
         });
         flow.session(operations)
                 .callbackOn(callbackExecutor)
@@ -92,7 +92,7 @@ class FlowAsyncExecutionTest {
 
     @Test
     void paymentExecuteWithoutExecutorPointsToExecuteSync() {
-        PaymentFlow flow = new PaymentFlow(f -> CheckoutResult.builder().build());
+        SettlementFlow flow = new SettlementFlow(f -> SettlementResult.builder().build());
         IllegalStateException e = assertThrows(IllegalStateException.class, flow::execute);
         assertTrue(e.getMessage().contains("executeSync"));
     }
@@ -103,7 +103,7 @@ class FlowAsyncExecutionTest {
         CountDownLatch complete = new CountDownLatch(1);
         AtomicReference<SessionError> received = new AtomicReference<>();
 
-        PaymentFlow flow = new PaymentFlow(f -> CheckoutResult.builder().build())
+        SettlementFlow flow = new SettlementFlow(f -> SettlementResult.builder().build())
                 .session(operations)
                 .onError(error -> {
                     received.set(error);
@@ -126,10 +126,10 @@ class FlowAsyncExecutionTest {
         CountDownLatch complete = new CountDownLatch(1);
         AtomicReference<String> prompted = new AtomicReference<>();
 
-        PaymentFlow flow = new PaymentFlow(f -> {
+        SettlementFlow flow = new SettlementFlow(f -> {
             f.giftCardHandler().apply(new GiftCardPaymentResult(
                     BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.TEN, BigDecimal.ONE));
-            return CheckoutResult.builder().build();
+            return SettlementResult.builder().build();
         });
         flow.session(operations)
                 .callbackOn(callbackExecutor)
@@ -151,7 +151,7 @@ class FlowAsyncExecutionTest {
         // same guarantee as SessionResult: get() must not report a clean
         // success while a throwing onSuccess is still being recorded
         IllegalStateException handlerBug = new IllegalStateException("handler bug");
-        PaymentFlow flow = new PaymentFlow(f -> CheckoutResult.builder().build())
+        SettlementFlow flow = new SettlementFlow(f -> SettlementResult.builder().build())
                 .session(operations)
                 .onSuccess(r -> {
                     throw handlerBug;
@@ -163,9 +163,9 @@ class FlowAsyncExecutionTest {
 
     @Test
     void paymentGetAwaitsAnInFlightExecute() throws Exception {
-        CheckoutResult result = CheckoutResult.builder().build();
+        SettlementResult result = SettlementResult.builder().build();
         CountDownLatch bodyMayFinish = new CountDownLatch(1);
-        PaymentFlow flow = new PaymentFlow(f -> {
+        SettlementFlow flow = new SettlementFlow(f -> {
             try {
                 bodyMayFinish.await();
             } catch (InterruptedException e) {

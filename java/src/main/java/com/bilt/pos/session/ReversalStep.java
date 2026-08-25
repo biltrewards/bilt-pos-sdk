@@ -15,9 +15,7 @@ package com.bilt.pos.session;
  * the leg, not the wire verb — which operation was running is already
  * known from the flow the handler is registered on.
  *
- * <p>A void — {@code CheckoutSession.voidTransaction()} for the session's
- * own payment, {@code ReversalSession.voidTransaction()} for a referenced
- * prior sale — reverses the known legs in this order: {@link #CARD},
+ * <p>A void reverses the known legs in this order: {@link #CARD},
  * {@link #STORED_VALUE}, {@link #REDEMPTION}, {@link #REBATE},
  * {@link #AWARD}. A refund flow has at most two steps: {@link #CARD} (the
  * tender refund) and {@link #AWARD}.</p>

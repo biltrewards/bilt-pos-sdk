@@ -916,7 +916,7 @@ public final class Main {
             pauseForDisplayCheck("Demo Item B should now be on the terminal display");
 
             // 3. Pay — rebate/point steps run automatically for identified members
-            com.bilt.pos.session.payment.CheckoutResult checkout = session.pay()
+            com.bilt.pos.session.settlement.SettlementResult checkout = session.settle()
                     .onRebatesRedeemed(rebates -> {
                         LOG.info("Rebates committed: -" + rebates.getTotalRebateAmount());
                         return rebates.getSuggestedTotal();
@@ -938,7 +938,7 @@ public final class Main {
                     })
                     .onError(error -> {
                         LOG.severe("Payment failed: " + error);
-                        return com.bilt.pos.session.payment.PaymentOptions.voidAndAbort();
+                        return com.bilt.pos.session.settlement.SettlementOptions.voidAndAbort();
                     })
                     .getOrNull();
 

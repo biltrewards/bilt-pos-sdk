@@ -8,4 +8,5 @@ com.bilt.pos.session.display
 com.bilt.pos.session.identity
 com.bilt.pos.session.input
 com.bilt.pos.session.payment
+com.bilt.pos.session.settlement
 com.bilt.pos.session.storedvalue

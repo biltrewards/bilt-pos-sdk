@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
  * transaction reference — the reference a later referenced refund/void of
  * that movement must present.
  *
- * Mirrors the SDK's `TransactionStep` one-to-one, but stays a separate enum:
+ * Mirrors the SDK's `SettlementStep` one-to-one, but stays a separate enum:
  * these names are the persisted on-disk format and must not shift with SDK
  * internals (and a Java enum would need a hand-written serializer).
  */
@@ -28,7 +28,7 @@ data class TransactionLeg(
     val brand: String? = null,
     /** The rewardRefs the redemption carried; a referenced redemption
      *  reversal must replay the same refs. Unset until the SDK exposes them
-     *  on CheckoutResult. */
+     *  on SettlementResult. */
     val rewardRefs: List<String>? = null,
 )
 

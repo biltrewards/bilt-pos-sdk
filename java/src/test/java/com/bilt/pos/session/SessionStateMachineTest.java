@@ -20,7 +20,7 @@ class SessionStateMachineTest {
         SessionStateMachine machine = new SessionStateMachine();
         machine.transitionTo(IDENTIFIED);
         machine.transitionTo(ACTIVE);
-        machine.transitionTo(PAYING);
+        machine.transitionTo(SETTLING);
         machine.transitionTo(COMPLETED);
         assertEquals(COMPLETED, machine.current());
     }
@@ -29,9 +29,9 @@ class SessionStateMachineTest {
     void failedPaymentCanRetryOrVoid() {
         SessionStateMachine machine = new SessionStateMachine();
         machine.transitionTo(ACTIVE);
-        machine.transitionTo(PAYING);
+        machine.transitionTo(SETTLING);
         machine.transitionTo(FAILED);
-        assertTrue(machine.canTransitionTo(PAYING));
+        assertTrue(machine.canTransitionTo(SETTLING));
         assertTrue(machine.canTransitionTo(VOIDING));
         machine.transitionTo(VOIDING);
         machine.transitionTo(VOIDED);
@@ -50,7 +50,7 @@ class SessionStateMachineTest {
     void completedAllowsVoidAndEndOnly() {
         SessionStateMachine machine = new SessionStateMachine();
         machine.transitionTo(ACTIVE);
-        machine.transitionTo(PAYING);
+        machine.transitionTo(SETTLING);
         machine.transitionTo(COMPLETED);
         for (SessionState target : SessionState.values()) {
             assertEquals(target == VOIDING || target == ENDED,
@@ -82,8 +82,8 @@ class SessionStateMachineTest {
     void moneyInFlightStatesRefuseEnd() {
         SessionStateMachine paying = new SessionStateMachine();
         paying.transitionTo(ACTIVE);
-        paying.transitionTo(PAYING);
-        assertFalse(paying.canTransitionTo(ENDED), "PAYING -> ENDED");
+        paying.transitionTo(SETTLING);
+        assertFalse(paying.canTransitionTo(ENDED), "SETTLING -> ENDED");
 
         SessionStateMachine voiding = new SessionStateMachine();
         voiding.transitionTo(VOIDING);
@@ -114,7 +114,7 @@ class SessionStateMachineTest {
     @Test
     void requireStateReturnsInvalidStateError() {
         SessionStateMachine machine = new SessionStateMachine();
-        SessionError error = machine.requireState(EnumSet.of(PAYING), "pay");
+        SessionError error = machine.requireState(EnumSet.of(SETTLING), "pay");
         assertNotNull(error);
         assertEquals(SessionErrorCode.INVALID_STATE, error.getCode());
         assertTrue(error.getMessage().contains("pay"));
@@ -127,7 +127,7 @@ class SessionStateMachineTest {
         assertTrue(VOIDED.isTerminal());
         assertTrue(ENDED.isTerminal());
         assertFalse(IDLE.isTerminal());
-        assertFalse(PAYING.isTerminal());
+        assertFalse(SETTLING.isTerminal());
         assertFalse(FAILED.isTerminal());
         assertFalse(VOIDING.isTerminal());
     }

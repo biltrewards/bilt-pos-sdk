@@ -7,20 +7,20 @@
  *
  *   Bilt POS SDK
  */
-package com.bilt.pos.session.payment;
+package com.bilt.pos.session.settlement;
 
 import java.time.Instant;
 
-/** A payment step that has been committed on the terminal. */
+/** A settlement step that has been committed on the terminal. */
 public final class CommittedStep {
 
-    private final TransactionStep step;
+    private final SettlementStep step;
     private final String saleTransactionId;
     private final String poiTransactionId;
     private final Instant poiTransactionTimestamp;
     private final boolean success;
 
-    public CommittedStep(TransactionStep step, String saleTransactionId,
+    public CommittedStep(SettlementStep step, String saleTransactionId,
                          String poiTransactionId, Instant poiTransactionTimestamp,
                          boolean success) {
         this.step = step;
@@ -30,7 +30,7 @@ public final class CommittedStep {
         this.success = success;
     }
 
-    public TransactionStep getStep() {
+    public SettlementStep getStep() {
         return step;
     }
 
