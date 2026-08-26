@@ -15,7 +15,7 @@ public enum RefundAllocationType {
     /** Return money to a payment card using a Nexo PaymentRequest(Refund). */
     CARD,
 
-    /** Restore money to a stored value card with a StoredValue Load. */
+    /** Return money to the original stored value tender using a Nexo PaymentRequest(Refund). */
     STORED_VALUE,
 
     /** Reverse a prior point/reward redemption by its original transaction reference. */

@@ -461,7 +461,7 @@ Only the movements you supply references for are reversed: a sale with no card l
 
 ### Item-based refunds in settlement
 
-To refund specific items of a prior sale, add them to the checkout basket as credit lines and settle with allocations chosen by the register. The allocations can split one returned amount across card, stored value, points, and rebate restoration:
+To refund specific items of a prior sale, add them to the checkout basket as credit lines and settle with allocations chosen by the register. The allocations can split one returned amount across card, the original stored value tender, points, and rebate restoration:
 
 ```java
 try (CheckoutSession session = CheckoutSession.builder()
@@ -480,7 +480,7 @@ try (CheckoutSession session = CheckoutSession.builder()
             .addRefundAllocation(RefundAllocation.card(
                     new BigDecimal("10.00"), originalSale))
             .addRefundAllocation(RefundAllocation.storedValue(
-                    StoredValueCard.number("GC-1"), new BigDecimal("14.99")))
+                    new BigDecimal("14.99"), originalSale))
             .build())
             .execute();
 }

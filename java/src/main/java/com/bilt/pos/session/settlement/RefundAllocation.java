@@ -9,8 +9,6 @@
  */
 package com.bilt.pos.session.settlement;
 
-import com.bilt.pos.session.storedvalue.StoredValueCard;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
@@ -28,7 +26,6 @@ public final class RefundAllocation {
     private final BigDecimal amount;
     private final String originalPoiTransactionId;
     private final Instant originalPoiTransactionTimestamp;
-    private final StoredValueCard storedValueCard;
     private final String memberId;
 
     private RefundAllocation(Builder builder) {
@@ -36,7 +33,6 @@ public final class RefundAllocation {
         this.amount = builder.amount == null ? BigDecimal.ZERO : builder.amount;
         this.originalPoiTransactionId = builder.originalPoiTransactionId;
         this.originalPoiTransactionTimestamp = builder.originalPoiTransactionTimestamp;
-        this.storedValueCard = builder.storedValueCard;
         this.memberId = builder.memberId;
         validate();
     }
@@ -67,13 +63,22 @@ public final class RefundAllocation {
                 .build();
     }
 
-    /** Stored value refund/restoration as a load onto the given card. */
-    public static RefundAllocation storedValue(StoredValueCard card, BigDecimal amount) {
+    /** Linked stored value refund using a Nexo PaymentRequest(Refund). */
+    public static RefundAllocation storedValue(BigDecimal amount, String originalPoiTransactionId,
+                                               Instant originalPoiTransactionTimestamp) {
         return builder()
                 .type(RefundAllocationType.STORED_VALUE)
-                .storedValueCard(card)
                 .amount(amount)
+                .originalPoiTransactionId(originalPoiTransactionId)
+                .originalPoiTransactionTimestamp(originalPoiTransactionTimestamp)
                 .build();
+    }
+
+    /** Linked stored value refund against a persisted original sale record. */
+    public static RefundAllocation storedValue(BigDecimal amount, OriginalSaleRecord originalSale) {
+        Objects.requireNonNull(originalSale, "originalSale");
+        return storedValue(amount, originalSale.getStoredValuePoiTransactionId(),
+                originalSale.getStoredValuePoiTransactionTimestamp());
     }
 
     /** Refund a prior points/rewards redemption by original POI transaction reference. */
@@ -162,10 +167,6 @@ public final class RefundAllocation {
         return originalPoiTransactionTimestamp;
     }
 
-    public StoredValueCard getStoredValueCard() {
-        return storedValueCard;
-    }
-
     public String getMemberId() {
         return memberId;
     }
@@ -180,7 +181,7 @@ public final class RefundAllocation {
             throw new IllegalArgumentException(type + " refund allocation amount must be positive");
         }
         if (type == RefundAllocationType.STORED_VALUE) {
-            Objects.requireNonNull(storedValueCard, "storedValueCard");
+            Objects.requireNonNull(originalPoiTransactionId, "originalPoiTransactionId");
         }
         if (type == RefundAllocationType.POINT_REDEMPTION
                 || type == RefundAllocationType.REBATE
@@ -197,7 +198,6 @@ public final class RefundAllocation {
         private BigDecimal amount;
         private String originalPoiTransactionId;
         private Instant originalPoiTransactionTimestamp;
-        private StoredValueCard storedValueCard;
         private String memberId;
 
         private Builder() {
@@ -220,11 +220,6 @@ public final class RefundAllocation {
 
         public Builder originalPoiTransactionTimestamp(Instant originalPoiTransactionTimestamp) {
             this.originalPoiTransactionTimestamp = originalPoiTransactionTimestamp;
-            return this;
-        }
-
-        public Builder storedValueCard(StoredValueCard storedValueCard) {
-            this.storedValueCard = storedValueCard;
             return this;
         }
 

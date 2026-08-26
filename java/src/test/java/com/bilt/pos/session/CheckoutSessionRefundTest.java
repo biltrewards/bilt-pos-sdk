@@ -3,13 +3,11 @@ package com.bilt.pos.session;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
-import com.bilt.pos.nexo.model.StoredValueData;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
-import com.bilt.pos.session.storedvalue.StoredValueCard;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.mockwebserver.MockResponse;
@@ -39,6 +37,7 @@ class CheckoutSessionRefundTest {
             "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
                     + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}";
     private static final Instant ORIGINAL_TIMESTAMP = Instant.parse("2026-07-20T10:00:00Z");
+    private static final String ORIGINAL_STORED_VALUE_TXN = "POI-ORIG-SV";
 
     private final ObjectMapper mapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -107,16 +106,6 @@ class CheckoutSessionRefundTest {
                 + "\"TimeStamp\":\"2026-07-20T10:00:03Z\"}},"
                 + "\"PaymentResult\":{\"AmountsResp\":{\"Currency\":\"USD\","
                 + "\"AuthorizedAmount\":" + authorized + "}}}}}";
-    }
-
-    private static String storedValueOk(String poiTxn, double amount, double balance) {
-        return "{\"SaleToPOIResponse\":{\"StoredValueResponse\":{"
-                + "\"Response\":{\"Result\":\"Success\"},"
-                + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"" + poiTxn + "\","
-                + "\"TimeStamp\":\"2026-07-20T10:00:02Z\"}},"
-                + "\"StoredValueResult\":[{\"StoredValueTransactionType\":\"Load\","
-                + "\"ItemAmount\":" + amount + ",\"Currency\":\"USD\","
-                + "\"StoredValueAccountStatus\":{\"CurrentBalance\":" + balance + "}}]}}}";
     }
 
     @Test
@@ -190,13 +179,13 @@ class CheckoutSessionRefundTest {
         session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 25.00)));
-        server.enqueue(new MockResponse().setBody(storedValueOk("POI-SV-REF-1", 15.00, 65.00)));
+        server.enqueue(new MockResponse().setBody(refundOk("POI-SV-REF-1", 15.00)));
 
         SettlementResult result = session.settle(SettlementOptions.builder()
                 .addRefundAllocation(RefundAllocation.card(new BigDecimal("25.00"),
                         "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
-                .addRefundAllocation(RefundAllocation.storedValue(
-                        StoredValueCard.number("GC-1"), new BigDecimal("15.00")))
+                .addRefundAllocation(RefundAllocation.storedValue(new BigDecimal("15.00"),
+                        ORIGINAL_STORED_VALUE_TXN, ORIGINAL_TIMESTAMP))
                 .build()).get();
 
         assertTrue(result.isSuccess());
@@ -214,11 +203,14 @@ class CheckoutSessionRefundTest {
         assertEquals("POI-ORIG-CARD", requests.get(0).getPaymentRequest()
                 .getPaymentTransaction().getOriginalPOITransaction()
                 .getPoiTransactionID().getTransactionID());
-        StoredValueData storedValue = requests.get(1).getStoredValueRequest()
-                .getStoredValueData()[0];
-        assertEquals("Load", storedValue.getStoredValueTransactionType().toValue());
-        assertEquals("GC-1", storedValue.getStoredValueAccountID().getStoredValueID());
-        assertEquals(15.00, storedValue.getItemAmount());
+        assertNull(requests.get(1).getStoredValueRequest());
+        assertEquals("Refund", requests.get(1).getPaymentRequest()
+                .getPaymentData().getPaymentType().toValue());
+        assertEquals(ORIGINAL_STORED_VALUE_TXN, requests.get(1).getPaymentRequest()
+                .getPaymentTransaction().getOriginalPOITransaction()
+                .getPoiTransactionID().getTransactionID());
+        assertEquals(15.00, requests.get(1).getPaymentRequest().getPaymentTransaction()
+                .getAmountsReq().getRequestedAmount());
     }
 
     @Test
@@ -229,14 +221,14 @@ class CheckoutSessionRefundTest {
         List<SettlementStep> callbacks = new ArrayList<>();
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 25.00)));
-        server.enqueue(new MockResponse().setBody(storedValueOk("POI-SV-REF-1", 15.00, 65.00)));
+        server.enqueue(new MockResponse().setBody(refundOk("POI-SV-REF-1", 15.00)));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-CARD-SALE-1", 75.00)));
 
         SettlementResult result = session.settle(SettlementOptions.builder()
                 .addRefundAllocation(RefundAllocation.card(new BigDecimal("25.00"),
                         "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
-                .addRefundAllocation(RefundAllocation.storedValue(
-                        StoredValueCard.number("GC-1"), new BigDecimal("15.00")))
+                .addRefundAllocation(RefundAllocation.storedValue(new BigDecimal("15.00"),
+                        ORIGINAL_STORED_VALUE_TXN, ORIGINAL_TIMESTAMP))
                 .build())
                 .beforeStep(ctx -> "TXN-" + ctx.getStep())
                 .onCardRefunded(movement -> callbacks.add(movement.getStep()))
@@ -259,8 +251,11 @@ class CheckoutSessionRefundTest {
         assertEquals("TXN-" + SettlementStep.CARD_REFUND, requests.get(0).getPaymentRequest()
                 .getSaleData().getSaleTransactionID().getTransactionID());
         assertEquals("TXN-" + SettlementStep.STORED_VALUE_REFUND,
-                requests.get(1).getStoredValueRequest().getSaleData()
+                requests.get(1).getPaymentRequest().getSaleData()
                         .getSaleTransactionID().getTransactionID());
+        assertEquals(ORIGINAL_STORED_VALUE_TXN, requests.get(1).getPaymentRequest()
+                .getPaymentTransaction().getOriginalPOITransaction()
+                .getPoiTransactionID().getTransactionID());
         assertEquals("TXN-" + SettlementStep.CARD_CHARGE, requests.get(2).getPaymentRequest()
                 .getSaleData().getSaleTransactionID().getTransactionID());
         assertEquals(1, requests.get(2).getPaymentRequest().getPaymentTransaction()
@@ -331,7 +326,7 @@ class CheckoutSessionRefundTest {
         session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 25.00)));
-        server.enqueue(new MockResponse().setBody(storedValueOk("POI-SV-REF-1", 15.00, 65.00)));
+        server.enqueue(new MockResponse().setBody(refundOk("POI-SV-REF-1", 15.00)));
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
 
         SessionException firstFailure = assertThrows(SessionException.class,
@@ -349,7 +344,11 @@ class CheckoutSessionRefundTest {
         assertEquals(3, firstAttempt.size());
         assertEquals("Refund", firstAttempt.get(0).getPaymentRequest()
                 .getPaymentData().getPaymentType().toValue());
-        assertNotNull(firstAttempt.get(1).getStoredValueRequest());
+        assertEquals("Refund", firstAttempt.get(1).getPaymentRequest()
+                .getPaymentData().getPaymentType().toValue());
+        assertEquals(ORIGINAL_STORED_VALUE_TXN, firstAttempt.get(1).getPaymentRequest()
+                .getPaymentTransaction().getOriginalPOITransaction()
+                .getPoiTransactionID().getTransactionID());
         assertNotNull(firstAttempt.get(2).getPaymentRequest());
 
         server.enqueue(new MockResponse().setBody(paymentOk("POI-CARD-SALE-2", 75.00)));
@@ -391,7 +390,7 @@ class CheckoutSessionRefundTest {
         session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 25.00)));
-        server.enqueue(new MockResponse().setBody(storedValueOk("POI-SV-REF-1", 15.00, 65.00)));
+        server.enqueue(new MockResponse().setBody(refundOk("POI-SV-REF-1", 15.00)));
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         assertThrows(SessionException.class, () -> session.settle(splitRefundOptions()).get());
         assertEquals(3, drainRequests().size());
@@ -401,7 +400,8 @@ class CheckoutSessionRefundTest {
                         .addRefundAllocation(RefundAllocation.card(new BigDecimal("20.00"),
                                 "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
                         .addRefundAllocation(RefundAllocation.storedValue(
-                                StoredValueCard.number("GC-1"), new BigDecimal("20.00")))
+                                new BigDecimal("20.00"), ORIGINAL_STORED_VALUE_TXN,
+                                ORIGINAL_TIMESTAMP))
                         .build()).get());
 
         assertEquals(SessionErrorCode.INVALID_STATE, mismatch.getError().getCode());
@@ -414,8 +414,8 @@ class CheckoutSessionRefundTest {
         return SettlementOptions.builder()
                 .addRefundAllocation(RefundAllocation.card(new BigDecimal("25.00"),
                         "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
-                .addRefundAllocation(RefundAllocation.storedValue(
-                        StoredValueCard.number("GC-1"), new BigDecimal("15.00")))
+                .addRefundAllocation(RefundAllocation.storedValue(new BigDecimal("15.00"),
+                        ORIGINAL_STORED_VALUE_TXN, ORIGINAL_TIMESTAMP))
                 .build();
     }
 }
