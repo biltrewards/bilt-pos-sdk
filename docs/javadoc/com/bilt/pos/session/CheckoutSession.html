@@ -793,7 +793,14 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  settlable state (<code>ACTIVE</code>, or <code>FAILED</code> for a retry) with a
  non-empty basket. Sale lines are charged through the normal tender
  sequence; credit lines must be covered by the register-supplied
- refund allocations in <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>.</div>
+ refund allocations in <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>.
+
+ <p>Refund allocations are not retried in the same settlement run. If
+ one fails, the session moves to <code>FAILED</code>; already-committed
+ refund allocation movements remain recorded, and the register retries
+ by calling <code>settle()</code> again with the same committed allocation
+ prefix. Charge-side failures after refund allocations use
+ <a href="SettlementFlow.html#onError(java.util.function.Function)"><code>SettlementFlow.onError(java.util.function.Function&lt;com.bilt.pos.session.SessionError, com.bilt.pos.session.settlement.SettlementOptions&gt;)</code></a> recovery options.</p></div>
 </section>
 </li>
 <li>

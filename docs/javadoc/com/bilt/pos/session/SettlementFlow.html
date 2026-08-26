@@ -125,9 +125,13 @@ loadScripts(document, 'script');</script>
  it waits on the flow. Without a callback executor, handlers run directly
  on the thread executing the sequence.</p>
 
- <p>If a step fails, the <code>onError</code> handler decides how to recover via
- the <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a> it returns; committed steps are reversed before
- a retry or failure. The default (no handler) is
+ <p>If a charge-side step fails after refund allocations, the <code>onError</code>
+ handler decides how to recover via the <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a> it returns;
+ committed charge-side steps are reversed before a retry or failure. Refund
+ allocation failures are different: they are not retried in the same run, and
+ committed refund allocations are not unwound. The session moves to
+ <code>FAILED</code>; retry by calling <code>settle()</code> again with the same
+ committed allocation prefix. The default charge-side policy (no handler) is
  <a href="settlement/SettlementOptions.html#voidAndAbort()"><code>SettlementOptions.voidAndAbort()</code></a>.</p></div>
 </section>
 <section class="summary">
@@ -208,8 +212,7 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onError(java.util.function.Function)" class="member-name-link">onError</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>,<wbr><a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a>&gt;&nbsp;handler)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Called when a step fails; the returned <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a> controls
- recovery — retry (e.g.</div>
+<div class="block">Called when settlement fails.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onExternalRefunded(java.util.function.Consumer)" class="member-name-link">onExternalRefunded</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</code></div>
@@ -388,9 +391,14 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="onError(java.util.function.Function)">
 <h3>onError</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onError</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>,<wbr><a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when a step fails; the returned <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a> controls
- recovery — retry (e.g. <code>retryWithoutLoyalty()</code>) or
- <code>voidAndAbort()</code>. Default: <code>voidAndAbort()</code>.</div>
+<div class="block">Called when settlement fails. For charge-side failures after refund
+ allocations, the returned <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a> controls recovery —
+ retry (e.g. <code>retryWithoutLoyalty()</code>) or <code>voidAndAbort()</code>.
+ For refund allocation failures, the handler is a terminal failure
+ notification: the returned options are ignored, committed refund
+ allocations stay recorded, and the register retries with the same
+ committed allocation prefix. Default charge-side policy:
+ <code>voidAndAbort()</code>.</div>
 </section>
 </li>
 <li>

@@ -365,6 +365,35 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
+    void refundAllocationFailureNotifiesOnErrorWithoutInRunRecovery() throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
+        List<SessionError> errors = new ArrayList<>();
+
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+
+        SessionException e = assertThrows(SessionException.class,
+                () -> session.settle(SettlementOptions.builder()
+                        .addRefundAllocation(RefundAllocation.card(new BigDecimal("40.00"),
+                                "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
+                        .build())
+                        .onError(error -> {
+                            errors.add(error);
+                            return SettlementOptions.retryWithoutLoyalty();
+                        })
+                        .get());
+
+        assertEquals(SessionErrorCode.DECLINED, e.getError().getCode());
+        assertEquals(SessionState.FAILED, session.getState());
+        assertEquals(1, errors.size());
+        assertEquals(SessionErrorCode.DECLINED, errors.get(0).getCode());
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(1, requests.size(), "onError must not trigger an in-run retry");
+        assertEquals("Refund", requests.get(0).getPaymentRequest()
+                .getPaymentData().getPaymentType().toValue());
+    }
+
+    @Test
     void settlementCanRecordExternalRefundAllocationWithoutTerminalMovement()
             throws Exception {
         CheckoutSession session = session();

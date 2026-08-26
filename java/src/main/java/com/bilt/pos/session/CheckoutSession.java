@@ -795,6 +795,13 @@ public final class CheckoutSession implements AutoCloseable {
      * non-empty basket. Sale lines are charged through the normal tender
      * sequence; credit lines must be covered by the register-supplied
      * refund allocations in {@link SettlementOptions}.
+     *
+     * <p>Refund allocations are not retried in the same settlement run. If
+     * one fails, the session moves to {@code FAILED}; already-committed
+     * refund allocation movements remain recorded, and the register retries
+     * by calling {@code settle()} again with the same committed allocation
+     * prefix. Charge-side failures after refund allocations use
+     * {@link SettlementFlow#onError} recovery options.</p>
      */
     public SettlementFlow settle(SettlementOptions options) {
         Objects.requireNonNull(options, "options");
@@ -934,6 +941,10 @@ public final class CheckoutSession implements AutoCloseable {
             SettlementStep step = refundStep(allocation.getType());
             String saleTransactionId = beforeSettlementStep(beforeStep, step, basket,
                     allocation.getAmount(), committedSteps);
+            // Refund allocation failures deliberately bypass the
+            // charge-side onError recovery loop: successful refunds cannot
+            // be re-charged as compensation, so a failed run is resumed by
+            // retrying settle() with the same committed allocation prefix.
             SettlementMovement movement = executeRefundAllocation(allocation, step,
                     saleTransactionId);
             movements.add(movement);
