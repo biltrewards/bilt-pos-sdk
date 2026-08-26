@@ -23,6 +23,12 @@ import java.util.List;
 /**
  * Final outcome of a successful settlement orchestration.
  *
+ * <p>For returns and exchanges, {@link #getMovements()} is the complete
+ * ledger of externally visible money and loyalty movements that remain
+ * committed after settlement. The refund aggregate getters report the
+ * amounts returned by card, stored value, external register-managed tender,
+ * and loyalty restoration.</p>
+ *
  * <p>The loyalty award is best-effort (the terminal stores-and-forwards when
  * the loyalty host is down): a failed award does not fail the checkout but is
  * reported in {@link #getWarnings()}.</p>
