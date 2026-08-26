@@ -95,7 +95,6 @@ public final class PaymentOrchestrator {
         public Handlers handlers = new Handlers();
         public List<CommittedStep> priorSteps = List.of();
         public BooleanSupplier abortRequested = () -> false;
-        public Consumer<Basket> finalDisplay = basket -> { };
         /** Receives the movements an incomplete unwind left standing. */
         public Consumer<List<StandingMovement>> onUnreversed = movements -> { };
     }
@@ -311,13 +310,6 @@ public final class PaymentOrchestrator {
 
         Basket finalBasket = withPaymentTotals(workingBasket, rebateTotal, pointsValue,
                 storedValueCharged, cardCharged, options.getCashback());
-
-        // 6. Final display (best-effort)
-        try {
-            request.finalDisplay.accept(finalBasket);
-        } catch (RuntimeException e) {
-            LOGGER.log(Level.WARNING, "final display failed", e);
-        }
 
         // last look before success is declared; later aborts are too late
         // and the completed payment stands (void it explicitly instead)

@@ -864,7 +864,6 @@ public final class CheckoutSession implements AutoCloseable {
         // movements an incomplete unwind left standing are kept so that
         // voidTransaction() on the failed session can finish the reversal
         request.onUnreversed = movements -> standingMovements = List.copyOf(movements);
-        request.finalDisplay = basket -> { };
         request.handlers.beforeStep = flow.beforeStepHandler();
         request.handlers.onRebatesRedeemed = flow.rebatesHandler();
         request.handlers.onPointsRedeemed = flow.pointsHandler();
