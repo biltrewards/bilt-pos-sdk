@@ -58,7 +58,6 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -758,18 +757,13 @@ public final class PaymentOrchestrator {
 
     private String beforeStep(Request request, SettlementStep step, Basket basket,
                               BigDecimal currentTotal, List<Commit> committed) {
-        String defaultId = UUID.randomUUID().toString();
-        if (request.handlers.beforeStep == null) {
-            return defaultId;
-        }
         List<CommittedStep> prior = new ArrayList<>();
         prior.addAll(request.priorSteps);
         for (Commit commit : committed) {
             prior.add(commit.info);
         }
-        String id = request.handlers.beforeStep.apply(new SettlementContext(
-                step, basket, currentTotal, defaultId, prior));
-        return id != null && !id.isEmpty() ? id : defaultId;
+        return SettlementContext.resolveSaleTransactionId(step, basket, currentTotal,
+                prior, request.handlers.beforeStep);
     }
 
     private <R> BigDecimal applyHandlerTotal(Function<R, BigDecimal> handler, R stepResult,

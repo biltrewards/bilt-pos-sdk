@@ -951,8 +951,8 @@ public final class CheckoutSession implements AutoCloseable {
                         "the settlement was aborted"));
             }
             SettlementStep step = refundStep(allocation.getType());
-            String saleTransactionId = beforeSettlementStep(beforeStep, step, basket,
-                    allocation.getAmount(), committedSteps);
+            String saleTransactionId = SettlementContext.resolveSaleTransactionId(
+                    step, basket, allocation.getAmount(), committedSteps, beforeStep);
             // Refund allocation failures deliberately bypass the
             // charge-side onError recovery loop: successful refunds cannot
             // be re-charged as compensation, so a failed run is resumed by
@@ -1068,18 +1068,6 @@ public final class CheckoutSession implements AutoCloseable {
                 .points(points)
                 .pointBalance(pointBalance)
                 .build();
-    }
-
-    private static String beforeSettlementStep(Function<SettlementContext, String> handler,
-            SettlementStep step, Basket basket, BigDecimal currentTotal,
-            List<CommittedStep> committedSteps) {
-        String defaultId = UUID.randomUUID().toString();
-        if (handler == null) {
-            return defaultId;
-        }
-        String id = handler.apply(new SettlementContext(step, basket, currentTotal,
-                defaultId, new ArrayList<>(committedSteps)));
-        return id != null && !id.isEmpty() ? id : defaultId;
     }
 
     private static SettlementStep refundStep(RefundAllocationType type) {

@@ -3389,6 +3389,13 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/IdentifyOptions.Builder.html#requireMember(boolean)" class="member-name-link">requireMember(boolean)</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyOptions.Builder.html" title="class in com.bilt.pos.session.identity">IdentifyOptions.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.util.List,java.util.function.Function)" class="member-name-link">resolveSaleTransactionId(SettlementStep, Basket, BigDecimal, List&lt;CommittedStep&gt;, Function&lt;SettlementContext, String&gt;)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
+<dd>
+<div class="block">Resolves the <code>SaleTransactionID</code> for a settlement step using the
+ same contract as <code>SettlementFlow.beforeStep</code>: generate a fresh
+ default ID, call the handler when one is registered, and fall back to
+ the default when the handler returns <code>null</code> or an empty string.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/ReversalDecision.html#RETRY" class="member-name-link">RETRY</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></dt>
 <dd>
 <div class="block">Re-send the failed step's request and continue from its outcome.</div>
