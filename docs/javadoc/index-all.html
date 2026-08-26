@@ -2344,6 +2344,10 @@ loadScripts(document, 'script');</script>
 </dl>
 <h2 class="title" id="I:H">H</h2>
 <dl class="index">
+<dt><a href="com/bilt/pos/session/basket/Basket.html#hasCreditLines()" class="member-name-link">hasCreditLines()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></dt>
+<dd>
+<div class="block">Whether the basket contains at least one credit/return line.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/Receipts.html#hasCustomerReceipt()" class="member-name-link">hasCustomerReceipt()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/Receipts.html" title="class in com.bilt.pos.receipt">Receipts</a></dt>
 <dd>
 <div class="block">Returns <code>true</code> if a customer receipt is present.</div>
@@ -2355,6 +2359,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html#hasMovement()" class="member-name-link">hasMovement()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a></dt>
 <dd>
 <div class="block">Whether the record contains at least one movement reference.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/basket/Basket.html#hasSaleLines()" class="member-name-link">hasSaleLines()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></dt>
+<dd>
+<div class="block">Whether the basket contains at least one sale/non-credit line.</div>
 </dd>
 <dt><a href="com/bilt/pos/display/QrCodeType.html#header" class="member-name-link">header</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/QrCodeType.html" title="class in com.bilt.pos.display">QrCodeType</a></dt>
 <dd>&nbsp;</dd>
@@ -3370,6 +3378,14 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/display/LineItemKindType.html#RETURN" class="member-name-link">RETURN</a> - Enum constant in enum class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemKindType.html" title="enum class in com.bilt.pos.display">LineItemKindType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/basket/Basket.html#returnPortion()" class="member-name-link">returnPortion()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></dt>
+<dd>
+<div class="block">The return side of this basket, with sale lines removed.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/basket/Basket.html#returnTotal()" class="member-name-link">returnTotal()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></dt>
+<dd>
+<div class="block">Positive amount that must be returned for the credit lines.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/ReversalDecision.html" class="type-name-link" title="enum class in com.bilt.pos.session">ReversalDecision</a> - Enum Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">How a reversal flow proceeds after one of its steps failed, returned by
@@ -3415,6 +3431,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/Terminal.Builder.html#saleId(java.lang.String)" class="member-name-link">saleId(String)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></dt>
 <dd>
 <div class="block">POS identifier sent as <code>SaleID</code>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/basket/Basket.html#salePortion()" class="member-name-link">salePortion()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></dt>
+<dd>
+<div class="block">The sale side of this basket, with credit lines removed.</div>
 </dd>
 <dt><a href="com/bilt/pos/nexo/security/SaleToPOISecuredMessage.html" class="type-name-link" title="class in com.bilt.pos.nexo.security">SaleToPOISecuredMessage</a> - Class in <a href="com/bilt/pos/nexo/security/package-summary.html">com.bilt.pos.nexo.security</a></dt>
 <dd>
@@ -4741,6 +4761,12 @@ the order they are declared.</div>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html#withProvider(java.lang.String)" class="member-name-link">withProvider(String)</a> - Method in class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></dt>
 <dd>
 <div class="block">Returns a copy with the stored value provider (e.g.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/basket/Basket.html#withSettledSalePortion(com.bilt.pos.session.basket.Basket)" class="member-name-link">withSettledSalePortion(Basket)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></dt>
+<dd>
+<div class="block">Returns a full-basket snapshot whose sale lines and payment
+ breakdown totals come from <code>settledSalePortion</code>, while this
+ basket's credit lines remain present.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/input/ConfirmationOptions.html#withTimeout(java.time.Duration)" class="member-name-link">withTimeout(Duration)</a> - Method in class com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/ConfirmationOptions.html" title="class in com.bilt.pos.session.input">ConfirmationOptions</a></dt>
 <dd>
