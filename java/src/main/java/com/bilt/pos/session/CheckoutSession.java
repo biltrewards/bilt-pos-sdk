@@ -77,7 +77,6 @@ import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
 import jakarta.xml.bind.JAXBException;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -140,7 +139,6 @@ import java.util.logging.Logger;
 public final class CheckoutSession implements AutoCloseable {
 
     private static final Logger LOGGER = Logger.getLogger(CheckoutSession.class.getName());
-    private static final int MONEY_SCALE = 2;
 
     /** The states in which the basket accepts mutations — and, by the same
      *  token, in which a queued auto-display push is still current. */
@@ -822,8 +820,8 @@ public final class CheckoutSession implements AutoCloseable {
                 throw invalidState("the basket is empty; settlement cannot start");
             }
             fullBasket = basketEngine.snapshot();
-            purchaseBasket = nonCreditBasket(fullBasket);
-            returnTotal = returnTotal(fullBasket);
+            purchaseBasket = fullBasket.salePortion();
+            returnTotal = fullBasket.returnTotal();
             validateRefundAllocations(returnTotal, options.getRefundAllocations());
             validateCommittedRefundRetry(options.getRefundAllocations());
             if (purchaseBasket.isEmpty() && returnTotal.signum() == 0) {
@@ -1165,87 +1163,6 @@ public final class CheckoutSession implements AutoCloseable {
                 && Objects.equals(a.getExpiryDate(), b.getExpiryDate());
     }
 
-    private static BigDecimal returnTotal(Basket basket) {
-        return filteredBasket(basket, true).getGrandTotal().abs();
-    }
-
-    private static Basket nonCreditBasket(Basket basket) {
-        if (!hasCreditLines(basket)) {
-            return basket;
-        }
-        return filteredBasket(basket, false);
-    }
-
-    private static Basket filteredBasket(Basket basket, boolean credit) {
-        List<com.bilt.pos.session.basket.BasketLineItem> items = new ArrayList<>();
-        BigDecimal originalTotal = BigDecimal.ZERO;
-        BigDecimal lineTaxTotal = BigDecimal.ZERO;
-        for (com.bilt.pos.session.basket.BasketLineItem line : basket.getItems()) {
-            if (line.isCredit() == credit) {
-                items.add(line);
-                originalTotal = originalTotal.add(line.getOriginalTotal());
-                lineTaxTotal = lineTaxTotal.add(line.getTaxAmount());
-            }
-        }
-        BigDecimal taxTotal = filteredTaxTotal(basket, credit, originalTotal,
-                lineTaxTotal, !items.isEmpty());
-        return Basket.builder()
-                .cartId(basket.getCartId())
-                .items(items)
-                .originalTotal(originalTotal)
-                .taxTotal(taxTotal)
-                .grandTotal(originalTotal.add(taxTotal))
-                .build();
-    }
-
-    private static BigDecimal filteredTaxTotal(Basket basket, boolean credit,
-            BigDecimal originalTotal, BigDecimal lineTaxTotal, boolean hasItems) {
-        if (!hasItems) {
-            return BigDecimal.ZERO;
-        }
-        BigDecimal fullLineTaxTotal = lineTaxTotal(basket);
-        if (basket.getTaxTotal().compareTo(fullLineTaxTotal) == 0) {
-            return lineTaxTotal;
-        }
-        boolean hasSaleLines = hasLines(basket, false);
-        boolean hasReturnLines = hasLines(basket, true);
-        if (!(hasSaleLines && hasReturnLines)) {
-            return basket.getTaxTotal();
-        }
-
-        // A basket-level override supersedes item tax, so splitting the
-        // basket must preserve that override instead of falling back to
-        // per-line taxes. Treat it as net basket tax and split by signed
-        // subtotals; the return side therefore receives a negative share.
-        BigDecimal basketOriginalTotal = basket.getOriginalTotal();
-        if (basketOriginalTotal.compareTo(BigDecimal.ZERO) == 0) {
-            return credit ? BigDecimal.ZERO : basket.getTaxTotal();
-        }
-        BigDecimal saleOriginalTotal = originalTotal(basket, false);
-        BigDecimal saleTaxTotal = basket.getTaxTotal()
-                .multiply(saleOriginalTotal)
-                .divide(basketOriginalTotal, MONEY_SCALE, RoundingMode.HALF_UP);
-        return credit ? basket.getTaxTotal().subtract(saleTaxTotal) : saleTaxTotal;
-    }
-
-    private static BigDecimal lineTaxTotal(Basket basket) {
-        BigDecimal total = BigDecimal.ZERO;
-        for (com.bilt.pos.session.basket.BasketLineItem line : basket.getItems()) {
-            total = total.add(line.getTaxAmount());
-        }
-        return total;
-    }
-
-    private static BigDecimal originalTotal(Basket basket, boolean credit) {
-        BigDecimal total = BigDecimal.ZERO;
-        for (com.bilt.pos.session.basket.BasketLineItem line : basket.getItems()) {
-            if (line.isCredit() == credit) {
-                total = total.add(line.getOriginalTotal());
-            }
-        }
-        return total;
-    }
-
     private static SettlementResult combineSettlementResult(Basket fullBasket,
             SettlementResult purchase, List<SettlementMovement> refundMovements) {
         List<SettlementMovement> movements = new ArrayList<>(refundMovements);
@@ -1258,9 +1175,12 @@ public final class CheckoutSession implements AutoCloseable {
         BigDecimal loyaltyRefunded = sumMovements(refundMovements,
                 SettlementStep.POINT_REDEMPTION_REFUND)
                 .add(sumMovements(refundMovements, SettlementStep.REBATE_REFUND));
+        Basket finalBasket = purchase == null
+                ? fullBasket
+                : fullBasket.withSettledSalePortion(purchase.getFinalBasket());
         SettlementResult.Builder builder = SettlementResult.builder()
                 .success(true)
-                .finalBasket(withSettlementTotals(fullBasket, purchase))
+                .finalBasket(finalBasket)
                 .cardRefundedAmount(cardRefunded)
                 .storedValueRefundedAmount(storedValueRefunded)
                 .loyaltyRefundedAmount(loyaltyRefunded)
@@ -1301,50 +1221,6 @@ public final class CheckoutSession implements AutoCloseable {
             builder.warning(warning);
         }
         return builder.build();
-    }
-
-    private static Basket withSettlementTotals(Basket fullBasket, SettlementResult purchase) {
-        if (purchase == null) {
-            return fullBasket;
-        }
-        Basket purchaseBasket = purchase.getFinalBasket();
-        if (!hasCreditLines(fullBasket)) {
-            return purchaseBasket;
-        }
-        List<com.bilt.pos.session.basket.BasketLineItem> items = new ArrayList<>();
-        Basket creditBasket = filteredBasket(fullBasket, true);
-        for (com.bilt.pos.session.basket.BasketLineItem line : fullBasket.getItems()) {
-            com.bilt.pos.session.basket.BasketLineItem paidLine =
-                    purchaseBasket.getItem(line.getItemId());
-            items.add(paidLine != null ? paidLine : line);
-        }
-        BigDecimal originalTotal = purchaseBasket.getOriginalTotal()
-                .add(creditBasket.getOriginalTotal());
-        BigDecimal taxTotal = purchaseBasket.getTaxTotal().add(creditBasket.getTaxTotal());
-        return Basket.builder()
-                .cartId(fullBasket.getCartId())
-                .items(items)
-                .originalTotal(originalTotal)
-                .taxTotal(taxTotal)
-                .grandTotal(originalTotal.add(taxTotal))
-                .rebateTotal(purchaseBasket.getRebateTotal())
-                .pointDiscountTotal(purchaseBasket.getPointDiscountTotal())
-                .storedValueTotal(purchaseBasket.getStoredValueTotal())
-                .cardPaymentTotal(purchaseBasket.getCardPaymentTotal())
-                .build();
-    }
-
-    private static boolean hasCreditLines(Basket basket) {
-        return hasLines(basket, true);
-    }
-
-    private static boolean hasLines(Basket basket, boolean credit) {
-        for (com.bilt.pos.session.basket.BasketLineItem line : basket.getItems()) {
-            if (line.isCredit() == credit) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static BigDecimal sumMovements(List<SettlementMovement> movements,
