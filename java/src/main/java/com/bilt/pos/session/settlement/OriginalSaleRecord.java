@@ -10,6 +10,7 @@
 package com.bilt.pos.session.settlement;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * References from a completed sale that a later checkout session can use to
@@ -117,6 +118,43 @@ public final class OriginalSaleRecord {
                 || rebatePoiTransactionId != null
                 || redemptionPoiTransactionId != null
                 || awardPoiTransactionId != null;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof OriginalSaleRecord)) {
+            return false;
+        }
+        OriginalSaleRecord that = (OriginalSaleRecord) other;
+        return Objects.equals(cardPoiTransactionId, that.cardPoiTransactionId)
+                && Objects.equals(cardPoiTransactionTimestamp, that.cardPoiTransactionTimestamp)
+                && Objects.equals(storedValuePoiTransactionId,
+                        that.storedValuePoiTransactionId)
+                && Objects.equals(storedValuePoiTransactionTimestamp,
+                        that.storedValuePoiTransactionTimestamp)
+                && Objects.equals(rebatePoiTransactionId, that.rebatePoiTransactionId)
+                && Objects.equals(rebatePoiTransactionTimestamp,
+                        that.rebatePoiTransactionTimestamp)
+                && Objects.equals(redemptionPoiTransactionId,
+                        that.redemptionPoiTransactionId)
+                && Objects.equals(redemptionPoiTransactionTimestamp,
+                        that.redemptionPoiTransactionTimestamp)
+                && Objects.equals(awardPoiTransactionId, that.awardPoiTransactionId)
+                && Objects.equals(awardPoiTransactionTimestamp,
+                        that.awardPoiTransactionTimestamp)
+                && Objects.equals(memberId, that.memberId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(cardPoiTransactionId, cardPoiTransactionTimestamp,
+                storedValuePoiTransactionId, storedValuePoiTransactionTimestamp,
+                rebatePoiTransactionId, rebatePoiTransactionTimestamp,
+                redemptionPoiTransactionId, redemptionPoiTransactionTimestamp,
+                awardPoiTransactionId, awardPoiTransactionTimestamp, memberId);
     }
 
     /** Builder for {@link OriginalSaleRecord}. */

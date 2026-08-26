@@ -218,6 +218,34 @@ public final class RefundAllocation {
         return type != RefundAllocationType.AWARD;
     }
 
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof RefundAllocation)) {
+            return false;
+        }
+        RefundAllocation that = (RefundAllocation) other;
+        return type == that.type
+                && amount.compareTo(that.amount) == 0
+                && Objects.equals(originalPoiTransactionId, that.originalPoiTransactionId)
+                && Objects.equals(originalPoiTransactionTimestamp,
+                        that.originalPoiTransactionTimestamp)
+                && Objects.equals(storedValueCard, that.storedValueCard)
+                && Objects.equals(memberId, that.memberId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(type, normalizedAmount(amount), originalPoiTransactionId,
+                originalPoiTransactionTimestamp, storedValueCard, memberId);
+    }
+
+    private static BigDecimal normalizedAmount(BigDecimal value) {
+        return value.stripTrailingZeros();
+    }
+
     private void validate() {
         if (amount.signum() < 0 || (countsTowardRefundTotal() && amount.signum() == 0)) {
             throw new IllegalArgumentException(type + " refund allocation amount must be positive");

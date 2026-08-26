@@ -1116,7 +1116,7 @@ public final class CheckoutSession implements AutoCloseable {
             throw committedRefundRetryError();
         }
         for (int i = 0; i < committed.size(); i++) {
-            if (!sameRefundAllocation(committed.get(i), allocations.get(i))) {
+            if (!Objects.equals(committed.get(i), allocations.get(i))) {
                 throw committedRefundRetryError();
             }
         }
@@ -1168,32 +1168,6 @@ public final class CheckoutSession implements AutoCloseable {
                     movement.getPoiTransactionId(), movement.getPoiTransactionTimestamp(), true));
         }
         return steps;
-    }
-
-    private static boolean sameRefundAllocation(RefundAllocation a, RefundAllocation b) {
-        return a.getType() == b.getType()
-                && a.getAmount().compareTo(b.getAmount()) == 0
-                && Objects.equals(a.getOriginalPoiTransactionId(),
-                        b.getOriginalPoiTransactionId())
-                && Objects.equals(a.getOriginalPoiTransactionTimestamp(),
-                        b.getOriginalPoiTransactionTimestamp())
-                && Objects.equals(a.getMemberId(), b.getMemberId())
-                && sameStoredValueCard(a.getStoredValueCard(), b.getStoredValueCard());
-    }
-
-    private static boolean sameStoredValueCard(StoredValueCard a, StoredValueCard b) {
-        if (a == b) {
-            return true;
-        }
-        if (a == null || b == null) {
-            return false;
-        }
-        return Objects.equals(a.getStoredValueId(), b.getStoredValueId())
-                && a.getIdentificationType() == b.getIdentificationType()
-                && a.getEntryMode() == b.getEntryMode()
-                && a.getAccountType() == b.getAccountType()
-                && Objects.equals(a.getProvider(), b.getProvider())
-                && Objects.equals(a.getExpiryDate(), b.getExpiryDate());
     }
 
     private static SettlementResult combineSettlementResult(Basket fullBasket,
@@ -1536,7 +1510,7 @@ public final class CheckoutSession implements AutoCloseable {
                 priorSaleVoidTarget = originalSale;
                 return priorSaleVoidReversedSteps;
             }
-            if (samePriorSaleVoidTarget(priorSaleVoidTarget, originalSale)) {
+            if (Objects.equals(priorSaleVoidTarget, originalSale)) {
                 return priorSaleVoidReversedSteps;
             }
             if (!priorSaleVoidReversedSteps.isEmpty()) {
@@ -1555,42 +1529,13 @@ public final class CheckoutSession implements AutoCloseable {
     private void clearPriorSaleVoidProgress(OriginalSaleRecord originalSale) {
         lock.lock();
         try {
-            if (samePriorSaleVoidTarget(priorSaleVoidTarget, originalSale)) {
+            if (Objects.equals(priorSaleVoidTarget, originalSale)) {
                 priorSaleVoidTarget = null;
                 priorSaleVoidReversedSteps = ConcurrentHashMap.newKeySet();
             }
         } finally {
             lock.unlock();
         }
-    }
-
-    private static boolean samePriorSaleVoidTarget(OriginalSaleRecord a,
-                                                  OriginalSaleRecord b) {
-        if (a == b) {
-            return true;
-        }
-        if (a == null || b == null) {
-            return false;
-        }
-        return Objects.equals(a.getCardPoiTransactionId(), b.getCardPoiTransactionId())
-                && Objects.equals(a.getCardPoiTransactionTimestamp(),
-                        b.getCardPoiTransactionTimestamp())
-                && Objects.equals(a.getStoredValuePoiTransactionId(),
-                        b.getStoredValuePoiTransactionId())
-                && Objects.equals(a.getStoredValuePoiTransactionTimestamp(),
-                        b.getStoredValuePoiTransactionTimestamp())
-                && Objects.equals(a.getRedemptionPoiTransactionId(),
-                        b.getRedemptionPoiTransactionId())
-                && Objects.equals(a.getRedemptionPoiTransactionTimestamp(),
-                        b.getRedemptionPoiTransactionTimestamp())
-                && Objects.equals(a.getRebatePoiTransactionId(),
-                        b.getRebatePoiTransactionId())
-                && Objects.equals(a.getRebatePoiTransactionTimestamp(),
-                        b.getRebatePoiTransactionTimestamp())
-                && Objects.equals(a.getAwardPoiTransactionId(),
-                        b.getAwardPoiTransactionId())
-                && Objects.equals(a.getAwardPoiTransactionTimestamp(),
-                        b.getAwardPoiTransactionTimestamp());
     }
 
     private void transitionLocked(SessionState target) {
