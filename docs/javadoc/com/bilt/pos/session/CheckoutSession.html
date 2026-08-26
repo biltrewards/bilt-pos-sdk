@@ -795,6 +795,11 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  sequence; credit lines must be covered by the register-supplied
  refund allocations in <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>.
 
+ <p>Terminal-backed refund allocations carry the return-side
+ itemization on the first <code>PaymentRequest(Refund)</code> leg only.
+ Additional refund legs are amount-only because allocations are
+ tender-level, not line-level.</p>
+
  <p>Refund allocations are not retried in the same settlement run. If
  one fails, the session moves to <code>FAILED</code>; already-committed
  refund allocation movements remain recorded, and the register retries

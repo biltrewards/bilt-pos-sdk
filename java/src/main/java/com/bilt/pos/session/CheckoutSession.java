@@ -23,6 +23,7 @@ import com.bilt.pos.nexo.model.OutputContent;
 import com.bilt.pos.nexo.model.OutputFormatEnum;
 import com.bilt.pos.nexo.model.RepeatedResponseMessageBody;
 import com.bilt.pos.nexo.model.ResultType;
+import com.bilt.pos.nexo.model.SaleItem;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
@@ -57,6 +58,7 @@ import com.bilt.pos.session.internal.PoiRef;
 import com.bilt.pos.session.internal.PaymentOrchestrator;
 import com.bilt.pos.session.internal.ReversalManager;
 import com.bilt.pos.session.internal.ReversalMovement;
+import com.bilt.pos.session.internal.SaleItemMapper;
 import com.bilt.pos.session.internal.SessionSignalCodec;
 import com.bilt.pos.session.internal.SessionStateMachine;
 import com.bilt.pos.session.internal.StoredValueManager;
@@ -796,6 +798,11 @@ public final class CheckoutSession implements AutoCloseable {
      * sequence; credit lines must be covered by the register-supplied
      * refund allocations in {@link SettlementOptions}.
      *
+     * <p>Terminal-backed refund allocations carry the return-side
+     * itemization on the first {@code PaymentRequest(Refund)} leg only.
+     * Additional refund legs are amount-only because allocations are
+     * tender-level, not line-level.</p>
+     *
      * <p>Refund allocations are not retried in the same settlement run. If
      * one fails, the session moves to {@code FAILED}; already-committed
      * refund allocation movements remain recorded, and the register retries
@@ -881,11 +888,14 @@ public final class CheckoutSession implements AutoCloseable {
             List<SettlementMovement> refundMovements = new ArrayList<>(
                     committedRefundMovementsSnapshot());
             List<CommittedStep> committedRefundSteps = committedRefundSteps(refundMovements);
-            List<RefundAllocation> pendingAllocations = options.getRefundAllocations()
-                    .subList(committedRefundAllocationsCount(),
-                            options.getRefundAllocations().size());
+            int committedRefundCount = committedRefundAllocationsCount();
+            List<RefundAllocation> refundAllocations = options.getRefundAllocations();
+            List<RefundAllocation> pendingAllocations = refundAllocations
+                    .subList(committedRefundCount, refundAllocations.size());
             refundMovements.addAll(executeRefundAllocations(flow, fullBasket,
-                    pendingAllocations, committedRefundSteps));
+                    pendingAllocations, committedRefundSteps,
+                    hasItemizedRefundAllocation(
+                            refundAllocations.subList(0, committedRefundCount))));
             request.priorSteps = committedRefundSteps;
             SettlementResult purchaseResult = purchaseBasket.isEmpty()
                     ? null : paymentOrchestrator.run(request);
@@ -929,10 +939,13 @@ public final class CheckoutSession implements AutoCloseable {
 
     private List<SettlementMovement> executeRefundAllocations(
             SettlementFlow flow, Basket basket, List<RefundAllocation> allocations,
-            List<CommittedStep> committedSteps) {
+            List<CommittedStep> committedSteps, boolean refundSaleItemsAlreadySent) {
         List<SettlementMovement> movements = new ArrayList<>();
         Function<SettlementContext, String> beforeStep = flow.beforeStepHandler();
         Consumer<SettlementMovement> onMovement = flow.movementHandler();
+        List<SaleItem> refundSaleItems = refundSaleItemsAlreadySent
+                ? List.of() : SaleItemMapper.toRefundSaleItems(basket.returnPortion());
+        boolean refundSaleItemsSent = refundSaleItemsAlreadySent;
         for (RefundAllocation allocation : allocations) {
             if (abortRequested) {
                 throw new SessionException(new SessionError(SessionErrorCode.ABORTED,
@@ -945,8 +958,18 @@ public final class CheckoutSession implements AutoCloseable {
             // charge-side onError recovery loop: successful refunds cannot
             // be re-charged as compensation, so a failed run is resumed by
             // retrying settle() with the same committed allocation prefix.
+            List<SaleItem> saleItems = null;
+            if (!refundSaleItemsSent && carriesRefundSaleItems(allocation.getType())
+                    && !refundSaleItems.isEmpty()) {
+                // Allocations are tender-level, not line-level. Carry the
+                // complete return itemization once, on the first refund
+                // PaymentRequest, so split refunds do not duplicate receipt
+                // lines across tender legs.
+                saleItems = refundSaleItems;
+                refundSaleItemsSent = true;
+            }
             SettlementMovement movement = executeRefundAllocation(allocation, step,
-                    saleTransactionId);
+                    saleTransactionId, saleItems);
             movements.add(movement);
             committedSteps.add(new CommittedStep(step, saleTransactionId,
                     movement.getPoiTransactionId(), movement.getPoiTransactionTimestamp(), true));
@@ -960,11 +983,12 @@ public final class CheckoutSession implements AutoCloseable {
 
     private SettlementMovement executeRefundAllocation(RefundAllocation allocation,
                                                        SettlementStep step,
-                                                       String saleTransactionId) {
+                                                       String saleTransactionId,
+                                                       List<SaleItem> saleItems) {
         switch (allocation.getType()) {
             case CARD:
             case STORED_VALUE:
-            RefundResult card = reversalManager.refund(allocation.getAmount(), null,
+                RefundResult card = reversalManager.refund(allocation.getAmount(), saleItems,
                         allocation.getOriginalPoiTransactionId(),
                         allocation.getOriginalPoiTransactionTimestamp(),
                         null, null, allocation.getMemberId(), saleTransactionId,
@@ -1014,6 +1038,20 @@ public final class CheckoutSession implements AutoCloseable {
                 throw new IllegalArgumentException("unsupported refund allocation type "
                         + allocation.getType());
         }
+    }
+
+    private static boolean hasItemizedRefundAllocation(List<RefundAllocation> allocations) {
+        for (RefundAllocation allocation : allocations) {
+            if (carriesRefundSaleItems(allocation.getType())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean carriesRefundSaleItems(RefundAllocationType type) {
+        return type == RefundAllocationType.CARD
+                || type == RefundAllocationType.STORED_VALUE;
     }
 
     private static SettlementMovement refundMovement(SettlementStep step,

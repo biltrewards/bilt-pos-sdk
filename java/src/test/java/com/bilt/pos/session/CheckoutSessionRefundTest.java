@@ -216,6 +216,7 @@ class CheckoutSessionRefundTest {
         assertEquals("POI-ORIG-CARD", requests.get(0).getPaymentRequest()
                 .getPaymentTransaction().getOriginalPOITransaction()
                 .getPoiTransactionID().getTransactionID());
+        assertRefundSaleItem(requests.get(0), "RET-1", 40.00);
         assertNull(requests.get(1).getStoredValueRequest());
         assertEquals("Refund", requests.get(1).getPaymentRequest()
                 .getPaymentData().getPaymentType().toValue());
@@ -224,6 +225,9 @@ class CheckoutSessionRefundTest {
                 .getPoiTransactionID().getTransactionID());
         assertEquals(15.00, requests.get(1).getPaymentRequest().getPaymentTransaction()
                 .getAmountsReq().getRequestedAmount());
+        assertNull(requests.get(1).getPaymentRequest().getPaymentTransaction()
+                        .getSaleItem(),
+                "split refund itemization is sent on the first refund leg only");
     }
 
     @Test
@@ -503,6 +507,45 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
+    void settlementRetryDoesNotReattachRefundItemsAfterCommittedRefundLeg()
+            throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
+
+        server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 25.00)));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+
+        SessionException firstFailure = assertThrows(SessionException.class,
+                () -> session.settle(splitRefundOptions()).get());
+        assertEquals(SessionErrorCode.DECLINED, firstFailure.getError().getCode());
+        assertEquals(SessionState.FAILED, session.getState());
+
+        List<SaleToPOIRequest> firstAttempt = drainRequests();
+        assertEquals(2, firstAttempt.size());
+        assertRefundSaleItem(firstAttempt.get(0), "RET-1", 40.00);
+        assertNull(firstAttempt.get(1).getPaymentRequest().getPaymentTransaction()
+                        .getSaleItem(),
+                "the first refund leg already carried the returned itemization");
+
+        server.enqueue(new MockResponse().setBody(refundOk("POI-SV-REF-2", 15.00)));
+
+        SettlementResult retried = session.settle(splitRefundOptions()).get();
+
+        assertTrue(retried.isSuccess());
+        assertEquals(0, new BigDecimal("25.00").compareTo(retried.getCardRefundedAmount()));
+        assertEquals(0, new BigDecimal("15.00").compareTo(
+                retried.getStoredValueRefundedAmount()));
+        List<SaleToPOIRequest> retryRequests = drainRequests();
+        assertEquals(1, retryRequests.size(), "retry resumes at the pending refund leg");
+        assertEquals(ORIGINAL_STORED_VALUE_TXN, retryRequests.get(0).getPaymentRequest()
+                .getPaymentTransaction().getOriginalPOITransaction()
+                .getPoiTransactionID().getTransactionID());
+        assertNull(retryRequests.get(0).getPaymentRequest().getPaymentTransaction()
+                        .getSaleItem(),
+                "retry must not duplicate itemization carried by the committed prefix");
+    }
+
+    @Test
     void settlementRetryRequiresSameCommittedRefundAllocationPrefix() throws Exception {
         CheckoutSession session = session();
         session.basket().addItem(BasketItem.of("BUY-1", "New item", 1, "75.00"));
@@ -536,5 +579,16 @@ class CheckoutSessionRefundTest {
                 .addRefundAllocation(RefundAllocation.storedValue(new BigDecimal("15.00"),
                         ORIGINAL_STORED_VALUE_TXN, ORIGINAL_TIMESTAMP))
                 .build();
+    }
+
+    private static void assertRefundSaleItem(SaleToPOIRequest request, String sku,
+                                             double itemAmount) {
+        com.bilt.pos.nexo.model.SaleItem[] saleItems = request.getPaymentRequest()
+                .getPaymentTransaction().getSaleItem();
+        assertNotNull(saleItems);
+        assertEquals(1, saleItems.length);
+        assertEquals(sku, saleItems[0].getProductCode());
+        assertEquals(1.0, saleItems[0].getQuantity());
+        assertEquals(itemAmount, saleItems[0].getItemAmount());
     }
 }
