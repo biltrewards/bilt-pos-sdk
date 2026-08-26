@@ -3,11 +3,13 @@ package com.bilt.pos.session;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
+import com.bilt.pos.nexo.model.StoredValueData;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
+import com.bilt.pos.session.storedvalue.StoredValueCard;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.mockwebserver.MockResponse;
@@ -106,6 +108,16 @@ class CheckoutSessionRefundTest {
                 + "\"TimeStamp\":\"2026-07-20T10:00:03Z\"}},"
                 + "\"PaymentResult\":{\"AmountsResp\":{\"Currency\":\"USD\","
                 + "\"AuthorizedAmount\":" + authorized + "}}}}}";
+    }
+
+    private static String storedValueOk(String poiTxn, double amount, double balance) {
+        return "{\"SaleToPOIResponse\":{\"StoredValueResponse\":{"
+                + "\"Response\":{\"Result\":\"Success\"},"
+                + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"" + poiTxn + "\","
+                + "\"TimeStamp\":\"2026-07-20T10:00:02Z\"}},"
+                + "\"StoredValueResult\":[{\"StoredValueTransactionType\":\"Load\","
+                + "\"ItemAmount\":" + amount + ",\"Currency\":\"USD\","
+                + "\"StoredValueAccountStatus\":{\"CurrentBalance\":" + balance + "}}]}}}";
     }
 
     @Test
@@ -211,6 +223,38 @@ class CheckoutSessionRefundTest {
                 .getPoiTransactionID().getTransactionID());
         assertEquals(15.00, requests.get(1).getPaymentRequest().getPaymentTransaction()
                 .getAmountsReq().getRequestedAmount());
+    }
+
+    @Test
+    void settlementCanIssueStoreCreditByLoadingStoredValueCard() throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "15.00"));
+
+        server.enqueue(new MockResponse().setBody(storedValueOk("POI-SV-LOAD-1", 15.00, 65.00)));
+
+        SettlementResult result = session.settle(SettlementOptions.builder()
+                .addRefundAllocation(RefundAllocation.storeCredit(
+                        StoredValueCard.number("GC-1"), new BigDecimal("15.00")))
+                .build())
+                .beforeStep(ctx -> "TXN-" + ctx.getStep())
+                .get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(0, new BigDecimal("15.00").compareTo(
+                result.getStoredValueRefundedAmount()));
+        assertEquals(SettlementStep.STORED_VALUE_REFUND,
+                result.getMovements().get(0).getStep());
+
+        SaleToPOIRequest request = recordedRequest();
+        assertNull(request.getPaymentRequest());
+        assertEquals("TXN-" + SettlementStep.STORED_VALUE_REFUND,
+                request.getStoredValueRequest().getSaleData()
+                        .getSaleTransactionID().getTransactionID());
+        StoredValueData storedValue = request.getStoredValueRequest().getStoredValueData()[0];
+        assertEquals("Load", storedValue.getStoredValueTransactionType().toValue());
+        assertNull(storedValue.getOriginalPOITransaction());
+        assertEquals("GC-1", storedValue.getStoredValueAccountID().getStoredValueID());
+        assertEquals(15.00, storedValue.getItemAmount());
     }
 
     @Test

@@ -963,6 +963,14 @@ public final class CheckoutSession implements AutoCloseable {
                 return refundMovement(step, allocation, saleTransactionId,
                         storedValue.getRefundedAmount(), storedValue.getPoiTransactionId(),
                         storedValue.getPoiTransactionTimestamp(), null, null);
+            case STORE_CREDIT:
+                StoredValueOperationResult storeCredit = storedValueManager.operation(
+                        StoredValueTransactionTypeEnum.LOAD,
+                        allocation.getStoredValueCard(), allocation.getAmount(),
+                        null, null, saleTransactionId);
+                return refundMovement(step, allocation, saleTransactionId,
+                        storeCredit.getAmount(), storeCredit.getPoiTransactionId(),
+                        storeCredit.getPoiTransactionTimestamp(), null, null);
             case POINT_REDEMPTION:
                 VoidResult points = reversalManager.refundLoyalty(ReversalStep.REDEMPTION,
                         allocation.getOriginalPoiTransactionId(),
@@ -1030,6 +1038,7 @@ public final class CheckoutSession implements AutoCloseable {
             case CARD:
                 return SettlementStep.CARD_REFUND;
             case STORED_VALUE:
+            case STORE_CREDIT:
                 return SettlementStep.STORED_VALUE_REFUND;
             case POINT_REDEMPTION:
                 return SettlementStep.POINT_REDEMPTION_REFUND;
@@ -1129,7 +1138,23 @@ public final class CheckoutSession implements AutoCloseable {
                         b.getOriginalPoiTransactionId())
                 && Objects.equals(a.getOriginalPoiTransactionTimestamp(),
                         b.getOriginalPoiTransactionTimestamp())
-                && Objects.equals(a.getMemberId(), b.getMemberId());
+                && Objects.equals(a.getMemberId(), b.getMemberId())
+                && sameStoredValueCard(a.getStoredValueCard(), b.getStoredValueCard());
+    }
+
+    private static boolean sameStoredValueCard(StoredValueCard a, StoredValueCard b) {
+        if (a == b) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        return Objects.equals(a.getStoredValueId(), b.getStoredValueId())
+                && a.getIdentificationType() == b.getIdentificationType()
+                && a.getEntryMode() == b.getEntryMode()
+                && a.getAccountType() == b.getAccountType()
+                && Objects.equals(a.getProvider(), b.getProvider())
+                && Objects.equals(a.getExpiryDate(), b.getExpiryDate());
     }
 
     private static BigDecimal returnTotal(Basket basket) {

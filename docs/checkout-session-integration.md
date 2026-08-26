@@ -488,6 +488,8 @@ try (CheckoutSession session = CheckoutSession.builder()
 
 The cart is free-form — which items may be returned, and in what quantities, is the register's decision. The SDK verifies that allocation totals match the credit-line total but does not decide how much should go to each tender type.
 
+Use `RefundAllocation.storedValue(amount, originalSale)` when refunding back to the original stored value tender; the SDK sends a linked `PaymentRequest(Refund)` against the stored value leg's POI transaction reference and does not need the card number. Use `RefundAllocation.storeCredit(card, amount)` when the refund should be issued as store credit onto a supplied stored value card; the SDK sends a `StoredValueRequest(Load)`.
+
 **Credit lines on a sale.** `BasketItem.credit(sku, desc, qty, price)` (or `.credit(true)` on the builder) makes the line subtract from the basket and display as a return. Quantities and unit prices stay positive — the direction carries the sign — and a credit line never upserts into a sale line of the same SKU: the basket shows both, like a paper receipt. `settle()` charges only sale lines and restores return value through the supplied allocations.
 
 ---

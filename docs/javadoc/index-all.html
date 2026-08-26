@@ -2039,6 +2039,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Amount charged to the stored value card; zero if no split.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#getStoredValueCard()" class="member-name-link">getStoredValueCard()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html#getStoredValueId()" class="member-name-link">getStoredValueId()</a> - Method in class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></dt>
 <dd>
 <div class="block">Card number or barcode; <code>null</code> for swiped cards.</div>
@@ -4090,6 +4092,14 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Stops any sound currently playing on the terminal.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/RefundAllocationType.html#STORE_CREDIT" class="member-name-link">STORE_CREDIT</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></dt>
+<dd>
+<div class="block">Restore returned value by loading a register-supplied stored value card.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#storeCredit(com.bilt.pos.session.storedvalue.StoredValueCard,java.math.BigDecimal)" class="member-name-link">storeCredit(StoredValueCard, BigDecimal)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
+<dd>
+<div class="block">Store-credit refund/restoration as a load onto the supplied stored value card.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/ReversalStep.html#STORED_VALUE" class="member-name-link">STORED_VALUE</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></dt>
 <dd>
 <div class="block">The stored value (gift card) leg of a split tender (Nexo
@@ -4134,6 +4144,8 @@ loadScripts(document, 'script');</script>
 <div class="block">Outcome of a stored value balance inquiry.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueBalance.html#%3Cinit%3E(java.math.BigDecimal,java.lang.String)" class="member-name-link">StoredValueBalance(BigDecimal, String)</a> - Constructor for class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueBalance.html" title="class in com.bilt.pos.session.storedvalue">StoredValueBalance</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html#storedValueCard(com.bilt.pos.session.storedvalue.StoredValueCard)" class="member-name-link">storedValueCard(StoredValueCard)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html" title="class in com.bilt.pos.session.settlement">RefundAllocation.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" class="type-name-link" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a> - Class in <a href="com/bilt/pos/session/storedvalue/package-summary.html">com.bilt.pos.session.storedvalue</a></dt>
 <dd>
