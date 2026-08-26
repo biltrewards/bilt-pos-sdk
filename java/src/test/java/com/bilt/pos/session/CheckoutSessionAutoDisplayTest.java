@@ -23,6 +23,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -302,6 +303,58 @@ class CheckoutSessionAutoDisplayTest {
                     "a failed push never interrupts the checkout");
             assertEquals(new BigDecimal("20.00"), session.basket()
                     .addItem(BasketItem.of("SKU-2", "Item", 1, "10.00")).getGrandTotal());
+        } finally {
+            callbackExecutor.shutdownNow();
+        }
+    }
+
+    @Test
+    void finalSettlementDisplayFailureFiresOnBackgroundErrorAndCheckoutCompletes()
+            throws Exception {
+        AtomicInteger displayRequests = new AtomicInteger();
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                String body = request.getBody().clone().readUtf8();
+                if (body.contains("\"DisplayRequest\"")) {
+                    return displayRequests.incrementAndGet() == 2
+                            ? new MockResponse().setResponseCode(500)
+                            : new MockResponse().setBody(DISPLAY_OK);
+                }
+                if (body.contains("\"PaymentRequest\"")) {
+                    return new MockResponse().setBody(PAYMENT_OK);
+                }
+                return new MockResponse().setBody(ADMIN_OK);
+            }
+        });
+        ExecutorService callbackExecutor = Executors.newSingleThreadExecutor(
+                runnable -> new Thread(runnable, "register-ui"));
+        try {
+            CountDownLatch reported = new CountDownLatch(1);
+            AtomicReference<SessionError> error = new AtomicReference<>();
+            AtomicReference<String> deliveryThread = new AtomicReference<>();
+            CheckoutSession session = start(sessionBuilder()
+                    .callbackExecutor(callbackExecutor)
+                    .onBackgroundError(e -> {
+                        error.set(e);
+                        deliveryThread.set(Thread.currentThread().getName());
+                        reported.countDown();
+                    }));
+
+            session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "50.00"));
+            assertTrue(session.settle().get().isSuccess(),
+                    "final display failures are best-effort");
+
+            assertTrue(reported.await(5, TimeUnit.SECONDS),
+                    "the failed final display must reach onBackgroundError");
+            assertNotNull(error.get());
+            assertEquals(SessionErrorCode.NETWORK, error.get().getCode());
+            assertTrue(error.get().getMessage().contains("Display"));
+            assertEquals("register-ui", deliveryThread.get(),
+                    "background errors deliver on the callback executor");
+            assertEquals(SessionState.COMPLETED, session.getState());
+            assertEquals(2, displayRequests.get(),
+                    "the first display is the cart push; the second is the final display");
         } finally {
             callbackExecutor.shutdownNow();
         }

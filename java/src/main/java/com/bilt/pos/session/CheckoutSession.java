@@ -1255,7 +1255,7 @@ public final class CheckoutSession implements AutoCloseable {
         try {
             showBasket(basket);
         } catch (RuntimeException e) {
-            LOGGER.warning("final display failed: " + e.getMessage());
+            operations.backgroundError("the final settlement display", e);
         }
     }
 
@@ -1696,8 +1696,7 @@ public final class CheckoutSession implements AutoCloseable {
         });
     }
 
-    /** The payment sequence's final display refresh; the orchestrator
-     *  catches its failures. */
+    /** Shows a basket snapshot; callers decide whether failures are fatal. */
     private void showBasket(Basket basket) {
         display.show(basket, stateMachine.current());
     }
@@ -2168,10 +2167,9 @@ public final class CheckoutSession implements AutoCloseable {
 
         /**
          * Handler for failures of work the session performs on its own
-         * behalf, with no result object to report through: today the
-         * automatic display push after a basket mutation
-         * ({@link #autoDisplay(boolean)}), in the future also the reactive
-         * {@link #onBasketUpdated(Consumer)} channel. Manual
+         * behalf, with no result object to report through: the automatic
+         * display push after a basket mutation ({@link #autoDisplay(boolean)})
+         * and the final settlement display refresh. Manual
          * {@code updateDisplay(...)} failures are not delivered here — they
          * report through their own per-call {@code onError}.
          *
