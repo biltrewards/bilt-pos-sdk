@@ -66,6 +66,14 @@ import java.util.function.Function;
  * {@code FAILED}; retry by calling {@code settle()} again with the same
  * committed allocation prefix. The default charge-side policy (no handler) is
  * {@link SettlementOptions#voidAndAbort()}.</p>
+ *
+ * <p>Movement callbacks are immediate observations, not the authoritative
+ * final ledger. Charge-side movements may be reversed by a later same-run
+ * unwind before the settlement retries or fails, and that unwind does not
+ * emit compensating movement callbacks. Refund allocation movements are
+ * durable because settlement never unwinds them. Treat
+ * {@link SettlementResult#getMovements()} from a successful result as the
+ * final movement ledger.</p>
  */
 public final class SettlementFlow extends SessionFlow<SettlementResult> {
 
@@ -143,12 +151,18 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         return register(() -> this.giftCardHandler = requireHandler(handler));
     }
 
-    /** Called when the card charge leg commits. */
+    /**
+     * Called when the card charge leg commits. See {@link #onMovement} for
+     * the provisional charge-side callback contract.
+     */
     public SettlementFlow onCardCharged(Consumer<SettlementMovement> handler) {
         return register(() -> this.cardChargeHandler = requireHandler(handler));
     }
 
-    /** Called when the loyalty award leg commits. */
+    /**
+     * Called when the loyalty award leg commits. See {@link #onMovement} for
+     * the provisional charge-side callback contract.
+     */
     public SettlementFlow onAwarded(Consumer<SettlementMovement> handler) {
         return register(() -> this.awardHandler = requireHandler(handler));
     }
@@ -183,7 +197,16 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         return register(() -> this.awardRefundHandler = requireHandler(handler));
     }
 
-    /** Called after any externally visible money or loyalty movement commits. */
+    /**
+     * Called after any externally visible money or loyalty movement commits.
+     *
+     * <p>Charge-side movement callbacks are provisional: a later failure,
+     * abort, or {@code onError} retry can unwind them in the same settlement
+     * run without emitting a compensating callback. Refund allocation
+     * movements are not unwound. Use
+     * {@link SettlementResult#getMovements()} from the successful result as
+     * the authoritative final ledger.</p>
+     */
     public SettlementFlow onMovement(Consumer<SettlementMovement> handler) {
         return register(() -> this.movementHandler = requireHandler(handler));
     }

@@ -274,7 +274,11 @@ public final class SettlementResult {
         return loyaltyRefundedAmount;
     }
 
-    /** Every externally visible money/loyalty movement this settlement executed. */
+    /**
+     * Every externally visible money/loyalty movement that remained
+     * committed when this settlement completed successfully. Charge-side
+     * movements that were later unwound by same-run recovery are excluded.
+     */
     public List<SettlementMovement> getMovements() {
         return movements;
     }

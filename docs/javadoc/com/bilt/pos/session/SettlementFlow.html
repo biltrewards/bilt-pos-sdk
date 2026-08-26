@@ -132,7 +132,15 @@ loadScripts(document, 'script');</script>
  committed refund allocations are not unwound. The session moves to
  <code>FAILED</code>; retry by calling <code>settle()</code> again with the same
  committed allocation prefix. The default charge-side policy (no handler) is
- <a href="settlement/SettlementOptions.html#voidAndAbort()"><code>SettlementOptions.voidAndAbort()</code></a>.</p></div>
+ <a href="settlement/SettlementOptions.html#voidAndAbort()"><code>SettlementOptions.voidAndAbort()</code></a>.</p>
+
+ <p>Movement callbacks are immediate observations, not the authoritative
+ final ledger. Charge-side movements may be reversed by a later same-run
+ unwind before the settlement retries or fails, and that unwind does not
+ emit compensating movement callbacks. Refund allocation movements are
+ durable because settlement never unwinds them. Treat
+ <a href="settlement/SettlementResult.html#getMovements()"><code>SettlementResult.getMovements()</code></a> from a successful result as the
+ final movement ledger.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -321,14 +329,16 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="onCardCharged(java.util.function.Consumer)">
 <h3>onCardCharged</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onCardCharged</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when the card charge leg commits.</div>
+<div class="block">Called when the card charge leg commits. See <a href="#onMovement(java.util.function.Consumer)"><code>onMovement(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a> for
+ the provisional charge-side callback contract.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="onAwarded(java.util.function.Consumer)">
 <h3>onAwarded</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onAwarded</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when the loyalty award leg commits.</div>
+<div class="block">Called when the loyalty award leg commits. See <a href="#onMovement(java.util.function.Consumer)"><code>onMovement(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a> for
+ the provisional charge-side callback contract.</div>
 </section>
 </li>
 <li>
@@ -377,7 +387,14 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="onMovement(java.util.function.Consumer)">
 <h3>onMovement</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onMovement</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called after any externally visible money or loyalty movement commits.</div>
+<div class="block">Called after any externally visible money or loyalty movement commits.
+
+ <p>Charge-side movement callbacks are provisional: a later failure,
+ abort, or <code>onError</code> retry can unwind them in the same settlement
+ run without emitting a compensating callback. Refund allocation
+ movements are not unwound. Use
+ <a href="settlement/SettlementResult.html#getMovements()"><code>SettlementResult.getMovements()</code></a> from the successful result as
+ the authoritative final ledger.</p></div>
 </section>
 </li>
 <li>
