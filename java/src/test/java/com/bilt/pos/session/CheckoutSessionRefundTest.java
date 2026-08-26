@@ -450,6 +450,14 @@ class CheckoutSessionRefundTest {
                 () -> session.voidTransaction().get());
         assertTrue(voidFailure.getError().getMessage().contains(
                 "committed refund allocations"));
+        SessionException endFailure = assertThrows(SessionException.class,
+                () -> session.end().get());
+        assertEquals(SessionErrorCode.INVALID_STATE, endFailure.getError().getCode());
+        assertTrue(endFailure.getError().getMessage().contains(
+                "retry settle() with the same refund allocations before ending"));
+        session.close();
+        assertEquals(SessionState.FAILED, session.getState(),
+                "close() must log and leave the session retryable, not end it");
 
         List<SaleToPOIRequest> firstAttempt = drainRequests();
         assertEquals(3, firstAttempt.size());

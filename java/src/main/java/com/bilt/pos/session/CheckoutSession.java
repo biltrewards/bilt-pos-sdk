@@ -1786,12 +1786,14 @@ public final class CheckoutSession implements AutoCloseable {
      *
      * <p>Allowed from any state except {@code SETTLING} and {@code VOIDING}
      * (money in flight), and refused while a failed payment's rollback is
-     * incomplete — finish the unwind with {@link #voidTransaction()} first,
-     * or the terminal would discard state with reversals still standing. If
-     * the end signal fails, the session keeps its current state so the call
-     * can be retried. A concurrent {@link #abort()} never cancels an
-     * in-flight end — the exchange always settles, and its success still
-     * moves the session to {@code ENDED}.</p>
+     * incomplete, or while refund allocations from a failed settlement have
+     * committed — finish the unwind with {@link #voidTransaction()} or retry
+     * {@code settle()} first, or the terminal/register state would be
+     * abandoned with money movements still unresolved. If the end signal
+     * fails, the session keeps its current state so the call can be retried.
+     * A concurrent {@link #abort()} never cancels an in-flight end — the
+     * exchange always settles, and its success still moves the session to
+     * {@code ENDED}.</p>
      */
     public SessionResult<Void> end() {
         return operation("end", () -> {
@@ -1811,6 +1813,11 @@ public final class CheckoutSession implements AutoCloseable {
                             + "finish the unwind with voidTransaction() before ending "
                             + "the session");
                 }
+                if (hasCommittedRefundAllocations()) {
+                    throw invalidState("refund allocations from a failed settlement are "
+                            + "committed; retry settle() with the same refund allocations "
+                            + "before ending the session");
+                }
             } finally {
                 lock.unlock();
             }
@@ -1825,8 +1832,9 @@ public final class CheckoutSession implements AutoCloseable {
 
     /**
      * Best-effort {@link #end()} for try-with-resources: a failure to send
-     * the end signal is logged, not thrown, and an already-ended session is
-     * left alone. Registers that need to react to a failed end should call
+     * the end signal, or a lifecycle state that refuses {@code end()}, is
+     * logged, not thrown, and an already-ended session is left alone.
+     * Registers that need to react to a failed end should call
      * {@code end()} directly.
      *
      * <p>Blocking, and queued behind any in-flight operation — so with a

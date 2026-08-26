@@ -197,8 +197,8 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#close()" class="member-name-link">close</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Best-effort <a href="#end()"><code>end()</code></a> for try-with-resources: a failure to send
- the end signal is logged, not thrown, and an already-ended session is
- left alone.</div>
+ the end signal, or a lifecycle state that refuses <code>end()</code>, is
+ logged, not thrown, and an already-ended session is left alone.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#end()" class="member-name-link">end</a>()</code></div>
@@ -949,12 +949,14 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 
  <p>Allowed from any state except <code>SETTLING</code> and <code>VOIDING</code>
  (money in flight), and refused while a failed payment's rollback is
- incomplete — finish the unwind with <a href="#voidTransaction()"><code>voidTransaction()</code></a> first,
- or the terminal would discard state with reversals still standing. If
- the end signal fails, the session keeps its current state so the call
- can be retried. A concurrent <a href="#abort()"><code>abort()</code></a> never cancels an
- in-flight end — the exchange always settles, and its success still
- moves the session to <code>ENDED</code>.</p></div>
+ incomplete, or while refund allocations from a failed settlement have
+ committed — finish the unwind with <a href="#voidTransaction()"><code>voidTransaction()</code></a> or retry
+ <code>settle()</code> first, or the terminal/register state would be
+ abandoned with money movements still unresolved. If the end signal
+ fails, the session keeps its current state so the call can be retried.
+ A concurrent <a href="#abort()"><code>abort()</code></a> never cancels an in-flight end — the
+ exchange always settles, and its success still moves the session to
+ <code>ENDED</code>.</p></div>
 </section>
 </li>
 <li>
@@ -962,8 +964,9 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <h3>close</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">close</span>()</div>
 <div class="block">Best-effort <a href="#end()"><code>end()</code></a> for try-with-resources: a failure to send
- the end signal is logged, not thrown, and an already-ended session is
- left alone. Registers that need to react to a failed end should call
+ the end signal, or a lifecycle state that refuses <code>end()</code>, is
+ logged, not thrown, and an already-ended session is left alone.
+ Registers that need to react to a failed end should call
  <code>end()</code> directly.
 
  <p>Blocking, and queued behind any in-flight operation — so with a

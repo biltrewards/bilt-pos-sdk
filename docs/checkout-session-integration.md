@@ -29,7 +29,7 @@ A few principles explain most of the behavior:
 - **Terminal operations are lazy.** Methods returning a `SessionResult` or `SettlementFlow` send nothing until you call `.execute()` (asynchronous, handlers deliver the outcome), `.executeSync()`, `.get()`, or `.getOrNull()` (blocking). Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
 - **Cart-building is local + auto-display.** The basket surface lives on `session.basket()`: `addItem` / `removeItem` / `updateItemQuantity` update the local basket and return the updated `Basket` immediately — pure local compute, safe to call from a UI thread. With `autoDisplay=true` (the default) each mutation also enqueues an **asynchronous, conflated** `DisplayRequest` push: pushes run on the session's operation lane (ordered against settlement — a `settle()` executed after ring-up queues behind the pending push and waits at most one roundtrip), and a fast ring-up conflates to the newest snapshot, so the customer display skips straight to the current state instead of replaying every tap. Push failures are best-effort — logged, never interrupting the checkout — and report through the builder's `onBackgroundError` handler when one is registered. The terminal may independently evaluate offers while items are scanned, but those offers are **only committed during `settle()`**.
 - **`settle()` is a fixed orchestration sequence,** with explicit callbacks for committed refund/charge movements and blocking callbacks after each loyalty/stored-value charge step so the register can update its own model and recompute tax, then return the total that feeds the next step. The shape is fixed, but steps are conditional: refund allocations run only when `SettlementOptions` supplies them for credit lines, loyalty (rebates + points) runs only for identified members and can be disabled, the stored-value charge step only runs when a gift card has been registered with `setStoredValueCard`, and card charge runs whenever an amount remains.
-- **Errors and aborts roll back cleanly.** If a charge-side step fails or `abort()` is called mid-sequence, everything already committed by that charge sequence (rebates, points, stored value) is reversed in the opposite order before the session moves to `FAILED` — basket intact, `settle()` retryable. Refund allocation failures are not recovered in-run; committed refund allocation movements stand, and the register retries `settle()` with the same committed allocation prefix. An abort is a register maneuver, not an abandonment; `end()` abandons the checkout.
+- **Errors and aborts roll back cleanly.** If a charge-side step fails or `abort()` is called mid-sequence, everything already committed by that charge sequence (rebates, points, stored value) is reversed in the opposite order before the session moves to `FAILED` — basket intact, `settle()` retryable. Refund allocation failures are not recovered in-run; committed refund allocation movements stand, and the register retries `settle()` with the same committed allocation prefix. An abort is a register maneuver, not an abandonment; `end()` is the abandonment path when no recovery-required movement is pending.
 
 ### Built-in loyalty handling
 
@@ -162,12 +162,13 @@ session.end().execute();          // or in a handler-style chain, or .get()
 
 `end()` sends the [session end signal](./session-start-end.md) — the terminal discards the session-scoped data it accumulated — and moves the session to `ENDED`. After that **nothing** runs on the session — not even diagnostics or display — and it cannot be restarted; create a new session for the next checkout. Rules:
 
-- Allowed from any state except `SETTLING` and `VOIDING` (money in flight).
+- Allowed from any state except `SETTLING` and `VOIDING` (money in flight), subject to the recovery guards below.
 - Refused while a failed settlement's rollback is incomplete — finish the unwind with `voidTransaction()` first.
+- Refused while refund allocations from a failed settlement have committed — retry `settle()` with the same refund allocations first.
 - If the end signal itself fails, the session keeps its state and `end()` can be retried.
 - A concurrent `abort()` never cancels an in-flight `end()` — like an in-flight void, the end exchange always settles (cancelling cleanup would only strand terminal-side session data).
 
-`CheckoutSession` is `AutoCloseable`: `close()` is a best-effort `end()` (failures are logged, an already-ended session is left alone), so try-with-resources guarantees the terminal is told to clean up even on exception paths:
+`CheckoutSession` is `AutoCloseable`: `close()` is a best-effort `end()` (failures and lifecycle refusals are logged, an already-ended session is left alone), so try-with-resources attempts terminal cleanup even on exception paths:
 
 ```java
 try (CheckoutSession session = CheckoutSession.builder()....start().get()) {

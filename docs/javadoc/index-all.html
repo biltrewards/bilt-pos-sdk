@@ -498,8 +498,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/CheckoutSession.html#close()" class="member-name-link">close()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a></dt>
 <dd>
 <div class="block">Best-effort <a href="com/bilt/pos/session/CheckoutSession.html#end()"><code>CheckoutSession.end()</code></a> for try-with-resources: a failure to send
- the end signal is logged, not thrown, and an already-ended session is
- left alone.</div>
+ the end signal, or a lifecycle state that refuses <code>end()</code>, is
+ logged, not thrown, and an already-ended session is left alone.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/Terminal.html#close()" class="member-name-link">close()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/Terminal.html" title="class in com.bilt.pos.session">Terminal</a></dt>
 <dd>
