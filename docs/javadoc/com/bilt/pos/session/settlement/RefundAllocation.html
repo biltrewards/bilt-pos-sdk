@@ -257,7 +257,9 @@ loadScripts(document, 'script');</script>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></span>&nbsp;<span class="element-name">card</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;originalPoiTransactionId,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a>&nbsp;originalPoiTransactionTimestamp)</span></div>
-<div class="block">Linked card refund.</div>
+<div class="block">Linked card refund. Requires an original POI transaction ID; use
+ <a href="#cardUnlinked(java.math.BigDecimal)"><code>cardUnlinked(BigDecimal)</code></a> when the refund should be issued
+ against a card presented at the terminal.</div>
 </section>
 </li>
 <li>
@@ -265,7 +267,10 @@ loadScripts(document, 'script');</script>
 <h3>card</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></span>&nbsp;<span class="element-name">card</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a>&nbsp;originalSale)</span></div>
-<div class="block">Linked card refund against a persisted original sale record.</div>
+<div class="block">Linked card refund against a persisted original sale record. The
+ record must contain a card leg; use <a href="#cardUnlinked(java.math.BigDecimal)"><code>cardUnlinked(BigDecimal)</code></a>
+ when the refund should be issued against a card presented at the
+ terminal.</div>
 </section>
 </li>
 <li>

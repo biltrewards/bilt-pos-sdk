@@ -41,21 +41,33 @@ public final class RefundAllocation {
         validate();
     }
 
-    /** Linked card refund. */
+    /**
+     * Linked card refund. Requires an original POI transaction ID; use
+     * {@link #cardUnlinked(BigDecimal)} when the refund should be issued
+     * against a card presented at the terminal.
+     */
     public static RefundAllocation card(BigDecimal amount, String originalPoiTransactionId,
                                         Instant originalPoiTransactionTimestamp) {
         return builder()
                 .type(RefundAllocationType.CARD)
                 .amount(amount)
-                .originalPoiTransactionId(originalPoiTransactionId)
+                .originalPoiTransactionId(Objects.requireNonNull(originalPoiTransactionId,
+                        "originalPoiTransactionId"))
                 .originalPoiTransactionTimestamp(originalPoiTransactionTimestamp)
                 .build();
     }
 
-    /** Linked card refund against a persisted original sale record. */
+    /**
+     * Linked card refund against a persisted original sale record. The
+     * record must contain a card leg; use {@link #cardUnlinked(BigDecimal)}
+     * when the refund should be issued against a card presented at the
+     * terminal.
+     */
     public static RefundAllocation card(BigDecimal amount, OriginalSaleRecord originalSale) {
         Objects.requireNonNull(originalSale, "originalSale");
-        return card(amount, originalSale.getCardPoiTransactionId(),
+        return card(amount, Objects.requireNonNull(originalSale.getCardPoiTransactionId(),
+                        "originalSale has no card leg; use cardUnlinked() "
+                                + "for an unlinked refund"),
                 originalSale.getCardPoiTransactionTimestamp());
     }
 
