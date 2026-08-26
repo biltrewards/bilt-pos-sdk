@@ -21,6 +21,9 @@ public enum RefundAllocationType {
     /** Restore returned value by loading a register-supplied stored value card. */
     STORE_CREDIT,
 
+    /** Refund value outside the terminal, such as cash from the register drawer. */
+    EXTERNAL,
+
     /** Reverse a prior point/reward redemption by its original transaction reference. */
     POINT_REDEMPTION,
 

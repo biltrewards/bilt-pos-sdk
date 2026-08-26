@@ -969,6 +969,9 @@ public final class CheckoutSession implements AutoCloseable {
                 return refundMovement(step, allocation, saleTransactionId,
                         storeCredit.getAmount(), storeCredit.getPoiTransactionId(),
                         storeCredit.getPoiTransactionTimestamp(), null, null);
+            case EXTERNAL:
+                return refundMovement(step, allocation, saleTransactionId,
+                        allocation.getAmount(), null, null, null, null);
             case POINT_REDEMPTION:
                 VoidResult points = reversalManager.refundLoyalty(ReversalStep.REDEMPTION,
                         allocation.getOriginalPoiTransactionId(),
@@ -1038,6 +1041,8 @@ public final class CheckoutSession implements AutoCloseable {
             case STORED_VALUE:
             case STORE_CREDIT:
                 return SettlementStep.STORED_VALUE_REFUND;
+            case EXTERNAL:
+                return SettlementStep.EXTERNAL_REFUND;
             case POINT_REDEMPTION:
                 return SettlementStep.POINT_REDEMPTION_REFUND;
             case REBATE:
@@ -1164,6 +1169,8 @@ public final class CheckoutSession implements AutoCloseable {
         BigDecimal cardRefunded = sumMovements(refundMovements, SettlementStep.CARD_REFUND);
         BigDecimal storedValueRefunded = sumMovements(refundMovements,
                 SettlementStep.STORED_VALUE_REFUND);
+        BigDecimal externalRefunded = sumMovements(refundMovements,
+                SettlementStep.EXTERNAL_REFUND);
         BigDecimal loyaltyRefunded = sumMovements(refundMovements,
                 SettlementStep.POINT_REDEMPTION_REFUND)
                 .add(sumMovements(refundMovements, SettlementStep.REBATE_REFUND));
@@ -1175,6 +1182,7 @@ public final class CheckoutSession implements AutoCloseable {
                 .finalBasket(finalBasket)
                 .cardRefundedAmount(cardRefunded)
                 .storedValueRefundedAmount(storedValueRefunded)
+                .externalRefundedAmount(externalRefunded)
                 .loyaltyRefundedAmount(loyaltyRefunded)
                 .movements(movements);
         if (purchase == null) {

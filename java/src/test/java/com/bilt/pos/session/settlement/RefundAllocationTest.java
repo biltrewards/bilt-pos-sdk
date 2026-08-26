@@ -6,6 +6,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,5 +41,15 @@ class RefundAllocationTest {
     @Test
     void unlinkedCardRefundDoesNotRequireOriginalTransactionId() {
         assertDoesNotThrow(() -> RefundAllocation.cardUnlinked(new BigDecimal("10.00")));
+    }
+
+    @Test
+    void externalRefundCountsTowardRefundTotalWithoutOriginalTransactionId() {
+        RefundAllocation allocation = RefundAllocation.external(new BigDecimal("10.00"));
+
+        assertEquals(RefundAllocationType.EXTERNAL, allocation.getType());
+        assertTrue(allocation.countsTowardRefundTotal());
+        assertEquals(new BigDecimal("10.00"), allocation.getAmount());
+        assertNull(allocation.getOriginalPoiTransactionId());
     }
 }

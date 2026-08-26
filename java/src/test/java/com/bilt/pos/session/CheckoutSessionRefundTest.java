@@ -6,6 +6,7 @@ import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.StoredValueData;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.settlement.RefundAllocation;
+import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
@@ -360,6 +361,43 @@ class CheckoutSessionRefundTest {
 
         assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
         assertTrue(e.getError().getMessage().contains("return lines total 40.00"));
+        assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
+    }
+
+    @Test
+    void settlementCanRecordExternalRefundAllocationWithoutTerminalMovement()
+            throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
+        List<SettlementStep> beforeSteps = new ArrayList<>();
+        List<SettlementStep> movementCallbacks = new ArrayList<>();
+
+        SettlementResult result = session.settle(SettlementOptions.builder()
+                .addRefundAllocation(RefundAllocation.external(new BigDecimal("40.00")))
+                .build())
+                .beforeStep(ctx -> {
+                    beforeSteps.add(ctx.getStep());
+                    return "TXN-" + ctx.getStep();
+                })
+                .onExternalRefunded(movement -> movementCallbacks.add(movement.getStep()))
+                .get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(0, new BigDecimal("40.00").compareTo(
+                result.getExternalRefundedAmount()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getCardRefundedAmount()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getStoredValueRefundedAmount()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getLoyaltyRefundedAmount()));
+        assertEquals(List.of(SettlementStep.EXTERNAL_REFUND), beforeSteps);
+        assertEquals(List.of(SettlementStep.EXTERNAL_REFUND), movementCallbacks);
+        assertEquals(1, result.getMovements().size());
+        SettlementMovement movement = result.getMovements().get(0);
+        assertEquals(SettlementStep.EXTERNAL_REFUND, movement.getStep());
+        assertEquals(0, new BigDecimal("40.00").compareTo(movement.getAmount()));
+        assertEquals("TXN-" + SettlementStep.EXTERNAL_REFUND,
+                movement.getSaleTransactionId());
+        assertNull(movement.getPoiTransactionId());
+        assertNull(movement.getPoiTransactionTimestamp());
         assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
     }
 

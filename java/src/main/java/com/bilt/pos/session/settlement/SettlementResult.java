@@ -70,6 +70,7 @@ public final class SettlementResult {
 
     private final BigDecimal cardRefundedAmount;
     private final BigDecimal storedValueRefundedAmount;
+    private final BigDecimal externalRefundedAmount;
     private final BigDecimal loyaltyRefundedAmount;
     private final List<SettlementMovement> movements;
     private final List<String> warnings;
@@ -105,6 +106,7 @@ public final class SettlementResult {
         this.redemptionPoiTransactionTimestamp = builder.redemptionPoiTransactionTimestamp;
         this.cardRefundedAmount = builder.cardRefundedAmount;
         this.storedValueRefundedAmount = builder.storedValueRefundedAmount;
+        this.externalRefundedAmount = builder.externalRefundedAmount;
         this.loyaltyRefundedAmount = builder.loyaltyRefundedAmount;
         this.movements = Collections.unmodifiableList(new ArrayList<>(builder.movements));
         this.warnings = Collections.unmodifiableList(new ArrayList<>(builder.warnings));
@@ -262,6 +264,11 @@ public final class SettlementResult {
         return storedValueRefundedAmount;
     }
 
+    /** Total refunded or restored outside the terminal during this settlement. */
+    public BigDecimal getExternalRefundedAmount() {
+        return externalRefundedAmount;
+    }
+
     /** Monetary value restored by loyalty refund movements. */
     public BigDecimal getLoyaltyRefundedAmount() {
         return loyaltyRefundedAmount;
@@ -315,6 +322,7 @@ public final class SettlementResult {
         private Instant redemptionPoiTransactionTimestamp;
         private BigDecimal cardRefundedAmount = BigDecimal.ZERO;
         private BigDecimal storedValueRefundedAmount = BigDecimal.ZERO;
+        private BigDecimal externalRefundedAmount = BigDecimal.ZERO;
         private BigDecimal loyaltyRefundedAmount = BigDecimal.ZERO;
         private List<SettlementMovement> movements = new ArrayList<>();
         private List<String> warnings = new ArrayList<>();
@@ -469,6 +477,11 @@ public final class SettlementResult {
 
         public Builder storedValueRefundedAmount(BigDecimal storedValueRefundedAmount) {
             this.storedValueRefundedAmount = storedValueRefundedAmount;
+            return this;
+        }
+
+        public Builder externalRefundedAmount(BigDecimal externalRefundedAmount) {
+            this.externalRefundedAmount = externalRefundedAmount;
             return this;
         }
 

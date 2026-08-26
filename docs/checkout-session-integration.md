@@ -80,9 +80,9 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 
 ## The settlement sequence explained
 
-`settle()` returns a `SettlementFlow` — a chainable builder where the register hooks into each step, executed when you call `.execute()` / `.get()` / `.getOrNull()`. `beforeStep` is called before every terminal movement with a `SettlementContext`; it is a chance to persist pending state and return the sale transaction ID to use for that step. The sequence is always:
+`settle()` returns a `SettlementFlow` — a chainable builder where the register hooks into each step, executed when you call `.execute()` / `.get()` / `.getOrNull()`. `beforeStep` is called before every terminal movement or register-recorded external refund with a `SettlementContext`; it is a chance to persist pending state and return the sale transaction ID to use for that step. The sequence is always:
 
-1. **Refund allocations** (if the basket has credit lines) — the register supplies the allocation split in `SettlementOptions`, and the SDK executes each card, stored value, point, rebate, or award refund movement → `onCardRefunded` / `onGiftCardRefunded` / `onPointsRefunded` / `onRebateRefunded` / `onAwardRefunded`
+1. **Refund allocations** (if the basket has credit lines) — the register supplies the allocation split in `SettlementOptions`, and the SDK executes or records each card, stored value, external, point, rebate, or award refund movement → `onCardRefunded` / `onGiftCardRefunded` / `onExternalRefunded` / `onPointsRefunded` / `onRebateRefunded` / `onAwardRefunded`
 2. **Rebate redemption** (identified members, if enabled, sale lines only) — terminal commits applicable offers/coupons → `onRebatesRedeemed`
 3. **Point redemption** (identified members, if enabled and a balance remains) — terminal redeems points for monetary value → `onPointsRedeemed`
 4. **Stored value charge** (if a card was registered and a balance remains) — terminal charges the gift card → `onGiftCardPayment`
@@ -461,7 +461,7 @@ Only the movements you supply references for are reversed: a sale with no card l
 
 ### Item-based refunds in settlement
 
-To refund specific items of a prior sale, add them to the checkout basket as credit lines and settle with allocations chosen by the register. The allocations can split one returned amount across card, the original stored value tender, points, and rebate restoration:
+To refund specific items of a prior sale, add them to the checkout basket as credit lines and settle with allocations chosen by the register. The allocations can split one returned amount across card, the original stored value tender, store credit, external tender such as cash, points, and rebate restoration:
 
 ```java
 try (CheckoutSession session = CheckoutSession.builder()
@@ -480,7 +480,9 @@ try (CheckoutSession session = CheckoutSession.builder()
             .addRefundAllocation(RefundAllocation.card(
                     new BigDecimal("10.00"), originalSale))
             .addRefundAllocation(RefundAllocation.storedValue(
-                    new BigDecimal("14.99"), originalSale))
+                    new BigDecimal("9.99"), originalSale))
+            .addRefundAllocation(RefundAllocation.external(
+                    new BigDecimal("5.00")))
             .build())
             .execute();
 }
@@ -488,7 +490,7 @@ try (CheckoutSession session = CheckoutSession.builder()
 
 The cart is free-form — which items may be returned, and in what quantities, is the register's decision. The SDK verifies that allocation totals match the credit-line total but does not decide how much should go to each tender type.
 
-Use `RefundAllocation.storedValue(amount, originalSale)` when refunding back to the original stored value tender; the SDK sends a linked `PaymentRequest(Refund)` against the stored value leg's POI transaction reference and does not need the card number. Use `RefundAllocation.storeCredit(card, amount)` when the refund should be issued as store credit onto a supplied stored value card; the SDK sends a `StoredValueRequest(Load)`.
+Use `RefundAllocation.storedValue(amount, originalSale)` when refunding back to the original stored value tender; the SDK sends a linked `PaymentRequest(Refund)` against the stored value leg's POI transaction reference and does not need the card number. Use `RefundAllocation.storeCredit(card, amount)` when the refund should be issued as store credit onto a supplied stored value card; the SDK sends a `StoredValueRequest(Load)`. Use `RefundAllocation.external(amount)` for register-managed refunds such as cash from the drawer; it counts toward the required allocation total, produces an `EXTERNAL_REFUND` movement, and sends no terminal request.
 
 **Credit lines on a sale.** `BasketItem.credit(sku, desc, qty, price)` (or `.credit(true)` on the builder) makes the line subtract from the basket and display as a return. Quantities and unit prices stay positive — the direction carries the sign — and a credit line never upserts into a sale line of the same SKU: the basket shows both, like a paper receipt. `settle()` charges only sale lines and restores return value through the supplied allocations.
 
@@ -606,7 +608,7 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | Register gift card for split tender | `session.setStoredValueCard(cardNumber)` |
 | Gift card lifecycle | `storedValueBalance / Activate / Load / Unload / Deactivate / Reverse` |
 | Read card without charging | `session.acquireCard()` |
-| Settle | `session.settle()` → `.beforeStep / .onRebatesRedeemed / .onPointsRedeemed / .onGiftCardPayment / .onCardRefunded / .onGiftCardRefunded / .onSuccess / .onError` → `.execute()` |
+| Settle | `session.settle()` → `.beforeStep / .onRebatesRedeemed / .onPointsRedeemed / .onGiftCardPayment / .onCardRefunded / .onGiftCardRefunded / .onExternalRefunded / .onSuccess / .onError` → `.execute()` |
 | Sync settle | `session.settle().get()` |
 | Refund | `refund()`, `refund(amount)`, `refundUnlinked(amount)` |
 | Item-based refund of a prior sale | `basket().addItem(BasketItem.credit(...))` + `session.settle(SettlementOptions.builder().addRefundAllocation(...).build())` |

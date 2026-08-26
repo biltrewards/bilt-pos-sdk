@@ -33,6 +33,9 @@ public enum SettlementStep {
     /** Terminal restores funds to a stored value card. */
     STORED_VALUE_REFUND,
 
+    /** Register records a refund fulfilled outside the terminal. */
+    EXTERNAL_REFUND,
+
     /** Terminal reverses a prior point/reward redemption. */
     POINT_REDEMPTION_REFUND,
 

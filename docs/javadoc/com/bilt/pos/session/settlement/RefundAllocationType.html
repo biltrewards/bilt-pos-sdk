@@ -127,20 +127,24 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color">
 <div class="block">Return money to a payment card using a Nexo PaymentRequest(Refund).</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#POINT_REDEMPTION" class="member-name-link">POINT_REDEMPTION</a></code></div>
+<div class="col-first even-row-color"><code><a href="#EXTERNAL" class="member-name-link">EXTERNAL</a></code></div>
 <div class="col-last even-row-color">
+<div class="block">Refund value outside the terminal, such as cash from the register drawer.</div>
+</div>
+<div class="col-first odd-row-color"><code><a href="#POINT_REDEMPTION" class="member-name-link">POINT_REDEMPTION</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">Reverse a prior point/reward redemption by its original transaction reference.</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#REBATE" class="member-name-link">REBATE</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#REBATE" class="member-name-link">REBATE</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">Reverse a prior rebate/coupon redemption by its original transaction reference.</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#STORE_CREDIT" class="member-name-link">STORE_CREDIT</a></code></div>
-<div class="col-last even-row-color">
+<div class="col-first odd-row-color"><code><a href="#STORE_CREDIT" class="member-name-link">STORE_CREDIT</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">Restore returned value by loading a register-supplied stored value card.</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#STORED_VALUE" class="member-name-link">STORED_VALUE</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#STORED_VALUE" class="member-name-link">STORED_VALUE</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">Return money to the original stored value tender using a Nexo PaymentRequest(Refund).</div>
 </div>
 </div>
@@ -207,6 +211,13 @@ the order they are declared.</div>
 <h3>STORE_CREDIT</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></span>&nbsp;<span class="element-name">STORE_CREDIT</span></div>
 <div class="block">Restore returned value by loading a register-supplied stored value card.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="EXTERNAL">
+<h3>EXTERNAL</h3>
+<div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></span>&nbsp;<span class="element-name">EXTERNAL</span></div>
+<div class="block">Refund value outside the terminal, such as cash from the register drawer.</div>
 </section>
 </li>
 <li>

@@ -135,28 +135,32 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color">
 <div class="block">Terminal returns money to a payment card.</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#POINT_REDEMPTION" class="member-name-link">POINT_REDEMPTION</a></code></div>
+<div class="col-first even-row-color"><code><a href="#EXTERNAL_REFUND" class="member-name-link">EXTERNAL_REFUND</a></code></div>
 <div class="col-last even-row-color">
+<div class="block">Register records a refund fulfilled outside the terminal.</div>
+</div>
+<div class="col-first odd-row-color"><code><a href="#POINT_REDEMPTION" class="member-name-link">POINT_REDEMPTION</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">Terminal redeems points/rewards for monetary value.</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#POINT_REDEMPTION_REFUND" class="member-name-link">POINT_REDEMPTION_REFUND</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#POINT_REDEMPTION_REFUND" class="member-name-link">POINT_REDEMPTION_REFUND</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">Terminal reverses a prior point/reward redemption.</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#REBATE_REDEMPTION" class="member-name-link">REBATE_REDEMPTION</a></code></div>
-<div class="col-last even-row-color">
+<div class="col-first odd-row-color"><code><a href="#REBATE_REDEMPTION" class="member-name-link">REBATE_REDEMPTION</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">Terminal commits applicable offers/coupons.</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#REBATE_REFUND" class="member-name-link">REBATE_REFUND</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#REBATE_REFUND" class="member-name-link">REBATE_REFUND</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">Terminal reverses a prior rebate/coupon redemption.</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#STORED_VALUE_CHARGE" class="member-name-link">STORED_VALUE_CHARGE</a></code></div>
-<div class="col-last even-row-color">
+<div class="col-first odd-row-color"><code><a href="#STORED_VALUE_CHARGE" class="member-name-link">STORED_VALUE_CHARGE</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">Terminal charges the registered stored value card.</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#STORED_VALUE_REFUND" class="member-name-link">STORED_VALUE_REFUND</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#STORED_VALUE_REFUND" class="member-name-link">STORED_VALUE_REFUND</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">Terminal restores funds to a stored value card.</div>
 </div>
 </div>
@@ -251,6 +255,13 @@ the order they are declared.</div>
 <h3>STORED_VALUE_REFUND</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a></span>&nbsp;<span class="element-name">STORED_VALUE_REFUND</span></div>
 <div class="block">Terminal restores funds to a stored value card.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="EXTERNAL_REFUND">
+<h3>EXTERNAL_REFUND</h3>
+<div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a></span>&nbsp;<span class="element-name">EXTERNAL_REFUND</span></div>
+<div class="block">Register records a refund fulfilled outside the terminal.</div>
 </section>
 </li>
 <li>

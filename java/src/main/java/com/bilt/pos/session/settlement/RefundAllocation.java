@@ -19,8 +19,9 @@ import java.util.Objects;
  * Register-selected refund/restoration movement for a settlement with returns.
  *
  * <p>The SDK does not infer tender allocation policy. For a mixed card/gift
- * card/points sale, the register supplies one allocation per movement it wants
- * executed, including split refunds for a single returned item.</p>
+ * card/points/cash sale, the register supplies one allocation per movement it
+ * wants recorded or executed, including split refunds for a single returned
+ * item.</p>
  */
 public final class RefundAllocation {
 
@@ -102,6 +103,18 @@ public final class RefundAllocation {
         return builder()
                 .type(RefundAllocationType.STORE_CREDIT)
                 .storedValueCard(card)
+                .amount(amount)
+                .build();
+    }
+
+    /**
+     * Register-managed refund/restoration outside the terminal, such as
+     * cash paid from the drawer. Counts toward the return allocation total
+     * but sends no Nexo movement.
+     */
+    public static RefundAllocation external(BigDecimal amount) {
+        return builder()
+                .type(RefundAllocationType.EXTERNAL)
                 .amount(amount)
                 .build();
     }

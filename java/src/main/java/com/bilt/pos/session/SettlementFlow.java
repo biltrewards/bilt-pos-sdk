@@ -27,8 +27,9 @@ import java.util.function.Function;
 /**
  * The settlement orchestration chain returned by {@code CheckoutSession.settle()}.
  *
- * <p>Registering handlers sends nothing; the sequence — refund allocations,
- * rebate redemption, point redemption, stored value, card charge, award — runs when
+ * <p>Registering handlers sends nothing; the sequence — refund allocations
+ * (including external register-managed refunds), rebate redemption, point
+ * redemption, stored value, card charge, award — runs when
  * {@link #execute()} (asynchronously, on the session's operation thread),
  * {@link #executeSync()} (blocking), {@link #get()}, or {@link #getOrNull()}
  * is invoked. Each step handler receives that step's result and returns the
@@ -74,6 +75,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     private Consumer<SettlementMovement> awardHandler;
     private Consumer<SettlementMovement> cardRefundHandler;
     private Consumer<SettlementMovement> giftCardRefundHandler;
+    private Consumer<SettlementMovement> externalRefundHandler;
     private Consumer<SettlementMovement> pointsRefundHandler;
     private Consumer<SettlementMovement> rebateRefundHandler;
     private Consumer<SettlementMovement> awardRefundHandler;
@@ -155,6 +157,11 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     /** Called when a stored value refund allocation commits. */
     public SettlementFlow onGiftCardRefunded(Consumer<SettlementMovement> handler) {
         return register(() -> this.giftCardRefundHandler = requireHandler(handler));
+    }
+
+    /** Called when an external refund allocation is recorded. */
+    public SettlementFlow onExternalRefunded(Consumer<SettlementMovement> handler) {
+        return register(() -> this.externalRefundHandler = requireHandler(handler));
     }
 
     /** Called when a point/reward redemption refund allocation commits. */
@@ -272,6 +279,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
                 && awardHandler == null
                 && cardRefundHandler == null
                 && giftCardRefundHandler == null
+                && externalRefundHandler == null
                 && pointsRefundHandler == null
                 && rebateRefundHandler == null
                 && awardRefundHandler == null) {
@@ -314,6 +322,8 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
                 return cardRefundHandler;
             case STORED_VALUE_REFUND:
                 return giftCardRefundHandler;
+            case EXTERNAL_REFUND:
+                return externalRefundHandler;
             case POINT_REDEMPTION_REFUND:
                 return pointsRefundHandler;
             case REBATE_REFUND:

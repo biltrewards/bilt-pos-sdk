@@ -942,14 +942,29 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/CardAcquisitionResult.Builder.html#expiryDate(java.lang.String)" class="member-name-link">expiryDate(String)</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionResult.Builder.html" title="class in com.bilt.pos.session.identity">CardAcquisitionResult.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#external(java.math.BigDecimal)" class="member-name-link">external(BigDecimal)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
+<dd>
+<div class="block">Register-managed refund/restoration outside the terminal, such as
+ cash paid from the drawer.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/display/DisplayTarget.html#EXTERNAL" class="member-name-link">EXTERNAL</a> - Enum constant in enum class com.bilt.pos.session.display.<a href="com/bilt/pos/session/display/DisplayTarget.html" title="enum class in com.bilt.pos.session.display">DisplayTarget</a></dt>
 <dd>
 <div class="block">A separate external display device driven by its own client.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/RefundAllocationType.html#EXTERNAL" class="member-name-link">EXTERNAL</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></dt>
+<dd>
+<div class="block">Refund value outside the terminal, such as cash from the register drawer.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementStep.html#EXTERNAL_REFUND" class="member-name-link">EXTERNAL_REFUND</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a></dt>
+<dd>
+<div class="block">Register records a refund fulfilled outside the terminal.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.Builder.html#externalDisplayClient(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">externalDisplayClient(BiltNexoTerminalClient)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></dt>
 <dd>
 <div class="block">A second client for an external customer display device.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#externalRefundedAmount(java.math.BigDecimal)" class="member-name-link">externalRefundedAmount(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
+<dd>&nbsp;</dd>
 </dl>
 <h2 class="title" id="I:F">F</h2>
 <dl class="index">
@@ -1409,6 +1424,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html#getExpiryDate()" class="member-name-link">getExpiryDate()</a> - Method in class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></dt>
 <dd>
 <div class="block"><code>"MMYY"</code>, or <code>null</code>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getExternalRefundedAmount()" class="member-name-link">getExternalRefundedAmount()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
+<dd>
+<div class="block">Total refunded or restored outside the terminal during this settlement.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getFinalBasket()" class="member-name-link">getFinalBasket()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
 <dd>
@@ -2853,6 +2872,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Called when a step fails; the returned <a href="com/bilt/pos/session/settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a> controls
  recovery — retry (e.g.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/SettlementFlow.html#onExternalRefunded(java.util.function.Consumer)" class="member-name-link">onExternalRefunded(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
+<dd>
+<div class="block">Called when an external refund allocation is recorded.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#onGiftCardPayment(java.util.function.Function)" class="member-name-link">onGiftCardPayment(Function&lt;GiftCardPaymentResult, BigDecimal&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
