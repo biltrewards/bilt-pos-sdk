@@ -116,6 +116,11 @@ public final class SettlementResult {
         return new Builder();
     }
 
+    /** Returns a builder initialized with this result's current values. */
+    public Builder toBuilder() {
+        return new Builder(this);
+    }
+
     public boolean isSuccess() {
         return success;
     }
@@ -334,6 +339,43 @@ public final class SettlementResult {
         private Builder() {
         }
 
+        private Builder(SettlementResult result) {
+            this.success = result.success;
+            this.finalBasket = result.finalBasket;
+            this.authorizedAmount = result.authorizedAmount;
+            this.storedValueAmountUsed = result.storedValueAmountUsed;
+            this.cardAmountCharged = result.cardAmountCharged;
+            this.approvalCode = result.approvalCode;
+            this.acquirerTransactionId = result.acquirerTransactionId;
+            this.paymentBrand = result.paymentBrand;
+            this.redeemedRebates = new ArrayList<>(result.redeemedRebates);
+            this.totalRebateAmount = result.totalRebateAmount;
+            this.pointsRedeemed = result.pointsRedeemed;
+            this.pointsMonetaryValue = result.pointsMonetaryValue;
+            this.earnedRewards = new ArrayList<>(result.earnedRewards);
+            this.totalPointsEarned = result.totalPointsEarned;
+            this.pointsBalance = result.pointsBalance;
+            this.promotionMessages = new ArrayList<>(result.promotionMessages);
+            this.customerReceipt = result.customerReceipt;
+            this.merchantReceipt = result.merchantReceipt;
+            this.poiTransactionId = result.poiTransactionId;
+            this.poiTransactionTimestamp = result.poiTransactionTimestamp;
+            this.storedValuePoiTransactionId = result.storedValuePoiTransactionId;
+            this.storedValuePoiTransactionTimestamp = result.storedValuePoiTransactionTimestamp;
+            this.awardPoiTransactionId = result.awardPoiTransactionId;
+            this.awardPoiTransactionTimestamp = result.awardPoiTransactionTimestamp;
+            this.rebatePoiTransactionId = result.rebatePoiTransactionId;
+            this.rebatePoiTransactionTimestamp = result.rebatePoiTransactionTimestamp;
+            this.redemptionPoiTransactionId = result.redemptionPoiTransactionId;
+            this.redemptionPoiTransactionTimestamp = result.redemptionPoiTransactionTimestamp;
+            this.cardRefundedAmount = result.cardRefundedAmount;
+            this.storedValueRefundedAmount = result.storedValueRefundedAmount;
+            this.externalRefundedAmount = result.externalRefundedAmount;
+            this.loyaltyRefundedAmount = result.loyaltyRefundedAmount;
+            this.movements = new ArrayList<>(result.movements);
+            this.warnings = new ArrayList<>(result.warnings);
+        }
+
         public Builder success(boolean success) {
             this.success = success;
             return this;
@@ -375,7 +417,8 @@ public final class SettlementResult {
         }
 
         public Builder redeemedRebates(List<RedeemedRebate> redeemedRebates) {
-            this.redeemedRebates = redeemedRebates;
+            this.redeemedRebates = redeemedRebates == null
+                    ? new ArrayList<>() : new ArrayList<>(redeemedRebates);
             return this;
         }
 
@@ -395,7 +438,8 @@ public final class SettlementResult {
         }
 
         public Builder earnedRewards(List<EarnedReward> earnedRewards) {
-            this.earnedRewards = earnedRewards;
+            this.earnedRewards = earnedRewards == null
+                    ? new ArrayList<>() : new ArrayList<>(earnedRewards);
             return this;
         }
 
@@ -410,7 +454,8 @@ public final class SettlementResult {
         }
 
         public Builder promotionMessages(List<String> promotionMessages) {
-            this.promotionMessages = promotionMessages;
+            this.promotionMessages = promotionMessages == null
+                    ? new ArrayList<>() : new ArrayList<>(promotionMessages);
             return this;
         }
 

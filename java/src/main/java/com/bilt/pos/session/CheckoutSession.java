@@ -1226,50 +1226,15 @@ public final class CheckoutSession implements AutoCloseable {
         Basket finalBasket = purchase == null
                 ? fullBasket
                 : fullBasket.withSettledSalePortion(purchase.getFinalBasket());
-        SettlementResult.Builder builder = SettlementResult.builder()
+        return (purchase == null ? SettlementResult.builder() : purchase.toBuilder())
                 .success(true)
                 .finalBasket(finalBasket)
                 .cardRefundedAmount(cardRefunded)
                 .storedValueRefundedAmount(storedValueRefunded)
                 .externalRefundedAmount(externalRefunded)
                 .loyaltyRefundedAmount(loyaltyRefunded)
-                .movements(movements);
-        if (purchase == null) {
-            return builder.build();
-        }
-        builder
-                .authorizedAmount(purchase.getAuthorizedAmount())
-                .storedValueAmountUsed(purchase.getStoredValueAmountUsed())
-                .cardAmountCharged(purchase.getCardAmountCharged())
-                .approvalCode(purchase.getApprovalCode())
-                .acquirerTransactionId(purchase.getAcquirerTransactionId())
-                .paymentBrand(purchase.getPaymentBrand())
-                .redeemedRebates(purchase.getRedeemedRebates())
-                .totalRebateAmount(purchase.getTotalRebateAmount())
-                .pointsRedeemed(purchase.getPointsRedeemed())
-                .pointsMonetaryValue(purchase.getPointsMonetaryValue())
-                .earnedRewards(purchase.getEarnedRewards())
-                .totalPointsEarned(purchase.getTotalPointsEarned())
-                .pointsBalance(purchase.getPointsBalance())
-                .promotionMessages(purchase.getPromotionMessages())
-                .customerReceipt(purchase.getCustomerReceipt())
-                .merchantReceipt(purchase.getMerchantReceipt())
-                .poiTransactionId(purchase.getPoiTransactionId())
-                .poiTransactionTimestamp(purchase.getPoiTransactionTimestamp())
-                .storedValuePoiTransactionId(purchase.getStoredValuePoiTransactionId())
-                .storedValuePoiTransactionTimestamp(
-                        purchase.getStoredValuePoiTransactionTimestamp())
-                .awardPoiTransactionId(purchase.getAwardPoiTransactionId())
-                .awardPoiTransactionTimestamp(purchase.getAwardPoiTransactionTimestamp())
-                .rebatePoiTransactionId(purchase.getRebatePoiTransactionId())
-                .rebatePoiTransactionTimestamp(purchase.getRebatePoiTransactionTimestamp())
-                .redemptionPoiTransactionId(purchase.getRedemptionPoiTransactionId())
-                .redemptionPoiTransactionTimestamp(
-                        purchase.getRedemptionPoiTransactionTimestamp());
-        for (String warning : purchase.getWarnings()) {
-            builder.warning(warning);
-        }
-        return builder.build();
+                .movements(movements)
+                .build();
     }
 
     private static BigDecimal sumMovements(List<SettlementMovement> movements,
