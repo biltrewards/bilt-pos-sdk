@@ -86,6 +86,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -199,6 +200,13 @@ public final class CheckoutSession implements AutoCloseable {
     // may continue only with the same allocation prefix.
     private volatile List<RefundAllocation> committedRefundAllocations = List.of();
     private volatile List<SettlementMovement> committedRefundMovements = List.of();
+    // Prior-sale voids do not use this session's lastPayment/guards, but
+    // they still need resume state when one movement reversed and a later
+    // one failed. The target record prevents applying that progress to a
+    // different prior sale.
+    private volatile OriginalSaleRecord priorSaleVoidTarget;
+    private volatile Set<ReversalStep> priorSaleVoidReversedSteps =
+            ConcurrentHashMap.newKeySet();
 
     // the session's Terminal facade, created lazily by terminal(); it has
     // its own executor and exchange, so the session's lifecycle never
@@ -1587,6 +1595,7 @@ public final class CheckoutSession implements AutoCloseable {
         }
         requireState(EnumSet.of(SessionState.IDLE), "voidTransaction");
         List<ReversalMovement> movements = voidTarget(originalSale);
+        Set<ReversalStep> reversedSteps = priorSaleVoidProgress(originalSale);
         SessionState stateBeforeVoid;
         lock.lock();
         try {
@@ -1603,7 +1612,8 @@ public final class CheckoutSession implements AutoCloseable {
         try {
             VoidResult result = reversalManager.voidMovements(movements,
                     originalSale.getMemberId(), flow.decider(),
-                    EnumSet.noneOf(ReversalStep.class));
+                    reversedSteps);
+            clearPriorSaleVoidProgress(originalSale);
             transitionLocked(SessionState.VOIDED);
             return result;
         } catch (RuntimeException e) {
@@ -1637,6 +1647,70 @@ public final class CheckoutSession implements AutoCloseable {
                         originalSale.getRebatePoiTransactionTimestamp()),
                 PoiRef.ofNullable(originalSale.getAwardPoiTransactionId(),
                         originalSale.getAwardPoiTransactionTimestamp()));
+    }
+
+    private Set<ReversalStep> priorSaleVoidProgress(OriginalSaleRecord originalSale) {
+        lock.lock();
+        try {
+            if (priorSaleVoidTarget == null) {
+                priorSaleVoidTarget = originalSale;
+                return priorSaleVoidReversedSteps;
+            }
+            if (samePriorSaleVoidTarget(priorSaleVoidTarget, originalSale)) {
+                return priorSaleVoidReversedSteps;
+            }
+            if (!priorSaleVoidReversedSteps.isEmpty()) {
+                throw invalidState("a void of another prior sale is partially complete; "
+                        + "retry voidTransaction(OriginalSaleRecord) with the same "
+                        + "original sale record before voiding another sale");
+            }
+            priorSaleVoidTarget = originalSale;
+            priorSaleVoidReversedSteps = ConcurrentHashMap.newKeySet();
+            return priorSaleVoidReversedSteps;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void clearPriorSaleVoidProgress(OriginalSaleRecord originalSale) {
+        lock.lock();
+        try {
+            if (samePriorSaleVoidTarget(priorSaleVoidTarget, originalSale)) {
+                priorSaleVoidTarget = null;
+                priorSaleVoidReversedSteps = ConcurrentHashMap.newKeySet();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static boolean samePriorSaleVoidTarget(OriginalSaleRecord a,
+                                                  OriginalSaleRecord b) {
+        if (a == b) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        return Objects.equals(a.getCardPoiTransactionId(), b.getCardPoiTransactionId())
+                && Objects.equals(a.getCardPoiTransactionTimestamp(),
+                        b.getCardPoiTransactionTimestamp())
+                && Objects.equals(a.getStoredValuePoiTransactionId(),
+                        b.getStoredValuePoiTransactionId())
+                && Objects.equals(a.getStoredValuePoiTransactionTimestamp(),
+                        b.getStoredValuePoiTransactionTimestamp())
+                && Objects.equals(a.getRedemptionPoiTransactionId(),
+                        b.getRedemptionPoiTransactionId())
+                && Objects.equals(a.getRedemptionPoiTransactionTimestamp(),
+                        b.getRedemptionPoiTransactionTimestamp())
+                && Objects.equals(a.getRebatePoiTransactionId(),
+                        b.getRebatePoiTransactionId())
+                && Objects.equals(a.getRebatePoiTransactionTimestamp(),
+                        b.getRebatePoiTransactionTimestamp())
+                && Objects.equals(a.getAwardPoiTransactionId(),
+                        b.getAwardPoiTransactionId())
+                && Objects.equals(a.getAwardPoiTransactionTimestamp(),
+                        b.getAwardPoiTransactionTimestamp());
     }
 
     private void transitionLocked(SessionState target) {

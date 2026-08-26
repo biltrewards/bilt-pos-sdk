@@ -93,6 +93,10 @@ class CheckoutSessionPaymentTest {
                     + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}";
 
     private static final String REVERSAL_OK = CheckoutSessionTest.REVERSAL_OK;
+    private static final String REVERSAL_UNREACHABLE =
+            "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
+                    + "\"Response\":{\"Result\":\"Failure\","
+                    + "\"ErrorCondition\":\"UnreachableHost\"}}}}";
 
     private final ObjectMapper mapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -1264,6 +1268,58 @@ class CheckoutSessionPaymentTest {
         SaleToPOIRequest reversal = nextRequest();
         assertEquals(PRIOR_STORED_VALUE_POI_TXN, reversal.getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
+    void originalSaleRecordVoidRetryResumesAfterPartialFailure() throws Exception {
+        OriginalSaleRecord originalSale = OriginalSaleRecord.builder()
+                .cardPoiTransactionId(PRIOR_CARD_POI_TXN)
+                .cardPoiTransactionTimestamp(ORIGINAL_TIME)
+                .storedValuePoiTransactionId(PRIOR_STORED_VALUE_POI_TXN)
+                .storedValuePoiTransactionTimestamp(ORIGINAL_TIME)
+                .build();
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        server.enqueue(new MockResponse().setBody(REVERSAL_UNREACHABLE));
+
+        SessionException failure = assertThrows(SessionException.class,
+                () -> session.voidTransaction(originalSale).get());
+        assertTrue(failure.getError().getMessage().contains(
+                PRIOR_CARD_POI_TXN + " was reversed"));
+        assertTrue(failure.getError().getMessage().contains(
+                PRIOR_STORED_VALUE_POI_TXN + " was not"));
+        assertEquals(SessionState.IDLE, session.getState(),
+                "a failed prior-sale void restores the fresh session to IDLE");
+
+        List<SaleToPOIRequest> firstAttempt = drainRequests();
+        assertEquals(2, firstAttempt.size());
+        assertEquals(PRIOR_CARD_POI_TXN, firstAttempt.get(0).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertEquals(PRIOR_STORED_VALUE_POI_TXN, firstAttempt.get(1).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+
+        SessionException wrongSale = assertThrows(SessionException.class,
+                () -> session.voidTransaction(OriginalSaleRecord.builder()
+                        .cardPoiTransactionId("POI-CARD-OTHER")
+                        .cardPoiTransactionTimestamp(ORIGINAL_TIME)
+                        .build()).get());
+        assertEquals(SessionErrorCode.INVALID_STATE, wrongSale.getError().getCode());
+        assertTrue(wrongSale.getError().getMessage().contains("another prior sale"));
+        assertEquals(0, drainRequests().size(),
+                "a different prior sale must not consume the saved retry progress");
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+
+        VoidResult retried = session.voidTransaction(originalSale).get();
+
+        assertTrue(retried.isSuccess());
+        assertEquals(SessionState.VOIDED, session.getState());
+
+        List<SaleToPOIRequest> retry = drainRequests();
+        assertEquals(1, retry.size());
+        assertEquals(PRIOR_STORED_VALUE_POI_TXN, retry.get(0).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID(),
+                "retry must not reverse the already-completed card leg again");
     }
 
     @Test
