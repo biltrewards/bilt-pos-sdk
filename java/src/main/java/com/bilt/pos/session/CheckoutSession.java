@@ -952,7 +952,8 @@ public final class CheckoutSession implements AutoCloseable {
                                                        String saleTransactionId) {
         switch (allocation.getType()) {
             case CARD:
-                RefundResult card = reversalManager.refund(allocation.getAmount(), null,
+            case STORED_VALUE:
+            RefundResult card = reversalManager.refund(allocation.getAmount(), null,
                         allocation.getOriginalPoiTransactionId(),
                         allocation.getOriginalPoiTransactionTimestamp(),
                         null, null, allocation.getMemberId(), saleTransactionId,
@@ -960,15 +961,6 @@ public final class CheckoutSession implements AutoCloseable {
                 return refundMovement(step, allocation, saleTransactionId,
                         card.getRefundedAmount(), card.getPoiTransactionId(),
                         card.getPoiTransactionTimestamp(), null, null);
-            case STORED_VALUE:
-                RefundResult storedValue = reversalManager.refund(allocation.getAmount(), null,
-                        allocation.getOriginalPoiTransactionId(),
-                        allocation.getOriginalPoiTransactionTimestamp(),
-                        null, null, allocation.getMemberId(), saleTransactionId,
-                        null, () -> { }, () -> { });
-                return refundMovement(step, allocation, saleTransactionId,
-                        storedValue.getRefundedAmount(), storedValue.getPoiTransactionId(),
-                        storedValue.getPoiTransactionTimestamp(), null, null);
             case STORE_CREDIT:
                 StoredValueOperationResult storeCredit = storedValueManager.operation(
                         StoredValueTransactionTypeEnum.LOAD,
