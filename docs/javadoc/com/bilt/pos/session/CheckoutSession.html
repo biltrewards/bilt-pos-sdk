@@ -883,9 +883,12 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="block">Voids a prior sale by its persisted original-sale record. This is a
  whole-transaction void: every referenced card, stored value, rebate,
  redemption, and award movement is reversed in the same order as a
- same-session void. Use this from a fresh idle checkout session; mixed
- sale/return settlements should use <a href="#settle(com.bilt.pos.session.settlement.SettlementOptions)"><code>settle(SettlementOptions)</code></a>
- with refund allocations instead.</div>
+ same-session void. Use this from a fresh idle checkout session for
+ the first attempt; if that void partially fails, retry it on the same
+ session instance because the in-memory reversed-step progress is what
+ prevents already-reversed legs from being sent again. Mixed sale/return
+ settlements should use <a href="#settle(com.bilt.pos.session.settlement.SettlementOptions)"><code>settle(SettlementOptions)</code></a> with refund
+ allocations instead.</div>
 </section>
 </li>
 <li>

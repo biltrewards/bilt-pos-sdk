@@ -1432,9 +1432,12 @@ public final class CheckoutSession implements AutoCloseable {
      * Voids a prior sale by its persisted original-sale record. This is a
      * whole-transaction void: every referenced card, stored value, rebate,
      * redemption, and award movement is reversed in the same order as a
-     * same-session void. Use this from a fresh idle checkout session; mixed
-     * sale/return settlements should use {@link #settle(SettlementOptions)}
-     * with refund allocations instead.
+     * same-session void. Use this from a fresh idle checkout session for
+     * the first attempt; if that void partially fails, retry it on the same
+     * session instance because the in-memory reversed-step progress is what
+     * prevents already-reversed legs from being sent again. Mixed sale/return
+     * settlements should use {@link #settle(SettlementOptions)} with refund
+     * allocations instead.
      */
     public ReversalFlow<VoidResult> voidTransaction(OriginalSaleRecord originalSale) {
         Objects.requireNonNull(originalSale, "originalSale");
