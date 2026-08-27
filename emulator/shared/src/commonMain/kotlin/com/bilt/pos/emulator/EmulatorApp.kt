@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -74,6 +76,10 @@ internal enum class EmulatorTab(val label: String) { SALE("Sale"), REFUND("Refun
 /** Width at which tab content switches from stacked to side-by-side panes. */
 private val WIDE_LAYOUT_BREAKPOINT = 700.dp
 
+/** Width from which the event log moves into its own right-hand column;
+ *  below it the log stacks under the tab content instead of starving it. */
+private val SIDE_LOG_BREAKPOINT = 1000.dp
+
 /**
  * Root composable of the terminal emulator, shared by the Android and
  * desktop targets. All interaction is driven through [controller], whose
@@ -132,28 +138,48 @@ internal fun EmulatorApp(
                 }
             },
         ) { padding ->
-            Column(
+            BoxWithConstraints(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                ConnectionPanel(state, controller)
+                val sideLog = maxWidth >= SIDE_LOG_BREAKPOINT
                 // The basket sits above the tab content and is shared by
                 // every tab: a settlement may mix new items (Sale tab) with
-                // returns of prior sales (Refund tab) in one basket.
-                // Weights, not fillMaxSize(): a non-weighted child measures
-                // against the Column's full height and would overflow by
-                // the connection panel's height.
-                BasketCard(state, controller, Modifier.fillMaxWidth().weight(1f))
-                when (selectedTab) {
-                    EmulatorTab.SALE ->
-                        ProductGrid(products, controller, Modifier.fillMaxWidth().weight(1.1f))
-                    EmulatorTab.REFUND ->
-                        RefundTab(state, controller, Modifier.fillMaxWidth().weight(1.1f))
+                // returns of prior sales (Refund tab) in one basket. The
+                // event log is shared too — its own right-hand column when
+                // the window is wide, stacked below otherwise. Weights, not
+                // fillMaxSize(): a non-weighted child measures against the
+                // full height and would overflow by its siblings' heights.
+                val basketAndTab: @Composable ColumnScope.() -> Unit = {
+                    BasketCard(state, controller, Modifier.fillMaxWidth().weight(1f))
+                    when (selectedTab) {
+                        EmulatorTab.SALE ->
+                            ProductGrid(products, controller, Modifier.fillMaxWidth().weight(1.1f))
+                        EmulatorTab.REFUND ->
+                            RefundTab(state, controller, Modifier.fillMaxWidth().weight(1.1f))
+                    }
                 }
-                // Below the tab content, not inside it: the event log
-                // documents whatever the operator is doing, so it is shared
-                // by every tab
-                EventsCard(state, Modifier.fillMaxWidth().weight(0.5f))
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    ConnectionPanel(state, controller)
+                    if (sideLog) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(2f).fillMaxHeight(),
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                content = basketAndTab,
+                            )
+                            EventsCard(state, Modifier.weight(1f).fillMaxHeight())
+                        }
+                    } else {
+                        basketAndTab()
+                        EventsCard(state, Modifier.fillMaxWidth().weight(0.5f))
+                    }
+                }
             }
         }
     }

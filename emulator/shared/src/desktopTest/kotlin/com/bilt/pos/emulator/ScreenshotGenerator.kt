@@ -54,9 +54,9 @@ class ScreenshotGenerator {
 
     @OptIn(ExperimentalComposeUiApi::class)
     private fun render(state: EmulatorState, file: File, initialTab: EmulatorTab = EmulatorTab.SALE) {
-        // 1100x1000 dp at 2x density — the desktop window's default size,
-        // above the 700dp breakpoint so the wide layout renders
-        val scene = ImageComposeScene(width = 2200, height = 2000, density = Density(2f)) {
+        // 1500x1000 dp at 2x density — the desktop window's default size,
+        // above the side-log breakpoint so the log column renders
+        val scene = ImageComposeScene(width = 3000, height = 2000, density = Density(2f)) {
             EmulatorApp(FakeController(state), MockProductProvider.products(), initialTab)
         }
         val png = scene.render().encodeToData(EncodedImageFormat.PNG)!!.bytes
