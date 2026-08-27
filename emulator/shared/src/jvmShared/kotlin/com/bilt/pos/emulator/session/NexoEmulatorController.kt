@@ -778,11 +778,11 @@ class NexoEmulatorController(
             .onError { error ->
                 attempt = PaymentAttempt.FAILED
                 if (connection === conn) {
-                    log("Payment failed: ${error.code} — ${error.message}")
+                    log("Settlement failed: ${error.code} — ${error.message}")
                     _state.update {
                         it.copy(paymentOutcome = PaymentOutcome(
                             success = false,
-                            title = "Payment failed",
+                            title = "Settlement failed",
                             message = "${error.code}\n${error.message}",
                         ))
                     }
@@ -800,7 +800,7 @@ class NexoEmulatorController(
                 val returnParts = recordSettledReturns(conn, returns, result)
                 if (connection === conn) {
                     publishPaymentResult(result, returnParts)
-                    log("Payment complete — ending the checkout automatically")
+                    log("Settlement complete — ending the checkout automatically")
                     endCompletedCheckout(conn, session)
                 }
             }
@@ -808,8 +808,8 @@ class NexoEmulatorController(
                 if (attempt != PaymentAttempt.SUCCEEDED && connection === conn) {
                     if (attempt == PaymentAttempt.RUNNING) {
                         log(
-                            "Payment aborted; committed steps reversed — " +
-                                "the basket is intact, Pay again to retry"
+                            "Settlement aborted; committed steps reversed — " +
+                                "the basket is intact, Settle again to retry"
                         )
                     }
                     // reset the customer display to the intact basket
@@ -1513,12 +1513,12 @@ class NexoEmulatorController(
                 add("earned ${result.totalPointsEarned} pts (balance ${result.pointsBalance})")
             }
         }
-        val summary = "Paid $${result.authorizedAmount.toPlainString()}" +
+        val summary = "Settled $${result.authorizedAmount.toPlainString()}" +
             (if (parts.isEmpty()) "" else " — " + parts.joinToString(", "))
         // the popup carries the promo messages and warnings that otherwise
         // live only in the event log
         val popup = buildList {
-            add("Paid $${result.authorizedAmount.toPlainString()}")
+            add("Settled $${result.authorizedAmount.toPlainString()}")
             addAll(parts)
             result.promotionMessages.forEach { add(it) }
             result.warnings.forEach { add("Warning: $it") }
@@ -1528,7 +1528,7 @@ class NexoEmulatorController(
                 lastPayment = summary,
                 paymentOutcome = PaymentOutcome(
                     success = true,
-                    title = "Payment successful",
+                    title = "Settlement complete",
                     message = popup,
                     receipt = receiptText(result.customerReceipt, result.merchantReceipt),
                 ),

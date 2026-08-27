@@ -106,17 +106,17 @@ class ScreenshotGenerator {
             basket = emptyList(),
             basketTotal = "0.00",
             basketTax = "0.00",
-            lastPayment = "Paid $174.89 — card $169.89 (Visa), rebates −$10.00, " +
+            lastPayment = "Settled $174.89 — card $169.89 (Visa), rebates −$10.00, " +
                 "5 pts −$5.00, earned 175 pts (balance 964)",
             events = midCheckout.events + listOf(
                 "10:41:40 Identifying member on the terminal…",
                 "10:41:47 Member identified: 98234 (K-Club), 789 pts, 1 reward(s)",
-                "10:41:48 Starting payment — rebates on, redemption on, award on",
+                "10:41:48 Starting settlement — rebates on, redemption on, award on",
                 "10:41:50 Rebates applied: −$10.00 → total $179.89",
                 "10:41:51 Points redeemed: 5 (−$5.00) → total $174.89",
-                "10:42:03 Paid $174.89 — card $169.89 (Visa), rebates −$10.00, " +
+                "10:42:03 Settled $174.89 — card $169.89 (Visa), rebates −$10.00, " +
                     "5 pts −$5.00, earned 175 pts (balance 964)",
-                "10:42:03 Payment complete — ending the checkout automatically",
+                "10:42:03 Settlement complete — ending the checkout automatically",
                 "10:42:04 Checkout ended",
             ),
         )

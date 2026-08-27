@@ -940,10 +940,14 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
+                // "Settle", not "Pay": a settlement may collect, refund
+                // (returns exceed additions), or both across mixed tenders
                 when {
-                    state.paymentInProgress -> "Paying…"
-                    paid -> "Paid"
-                    else -> "Pay $${state.basketTotal}"
+                    state.paymentInProgress -> "Settling…"
+                    paid -> "Settled"
+                    state.basketTotal.startsWith("-") ->
+                        "Settle (refund $${state.basketTotal.drop(1)})"
+                    else -> "Settle $${state.basketTotal}"
                 }
             )
         }
