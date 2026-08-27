@@ -198,8 +198,8 @@ the order they are declared.</div>
 <div class="block">Leave this movement standing (the terminal may retry loyalty
  movements via store-and-forward) and continue with the remaining
  steps. A void honors a skipped money leg the same way — the
- remaining steps still run — but then fails as incomplete instead of
- reaching <code>VOIDED</code>: a standing card or stored value leg has no
+ remaining steps still run — but then fails as incomplete: a standing
+ card or stored value leg has no
  terminal-side retry, so the reversed movements stay recorded and a
  retried <code>voidTransaction()</code> sends only the legs still
  standing. A refund flow's tender step may be skipped outright: no
@@ -211,8 +211,7 @@ the order they are declared.</div>
 <h3>ABORT</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></span>&nbsp;<span class="element-name">ABORT</span></div>
 <div class="block">Stop the flow. The failure is thrown, already-reversed steps stand,
- and the session returns to its pre-reversal state so the operation
- can be retried.</div>
+ so the operation can be retried.</div>
 </section>
 </li>
 </ul>

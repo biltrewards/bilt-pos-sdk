@@ -26,8 +26,10 @@ import java.util.function.Consumer;
  * synchronously; when the session has automatic display enabled it also
  * enqueues an asynchronous, conflated customer display refresh showing
  * the itemised basket. The owning session decides when mutations are
- * allowed: a basket frozen by an in-flight payment, or one whose session has
- * ended, rejects them with {@code IllegalStateException}.</p>
+ * allowed: a basket frozen by in-flight money movement, already consumed by
+ * settlement, or owned by an ended session rejects them with
+ * {@code IllegalStateException}. Call {@link #clear()} after settlement to
+ * start another basket in the same session.</p>
  *
  * <pre>{@code
  * session.basket().addItem(
@@ -43,7 +45,7 @@ public final class SessionBasket {
 
     /**
      * The owning session's side of the basket: it gates and applies
-     * mutations under its own lifecycle rules (state checks, atomicity,
+     * mutations under its own safety rules (in-flight checks, atomicity,
      * display refresh) and produces snapshots under its lock.
      */
     interface Host {
@@ -53,6 +55,9 @@ public final class SessionBasket {
 
         /** An immutable snapshot of the current basket. */
         Basket snapshot();
+
+        /** Clears the current basket and starts a fresh one. */
+        Basket clear();
     }
 
     private final Host host;
@@ -64,6 +69,23 @@ public final class SessionBasket {
     /** An immutable snapshot of the current basket. */
     public Basket snapshot() {
         return host.snapshot();
+    }
+
+    /**
+     * Clears all items and tax, starts a fresh basket with a new cart ID,
+     * and clears the stored-value card selected for split tender.
+     *
+     * <p>This is the explicit transaction boundary for a session that runs
+     * more than one settlement. A settled basket cannot be charged again;
+     * clear it before ringing the next one.</p>
+     *
+     * @return the new empty basket snapshot
+     * @throws IllegalStateException if money movement, settlement recovery,
+     *         or a partially completed same-session void is still in
+     *         progress, or the session has ended
+     */
+    public Basket clear() {
+        return host.clear();
     }
 
     // ─── Items ───

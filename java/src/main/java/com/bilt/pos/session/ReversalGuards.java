@@ -13,8 +13,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The mutual-exclusion guards between the refunds and voids of one sale,
- * shared by the session types. Money decides both directions:
+ * The mutual-exclusion guards between refunds and voids of the session's
+ * most recent successful sale. Money decides both directions:
  *
  * <ul>
  *   <li>once a refund has returned money ({@link #markRefunded}, raised
@@ -40,7 +40,7 @@ final class ReversalGuards {
     private volatile boolean refundIssued;
     private final String subject;
 
-    /** @param subject the sale as the session names it: "payment" or "sale" */
+    /** @param subject the sale as the session names it in errors */
     ReversalGuards(String subject) {
         this.subject = subject;
     }
@@ -76,9 +76,10 @@ final class ReversalGuards {
         refundIssued = true;
     }
 
-    /** A new payment replaced the guarded sale; the refund guard lifts. */
-    void clearRefundIssued() {
+    /** A new payment replaced the guarded sale and all of its reversal progress. */
+    void reset() {
         refundIssued = false;
+        reversedSteps.clear();
     }
 
     /** Whether a refund flow already reversed the award. */

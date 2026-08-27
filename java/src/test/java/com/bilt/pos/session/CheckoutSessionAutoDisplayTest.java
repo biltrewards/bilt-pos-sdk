@@ -211,9 +211,9 @@ class CheckoutSessionAutoDisplayTest {
         assertTrue(firstPushOnTheWire.await(5, TimeUnit.SECONDS));
         CountDownLatch paid = new CountDownLatch(1);
         session.settle().onComplete(paid::countDown).execute();
-        // accepted — the queued payment has not started, so the session is
-        // still ACTIVE. The item is part of the charged basket; its push,
-        // queued behind the payment, must not run at COMPLETED.
+        // Accepted because the queued settlement has not started. The item
+        // is part of the charged basket; its push, queued behind settlement,
+        // must not replace the final settled display.
         session.basket().addItem(BasketItem.of("SKU-2", "Item", 1, "10.00"));
         lateItemRung.countDown();
         assertTrue(paid.await(5, TimeUnit.SECONDS));
@@ -233,7 +233,7 @@ class CheckoutSessionAutoDisplayTest {
     // ─── No push after end ───
 
     @Test
-    void queuedPushAgainstAnEndedSessionSendsNothing() throws Exception {
+    void basketMutationIsRejectedWhileSessionIsEnding() throws Exception {
         CountDownLatch endOnTheWire = new CountDownLatch(1);
         CountDownLatch mutated = new CountDownLatch(1);
         server.setDispatcher(new Dispatcher() {
@@ -253,16 +253,18 @@ class CheckoutSessionAutoDisplayTest {
         CountDownLatch ended = new CountDownLatch(1);
         session.end().onComplete(ended::countDown).execute();
         assertTrue(endOnTheWire.await(5, TimeUnit.SECONDS));
-        // the end has not settled, so the basket still accepts the mutation
-        // — but its push is queued behind the end and runs against ENDED
-        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
-        mutated.countDown();
+        try {
+            assertThrows(IllegalStateException.class,
+                    () -> session.basket().addItem(
+                            BasketItem.of("SKU-1", "Item", 1, "10.00")));
+        } finally {
+            mutated.countDown();
+        }
         assertTrue(ended.await(5, TimeUnit.SECONDS));
 
-        assertEquals(SessionState.ENDED, session.getState());
         List<SaleToPOIRequest> requests = drainRequests();
         assertTrue(requests.stream().noneMatch(CheckoutSessionAutoDisplayTest::isDisplay),
-                "a push that finds the session ended must send nothing");
+                "a closing session must not enqueue another basket display");
     }
 
     // ─── Background-error reporting ───
@@ -299,8 +301,6 @@ class CheckoutSessionAutoDisplayTest {
             assertNotNull(error.get());
             assertEquals("register-ui", deliveryThread.get(),
                     "background errors deliver on the callback executor");
-            assertEquals(SessionState.ACTIVE, session.getState(),
-                    "a failed push never interrupts the checkout");
             assertEquals(new BigDecimal("20.00"), session.basket()
                     .addItem(BasketItem.of("SKU-2", "Item", 1, "10.00")).getGrandTotal());
         } finally {
@@ -352,7 +352,6 @@ class CheckoutSessionAutoDisplayTest {
             assertTrue(error.get().getMessage().contains("Display"));
             assertEquals("register-ui", deliveryThread.get(),
                     "background errors deliver on the callback executor");
-            assertEquals(SessionState.COMPLETED, session.getState());
             assertEquals(2, displayRequests.get(),
                     "the first display is the cart push; the second is the final display");
         } finally {

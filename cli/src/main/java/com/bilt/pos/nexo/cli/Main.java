@@ -874,8 +874,7 @@ public final class Main {
                         .start()
                         .get()) {
 
-            LOG.info("Session " + session.getSessionId() + " started (state "
-                    + session.getState() + ")");
+            LOG.info("Session " + session.getSessionId() + " started");
 
             // 1. Identify the member — opt-in via --identify: the terminal-side
             // CardAcquisition prompt immediately asks for a card, which gets in
@@ -946,12 +945,11 @@ public final class Main {
                     .onError(error -> LOG.warning("Session end failed: " + error))
                     .executeSync();
 
-            LOG.info("Session finished in state " + session.getState());
+            LOG.info("Session ended");
             if (checkout == null) {
                 // this demo doubles as a smoke test: a failed checkout must
                 // fail the process (main exits 1 on any exception from run())
-                throw new IllegalStateException(
-                        "checkout did not complete (session state " + session.getState() + ")");
+                throw new IllegalStateException("checkout did not complete");
             }
         }
     }

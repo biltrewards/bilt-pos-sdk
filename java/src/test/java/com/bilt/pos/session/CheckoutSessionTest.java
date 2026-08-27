@@ -120,8 +120,7 @@ class CheckoutSessionTest {
     }
 
     @Test
-    void sessionStartsIdleWithIdentity() {
-        assertEquals(SessionState.IDLE, session.getState());
+    void sessionStartsWithIdentity() {
         assertNotNull(session.getSessionId());
         assertEquals("USD", session.getCurrency());
         assertEquals("STR-0142", session.getStoreLocation());
@@ -321,11 +320,8 @@ class CheckoutSessionTest {
 
     @Test
     void abortWithoutInFlightOperationIsANoOp() {
-        SessionState before = session.getState();
         session.abort().executeSync();
 
-        assertEquals(before, session.getState(),
-                "abort is operation-scoped; with nothing in flight the session is untouched");
         assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
         assertDoesNotThrow(() -> session.abort().executeSync());
     }

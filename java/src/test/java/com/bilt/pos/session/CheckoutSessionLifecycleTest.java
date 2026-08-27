@@ -89,7 +89,6 @@ class CheckoutSessionLifecycleTest {
         CheckoutSession session = sessionBuilder().start().get();
 
         assertNotNull(session);
-        assertEquals(SessionState.IDLE, session.getState());
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("Service", sent.getMessageHeader().getMessageClass().toValue());
@@ -126,7 +125,6 @@ class CheckoutSessionLifecycleTest {
 
         // the terminal had acknowledged Start; the escaping handler must not
         // strand that session-scoped context — the session is ended for it
-        assertEquals(SessionState.ENDED, delivered.get().getState());
 
         // and later accessors must not report the released session as a
         // success: the handler failure stays loud, the session is lost
@@ -174,8 +172,6 @@ class CheckoutSessionLifecycleTest {
 
         session.end().executeSync();
 
-        assertEquals(SessionState.ENDED, session.getState());
-        assertTrue(session.getState().isTerminal());
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("Admin", sent.getMessageHeader().getMessageCategory().toValue());
         assertEquals("BiltSession,End,v1," + session.getSessionId(),
@@ -186,13 +182,9 @@ class CheckoutSessionLifecycleTest {
     void endIsAllowedAfterAnAbort() throws Exception {
         CheckoutSession session = startedSession();
         session.abort().executeSync();
-        assertEquals(SessionState.IDLE, session.getState(),
-                "abort is operation-scoped; the session continues until end()");
-
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
         session.end().executeSync();
 
-        assertEquals(SessionState.ENDED, session.getState());
     }
 
     @Test
@@ -214,12 +206,9 @@ class CheckoutSessionLifecycleTest {
         server.enqueue(new MockResponse().setBody(ADMIN_FAILED));
         SessionException e = assertThrows(SessionException.class, () -> session.end().get());
         assertEquals(SessionErrorCode.TERMINAL_ERROR, e.getError().getCode());
-        assertEquals(SessionState.ACTIVE, session.getState(),
-                "a failed end must leave the session where it was");
 
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
         session.end().executeSync();
-        assertEquals(SessionState.ENDED, session.getState());
     }
 
     @Test
@@ -254,10 +243,9 @@ class CheckoutSessionLifecycleTest {
         register.join(5_000);
         assertFalse(register.isAlive());
 
-        // cancelling cleanup would only strand the terminal's session data:
-        // the end settles despite the abort, and the session lands in ENDED
+        // Cancelling cleanup would only strand terminal session data, so the
+        // end exchange settles despite the abort.
         assertNull(failed.get(), "the end exchange must settle despite the abort");
-        assertEquals(SessionState.ENDED, session.getState());
         assertEquals(2, server.getRequestCount(),
                 "start and end only — no AbortRequest may target the end exchange");
     }
@@ -306,7 +294,6 @@ class CheckoutSessionLifecycleTest {
         session.end().executeSync();
 
         assertDoesNotThrow(() -> session.abort().executeSync());
-        assertEquals(SessionState.ENDED, session.getState());
     }
 
     // ─── try-with-resources ───
@@ -317,10 +304,8 @@ class CheckoutSessionLifecycleTest {
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
 
         try (CheckoutSession resource = session) {
-            assertEquals(SessionState.IDLE, resource.getState());
         }
 
-        assertEquals(SessionState.ENDED, session.getState());
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("BiltSession,End,v1," + session.getSessionId(),
                 sent.getAdminRequest().getServiceIdentification());
@@ -343,7 +328,5 @@ class CheckoutSessionLifecycleTest {
         server.enqueue(new MockResponse().setBody(ADMIN_FAILED));
 
         assertDoesNotThrow(session::close);
-        assertEquals(SessionState.IDLE, session.getState(),
-                "a failed best-effort end leaves the session where it was");
     }
 }

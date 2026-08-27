@@ -80,7 +80,7 @@ class CheckoutSessionBasketTest {
                 sent.getDisplayRequest().getDisplayOutput()[0].getOutputContent().getOutputXHTML());
     }
 
-    // ─── State transitions ───
+    // ─── Mutation safety ───
 
     @Test
     void negativeTaxValuesAreRejected() throws Exception {
@@ -111,18 +111,15 @@ class CheckoutSessionBasketTest {
         Basket basket = session.basket().snapshot();
         assertEquals(2, basket.getItem("1").getQuantity(),
                 "a failed batch must leave the basket untouched");
-        assertEquals(SessionState.ACTIVE, session.getState());
     }
 
     @Test
-    void basketDrivesIdleActiveTransitions() throws Exception {
+    void itemsCanBeAddedAndRemovedBeforeSettlement() throws Exception {
         CheckoutSession session = start(sessionBuilder().autoDisplay(false));
 
-        assertEquals(SessionState.IDLE, session.getState());
         session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
-        assertEquals(SessionState.ACTIVE, session.getState());
         session.basket().removeItemBySku("SKU-1");
-        assertEquals(SessionState.IDLE, session.getState());
+        assertTrue(session.basket().snapshot().isEmpty());
     }
 
     @Test
@@ -222,7 +219,6 @@ class CheckoutSessionBasketTest {
         Basket basket = session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
 
         assertEquals(new BigDecimal("10.00"), basket.getGrandTotal());
-        assertEquals(SessionState.ACTIVE, session.getState());
     }
 
     @Test

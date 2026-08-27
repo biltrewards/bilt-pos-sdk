@@ -62,9 +62,9 @@ import java.util.function.Function;
  * handler decides how to recover via the {@link SettlementOptions} it returns;
  * committed charge-side steps are reversed before a retry or failure. Refund
  * allocation failures are different: they are not retried in the same run, and
- * committed refund allocations are not unwound. The session moves to
- * {@code FAILED}; retry by calling {@code settle()} again with the same
- * committed allocation prefix. The default charge-side policy (no handler) is
+ * committed refund allocations are not unwound. Retry by calling
+ * {@code settle()} again with the same committed allocation prefix. The
+ * default charge-side policy (no handler) is
  * {@link SettlementOptions#voidAndAbort()}.</p>
  *
  * <p>Movement callbacks are immediate observations, not the authoritative

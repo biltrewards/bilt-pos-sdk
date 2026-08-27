@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class BasketDisplayRendererTest {
 
     private static final DisplayContext CONTEXT =
-            new DisplayContext(SessionState.SETTLING, DisplayTarget.TERMINAL, "USD");
+            new DisplayContext(DisplayTarget.TERMINAL, "USD");
 
     private static BasketLineItem line(String id, BigDecimal original, BigDecimal rebate) {
         return BasketLineItem.builder()
@@ -103,7 +103,7 @@ class BasketDisplayRendererTest {
                 .grandTotal(new BigDecimal("10.00"))
                 .build();
         DisplayContext context =
-                new DisplayContext(SessionState.SETTLING, DisplayTarget.TERMINAL, "ZZZ");
+                new DisplayContext(DisplayTarget.TERMINAL, "ZZZ");
 
         DisplayPayload payload = new BasketDisplayRenderer().render(basket, context);
 

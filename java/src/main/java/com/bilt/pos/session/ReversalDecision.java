@@ -27,8 +27,8 @@ public enum ReversalDecision {
      * Leave this movement standing (the terminal may retry loyalty
      * movements via store-and-forward) and continue with the remaining
      * steps. A void honors a skipped money leg the same way — the
-     * remaining steps still run — but then fails as incomplete instead of
-     * reaching {@code VOIDED}: a standing card or stored value leg has no
+     * remaining steps still run — but then fails as incomplete: a standing
+     * card or stored value leg has no
      * terminal-side retry, so the reversed movements stay recorded and a
      * retried {@code voidTransaction()} sends only the legs still
      * standing. A refund flow's tender step may be skipped outright: no
@@ -38,8 +38,7 @@ public enum ReversalDecision {
 
     /**
      * Stop the flow. The failure is thrown, already-reversed steps stand,
-     * and the session returns to its pre-reversal state so the operation
-     * can be retried.
+     * so the operation can be retried.
      */
     ABORT
 }

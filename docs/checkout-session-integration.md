@@ -3,7 +3,7 @@
 
 # CheckoutSession — Integration Guide
 
-`CheckoutSession` is a higher-level abstraction on top of [`BiltNexoTerminalClient`](./integration.md). It manages the full lifecycle of a loyalty-enabled checkout — member identification, cart management, terminal display, settlement orchestration (refund allocations, rebate redemption, point redemption, stored value, card charge), and reward award — as a single stateful session.
+`CheckoutSession` is a higher-level abstraction on top of [`BiltNexoTerminalClient`](./integration.md). It provides a terminal-side session bracket for loyalty-enabled operations — member identification, cart management, terminal display, settlement orchestration (refund allocations, rebate redemption, point redemption, stored value, card charge), reward award, refunds, and voids.
 
 You keep working with one object for the whole transaction instead of hand-assembling nexo messages. The raw nexo client is still available via `session.getClient()` as an escape hatch.
 
@@ -23,13 +23,13 @@ Make sure you have:
 
 A few principles explain most of the behavior:
 
-- **A session is bracketed on the terminal.** The builder's `start()` announces the session to the terminal and only hands out the `CheckoutSession` once the terminal acknowledged — an unstarted session never exists. `end()` tells the terminal to discard the session-scoped data it accumulated and seals the session: nothing can run on it afterwards, and it cannot be restarted. One session per checkout, always closed with `end()` (or try-with-resources — the session is `AutoCloseable`).
+- **A session is bracketed on the terminal, not bound to one transaction.** The builder's `start()` announces the session to the terminal and only hands out the `CheckoutSession` once the terminal acknowledged — an unstarted session never exists. The register may run multiple settlements, refunds, voids, stored-value operations, and prompts sequentially inside that bracket. `end()` tells the terminal to discard the session-scoped data and seals the session; it cannot be restarted.
 - **The session owns the basket.** Items, tax, and totals live in one place, and `Basket` is the single source of truth. Every mutation returns the updated basket.
 - **nexo underneath.** Every session operation maps to a standard nexo 3.0 message, but the SDK hides much more than message serialization: it manages the complexity of communicating with the terminal, and it orchestrates settlement when the transaction has returns, exchanges, or multiple tenders — sequencing refund allocations, rebates, point redemption, stored value, card, loyalty award, and reversal — so the register doesn't have to coordinate the wire calls itself.
 - **Terminal operations are lazy.** Methods returning a `SessionResult` or `SettlementFlow` send nothing until you call `.execute()` (asynchronous, handlers deliver the outcome), `.executeSync()`, `.get()`, or `.getOrNull()` (blocking). Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
 - **Cart-building is local + auto-display.** The basket surface lives on `session.basket()`: `addItem` / `removeItem` / `updateItemQuantity` update the local basket and return the updated `Basket` immediately — pure local compute, safe to call from a UI thread. With `autoDisplay=true` (the default) each mutation also enqueues an **asynchronous, conflated** `DisplayRequest` push: pushes run on the session's operation lane (ordered against settlement — a `settle()` executed after ring-up queues behind the pending push and waits at most one roundtrip), and a fast ring-up conflates to the newest snapshot, so the customer display skips straight to the current state instead of replaying every tap. Automatic display failures — cart pushes and the final settlement display refresh — are best-effort: logged, never interrupting the checkout, and reported through the builder's `onBackgroundError` handler when one is registered. The terminal may independently evaluate offers while items are scanned, but those offers are **only committed during `settle()`**.
 - **`settle()` is a fixed orchestration sequence,** with explicit callbacks for committed refund/charge movements and blocking callbacks after each loyalty/stored-value charge step so the register can update its own model and recompute tax, then return the total that feeds the next step. The shape is fixed, but steps are conditional: refund allocations run only when `SettlementOptions` supplies them for credit lines, loyalty (rebates + points) runs only for identified members and can be disabled, the stored-value charge step only runs when a gift card has been registered with `setStoredValueCard`, and card charge runs whenever an amount remains.
-- **Errors and aborts roll back cleanly.** If a charge-side step fails or `abort()` is called mid-sequence, everything already committed by that charge sequence (rebates, points, stored value) is reversed in the opposite order before the session moves to `FAILED` — basket intact, `settle()` retryable. Refund allocation failures are not recovered in-run; committed refund allocation movements stand, and the register retries `settle()` with the same committed allocation prefix. An abort is a register maneuver, not an abandonment; `end()` is the abandonment path when no recovery-required movement is pending.
+- **Errors and aborts roll back cleanly.** If a charge-side step fails or `abort()` is called mid-sequence, everything already committed by that charge sequence (rebates, points, stored value) is reversed in the opposite order — basket intact, `settle()` retryable. Refund allocation failures are not recovered in-run; committed refund allocation movements stand, and the register retries `settle()` with the same committed allocation prefix. An abort is a register maneuver, not an abandonment; `end()` is the abandonment path when no recovery-required movement is pending.
 
 ### Built-in loyalty handling
 
@@ -106,36 +106,29 @@ Treat charge-side movement callbacks as provisional until settlement succeeds. A
 | `onSuccess` | No-op (the result is still available via `.get()`). |
 | `onError` | For charge-side failures, `SettlementOptions.voidAndAbort()` — roll back and fail the settlement. Refund allocation failures notify `onError`, but its returned options are ignored. |
 
-**Abort / error rollback.** `abort()` returns a lazy `SessionResult<Void>` like every terminal operation — `abort().execute()` returns immediately, `abort().executeSync()` blocks for the roundtrip — and is deliberately **unordered**: it exists to interrupt the operation occupying the session's operation lane, so it overtakes whatever is in flight instead of queueing behind the very thing it cancels (`updateInputDisplay` shares this lane for the same reason). It is operation-scoped: it interrupts the in-flight operation and the session continues. If it fires mid-settlement (e.g. after rebates committed but before card charge), the session reverses the committed charge-side movements — rebate refunds, redemption refunds, stored-value reversals — and settles in `FAILED` with the basket intact, so `settle()` can retry (the thrown error carries the `ABORTED` code); these unwind reversals do not produce movement callbacks. If a reversal fails, `voidTransaction()` finishes the unwind. Refund allocations that have already committed are reported in `SettlementResult` movements and are not automatically re-charged as compensation. Aborted prompts (input, PIN, identification) deliver their aborted/cancelled outcome and leave the state unchanged; with nothing in flight `abort()` is a no-op. `abort()` is safe to call from any thread. An operation that completes on the terminal despite a racing abort always delivers its outcome — a prompt was genuinely answered, money may have genuinely moved, and the register must know. For charge-side errors after refund allocations, the `SettlementOptions` returned by `onError` decides what happens next:
+**Abort / error rollback.** `abort()` returns a lazy `SessionResult<Void>` like every terminal operation — `abort().execute()` returns immediately, `abort().executeSync()` blocks for the roundtrip — and is deliberately **unordered**: it exists to interrupt the operation occupying the session's operation lane, so it overtakes whatever is in flight instead of queueing behind the very thing it cancels (`updateInputDisplay` shares this lane for the same reason). It is operation-scoped: it interrupts the in-flight operation and the session continues. If it fires mid-settlement (e.g. after rebates committed but before card charge), the session reverses the committed charge-side movements — rebate refunds, redemption refunds, stored-value reversals — and leaves the basket intact so `settle()` can retry (the thrown error carries the `ABORTED` code); these unwind reversals do not produce movement callbacks. If a reversal fails, `voidTransaction()` finishes the unwind. Refund allocations that have already committed are reported in `SettlementResult` movements and are not automatically re-charged as compensation. Aborted prompts (input, PIN, identification) deliver their aborted/cancelled outcome; with nothing in flight `abort()` is a no-op. `abort()` is safe to call from any thread. An operation that completes on the terminal despite a racing abort always delivers its outcome — a prompt was genuinely answered, money may have genuinely moved, and the register must know. For charge-side errors after refund allocations, the `SettlementOptions` returned by `onError` decides what happens next:
 
-- `SettlementOptions.voidAndAbort()` (the default) — roll back committed charge-side steps in reverse order and fail; the session moves to `FAILED`, from which `settle()` can be retried. If the rollback itself was incomplete, a retried `settle()` first finishes the standing reversals — and refuses to start if one still cannot go through.
+- `SettlementOptions.voidAndAbort()` (the default) — roll back committed charge-side steps in reverse order and fail. The same basket remains available for a `settle()` retry. If the rollback itself was incomplete, a retried `settle()` first finishes the standing reversals — and refuses to start if one still cannot go through.
 - `SettlementOptions.retryWithoutLoyalty()` — roll back the loyalty steps and restart the sequence with rebates and points disabled.
 - Any other options — full rollback, then restart with those options. At most 3 recoveries per execution.
 
-Refund allocation failures are terminal for that settlement run. The `onError` handler is still called so the register can display/log the failure, but its returned `SettlementOptions` are ignored. The session moves to `FAILED`; retry with the same committed allocation prefix so already-committed refund allocation movements are preserved and not resent.
+Refund allocation failures are terminal for that settlement run. The `onError` handler is still called so the register can display/log the failure, but its returned `SettlementOptions` are ignored. Retry with the same committed allocation prefix so already-committed refund allocation movements are preserved and not resent.
 
 **A failed award never reverses a completed charge:** the checkout completes with the failure reported in `SettlementResult.getWarnings()`, and the terminal retries the award via Store-and-Forward.
 
 ---
 
-## Session state machine
+## Session lifetime and repeated operations
 
-```
-IDLE → IDENTIFIED → ACTIVE → SETTLING → COMPLETED
-                       ↑         ↓        ↓
-                       └────── FAILED → VOIDING → VOIDED
-abort() interrupts the in-flight operation only (an aborted settlement → FAILED)
-end()   → ENDED   (from any state except SETTLING/VOIDING)
-```
+`CheckoutSession` has no public transaction state machine. The register owns the business flow, while the SDK enforces only concrete safety constraints:
 
-Notes:
-
-- `identifyMember()` can be called from `IDLE` or `ACTIVE`. Called from `ACTIVE`, the terminal re-evaluates offers with member context. Identification is optional — the customer can identify themselves on the terminal, and they can always opt out.
-- Removing all items from `ACTIVE` returns to `IDLE` (or `IDENTIFIED` if a member was explicitly identified).
-- From `FAILED` the register can retry `settle()` directly, keep editing the basket (back to `ACTIVE`), identify a member, or `voidTransaction()`. While a failed settlement's rollback is incomplete, edits keep the session in `FAILED` — preserving the path to finish the unwind.
-- `voidTransaction()` runs from `COMPLETED` (or `FAILED`); if the void itself fails, the session is restored to its pre-void state so it can be retried.
-- `COMPLETED`, `VOIDED`, and `ENDED` are terminal. `getState()` reports the current `SessionState`; the basket is frozen while `SETTLING`.
-- `ENDED` is the strictest terminal state: `COMPLETED`/`VOIDED` still allow the wrap-up operations that reference the settled transaction (void, refund, receipt reprint, diagnostics), but after `end()` nothing runs at all — the terminal has discarded the session.
+- Terminal operations run sequentially in submission order. A settlement or void already in flight cannot be started again re-entrantly.
+- A successful settlement consumes its basket. Calling `settle()` again or mutating that basket fails before another payment can be sent.
+- Call `session.basket().clear()` to begin another settlement in the same session. It creates a fresh empty basket with a new cart ID and clears the stored-value card selected for the previous basket. The identified member remains attached.
+- A failed settlement does not consume the basket. The register may correct it and retry. If refund allocations committed, the retry must retain the same allocation prefix; if rollback is incomplete, the retry first finishes it.
+- `refund()` and parameterless `voidTransaction()` refer to the most recent successful settlement in this session. Persist `SettlementResult.toOriginalSaleRecord()` when an older settlement may need to be referenced later.
+- `voidTransaction(OriginalSaleRecord)` is independent of the current basket and can run anywhere inside the open session. A partially failed prior-sale void must still be retried on the same session instance so its in-memory progress is retained.
+- Only a successful `end()` permanently seals the session. It is refused while money or required recovery is unresolved.
 
 ---
 
@@ -154,7 +147,7 @@ CheckoutSession session = CheckoutSession.builder()
 
 The builder's `start()` announces the session to the terminal (the [session start signal](./session-start-end.md)) and yields the `CheckoutSession` once the terminal acknowledged. It is lazy like every other operation — chain `onSuccess`/`onError` and finish with `execute()`, `get()`, or `getOrNull()`. A refused start hands out no session; call `start()` again for a fresh attempt. And if your `onSuccess` handler itself throws, the just-started session is ended on the terminal (best-effort) before the exception propagates — a `start()` whose execution threw never leaves a terminal-side session behind.
 
-A session represents one checkout. Create a new session per transaction; sessions are intended for use from a single register thread (`abort()` may be called from any thread).
+A session represents one terminal interaction bracket and may contain multiple register-orchestrated transactions. Sessions are intended for use from a single register thread (`abort()` may be called from any thread).
 
 ### End the session
 
@@ -162,12 +155,12 @@ A session represents one checkout. Create a new session per transaction; session
 session.end().execute();          // or in a handler-style chain, or .get()
 ```
 
-`end()` sends the [session end signal](./session-start-end.md) — the terminal discards the session-scoped data it accumulated — and moves the session to `ENDED`. After that **nothing** runs on the session — not even diagnostics or display — and it cannot be restarted; create a new session for the next checkout. Rules:
+`end()` sends the [session end signal](./session-start-end.md) — the terminal discards the session-scoped data it accumulated. After that no session operation runs and the bracket cannot be restarted; create a new session for another bracket. The independent `Terminal` facade remains usable. Rules:
 
-- Allowed from any state except `SETTLING` and `VOIDING` (money in flight), subject to the recovery guards below.
+- Refused while settlement or void money movement is in flight.
 - Refused while a failed settlement's rollback is incomplete — finish the unwind with `voidTransaction()` first.
 - Refused while refund allocations from a failed settlement have committed — retry `settle()` with the same refund allocations first.
-- If the end signal itself fails, the session keeps its state and `end()` can be retried.
+- If the end signal itself fails, the session remains open and `end()` can be retried.
 - A concurrent `abort()` never cancels an in-flight `end()` — like an in-flight void, the end exchange always settles (cancelling cleanup would only strand terminal-side session data).
 
 `CheckoutSession` is `AutoCloseable`: `close()` is a best-effort `end()` (failures and lifecycle refusals are logged, an already-ended session is left alone), so try-with-resources attempts terminal cleanup even on exception paths:
@@ -398,6 +391,16 @@ session.basket().mutate(m -> m
     .removeItemBySku("KRK-FRAME-5X7-BLK"));
 ```
 
+After `settle()` succeeds, that basket is consumed and cannot be charged or modified again. Start another transaction inside the same session explicitly:
+
+```java
+session.basket().clear();  // new cart ID; also clears the selected split-tender gift card
+session.basket().addItem(BasketItem.of("NEXT-SKU", "Next item", 1, "12.00"));
+session.settle().execute();
+```
+
+The identified member stays attached across `clear()`. A failed settlement does not consume the basket, so correct or retry it without clearing. If a same-session void fails after reversing any movement, retry `voidTransaction()` on that session before clearing the basket, settling another transaction, or ending the session; those operations are refused so the in-memory resume progress cannot be discarded.
+
 **Tax computation rules:** explicit item `taxAmount` wins; else item `taxRate` × `originalTotal`; else $0. `basket.taxTotal` is the sum of item amounts unless `setTaxTotal()` overrides it. `grandTotal = originalTotal + taxTotal`.
 
 ---
@@ -406,8 +409,8 @@ session.basket().mutate(m -> m
 
 `CheckoutSession` can still reverse the positive sale it took itself: `refund()` and `voidTransaction()` work on the session's completed pure-sale settlement, no references needed. Returns from an earlier sale are handled in `settle(...)` by adding credit lines to the basket and supplying register-selected `RefundAllocation`s in `SettlementOptions`. A pure prior-sale void uses `voidTransaction(OriginalSaleRecord)` — see [Reversing a prior sale](#reversing-a-prior-sale-originalsalerecord) below.
 
-- `refund()` / `refund(amount)` — linked refunds of the completed pure-sale card payment; also reverse the loyalty award when one ran, best-effort by default. Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once a refund — linked or unlinked — has returned money, the payment can no longer be voided from that session: a void would return the full amount on top of the refund. Refunds cover the card leg + award only; the sale's committed rebate and redemption movements are reversed by `voidTransaction()`.
-- `refundUnlinked(amount)` — payment-only, not tied to a prior transaction, no loyalty reversal.
+- `refund()` / `refund(amount)` — linked refunds of the most recent successful settlement's card payment; also reverse the loyalty award when one ran, best-effort by default. Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once a linked refund has returned money, that payment can no longer be voided from the session: a void would return the full amount on top of the refund. Refunds cover the card leg + award only; the sale's committed rebate and redemption movements are reversed by `voidTransaction()`.
+- `refundUnlinked(amount)` — payment-only, not tied to a prior transaction, no loyalty reversal, and does not alter the latest settlement's refund/void guards.
 - `voidTransaction()` — reverses every movement the completed pure-sale settlement committed, in order: card and stored value legs (nexo `ReversalRequest`), then the redemption, rebate, and award (their `LoyaltyRequest` refund types). A checkout fully covered by rewards has no money leg; voiding it refunds the loyalty movements alone. And when a failed settlement's rollback was incomplete (the error names the movements still standing), `voidTransaction()` on that session finishes the unwind by retrying the reversals that did not go through.
 
 Both return a `ReversalFlow` — lazy like every session operation (`execute()` / `get()` / `getOrNull()`). When a step fails, the `onError` handler decides how to proceed:
@@ -421,7 +424,7 @@ session.voidTransaction()
     .execute();
 ```
 
-`RETRY` re-sends the failed step, `SKIP` leaves the movement standing and continues, `ABORT` stops the flow (already-reversed steps always stand — there is no compensating re-commit; a later `voidTransaction()` resumes at the first movement still standing). Without a handler the default policy applies: money-leg failures abort; loyalty failures are skipped when a money leg anchors the void, and abort when the loyalty movements are the substance of the void.
+`RETRY` re-sends the failed step, `SKIP` leaves the movement standing and continues, `ABORT` stops the flow (already-reversed steps always stand — there is no compensating re-commit; a later `voidTransaction()` resumes at the first movement still standing). While a same-session void has this resume progress, `basket().clear()`, another `settle()`, and `end()` are refused. Without a handler the default policy applies: money-leg failures abort; loyalty failures are skipped when a money leg anchors the void, and abort when the loyalty movements are the substance of the void.
 
 ---
 
@@ -614,6 +617,7 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | Batch edits, one display update | `session.basket().mutate(m -> ...)` |
 | Set tax | `session.basket().setTaxRateBySku(...)`, `.setTaxAmountBySku(...)`, `.setTaxTotal(...)` |
 | Basket snapshot | `session.basket().snapshot()` |
+| Start another basket in the same session | `session.basket().clear()` |
 | Register gift card for split tender | `session.setStoredValueCard(cardNumber)` |
 | Gift card lifecycle | `storedValueBalance / Activate / Load / Unload / Deactivate / Reverse` |
 | Read card without charging | `session.acquireCard()` |
