@@ -1011,8 +1011,12 @@ class NexoEmulatorController(
             log("Another operation is already in progress")
             return
         }
-        // the shared busy flag: the UI (and a caller pacing itself on the
-        // state) knows when the return has fully landed
+        // The ring participates in the refund abort protocol: the busy flag
+        // routes abort() here (there is no wire call for it to cancel), and
+        // the flag — cleared per attempt, like refundSale — is checked
+        // before the basket mutation, so an abort during the store lookup
+        // keeps the return out of the basket.
+        conn.refundAbortRequested.set(false)
         _state.update { it.copy(refundInProgress = true) }
         // IO coroutine: the store lookup blocks
         val job = conn.scope.launch(Dispatchers.IO) {
@@ -1075,6 +1079,12 @@ class NexoEmulatorController(
             }
             if (items.isEmpty()) {
                 log("Nothing left to return among the selected items")
+                return@launch
+            }
+            // last stop before the basket mutation — an abort that landed
+            // during the lookup must keep the return out
+            if (conn.refundAbortRequested.get()) {
+                log("Return aborted — nothing was rung into the basket")
                 return@launch
             }
             try {
@@ -1420,13 +1430,15 @@ class NexoEmulatorController(
             log("Nothing to abort")
             return
         }
-        // A refund in flight takes precedence — while one runs, no checkout
-        // session can be active (they refuse to start together). abort() is
-        // unordered: execute() overtakes the in-flight call instead of
-        // queueing behind it. The flag is set regardless of whether the
-        // refund's session is on the wire: an abort landing during the
-        // store lookup or the session start has nothing to cancel, and the
-        // flag is what stops the refund before its money movement.
+        // A refund operation in flight takes precedence — a full refund
+        // cannot coexist with an active checkout (they refuse to start
+        // together), and a return ring holds the operation claim of the
+        // checkout it mutates. abort() is unordered: execute() overtakes
+        // the in-flight call instead of queueing behind it. The flag is set
+        // regardless of whether a refund session is on the wire: an abort
+        // landing during the store lookup, a session start, or a return
+        // ring has nothing to cancel, and the flag is what stops the
+        // refund's money movement — or keeps the return out of the basket.
         if (_state.value.refundInProgress || conn.refundSession != null) {
             conn.refundAbortRequested.set(true)
             log("Aborting the refund…")

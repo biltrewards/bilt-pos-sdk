@@ -335,6 +335,40 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
+    fun abortDuringTheReturnRingKeepsTheBasketUntouched() {
+        val store = LatchedLookupStore(storeWithOneSale())
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.addReturnToBasket("sale-1", setOf("SKU-1"))
+            // the ring is parked in the store lookup: nothing on the wire,
+            // nothing in the basket yet — the abort flag is the only brake
+            assertTrue(store.lookupEntered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            controller.abort()
+            store.lookupRelease.countDown()
+
+            withTimeout(10_000) {
+                controller.state.first { s ->
+                    s.events.any { "Return aborted — nothing was rung into the basket" in it }
+                }
+            }
+            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+            assertTrue(controller.state.value.basket.isEmpty(), "the return still landed")
+            // the sale's remaining quantity is untouched
+            assertEquals(
+                2,
+                controller.state.value.sales.single().items.single().remainingQuantity,
+            )
+        }
+    }
+
+    @Test
     fun failedRefundRecordWarnsOnTheOutcome() {
         val store = storeWithOneSale()
         val controller = controller(RefundWriteFailingStore(store))
