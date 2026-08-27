@@ -506,7 +506,10 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
     val connected = state.connection.phase != ConnectionPhase.DISCONNECTED
     // Encryption needs a passphrase from somewhere: the field or NEXO_PASSPHRASE
     val passphraseAvailable = state.hasConfiguredPassphrase || passphrase.isNotBlank()
-    val canConnect = terminalIp.isNotBlank() && (!encryptionOn || passphraseAvailable)
+    // The adb tunnel needs no address — a USB-only terminal has none; the
+    // field then only narrows the device pick (by serial or wifi-adb ip)
+    val canConnect = (terminalIp.isNotBlank() || adbTunnel) &&
+        (!encryptionOn || passphraseAvailable)
 
     val passphrasePlaceholder = if (state.hasConfiguredPassphrase) {
         "passphrase (NEXO_PASSPHRASE)"

@@ -209,17 +209,34 @@ class NexoEmulatorController(
     override fun autodetectAddress() {
         scope.launch(Dispatchers.IO) {
             val detected = TerminalAddressDetector.detect()
-            if (detected != null) {
-                _state.update { it.copy(terminalAddress = detected, addressAutodetected = true) }
-                log("Autodetected terminal address $detected via adb")
-                // Auto-connect only from DISCONNECTED: never tear down a
-                // connection the operator made while adb was probing
-                if (_state.value.connection.phase == ConnectionPhase.DISCONNECTED) {
-                    log("Connecting automatically to the detected terminal")
-                    connect(detected, _state.value.encryptionEnabled, null)
+            when {
+                detected == null ->
+                    log("Address autodetect found no adb device; enter the address manually")
+                detected.address != null -> {
+                    _state.update {
+                        it.copy(terminalAddress = detected.address, addressAutodetected = true)
+                    }
+                    log("Autodetected terminal address ${detected.address} via adb")
+                    // Auto-connect only from DISCONNECTED: never tear down a
+                    // connection the operator made while adb was probing
+                    if (_state.value.connection.phase == ConnectionPhase.DISCONNECTED) {
+                        log("Connecting automatically to the detected terminal")
+                        connect(detected.address, _state.value.encryptionEnabled, null)
+                    }
                 }
-            } else {
-                log("Address autodetect found no adb device; enter the address manually")
+                else -> {
+                    // A USB-only terminal: nothing to dial, but the adb
+                    // tunnel reaches it — prefill the serial (the tunnel
+                    // matches devices by it) and leave connecting to the
+                    // operator, who must tick the tunnel first
+                    _state.update {
+                        it.copy(terminalAddress = detected.serial, addressAutodetected = true)
+                    }
+                    log(
+                        "Terminal ${detected.serial} is attached via adb but has no " +
+                            "network address — tick \"adb tunnel\" and Connect"
+                    )
+                }
             }
         }
     }
@@ -257,7 +274,7 @@ class NexoEmulatorController(
         }
         // The forward comes up on an IO coroutine — adb is a subprocess and
         // may first have to start its server; connect() runs on the UI thread
-        log("Opening adb tunnel to $address port 8443…")
+        log("Opening adb tunnel to ${address.ifBlank { "the attached device" }} (device port 8443)…")
         scope.launch(Dispatchers.IO) {
             val tunnel = try {
                 AdbTunnel.open(address)

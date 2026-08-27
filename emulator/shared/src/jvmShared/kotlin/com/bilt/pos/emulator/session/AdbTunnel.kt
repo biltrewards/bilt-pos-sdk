@@ -37,10 +37,10 @@ object AdbTunnel {
         val serials = Adb.devices()
         val serial = pickSerial(serials, address) ?: throw IllegalStateException(
             if (serials.isEmpty()) {
-                "no adb device attached (checked with ${Adb.executable}) — " +
-                    "plug the terminal in (or `adb connect $address`)"
+                "no adb device attached (checked with ${Adb.executable}) — plug the terminal in" +
+                    (address.takeIf { it.isNotBlank() }?.let { " (or `adb connect $it`)" } ?: "")
             } else {
-                "several adb devices attached and none matches $address: $serials"
+                "several adb devices attached and none matches \"$address\": $serials"
             }
         )
         val output = Adb.run("-s", serial, "forward", "tcp:0", "tcp:$DEVICE_PORT")
