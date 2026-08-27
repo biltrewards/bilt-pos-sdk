@@ -399,7 +399,7 @@ session.basket().addItem(BasketItem.of("NEXT-SKU", "Next item", 1, "12.00"));
 session.settle().execute();
 ```
 
-The identified member stays attached across `clear()`. A failed settlement does not consume the basket, so correct or retry it without clearing. If a same-session void fails after reversing any movement, retry `voidTransaction()` on that session before clearing the basket, settling another transaction, or ending the session; those operations are refused so the in-memory resume progress cannot be discarded.
+The identified member stays attached across `clear()`. Re-identifying later changes the member for future work but does not rewrite a completed settlement: same-session `refund()` and `voidTransaction()` use the member ID captured when their target payment settled. A failed settlement does not consume the basket, so correct or retry it without clearing. If a same-session void fails after reversing any movement, retry `voidTransaction()` on that session before clearing the basket, settling another transaction, or ending the session; those operations are refused so the in-memory resume progress cannot be discarded.
 
 **Tax computation rules:** explicit item `taxAmount` wins; else item `taxRate` × `originalTotal`; else $0. `basket.taxTotal` is the sum of item amounts unless `setTaxTotal()` overrides it. `grandTotal = originalTotal + taxTotal`.
 

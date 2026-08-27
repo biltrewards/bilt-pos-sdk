@@ -258,14 +258,14 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     /**
-     * The transaction references of this session's completed payment, kept
-     * for void and refund. One immutable snapshot: written atomically when
-     * a payment completes, read as a group afterwards — deliberately just
-     * the references, so receipts and the final basket are not pinned for
-     * the session's lifetime.
+     * The reversal metadata of this session's completed payment, kept for
+     * void and refund. One immutable snapshot: written atomically when a
+     * payment completes, read as a group afterwards — deliberately just the
+     * references and settlement-time member ID, so receipts and the final
+     * basket are not pinned for the session's lifetime.
      */
     private static final class LastPayment {
-        static final LastPayment NONE = new LastPayment(null);
+        static final LastPayment NONE = new LastPayment(null, null);
 
         final String poiTransactionId;
         final Instant poiTransactionTimestamp;
@@ -277,8 +277,9 @@ public final class CheckoutSession implements AutoCloseable {
         final Instant rebatePoiTransactionTimestamp;
         final String redemptionPoiTransactionId;
         final Instant redemptionPoiTransactionTimestamp;
+        final String memberId;
 
-        LastPayment(SettlementResult result) {
+        LastPayment(SettlementResult result, String memberId) {
             poiTransactionId = result == null ? null : result.getPoiTransactionId();
             poiTransactionTimestamp = result == null ? null : result.getPoiTransactionTimestamp();
             storedValuePoiTransactionId = result == null
@@ -295,6 +296,7 @@ public final class CheckoutSession implements AutoCloseable {
                     ? null : result.getRedemptionPoiTransactionId();
             redemptionPoiTransactionTimestamp = result == null
                     ? null : result.getRedemptionPoiTransactionTimestamp();
+            this.memberId = memberId;
         }
 
         /** Whether a persisted record includes any movement of this payment. */
@@ -946,7 +948,8 @@ public final class CheckoutSession implements AutoCloseable {
             lock.lock();
             try {
                 basketConsumed = true;
-                lastPayment = new LastPayment(result);
+                lastPayment = new LastPayment(result, request.member == null
+                        ? null : request.member.getMemberId());
                 lastSettlementIncludesRefunds = !refundMovements.isEmpty();
                 lastPaymentVoided = false;
                 lastPaymentVoidIncomplete = false;
@@ -1277,7 +1280,9 @@ public final class CheckoutSession implements AutoCloseable {
      * partially reversed the payment's money legs, refunds are refused
      * until the void is finished. To refund a sale taken by an earlier
      * session, ring return lines into a new checkout session and provide
-     * refund allocations on {@link SettlementOptions}.</p>
+     * refund allocations on {@link SettlementOptions}. Loyalty reversals use
+     * the member attached when this payment settled, even if the session was
+     * subsequently re-identified.</p>
      */
     public ReversalFlow<RefundResult> refund() {
         operations.track("refund");
@@ -1327,16 +1332,10 @@ public final class CheckoutSession implements AutoCloseable {
                 paid.poiTransactionId, paid.poiTransactionTimestamp,
                 awardReversed ? null : paid.awardPoiTransactionId,
                 awardReversed ? null : paid.awardPoiTransactionTimestamp,
-                linked ? reversalMemberId() : null,
+                linked ? paid.memberId : null,
                 flow.decider(),
                 linked ? guards::markRefunded : () -> { },
                 linked ? guards::markAwardReversed : () -> { });
-    }
-
-    /** The identified member for a reversal's {@code LoyaltyData}, or {@code null}. */
-    private String reversalMemberId() {
-        IdentifyResult currentMember = getMember();
-        return currentMember != null ? currentMember.getMemberId() : null;
     }
 
     private void requireRefundable(String operationName) {
@@ -1384,7 +1383,8 @@ public final class CheckoutSession implements AutoCloseable {
      * reversals that did not go through. Not allowed once the payment has
      * been refunded from this session — a void would return the full amount
      * on top of the refund, so further returns must use
-     * {@link #refund(BigDecimal)}.</p>
+     * {@link #refund(BigDecimal)}. Loyalty reversals use the member attached
+     * when this payment settled, not a later session identification.</p>
      */
     public ReversalFlow<VoidResult> voidTransaction() {
         operations.track("voidTransaction");
@@ -1417,6 +1417,7 @@ public final class CheckoutSession implements AutoCloseable {
         beginVoid();
         boolean sameSessionVoidStarted = false;
         Set<ReversalStep> reversedBefore = Set.of();
+        LastPayment paid = LastPayment.NONE;
         try {
             // A failed settlement whose rollback was incomplete left
             // movements standing; voiding that session finishes the unwind.
@@ -1435,7 +1436,8 @@ public final class CheckoutSession implements AutoCloseable {
                 if (lastPaymentVoided) {
                     throw invalidState("the most recent payment has already been voided");
                 }
-                movements = voidTarget();
+                paid = lastPayment;
+                movements = voidTarget(paid);
                 if (movements.isEmpty()) {
                     throw invalidState(
                             "voidTransaction requires a completed payment in this "
@@ -1453,7 +1455,7 @@ public final class CheckoutSession implements AutoCloseable {
             // records progress into it), so a retry resumes at the
             // movements still standing while the default policy still sees
             // the whole target
-            VoidResult result = reversalManager.voidMovements(movements, reversalMemberId(),
+            VoidResult result = reversalManager.voidMovements(movements, paid.memberId,
                     flow.decider(), guards.reversedSteps());
             if (!resumeRollback) {
                 lastPaymentVoided = true;
@@ -1521,8 +1523,7 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     /** The completed payment's movements, in reversal order. */
-    private List<ReversalMovement> voidTarget() {
-        LastPayment paid = lastPayment;
+    private static List<ReversalMovement> voidTarget(LastPayment paid) {
         return ReversalMovement.ofSale(
                 PoiRef.ofNullable(paid.poiTransactionId, paid.poiTransactionTimestamp),
                 PoiRef.ofNullable(paid.storedValuePoiTransactionId,

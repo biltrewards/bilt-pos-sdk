@@ -821,7 +821,9 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  partially reversed the payment's money legs, refunds are refused
  until the void is finished. To refund a sale taken by an earlier
  session, ring return lines into a new checkout session and provide
- refund allocations on <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>.</p></div>
+ refund allocations on <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>. Loyalty reversals use
+ the member attached when this payment settled, even if the session was
+ subsequently re-identified.</p></div>
 </section>
 </li>
 <li>
@@ -867,7 +869,8 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  reversals that did not go through. Not allowed once the payment has
  been refunded from this session — a void would return the full amount
  on top of the refund, so further returns must use
- <a href="#refund(java.math.BigDecimal)"><code>refund(BigDecimal)</code></a>.</p></div>
+ <a href="#refund(java.math.BigDecimal)"><code>refund(BigDecimal)</code></a>. Loyalty reversals use the member attached
+ when this payment settled, not a later session identification.</p></div>
 </section>
 </li>
 <li>

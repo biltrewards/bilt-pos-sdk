@@ -138,7 +138,12 @@ class CheckoutSessionPaymentTest {
 
     /** Identifies the member (consumes one enqueued response + one request). */
     private void identifyMember() throws Exception {
-        server.enqueue(new MockResponse().setBody(IDENTIFY_OK));
+        identifyMember("98234");
+    }
+
+    /** Identifies a specific member from the reusable terminal fixture. */
+    private void identifyMember(String memberId) throws Exception {
+        server.enqueue(new MockResponse().setBody(IDENTIFY_OK.replace("98234", memberId)));
         session.identifyMember().executeSync();
         server.takeRequest(5, TimeUnit.SECONDS);
     }
@@ -2100,6 +2105,31 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void refundAfterReidentifyUsesTheSettlementMember() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+        session.settle(SettlementOptions.builder()
+                .disableRebates(true).disablePoints(true).build()).executeSync();
+        drainRequests();
+
+        session.basket().clear();
+        identifyMember("56789");
+        assertEquals("56789", session.getMember().getMemberId());
+
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.refundOk(25.00)));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.refund(new BigDecimal("25.00")).get().isSuccess());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size());
+        assertEquals("98234", requests.get(1).getLoyaltyRequest().getLoyaltyData()[0]
+                .getLoyaltyAccountID().getLoyaltyID(),
+                "the award refund belongs to the member on the settled payment");
+    }
+
+    @Test
     void refundWithSkippedTenderLeavesThePaymentVoidable() throws Exception {
         identifyMember();
         addHundredDollarItem();
@@ -2339,6 +2369,10 @@ class CheckoutSessionPaymentTest {
                 .disableRebates(true).disablePoints(true).build()).executeSync();
         drainRequests();
 
+        session.basket().clear();
+        identifyMember("56789");
+        assertEquals("56789", session.getMember().getMemberId());
+
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         session.voidTransaction().executeSync();
@@ -2352,7 +2386,7 @@ class CheckoutSessionPaymentTest {
                 "the reversal must reference the award, not the payment");
         assertEquals("98234", awardRefund.getLoyaltyRequest().getLoyaltyData()[0]
                 .getLoyaltyAccountID().getLoyaltyID(),
-                "the reversal must carry the member's LoyaltyData");
+                "the reversal must carry the settled payment's member, not the live member");
     }
 
     @Test
