@@ -14,9 +14,7 @@ import com.bilt.pos.nexo.client.BiltNexoTerminalClient
 import com.bilt.pos.nexo.security.SecurityKey
 import com.bilt.pos.session.CheckoutSession
 import com.bilt.pos.session.Receipt
-import com.bilt.pos.session.RefundResult
 import com.bilt.pos.session.ReversalDecision
-import com.bilt.pos.session.ReversalSession
 import com.bilt.pos.session.ReversalStep
 import com.bilt.pos.session.SessionErrorCode
 import com.bilt.pos.session.SessionException
@@ -27,6 +25,8 @@ import com.bilt.pos.session.identity.CardAcquisitionOptions
 import com.bilt.pos.session.identity.ForceEntryMode
 import com.bilt.pos.session.identity.IdentifyOptions
 import com.bilt.pos.session.identity.IdentifyStatus
+import com.bilt.pos.session.settlement.OriginalSaleRecord
+import com.bilt.pos.session.settlement.RefundAllocation
 import com.bilt.pos.session.settlement.SettlementOptions
 import com.bilt.pos.session.settlement.SettlementRecovery
 import com.bilt.pos.session.settlement.SettlementResult
@@ -112,10 +112,10 @@ class NexoEmulatorController(
          *  connection. Removed from the adb server on teardown. */
         val tunnel: AdbTunnel.Tunnel? = null,
         @Volatile var session: CheckoutSession? = null,
-        /** The reversal session of the refund leg currently on the wire, so
+        /** The fresh checkout session a referenced refund is running on, so
          *  [abort] can reach a refund the way it reaches a payment; null
          *  outside a refund. */
-        @Volatile var reversal: ReversalSession? = null,
+        @Volatile var refundSession: CheckoutSession? = null,
     ) {
         /** Set by [abort] for the current refund attempt. It covers the
          *  windows the SDK's abort cannot: during the store lookup, the
@@ -895,35 +895,32 @@ class NexoEmulatorController(
                 return@launch
             }
             val sale = stored.sale
-            if (stored.moneyLegs.isEmpty()) {
-                log("The sale has no money leg (rewards covered everything) — only a void could reverse it")
+            if (skus == null) {
+                // A full refund is a void of the prior sale: one flow
+                // reverses every referenced movement — the tender legs,
+                // redemption, rebate, and the award. After an item-based
+                // partial refund it would return the full legs on top of
+                // what was already given back, so it is refused then.
+                if (stored.refunds.isNotEmpty()) {
+                    log("The sale was already partially refunded — refund the remaining items instead")
+                    return@launch
+                }
+                if (sale.legs.isEmpty()) {
+                    log("The sale has no recorded movements — nothing to reverse")
+                    return@launch
+                }
+                executeFullRefund(conn, stored)
                 return@launch
             }
-            // Attached only while the store says the award is standing: the
-            // SDK's own guard lives inside one ReversalSession, so without
-            // this a retry (or a later partial refund) would reverse the
-            // same award again on a fresh session
-            val award = sale.leg(LegType.AWARD)?.takeUnless { stored.awardReversed }
-            if (skus == null) {
-                // A full refund returns EVERY tender leg still standing — a
-                // split tender refunds the card and the gift card legs, each
-                // by its own linked refund; a leg an earlier full refund
-                // already returned is skipped, so a partial failure retries
-                // only what is outstanding
-                executeRefund(
-                    conn, sale,
-                    legs = stored.moneyLegs.filterNot { stored.legRefunded(it.type) },
-                    items = null,
-                    award = award,
-                )
+            if (stored.moneyLegs.isEmpty()) {
+                log("The sale has no tender leg (rewards covered everything) — use the full refund")
                 return@launch
             }
             // Item refunds draw from the primary OUTSTANDING tender: the
-            // card leg unless a full refund already returned it (a split
-            // tender whose card leg was refunded but whose gift card leg
-            // failed must not touch the card transaction again), else the
-            // stored value leg. Ring only what earlier refunds have not
-            // returned yet — the store's refund history caps every line.
+            // card leg unless an earlier refund already returned it (a
+            // legacy per-leg record can say so), else the stored value leg.
+            // Ring only what earlier refunds have not returned yet — the
+            // store's refund history caps every line.
             val outstanding = stored.moneyLegs.filterNot { stored.legRefunded(it.type) }
             val primaryLeg = outstanding.firstOrNull { it.type == LegType.CARD }
                 ?: outstanding.firstOrNull()
@@ -953,7 +950,7 @@ class NexoEmulatorController(
                 log("Nothing left to refund among the selected items")
                 return@launch
             }
-            executeRefund(conn, sale, legs = listOf(primaryLeg), items = items, award = award)
+            executeItemRefund(conn, sale, primaryLeg, items)
         }
         // Releases on every path, including a job cancelled before it ran
         // (disconnect racing this call). The claim always (per-connection);
@@ -968,63 +965,235 @@ class NexoEmulatorController(
     }
 
     /**
-     * Runs the referenced refund, blocking the calling IO coroutine: one
-     * fresh [ReversalSession] per tender leg in [legs] — a full linked
-     * refund of each when [items] is null, otherwise an item-based refund
-     * of the returned [items] via the (single) leg's refund cart. Each
-     * leg's refund is recorded into the store as its money moves, so a
-     * failure mid-way keeps what already landed and a retry covers only
-     * the outstanding legs. The success popup publishes once every leg is
-     * through; a failure publishes its own popup and stops the sequence.
+     * Full refund of the prior sale, blocking the calling IO coroutine: a
+     * void of every referenced movement — the tender legs, redemption,
+     * rebate, and award — on a fresh [CheckoutSession], recorded as a
+     * legless full [RefundRecord] (the sale is exhausted for good).
      */
-    private fun executeRefund(
-        conn: Connection,
-        sale: SaleRecord,
-        legs: List<TransactionLeg>,
-        items: List<SaleItem>?,
-        award: TransactionLeg?,
-    ) {
-        val results = mutableListOf<Pair<TransactionLeg, RefundResult>>()
-        var recorded = true
-        // one award, one reversal: the references ride along until a leg's
-        // session actually reverses the award, then never again — the
-        // record of the reversal is what a retry checks
-        var awardPending = award
-        for (leg in legs) {
-            // the abort flag is the only brake while nothing is on the wire
-            // — an abort during the store lookup or between legs must stop
-            // the next money movement here
-            if (conn.refundAbortRequested.get()) {
-                publishRefundAborted(conn, results.size, legs.size)
-                return
+    private fun executeFullRefund(conn: Connection, stored: StoredSale) {
+        val sale = stored.sale
+        log(
+            "Starting full refund of sale ${sale.id.take(8)} — voiding every " +
+                "movement of the prior sale (${sale.legs.size} reference(s))…"
+        )
+        runRefundSession(conn, sale) { session ->
+            val result = session.voidTransaction(originalSaleRecord(sale))
+                .onError { step, error ->
+                    log("Refund step ${step ?: "(none ran)"} failed: ${error.message}")
+                    // the default policy, replicated so logging doesn't
+                    // change behavior: a failed tender reversal aborts, a
+                    // loyalty movement riding along is skipped (the
+                    // terminal can retry it via store-and-forward)
+                    if (step == ReversalStep.CARD || step == ReversalStep.STORED_VALUE) {
+                        ReversalDecision.ABORT
+                    } else {
+                        ReversalDecision.SKIP
+                    }
+                }
+                .get()
+            if (result.isSuccess) {
+                // Money moved on the terminal, so the refund is recorded
+                // even when the operator disconnected mid-call — same
+                // rationale as persistSale
+                val recorded = recordRefund(sale.id, RefundRecord(
+                    amount = result.reversedAmount?.toPlainString(),
+                    poiTransactionId = result.poiTransactionId,
+                    poiTimestamp = result.poiTransactionTimestamp?.toString(),
+                    recordedAt = Instant.now().toString(),
+                    // legless: the void exhausted the whole sale
+                    full = true,
+                    awardReversed = sale.leg(LegType.AWARD) != null,
+                ))
+                val parts = buildList {
+                    // the terminal does not always echo the reversed amount
+                    add("Refunded" + (result.reversedAmount?.let { " $${it.toPlainString()}" } ?: ""))
+                    if (result.pointsReversed > 0) {
+                        add("reversed ${result.pointsReversed} pts (balance ${result.remainingPointBalance})")
+                    }
+                }
+                publishRefundResult(
+                    conn, parts, recorded,
+                    receiptText(result.customerReceipt, result.merchantReceipt),
+                )
             }
-            val attached = awardPending
-            val run = refundLeg(conn, sale, leg, items, attached, results.size, legs.size)
-                ?: return
-            val awardReversed = attached != null && !run.awardFailed
-            if (awardReversed) {
-                awardPending = null
-            }
-            // Money moved on the terminal, so the refund is recorded even
-            // when the operator disconnected mid-call — same rationale as
-            // persistSale
-            recorded = recordRefund(sale.id, leg, run.result, items, awardReversed) && recorded
-            results += leg to run.result
-        }
-        if (connection === conn) {
-            publishRefundResult(results, recorded)
         }
     }
 
-    /** The outcome popup for a refund stopped by the abort flag: what
-     *  already landed stands (and is recorded); the rest was not sent. */
-    private fun publishRefundAborted(conn: Connection, completedLegs: Int, totalLegs: Int) {
-        val message = if (completedLegs == 0) {
-            "Refund aborted before any money moved"
-        } else {
-            "Refund aborted after $completedLegs of $totalLegs leg(s) — " +
-                "the completed refunds stand; the rest was not sent"
+    /**
+     * Item-based refund of the prior sale, blocking the calling IO
+     * coroutine: the returned [items] go into a fresh [CheckoutSession]'s
+     * basket as credit lines and settle with one [RefundAllocation] for the
+     * whole credit total against [leg] — the sale's outstanding tender.
+     */
+    private fun executeItemRefund(
+        conn: Connection,
+        sale: SaleRecord,
+        leg: TransactionLeg,
+        items: List<SaleItem>,
+    ) {
+        log(
+            "Starting item refund of sale ${sale.id.take(8)} against the " +
+                "${legLabel(leg.type)} leg (${leg.poiTransactionId})…"
+        )
+        runRefundSession(conn, sale) { session ->
+            items.forEach { item ->
+                // rung exactly as sold — shelf price and tax rate — so the
+                // credit total is price plus tax of the returns;
+                // rebate/points proration is deliberately out of scope
+                session.basket().addItem(
+                    BasketItem.builder()
+                        .sku(item.sku)
+                        .description(item.description)
+                        .quantity(item.quantity)
+                        .unitPrice(BigDecimal(item.unitPrice))
+                        .credit(true)
+                        .apply { item.category?.let(::category) }
+                        .apply { item.taxRate?.let { rate -> taxRate(BigDecimal(rate)) } }
+                        .build()
+                )
+            }
+            // credit lines total negative; the allocation must match the
+            // magnitude, and the register (this emulator) sends it all to
+            // the one outstanding tender
+            val amount = session.basket().snapshot().grandTotal.negate()
+            val original = originalSaleRecord(sale)
+            val allocation = if (leg.type == LegType.CARD) {
+                RefundAllocation.card(amount, original)
+            } else {
+                RefundAllocation.storedValue(amount, original)
+            }
+            val result = session.settle(
+                SettlementOptions.builder()
+                    .disableRebates(true)
+                    .disablePoints(true)
+                    .disableAward(true)
+                    .addRefundAllocation(allocation)
+                    .build()
+            ).get()
+            if (result.isSuccess) {
+                // recorded ungated for the same reason as the full refund
+                val recorded = recordRefund(sale.id, RefundRecord(
+                    amount = amount.toPlainString(),
+                    poiTransactionId = result.poiTransactionId,
+                    poiTimestamp = result.poiTransactionTimestamp?.toString(),
+                    recordedAt = Instant.now().toString(),
+                    full = false,
+                    leg = leg.type,
+                    items = items.map { RefundedItem(it.sku, it.quantity) },
+                ))
+                publishRefundResult(
+                    conn,
+                    listOf("Refunded $${amount.toPlainString()} (${legLabel(leg.type)})"),
+                    recorded,
+                    receiptText(result.customerReceipt, result.merchantReceipt),
+                )
+            }
         }
+    }
+
+    /**
+     * Opens the fresh checkout session a referenced refund runs on, keeps
+     * it reachable for [abort] while [body] drives it, and funnels
+     * failures into the outcome popup. The session is bracketed around the
+     * body (close() sends the End signal on every path).
+     */
+    private fun runRefundSession(
+        conn: Connection,
+        sale: SaleRecord,
+        body: (CheckoutSession) -> Unit,
+    ) {
+        try {
+            val session = CheckoutSession.builder()
+                .client(conn.client)
+                // the record persisted the original sale's identity exactly
+                // so a later referenced reversal can present it
+                .saleId(sale.saleId)
+                .poiId(sale.poiId)
+                .currency(sale.currency)
+                .onBackgroundError { error ->
+                    log("Customer display update failed: ${error.message}")
+                }
+                .start()
+                .get()
+            conn.refundSession = session
+            try {
+                session.use {
+                    // an abort during the start roundtrip had nothing to
+                    // cancel (the session was not published yet) — this
+                    // check is what keeps the money from moving; from here
+                    // on the SDK abort reaches the operation itself
+                    if (conn.refundAbortRequested.get()) {
+                        publishRefundAborted(conn)
+                        return
+                    }
+                    body(session)
+                }
+            } finally {
+                conn.refundSession = null
+            }
+        } catch (e: SessionException) {
+            if (connection === conn) {
+                if (e.error.code == SessionErrorCode.ABORTED) {
+                    log("Refund aborted — the interrupted movement was not committed")
+                } else {
+                    log("Refund failed: ${e.error.code} — ${e.error.message}")
+                }
+                _state.update {
+                    it.copy(paymentOutcome = PaymentOutcome(
+                        success = false,
+                        title = "Refund failed",
+                        message = "${e.error.code}\n${e.error.message}",
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            // e.g. the session start being rejected by the terminal
+            if (connection === conn) {
+                log("Refund not completed: ${e.message}")
+                _state.update {
+                    it.copy(paymentOutcome = PaymentOutcome(
+                        success = false,
+                        title = "Refund failed",
+                        message = "Refund not completed\n${e.message}",
+                    ))
+                }
+                detailedLog(e.stackTraceToString())
+            }
+        }
+    }
+
+    /** The prior sale's persisted terminal references, as the settlement
+     *  API takes them. */
+    private fun originalSaleRecord(sale: SaleRecord): OriginalSaleRecord {
+        val builder = OriginalSaleRecord.builder()
+        sale.leg(LegType.CARD)?.let {
+            builder.cardPoiTransactionId(it.poiTransactionId)
+            parseInstant(it.poiTimestamp)?.let(builder::cardPoiTransactionTimestamp)
+        }
+        sale.leg(LegType.STORED_VALUE)?.let {
+            builder.storedValuePoiTransactionId(it.poiTransactionId)
+            parseInstant(it.poiTimestamp)?.let(builder::storedValuePoiTransactionTimestamp)
+        }
+        sale.leg(LegType.REBATE)?.let {
+            builder.rebatePoiTransactionId(it.poiTransactionId)
+            parseInstant(it.poiTimestamp)?.let(builder::rebatePoiTransactionTimestamp)
+        }
+        sale.leg(LegType.REDEMPTION)?.let {
+            builder.redemptionPoiTransactionId(it.poiTransactionId)
+            parseInstant(it.poiTimestamp)?.let(builder::redemptionPoiTransactionTimestamp)
+        }
+        sale.leg(LegType.AWARD)?.let {
+            builder.awardPoiTransactionId(it.poiTransactionId)
+            parseInstant(it.poiTimestamp)?.let(builder::awardPoiTransactionTimestamp)
+        }
+        sale.memberId?.let(builder::memberId)
+        return builder.build()
+    }
+
+    /** The outcome popup for a refund stopped by the abort flag before it
+     *  reached the wire. */
+    private fun publishRefundAborted(conn: Connection) {
+        val message = "Refund aborted before any money moved"
         log(message)
         if (connection === conn) {
             _state.update {
@@ -1037,165 +1206,15 @@ class NexoEmulatorController(
         }
     }
 
-    /** One leg's outcome: the terminal's result, and whether the attached
-     *  award reversal failed (and was skipped) rather than committed. */
-    private class LegRun(val result: RefundResult, val awardFailed: Boolean)
-
-    /** One leg's linked refund on its own [ReversalSession]; null after a
-     *  failure, which is logged and published as the outcome popup. */
-    private fun refundLeg(
-        conn: Connection,
-        sale: SaleRecord,
-        leg: TransactionLeg,
-        items: List<SaleItem>?,
-        award: TransactionLeg?,
-        completedLegs: Int,
-        totalLegs: Int,
-    ): LegRun? {
-        log(
-            "Starting referenced refund of sale ${sale.id.take(8)} " +
-                "(${leg.type} leg ${leg.poiTransactionId}" +
-                (award?.let { ", award ${it.poiTransactionId}" } ?: "") + ")…"
-        )
-        try {
-            val builder = ReversalSession.builder()
-                .client(conn.client)
-                // the record persisted the original sale's identity exactly
-                // so a later referenced reversal can present it
-                .saleId(sale.saleId)
-                .poiId(sale.poiId)
-                .currency(sale.currency)
-                .poiTransactionId(leg.poiTransactionId)
-            parseInstant(leg.poiTimestamp)?.let(builder::poiTransactionTimestamp)
-            award?.let {
-                builder.awardPoiTransactionId(it.poiTransactionId)
-                parseInstant(it.poiTimestamp)?.let(builder::awardPoiTransactionTimestamp)
-            }
-            sale.memberId?.let(builder::memberId)
-            val session = builder.start().get()
-            // published for abort() while this leg is on the wire
-            conn.reversal = session
-            try {
-                session.use {
-                    // an abort during the start roundtrip had nothing to
-                    // cancel (the reversal was not published yet) — this
-                    // check is what keeps the money from moving; from here
-                    // on the SDK abort reaches the flow itself
-                    if (conn.refundAbortRequested.get()) {
-                        publishRefundAborted(conn, completedLegs, totalLegs)
-                        return null
-                    }
-                    return runLegFlow(session, items)
-                }
-            } finally {
-                conn.reversal = null
-            }
-        } catch (e: SessionException) {
-            if (connection === conn) {
-                if (e.error.code == SessionErrorCode.ABORTED) {
-                    log("Refund aborted (${leg.type} leg) — this leg was not refunded")
-                } else {
-                    log("Refund failed (${leg.type} leg): ${e.error.code} — ${e.error.message}")
-                }
-                _state.update {
-                    it.copy(paymentOutcome = PaymentOutcome(
-                        success = false,
-                        title = "Refund failed",
-                        message = "${e.error.code}\n${e.error.message}",
-                    ))
-                }
-            }
-            return null
-        } catch (e: Exception) {
-            // e.g. the session start being rejected by the terminal
-            if (connection === conn) {
-                log("Refund not completed (${leg.type} leg): ${e.message}")
-                _state.update {
-                    it.copy(paymentOutcome = PaymentOutcome(
-                        success = false,
-                        title = "Refund failed",
-                        message = "Refund not completed\n${e.message}",
-                    ))
-                }
-                detailedLog(e.stackTraceToString())
-            }
-            return null
-        }
-    }
-
-    /** The leg's refund flow on its started [session]: full linked refund,
-     *  or item-based via the refund cart. Failures throw to [refundLeg]. */
-    private fun runLegFlow(
-        session: ReversalSession,
-        items: List<SaleItem>?,
-    ): LegRun? {
-        // Handlers of the blocking accessors run inline on this thread, so
-        // a plain var sees the write; set when the award step failed and
-        // was skipped — the award then stands, and the record must say so
-        var awardFailed = false
-        val flow = if (items == null) {
-            session.refund()
-        } else {
-            items.forEach { item ->
-                // rung exactly as sold — shelf price and tax rate — so the
-                // credit total is price plus tax of the returns;
-                // rebate/points proration is deliberately out of scope,
-                // like the all-or-nothing award
-                session.basket().addItem(
-                    BasketItem.builder()
-                        .sku(item.sku)
-                        .description(item.description)
-                        .quantity(item.quantity)
-                        .unitPrice(BigDecimal(item.unitPrice))
-                        .apply { item.category?.let(::category) }
-                        .apply { item.taxRate?.let { rate -> taxRate(BigDecimal(rate)) } }
-                        .build()
-                )
-            }
-            session.refundBasket()
-        }
-        val result = flow
-            .onError { step, error ->
-                log("Refund step ${step ?: "(none ran)"} failed: ${error.message}")
-                // the SDK's default policy, replicated so logging doesn't
-                // change behavior: the award reversal is best-effort, a
-                // failed tender refund aborts
-                if (step == ReversalStep.AWARD) {
-                    awardFailed = true
-                    ReversalDecision.SKIP
-                } else {
-                    ReversalDecision.ABORT
-                }
-            }
-            .get()
-        return result.takeIf { it.isSuccess }?.let { LegRun(it, awardFailed) }
-    }
-
-    /** Stores the refund against its sale — including which tender leg it
-     *  drew from and what it covered, so a later refund can't return the
-     *  same thing again. A storage failure cannot fail the refund (the
-     *  money already moved) but must not stay quiet either — without the
-     *  record the sale offers the same refund again, and a terminal that
-     *  accepts it would return the money twice. False on failure, so the
-     *  outcome popup carries the warning. */
-    private fun recordRefund(
-        saleId: String,
-        leg: TransactionLeg,
-        result: RefundResult,
-        items: List<SaleItem>?,
-        awardReversed: Boolean,
-    ): Boolean {
+    /** Stores the refund against its sale — including what it covered, so
+     *  a later refund can't return the same thing again. A storage failure
+     *  cannot fail the refund (the money already moved) but must not stay
+     *  quiet either — without the record the sale offers the same refund
+     *  again, and a terminal that accepts it would return the money twice.
+     *  False on failure, so the outcome popup carries the warning. */
+    private fun recordRefund(saleId: String, record: RefundRecord): Boolean {
         return try {
-            saleStore.recordRefund(saleId, RefundRecord(
-                amount = result.refundedAmount?.toPlainString(),
-                poiTransactionId = result.poiTransactionId,
-                poiTimestamp = result.poiTransactionTimestamp?.toString(),
-                recordedAt = Instant.now().toString(),
-                full = items == null,
-                leg = leg.type,
-                awardReversed = awardReversed,
-                items = items.orEmpty().map { RefundedItem(it.sku, it.quantity) },
-            ))
+            saleStore.recordRefund(saleId, record)
             // keep the Refund tab's list (refunded badges) current
             refreshSales()
             true
@@ -1206,49 +1225,31 @@ class NexoEmulatorController(
         }
     }
 
-    /** Publishes the outcome of a completed refund — one entry per tender
-     *  leg refunded (a split tender lists both). [recorded] false means the
-     *  refund history write failed: the money moved, so the popup stays a
+    /** Publishes a completed refund. [recorded] false means the refund
+     *  history write failed: the money moved, so the popup stays a
      *  success, but it must warn that the sale will offer this refund
      *  again. */
     private fun publishRefundResult(
-        results: List<Pair<TransactionLeg, RefundResult>>,
+        conn: Connection,
+        parts: List<String>,
         recorded: Boolean,
+        receipt: String?,
     ) {
-        val parts = buildList {
-            results.forEach { (leg, result) ->
-                add(
-                    // the terminal does not always echo the refunded amount
-                    "Refunded" + (result.refundedAmount?.let { " $${it.toPlainString()}" } ?: "") +
-                        (if (results.size > 1) " (${legLabel(leg.type)})" else "")
-                )
-            }
-            results.map { it.second }.firstOrNull { it.pointsReversed > 0 }?.let {
-                add("reversed ${it.pointsReversed} pts (balance ${it.remainingPointBalance})")
-            }
-            results.mapNotNull { it.second.approvalCode }.forEach { add("approval $it") }
-            if (!recorded) {
-                add(
-                    "WARNING: the refund could NOT be recorded — the sale " +
-                        "will still offer what was just refunded; refunding " +
-                        "it again would return the money twice"
-                )
+        val all = if (recorded) parts else parts +
+            ("WARNING: the refund could NOT be recorded — the sale will " +
+                "still offer what was just refunded; refunding it again " +
+                "would return the money twice")
+        log(all.joinToString(", "))
+        if (connection === conn) {
+            _state.update {
+                it.copy(paymentOutcome = PaymentOutcome(
+                    success = true,
+                    title = "Refund complete",
+                    message = all.joinToString("\n"),
+                    receipt = receipt,
+                ))
             }
         }
-        val summary = parts.joinToString(", ")
-        // the receipt of the first leg — the primary tender's copy
-        val receipt = results.firstNotNullOfOrNull { (_, result) ->
-            receiptText(result.customerReceipt, result.merchantReceipt)
-        }
-        _state.update {
-            it.copy(paymentOutcome = PaymentOutcome(
-                success = true,
-                title = "Refund complete",
-                message = parts.joinToString("\n"),
-                receipt = receipt,
-            ))
-        }
-        log(summary)
     }
 
     private fun legLabel(type: LegType): String =
@@ -1273,16 +1274,15 @@ class NexoEmulatorController(
         }
         // A refund in flight takes precedence — while one runs, no checkout
         // session can be active (they refuse to start together). abort() is
-        // unordered on both session kinds: execute() overtakes the in-flight
-        // call instead of queueing behind it. The flag is set regardless of
-        // whether a reversal is on the wire: an abort landing during the
-        // store lookup, a session start, or between split-tender legs has
-        // nothing to cancel, and the flag is what stops the refund before
-        // its next money movement.
-        if (_state.value.refundInProgress || conn.reversal != null) {
+        // unordered: execute() overtakes the in-flight call instead of
+        // queueing behind it. The flag is set regardless of whether the
+        // refund's session is on the wire: an abort landing during the
+        // store lookup or the session start has nothing to cancel, and the
+        // flag is what stops the refund before its money movement.
+        if (_state.value.refundInProgress || conn.refundSession != null) {
             conn.refundAbortRequested.set(true)
             log("Aborting the refund…")
-            conn.reversal?.abort()
+            conn.refundSession?.abort()
                 ?.onError { error ->
                     log("Abort failed: ${error.message}")
                     error.cause?.let { detailedLog(it.stackTraceToString()) }

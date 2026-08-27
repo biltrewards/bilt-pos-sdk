@@ -277,8 +277,14 @@ private fun RefundDetailsCard(
     controller: EmulatorController,
     modifier: Modifier = Modifier,
 ) {
+    // A full refund voids every movement of the prior sale, so it is only
+    // offered while nothing was refunded yet — after a partial item refund
+    // it would return the full legs on top of what was already given back
+    val fullAvailable = !sale.refunded
     // keyed on the sale so picking another sale resets the selections
-    var mode by remember(sale.id) { mutableStateOf(RefundMode.FULL) }
+    var mode by remember(sale.id) {
+        mutableStateOf(if (fullAvailable) RefundMode.FULL else RefundMode.ITEMS)
+    }
     var selectedSkus by remember(sale.id) { mutableStateOf(emptySet<String>()) }
     // per-item refunds need recorded line items to select from
     val itemsAvailable = sale.items.isNotEmpty()
@@ -308,7 +314,8 @@ private fun RefundDetailsCard(
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                LabeledRadio("Full amount", mode == RefundMode.FULL, sale.refundable) {
+                LabeledRadio("Full amount", mode == RefundMode.FULL,
+                    sale.refundable && fullAvailable) {
                     mode = RefundMode.FULL
                 }
                 LabeledRadio(
@@ -356,14 +363,13 @@ private fun RefundDetailsCard(
                 )
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            // The two bases differ by design: FULL asks the terminal for a
-            // full linked refund of every outstanding tender leg, so the
-            // label shows what was charged (authorizedAmount) and the
-            // outcome popup reports what actually came back per leg; ITEMS
-            // charges the refund cart total —
-            // shelf price plus tax of each selected return, the same figure
-            // its rows show. Rebate/points proration is out of scope, like
-            // the all-or-nothing award reversal.
+            // The two bases differ by design: FULL voids every movement of
+            // the prior sale (tenders, loyalty, and award), so the label
+            // shows what was charged (authorizedAmount) and the outcome
+            // popup reports what actually came back; ITEMS settles credit
+            // lines against the outstanding tender — shelf price plus tax
+            // of each selected return, the same figure its rows show.
+            // Rebate/points proration is out of scope.
             // exhausted lines contribute zero (their refundMinor already is),
             // so a selection that outlived a refresh can't inflate the amount
             val itemsMinor = sale.items.filter { it.sku in selectedSkus }.sumOf { it.refundMinor }
@@ -371,10 +377,10 @@ private fun RefundDetailsCard(
                 RefundMode.FULL -> sale.totalAmount
                 RefundMode.ITEMS -> minorUnitsToDecimal(itemsMinor)
             }
-            // a reversal session brackets the terminal like a checkout, so
-            // refunds need a connection with no active checkout — and each
-            // disabled state says so: stored sales browse fine offline, so a
-            // silently gray button would read as broken
+            // a refund runs on its own checkout session, so it needs a
+            // connection with no active checkout — and each disabled state
+            // says so: stored sales browse fine offline, so a silently gray
+            // button would read as broken
             val connected = state.connection.phase != ConnectionPhase.DISCONNECTED
             when {
                 !connected -> Text(

@@ -58,20 +58,28 @@ class NexoEmulatorControllerRefundTest {
         /** A raw (un-Base64ed) receipt payload — some terminals send the
          *  receipt XML like this; it must parse without a warning. */
         const val RAW_RECEIPT_XML =
-            "<receipt><plainTextReceipt>REFUND $2.24</plainTextReceipt></receipt>"
+            "<receipt><plainTextReceipt>REFUND RECEIPT</plainTextReceipt></receipt>"
 
         const val REFUND_OK =
             """{"SaleToPOIResponse":{"PaymentResponse":{
                 "Response":{"Result":"Success"},
                 "POIData":{"POITransactionID":{"TransactionID":"POI-REF-100",
                     "TimeStamp":"2026-03-02T16:00:05+00:00"}},
+                "PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":24.99},
+                    "PaymentAcquirerData":{"ApprovalCode":"APPR01"}}}}}"""
+
+        /** The void path's reply; carries a raw-XML customer receipt (must
+         *  parse silently) and a garbage cashier receipt (must warn). */
+        const val REVERSAL_OK =
+            """{"SaleToPOIResponse":{"ReversalResponse":{
+                "Response":{"Result":"Success"},
+                "POIData":{"POITransactionID":{"TransactionID":"POI-REV-100",
+                    "TimeStamp":"2026-03-02T16:00:05+00:00"}},
                 "PaymentReceipt":[
                     {"DocumentQualifier":"CustomerReceipt",
                         "OutputContent":{"OutputFormat":"XHTML","OutputXHTML":"$RAW_RECEIPT_XML"}},
                     {"DocumentQualifier":"CashierReceipt",
-                        "OutputContent":{"OutputFormat":"XHTML","OutputXHTML":"!!!not-a-receipt"}}],
-                "PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":24.99},
-                    "PaymentAcquirerData":{"ApprovalCode":"APPR01"}}}}}"""
+                        "OutputContent":{"OutputFormat":"XHTML","OutputXHTML":"!!!not-a-receipt"}}]}}}"""
     }
 
     private lateinit var server: MockWebServer
@@ -100,6 +108,7 @@ class NexoEmulatorControllerRefundTest {
                             "\"DiagnosisRequest\"" in body -> DIAGNOSIS_OK
                             "\"AdminRequest\"" in body -> ADMIN_OK
                             "\"LoyaltyRequest\"" in body -> LOYALTY_OK
+                            "\"ReversalRequest\"" in body -> REVERSAL_OK
                             "\"PaymentRequest\"" in body -> REFUND_OK
                             else -> ADMIN_OK
                         }
@@ -211,17 +220,35 @@ class NexoEmulatorControllerRefundTest {
 
             assertTrue(outcome.success, "expected a successful refund, got: ${outcome.message}")
             assertEquals("Refund complete", outcome.title)
-            assertTrue("24.99" in outcome.message, "amount missing from: ${outcome.message}")
+            // the terminal's customer receipt (sent raw, not base64) lands
+            // on the outcome popup
+            assertEquals("REFUND RECEIPT", outcome.receipt)
 
-            // the refund landed in the store with the terminal's references,
-            // marked as exhausting the sale
+            // Receipt handling, through the SDK's JUL logs: the garbage
+            // cashier receipt warns — once, as the raw-XML customer receipt
+            // parses silently — and the warning surfaces on the curated
+            // Events feed (one line) with the full record on Detailed
+            val state = controller.state.value
+            assertEquals(
+                1, state.events.count { "unparsable receipt payload" in it },
+                "expected exactly the cashier-receipt warning on the events feed; " +
+                    "events tail: ${state.events.takeLast(8)}",
+            )
+            assertTrue(
+                state.detailedEvents.any {
+                    "unparsable receipt payload" in it && "IllegalArgumentException" in it
+                },
+                "expected the warning's stack trace on the detailed log",
+            )
+
+            // the refund landed in the store as a legless full record — the
+            // void exhausted the whole sale, award included
             val refund = assertNotNull(store.findSale("sale-1")).refunds.single()
-            assertEquals("24.99", refund.amount)
-            assertEquals("POI-REF-100", refund.poiTransactionId)
-            assertTrue(refund.full, "a full-amount refund must be recorded as full")
+            assertTrue(refund.full, "a full refund must be recorded as full")
+            assertEquals(null, refund.leg)
             assertTrue(
                 refund.awardReversed,
-                "the committed award reversal must be recorded, or a retry would repeat it",
+                "the committed award reversal must be recorded",
             )
             assertTrue(assertNotNull(store.findSale("sale-1")).fullyRefunded)
 
@@ -232,13 +259,13 @@ class NexoEmulatorControllerRefundTest {
                 controller.state.first { !it.refundInProgress }
             }
 
-            // the wire saw the refund referencing the stored card leg, plus
-            // the award reversal carrying its own reference
-            val payment = assertNotNull(
-                requests.firstOrNull { "\"PaymentRequest\"" in it },
-                "no refund PaymentRequest reached the terminal",
+            // the wire saw the void of the stored card leg, plus the award
+            // reversal carrying its own reference
+            val reversal = assertNotNull(
+                requests.firstOrNull { "\"ReversalRequest\"" in it },
+                "no ReversalRequest reached the terminal",
             )
-            assertTrue("poi-card-1" in payment, "original card reference missing: $payment")
+            assertTrue("poi-card-1" in reversal, "original card reference missing: $reversal")
             val loyalty = assertNotNull(
                 requests.firstOrNull { "\"LoyaltyRequest\"" in it },
                 "no award reversal reached the terminal",
@@ -249,14 +276,14 @@ class NexoEmulatorControllerRefundTest {
             // refunded in full. Wait out the first attempt's claim first,
             // like the UI does via the disabled button.
             withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
-            val paymentsBefore = requests.count { "\"PaymentRequest\"" in it }
+            val reversalsBefore = requests.count { "\"ReversalRequest\"" in it }
             controller.refundSale("sale-1")
             withTimeout(10_000) {
                 controller.state.first { s ->
                     s.events.any { "already refunded in full" in it }
                 }
             }
-            assertEquals(paymentsBefore, requests.count { "\"PaymentRequest\"" in it })
+            assertEquals(reversalsBefore, requests.count { "\"ReversalRequest\"" in it })
             assertEquals(1, assertNotNull(store.findSale("sale-1")).refunds.size)
         }
     }
@@ -425,24 +452,19 @@ class NexoEmulatorControllerRefundTest {
                 controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
             }
             assertTrue(outcome.success, "expected a successful refund, got: ${outcome.message}")
-            assertTrue("card" in outcome.message && "gift card" in outcome.message,
-                "expected both tender legs in the outcome: ${outcome.message}")
 
-            // one linked refund per tender leg, each referencing its own
-            // original transaction
-            val payments = requests.filter { "\"PaymentRequest\"" in it }
-            assertEquals(2, payments.size, "expected a refund per tender leg")
-            assertTrue(payments.any { "poi-card-2" in it }, "card leg not refunded")
-            assertTrue(payments.any { "poi-sv-2" in it }, "stored value leg not refunded")
+            // the void reverses both tender legs in one flow, each with its
+            // own original transaction reference
+            val reversals = requests.filter { "\"ReversalRequest\"" in it }
+            assertEquals(2, reversals.size, "expected a reversal per tender leg")
+            assertTrue(reversals.any { "poi-card-2" in it }, "card leg not reversed")
+            assertTrue(reversals.any { "poi-sv-2" in it }, "stored value leg not reversed")
 
-            // both legs recorded as fully returned — only then is the sale
-            // exhausted
+            // recorded as one legless full refund — the sale is exhausted
             val stored = assertNotNull(store.findSale("sale-2"))
-            assertEquals(
-                setOf(LegType.CARD, LegType.STORED_VALUE),
-                stored.refunds.mapNotNull { it.leg }.toSet(),
-            )
-            assertTrue(stored.refunds.all { it.full })
+            val refund = stored.refunds.single()
+            assertTrue(refund.full)
+            assertEquals(null, refund.leg)
             assertTrue(stored.fullyRefunded)
         }
     }
@@ -462,35 +484,22 @@ class NexoEmulatorControllerRefundTest {
                 controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
             }
             assertTrue(outcome.success, "expected a successful refund, got: ${outcome.message}")
-            // the terminal's customer receipt (sent raw, not base64) lands
-            // on the outcome popup
-            assertEquals("REFUND $2.24", outcome.receipt)
+            assertTrue("2.24" in outcome.message, "amount missing from: ${outcome.message}")
 
-            // the refund PaymentRequest carries the returned item and asks
-            // for the cart total: 2 × 1.05 plus 0.14 tax (matching the UI's
-            // refundMinor of 224 cents)
+            // the refund PaymentRequest references the card leg and carries
+            // the returned item with the cart total: 2 × 1.05 plus 0.14 tax
+            // (matching the UI's refundMinor of 224 cents)
             val payment = assertNotNull(
                 requests.firstOrNull { "\"PaymentRequest\"" in it },
                 "no refund PaymentRequest reached the terminal",
             )
+            assertTrue("poi-card-1" in payment, "original card reference missing: $payment")
             assertTrue("SKU-1" in payment, "returned item missing from: $payment")
             assertTrue("2.24" in payment, "cart total missing from: $payment")
-
-            // Receipt handling, through the SDK's JUL logs: the garbage
-            // cashier receipt warns — once, as the raw-XML customer receipt
-            // parses silently — and the warning surfaces on the curated
-            // Events feed (one line) with the full record on Detailed
-            val state = controller.state.value
-            assertEquals(
-                1, state.events.count { "unparsable receipt payload" in it },
-                "expected exactly the cashier-receipt warning on the events feed; " +
-                    "events tail: ${state.events.takeLast(8)}",
-            )
+            // items settle against the tender alone — the award stands
             assertTrue(
-                state.detailedEvents.any {
-                    "unparsable receipt payload" in it && "IllegalArgumentException" in it
-                },
-                "expected the warning's stack trace on the detailed log",
+                requests.none { "\"LoyaltyRequest\"" in it },
+                "an item refund must not touch the award",
             )
 
             // the store knows what was returned: the line is exhausted in
@@ -498,6 +507,7 @@ class NexoEmulatorControllerRefundTest {
             val refund = assertNotNull(store.findSale("sale-1")).refunds.single()
             assertEquals(listOf(RefundedItem("SKU-1", 2)), refund.items)
             assertTrue(!refund.full, "an item refund must not exhaust the sale")
+            assertEquals(LegType.CARD, refund.leg)
             withTimeout(10_000) {
                 controller.state.first { s ->
                     s.sales.singleOrNull()?.items?.singleOrNull()?.remainingQuantity == 0
