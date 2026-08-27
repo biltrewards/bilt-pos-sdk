@@ -1,7 +1,5 @@
 package com.bilt.pos.emulator.session
 
-import java.util.concurrent.TimeUnit
-
 /**
  * A localhost tunnel to the terminal's nexo port over `adb forward`: the
  * emulator connects to 127.0.0.1 and the adb server carries the traffic to
@@ -11,7 +9,8 @@ import java.util.concurrent.TimeUnit
  *
  * adb rather than ssh because the terminal is an Android device: it runs no
  * sshd, but it is already attached via adb — the address autodetection
- * ([TerminalAddressDetector]) depends on that.
+ * ([TerminalAddressDetector]) depends on that. [Adb] resolves the
+ * executable beyond PATH, which a desktop app may not inherit.
  *
  * Forwards live in the adb server, not in this process, so an opened tunnel
  * must be [close]d — an unremoved forward outlives the emulator.
@@ -32,18 +31,19 @@ object AdbTunnel {
      *
      * @throws IllegalStateException when adb is unavailable, no attached
      *   device matches, or the forward fails; the message carries adb's
-     *   output so the event log explains the failure
+     *   output (and the executable used) so the event log explains it
      */
     fun open(address: String): Tunnel {
-        val serials = parseSerials(run("adb", "devices"))
+        val serials = Adb.devices()
         val serial = pickSerial(serials, address) ?: throw IllegalStateException(
             if (serials.isEmpty()) {
-                "no adb device attached — plug the terminal in (or `adb connect $address`)"
+                "no adb device attached (checked with ${Adb.executable}) — " +
+                    "plug the terminal in (or `adb connect $address`)"
             } else {
                 "several adb devices attached and none matches $address: $serials"
             }
         )
-        val output = run("adb", "-s", serial, "forward", "tcp:0", "tcp:$DEVICE_PORT")
+        val output = Adb.run("-s", serial, "forward", "tcp:0", "tcp:$DEVICE_PORT")
         val port = parseForwardedPort(output) ?: throw IllegalStateException(
             "adb forward did not return a port: \"${output.trim()}\""
         )
@@ -53,18 +53,8 @@ object AdbTunnel {
     /** Removes the forward from the adb server. Best-effort: a failure
      *  (device already detached, adb gone) leaves nothing to clean up. */
     fun close(tunnel: Tunnel) {
-        try {
-            run("adb", "-s", tunnel.serial, "forward", "--remove", "tcp:${tunnel.localPort}")
-        } catch (_: Exception) {
-        }
+        Adb.runOrNull("-s", tunnel.serial, "forward", "--remove", "tcp:${tunnel.localPort}")
     }
-
-    /** The attached-device serials from `adb devices` output. */
-    internal fun parseSerials(devicesOutput: String): List<String> =
-        devicesOutput.lineSequence()
-            .filter { it.contains("\tdevice") }
-            .map { it.substringBefore('\t') }
-            .toList()
 
     /** The serial to forward through: the device whose wifi-adb serial
      *  ("<ip>:5555") carries [address], else the single attached device —
@@ -78,25 +68,4 @@ object AdbTunnel {
      *  number on its own line). */
     internal fun parseForwardedPort(output: String): Int? =
         output.trim().lineSequence().lastOrNull()?.trim()?.toIntOrNull()
-
-    private fun run(vararg command: String): String {
-        val process = try {
-            ProcessBuilder(*command).redirectErrorStream(true).start()
-        } catch (e: Exception) {
-            throw IllegalStateException("adb could not be started (is it on PATH?): ${e.message}")
-        }
-        // wait before reading, like TerminalAddressDetector: adb output is
-        // tiny, so the pipe can't fill and deadlock the wait
-        if (!process.waitFor(5, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            throw IllegalStateException("adb timed out: ${command.joinToString(" ")}")
-        }
-        val output = process.inputStream.bufferedReader().readText()
-        if (process.exitValue() != 0) {
-            throw IllegalStateException(
-                "adb failed (${command.joinToString(" ")}): ${output.trim()}"
-            )
-        }
-        return output
-    }
 }

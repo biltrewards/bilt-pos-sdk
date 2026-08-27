@@ -1,5 +1,6 @@
 package com.bilt.pos.emulator
 
+import com.bilt.pos.emulator.session.Adb
 import com.bilt.pos.emulator.session.AdbTunnel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,8 +25,31 @@ class AdbTunnelTest {
         """.trimIndent()
         assertEquals(
             listOf("192.168.1.57:5555", "R58M123ABC"),
-            AdbTunnel.parseSerials(output),
+            Adb.parseSerials(output),
         )
+    }
+
+    @Test
+    fun parseSerialsToleratesSpacesBetweenSerialAndState() {
+        // seen in the wild: some adb builds pad with spaces, not a tab
+        val output = """
+            List of devices attached
+            910-001-044     device
+
+        """.trimIndent()
+        assertEquals(listOf("910-001-044"), Adb.parseSerials(output))
+    }
+
+    @Test
+    fun parseSerialsSkipsTheDaemonStartBanner() {
+        val output = """
+            * daemon not running; starting now at tcp:5037
+            * daemon started successfully
+            List of devices attached
+            910-001-044	device
+
+        """.trimIndent()
+        assertEquals(listOf("910-001-044"), Adb.parseSerials(output))
     }
 
     @Test
