@@ -137,41 +137,23 @@ internal fun EmulatorApp(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 ConnectionPanel(state, controller)
-                // weights, not fillMaxSize(): a non-weighted child measures
-                // against the Column's full height and would overflow by the
-                // connection panel's height
+                // The basket sits above the tab content and is shared by
+                // every tab: a settlement may mix new items (Sale tab) with
+                // returns of prior sales (Refund tab) in one basket.
+                // Weights, not fillMaxSize(): a non-weighted child measures
+                // against the Column's full height and would overflow by
+                // the connection panel's height.
+                BasketCard(state, controller, Modifier.fillMaxWidth().weight(1f))
                 when (selectedTab) {
                     EmulatorTab.SALE ->
-                        SaleTab(state, controller, products, Modifier.fillMaxWidth().weight(1f))
+                        ProductGrid(products, controller, Modifier.fillMaxWidth().weight(1.1f))
                     EmulatorTab.REFUND ->
-                        RefundTab(state, controller, Modifier.fillMaxWidth().weight(1f))
+                        RefundTab(state, controller, Modifier.fillMaxWidth().weight(1.1f))
                 }
                 // Below the tab content, not inside it: the event log
                 // documents whatever the operator is doing, so it is shared
                 // by every tab
                 EventsCard(state, Modifier.fillMaxWidth().weight(0.5f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun SaleTab(
-    state: EmulatorState,
-    controller: EmulatorController,
-    products: List<Product>,
-    modifier: Modifier = Modifier,
-) {
-    BoxWithConstraints(modifier = modifier) {
-        if (maxWidth < WIDE_LAYOUT_BREAKPOINT) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                ProductGrid(products, controller, Modifier.weight(1.4f))
-                BasketCard(state, controller, Modifier.weight(1f))
-            }
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                ProductGrid(products, controller, Modifier.weight(1f))
-                BasketCard(state, controller, Modifier.weight(2f))
             }
         }
     }
@@ -377,34 +359,54 @@ private fun RefundDetailsCard(
                 RefundMode.FULL -> sale.totalAmount
                 RefundMode.ITEMS -> minorUnitsToDecimal(itemsMinor)
             }
-            // a refund runs on its own checkout session, so it needs a
-            // connection with no active checkout — and each disabled state
-            // says so: stored sales browse fine offline, so a silently gray
-            // button would read as broken
+            // The two modes need opposite session states: the full refund
+            // voids the prior sale on its own session (no active checkout),
+            // while item returns ring into the ACTIVE checkout's basket and
+            // settle with it. Each disabled state says so — stored sales
+            // browse fine offline, so a silently gray button would read as
+            // broken.
             val connected = state.connection.phase != ConnectionPhase.DISCONNECTED
+            val sessionActive = state.sessionId != null
             when {
                 !connected -> Text(
                     "Connect to the terminal to run a refund",
                     style = MaterialTheme.typography.bodySmall,
                 )
-                state.sessionId != null -> Text(
-                    "End the active checkout to run a refund",
+                mode == RefundMode.FULL && sessionActive -> Text(
+                    "End the active checkout to run a full refund",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                mode == RefundMode.ITEMS && !sessionActive -> Text(
+                    "Start a checkout to ring returns into its basket",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
             Button(
                 onClick = {
-                    controller.refundSale(
-                        sale.id,
-                        if (mode == RefundMode.ITEMS) selectedSkus else null,
-                    )
+                    when (mode) {
+                        RefundMode.FULL -> controller.refundSale(sale.id)
+                        RefundMode.ITEMS -> {
+                            controller.addReturnToBasket(sale.id, selectedSkus)
+                            // the rung lines re-project with zero remaining;
+                            // a stale selection would just read confusingly
+                            selectedSkus = emptySet()
+                        }
+                    }
                 },
-                enabled = sale.refundable && connected && state.sessionId == null &&
-                    !state.refundInProgress &&
-                    (mode == RefundMode.FULL || itemsMinor > 0),
+                enabled = sale.refundable && connected && when (mode) {
+                    RefundMode.FULL ->
+                        fullAvailable && !sessionActive && !state.refundInProgress
+                    RefundMode.ITEMS -> sessionActive && itemsMinor > 0
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (state.refundInProgress) "Refunding…" else "Refund $$amount")
+                Text(
+                    when {
+                        mode == RefundMode.FULL && state.refundInProgress -> "Refunding…"
+                        mode == RefundMode.FULL -> "Refund $$amount"
+                        else -> "Add return to basket ($$amount)"
+                    }
+                )
             }
         }
     }
@@ -822,10 +824,12 @@ private fun BasketCard(
                 Text("Empty", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
-                    items(state.basket, key = { it.sku }) { line ->
+                    // keyed on sku AND direction: a mixed basket may hold a
+                    // sale line and a return of the same sku side by side
+                    items(state.basket, key = { "${it.sku}:${it.credit}" }) { line ->
                         LineItemRow(
                             line.quantity,
-                            line.description,
+                            if (line.credit) "${line.description} (return)" else line.description,
                             "$${line.lineTotal}",
                             Modifier.padding(vertical = 2.dp),
                         )

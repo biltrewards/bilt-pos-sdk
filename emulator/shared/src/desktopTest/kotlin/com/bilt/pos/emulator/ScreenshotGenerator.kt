@@ -46,16 +46,17 @@ class ScreenshotGenerator {
         override fun addProduct(product: Product) = Unit
         override fun settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?) = Unit
         override fun acquireCard() = Unit
-        override fun refundSale(saleId: String, skus: Set<String>?) = Unit
+        override fun refundSale(saleId: String) = Unit
+        override fun addReturnToBasket(saleId: String, skus: Set<String>) = Unit
         override fun abort() = Unit
         override fun dismissPaymentOutcome() = Unit
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
     private fun render(state: EmulatorState, file: File, initialTab: EmulatorTab = EmulatorTab.SALE) {
-        // 1100x900 dp at 2x density — the desktop window's default size,
+        // 1100x1000 dp at 2x density — the desktop window's default size,
         // above the 700dp breakpoint so the wide layout renders
-        val scene = ImageComposeScene(width = 2200, height = 1800, density = Density(2f)) {
+        val scene = ImageComposeScene(width = 2200, height = 2000, density = Density(2f)) {
             EmulatorApp(FakeController(state), MockProductProvider.products(), initialTab)
         }
         val png = scene.render().encodeToData(EncodedImageFormat.PNG)!!.bytes

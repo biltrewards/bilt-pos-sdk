@@ -43,6 +43,9 @@ data class BasketLine(
     val description: String,
     val quantity: Int,
     val lineTotal: String,
+    /** True for a return rung into the basket — the line subtracts, and
+     *  settlement restores its value to the original sale's tender. */
+    val credit: Boolean = false,
 )
 
 /** Outcome of the last payment or refund attempt, shown as a popup until
@@ -262,18 +265,26 @@ interface EmulatorController {
     fun acquireCard()
 
     /**
-     * Referenced refund of the stored sale [saleId], run on a fresh
-     * checkout session against the connected terminal — the originating
-     * checkout is long gone; the stored transaction references identify
-     * what to reverse. A null [skus] refunds the sale in full by voiding
-     * every referenced movement (tender legs, redemption, rebate, award);
-     * otherwise the selected items are rung in as credit lines (shelf
-     * price plus tax per line) and settled with a refund allocation
-     * against the sale's outstanding tender. Requires a connection with no
-     * active checkout session. The outcome reports as
-     * [EmulatorState.paymentOutcome], like a payment.
+     * Full refund of the stored sale [saleId], run on a fresh checkout
+     * session against the connected terminal — the originating checkout is
+     * long gone; the stored transaction references identify what to
+     * reverse. Voids every referenced movement (tender legs, redemption,
+     * rebate, award). Requires a connection with no active checkout
+     * session. The outcome reports as [EmulatorState.paymentOutcome], like
+     * a payment.
      */
-    fun refundSale(saleId: String, skus: Set<String>? = null)
+    fun refundSale(saleId: String)
+
+    /**
+     * Rings the selected items of the stored sale [saleId] into the ACTIVE
+     * checkout's basket as returns (credit lines, shelf price plus tax per
+     * line). The basket may mix returns with new items — settlement then
+     * charges the sale lines and restores each return's value to its
+     * original sale's outstanding tender via a refund allocation. Rung
+     * returns are held until the settlement succeeds (recorded against
+     * their sales then) or the checkout ends.
+     */
+    fun addReturnToBasket(saleId: String, skus: Set<String>)
 
     /**
      * Abort whatever is in flight, mirroring the SDK's operation-scoped

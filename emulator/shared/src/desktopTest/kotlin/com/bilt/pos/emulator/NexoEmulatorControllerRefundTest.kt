@@ -1,7 +1,9 @@
 package com.bilt.pos.emulator
 
+import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorConfig
+import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.NexoEmulatorController
 import com.bilt.pos.emulator.store.JsonlSaleStore
 import com.bilt.pos.emulator.store.LegType
@@ -68,6 +70,18 @@ class NexoEmulatorControllerRefundTest {
                 "PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":24.99},
                     "PaymentAcquirerData":{"ApprovalCode":"APPR01"}}}}}"""
 
+        const val PAYMENT_OK =
+            """{"SaleToPOIResponse":{"PaymentResponse":{
+                "Response":{"Result":"Success"},
+                "POIData":{"POITransactionID":{"TransactionID":"POI-NEW-1",
+                    "TimeStamp":"2026-03-02T16:10:00+00:00"}},
+                "PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":34.99},
+                    "PaymentAcquirerData":{"ApprovalCode":"APPR02"}}}}}"""
+
+        const val DISPLAY_OK =
+            """{"SaleToPOIResponse":{"DisplayResponse":{
+                "OutputResult":[{"Response":{"Result":"Success"}}]}}}"""
+
         /** The void path's reply; carries a raw-XML customer receipt (must
          *  parse silently) and a garbage cashier receipt (must warn). */
         const val REVERSAL_OK =
@@ -107,9 +121,13 @@ class NexoEmulatorControllerRefundTest {
                         when {
                             "\"DiagnosisRequest\"" in body -> DIAGNOSIS_OK
                             "\"AdminRequest\"" in body -> ADMIN_OK
+                            "\"DisplayRequest\"" in body -> DISPLAY_OK
                             "\"LoyaltyRequest\"" in body -> LOYALTY_OK
                             "\"ReversalRequest\"" in body -> REVERSAL_OK
-                            "\"PaymentRequest\"" in body -> REFUND_OK
+                            // the refund leg of a settlement carries the
+                            // Refund payment type; a charge does not
+                            "\"PaymentRequest\"" in body && "Refund" in body -> REFUND_OK
+                            "\"PaymentRequest\"" in body -> PAYMENT_OK
                             else -> ADMIN_OK
                         }
                     )
@@ -391,16 +409,21 @@ class NexoEmulatorControllerRefundTest {
                 controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
             }
 
-            controller.refundSale("sale-3", skus = setOf("SKU-1"))
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+            controller.addReturnToBasket("sale-3", setOf("SKU-1"))
+            withTimeout(10_000) { controller.state.first { s -> s.basket.any { it.credit } } }
+            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+            controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
             val outcome = withTimeout(10_000) {
                 controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
             }
             assertTrue(outcome.success, "expected a successful refund, got: ${outcome.message}")
 
-            // the item refund must not touch the already-returned card
-            // transaction — it draws from the outstanding gift card leg
+            // the return must not touch the already-returned card
+            // transaction — it restores to the outstanding gift card leg
             val payment = assertNotNull(
-                requests.firstOrNull { "\"PaymentRequest\"" in it },
+                requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" in it },
                 "no refund PaymentRequest reached the terminal",
             )
             assertTrue("poi-sv-3" in payment, "expected the stored value reference: $payment")
@@ -410,9 +433,7 @@ class NexoEmulatorControllerRefundTest {
                 assertNotNull(store.findSale("sale-3")).refunds.last().leg,
             )
 
-            // the award was already reversed by the earlier refund — a
-            // fresh session must not carry the references and reverse it
-            // again (the SDK's own guard only lives inside one session)
+            // loyalty is off and returns never touch the award
             assertTrue(
                 requests.none { "\"LoyaltyRequest\"" in it },
                 "the already-reversed award was sent for reversal again",
@@ -479,53 +500,127 @@ class NexoEmulatorControllerRefundTest {
                 controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
             }
 
-            controller.refundSale("sale-1", skus = setOf("SKU-1"))
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
-            assertTrue(outcome.success, "expected a successful refund, got: ${outcome.message}")
-            assertTrue("2.24" in outcome.message, "amount missing from: ${outcome.message}")
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
 
-            // the refund PaymentRequest references the card leg and carries
-            // the returned item with the cart total: 2 × 1.05 plus 0.14 tax
-            // (matching the UI's refundMinor of 224 cents)
-            val payment = assertNotNull(
-                requests.firstOrNull { "\"PaymentRequest\"" in it },
-                "no refund PaymentRequest reached the terminal",
-            )
-            assertTrue("poi-card-1" in payment, "original card reference missing: $payment")
-            assertTrue("SKU-1" in payment, "returned item missing from: $payment")
-            assertTrue("2.24" in payment, "cart total missing from: $payment")
-            // items settle against the tender alone — the award stands
-            assertTrue(
-                requests.none { "\"LoyaltyRequest\"" in it },
-                "an item refund must not touch the award",
-            )
-
-            // the store knows what was returned: the line is exhausted in
-            // the UI projection and a repeat attempt never reaches the wire
-            val refund = assertNotNull(store.findSale("sale-1")).refunds.single()
-            assertEquals(listOf(RefundedItem("SKU-1", 2)), refund.items)
-            assertTrue(!refund.full, "an item refund must not exhaust the sale")
-            assertEquals(LegType.CARD, refund.leg)
+            controller.addReturnToBasket("sale-1", setOf("SKU-1"))
+            // the return lands in the shared basket as a credit line, and
+            // the sales projection nets it off the remaining quantity
+            withTimeout(10_000) { controller.state.first { s -> s.basket.any { it.credit } } }
             withTimeout(10_000) {
                 controller.state.first { s ->
                     s.sales.singleOrNull()?.items?.singleOrNull()?.remainingQuantity == 0
                 }
             }
-            // the busy flag clears after the operation claim releases; a
-            // second attempt before that is refused as a concurrent
-            // operation, not as an exhausted sale (the UI disables the
-            // button until then)
+            // the ring holds the operation claim until the busy flag drops;
+            // settling before that would be refused as concurrent
             withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
-            controller.refundSale("sale-1", skus = setOf("SKU-1"))
+
+            controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(outcome.success, "expected a successful settlement, got: ${outcome.message}")
+            assertTrue(
+                "returned $2.24" in outcome.message,
+                "return missing from: ${outcome.message}",
+            )
+
+            // the settlement's refund leg references the card leg and
+            // carries the returned item with the credit total: 2 × 1.05
+            // plus 0.14 tax (matching the UI's refundMinor of 224 cents)
+            val payment = assertNotNull(
+                requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" in it },
+                "no refund PaymentRequest reached the terminal",
+            )
+            assertTrue("poi-card-1" in payment, "original card reference missing: $payment")
+            assertTrue("SKU-1" in payment, "returned item missing from: $payment")
+            assertTrue("2.24" in payment, "credit total missing from: $payment")
+            // nothing sold and loyalty off: the refund leg is the only
+            // money movement, and the award stands
+            assertTrue(requests.none { "\"PaymentRequest\"" in it && "Refund" !in it })
+            assertTrue(requests.none { "\"LoyaltyRequest\"" in it })
+
+            // recorded against the original sale
+            val refund = assertNotNull(store.findSale("sale-1")).refunds.single()
+            assertEquals(listOf(RefundedItem("SKU-1", 2)), refund.items)
+            assertTrue(!refund.full, "an item return must not exhaust the sale")
+            assertEquals(LegType.CARD, refund.leg)
+            assertEquals("2.24", refund.amount)
+
+            // the settlement auto-ended the checkout; a fresh one offers
+            // nothing left to return, before anything reaches the basket
+            withTimeout(10_000) { controller.state.first { it.sessionId == null } }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+            controller.addReturnToBasket("sale-1", setOf("SKU-1"))
             withTimeout(10_000) {
                 controller.state.first { s ->
-                    s.events.any { "Nothing left to refund among the selected items" in it }
+                    s.events.any { "Nothing left to return among the selected items" in it }
                 }
             }
-            assertEquals(1, requests.count { "\"PaymentRequest\"" in it })
+            assertTrue(controller.state.value.basket.isEmpty())
             assertEquals(1, assertNotNull(store.findSale("sale-1")).refunds.size)
+            // the returns-only settlement did not fabricate a new "sale"
+            assertEquals(1, store.listSales().size)
+        }
+    }
+
+    @Test
+    fun mixedSettlementChargesNewItemsAndRestoresReturns() {
+        val store = storeWithOneSale()
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            // one new item and one return in the same basket ("Grocery" is
+            // tax-exempt, so the sale line stays a flat 34.99)
+            controller.addProduct(Product("SKU-NEW", "Desk Lamp", 3499, "Grocery"))
+            controller.addReturnToBasket("sale-1", setOf("SKU-1"))
+            withTimeout(10_000) {
+                controller.state.first { s -> s.basket.size == 2 && s.basket.any { it.credit } }
+            }
+            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+            // the display nets the return off the total: 34.99 − 2.24
+            assertEquals("32.75", controller.state.value.basketTotal)
+
+            controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(outcome.success, "expected a successful settlement, got: ${outcome.message}")
+            assertTrue(
+                "returned $2.24" in outcome.message,
+                "return missing from: ${outcome.message}",
+            )
+
+            // the wire saw both movements: the linked refund of the return
+            // against the original card leg, and the charge for the new item
+            val refundLeg = assertNotNull(
+                requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" in it },
+                "no refund PaymentRequest reached the terminal",
+            )
+            assertTrue("poi-card-1" in refundLeg && "2.24" in refundLeg)
+            val charge = assertNotNull(
+                requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" !in it },
+                "no charge PaymentRequest reached the terminal",
+            )
+            assertTrue("34.99" in charge, "charge amount missing: $charge")
+
+            // the return lands on the ORIGINAL sale's history; the new sale
+            // is persisted with only the sold line
+            assertEquals(
+                listOf(RefundedItem("SKU-1", 2)),
+                assertNotNull(store.findSale("sale-1")).refunds.single().items,
+            )
+            withTimeout(10_000) { controller.state.first { it.sales.size == 2 } }
+            val newSale = store.listSales().first { it.sale.id != "sale-1" }.sale
+            assertEquals(listOf("SKU-NEW"), newSale.items.map { it.sku })
         }
     }
 }
