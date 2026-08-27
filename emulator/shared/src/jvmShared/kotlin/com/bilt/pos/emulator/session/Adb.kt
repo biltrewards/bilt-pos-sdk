@@ -1,24 +1,33 @@
 package com.bilt.pos.emulator.session
 
-import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.logging.Logger
 
 /**
  * Locates and runs the adb executable for the emulator's device
  * integrations — the address autodetect and the adb tunnel.
  *
- * A desktop app does not inherit the shell's PATH (a Finder-launched app
- * sees only the system default), so a bare `adb` often fails even though
- * the operator's terminal finds one. The resolver checks the conventional
- * SDK locations first and falls back to PATH lookup.
+ * Resolution prefers PATH: that is the adb the operator's terminal uses,
+ * and running a DIFFERENT install (a second SDK copy) would kill their adb
+ * server over the version mismatch and leave devices enumerating late. The
+ * conventional SDK locations are fallbacks for launches that don't inherit
+ * the shell's PATH (a Finder-launched app sees only the system default).
+ * Every candidate is probed with `adb version` — which does not start the
+ * server — so the resolution log states what actually runs.
+ *
+ * Logs through JUL under `com.bilt.pos`, so the emulator's Detailed tab
+ * carries the whole trail: the resolved executable, every command, and the
+ * raw output.
  */
 internal object Adb {
 
-    /** The resolved adb executable — a full path when a conventional
-     *  location has one, else plain `adb` for PATH lookup. */
+    private val LOGGER = Logger.getLogger("com.bilt.pos.emulator.Adb")
+
+    /** The resolved adb executable: the first candidate whose
+     *  `adb version` answers — PATH first, then the SDK locations. */
     val executable: String by lazy {
         val home = System.getProperty("user.home")
-        listOfNotNull(
+        val candidates = listOf("adb") + listOfNotNull(
             System.getenv("ANDROID_HOME")?.let { "$it/platform-tools/adb" },
             System.getenv("ANDROID_SDK_ROOT")?.let { "$it/platform-tools/adb" },
             // the default SDK locations on macOS and Linux
@@ -26,7 +35,35 @@ internal object Adb {
             "$home/Android/Sdk/platform-tools/adb",
             "/opt/homebrew/bin/adb",
             "/usr/local/bin/adb",
-        ).firstOrNull { File(it).canExecute() } ?: "adb"
+        )
+        for (candidate in candidates.distinct()) {
+            val version = probe(candidate)
+            if (version != null) {
+                LOGGER.info("using adb: $candidate ($version)")
+                return@lazy candidate
+            }
+            LOGGER.fine("adb candidate not usable: $candidate")
+        }
+        LOGGER.warning(
+            "no usable adb found — tried PATH, ANDROID_HOME, ANDROID_SDK_ROOT, " +
+                "and the default SDK locations; install platform-tools or set ANDROID_HOME"
+        )
+        "adb"
+    }
+
+    /** First line of `[candidate] version`, or null when it can't run. */
+    private fun probe(candidate: String): String? = try {
+        val process = ProcessBuilder(candidate, "version").redirectErrorStream(true).start()
+        if (!process.waitFor(5, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            null
+        } else {
+            process.inputStream.bufferedReader().readText()
+                .takeIf { process.exitValue() == 0 }
+                ?.lineSequence()?.firstOrNull()?.trim()
+        }
+    } catch (_: Exception) {
+        null
     }
 
     /**
@@ -38,9 +75,11 @@ internal object Adb {
      */
     fun run(vararg args: String): String {
         val command = listOf(executable) + args
+        LOGGER.fine("running: ${command.joinToString(" ")}")
         val process = try {
             ProcessBuilder(command).redirectErrorStream(true).start()
         } catch (e: Exception) {
+            LOGGER.warning("adb could not be started ($executable): ${e.message}")
             throw IllegalStateException(
                 "adb could not be started ($executable — install platform-tools " +
                     "or set ANDROID_HOME): ${e.message}"
@@ -50,10 +89,13 @@ internal object Adb {
         // and deadlock the wait
         if (!process.waitFor(15, TimeUnit.SECONDS)) {
             process.destroyForcibly()
+            LOGGER.warning("adb timed out: ${command.joinToString(" ")}")
             throw IllegalStateException("adb timed out: ${command.joinToString(" ")}")
         }
         val output = process.inputStream.bufferedReader().readText()
+        LOGGER.fine("adb output: ${output.trim().ifEmpty { "(none)" }}")
         if (process.exitValue() != 0) {
+            LOGGER.warning("adb failed (${args.joinToString(" ")}): ${output.trim()}")
             throw IllegalStateException(
                 "adb failed (${args.joinToString(" ")}): ${output.trim()}"
             )
@@ -76,11 +118,23 @@ internal object Adb {
     fun devices(): List<String> {
         val first = run("devices")
         val serials = parseSerials(first)
-        if (serials.isNotEmpty() || "daemon" !in first) {
+        if (serials.isNotEmpty()) {
+            LOGGER.info("adb devices: $serials")
             return serials
         }
+        if ("daemon" !in first) {
+            LOGGER.info("adb devices found none; raw output: ${first.trim().ifEmpty { "(none)" }}")
+            return serials
+        }
+        LOGGER.info("adb server just started — retrying the device listing")
         Thread.sleep(1_500)
-        return parseSerials(run("devices"))
+        val retried = run("devices")
+        return parseSerials(retried).also {
+            LOGGER.info(
+                if (it.isEmpty()) "adb devices found none after retry; raw output: ${retried.trim()}"
+                else "adb devices: $it"
+            )
+        }
     }
 
     /** The attached-device serials from `adb devices` output. Tolerates
