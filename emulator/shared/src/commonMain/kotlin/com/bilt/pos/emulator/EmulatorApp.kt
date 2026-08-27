@@ -19,7 +19,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -58,6 +62,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bilt.pos.emulator.catalog.Product
@@ -801,25 +806,28 @@ private fun ProductGrid(
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text("Products", style = MaterialTheme.typography.titleMedium)
-            // weight(1f) so the list measures against the space under the
-            // header instead of the card's full height (clips the last rows)
-            LazyColumn(
+            // weight(1f) so the grid measures against the space under the
+            // header instead of the card's full height (clips the last rows).
+            // Adaptive columns: as many compact bubbles per row as fit.
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 150.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(top = 8.dp).weight(1f),
             ) {
                 items(products, key = { it.sku }) { product ->
                     Button(
                         onClick = { controller.addProduct(product) },
-                        modifier = Modifier.fillMaxWidth(),
+                        // fixed height so rows stay even when names differ
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 product.name,
-                                style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             Text(product.priceLabel, style = MaterialTheme.typography.labelMedium)
                         }
