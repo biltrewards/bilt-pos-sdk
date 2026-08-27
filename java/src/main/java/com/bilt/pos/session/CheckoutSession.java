@@ -1378,9 +1378,9 @@ public final class CheckoutSession implements AutoCloseable {
      * redemption, and award movement is reversed in the same order as a
      * same-session void. If the void partially fails, retry it on the same
      * session instance because the in-memory reversed-step progress is what
-     * prevents already-reversed legs from being sent again. Mixed sale/return
-     * settlements should use {@link #settle(SettlementOptions)} with refund
-     * allocations instead.
+     * prevents already-reversed legs from being sent again; {@link #end()} is
+     * refused until that retry succeeds. Mixed sale/return settlements should
+     * use {@link #settle(SettlementOptions)} with refund allocations instead.
      */
     public ReversalFlow<VoidResult> voidTransaction(OriginalSaleRecord originalSale) {
         Objects.requireNonNull(originalSale, "originalSale");
@@ -1726,9 +1726,9 @@ public final class CheckoutSession implements AutoCloseable {
      * establish another terminal bracket.
      *
      * <p>Refused while money is in flight, while a failed payment's rollback
-     * is incomplete, while a same-session void is partially complete, or
-     * while refund allocations from a failed settlement have committed —
-     * finish the unwind with {@link #voidTransaction()} or retry
+     * is incomplete, while a same-session or prior-sale void is partially
+     * complete, or while refund allocations from a failed settlement have
+     * committed — finish the unwind with {@link #voidTransaction()} or retry
      * {@code settle()} first, or the terminal/register state would be
      * abandoned with money movements still unresolved. If the end signal
      * fails, the session remains open so the call can be retried.
@@ -1755,6 +1755,11 @@ public final class CheckoutSession implements AutoCloseable {
                 if (lastPaymentVoidIncomplete) {
                     throw invalidState("a void of the most recent payment is partially "
                             + "complete; retry voidTransaction() before ending the session");
+                }
+                if (!priorSaleVoidReversedSteps.isEmpty()) {
+                    throw invalidState("a prior-sale void is partially complete; retry "
+                            + "voidTransaction(OriginalSaleRecord) with the same original "
+                            + "sale record before ending the session");
                 }
                 if (hasCommittedRefundAllocations()) {
                     throw invalidState("refund allocations from a failed settlement are "

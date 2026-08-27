@@ -467,7 +467,7 @@ try (CheckoutSession session = CheckoutSession.builder()
 
 Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. The same `ReversalFlow` decision handling applies as on `CheckoutSession`.
 
-If a prior-sale void partially fails after reversing one or more legs, retry that void on the same `CheckoutSession` instance. The reversed-step progress is held in memory so the retry resumes at the first still-standing movement; a new session created with the same `OriginalSaleRecord` has no memory of that progress and would send the full void sequence again.
+If a prior-sale void partially fails after reversing one or more legs, retry that void on the same `CheckoutSession` instance. The reversed-step progress is held in memory so the retry resumes at the first still-standing movement; `end()` is refused until the void finishes because a new session created with the same `OriginalSaleRecord` has no memory of that progress and would send the full void sequence again.
 
 ### Item-based refunds in settlement
 

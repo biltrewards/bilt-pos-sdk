@@ -1356,6 +1356,19 @@ class CheckoutSessionPaymentTest {
         assertEquals(PRIOR_STORED_VALUE_POI_TXN, firstAttempt.get(1).getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
 
+        SessionException endRefused = assertThrows(SessionException.class,
+                () -> session.end().get());
+        assertEquals(SessionErrorCode.INVALID_STATE, endRefused.getError().getCode());
+        assertTrue(endRefused.getError().getMessage().contains(
+                "voidTransaction(OriginalSaleRecord)"));
+        assertEquals(0, drainRequests().size(),
+                "end must not discard prior-sale void resume progress");
+
+        assertDoesNotThrow(session::close,
+                "best-effort close must leave the guarded session open");
+        assertEquals(0, drainRequests().size(),
+                "close must inherit end's prior-sale progress guard");
+
         SessionException wrongSale = assertThrows(SessionException.class,
                 () -> session.voidTransaction(OriginalSaleRecord.builder()
                         .cardPoiTransactionId("POI-CARD-OTHER")
@@ -1377,6 +1390,10 @@ class CheckoutSessionPaymentTest {
         assertEquals(PRIOR_STORED_VALUE_POI_TXN, retry.get(0).getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID(),
                 "retry must not reverse the already-completed card leg again");
+
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+        assertDoesNotThrow(() -> session.end().get(),
+                "end is allowed after the prior-sale void finishes");
     }
 
     @Test

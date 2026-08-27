@@ -879,9 +879,9 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  redemption, and award movement is reversed in the same order as a
  same-session void. If the void partially fails, retry it on the same
  session instance because the in-memory reversed-step progress is what
- prevents already-reversed legs from being sent again. Mixed sale/return
- settlements should use <a href="#settle(com.bilt.pos.session.settlement.SettlementOptions)"><code>settle(SettlementOptions)</code></a> with refund
- allocations instead.</div>
+ prevents already-reversed legs from being sent again; <a href="#end()"><code>end()</code></a> is
+ refused until that retry succeeds. Mixed sale/return settlements should
+ use <a href="#settle(com.bilt.pos.session.settlement.SettlementOptions)"><code>settle(SettlementOptions)</code></a> with refund allocations instead.</div>
 </section>
 </li>
 <li>
@@ -946,9 +946,9 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  establish another terminal bracket.
 
  <p>Refused while money is in flight, while a failed payment's rollback
- is incomplete, while a same-session void is partially complete, or
- while refund allocations from a failed settlement have committed —
- finish the unwind with <a href="#voidTransaction()"><code>voidTransaction()</code></a> or retry
+ is incomplete, while a same-session or prior-sale void is partially
+ complete, or while refund allocations from a failed settlement have
+ committed — finish the unwind with <a href="#voidTransaction()"><code>voidTransaction()</code></a> or retry
  <code>settle()</code> first, or the terminal/register state would be
  abandoned with money movements still unresolved. If the end signal
  fails, the session remains open so the call can be retried.
