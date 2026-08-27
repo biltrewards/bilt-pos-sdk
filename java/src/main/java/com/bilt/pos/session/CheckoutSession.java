@@ -296,6 +296,26 @@ public final class CheckoutSession implements AutoCloseable {
             redemptionPoiTransactionTimestamp = result == null
                     ? null : result.getRedemptionPoiTransactionTimestamp();
         }
+
+        /** Whether a persisted record includes any movement of this payment. */
+        boolean sharesMovementWith(OriginalSaleRecord sale) {
+            return references(sale.getCardPoiTransactionId())
+                    || references(sale.getStoredValuePoiTransactionId())
+                    || references(sale.getRedemptionPoiTransactionId())
+                    || references(sale.getRebatePoiTransactionId())
+                    || references(sale.getAwardPoiTransactionId());
+        }
+
+        private boolean references(String transactionId) {
+            if (transactionId == null) {
+                return false;
+            }
+            return transactionId.equals(poiTransactionId)
+                    || transactionId.equals(storedValuePoiTransactionId)
+                    || transactionId.equals(redemptionPoiTransactionId)
+                    || transactionId.equals(rebatePoiTransactionId)
+                    || transactionId.equals(awardPoiTransactionId);
+        }
     }
 
     public static Builder builder() {
@@ -1381,6 +1401,9 @@ public final class CheckoutSession implements AutoCloseable {
      * prevents already-reversed legs from being sent again; {@link #end()} is
      * refused until that retry succeeds. Mixed sale/return settlements should
      * use {@link #settle(SettlementOptions)} with refund allocations instead.
+     * A record containing any movement of this session's most recent
+     * settlement is refused; use parameterless {@link #voidTransaction()} so
+     * the settlement's shared refund/void guards remain authoritative.
      */
     public ReversalFlow<VoidResult> voidTransaction(OriginalSaleRecord originalSale) {
         Objects.requireNonNull(originalSale, "originalSale");
@@ -1457,6 +1480,11 @@ public final class CheckoutSession implements AutoCloseable {
         }
         beginVoid();
         try {
+            if (lastPayment.sharesMovementWith(originalSale)) {
+                throw invalidState("the original sale record references the most recent "
+                        + "settlement in this session; use parameterless voidTransaction() "
+                        + "so its refund and void guards remain consistent");
+            }
             List<ReversalMovement> movements = voidTarget(originalSale);
             Set<ReversalStep> reversedSteps = priorSaleVoidProgress(originalSale);
             VoidResult result = reversalManager.voidMovements(movements,

@@ -127,7 +127,7 @@ Refund allocation failures are terminal for that settlement run. The `onError` h
 - Call `session.basket().clear()` to begin another settlement in the same session. It creates a fresh empty basket with a new cart ID and clears the stored-value card selected for the previous basket. The identified member remains attached.
 - A failed settlement does not consume the basket. The register may correct it and retry. If refund allocations committed, the retry must retain the same allocation prefix; if rollback is incomplete, the retry first finishes it.
 - `refund()` and parameterless `voidTransaction()` refer to the most recent successful settlement in this session. Persist `SettlementResult.toOriginalSaleRecord()` when an older settlement may need to be referenced later.
-- `voidTransaction(OriginalSaleRecord)` is independent of the current basket and can run anywhere inside the open session. A partially failed prior-sale void must still be retried on the same session instance so its in-memory progress is retained.
+- `voidTransaction(OriginalSaleRecord)` is independent of the current basket and can target an older settlement anywhere inside the open session. A record containing any movement of the most recent settlement is refused; use parameterless `voidTransaction()` so its refund/void guards remain authoritative. A partially failed prior-sale void must still be retried on the same session instance so its in-memory progress is retained.
 - Only a successful `end()` permanently seals the session. It is refused while money or required recovery is unresolved.
 
 ---
@@ -407,7 +407,7 @@ The identified member stays attached across `clear()`. A failed settlement does 
 
 ## Refund and void
 
-`CheckoutSession` can still reverse the positive sale it took itself: `refund()` and `voidTransaction()` work on the session's completed pure-sale settlement, no references needed. Returns from an earlier sale are handled in `settle(...)` by adding credit lines to the basket and supplying register-selected `RefundAllocation`s in `SettlementOptions`. A pure prior-sale void uses `voidTransaction(OriginalSaleRecord)` — see [Reversing a prior sale](#reversing-a-prior-sale-originalsalerecord) below.
+`CheckoutSession` can still reverse the positive sale it took itself: `refund()` and `voidTransaction()` work on the session's most recent completed pure-sale settlement, no references needed. Returns from an earlier sale are handled in `settle(...)` by adding credit lines to the basket and supplying register-selected `RefundAllocation`s in `SettlementOptions`. A pure older-sale void uses `voidTransaction(OriginalSaleRecord)` — see [Reversing a prior sale](#reversing-a-prior-sale-originalsalerecord) below.
 
 - `refund()` / `refund(amount)` — linked refunds of the most recent successful settlement's card payment; also reverse the loyalty award when one ran, best-effort by default. Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once a linked refund has returned money, that payment can no longer be voided from the session: a void would return the full amount on top of the refund. Refunds cover the card leg + award only; the sale's committed rebate and redemption movements are reversed by `voidTransaction()`.
 - `refundUnlinked(amount)` — payment-only, not tied to a prior transaction, no loyalty reversal, and does not alter the latest settlement's refund/void guards.
@@ -465,7 +465,7 @@ try (CheckoutSession session = CheckoutSession.builder()
 }
 ```
 
-Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. The same `ReversalFlow` decision handling applies as on `CheckoutSession`.
+Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. The same `ReversalFlow` decision handling applies as on `CheckoutSession`. If the record includes any POI transaction ID from this session's most recent settlement, the call is refused; use parameterless `voidTransaction()` so a later refund or second void cannot bypass that settlement's shared guards.
 
 If a prior-sale void partially fails after reversing one or more legs, retry that void on the same `CheckoutSession` instance. The reversed-step progress is held in memory so the retry resumes at the first still-standing movement; `end()` is refused until the void finishes because a new session created with the same `OriginalSaleRecord` has no memory of that progress and would send the full void sequence again.
 

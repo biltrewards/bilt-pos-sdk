@@ -881,7 +881,10 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  session instance because the in-memory reversed-step progress is what
  prevents already-reversed legs from being sent again; <a href="#end()"><code>end()</code></a> is
  refused until that retry succeeds. Mixed sale/return settlements should
- use <a href="#settle(com.bilt.pos.session.settlement.SettlementOptions)"><code>settle(SettlementOptions)</code></a> with refund allocations instead.</div>
+ use <a href="#settle(com.bilt.pos.session.settlement.SettlementOptions)"><code>settle(SettlementOptions)</code></a> with refund allocations instead.
+ A record containing any movement of this session's most recent
+ settlement is refused; use parameterless <a href="#voidTransaction()"><code>voidTransaction()</code></a> so
+ the settlement's shared refund/void guards remain authoritative.</div>
 </section>
 </li>
 <li>

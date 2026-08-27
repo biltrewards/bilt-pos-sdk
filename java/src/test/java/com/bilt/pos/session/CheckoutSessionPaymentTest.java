@@ -1241,6 +1241,54 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void originalSaleRecordVoidRejectsTheMostRecentSessionPayment() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        SettlementResult sale = session.settle().get();
+        drainRequests();
+
+        SessionException referencedVoid = assertThrows(SessionException.class,
+                () -> session.voidTransaction(sale.toOriginalSaleRecord(null)).get());
+        assertEquals(SessionErrorCode.INVALID_STATE, referencedVoid.getError().getCode());
+        assertTrue(referencedVoid.getError().getMessage().contains(
+                "parameterless voidTransaction()"));
+        assertEquals(0, drainRequests().size(),
+                "a referenced void must not bypass the latest payment's guards");
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        drainRequests();
+
+        SessionException refundRefused = assertThrows(SessionException.class,
+                () -> session.refund(new BigDecimal("10.00")).get());
+        assertEquals(SessionErrorCode.INVALID_STATE, refundRefused.getError().getCode());
+        assertEquals(0, drainRequests().size(),
+                "the shared guard must prevent refunding the voided payment");
+    }
+
+    @Test
+    void originalSaleRecordVoidCanTargetAnOlderSettlementInTheSameSession() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        SettlementResult olderSale = session.settle().get();
+        drainRequests();
+
+        session.basket().clear();
+        session.basket().addItem(BasketItem.of("SKU-2", "Item", 1, "25.00"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 25.00)));
+        session.settle().get();
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        assertTrue(session.voidTransaction(
+                olderSale.toOriginalSaleRecord(null)).get().isSuccess());
+
+        SaleToPOIRequest reversal = nextRequest();
+        assertEquals("POI-PAY-1", reversal.getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
     void originalSaleRecordVoidCanRunAlongsideAnUnsettledBasket() throws Exception {
         session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
