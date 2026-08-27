@@ -103,9 +103,7 @@ loadScripts(document, 'script');</script>
  the leg, not the wire verb — which operation was running is already
  known from the flow the handler is registered on.
 
- <p>A void — <code>CheckoutSession.voidTransaction()</code> for the session's
- own payment, <code>ReversalSession.voidTransaction()</code> for a referenced
- prior sale — reverses the known legs in this order: <a href="#CARD"><code>CARD</code></a>,
+ <p>A void reverses the known legs in this order: <a href="#CARD"><code>CARD</code></a>,
  <a href="#STORED_VALUE"><code>STORED_VALUE</code></a>, <a href="#REDEMPTION"><code>REDEMPTION</code></a>, <a href="#REBATE"><code>REBATE</code></a>,
  <a href="#AWARD"><code>AWARD</code></a>. A refund flow has at most two steps: <a href="#CARD"><code>CARD</code></a> (the
  tender refund) and <a href="#AWARD"><code>AWARD</code></a>.</p></div>

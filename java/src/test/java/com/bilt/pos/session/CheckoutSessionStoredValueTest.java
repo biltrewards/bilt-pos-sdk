@@ -213,7 +213,7 @@ class CheckoutSessionStoredValueTest {
                         + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-GC-1\"}},"
                         + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":50.00}}}}}"));
 
-        session.pay().executeSync();
+        session.settle().executeSync();
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("svs", sent.getPaymentRequest().getPaymentData().getPaymentInstrumentData()

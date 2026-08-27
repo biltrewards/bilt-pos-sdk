@@ -7,6 +7,7 @@ import com.bilt.pos.session.internal.BasketEngine;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -330,6 +331,129 @@ class BasketEngineTest {
         basket = engine.snapshot();
         assertEquals(2, basket.getItemCount());
         assertEquals(new BigDecimal("0.00"), basket.getGrandTotal());
+    }
+
+    @Test
+    void basketPortionsSplitSaleAndCreditLinesAndLineTaxes() {
+        BasketEngine engine = new BasketEngine();
+        engine.addItem(BasketItem.builder()
+                .sku("SKU-SALE").description("Sale Item")
+                .quantity(2).unitPrice(new BigDecimal("10.00"))
+                .taxAmount(new BigDecimal("1.50"))
+                .build());
+        engine.addItem(BasketItem.builder()
+                .sku("SKU-RETURN").description("Return Item")
+                .quantity(1).unitPrice(new BigDecimal("4.00"))
+                .taxAmount(new BigDecimal("0.32"))
+                .credit(true)
+                .build());
+
+        Basket basket = engine.snapshot();
+        Basket sale = basket.salePortion();
+        Basket returns = basket.returnPortion();
+
+        assertTrue(basket.hasSaleLines());
+        assertTrue(basket.hasCreditLines());
+        assertEquals(1, sale.getItemCount());
+        assertFalse(sale.hasCreditLines());
+        assertEquals(new BigDecimal("20.00"), sale.getOriginalTotal());
+        assertEquals(new BigDecimal("1.50"), sale.getTaxTotal());
+        assertEquals(new BigDecimal("21.50"), sale.getGrandTotal());
+        assertEquals(1, returns.getItemCount());
+        assertFalse(returns.hasSaleLines());
+        assertEquals(new BigDecimal("-4.00"), returns.getOriginalTotal());
+        assertEquals(new BigDecimal("-0.32"), returns.getTaxTotal());
+        assertEquals(new BigDecimal("-4.32"), returns.getGrandTotal());
+        assertEquals(new BigDecimal("4.32"), basket.returnTotal());
+    }
+
+    @Test
+    void basketPortionsPreserveTaxTotalOverride() {
+        BasketEngine engine = new BasketEngine();
+        engine.addItem(BasketItem.of("SKU-SALE", "Sale Item", 1, "100.00"));
+        engine.addItem(BasketItem.credit("SKU-RETURN", "Return Item", 1, "25.00"));
+        engine.setTaxTotal(new BigDecimal("6.00"));
+
+        Basket basket = engine.snapshot();
+        Basket sale = basket.salePortion();
+        Basket returns = basket.returnPortion();
+
+        assertEquals(new BigDecimal("0.00"), basket.getItemBySku("SKU-SALE").getTaxAmount());
+        assertEquals(new BigDecimal("8.00"), sale.getTaxTotal());
+        assertEquals(new BigDecimal("108.00"), sale.getGrandTotal());
+        assertEquals(new BigDecimal("-2.00"), returns.getTaxTotal());
+        assertEquals(new BigDecimal("-27.00"), returns.getGrandTotal());
+        assertEquals(new BigDecimal("27.00"), basket.returnTotal());
+    }
+
+    @Test
+    void salePortionReturnsSameSnapshotWhenBasketHasOnlySaleLines() {
+        BasketEngine engine = new BasketEngine();
+        engine.addItem(candle(1));
+
+        Basket basket = engine.snapshot();
+
+        assertSame(basket, basket.salePortion());
+        assertFalse(basket.hasCreditLines());
+        assertTrue(basket.returnPortion().isEmpty());
+    }
+
+    @Test
+    void settledSalePortionIsMergedBackIntoFullBasket() {
+        BasketEngine engine = new BasketEngine();
+        engine.addItem(BasketItem.builder()
+                .sku("SKU-SALE").description("Sale Item")
+                .quantity(2).unitPrice(new BigDecimal("10.00"))
+                .taxAmount(new BigDecimal("1.50"))
+                .build());
+        engine.addItem(BasketItem.builder()
+                .sku("SKU-RETURN").description("Return Item")
+                .quantity(1).unitPrice(new BigDecimal("4.00"))
+                .taxAmount(new BigDecimal("0.32"))
+                .credit(true)
+                .build());
+
+        Basket full = engine.snapshot();
+        BasketLineItem saleLine = full.getItemBySku("SKU-SALE");
+        BasketLineItem settledSaleLine = BasketLineItem.builder()
+                .itemId(saleLine.getItemId())
+                .sku(saleLine.getSku())
+                .description(saleLine.getDescription())
+                .category(saleLine.getCategory())
+                .quantity(saleLine.getQuantity())
+                .unitPrice(saleLine.getUnitPrice())
+                .originalTotal(saleLine.getOriginalTotal())
+                .rebateAmount(new BigDecimal("5.00"))
+                .rebateLabel("Offer")
+                .adjustedTotal(new BigDecimal("15.00"))
+                .taxRate(saleLine.getTaxRate())
+                .taxAmount(saleLine.getTaxAmount())
+                .metadata(saleLine.getMetadata())
+                .build();
+        Basket settledSale = Basket.builder()
+                .cartId(full.getCartId())
+                .items(List.of(settledSaleLine))
+                .originalTotal(new BigDecimal("20.00"))
+                .taxTotal(new BigDecimal("1.00"))
+                .grandTotal(new BigDecimal("21.00"))
+                .rebateTotal(new BigDecimal("5.00"))
+                .pointDiscountTotal(new BigDecimal("3.00"))
+                .storedValueTotal(new BigDecimal("8.00"))
+                .cardPaymentTotal(new BigDecimal("5.00"))
+                .build();
+
+        Basket merged = full.withSettledSalePortion(settledSale);
+
+        assertEquals(2, merged.getItemCount());
+        assertSame(settledSaleLine, merged.getItem("1"));
+        assertSame(full.getItem("2"), merged.getItem("2"));
+        assertEquals(new BigDecimal("16.00"), merged.getOriginalTotal());
+        assertEquals(new BigDecimal("0.68"), merged.getTaxTotal());
+        assertEquals(new BigDecimal("16.68"), merged.getGrandTotal());
+        assertEquals(new BigDecimal("5.00"), merged.getRebateTotal());
+        assertEquals(new BigDecimal("3.00"), merged.getPointDiscountTotal());
+        assertEquals(new BigDecimal("8.00"), merged.getStoredValueTotal());
+        assertEquals(new BigDecimal("5.00"), merged.getCardPaymentTotal());
     }
 
     @Test

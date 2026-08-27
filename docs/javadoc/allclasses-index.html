@@ -125,14 +125,6 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Builder for <a href="com/bilt/pos/session/identity/CardAcquisitionResult.html" title="class in com.bilt.pos.session.identity"><code>CardAcquisitionResult</code></a>.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/CheckoutResult.html" title="class in com.bilt.pos.session.payment">CheckoutResult</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
-<div class="block">Final outcome of a successful payment orchestration.</div>
-</div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/CheckoutResult.Builder.html" title="class in com.bilt.pos.session.payment">CheckoutResult.Builder</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
-<div class="block">Builder for <a href="com/bilt/pos/session/payment/CheckoutResult.html" title="class in com.bilt.pos.session.payment"><code>CheckoutResult</code></a>.</div>
-</div>
 <div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">A stateful, loyalty-enabled checkout on top of <a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client"><code>BiltNexoTerminalClient</code></a>.</div>
@@ -141,9 +133,9 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Builder for <a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a>.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/CommittedStep.html" title="class in com.bilt.pos.session.payment">CommittedStep</a></div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/CommittedStep.html" title="class in com.bilt.pos.session.settlement">CommittedStep</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
-<div class="block">A payment step that has been committed on the terminal.</div>
+<div class="block">A settlement step that has been committed on the terminal.</div>
 </div>
 <div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/input/ConfirmationOptions.html" title="class in com.bilt.pos.session.input">ConfirmationOptions</a></div>
 <div class="col-last even-row-color all-classes-table all-classes-table-tab2">
@@ -296,91 +288,100 @@ loadScripts(document, 'script');</script>
  Java content interface and Java element interface 
  generated in the com.bilt.pos.receipt package.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/PaymentFlow.html" title="class in com.bilt.pos.session">PaymentFlow</a></div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a></div>
 <div class="col-last even-row-color all-classes-table all-classes-table-tab2">
-<div class="block">The payment orchestration chain returned by <code>CheckoutSession.pay()</code>.</div>
+<div class="block">References from a completed sale that a later checkout session can use to
+ void the whole original transaction or allocate return settlement.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/PaymentOptions.html" title="class in com.bilt.pos.session.payment">PaymentOptions</a></div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord.Builder</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
-<div class="block">Options controlling a payment run.</div>
+<div class="block">Builder for <a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement"><code>OriginalSaleRecord</code></a>.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/PaymentOptions.Builder.html" title="class in com.bilt.pos.session.payment">PaymentOptions.Builder</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
-<div class="block">Builder for <a href="com/bilt/pos/session/payment/PaymentOptions.html" title="class in com.bilt.pos.session.payment"><code>PaymentOptions</code></a>.</div>
-</div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/input/PinMode.html" title="enum class in com.bilt.pos.session.input">PinMode</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab3">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/input/PinMode.html" title="enum class in com.bilt.pos.session.input">PinMode</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab3">
 <div class="block">Kind of PIN operation.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/input/PinOptions.html" title="class in com.bilt.pos.session.input">PinOptions</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/input/PinOptions.html" title="class in com.bilt.pos.session.input">PinOptions</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Options for PIN entry and verification.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/input/PinOptions.Builder.html" title="class in com.bilt.pos.session.input">PinOptions.Builder</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/input/PinOptions.Builder.html" title="class in com.bilt.pos.session.input">PinOptions.Builder</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Builder for <a href="com/bilt/pos/session/input/PinOptions.html" title="class in com.bilt.pos.session.input"><code>PinOptions</code></a>.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/input/PinResult.html" title="class in com.bilt.pos.session.input">PinResult</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/input/PinResult.html" title="class in com.bilt.pos.session.input">PinResult</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Outcome of a PIN operation.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/PointRedemptionResult.html" title="class in com.bilt.pos.session.payment">PointRedemptionResult</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/PointRedemptionResult.html" title="class in com.bilt.pos.session.payment">PointRedemptionResult</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Result of the point/reward redemption step, delivered to
  <code>onPointsRedeemed</code>.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/PrintPayload.html" title="class in com.bilt.pos.session">PrintPayload</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/PrintPayload.html" title="class in com.bilt.pos.session">PrintPayload</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Content for <a href="com/bilt/pos/session/Terminal.html#print(com.bilt.pos.session.PrintPayload)"><code>Terminal.print(PrintPayload)</code></a>.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/PrintPayload.Format.html" title="enum class in com.bilt.pos.session">PrintPayload.Format</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab3">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/PrintPayload.Format.html" title="enum class in com.bilt.pos.session">PrintPayload.Format</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab3">
 <div class="block">Content encoding of the payload.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/QrCodeType.html" title="class in com.bilt.pos.display">QrCodeType</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/QrCodeType.html" title="class in com.bilt.pos.display">QrCodeType</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Java class for QrCodeType complex type</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/RebateRedemptionResult.html" title="class in com.bilt.pos.session.payment">RebateRedemptionResult</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/RebateRedemptionResult.html" title="class in com.bilt.pos.session.payment">RebateRedemptionResult</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Result of the rebate step, delivered to <code>onRebatesRedeemed</code>.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/Receipt.html" title="class in com.bilt.pos.session">Receipt</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/Receipt.html" title="class in com.bilt.pos.session">Receipt</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">A rendered receipt returned from a payment, refund, or void operation.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/receipt/ReceiptCopyEnum.html" title="enum class in com.bilt.pos.receipt">ReceiptCopyEnum</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab3">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/receipt/ReceiptCopyEnum.html" title="enum class in com.bilt.pos.receipt">ReceiptCopyEnum</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab3">
 <div class="block">Java class for ReceiptCopyEnum</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Java class for ReceiptDataType complex type</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/receipt/ReceiptHelper.html" title="class in com.bilt.pos.receipt">ReceiptHelper</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/receipt/ReceiptHelper.html" title="class in com.bilt.pos.receipt">ReceiptHelper</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Utility class for serializing and deserializing <a href="com/bilt/pos/receipt/ReceiptType.html" title="class in com.bilt.pos.receipt"><code>ReceiptType</code></a> objects
  to/from XML and Base64-encoded XML strings.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/receipt/Receipts.html" title="class in com.bilt.pos.receipt">Receipts</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/receipt/Receipts.html" title="class in com.bilt.pos.receipt">Receipts</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Extracts and parses receipt XML payloads from a Nexo <code>NexoTerminalAPI</code> response.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/ReceiptType.html" title="class in com.bilt.pos.display">ReceiptType</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
-<div class="block">Java class for ReceiptType complex type</div>
-</div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/receipt/ReceiptType.html" title="class in com.bilt.pos.receipt">ReceiptType</a></div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/ReceiptType.html" title="class in com.bilt.pos.display">ReceiptType</a></div>
 <div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Java class for ReceiptType complex type</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/ReconciliationResult.html" title="class in com.bilt.pos.session">ReconciliationResult</a></div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/receipt/ReceiptType.html" title="class in com.bilt.pos.receipt">ReceiptType</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="block">Java class for ReceiptType complex type</div>
+</div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/ReconciliationResult.html" title="class in com.bilt.pos.session">ReconciliationResult</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Outcome of <a href="com/bilt/pos/session/Terminal.html#reconcile()"><code>Terminal.reconcile()</code></a> and <a href="com/bilt/pos/session/Terminal.html#getTotals()"><code>Terminal.getTotals()</code></a>.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/RedeemedRebate.html" title="class in com.bilt.pos.session.payment">RedeemedRebate</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/RedeemedRebate.html" title="class in com.bilt.pos.session.payment">RedeemedRebate</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">A single rebate the terminal committed during the rebate step.</div>
+</div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="block">Register-selected refund/restoration movement for a settlement with returns.</div>
+</div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html" title="class in com.bilt.pos.session.settlement">RefundAllocation.Builder</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="block">Builder for <a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement"><code>RefundAllocation</code></a>.</div>
+</div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/settlement/RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab3">
+<div class="block">The destination/source being restored for a returned item during settlement.</div>
 </div>
 <div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
@@ -397,19 +398,8 @@ loadScripts(document, 'script');</script>
 </div>
 <div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow&lt;T&gt;</a></div>
 <div class="col-last even-row-color all-classes-table all-classes-table-tab2">
-<div class="block">The reversal chain returned by the <code>voidTransaction()</code> and
- <code>refund</code> operations of <a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> (this session's own
- payment) and <a href="com/bilt/pos/session/ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a> (a referenced prior sale).</div>
-</div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/ReversalSession.html" title="class in com.bilt.pos.session">ReversalSession</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
-<div class="block">A referenced reversal of a prior sale — void or refund from a fresh
- session, in a later process, long after the <a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> that
- took the payment is gone.</div>
-</div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/ReversalSession.Builder.html" title="class in com.bilt.pos.session">ReversalSession.Builder</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
-<div class="block">Builder for <a href="com/bilt/pos/session/ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>.</div>
+<div class="block">The reversal chain returned by <a href="com/bilt/pos/session/CheckoutSession.html#voidTransaction()"><code>CheckoutSession.voidTransaction()</code></a>,
+ prior-sale voids, and same-session refund operations.</div>
 </div>
 <div class="col-first odd-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab3">
@@ -448,10 +438,8 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab2">&nbsp;</div>
 <div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></div>
 <div class="col-last even-row-color all-classes-table all-classes-table-tab2">
-<div class="block">The basket surface of a session, obtained via
- <a href="com/bilt/pos/session/CheckoutSession.html#basket()"><code>CheckoutSession.basket()</code></a> (the sale basket) or
- <a href="com/bilt/pos/session/ReversalSession.html#basket()"><code>ReversalSession.basket()</code></a> (the refund cart): item and tax
- mutations, batch edits, and immutable snapshots.</div>
+<div class="block">The basket surface of a checkout session: item and tax mutations, batch
+ edits, and immutable snapshots.</div>
 </div>
 <div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/SessionError.html" title="class in com.bilt.pos.session">SessionError</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
@@ -472,56 +460,86 @@ loadScripts(document, 'script');</script>
 </div>
 <div class="col-first odd-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab3">
-<div class="block">Lifecycle state of a <a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> (full diagram below) or a
- <a href="com/bilt/pos/session/ReversalSession.html" title="class in com.bilt.pos.session"><code>ReversalSession</code></a>, which only ever moves <code>IDLE → VOIDING →
- VOIDED</code> (or <code>ENDED</code>).</div>
+<div class="block">Lifecycle state of a <a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a>.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/input/Signature.html" title="class in com.bilt.pos.session.input">Signature</a></div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></div>
 <div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="block">Context handed to the <code>beforeStep</code> handler before each payment step.</div>
+</div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="block">The settlement orchestration chain returned by <code>CheckoutSession.settle()</code>.</div>
+</div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="block">One money or loyalty movement committed as part of a settlement.</div>
+</div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="block">Builder for <a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement"><code>SettlementMovement</code></a>.</div>
+</div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="block">Options controlling a settlement run.</div>
+</div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="block">Builder for <a href="com/bilt/pos/session/settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>.</div>
+</div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="block">Final outcome of a successful settlement orchestration.</div>
+</div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="block">Builder for <a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement"><code>SettlementResult</code></a>.</div>
+</div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/settlement/SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab3">
+<div class="block">A step of the settlement sequence.</div>
+</div>
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/input/Signature.html" title="class in com.bilt.pos.session.input">Signature</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">A signature captured on the terminal.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/SignatureType.html" title="class in com.bilt.pos.display">SignatureType</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/SignatureType.html" title="class in com.bilt.pos.display">SignatureType</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Java class for SignatureType complex type</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/StandbyType.html" title="class in com.bilt.pos.display">StandbyType</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/StandbyType.html" title="class in com.bilt.pos.display">StandbyType</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Java class for StandbyType complex type</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/storedvalue/StoredValueBalance.html" title="class in com.bilt.pos.session.storedvalue">StoredValueBalance</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/storedvalue/StoredValueBalance.html" title="class in com.bilt.pos.session.storedvalue">StoredValueBalance</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Outcome of a stored value balance inquiry.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Identifies a stored value (gift) card for stored value operations and
  split-tender payment.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/storedvalue/StoredValueOperationResult.html" title="class in com.bilt.pos.session.storedvalue">StoredValueOperationResult</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/storedvalue/StoredValueOperationResult.html" title="class in com.bilt.pos.session.storedvalue">StoredValueOperationResult</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Outcome of a stored value operation (activate, load, unload, reserve,
  reverse, duplicate).</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/storedvalue/StoredValueOperationResult.Builder.html" title="class in com.bilt.pos.session.storedvalue">StoredValueOperationResult.Builder</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/storedvalue/StoredValueOperationResult.Builder.html" title="class in com.bilt.pos.session.storedvalue">StoredValueOperationResult.Builder</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Builder for <a href="com/bilt/pos/session/storedvalue/StoredValueOperationResult.html" title="class in com.bilt.pos.session.storedvalue"><code>StoredValueOperationResult</code></a>.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/TaxType.html" title="class in com.bilt.pos.display">TaxType</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/TaxType.html" title="class in com.bilt.pos.display">TaxType</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Java class for TaxType complex type</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/Terminal.html" title="class in com.bilt.pos.session">Terminal</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/Terminal.html" title="class in com.bilt.pos.session">Terminal</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">A terminal's device and admin operations — diagnostics, totals,
  reconciliation, printing, sound — outside any session.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
-<div class="block">Builder for <a href="com/bilt/pos/session/Terminal.html" title="class in com.bilt.pos.session"><code>Terminal</code></a>.</div>
-</div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/payment/TransactionContext.html" title="class in com.bilt.pos.session.payment">TransactionContext</a></div>
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></div>
 <div class="col-last even-row-color all-classes-table all-classes-table-tab2">
-<div class="block">Context handed to the <code>beforeStep</code> handler before each payment step.</div>
+<div class="block">Builder for <a href="com/bilt/pos/session/Terminal.html" title="class in com.bilt.pos.session"><code>Terminal</code></a>.</div>
 </div>
 <div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/TransactionStatusOptions.html" title="class in com.bilt.pos.session">TransactionStatusOptions</a></div>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
@@ -535,21 +553,17 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Outcome of <a href="com/bilt/pos/session/CheckoutSession.html#getTransactionStatus(java.lang.String)"><code>CheckoutSession.getTransactionStatus(String)</code></a>.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab3"><a href="com/bilt/pos/session/payment/TransactionStep.html" title="enum class in com.bilt.pos.session.payment">TransactionStep</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab3">
-<div class="block">A step of the payment orchestration sequence.</div>
-</div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Outcome of <code>voidTransaction()</code>: the payment reversal plus a
  best-effort loyalty award reversal.</div>
 </div>
-<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/VoidResult.Builder.html" title="class in com.bilt.pos.session">VoidResult.Builder</a></div>
-<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/session/VoidResult.Builder.html" title="class in com.bilt.pos.session">VoidResult.Builder</a></div>
+<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Builder for <a href="com/bilt/pos/session/VoidResult.html" title="class in com.bilt.pos.session"><code>VoidResult</code></a>.</div>
 </div>
-<div class="col-first odd-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/WaitingType.html" title="class in com.bilt.pos.display">WaitingType</a></div>
-<div class="col-last odd-row-color all-classes-table all-classes-table-tab2">
+<div class="col-first even-row-color all-classes-table all-classes-table-tab2"><a href="com/bilt/pos/display/WaitingType.html" title="class in com.bilt.pos.display">WaitingType</a></div>
+<div class="col-last even-row-color all-classes-table all-classes-table-tab2">
 <div class="block">Java class for WaitingType complex type</div>
 </div>
 </div>

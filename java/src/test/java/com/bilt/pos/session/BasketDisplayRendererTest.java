@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class BasketDisplayRendererTest {
 
     private static final DisplayContext CONTEXT =
-            new DisplayContext(SessionState.PAYING, DisplayTarget.TERMINAL, "USD");
+            new DisplayContext(SessionState.SETTLING, DisplayTarget.TERMINAL, "USD");
 
     private static BasketLineItem line(String id, BigDecimal original, BigDecimal rebate) {
         return BasketLineItem.builder()
@@ -103,7 +103,7 @@ class BasketDisplayRendererTest {
                 .grandTotal(new BigDecimal("10.00"))
                 .build();
         DisplayContext context =
-                new DisplayContext(SessionState.PAYING, DisplayTarget.TERMINAL, "ZZZ");
+                new DisplayContext(SessionState.SETTLING, DisplayTarget.TERMINAL, "ZZZ");
 
         DisplayPayload payload = new BasketDisplayRenderer().render(basket, context);
 
@@ -112,8 +112,8 @@ class BasketDisplayRendererTest {
 
     @Test
     void creditLinesRenderNegativeAmounts() {
-        // a refund cart (or a sale's return line): the credit line's totals
-        // are negative in the snapshot and flow to the receipt unchanged
+        // a sale's return line: the credit line's totals are negative in the
+        // snapshot and flow to the receipt unchanged
         BasketLineItem returned = BasketLineItem.builder()
                 .itemId("1").sku("SKU-1").description("Returned Item")
                 .quantity(1).unitPrice(new BigDecimal("24.99"))

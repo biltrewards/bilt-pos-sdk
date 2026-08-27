@@ -817,7 +817,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
         }
         Button(
             onClick = {
-                controller.pay(
+                controller.settle(
                     LoyaltyOptions(
                         rebates = rebates,
                         redemption = redemption,

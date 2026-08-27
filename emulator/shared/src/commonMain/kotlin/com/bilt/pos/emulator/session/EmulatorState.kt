@@ -217,11 +217,11 @@ interface EmulatorController {
     fun addProduct(product: Product)
 
     /**
-     * Run the payment on the active session. [loyalty] picks which loyalty
+     * Run settlement on the active session. [loyalty] picks which loyalty
      * steps run; [storedValue] adds a gift card as the first tender —
      * anything it doesn't cover falls through to the standard card payment.
      */
-    fun pay(loyalty: LoyaltyOptions, storedValue: StoredValueOptions? = null)
+    fun settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions? = null)
 
     /**
      * Read a card on the terminal (nexo CardAcquisition request) without

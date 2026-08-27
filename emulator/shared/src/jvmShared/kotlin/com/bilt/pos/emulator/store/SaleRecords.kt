@@ -1,6 +1,6 @@
 package com.bilt.pos.emulator.store
 
-import com.bilt.pos.session.payment.CheckoutResult
+import com.bilt.pos.session.settlement.SettlementResult
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -13,7 +13,7 @@ import java.time.Instant
  * A pure projection — [recordId] and [completedAt] belong to the act of
  * persisting, so the caller supplies them.
  */
-fun CheckoutResult.toSaleRecord(
+fun SettlementResult.toSaleRecord(
     sessionId: String,
     saleId: String,
     poiId: String,
@@ -64,7 +64,7 @@ fun CheckoutResult.toSaleRecord(
         loyaltyLeg(LegType.AWARD, awardPoiTransactionId, awardPoiTransactionTimestamp, null)
         loyaltyLeg(LegType.REBATE, rebatePoiTransactionId, rebatePoiTransactionTimestamp,
             totalRebateAmount)
-        // rewardRefs stay unset until CheckoutResult exposes the refs the
+        // rewardRefs stay unset until SettlementResult exposes the refs the
         // redemption sent (SDK referenced-reversal work)
         loyaltyLeg(LegType.REDEMPTION, redemptionPoiTransactionId,
             redemptionPoiTransactionTimestamp, pointsMonetaryValue)

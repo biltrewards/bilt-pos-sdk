@@ -115,4 +115,27 @@ public final class StoredValueCard {
     public String getExpiryDate() {
         return expiryDate;
     }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof StoredValueCard)) {
+            return false;
+        }
+        StoredValueCard that = (StoredValueCard) other;
+        return Objects.equals(storedValueId, that.storedValueId)
+                && identificationType == that.identificationType
+                && entryMode == that.entryMode
+                && accountType == that.accountType
+                && Objects.equals(provider, that.provider)
+                && Objects.equals(expiryDate, that.expiryDate);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(storedValueId, identificationType, entryMode, accountType,
+                provider, expiryDate);
+    }
 }

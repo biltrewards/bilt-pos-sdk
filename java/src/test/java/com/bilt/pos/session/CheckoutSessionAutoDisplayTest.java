@@ -23,6 +23,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -161,7 +162,7 @@ class CheckoutSessionAutoDisplayTest {
 
         CountDownLatch paid = new CountDownLatch(1);
         session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "50.00"));
-        session.pay().onComplete(paid::countDown).execute();
+        session.settle().onComplete(paid::countDown).execute();
         assertTrue(paid.await(5, TimeUnit.SECONDS));
 
         // three requests: the pending push, the payment queued behind it,
@@ -209,7 +210,7 @@ class CheckoutSessionAutoDisplayTest {
         session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "50.00"));
         assertTrue(firstPushOnTheWire.await(5, TimeUnit.SECONDS));
         CountDownLatch paid = new CountDownLatch(1);
-        session.pay().onComplete(paid::countDown).execute();
+        session.settle().onComplete(paid::countDown).execute();
         // accepted — the queued payment has not started, so the session is
         // still ACTIVE. The item is part of the charged basket; its push,
         // queued behind the payment, must not run at COMPLETED.
@@ -308,6 +309,58 @@ class CheckoutSessionAutoDisplayTest {
     }
 
     @Test
+    void finalSettlementDisplayFailureFiresOnBackgroundErrorAndCheckoutCompletes()
+            throws Exception {
+        AtomicInteger displayRequests = new AtomicInteger();
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                String body = request.getBody().clone().readUtf8();
+                if (body.contains("\"DisplayRequest\"")) {
+                    return displayRequests.incrementAndGet() == 2
+                            ? new MockResponse().setResponseCode(500)
+                            : new MockResponse().setBody(DISPLAY_OK);
+                }
+                if (body.contains("\"PaymentRequest\"")) {
+                    return new MockResponse().setBody(PAYMENT_OK);
+                }
+                return new MockResponse().setBody(ADMIN_OK);
+            }
+        });
+        ExecutorService callbackExecutor = Executors.newSingleThreadExecutor(
+                runnable -> new Thread(runnable, "register-ui"));
+        try {
+            CountDownLatch reported = new CountDownLatch(1);
+            AtomicReference<SessionError> error = new AtomicReference<>();
+            AtomicReference<String> deliveryThread = new AtomicReference<>();
+            CheckoutSession session = start(sessionBuilder()
+                    .callbackExecutor(callbackExecutor)
+                    .onBackgroundError(e -> {
+                        error.set(e);
+                        deliveryThread.set(Thread.currentThread().getName());
+                        reported.countDown();
+                    }));
+
+            session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "50.00"));
+            assertTrue(session.settle().get().isSuccess(),
+                    "final display failures are best-effort");
+
+            assertTrue(reported.await(5, TimeUnit.SECONDS),
+                    "the failed final display must reach onBackgroundError");
+            assertNotNull(error.get());
+            assertEquals(SessionErrorCode.NETWORK, error.get().getCode());
+            assertTrue(error.get().getMessage().contains("Display"));
+            assertEquals("register-ui", deliveryThread.get(),
+                    "background errors deliver on the callback executor");
+            assertEquals(SessionState.COMPLETED, session.getState());
+            assertEquals(2, displayRequests.get(),
+                    "the first display is the cart push; the second is the final display");
+        } finally {
+            callbackExecutor.shutdownNow();
+        }
+    }
+
+    @Test
     void manualUpdateDisplayFailureSkipsTheBackgroundHandler() throws Exception {
         server.setDispatcher(new Dispatcher() {
             @Override
@@ -364,7 +417,7 @@ class CheckoutSessionAutoDisplayTest {
         session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "50.00"));
 
         CountDownLatch paymentSettled = new CountDownLatch(1);
-        session.pay().onComplete(paymentSettled::countDown).execute();
+        session.settle().onComplete(paymentSettled::countDown).execute();
         assertTrue(paymentOnTheWire.await(5, TimeUnit.SECONDS));
 
         session.abort().execute();

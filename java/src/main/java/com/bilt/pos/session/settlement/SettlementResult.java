@@ -7,10 +7,12 @@
  *
  *   Bilt POS SDK
  */
-package com.bilt.pos.session.payment;
+package com.bilt.pos.session.settlement;
 
 import com.bilt.pos.session.Receipt;
 import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.payment.EarnedReward;
+import com.bilt.pos.session.payment.RedeemedRebate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -19,18 +21,24 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Final outcome of a successful payment orchestration.
+ * Final outcome of a successful settlement orchestration.
+ *
+ * <p>For returns and exchanges, {@link #getMovements()} is the complete
+ * ledger of externally visible money and loyalty movements that remain
+ * committed after settlement. The refund aggregate getters report the
+ * amounts returned by card, stored value, external register-managed tender,
+ * and loyalty restoration.</p>
  *
  * <p>The loyalty award is best-effort (the terminal stores-and-forwards when
  * the loyalty host is down): a failed award does not fail the checkout but is
  * reported in {@link #getWarnings()}.</p>
  */
-public final class CheckoutResult {
+public final class SettlementResult {
 
     private final boolean success;
     private final Basket finalBasket;
 
-    // Payment breakdown
+    // Charge-side breakdown
     private final BigDecimal authorizedAmount;
     private final BigDecimal storedValueAmountUsed;
     private final BigDecimal cardAmountCharged;
@@ -38,7 +46,7 @@ public final class CheckoutResult {
     private final String acquirerTransactionId;
     private final String paymentBrand;
 
-    // Loyalty — redeemed during payment
+    // Loyalty — redeemed during charge-side settlement
     private final List<RedeemedRebate> redeemedRebates;
     private final BigDecimal totalRebateAmount;
     private final int pointsRedeemed;
@@ -66,9 +74,14 @@ public final class CheckoutResult {
     private final String redemptionPoiTransactionId;
     private final Instant redemptionPoiTransactionTimestamp;
 
+    private final BigDecimal cardRefundedAmount;
+    private final BigDecimal storedValueRefundedAmount;
+    private final BigDecimal externalRefundedAmount;
+    private final BigDecimal loyaltyRefundedAmount;
+    private final List<SettlementMovement> movements;
     private final List<String> warnings;
 
-    private CheckoutResult(Builder builder) {
+    private SettlementResult(Builder builder) {
         this.success = builder.success;
         this.finalBasket = builder.finalBasket;
         this.authorizedAmount = builder.authorizedAmount;
@@ -97,6 +110,11 @@ public final class CheckoutResult {
         this.rebatePoiTransactionTimestamp = builder.rebatePoiTransactionTimestamp;
         this.redemptionPoiTransactionId = builder.redemptionPoiTransactionId;
         this.redemptionPoiTransactionTimestamp = builder.redemptionPoiTransactionTimestamp;
+        this.cardRefundedAmount = builder.cardRefundedAmount;
+        this.storedValueRefundedAmount = builder.storedValueRefundedAmount;
+        this.externalRefundedAmount = builder.externalRefundedAmount;
+        this.loyaltyRefundedAmount = builder.loyaltyRefundedAmount;
+        this.movements = Collections.unmodifiableList(new ArrayList<>(builder.movements));
         this.warnings = Collections.unmodifiableList(new ArrayList<>(builder.warnings));
     }
 
@@ -104,11 +122,16 @@ public final class CheckoutResult {
         return new Builder();
     }
 
+    /** Returns a builder initialized with this result's current values. */
+    public Builder toBuilder() {
+        return new Builder(this);
+    }
+
     public boolean isSuccess() {
         return success;
     }
 
-    /** Basket with the payment breakdown totals populated. */
+    /** Basket with settlement breakdown totals populated. */
     public Basket getFinalBasket() {
         return finalBasket;
     }
@@ -242,12 +265,46 @@ public final class CheckoutResult {
         return redemptionPoiTransactionTimestamp;
     }
 
+    /** Total returned to payment cards during this settlement. */
+    public BigDecimal getCardRefundedAmount() {
+        return cardRefundedAmount;
+    }
+
+    /** Total restored to stored value cards during this settlement. */
+    public BigDecimal getStoredValueRefundedAmount() {
+        return storedValueRefundedAmount;
+    }
+
+    /** Total refunded or restored outside the terminal during this settlement. */
+    public BigDecimal getExternalRefundedAmount() {
+        return externalRefundedAmount;
+    }
+
+    /** Monetary value restored by loyalty refund movements. */
+    public BigDecimal getLoyaltyRefundedAmount() {
+        return loyaltyRefundedAmount;
+    }
+
+    /**
+     * Every externally visible money/loyalty movement that remained
+     * committed when this settlement completed successfully. Charge-side
+     * movements that were later unwound by same-run recovery are excluded.
+     */
+    public List<SettlementMovement> getMovements() {
+        return movements;
+    }
+
     /** Non-fatal problems, e.g. a failed loyalty award. */
     public List<String> getWarnings() {
         return warnings;
     }
 
-    /** Builder for {@link CheckoutResult}. Intended for SDK use. */
+    /** References needed to void or refund against this completed settlement later. */
+    public OriginalSaleRecord toOriginalSaleRecord(String memberId) {
+        return OriginalSaleRecord.from(this, memberId);
+    }
+
+    /** Builder for {@link SettlementResult}. Intended for SDK use. */
     public static final class Builder {
 
         private boolean success;
@@ -278,9 +335,51 @@ public final class CheckoutResult {
         private Instant rebatePoiTransactionTimestamp;
         private String redemptionPoiTransactionId;
         private Instant redemptionPoiTransactionTimestamp;
+        private BigDecimal cardRefundedAmount = BigDecimal.ZERO;
+        private BigDecimal storedValueRefundedAmount = BigDecimal.ZERO;
+        private BigDecimal externalRefundedAmount = BigDecimal.ZERO;
+        private BigDecimal loyaltyRefundedAmount = BigDecimal.ZERO;
+        private List<SettlementMovement> movements = new ArrayList<>();
         private List<String> warnings = new ArrayList<>();
 
         private Builder() {
+        }
+
+        private Builder(SettlementResult result) {
+            this.success = result.success;
+            this.finalBasket = result.finalBasket;
+            this.authorizedAmount = result.authorizedAmount;
+            this.storedValueAmountUsed = result.storedValueAmountUsed;
+            this.cardAmountCharged = result.cardAmountCharged;
+            this.approvalCode = result.approvalCode;
+            this.acquirerTransactionId = result.acquirerTransactionId;
+            this.paymentBrand = result.paymentBrand;
+            this.redeemedRebates = new ArrayList<>(result.redeemedRebates);
+            this.totalRebateAmount = result.totalRebateAmount;
+            this.pointsRedeemed = result.pointsRedeemed;
+            this.pointsMonetaryValue = result.pointsMonetaryValue;
+            this.earnedRewards = new ArrayList<>(result.earnedRewards);
+            this.totalPointsEarned = result.totalPointsEarned;
+            this.pointsBalance = result.pointsBalance;
+            this.promotionMessages = new ArrayList<>(result.promotionMessages);
+            this.customerReceipt = result.customerReceipt;
+            this.merchantReceipt = result.merchantReceipt;
+            this.poiTransactionId = result.poiTransactionId;
+            this.poiTransactionTimestamp = result.poiTransactionTimestamp;
+            this.storedValuePoiTransactionId = result.storedValuePoiTransactionId;
+            this.storedValuePoiTransactionTimestamp = result.storedValuePoiTransactionTimestamp;
+            this.awardPoiTransactionId = result.awardPoiTransactionId;
+            this.awardPoiTransactionTimestamp = result.awardPoiTransactionTimestamp;
+            this.rebatePoiTransactionId = result.rebatePoiTransactionId;
+            this.rebatePoiTransactionTimestamp = result.rebatePoiTransactionTimestamp;
+            this.redemptionPoiTransactionId = result.redemptionPoiTransactionId;
+            this.redemptionPoiTransactionTimestamp = result.redemptionPoiTransactionTimestamp;
+            this.cardRefundedAmount = result.cardRefundedAmount;
+            this.storedValueRefundedAmount = result.storedValueRefundedAmount;
+            this.externalRefundedAmount = result.externalRefundedAmount;
+            this.loyaltyRefundedAmount = result.loyaltyRefundedAmount;
+            this.movements = new ArrayList<>(result.movements);
+            this.warnings = new ArrayList<>(result.warnings);
         }
 
         public Builder success(boolean success) {
@@ -324,7 +423,8 @@ public final class CheckoutResult {
         }
 
         public Builder redeemedRebates(List<RedeemedRebate> redeemedRebates) {
-            this.redeemedRebates = redeemedRebates;
+            this.redeemedRebates = redeemedRebates == null
+                    ? new ArrayList<>() : new ArrayList<>(redeemedRebates);
             return this;
         }
 
@@ -344,7 +444,8 @@ public final class CheckoutResult {
         }
 
         public Builder earnedRewards(List<EarnedReward> earnedRewards) {
-            this.earnedRewards = earnedRewards;
+            this.earnedRewards = earnedRewards == null
+                    ? new ArrayList<>() : new ArrayList<>(earnedRewards);
             return this;
         }
 
@@ -359,7 +460,8 @@ public final class CheckoutResult {
         }
 
         public Builder promotionMessages(List<String> promotionMessages) {
-            this.promotionMessages = promotionMessages;
+            this.promotionMessages = promotionMessages == null
+                    ? new ArrayList<>() : new ArrayList<>(promotionMessages);
             return this;
         }
 
@@ -423,13 +525,43 @@ public final class CheckoutResult {
             return this;
         }
 
+        public Builder cardRefundedAmount(BigDecimal cardRefundedAmount) {
+            this.cardRefundedAmount = cardRefundedAmount;
+            return this;
+        }
+
+        public Builder storedValueRefundedAmount(BigDecimal storedValueRefundedAmount) {
+            this.storedValueRefundedAmount = storedValueRefundedAmount;
+            return this;
+        }
+
+        public Builder externalRefundedAmount(BigDecimal externalRefundedAmount) {
+            this.externalRefundedAmount = externalRefundedAmount;
+            return this;
+        }
+
+        public Builder loyaltyRefundedAmount(BigDecimal loyaltyRefundedAmount) {
+            this.loyaltyRefundedAmount = loyaltyRefundedAmount;
+            return this;
+        }
+
+        public Builder movements(List<SettlementMovement> movements) {
+            this.movements = movements == null ? new ArrayList<>() : new ArrayList<>(movements);
+            return this;
+        }
+
+        public Builder movement(SettlementMovement movement) {
+            this.movements.add(movement);
+            return this;
+        }
+
         public Builder warning(String warning) {
             this.warnings.add(warning);
             return this;
         }
 
-        public CheckoutResult build() {
-            return new CheckoutResult(this);
+        public SettlementResult build() {
+            return new SettlementResult(this);
         }
     }
 }

@@ -4,7 +4,7 @@ import com.bilt.pos.emulator.store.LegType
 import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketLineItem
-import com.bilt.pos.session.payment.CheckoutResult
+import com.bilt.pos.session.settlement.SettlementResult
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.test.Test
@@ -16,7 +16,7 @@ class SaleRecordMapperTest {
     private val cardTime = Instant.parse("2026-08-04T10:00:00Z")
     private val recordTime = Instant.parse("2026-08-04T10:00:05Z")
 
-    private fun record(result: CheckoutResult) = result.toSaleRecord(
+    private fun record(result: SettlementResult) = result.toSaleRecord(
         sessionId = "sess-1",
         saleId = "bilt-emulator",
         poiId = "EMULATOR",
@@ -28,7 +28,7 @@ class SaleRecordMapperTest {
 
     @Test
     fun mapsEveryCommittedLegWithItsReference() {
-        val result = CheckoutResult.builder()
+        val result = SettlementResult.builder()
             .success(true)
             .authorizedAmount(BigDecimal("20.00"))
             .cardAmountCharged(BigDecimal("12.75"))
@@ -95,7 +95,7 @@ class SaleRecordMapperTest {
 
     @Test
     fun onlyCommittedLegsAreRecorded() {
-        val result = CheckoutResult.builder()
+        val result = SettlementResult.builder()
             .success(true)
             .authorizedAmount(BigDecimal("5.00"))
             .cardAmountCharged(BigDecimal("5.00"))
@@ -114,7 +114,7 @@ class SaleRecordMapperTest {
         // gift-card-only: the SDK copies the stored value payment's reference
         // into poiTransactionId (no card step ran) — the mapper must not
         // record that copy as a CARD leg on top of the STORED_VALUE leg
-        val result = CheckoutResult.builder()
+        val result = SettlementResult.builder()
             .success(true)
             .authorizedAmount(BigDecimal("8.00"))
             .storedValueAmountUsed(BigDecimal("8.00"))
@@ -138,7 +138,7 @@ class SaleRecordMapperTest {
 
     @Test
     fun splitTenderKeepsPaymentArtifactsOnTheCardLeg() {
-        val result = CheckoutResult.builder()
+        val result = SettlementResult.builder()
             .success(true)
             .authorizedAmount(BigDecimal("10.00"))
             .cardAmountCharged(BigDecimal("6.00"))
@@ -161,7 +161,7 @@ class SaleRecordMapperTest {
 
     @Test
     fun loyaltyOnlyCheckoutHasNoTenderLegs() {
-        val result = CheckoutResult.builder()
+        val result = SettlementResult.builder()
             .success(true)
             .authorizedAmount(BigDecimal.ZERO)
             .totalRebateAmount(BigDecimal("3.00"))

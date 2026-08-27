@@ -17,7 +17,7 @@ Make sure you have:
 2. Read and understood the [Integration Guide](./integration.md).
 3. The `POITransactionID` and `TimeStamp` from the original [rebate](./loyalty-apply-rebates.md) response.
 
-> **Referenced reversal through the session API:** a `ReversalSession` void sends this request when its builder carries `rebatePoiTransactionId` / `rebatePoiTransactionTimestamp` (persist both from the original sale's `CheckoutResult` — `getRebatePoiTransactionId()`, `getRebatePoiTransactionTimestamp()`); `memberId` on the builder populates `LoyaltyData[].LoyaltyAccountID`. See the [integration guide](./checkout-session-integration.md#reversing-a-prior-sale-reversalsession).
+> **Referenced reversal through the session API:** `CheckoutSession.voidTransaction(OriginalSaleRecord)` sends this request when the record carries `rebatePoiTransactionId` / `rebatePoiTransactionTimestamp` (persist both from the original sale's `SettlementResult` — `getRebatePoiTransactionId()`, `getRebatePoiTransactionTimestamp()`); `memberId` on the record populates `LoyaltyData[].LoyaltyAccountID`. See the [integration guide](./checkout-session-integration.md#reversing-a-prior-sale-originalsalerecord).
 
 ---
 

@@ -17,7 +17,7 @@ You can make a **full refund** to return the total amount, or a **partial refund
 
 You need the transaction identifier and timestamp of the original payment. These are returned in the payment response as `POIData.POITransactionID.TransactionID` and `POIData.POITransactionID.TimeStamp`. Make sure your POS app stores these when a payment completes.
 
-> Through the session API: `CheckoutSession.refund(...)` refunds the payment the session itself just took, and a `ReversalSession` built with `poiTransactionId` / `poiTransactionTimestamp` (plus `awardPoiTransactionId` / `awardPoiTransactionTimestamp` / `memberId` for the loyalty award reversal) refunds a prior sale. For an item-based refund, ring the returned items into `ReversalSession.basket()` and execute with `refundBasket()` — the refund amount is computed from the cart and the items are attached as `SaleItem`s (positive magnitudes; `PaymentType=Refund` carries the direction). See the [integration guide](./checkout-session-integration.md#reversing-a-prior-sale-reversalsession).
+> Through the session API: `CheckoutSession.refund(...)` refunds the payment the session itself just took. To refund a prior sale, add return lines with `BasketItem.credit(...)` and provide register-selected `RefundAllocation`s in `SettlementOptions`; the allocation carries the original transaction reference for linked card/loyalty refunds. See the [integration guide](./checkout-session-integration.md#item-based-refunds-in-settlement).
 
 ---
 

@@ -42,22 +42,22 @@ import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.identity.IdentifyResult;
-import com.bilt.pos.session.payment.CheckoutResult;
-import com.bilt.pos.session.payment.CommittedStep;
+import com.bilt.pos.session.settlement.SettlementResult;
+import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
-import com.bilt.pos.session.payment.PaymentOptions;
+import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.payment.PointRedemptionResult;
 import com.bilt.pos.session.payment.RebateRedemptionResult;
 import com.bilt.pos.session.payment.RedeemedRebate;
-import com.bilt.pos.session.payment.TransactionContext;
-import com.bilt.pos.session.payment.TransactionStep;
+import com.bilt.pos.session.settlement.SettlementContext;
+import com.bilt.pos.session.settlement.SettlementMovement;
+import com.bilt.pos.session.settlement.SettlementStep;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -77,11 +77,12 @@ public final class PaymentOrchestrator {
 
     /** Handlers captured from the payment flow. All may be {@code null}. */
     public static final class Handlers {
-        public Function<TransactionContext, String> beforeStep;
+        public Function<SettlementContext, String> beforeStep;
         public Function<RebateRedemptionResult, BigDecimal> onRebatesRedeemed;
         public Function<PointRedemptionResult, BigDecimal> onPointsRedeemed;
         public Function<GiftCardPaymentResult, BigDecimal> onGiftCardPayment;
-        public Function<SessionError, PaymentOptions> onError;
+        public Consumer<SettlementMovement> onMovement;
+        public Function<SessionError, SettlementOptions> onError;
     }
 
     /** Inputs to a payment run. */
@@ -89,10 +90,10 @@ public final class PaymentOrchestrator {
         public Basket basket;
         public IdentifyResult member;
         public com.bilt.pos.session.storedvalue.StoredValueCard storedValueCard;
-        public PaymentOptions options;
+        public SettlementOptions options;
         public Handlers handlers = new Handlers();
+        public List<CommittedStep> priorSteps = List.of();
         public BooleanSupplier abortRequested = () -> false;
-        public Consumer<Basket> finalDisplay = basket -> { };
         /** Receives the movements an incomplete unwind left standing. */
         public Consumer<List<StandingMovement>> onUnreversed = movements -> { };
     }
@@ -160,8 +161,8 @@ public final class PaymentOrchestrator {
      * reversed and a {@link SessionException} is thrown — with
      * {@link SessionErrorCode#ABORTED} when the run was aborted.
      */
-    public CheckoutResult run(Request request) {
-        PaymentOptions options = request.options;
+    public SettlementResult run(Request request) {
+        SettlementOptions options = request.options;
         int resolutions = 0;
         while (true) {
             List<Commit> committed = new ArrayList<>();
@@ -192,8 +193,8 @@ public final class PaymentOrchestrator {
                     throw new SessionException(error);
                 }
                 resolutions++;
-                PaymentOptions resolution = request.handlers.onError == null
-                        ? PaymentOptions.voidAndAbort()
+                SettlementOptions resolution = request.handlers.onError == null
+                        ? SettlementOptions.voidAndAbort()
                         : request.handlers.onError.apply(error);
                 boolean wantsRetry = resolution != null && !resolution.isVoidAndAbort();
                 if (!wantsRetry) {
@@ -223,13 +224,13 @@ public final class PaymentOrchestrator {
 
     // ─── The sequence ───
 
-    private CheckoutResult runSequence(Request request, PaymentOptions options,
+    private SettlementResult runSequence(Request request, SettlementOptions options,
                                        List<Commit> committed) {
         Basket workingBasket = request.basket;
         BigDecimal currentTotal = workingBasket.getGrandTotal();
         boolean loyalty = request.member != null;
 
-        CheckoutResult.Builder result = CheckoutResult.builder().success(true);
+        SettlementResult.Builder result = SettlementResult.builder().success(true);
         List<RedeemedRebate> redeemedRebates = new ArrayList<>();
         BigDecimal rebateTotal = BigDecimal.ZERO;
         int pointsRedeemed = 0;
@@ -240,7 +241,7 @@ public final class PaymentOrchestrator {
         // 1. Rebate redemption
         if (loyalty && !options.isDisableRebates()) {
             checkAbort(request);
-            String saleTxnId = beforeStep(request, TransactionStep.REBATE,
+            String saleTxnId = beforeStep(request, SettlementStep.REBATE_REDEMPTION,
                     workingBasket, currentTotal, committed);
             RebateOutcome outcome = rebateStep(request, workingBasket, currentTotal,
                     saleTxnId, committed, result);
@@ -258,7 +259,7 @@ public final class PaymentOrchestrator {
         if (loyalty && !options.isDisablePoints() && !request.member.getRewards().isEmpty()
                 && currentTotal.signum() > 0) {
             checkAbort(request);
-            String saleTxnId = beforeStep(request, TransactionStep.POINTS,
+            String saleTxnId = beforeStep(request, SettlementStep.POINT_REDEMPTION,
                     workingBasket, currentTotal, committed);
             PointRedemptionResult points = pointsStep(request, workingBasket, currentTotal,
                     saleTxnId, committed, result);
@@ -272,7 +273,7 @@ public final class PaymentOrchestrator {
         // 3. Stored value
         if (request.storedValueCard != null && currentTotal.signum() > 0) {
             checkAbort(request);
-            String saleTxnId = beforeStep(request, TransactionStep.STORED_VALUE,
+            String saleTxnId = beforeStep(request, SettlementStep.STORED_VALUE_CHARGE,
                     workingBasket, currentTotal, committed);
             GiftCardPaymentResult giftCard = storedValueStep(request, currentTotal,
                     saleTxnId, committed, result);
@@ -287,7 +288,7 @@ public final class PaymentOrchestrator {
             if (options.getPaymentProcessingDisplay() != null) {
                 showProcessingDisplay(options.getPaymentProcessingDisplay());
             }
-            String saleTxnId = beforeStep(request, TransactionStep.CARD_PAYMENT,
+            String saleTxnId = beforeStep(request, SettlementStep.CARD_CHARGE,
                     workingBasket, currentTotal, committed);
             cardCharged = cardStep(request, workingBasket, currentTotal, options,
                     saleTxnId, committed, result);
@@ -296,7 +297,7 @@ public final class PaymentOrchestrator {
         // 5. Award (best-effort — never fails the checkout; terminal SAFs)
         if (loyalty && !options.isDisableAward()) {
             checkAbort(request);
-            String saleTxnId = beforeStep(request, TransactionStep.AWARD,
+            String saleTxnId = beforeStep(request, SettlementStep.AWARD,
                     workingBasket, storedValueCharged.add(cardCharged), committed);
             awardStep(request, workingBasket, saleTxnId, committed, result);
         }
@@ -308,13 +309,6 @@ public final class PaymentOrchestrator {
 
         Basket finalBasket = withPaymentTotals(workingBasket, rebateTotal, pointsValue,
                 storedValueCharged, cardCharged, options.getCashback());
-
-        // 6. Final display (best-effort)
-        try {
-            request.finalDisplay.accept(finalBasket);
-        } catch (RuntimeException e) {
-            LOGGER.log(Level.WARNING, "final display failed", e);
-        }
 
         // last look before success is declared; later aborts are too late
         // and the completed payment stands (void it explicitly instead)
@@ -343,7 +337,7 @@ public final class PaymentOrchestrator {
 
     private RebateOutcome rebateStep(Request request, Basket basket, BigDecimal currentTotal,
                                      String saleTxnId, List<Commit> committed,
-                                     CheckoutResult.Builder result) {
+                                     SettlementResult.Builder result) {
         LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.REBATE, request, basket,
                 saleTxnId, null);
 
@@ -379,11 +373,14 @@ public final class PaymentOrchestrator {
             }
         }
 
-        commit(committed, TransactionStep.REBATE, saleTxnId, body.getPoiData(),
+        commit(committed, SettlementStep.REBATE_REDEMPTION, saleTxnId, body.getPoiData(),
                 totalRebate.signum() > 0
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REBATE_REFUND,
                                 Wire.poiRef(body.getPoiData()), request.member.getMemberId())
                         : null);
+        publishMovement(request, result, movement(SettlementStep.REBATE_REDEMPTION,
+                totalRebate, saleTxnId, body.getPoiData(), request.member.getMemberId(),
+                null, null));
         // kept on the result so a checkout with no payment legs (rewards
         // covered everything) can still be voided by reversing this movement
         TransactionIdentificationType rebatePoiTxn = Wire.poiRef(body.getPoiData());
@@ -404,7 +401,7 @@ public final class PaymentOrchestrator {
     private PointRedemptionResult pointsStep(Request request, Basket basket,
                                              BigDecimal currentTotal, String saleTxnId,
                                              List<Commit> committed,
-                                             CheckoutResult.Builder result) {
+                                             SettlementResult.Builder result) {
         String rewardRefsPayload = LoyaltyPayloadCodec.memberRewardRefs(
                 request.member.getRewards());
         LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.REDEMPTION, request, basket,
@@ -436,11 +433,14 @@ public final class PaymentOrchestrator {
                         body.getResponse().getAdditionalResponse(), "pointsUsed", 0)
                 : pointsUsed;
 
-        commit(committed, TransactionStep.POINTS, saleTxnId, body.getPoiData(),
+        commit(committed, SettlementStep.POINT_REDEMPTION, saleTxnId, body.getPoiData(),
                 monetaryValue.signum() > 0
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
                                 Wire.poiRef(body.getPoiData()), request.member.getMemberId())
                         : null);
+        publishMovement(request, result, movement(SettlementStep.POINT_REDEMPTION,
+                monetaryValue, saleTxnId, body.getPoiData(), request.member.getMemberId(),
+                pointsUsed, balance));
         // kept on the result so a checkout with no payment legs (rewards
         // covered everything) can still be voided by reversing this movement
         TransactionIdentificationType redemptionPoiTxn = Wire.poiRef(body.getPoiData());
@@ -456,7 +456,7 @@ public final class PaymentOrchestrator {
 
     private GiftCardPaymentResult storedValueStep(Request request, BigDecimal currentTotal,
                                                   String saleTxnId, List<Commit> committed,
-                                                  CheckoutResult.Builder result) {
+                                                  SettlementResult.Builder result) {
         SaleToPOIRequest wireRequest = SaleToPOIRequest.builder()
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.PAYMENT))
@@ -478,7 +478,7 @@ public final class PaymentOrchestrator {
                         .build())
                 .build();
 
-        PaymentResponse body = sendPayment(TransactionStep.STORED_VALUE, wireRequest,
+        PaymentResponse body = sendPayment(SettlementStep.STORED_VALUE_CHARGE, wireRequest,
                 currentTotal);
         BigDecimal charged = body.getPaymentResult() != null
                 && body.getPaymentResult().getAmountsResp() != null
@@ -487,8 +487,10 @@ public final class PaymentOrchestrator {
         BigDecimal remainingBalance = parseCardBalance(
                 body.getResponse().getAdditionalResponse());
 
-        commit(committed, TransactionStep.STORED_VALUE, saleTxnId, body.getPoiData(),
+        commit(committed, SettlementStep.STORED_VALUE_CHARGE, saleTxnId, body.getPoiData(),
                 reversalRollback(Wire.poiRef(body.getPoiData())));
+        publishMovement(request, result, movement(SettlementStep.STORED_VALUE_CHARGE,
+                charged, saleTxnId, body.getPoiData(), null, null, null));
 
         // a gift-card-only checkout has no card step: this payment's
         // references/receipts must reach the result so the session can void
@@ -508,8 +510,8 @@ public final class PaymentOrchestrator {
     }
 
     private BigDecimal cardStep(Request request, Basket basket, BigDecimal currentTotal,
-                                PaymentOptions options, String saleTxnId,
-                                List<Commit> committed, CheckoutResult.Builder result) {
+                                SettlementOptions options, String saleTxnId,
+                                List<Commit> committed, SettlementResult.Builder result) {
         // nexo contract: RequestedAmount is the TOTAL requested for payment
         // INCLUDING cashback — the terminal authorizes sale + cashback as
         // one amount, with CashBackAmount identifying the cash portion
@@ -534,7 +536,7 @@ public final class PaymentOrchestrator {
                         .build())
                 .build();
 
-        PaymentResponse body = sendPayment(TransactionStep.CARD_PAYMENT, wireRequest,
+        PaymentResponse body = sendPayment(SettlementStep.CARD_CHARGE, wireRequest,
                 grossTotal);
         BigDecimal charged = body.getPaymentResult() != null
                 && body.getPaymentResult().getAmountsResp() != null
@@ -543,8 +545,10 @@ public final class PaymentOrchestrator {
 
         // commit BEFORE validating the amount so an under-authorization is
         // reversed by the unwind like any other committed step
-        commit(committed, TransactionStep.CARD_PAYMENT, saleTxnId, body.getPoiData(),
+        commit(committed, SettlementStep.CARD_CHARGE, saleTxnId, body.getPoiData(),
                 reversalRollback(Wire.poiRef(body.getPoiData())));
+        publishMovement(request, result, movement(SettlementStep.CARD_CHARGE,
+                charged, saleTxnId, body.getPoiData(), null, null, null));
 
         // a partial authorization on the stored value step is the split
         // tender mechanism, but the card step is the FINAL tender — an
@@ -567,7 +571,7 @@ public final class PaymentOrchestrator {
      * card steps are payments; the card step runs last, so in a split tender
      * its (non-null) values take precedence.
      */
-    private static void copyPaymentArtifacts(PaymentResponse body, CheckoutResult.Builder result) {
+    private static void copyPaymentArtifacts(PaymentResponse body, SettlementResult.Builder result) {
         if (body.getPaymentResult() != null
                 && body.getPaymentResult().getPaymentAcquirerData() != null) {
             if (body.getPaymentResult().getPaymentAcquirerData().getApprovalCode() != null) {
@@ -605,14 +609,14 @@ public final class PaymentOrchestrator {
 
     private void awardStep(Request request, Basket basket,
                            String saleTxnId, List<Commit> committed,
-                           CheckoutResult.Builder result) {
+                           SettlementResult.Builder result) {
         try {
             LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.AWARD, request, basket,
                     saleTxnId, null);
             // an abort observed after this point unwinds the tender — the
             // credited points must be reversed with it, like void does
             TransactionIdentificationType awardPoiTxn = Wire.poiRef(body.getPoiData());
-            commit(committed, TransactionStep.AWARD, saleTxnId, body.getPoiData(),
+            commit(committed, SettlementStep.AWARD, saleTxnId, body.getPoiData(),
                     awardPoiTxn != null
                             ? loyaltyRollback(LoyaltyTransactionTypeEnum.AWARD_REFUND,
                                     awardPoiTxn, request.member.getMemberId())
@@ -631,6 +635,12 @@ public final class PaymentOrchestrator {
             if (first != null && first.getCurrentBalance() != null) {
                 result.pointsBalance((int) Math.round(first.getCurrentBalance()));
             }
+            publishMovement(request, result, movement(SettlementStep.AWARD,
+                    BigDecimal.ZERO, saleTxnId, body.getPoiData(), request.member.getMemberId(),
+                    first != null && first.getLoyaltyAmount() != null
+                            ? (int) Math.round(first.getLoyaltyAmount().getAmountValue()) : null,
+                    first != null && first.getCurrentBalance() != null
+                            ? (int) Math.round(first.getCurrentBalance()) : null));
             result.promotionMessages(parsePromotionMessages(
                     body.getResponse().getAdditionalResponse()));
             result.earnedRewards(LoyaltyPayloadCodec.parseEarnedRewards(
@@ -707,7 +717,7 @@ public final class PaymentOrchestrator {
         }
     }
 
-    private PaymentResponse sendPayment(TransactionStep step, SaleToPOIRequest wireRequest,
+    private PaymentResponse sendPayment(SettlementStep step, SaleToPOIRequest wireRequest,
                                         BigDecimal requestedAmount) {
         PaymentResponse body;
         try {
@@ -730,7 +740,7 @@ public final class PaymentOrchestrator {
             // relabelled when the response affirmatively reports a balance
             // below the requested amount — hard declines (expired, blocked,
             // invalid cards) stay DECLINED
-            if (step == TransactionStep.STORED_VALUE
+            if (step == SettlementStep.STORED_VALUE_CHARGE
                     && error.getCode() == SessionErrorCode.DECLINED) {
                 BigDecimal balance = parseCardBalance(
                         body.getResponse().getAdditionalResponse());
@@ -745,19 +755,15 @@ public final class PaymentOrchestrator {
         }
     }
 
-    private String beforeStep(Request request, TransactionStep step, Basket basket,
+    private String beforeStep(Request request, SettlementStep step, Basket basket,
                               BigDecimal currentTotal, List<Commit> committed) {
-        String defaultId = UUID.randomUUID().toString();
-        if (request.handlers.beforeStep == null) {
-            return defaultId;
-        }
         List<CommittedStep> prior = new ArrayList<>();
+        prior.addAll(request.priorSteps);
         for (Commit commit : committed) {
             prior.add(commit.info);
         }
-        String id = request.handlers.beforeStep.apply(new TransactionContext(
-                step, basket, currentTotal, defaultId, prior));
-        return id != null && !id.isEmpty() ? id : defaultId;
+        return SettlementContext.resolveSaleTransactionId(step, basket, currentTotal,
+                prior, request.handlers.beforeStep);
     }
 
     private <R> BigDecimal applyHandlerTotal(Function<R, BigDecimal> handler, R stepResult,
@@ -777,7 +783,7 @@ public final class PaymentOrchestrator {
         }
     }
 
-    private void commit(List<Commit> committed, TransactionStep step, String saleTxnId,
+    private void commit(List<Commit> committed, SettlementStep step, String saleTxnId,
                         com.bilt.pos.nexo.model.POIData poiData, Runnable rollback) {
         TransactionIdentificationType poiTxn = poiData == null
                 ? null : poiData.getPoiTransactionID();
@@ -787,6 +793,31 @@ public final class PaymentOrchestrator {
                         poiTxn == null ? null : Wire.instant(poiTxn.getTimeStamp()),
                         true),
                 rollback));
+    }
+
+    private static SettlementMovement movement(SettlementStep step, BigDecimal amount,
+            String saleTxnId, com.bilt.pos.nexo.model.POIData poiData, String memberId,
+            Integer points, Integer pointBalance) {
+        TransactionIdentificationType poiTxn = poiData == null
+                ? null : poiData.getPoiTransactionID();
+        return SettlementMovement.builder()
+                .step(step)
+                .amount(amount)
+                .saleTransactionId(saleTxnId)
+                .poiTransactionId(poiTxn == null ? null : poiTxn.getTransactionID())
+                .poiTransactionTimestamp(poiTxn == null ? null : Wire.instant(poiTxn.getTimeStamp()))
+                .memberId(memberId)
+                .points(points)
+                .pointBalance(pointBalance)
+                .build();
+    }
+
+    private static void publishMovement(Request request, SettlementResult.Builder result,
+                                        SettlementMovement movement) {
+        result.movement(movement);
+        if (request.handlers.onMovement != null) {
+            request.handlers.onMovement.accept(movement);
+        }
     }
 
     // ─── Rollback ───
@@ -917,6 +948,7 @@ public final class PaymentOrchestrator {
                     .category(line.getCategory())
                     .quantity(line.getQuantity())
                     .unitPrice(line.getUnitPrice())
+                    .credit(line.isCredit())
                     .originalTotal(line.getOriginalTotal())
                     .rebateAmount(rebateAmount)
                     .rebateLabel(rebateLabel)

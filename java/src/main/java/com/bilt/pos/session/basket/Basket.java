@@ -10,10 +10,12 @@
 package com.bilt.pos.session.basket;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * An immutable snapshot of the session's basket.
@@ -27,6 +29,8 @@ import java.util.List;
  * the snapshots produced during and after payment orchestration.</p>
  */
 public final class Basket {
+
+    private static final int MONEY_SCALE = 2;
 
     private final String cartId;
     private final List<BasketLineItem> items;
@@ -144,6 +148,153 @@ public final class Basket {
     /** Number of lines (not total quantity). */
     public int getItemCount() {
         return items.size();
+    }
+
+    /** Whether the basket contains at least one sale/non-credit line. */
+    public boolean hasSaleLines() {
+        return hasLines(false);
+    }
+
+    /** Whether the basket contains at least one credit/return line. */
+    public boolean hasCreditLines() {
+        return hasLines(true);
+    }
+
+    /**
+     * The sale side of this basket, with credit lines removed. If this
+     * basket has no credit lines, the current snapshot is already the sale
+     * portion and is returned unchanged.
+     */
+    public Basket salePortion() {
+        if (!hasCreditLines()) {
+            return this;
+        }
+        return filteredPortion(false);
+    }
+
+    /**
+     * The return side of this basket, with sale lines removed. Totals keep
+     * their credit-line sign, so {@link #returnTotal()} exposes the
+     * positive refund magnitude.
+     */
+    public Basket returnPortion() {
+        return filteredPortion(true);
+    }
+
+    /** Positive amount that must be returned for the credit lines. */
+    public BigDecimal returnTotal() {
+        return returnPortion().getGrandTotal().abs();
+    }
+
+    /**
+     * Returns a full-basket snapshot whose sale lines and payment
+     * breakdown totals come from {@code settledSalePortion}, while this
+     * basket's credit lines remain present. Used after a mixed sale/return
+     * settlement, where only the sale portion went through payment
+     * orchestration but the final result still needs to describe the whole
+     * register basket.
+     */
+    public Basket withSettledSalePortion(Basket settledSalePortion) {
+        Objects.requireNonNull(settledSalePortion, "settledSalePortion");
+        if (!hasCreditLines()) {
+            return settledSalePortion;
+        }
+        List<BasketLineItem> mergedItems = new ArrayList<>();
+        for (BasketLineItem line : items) {
+            BasketLineItem settledLine = settledSalePortion.getItem(line.getItemId());
+            mergedItems.add(settledLine != null ? settledLine : line);
+        }
+        Basket returns = returnPortion();
+        BigDecimal mergedOriginalTotal = settledSalePortion.getOriginalTotal()
+                .add(returns.getOriginalTotal());
+        BigDecimal mergedTaxTotal = settledSalePortion.getTaxTotal()
+                .add(returns.getTaxTotal());
+        return Basket.builder()
+                .cartId(cartId)
+                .items(mergedItems)
+                .originalTotal(mergedOriginalTotal)
+                .taxTotal(mergedTaxTotal)
+                .grandTotal(mergedOriginalTotal.add(mergedTaxTotal))
+                .rebateTotal(settledSalePortion.getRebateTotal())
+                .pointDiscountTotal(settledSalePortion.getPointDiscountTotal())
+                .storedValueTotal(settledSalePortion.getStoredValueTotal())
+                .cardPaymentTotal(settledSalePortion.getCardPaymentTotal())
+                .build();
+    }
+
+    private Basket filteredPortion(boolean credit) {
+        List<BasketLineItem> filteredItems = new ArrayList<>();
+        BigDecimal filteredOriginalTotal = BigDecimal.ZERO;
+        BigDecimal filteredLineTaxTotal = BigDecimal.ZERO;
+        for (BasketLineItem line : items) {
+            if (line.isCredit() == credit) {
+                filteredItems.add(line);
+                filteredOriginalTotal = filteredOriginalTotal.add(line.getOriginalTotal());
+                filteredLineTaxTotal = filteredLineTaxTotal.add(line.getTaxAmount());
+            }
+        }
+        BigDecimal filteredTaxTotal = filteredTaxTotal(credit, filteredLineTaxTotal,
+                !filteredItems.isEmpty());
+        return Basket.builder()
+                .cartId(cartId)
+                .items(filteredItems)
+                .originalTotal(filteredOriginalTotal)
+                .taxTotal(filteredTaxTotal)
+                .grandTotal(filteredOriginalTotal.add(filteredTaxTotal))
+                .updatedAt(updatedAt)
+                .build();
+    }
+
+    private BigDecimal filteredTaxTotal(boolean credit, BigDecimal filteredLineTaxTotal,
+            boolean hasFilteredItems) {
+        if (!hasFilteredItems) {
+            return BigDecimal.ZERO;
+        }
+        if (taxTotal.compareTo(lineTaxTotal()) == 0) {
+            return filteredLineTaxTotal;
+        }
+        if (!(hasSaleLines() && hasCreditLines())) {
+            return taxTotal;
+        }
+
+        // A basket-level override supersedes item tax, so splitting the
+        // basket must preserve that override instead of falling back to
+        // per-line taxes. Treat it as net basket tax and split by signed
+        // subtotals; the return side therefore receives a negative share.
+        if (originalTotal.compareTo(BigDecimal.ZERO) == 0) {
+            return credit ? BigDecimal.ZERO : taxTotal;
+        }
+        BigDecimal saleTaxTotal = taxTotal
+                .multiply(originalTotal(false))
+                .divide(originalTotal, MONEY_SCALE, RoundingMode.HALF_UP);
+        return credit ? taxTotal.subtract(saleTaxTotal) : saleTaxTotal;
+    }
+
+    private BigDecimal lineTaxTotal() {
+        BigDecimal total = BigDecimal.ZERO;
+        for (BasketLineItem line : items) {
+            total = total.add(line.getTaxAmount());
+        }
+        return total;
+    }
+
+    private BigDecimal originalTotal(boolean credit) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (BasketLineItem line : items) {
+            if (line.isCredit() == credit) {
+                total = total.add(line.getOriginalTotal());
+            }
+        }
+        return total;
+    }
+
+    private boolean hasLines(boolean credit) {
+        for (BasketLineItem line : items) {
+            if (line.isCredit() == credit) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Builder for {@link Basket}. Intended for SDK use. */

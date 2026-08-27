@@ -29,10 +29,10 @@ import java.util.List;
  *
  * <p>Credit lines carry their sign onto the wire in a normal (sale)
  * request: negative {@code Quantity} and {@code ItemAmount}, positive
- * {@code UnitPrice} — the mixed-basket return-line convention. In a refund
- * request every line is a return and {@code PaymentType=Refund} already
- * carries the direction, so {@link #toRefundSaleItems} emits magnitudes
- * only; signed items there would risk double negation on the terminal.</p>
+ * {@code UnitPrice} — the mixed-basket return-line convention. In an
+ * itemized refund request, {@code PaymentType=Refund} already carries the
+ * direction, so {@link #toRefundSaleItems} emits magnitudes only; signed
+ * items there would risk double negation on the terminal.</p>
  */
 public final class SaleItemMapper {
 
@@ -50,8 +50,8 @@ public final class SaleItemMapper {
     }
 
     /**
-     * Maps a refund cart for a {@code PaymentRequest(Refund)}: all
-     * magnitudes positive, the payment type carrying the direction.
+     * Maps item lines for a {@code PaymentRequest(Refund)}: all magnitudes
+     * positive, the payment type carrying the direction.
      */
     public static List<SaleItem> toRefundSaleItems(Basket basket) {
         return map(basket, true, true);

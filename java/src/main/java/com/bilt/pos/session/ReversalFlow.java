@@ -18,9 +18,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * The reversal chain returned by the {@code voidTransaction()} and
- * {@code refund} operations of {@link CheckoutSession} (this session's own
- * payment) and {@link ReversalSession} (a referenced prior sale).
+ * The reversal chain returned by {@link CheckoutSession#voidTransaction()},
+ * prior-sale voids, and same-session refund operations.
  *
  * <p>Registering handlers sends nothing; the reversal steps run when
  * {@link #execute()} (asynchronously, on the session's operation thread) or

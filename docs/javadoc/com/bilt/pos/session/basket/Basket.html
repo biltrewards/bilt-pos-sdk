@@ -203,8 +203,40 @@ loadScripts(document, 'script');</script>
 <div class="block">When this snapshot was produced.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#hasCreditLines()" class="member-name-link">hasCreditLines</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Whether the basket contains at least one credit/return line.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#hasSaleLines()" class="member-name-link">hasSaleLines</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Whether the basket contains at least one sale/non-credit line.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isEmpty()" class="member-name-link">isEmpty</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#returnPortion()" class="member-name-link">returnPortion</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The return side of this basket, with sale lines removed.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#returnTotal()" class="member-name-link">returnTotal</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Positive amount that must be returned for the credit lines.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#salePortion()" class="member-name-link">salePortion</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The sale side of this basket, with credit lines removed.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#withSettledSalePortion(com.bilt.pos.session.basket.Basket)" class="member-name-link">withSettledSalePortion</a><wbr>(<a href="Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;settledSalePortion)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Returns a full-basket snapshot whose sale lines and payment
+ breakdown totals come from <code>settledSalePortion</code>, while this
+ basket's credit lines remain present.</div>
+</div>
 </div>
 </div>
 </div>
@@ -326,6 +358,57 @@ loadScripts(document, 'script');</script>
 <h3>getItemCount</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">int</span>&nbsp;<span class="element-name">getItemCount</span>()</div>
 <div class="block">Number of lines (not total quantity).</div>
+</section>
+</li>
+<li>
+<section class="detail" id="hasSaleLines()">
+<h3>hasSaleLines</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">hasSaleLines</span>()</div>
+<div class="block">Whether the basket contains at least one sale/non-credit line.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="hasCreditLines()">
+<h3>hasCreditLines</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">hasCreditLines</span>()</div>
+<div class="block">Whether the basket contains at least one credit/return line.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="salePortion()">
+<h3>salePortion</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">salePortion</span>()</div>
+<div class="block">The sale side of this basket, with credit lines removed. If this
+ basket has no credit lines, the current snapshot is already the sale
+ portion and is returned unchanged.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="returnPortion()">
+<h3>returnPortion</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">returnPortion</span>()</div>
+<div class="block">The return side of this basket, with sale lines removed. Totals keep
+ their credit-line sign, so <a href="#returnTotal()"><code>returnTotal()</code></a> exposes the
+ positive refund magnitude.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="returnTotal()">
+<h3>returnTotal</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">returnTotal</span>()</div>
+<div class="block">Positive amount that must be returned for the credit lines.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="withSettledSalePortion(com.bilt.pos.session.basket.Basket)">
+<h3>withSettledSalePortion</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">withSettledSalePortion</span><wbr><span class="parameters">(<a href="Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;settledSalePortion)</span></div>
+<div class="block">Returns a full-basket snapshot whose sale lines and payment
+ breakdown totals come from <code>settledSalePortion</code>, while this
+ basket's credit lines remain present. Used after a mixed sale/return
+ settlement, where only the sale portion went through payment
+ orchestration but the final result still needs to describe the whole
+ register basket.</div>
 </section>
 </li>
 </ul>

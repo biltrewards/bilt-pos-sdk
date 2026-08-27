@@ -48,10 +48,8 @@ public final class ReversalMovement {
      * award, a card-only sale no rebate or redemption, a rewards-covered
      * sale no card leg), so no movement is produced for it. Whether the
      * resulting list may be empty is the caller's rule — the sessions
-     * guard it ({@code ReversalSession} requires a reference at build
-     * time, {@code CheckoutSession} a completed payment). A gift-card-only
-     * sale reports the same reference for both money legs; it yields one
-     * movement.
+     * guard it. A gift-card-only sale reports the same reference for both
+     * money legs; it yields one movement.
      */
     public static List<ReversalMovement> ofSale(PoiRef card, PoiRef storedValue,
                                                 PoiRef redemption, PoiRef rebate,
