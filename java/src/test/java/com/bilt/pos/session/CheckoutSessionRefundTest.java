@@ -393,7 +393,9 @@ class CheckoutSessionRefundTest {
 
         SessionException voidFailure = assertThrows(SessionException.class,
                 () -> session.voidTransaction().get());
-        assertTrue(voidFailure.getError().getMessage().contains("pure sale settlement"));
+        assertTrue(voidFailure.getError().getMessage().contains(
+                "this settlement included return lines"));
+        assertFalse(voidFailure.getError().getMessage().contains("refund allocations"));
     }
 
     @Test

@@ -1481,7 +1481,7 @@ public final class CheckoutSession implements AutoCloseable {
                 guards.requireNotRefunded();
                 if (lastSettlementIncludesRefunds) {
                     throw invalidState("voidTransaction is only supported for a pure sale "
-                            + "settlement; this settlement included refund allocations");
+                            + "settlement; this settlement included return lines");
                 }
                 if (lastPaymentVoided) {
                     throw invalidState("the most recent payment has already been voided");
