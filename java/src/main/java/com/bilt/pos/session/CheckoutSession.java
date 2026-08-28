@@ -142,6 +142,15 @@ public final class CheckoutSession implements AutoCloseable {
 
     private static final Logger LOGGER = Logger.getLogger(CheckoutSession.class.getName());
 
+    /** Mutually exclusive runtime activity; recovery and basket state live separately. */
+    private enum SessionPhase {
+        OPEN,
+        SETTLING,
+        VOIDING,
+        ENDING,
+        ENDED
+    }
+
     private final String sessionId = UUID.randomUUID().toString();
     private final ReentrantLock lock = new ReentrantLock();
     private final SessionOperations operations;
@@ -167,10 +176,7 @@ public final class CheckoutSession implements AutoCloseable {
     private final StoredValueManager storedValueManager;
 
     private volatile boolean abortRequested;
-    private volatile boolean settlementInFlight;
-    private volatile boolean voidInFlight;
-    private volatile boolean ending;
-    private volatile boolean ended;
+    private volatile SessionPhase phase = SessionPhase.OPEN;
     private volatile boolean basketConsumed;
     private volatile IdentifyResult member;
     private volatile StoredValueCard storedValueCard;
@@ -361,10 +367,10 @@ public final class CheckoutSession implements AutoCloseable {
         Basket snapshot;
         lock.lock();
         try {
-            if (ended || ending) {
+            if (closingOrEnded()) {
                 throw new IllegalStateException("the basket cannot be modified after end()");
             }
-            if (settlementInFlight || voidInFlight) {
+            if (moneyMovementInFlight()) {
                 throw new IllegalStateException(
                         "the basket cannot be modified while money movement is in flight");
             }
@@ -394,10 +400,10 @@ public final class CheckoutSession implements AutoCloseable {
     private Basket clearBasket() {
         lock.lock();
         try {
-            if (ended || ending) {
+            if (closingOrEnded()) {
                 throw new IllegalStateException("the basket cannot be cleared after end()");
             }
-            if (settlementInFlight || voidInFlight) {
+            if (moneyMovementInFlight()) {
                 throw new IllegalStateException(
                         "the basket cannot be cleared while money movement is in flight");
             }
@@ -428,7 +434,7 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     private boolean basketDisplayIsCurrent() {
-        return !ended && !ending && !settlementInFlight && !voidInFlight && !basketConsumed;
+        return phase == SessionPhase.OPEN && !basketConsumed;
     }
 
     // ─── Member Identification ───
@@ -492,7 +498,7 @@ public final class CheckoutSession implements AutoCloseable {
     private IdentifyResult completeIdentify(IdentifyResult result) {
         lock.lock();
         try {
-            if (ended) {
+            if (phase == SessionPhase.ENDED) {
                 throw discardedAfterEnd("identifyMember");
             }
             if (result.getStatus() == IdentifyStatus.FOUND) {
@@ -649,7 +655,7 @@ public final class CheckoutSession implements AutoCloseable {
     private void discardIfEndedMidFlight(String operationName) {
         lock.lock();
         try {
-            if (ended) {
+            if (phase == SessionPhase.ENDED) {
                 throw discardedAfterEnd(operationName);
             }
         } finally {
@@ -665,9 +671,17 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     private void requireOpen(String operationName) {
-        if (ended) {
+        if (closingOrEnded()) {
             throw invalidState(operationName + " is not allowed after end(); create a new session");
         }
+    }
+
+    private boolean closingOrEnded() {
+        return phase == SessionPhase.ENDING || phase == SessionPhase.ENDED;
+    }
+
+    private boolean moneyMovementInFlight() {
+        return phase == SessionPhase.SETTLING || phase == SessionPhase.VOIDING;
     }
 
     // ─── Stored Value ───
@@ -693,11 +707,11 @@ public final class CheckoutSession implements AutoCloseable {
     private void setStoredValueTender(StoredValueCard card) {
         lock.lock();
         try {
-            if (ended || ending) {
+            if (closingOrEnded()) {
                 throw new IllegalStateException(
                         "the stored-value tender cannot be changed after end()");
             }
-            if (settlementInFlight || voidInFlight) {
+            if (moneyMovementInFlight()) {
                 throw new IllegalStateException("the stored-value tender cannot be changed "
                         + "while money movement is in flight");
             }
@@ -863,7 +877,7 @@ public final class CheckoutSession implements AutoCloseable {
         lock.lock();
         try {
             requireOpen("settle");
-            if (settlementInFlight || voidInFlight) {
+            if (moneyMovementInFlight()) {
                 throw invalidState("settle() is not allowed while money movement is in flight");
             }
             if (lastPaymentVoidIncomplete) {
@@ -892,7 +906,7 @@ public final class CheckoutSession implements AutoCloseable {
             if (purchaseBasket.isEmpty() && options.getCashback() != null) {
                 throw invalidState("cashback requires a card charge in the settlement");
             }
-            settlementInFlight = true;
+            phase = SessionPhase.SETTLING;
             // the abort flag is scoped to a single settlement run: a stale
             // abort left over from an earlier operation must
             // not kill a legitimate retry at its first checkAbort
@@ -968,7 +982,7 @@ public final class CheckoutSession implements AutoCloseable {
         } finally {
             lock.lock();
             try {
-                settlementInFlight = false;
+                phase = SessionPhase.OPEN;
             } finally {
                 lock.unlock();
             }
@@ -1342,7 +1356,7 @@ public final class CheckoutSession implements AutoCloseable {
         lock.lock();
         try {
             requireOpen(operationName);
-            if (settlementInFlight || voidInFlight) {
+            if (moneyMovementInFlight()) {
                 throw invalidState(operationName
                         + " is not allowed while money movement is in flight");
             }
@@ -1503,11 +1517,11 @@ public final class CheckoutSession implements AutoCloseable {
         lock.lock();
         try {
             requireOpen("voidTransaction");
-            if (settlementInFlight || voidInFlight) {
+            if (moneyMovementInFlight()) {
                 throw invalidState("voidTransaction is not allowed while money movement "
                         + "is in flight");
             }
-            voidInFlight = true;
+            phase = SessionPhase.VOIDING;
         } finally {
             lock.unlock();
         }
@@ -1516,7 +1530,7 @@ public final class CheckoutSession implements AutoCloseable {
     private void endVoid() {
         lock.lock();
         try {
-            voidInFlight = false;
+            phase = SessionPhase.OPEN;
         } finally {
             lock.unlock();
         }
@@ -1723,7 +1737,7 @@ public final class CheckoutSession implements AutoCloseable {
                 // stale abort must not kill the next payment at its first
                 // checkAbort, and prompts are aborted via the wire request
                 // below.
-                if (settlementInFlight) {
+                if (phase == SessionPhase.SETTLING) {
                     abortRequested = true;
                 }
             } finally {
@@ -1768,11 +1782,11 @@ public final class CheckoutSession implements AutoCloseable {
         return operation("end", () -> {
             lock.lock();
             try {
-                if (ended || ending) {
+                if (phase == SessionPhase.ENDING || phase == SessionPhase.ENDED) {
                     throw invalidState(
                             "the session has already ended; create a new session");
                 }
-                if (settlementInFlight || voidInFlight) {
+                if (moneyMovementInFlight()) {
                     throw invalidState("end() is not allowed while money movement "
                             + "is in flight");
                 }
@@ -1795,7 +1809,7 @@ public final class CheckoutSession implements AutoCloseable {
                             + "committed; retry settle() with the same refund allocations "
                             + "before ending the session");
                 }
-                ending = true;
+                phase = SessionPhase.ENDING;
             } finally {
                 lock.unlock();
             }
@@ -1804,7 +1818,7 @@ public final class CheckoutSession implements AutoCloseable {
             } catch (RuntimeException e) {
                 lock.lock();
                 try {
-                    ending = false;
+                    phase = SessionPhase.OPEN;
                 } finally {
                     lock.unlock();
                 }
@@ -1812,8 +1826,7 @@ public final class CheckoutSession implements AutoCloseable {
             }
             lock.lock();
             try {
-                ending = false;
-                ended = true;
+                phase = SessionPhase.ENDED;
             } finally {
                 lock.unlock();
             }
@@ -1841,7 +1854,7 @@ public final class CheckoutSession implements AutoCloseable {
      */
     @Override
     public void close() {
-        if (ended) {
+        if (phase == SessionPhase.ENDED) {
             return;
         }
         // synchronous deliberately: close() runs on teardown paths (often
