@@ -890,6 +890,10 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
     var award by rememberSaveable { mutableStateOf(false) }
     // Gift card tender: charged first, remainder goes to the card payment
     var giftCard by rememberSaveable { mutableStateOf(false) }
+    // Net by default: a mixed basket moves only the signed difference;
+    // unchecked, returns refund in full to their original tenders and the
+    // sale lines are charged in full
+    var netSettlement by rememberSaveable { mutableStateOf(true) }
     var giftCardNumber by rememberSaveable { mutableStateOf("") }
 
     // One payment per checkout: pay again only after the next Start Checkout
@@ -910,6 +914,9 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             LoyaltyCheckbox("Redemption", redemption, !state.paymentInProgress) { redemption = it }
             LoyaltyCheckbox("Award", award, !state.paymentInProgress) { award = it }
             LoyaltyCheckbox("Gift card", giftCard, !state.paymentInProgress) { giftCard = it }
+            LoyaltyCheckbox("Net settlement", netSettlement, !state.paymentInProgress) {
+                netSettlement = it
+            }
         }
         if (giftCard) {
             // Adopt each terminal card read into the field. Tracking the
@@ -968,6 +975,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                         award = award,
                     ),
                     if (giftCard) StoredValueOptions(cardNumber = giftCardNumber) else null,
+                    net = netSettlement,
                 )
             },
             enabled = canPay,

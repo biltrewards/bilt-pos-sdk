@@ -629,32 +629,80 @@ class NexoEmulatorControllerRefundTest {
             }
             assertTrue(outcome.success, "expected a successful settlement, got: ${outcome.message}")
             assertTrue(
-                "returned $2.24" in outcome.message,
-                "return missing from: ${outcome.message}",
+                "netted $2.24 against the purchase" in outcome.message,
+                "netted return missing from: ${outcome.message}",
             )
 
-            // the wire saw both movements: the linked refund of the return
-            // against the original card leg, and the charge for the new item
+            // net settlement (the default): the charge absorbs the return —
+            // ONE movement for the difference, no refund leg at all
+            assertTrue(
+                requests.none { "\"PaymentRequest\"" in it && "\"Refund\"" in it },
+                "a netted settlement must not send a refund leg",
+            )
+            val charge = assertNotNull(
+                requests.firstOrNull { "\"PaymentRequest\"" in it },
+                "no charge PaymentRequest reached the terminal",
+            )
+            assertTrue("32.75" in charge, "netted charge amount missing: $charge")
+
+            // the return still lands on the ORIGINAL sale's history — full
+            // value, but no tender leg (no money flowed back); the new sale
+            // is persisted with only the sold line
+            val refund = assertNotNull(store.findSale("sale-1")).refunds.single()
+            assertEquals(listOf(RefundedItem("SKU-1", 2)), refund.items)
+            assertEquals("2.24", refund.amount)
+            assertEquals(null, refund.leg)
+            withTimeout(10_000) { controller.state.first { it.sales.size == 2 } }
+            val newSale = store.listSales().first { it.sale.id != "sale-1" }.sale
+            assertEquals(listOf("SKU-NEW"), newSale.items.map { it.sku })
+        }
+    }
+
+    @Test
+    fun grossSettlementRefundsAndChargesSeparately() {
+        val store = storeWithOneSale()
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+            controller.addProduct(Product("SKU-NEW", "Desk Lamp", 3499, "Grocery"))
+            controller.addReturnToBasket("sale-1", setOf("SKU-1"))
+            withTimeout(10_000) {
+                controller.state.first { s -> s.basket.size == 2 && s.basket.any { it.credit } }
+            }
+            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+
+            // net off: the return refunds in full to the original tender
+            // and the sale lines charge in full — two movements
+            controller.settle(
+                LoyaltyOptions(rebates = false, redemption = false, award = false),
+                net = false,
+            )
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(outcome.success, "expected a successful settlement, got: ${outcome.message}")
+            assertTrue(
+                "returned $2.24 to the card" in outcome.message,
+                "return missing from: ${outcome.message}",
+            )
             val refundLeg = assertNotNull(
-                requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" in it },
+                requests.firstOrNull { "\"PaymentRequest\"" in it && "\"Refund\"" in it },
                 "no refund PaymentRequest reached the terminal",
             )
             assertTrue("poi-card-1" in refundLeg && "2.24" in refundLeg)
             val charge = assertNotNull(
-                requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" !in it },
+                requests.firstOrNull { "\"PaymentRequest\"" in it && "\"Refund\"" !in it },
                 "no charge PaymentRequest reached the terminal",
             )
             assertTrue("34.99" in charge, "charge amount missing: $charge")
-
-            // the return lands on the ORIGINAL sale's history; the new sale
-            // is persisted with only the sold line
-            assertEquals(
-                listOf(RefundedItem("SKU-1", 2)),
-                assertNotNull(store.findSale("sale-1")).refunds.single().items,
-            )
-            withTimeout(10_000) { controller.state.first { it.sales.size == 2 } }
-            val newSale = store.listSales().first { it.sale.id != "sale-1" }.sale
-            assertEquals(listOf("SKU-NEW"), newSale.items.map { it.sku })
+            val refund = assertNotNull(store.findSale("sale-1")).refunds.single()
+            assertEquals(LegType.CARD, refund.leg)
+            assertEquals("2.24", refund.amount)
         }
     }
 }

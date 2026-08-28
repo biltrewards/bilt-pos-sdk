@@ -254,7 +254,19 @@ interface EmulatorController {
      * steps run; [storedValue] adds a gift card as the first tender —
      * anything it doesn't cover falls through to the standard card payment.
      */
-    fun settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions? = null)
+    /**
+     * Settles the active checkout. With [net] (the default) a mixed basket
+     * moves only the signed difference: a payment-dominant basket charges
+     * the difference and the returns' value is absorbed by it; a
+     * refund-dominant basket refunds only the difference to the original
+     * tenders. Without [net], returns are refunded in full to their
+     * original tenders and the sale lines are charged in full.
+     */
+    fun settle(
+        loyalty: LoyaltyOptions,
+        storedValue: StoredValueOptions? = null,
+        net: Boolean = true,
+    )
 
     /**
      * Read a card on the terminal (nexo CardAcquisition request) without

@@ -31,6 +31,7 @@ import com.bilt.pos.session.settlement.SettlementOptions
 import com.bilt.pos.session.settlement.SettlementRecovery
 import com.bilt.pos.session.settlement.SettlementResult
 import com.bilt.pos.session.settlement.SettlementStep
+import com.bilt.pos.session.settlement.SettlementType
 import com.bilt.pos.session.storedvalue.StoredValueCard
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -114,6 +115,18 @@ class NexoEmulatorController(
         val legType: LegType,
         val items: List<SaleItem>,
         val amount: BigDecimal,
+    )
+
+    /** One returned sale's plan within a settlement: its [total] return
+     *  value, and how much of it goes back to the tender as a refund
+     *  allocation ([allocated]) — the rest is netted against the charge. */
+    private class PlannedReturn(
+        val saleId: String,
+        val original: OriginalSaleRecord,
+        val legType: LegType,
+        val items: List<SaleItem>,
+        val total: BigDecimal,
+        val allocated: BigDecimal,
     )
 
     private class Connection(
@@ -692,7 +705,7 @@ class NexoEmulatorController(
             .execute()
     }
 
-    override fun settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?) {
+    override fun settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?, net: Boolean) {
         val conn = connection
         val session = conn?.session
         if (conn == null || session == null) {
@@ -717,33 +730,52 @@ class NexoEmulatorController(
         val card = storedValue?.toCard()
         session.setStoredValueCard(card)
 
-        // One refund allocation per returned sale: its whole return value
-        // restores to that sale's outstanding tender. Read under the claim,
-        // so it matches exactly the credit lines in the basket.
-        val returns = conn.pendingReturns
+        // The refund allocations must total exactly what the selected mode
+        // returns: the full return value in gross mode, only the
+        // refund-dominant difference under NET (zero when the charge
+        // absorbs the returns). One allocation per returned sale, filled
+        // in ring order until the required total is covered. Read under
+        // the claim, so it matches exactly the credit lines in the basket.
+        val settlementType =
+            if (net) SettlementType.NET else SettlementType.REFUND_THEN_CHARGE
+        val required = session.basket().snapshot().getRefundAmount(settlementType)
+        var unallocated = required
+        val returns = conn.pendingReturns.groupBy { it.saleId }.values.map { group ->
+            val total = group.fold(BigDecimal.ZERO) { acc, pending -> acc.add(pending.amount) }
+                .setScale(2, RoundingMode.HALF_UP)
+            val allocated = if (total <= unallocated) total else unallocated
+            unallocated = unallocated.subtract(allocated)
+            PlannedReturn(
+                saleId = group.first().saleId,
+                legType = group.first().legType,
+                original = group.first().original,
+                items = group.flatMap { it.items },
+                total = total,
+                allocated = allocated,
+            )
+        }
         val optionsBuilder = SettlementOptions.builder()
+            .settlementType(settlementType)
             .disableRebates(!loyalty.rebates)
             .disablePoints(!loyalty.redemption)
             .disableAward(!loyalty.award)
-        returns.groupBy { it.saleId }.values.forEach { group ->
-            val amount = group.fold(BigDecimal.ZERO) { acc, pending -> acc.add(pending.amount) }
-                .setScale(2, RoundingMode.HALF_UP)
-            val first = group.first()
+        returns.filter { it.allocated.signum() > 0 }.forEach { planned ->
             optionsBuilder.addRefundAllocation(
-                if (first.legType == LegType.CARD) {
-                    RefundAllocation.card(amount, first.original)
+                if (planned.legType == LegType.CARD) {
+                    RefundAllocation.card(planned.allocated, planned.original)
                 } else {
-                    RefundAllocation.storedValue(amount, first.original)
+                    RefundAllocation.storedValue(planned.allocated, planned.original)
                 }
             )
         }
         val options = optionsBuilder.build()
         log(
-            "Starting settlement — rebates ${onOff(loyalty.rebates)}, " +
+            "Starting ${if (net) "net " else ""}settlement — rebates ${onOff(loyalty.rebates)}, " +
                 "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}" +
                 (card?.let { ", gift card ${it.storedValueId ?: "(swipe on terminal)"}" } ?: "") +
                 (if (returns.isEmpty()) "" else
-                    ", returning to ${returns.groupBy { it.saleId }.size} prior sale(s)")
+                    ", ${returns.size} prior sale(s) returned" +
+                        " ($${required.toPlainString()} to refund after netting)")
         )
         session.settle(options)
             .onCardRefunded { movement ->
@@ -1150,31 +1182,46 @@ class NexoEmulatorController(
      */
     private fun recordSettledReturns(
         conn: Connection,
-        returns: List<PendingReturn>,
+        returns: List<PlannedReturn>,
         result: SettlementResult,
     ): List<String> {
         if (returns.isEmpty()) {
             return emptyList()
         }
+        // refund movements commit in allocation order — one per planned
+        // return with money actually flowing back; fully netted returns
+        // have none
         val movements = result.movements.filter {
             it.step == SettlementStep.CARD_REFUND || it.step == SettlementStep.STORED_VALUE_REFUND
         }
+        var movementIndex = 0
         var recorded = true
         val parts = mutableListOf<String>()
-        returns.groupBy { it.saleId }.values.forEachIndexed { index, group ->
-            val first = group.first()
-            val amount = group.fold(BigDecimal.ZERO) { acc, pending -> acc.add(pending.amount) }
-                .setScale(2, RoundingMode.HALF_UP)
-            val movement = movements.getOrNull(index)
-            parts += "returned $${amount.toPlainString()} to the ${legLabel(first.legType)}"
-            recorded = recordRefund(first.saleId, RefundRecord(
-                amount = amount.toPlainString(),
+        returns.forEach { planned ->
+            val refunded = planned.allocated.signum() > 0
+            val movement = if (refunded) movements.getOrNull(movementIndex++) else null
+            parts += when {
+                !refunded ->
+                    "netted $${planned.total.toPlainString()} against the purchase"
+                planned.allocated < planned.total ->
+                    "returned $${planned.total.toPlainString()} " +
+                        "($${planned.allocated.toPlainString()} to the " +
+                        "${legLabel(planned.legType)}, the rest netted)"
+                else ->
+                    "returned $${planned.total.toPlainString()} to the ${legLabel(planned.legType)}"
+            }
+            recorded = recordRefund(planned.saleId, RefundRecord(
+                // the full return value: the customer received it all, as
+                // tender refund and/or as offset against the charge
+                amount = planned.total.toPlainString(),
                 poiTransactionId = movement?.poiTransactionId,
                 poiTimestamp = movement?.poiTransactionTimestamp?.toString(),
                 recordedAt = Instant.now().toString(),
                 full = false,
-                leg = first.legType,
-                items = group.flatMap { it.items }.map { RefundedItem(it.sku, it.quantity) },
+                // the leg names a tender money moved back to; a fully
+                // netted return touched none
+                leg = planned.legType.takeIf { refunded },
+                items = planned.items.map { RefundedItem(it.sku, it.quantity) },
             )) && recorded
         }
         conn.pendingReturns = emptyList()
