@@ -158,6 +158,11 @@ class NexoEmulatorController(
          *  next refund attempt is claimed. */
         val refundAbortRequested = AtomicBoolean(false)
 
+        /** The in-flight refund/return job, so [shutdown] can wait for its
+         *  store write — it runs on the job's own thread, and money that
+         *  moved on the terminal must not exit unrecorded. */
+        @Volatile var refundJob: kotlinx.coroutines.Job? = null
+
         /** Guards against a double-tap bracketing two terminal sessions:
          *  [session] is only installed once the Start roundtrip acknowledges. */
         val startClaimed = AtomicBoolean(false)
@@ -498,6 +503,15 @@ class NexoEmulatorController(
             connection.also { connection = null }
         }
         if (conn != null) {
+            // A refund may be mid-void with money already reversed on the
+            // terminal; its store write runs on the refund job's own thread
+            // (unlike sale writes, which hop to persistenceScope), so the
+            // exit must wait it out — bounded, a hung terminal must not
+            // wedge the window close. Before the tunnel teardown: the
+            // refund's wire traffic may cross the forward.
+            runBlocking {
+                withTimeoutOrNull(15_000) { conn.refundJob?.join() }
+            }
             conn.scope.cancel()
             conn.terminal.close()
             conn.session?.let { runCatching { it.close() } }
@@ -1024,6 +1038,7 @@ class NexoEmulatorController(
         // (disconnect racing this call). The claim always (per-connection);
         // the shared UI flag only while this connection is still current —
         // mirrors finishPaymentAttempt.
+        conn.refundJob = job
         job.invokeOnCompletion {
             conn.operationClaimed.set(false)
             if (connection === conn) {
@@ -1161,6 +1176,7 @@ class NexoEmulatorController(
                 detailedLog(e.stackTraceToString())
             }
         }
+        conn.refundJob = job
         job.invokeOnCompletion {
             conn.operationClaimed.set(false)
             if (connection === conn) {
@@ -1286,8 +1302,9 @@ class NexoEmulatorController(
             }
             if (result.isSuccess) {
                 // Money moved on the terminal, so the refund is recorded
-                // even when the operator disconnected mid-call — same
-                // rationale as persistSale
+                // unconditionally; unlike sale writes this one runs on the
+                // refund job's own thread — shutdown() joins the job so a
+                // window close cannot exit before it reaches disk
                 val recorded = recordRefund(sale.id, RefundRecord(
                     amount = result.reversedAmount?.toPlainString(),
                     poiTransactionId = result.poiTransactionId,
