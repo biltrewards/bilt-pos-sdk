@@ -146,8 +146,13 @@ loadScripts(document, 'script');</script>
 <div class="block">Replaces the settlement's refund/restoration allocations.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#voidAndAbort(boolean)" class="member-name-link">voidAndAbort</a><wbr>(boolean&nbsp;voidAndAbort)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#settlementType(com.bilt.pos.session.settlement.SettlementType)" class="member-name-link">settlementType</a><wbr>(<a href="SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a>&nbsp;settlementType)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Selects how a mixed sale/return basket moves money.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#voidAndAbort(boolean)" class="member-name-link">voidAndAbort</a><wbr>(boolean&nbsp;voidAndAbort)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 </div>
 </div>
 </div>
@@ -207,7 +212,9 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="refundAllocations(java.util.List)">
 <h3>refundAllocations</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">refundAllocations</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&gt;&nbsp;refundAllocations)</span></div>
-<div class="block">Replaces the settlement's refund/restoration allocations.</div>
+<div class="block">Replaces the settlement's refund/restoration allocations. See
+ <a href="SettlementOptions.html#getRefundAllocations()"><code>SettlementOptions.getRefundAllocations()</code></a> for net-settlement
+ totals.</div>
 </section>
 </li>
 <li>
@@ -215,6 +222,14 @@ loadScripts(document, 'script');</script>
 <h3>addRefundAllocation</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">addRefundAllocation</span><wbr><span class="parameters">(<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&nbsp;allocation)</span></div>
 <div class="block">Adds one register-selected refund/restoration allocation.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="settlementType(com.bilt.pos.session.settlement.SettlementType)">
+<h3>settlementType</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">settlementType</span><wbr><span class="parameters">(<a href="SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a>&nbsp;settlementType)</span></div>
+<div class="block">Selects how a mixed sale/return basket moves money. Default:
+ <a href="SettlementType.html#REFUND_THEN_CHARGE"><code>SettlementType.REFUND_THEN_CHARGE</code></a>.</div>
 </section>
 </li>
 <li>

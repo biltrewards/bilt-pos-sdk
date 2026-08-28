@@ -4,6 +4,7 @@ import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.internal.BasketEngine;
+import com.bilt.pos.session.settlement.SettlementType;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -488,6 +489,26 @@ class BasketEngineTest {
                 "the override is a magnitude; the cart's direction supplies the sign");
         assertEquals(new BigDecimal("-26.99"), basket.getGrandTotal(),
                 "tax returned with the merchandise, not netted against it");
+    }
+
+    @Test
+    void refundAmountReflectsSettlementType() {
+        BasketEngine refundBasket = new BasketEngine();
+        refundBasket.addItem(BasketItem.of("BUY", "New item", 1, "15.00"));
+        refundBasket.addItem(BasketItem.credit("RETURN", "Returned item", 1, "40.00"));
+
+        BasketEngine chargeBasket = new BasketEngine();
+        chargeBasket.addItem(BasketItem.of("BUY", "New item", 1, "40.00"));
+        chargeBasket.addItem(BasketItem.credit("RETURN", "Returned item", 1, "15.00"));
+
+        assertEquals(new BigDecimal("25.00"),
+                refundBasket.snapshot().getRefundAmount(SettlementType.NET));
+        assertEquals(new BigDecimal("40.00"), refundBasket.snapshot()
+                .getRefundAmount(SettlementType.REFUND_THEN_CHARGE));
+        assertEquals(BigDecimal.ZERO,
+                chargeBasket.snapshot().getRefundAmount(SettlementType.NET));
+        assertEquals(new BigDecimal("15.00"), chargeBasket.snapshot()
+                .getRefundAmount(SettlementType.REFUND_THEN_CHARGE));
     }
 
     @Test

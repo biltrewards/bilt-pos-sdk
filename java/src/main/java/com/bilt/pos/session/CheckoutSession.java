@@ -66,6 +66,7 @@ import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.RefundAllocationType;
+import com.bilt.pos.session.settlement.SettlementType;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementMovement;
@@ -841,14 +842,19 @@ public final class CheckoutSession implements AutoCloseable {
      * precondition is verified — until the returned {@link SettlementFlow}'s
      * {@code execute()}, {@code executeSync()}, {@code get()}, or
      * {@code getOrNull()} is invoked: the session must then be open with a
-     * non-empty, unconsumed basket. Sale lines are charged through the normal tender
-     * sequence; credit lines must be covered by the register-supplied
-     * refund allocations in {@link SettlementOptions}.
+     * non-empty, unconsumed basket. With the default
+     * {@link SettlementType#REFUND_THEN_CHARGE}, sale lines are charged
+     * through the normal tender sequence and credit lines are covered by
+     * register-supplied refund allocations. With
+     * {@link SettlementType#NET}, only the signed basket difference moves:
+     * a positive balance is charged, a negative balance is allocated as a
+     * refund, and a zero balance sends no monetary movement.
      *
-     * <p>Terminal-backed refund allocations carry the return-side
-     * itemization on the first {@code PaymentRequest(Refund)} leg only.
-     * Additional refund legs are amount-only because allocations are
-     * tender-level, not line-level.</p>
+     * <p>Terminal-backed refund allocations carry itemization on the first
+     * {@code PaymentRequest(Refund)} leg only. A separate refund carries the
+     * return lines; a net refund carries the signed mixed basket. Additional
+     * refund legs are amount-only because allocations are tender-level, not
+     * line-level.</p>
      *
      * <p>Refund allocations are not retried in the same settlement run. If
      * one fails, already-committed refund allocation movements remain
@@ -874,6 +880,8 @@ public final class CheckoutSession implements AutoCloseable {
         Basket fullBasket;
         Basket purchaseBasket;
         BigDecimal returnTotal;
+        BigDecimal refundAmount;
+        boolean netSettlement;
         lock.lock();
         try {
             requireOpen("settle");
@@ -894,16 +902,20 @@ public final class CheckoutSession implements AutoCloseable {
             fullBasket = basketEngine.snapshot();
             purchaseBasket = fullBasket.salePortion();
             returnTotal = fullBasket.returnTotal();
-            validateRefundAllocations(returnTotal, options.getRefundAllocations());
-            validateCommittedRefundRetry(options.getRefundAllocations());
+            netSettlement = options.getSettlementType() == SettlementType.NET;
+            refundAmount = fullBasket.getRefundAmount(options.getSettlementType());
+            validateRefundAllocations(returnTotal, refundAmount, options);
             if (purchaseBasket.isEmpty() && returnTotal.signum() == 0) {
                 throw invalidState("settlement requires a sale line or a return line");
             }
-            if (!purchaseBasket.isEmpty() && purchaseBasket.getGrandTotal().signum() <= 0) {
+            if (!netSettlement && !purchaseBasket.isEmpty()
+                    && purchaseBasket.getGrandTotal().signum() <= 0) {
                 throw invalidState("the sale portion of the basket is not positive; "
                         + "settlement cannot charge it");
             }
-            if (purchaseBasket.isEmpty() && options.getCashback() != null) {
+            Basket chargeBasket = netSettlement ? fullBasket : purchaseBasket;
+            if ((chargeBasket.isEmpty() || chargeBasket.getGrandTotal().signum() <= 0)
+                    && options.getCashback() != null) {
                 throw invalidState("cashback requires a card charge in the settlement");
             }
             phase = SessionPhase.SETTLING;
@@ -917,7 +929,7 @@ public final class CheckoutSession implements AutoCloseable {
         request.member = getMember();
         request.storedValueCard = storedValueCard;
         request.options = options;
-        request.basket = purchaseBasket;
+        request.basket = netSettlement ? fullBasket : purchaseBasket;
         request.abortRequested = () -> abortRequested;
         // movements an incomplete unwind left standing are kept so that
         // voidTransaction() on the failed session can finish the reversal
@@ -947,24 +959,27 @@ public final class CheckoutSession implements AutoCloseable {
             List<CommittedStep> committedRefundSteps = committedRefundSteps(refundMovements);
             int committedRefundCount = committedRefundAllocationsCount();
             List<RefundAllocation> refundAllocations = options.getRefundAllocations();
+            validateCommittedRefundRetry(refundAllocations);
             List<RefundAllocation> pendingAllocations = refundAllocations
                     .subList(committedRefundCount, refundAllocations.size());
             refundMovements.addAll(executeRefundAllocations(flow, fullBasket,
                     pendingAllocations, committedRefundSteps,
                     hasItemizedRefundAllocation(
-                            refundAllocations.subList(0, committedRefundCount))));
+                            refundAllocations.subList(0, committedRefundCount)),
+                    netSettlement && refundAmount.signum() > 0));
             request.priorSteps = committedRefundSteps;
-            SettlementResult purchaseResult = purchaseBasket.isEmpty()
+            SettlementResult purchaseResult = request.basket.isEmpty()
+                    || request.basket.getGrandTotal().signum() <= 0
                     ? null : paymentOrchestrator.run(request);
             SettlementResult result = combineSettlementResult(fullBasket, purchaseResult,
-                    refundMovements);
+                    refundMovements, netSettlement);
             showFinalSettlement(result.getFinalBasket());
             lock.lock();
             try {
                 basketConsumed = true;
                 lastPayment = new LastPayment(result, request.member == null
                         ? null : request.member.getMemberId());
-                lastSettlementIncludesRefunds = !refundMovements.isEmpty();
+                lastSettlementIncludesRefunds = returnTotal.signum() > 0;
                 lastPaymentVoided = false;
                 lastPaymentVoidIncomplete = false;
                 clearCommittedRefundAllocations();
@@ -991,12 +1006,15 @@ public final class CheckoutSession implements AutoCloseable {
 
     private List<SettlementMovement> executeRefundAllocations(
             SettlementFlow flow, Basket basket, List<RefundAllocation> allocations,
-            List<CommittedStep> committedSteps, boolean refundSaleItemsAlreadySent) {
+            List<CommittedStep> committedSteps, boolean refundSaleItemsAlreadySent,
+            boolean netRefund) {
         List<SettlementMovement> movements = new ArrayList<>();
         Function<SettlementContext, String> beforeStep = flow.beforeStepHandler();
         Consumer<SettlementMovement> onMovement = flow.movementHandler();
         List<SaleItem> refundSaleItems = refundSaleItemsAlreadySent
-                ? List.of() : SaleItemMapper.toRefundSaleItems(basket.returnPortion());
+                ? List.of() : netRefund
+                        ? SaleItemMapper.toNetRefundSaleItems(basket)
+                        : SaleItemMapper.toRefundSaleItems(basket.returnPortion());
         boolean refundSaleItemsSent = refundSaleItemsAlreadySent;
         for (RefundAllocation allocation : allocations) {
             if (abortRequested) {
@@ -1145,20 +1163,37 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     private static void validateRefundAllocations(BigDecimal returnTotal,
-                                                  List<RefundAllocation> allocations) {
+            BigDecimal netRefundAmount, SettlementOptions options) {
+        List<RefundAllocation> allocations = options.getRefundAllocations();
         if (returnTotal.signum() == 0 && !allocations.isEmpty()) {
             throw invalidState("refund allocations require at least one return line");
         }
+        BigDecimal allocated = monetaryAllocationTotal(allocations);
+        if (returnTotal.signum() == 0) {
+            return;
+        }
+        if (options.getSettlementType() == SettlementType.REFUND_THEN_CHARGE
+                && allocated.compareTo(returnTotal) != 0) {
+            throw invalidState("refund allocations total " + allocated
+                    + " but return lines total " + returnTotal);
+        }
+        if (options.getSettlementType() != SettlementType.NET) {
+            return;
+        }
+        if (allocated.compareTo(netRefundAmount) != 0) {
+            throw invalidState("net refund allocations total " + allocated
+                    + " but the net refund amount is " + netRefundAmount);
+        }
+    }
+
+    private static BigDecimal monetaryAllocationTotal(List<RefundAllocation> allocations) {
         BigDecimal allocated = BigDecimal.ZERO;
         for (RefundAllocation allocation : allocations) {
             if (allocation.countsTowardRefundTotal()) {
                 allocated = allocated.add(allocation.getAmount());
             }
         }
-        if (returnTotal.signum() > 0 && allocated.compareTo(returnTotal) != 0) {
-            throw invalidState("refund allocations total " + allocated
-                    + " but return lines total " + returnTotal);
-        }
+        return allocated;
     }
 
     private void validateCommittedRefundRetry(List<RefundAllocation> allocations) {
@@ -1225,7 +1260,8 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     private static SettlementResult combineSettlementResult(Basket fullBasket,
-            SettlementResult purchase, List<SettlementMovement> refundMovements) {
+            SettlementResult purchase, List<SettlementMovement> refundMovements,
+            boolean netSettlement) {
         List<SettlementMovement> movements = new ArrayList<>(refundMovements);
         if (purchase != null) {
             movements.addAll(purchase.getMovements());
@@ -1240,7 +1276,8 @@ public final class CheckoutSession implements AutoCloseable {
                 .add(sumMovements(refundMovements, SettlementStep.REBATE_REFUND));
         Basket finalBasket = purchase == null
                 ? fullBasket
-                : fullBasket.withSettledSalePortion(purchase.getFinalBasket());
+                : netSettlement ? purchase.getFinalBasket()
+                        : fullBasket.withSettledSalePortion(purchase.getFinalBasket());
         return (purchase == null ? SettlementResult.builder() : purchase.toBuilder())
                 .success(true)
                 .finalBasket(finalBasket)
@@ -1445,7 +1482,7 @@ public final class CheckoutSession implements AutoCloseable {
                 guards.requireNotRefunded();
                 if (lastSettlementIncludesRefunds) {
                     throw invalidState("voidTransaction is only supported for a pure sale "
-                            + "settlement; this settlement included refund allocations");
+                            + "settlement; this settlement included return lines");
                 }
                 if (lastPaymentVoided) {
                     throw invalidState("the most recent payment has already been voided");

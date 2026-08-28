@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Options controlling a settlement run.
@@ -33,6 +34,7 @@ public final class SettlementOptions {
     private final BigDecimal cashback;
     private final DisplayPayload paymentProcessingDisplay;
     private final List<RefundAllocation> refundAllocations;
+    private final SettlementType settlementType;
     private final boolean voidAndAbort;
 
     private SettlementOptions(Builder builder) {
@@ -43,6 +45,7 @@ public final class SettlementOptions {
         this.paymentProcessingDisplay = builder.paymentProcessingDisplay;
         this.refundAllocations = Collections.unmodifiableList(
                 new ArrayList<>(builder.refundAllocations));
+        this.settlementType = builder.settlementType;
         this.voidAndAbort = builder.voidAndAbort;
     }
 
@@ -93,9 +96,23 @@ public final class SettlementOptions {
         return paymentProcessingDisplay;
     }
 
-    /** Register-specified refund/restoration movements to run during settlement. */
+    /**
+     * Register-specified refund/restoration movements. In
+     * {@link SettlementType#REFUND_THEN_CHARGE} their monetary total must
+     * equal the full return value. In {@link SettlementType#NET}, a
+     * refund-dominant basket requires allocations totaling the net refund;
+     * a charge-dominant or balanced basket requires no monetary allocations.
+     */
     public List<RefundAllocation> getRefundAllocations() {
         return refundAllocations;
+    }
+
+    /**
+     * Whether mixed sale/return baskets execute separate refund and charge
+     * legs or move only their net difference.
+     */
+    public SettlementType getSettlementType() {
+        return settlementType;
     }
 
     /** Whether these options mean "unwind and fail" when returned from {@code onError}. */
@@ -112,6 +129,7 @@ public final class SettlementOptions {
         private BigDecimal cashback;
         private DisplayPayload paymentProcessingDisplay;
         private List<RefundAllocation> refundAllocations = new ArrayList<>();
+        private SettlementType settlementType = SettlementType.REFUND_THEN_CHARGE;
         private boolean voidAndAbort;
 
         private Builder() {
@@ -157,7 +175,11 @@ public final class SettlementOptions {
             return this;
         }
 
-        /** Replaces the settlement's refund/restoration allocations. */
+        /**
+         * Replaces the settlement's refund/restoration allocations. See
+         * {@link SettlementOptions#getRefundAllocations()} for net-settlement
+         * totals.
+         */
         public Builder refundAllocations(List<RefundAllocation> refundAllocations) {
             this.refundAllocations = refundAllocations == null
                     ? new ArrayList<>() : new ArrayList<>(refundAllocations);
@@ -170,6 +192,16 @@ public final class SettlementOptions {
                 throw new NullPointerException("allocation");
             }
             this.refundAllocations.add(allocation);
+            return this;
+        }
+
+        /**
+         * Selects how a mixed sale/return basket moves money. Default:
+         * {@link SettlementType#REFUND_THEN_CHARGE}.
+         */
+        public Builder settlementType(SettlementType settlementType) {
+            this.settlementType = Objects.requireNonNull(settlementType,
+                    "settlementType");
             return this;
         }
 

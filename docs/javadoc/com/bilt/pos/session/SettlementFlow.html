@@ -94,9 +94,11 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">The settlement orchestration chain returned by <code>CheckoutSession.settle()</code>.
 
- <p>Registering handlers sends nothing; the sequence — refund allocations
- (including external register-managed refunds), rebate redemption, point
- redemption, stored value, card charge, award — runs when
+ <p>Registering handlers sends nothing. With the default settlement option,
+ the sequence is refund allocations (including external register-managed
+ refunds), rebate redemption, point redemption, stored value, card charge,
+ award. With net settlement, only the signed basket difference is charged or
+ refunded. The sequence runs when
  <a href="#execute()"><code>execute()</code></a> (asynchronously, on the session's operation thread),
  <a href="#executeSync()"><code>executeSync()</code></a> (blocking), <a href="#get()"><code>get()</code></a>, or <a href="#getOrNull()"><code>getOrNull()</code></a>
  is invoked. Each step handler receives that step's result and returns the
