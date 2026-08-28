@@ -10,7 +10,7 @@
 package com.bilt.pos.session.settlement;
 
 /** How a settlement containing both sale and return lines moves money. */
-public enum SettlementOption {
+public enum SettlementType {
 
     /**
      * Execute the return allocations first, then charge the sale portion.

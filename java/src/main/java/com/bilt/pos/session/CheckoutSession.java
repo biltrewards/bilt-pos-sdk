@@ -66,7 +66,7 @@ import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.RefundAllocationType;
-import com.bilt.pos.session.settlement.SettlementOption;
+import com.bilt.pos.session.settlement.SettlementType;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementMovement;
@@ -843,10 +843,10 @@ public final class CheckoutSession implements AutoCloseable {
      * {@code execute()}, {@code executeSync()}, {@code get()}, or
      * {@code getOrNull()} is invoked: the session must then be open with a
      * non-empty, unconsumed basket. With the default
-     * {@link SettlementOption#REFUND_THEN_CHARGE}, sale lines are charged
+     * {@link SettlementType#REFUND_THEN_CHARGE}, sale lines are charged
      * through the normal tender sequence and credit lines are covered by
      * register-supplied refund allocations. With
-     * {@link SettlementOption#NET}, only the signed basket difference moves:
+     * {@link SettlementType#NET}, only the signed basket difference moves:
      * a positive balance is charged, a negative balance is allocated as a
      * refund, and a zero balance sends no monetary movement.
      *
@@ -902,8 +902,8 @@ public final class CheckoutSession implements AutoCloseable {
             fullBasket = basketEngine.snapshot();
             purchaseBasket = fullBasket.salePortion();
             returnTotal = fullBasket.returnTotal();
-            netSettlement = options.getSettlementOption() == SettlementOption.NET;
-            refundAmount = fullBasket.getRefundAmount(options.getSettlementOption());
+            netSettlement = options.getSettlementType() == SettlementType.NET;
+            refundAmount = fullBasket.getRefundAmount(options.getSettlementType());
             validateRefundAllocations(returnTotal, refundAmount, options);
             if (purchaseBasket.isEmpty() && returnTotal.signum() == 0) {
                 throw invalidState("settlement requires a sale line or a return line");
@@ -1172,12 +1172,12 @@ public final class CheckoutSession implements AutoCloseable {
         if (returnTotal.signum() == 0) {
             return;
         }
-        if (options.getSettlementOption() == SettlementOption.REFUND_THEN_CHARGE
+        if (options.getSettlementType() == SettlementType.REFUND_THEN_CHARGE
                 && allocated.compareTo(returnTotal) != 0) {
             throw invalidState("refund allocations total " + allocated
                     + " but return lines total " + returnTotal);
         }
-        if (options.getSettlementOption() != SettlementOption.NET) {
+        if (options.getSettlementType() != SettlementType.NET) {
             return;
         }
         if (allocated.compareTo(netRefundAmount) != 0) {

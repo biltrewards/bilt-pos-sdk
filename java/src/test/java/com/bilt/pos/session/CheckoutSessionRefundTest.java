@@ -7,7 +7,7 @@ import com.bilt.pos.nexo.model.StoredValueData;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.SettlementMovement;
-import com.bilt.pos.session.settlement.SettlementOption;
+import com.bilt.pos.session.settlement.SettlementType;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
@@ -366,7 +366,7 @@ class CheckoutSessionRefundTest {
         server.enqueue(new MockResponse().setBody(paymentOk("POI-CARD-SALE-1", 35.00)));
 
         SettlementResult result = session.settle(SettlementOptions.builder()
-                .settlementOption(SettlementOption.NET)
+                .settlementType(SettlementType.NET)
                 .build()).get();
 
         assertTrue(result.isSuccess());
@@ -407,7 +407,7 @@ class CheckoutSessionRefundTest {
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 15.00)));
 
         SettlementResult result = session.settle(SettlementOptions.builder()
-                .settlementOption(SettlementOption.NET)
+                .settlementType(SettlementType.NET)
                 .addRefundAllocation(RefundAllocation.card(new BigDecimal("15.00"),
                         "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
                 .build()).get();
@@ -445,7 +445,7 @@ class CheckoutSessionRefundTest {
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 40.00)));
 
         SettlementResult result = session.settle(SettlementOptions.builder()
-                .settlementOption(SettlementOption.NET)
+                .settlementType(SettlementType.NET)
                 .addRefundAllocation(RefundAllocation.card(new BigDecimal("40.00"),
                         "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
                 .build()).get();
@@ -469,7 +469,7 @@ class CheckoutSessionRefundTest {
         session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
 
         SettlementResult result = session.settle(SettlementOptions.builder()
-                .settlementOption(SettlementOption.NET)
+                .settlementType(SettlementType.NET)
                 .addRefundAllocation(RefundAllocation.external(new BigDecimal("25.00")))
                 .build()).get();
 
@@ -487,7 +487,7 @@ class CheckoutSessionRefundTest {
         session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
 
         SettlementResult result = session.settle(SettlementOptions.builder()
-                .settlementOption(SettlementOption.NET)
+                .settlementType(SettlementType.NET)
                 .build()).get();
 
         assertTrue(result.isSuccess());
@@ -506,7 +506,7 @@ class CheckoutSessionRefundTest {
 
         SessionException error = assertThrows(SessionException.class,
                 () -> session.settle(SettlementOptions.builder()
-                        .settlementOption(SettlementOption.NET)
+                        .settlementType(SettlementType.NET)
                         .addRefundAllocation(RefundAllocation.card(new BigDecimal("25.00"),
                                 "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
                         .addRefundAllocation(RefundAllocation.storedValue(

@@ -781,10 +781,10 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  <code>execute()</code>, <code>executeSync()</code>, <code>get()</code>, or
  <code>getOrNull()</code> is invoked: the session must then be open with a
  non-empty, unconsumed basket. With the default
- <a href="settlement/SettlementOption.html#REFUND_THEN_CHARGE"><code>SettlementOption.REFUND_THEN_CHARGE</code></a>, sale lines are charged
+ <a href="settlement/SettlementType.html#REFUND_THEN_CHARGE"><code>SettlementType.REFUND_THEN_CHARGE</code></a>, sale lines are charged
  through the normal tender sequence and credit lines are covered by
  register-supplied refund allocations. With
- <a href="settlement/SettlementOption.html#NET"><code>SettlementOption.NET</code></a>, only the signed basket difference moves:
+ <a href="settlement/SettlementType.html#NET"><code>SettlementType.NET</code></a>, only the signed basket difference moves:
  a positive balance is charged, a negative balance is allocated as a
  refund, and a zero balance sends no monetary movement.
 
