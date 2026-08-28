@@ -437,6 +437,32 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
+    void netSettlementRefundsWhenSaleLineHasZeroValue() throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.of("FREE-1", "Free item", 1, "0.00"));
+        session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
+
+        server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 40.00)));
+
+        SettlementResult result = session.settle(SettlementOptions.builder()
+                .settlementOption(SettlementOption.NET)
+                .addRefundAllocation(RefundAllocation.card(new BigDecimal("40.00"),
+                        "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
+                .build()).get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getCardAmountCharged()));
+        assertEquals(0, new BigDecimal("40.00").compareTo(result.getCardRefundedAmount()));
+        assertEquals(List.of(SettlementStep.CARD_REFUND), result.getMovements().stream()
+                .map(SettlementMovement::getStep).toList());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(1, requests.size(), "the zero-value sale line must not trigger a charge");
+        assertEquals(40.00, requests.get(0).getPaymentRequest().getPaymentTransaction()
+                .getAmountsReq().getRequestedAmount());
+    }
+
+    @Test
     void netSettlementAcceptsAllocationsForTheRefundDifference() throws Exception {
         CheckoutSession session = session();
         session.basket().addItem(BasketItem.of("BUY-1", "New item", 1, "15.00"));

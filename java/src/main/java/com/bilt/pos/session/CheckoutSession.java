@@ -908,7 +908,8 @@ public final class CheckoutSession implements AutoCloseable {
             if (purchaseBasket.isEmpty() && returnTotal.signum() == 0) {
                 throw invalidState("settlement requires a sale line or a return line");
             }
-            if (!purchaseBasket.isEmpty() && purchaseBasket.getGrandTotal().signum() <= 0) {
+            if (!netSettlement && !purchaseBasket.isEmpty()
+                    && purchaseBasket.getGrandTotal().signum() <= 0) {
                 throw invalidState("the sale portion of the basket is not positive; "
                         + "settlement cannot charge it");
             }
