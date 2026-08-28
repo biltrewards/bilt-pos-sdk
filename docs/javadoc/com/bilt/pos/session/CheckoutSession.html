@@ -780,14 +780,19 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  precondition is verified — until the returned <a href="SettlementFlow.html" title="class in com.bilt.pos.session"><code>SettlementFlow</code></a>'s
  <code>execute()</code>, <code>executeSync()</code>, <code>get()</code>, or
  <code>getOrNull()</code> is invoked: the session must then be open with a
- non-empty, unconsumed basket. Sale lines are charged through the normal tender
- sequence; credit lines must be covered by the register-supplied
- refund allocations in <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>.
+ non-empty, unconsumed basket. With the default
+ <a href="settlement/SettlementOption.html#REFUND_THEN_CHARGE"><code>SettlementOption.REFUND_THEN_CHARGE</code></a>, sale lines are charged
+ through the normal tender sequence and credit lines are covered by
+ register-supplied refund allocations. With
+ <a href="settlement/SettlementOption.html#NET"><code>SettlementOption.NET</code></a>, only the signed basket difference moves:
+ a positive balance is charged, a negative balance is allocated as a
+ refund, and a zero balance sends no monetary movement.
 
- <p>Terminal-backed refund allocations carry the return-side
- itemization on the first <code>PaymentRequest(Refund)</code> leg only.
- Additional refund legs are amount-only because allocations are
- tender-level, not line-level.</p>
+ <p>Terminal-backed refund allocations carry itemization on the first
+ <code>PaymentRequest(Refund)</code> leg only. A separate refund carries the
+ return lines; a net refund carries the signed mixed basket. Additional
+ refund legs are amount-only because allocations are tender-level, not
+ line-level.</p>
 
  <p>Refund allocations are not retried in the same settlement run. If
  one fails, already-committed refund allocation movements remain
