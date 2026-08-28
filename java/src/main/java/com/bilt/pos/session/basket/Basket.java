@@ -9,6 +9,8 @@
  */
 package com.bilt.pos.session.basket;
 
+import com.bilt.pos.session.settlement.SettlementOption;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -184,6 +186,20 @@ public final class Basket {
     /** Positive amount that must be returned for the credit lines. */
     public BigDecimal returnTotal() {
         return returnPortion().getGrandTotal().abs();
+    }
+
+    /**
+     * Positive monetary refund allocation required by the selected settlement
+     * mode. {@link SettlementOption#REFUND_THEN_CHARGE} returns the full value
+     * of the credit lines. {@link SettlementOption#NET} returns only a negative
+     * basket's refund difference, or zero when sales cover the returns.
+     */
+    public BigDecimal getRefundAmount(SettlementOption settlementOption) {
+        Objects.requireNonNull(settlementOption, "settlementOption");
+        if (settlementOption == SettlementOption.NET) {
+            return grandTotal.signum() < 0 ? grandTotal.abs() : BigDecimal.ZERO;
+        }
+        return returnTotal();
     }
 
     /**

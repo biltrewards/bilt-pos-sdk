@@ -28,7 +28,7 @@ A few principles explain most of the behavior:
 - **nexo underneath.** Every session operation maps to a standard nexo 3.0 message, but the SDK hides much more than message serialization: it manages the complexity of communicating with the terminal, and it orchestrates settlement when the transaction has returns, exchanges, or multiple tenders — sequencing refund allocations, rebates, point redemption, stored value, card, loyalty award, and reversal — so the register doesn't have to coordinate the wire calls itself.
 - **Terminal operations are lazy.** Methods returning a `SessionResult` or `SettlementFlow` send nothing until you call `.execute()` (asynchronous, handlers deliver the outcome), `.executeSync()`, `.get()`, or `.getOrNull()` (blocking). Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
 - **Cart-building is local + auto-display.** The basket surface lives on `session.basket()`: `addItem` / `removeItem` / `updateItemQuantity` update the local basket and return the updated `Basket` immediately — pure local compute, safe to call from a UI thread. With `autoDisplay=true` (the default) each mutation also enqueues an **asynchronous, conflated** `DisplayRequest` push: pushes run on the session's operation lane (ordered against settlement — a `settle()` executed after ring-up queues behind the pending push and waits at most one roundtrip), and a fast ring-up conflates to the newest snapshot, so the customer display skips straight to the current state instead of replaying every tap. Automatic display failures — cart pushes and the final settlement display refresh — are best-effort: logged, never interrupting the checkout, and reported through the builder's `onBackgroundError` handler when one is registered. The terminal may independently evaluate offers while items are scanned, but those offers are **only committed during `settle()`**.
-- **`settle()` is a fixed orchestration sequence,** with explicit callbacks for committed refund/charge movements and blocking callbacks after each loyalty/stored-value charge step so the register can update its own model and recompute tax, then return the total that feeds the next step. The shape is fixed, but steps are conditional: refund allocations run only when `SettlementOptions` supplies them for credit lines, loyalty (rebates + points) runs only for identified members and can be disabled, the stored-value charge step only runs when a gift card has been registered with `setStoredValueCard`, and card charge runs whenever an amount remains.
+- **`settle()` supports separate and net movement,** with explicit callbacks for committed refund/charge movements and blocking callbacks after each loyalty/stored-value charge step so the register can update its own model and recompute tax, then return the total that feeds the next step. `SettlementOption.REFUND_THEN_CHARGE` is the backward-compatible default. `SettlementOption.NET` sends only the signed basket difference: a charge, a refund, or no monetary movement. Loyalty runs only for identified members and can be disabled; stored value runs only when a gift card is registered; card runs whenever a positive balance remains.
 - **Errors and aborts roll back cleanly.** If a charge-side step fails or `abort()` is called mid-sequence, everything already committed by that charge sequence (rebates, points, stored value) is reversed in the opposite order — basket intact, `settle()` retryable. Refund allocation failures are not recovered in-run; committed refund allocation movements stand, and the register retries `settle()` with the same committed allocation prefix. An abort is a register maneuver, not an abandonment; `end()` is the abandonment path when no recovery-required movement is pending.
 
 ### Built-in loyalty handling
@@ -80,7 +80,7 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 
 ## The settlement sequence explained
 
-`settle()` returns a `SettlementFlow` — a chainable builder where the register hooks into each step, executed when you call `.execute()` / `.get()` / `.getOrNull()`. `beforeStep` is called before every terminal movement or register-recorded external refund with a `SettlementContext`; it is a chance to persist pending state and return the sale transaction ID to use for that step. The sequence is always:
+`settle()` returns a `SettlementFlow` — a chainable builder where the register hooks into each step, executed when you call `.execute()` / `.get()` / `.getOrNull()`. `beforeStep` is called before every terminal movement or register-recorded external refund with a `SettlementContext`; it is a chance to persist pending state and return the sale transaction ID to use for that step. The default `REFUND_THEN_CHARGE` sequence is:
 
 1. **Refund allocations** (if the basket has credit lines) — the register supplies the allocation split in `SettlementOptions`, and the SDK executes or records each card, stored value, external, point, rebate, or award refund movement → `onCardRefunded` / `onGiftCardRefunded` / `onExternalRefunded` / `onPointsRefunded` / `onRebateRefunded` / `onAwardRefunded`
 2. **Rebate redemption** (identified members, if enabled, sale lines only) — terminal commits applicable offers/coupons → `onRebatesRedeemed`
@@ -89,6 +89,8 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 5. **Card charge** (if a balance remains) — terminal processes the card for the remaining amount → `onCardCharged`
 6. **Award** — terminal submits the loyalty award (Store-and-Forward if loyalty is down) → `onAwarded`
 7. `onSuccess` / `onError`
+
+With `SettlementOption.NET`, the SDK uses the complete signed basket instead. A positive total enters the loyalty/stored-value/card charge sequence for only that difference. A negative total skips the charge sequence and executes refund allocations for only the absolute difference. A zero total sends no monetary movement. Award-reversal allocations remain bookkeeping movements and are retained even when the return value is fully absorbed by a net charge.
 
 **Callbacks are synchronous and blocking.** The total-returning callbacks run on the calling thread, and the `BigDecimal` they return becomes the total passed to the next step. This is deliberate: some jurisdictions tax the discounted price, so the register may need to recompute tax after each discount and feed the corrected total forward. That total → tax → total pipeline only works if the steps are sequential. Movement callbacks are also synchronous, but they report movement observations instead of changing the running total.
 
@@ -498,13 +500,40 @@ try (CheckoutSession session = CheckoutSession.builder()
 }
 ```
 
-The cart is free-form — which items may be returned, and in what quantities, is the register's decision. The SDK verifies that allocation totals match the credit-line total but does not decide how much should go to each tender type.
+The cart is free-form — which items may be returned, and in what quantities, is the register's decision. Under the default `REFUND_THEN_CHARGE` option, the SDK verifies that allocation totals match the credit-line total but does not decide how much should go to each tender type.
 
-For terminal-backed refund allocations (`card`, `cardUnlinked`, `storedValue`), the SDK sends the return-side itemization on the first `PaymentRequest(Refund)` leg. Additional terminal refund legs are amount-only because refund allocations are tender-level, not line-level; this keeps split refunds from duplicating receipt lines.
+### Net settlement
+
+Select `SettlementOption.NET` to move only the difference between sale and return lines:
+
+```java
+session.basket().addItem(BasketItem.of(
+        "NEW-ITEM", "New item", 1, "15.00"));
+session.basket().addItem(BasketItem.credit(
+        "RETURNED-ITEM", "Returned item", 1, "40.00"));
+
+Basket basket = session.basket().snapshot();
+BigDecimal refund = basket.getRefundAmount(SettlementOption.NET); // $40 - $15 = $25
+
+SettlementOptions options = SettlementOptions.builder()
+        .settlementOption(SettlementOption.NET)
+        // The register chooses destinations totaling the $25 difference.
+        .addRefundAllocation(RefundAllocation.card(
+                refund.subtract(new BigDecimal("15.00")), originalSale))
+        .addRefundAllocation(RefundAllocation.storedValue(
+                new BigDecimal("15.00"), originalSale))
+        .build();
+
+session.settle(options).execute();
+```
+
+The amount is known before settlement: `Basket.getRefundAmount(SettlementOption.NET)` returns the positive refund difference, or zero when the basket is payment-dominant or balanced. The same method with `REFUND_THEN_CHARGE` returns the full credit-line value. Supply monetary allocations totaling exactly the amount returned for the selected mode. The register owns the split across original card, stored value, store credit, or external tender.
+
+For terminal-backed refund allocations (`card`, `cardUnlinked`, `storedValue`), the SDK sends itemization on the first `PaymentRequest(Refund)` leg. A separate refund sends return-side magnitudes. A net refund sends the mixed basket with return lines positive and purchase lines negative, so the itemization sums to the refund difference. Additional terminal refund legs are amount-only because refund allocations are tender-level, not line-level; this keeps split refunds from duplicating receipt lines.
 
 Use `RefundAllocation.storedValue(amount, originalSale)` when refunding back to the original stored value tender; the SDK sends a linked `PaymentRequest(Refund)` against the stored value leg's POI transaction reference and does not need the card number. Use `RefundAllocation.storeCredit(card, amount)` when the refund should be issued as store credit onto a supplied stored value card; the SDK sends a `StoredValueRequest(Load)`. Use `RefundAllocation.external(amount)` for register-managed refunds such as cash from the drawer; it counts toward the required allocation total, produces an `EXTERNAL_REFUND` movement, and sends no terminal request.
 
-**Credit lines on a sale.** `BasketItem.credit(sku, desc, qty, price)` (or `.credit(true)` on the builder) makes the line subtract from the basket and display as a return. Quantities and unit prices stay positive — the direction carries the sign — and a credit line never upserts into a sale line of the same SKU: the basket shows both, like a paper receipt. `settle()` charges only sale lines and restores return value through the supplied allocations.
+**Credit lines on a sale.** `BasketItem.credit(sku, desc, qty, price)` (or `.credit(true)` on the builder) makes the line subtract from the basket and display as a return. Quantities and unit prices stay positive — the direction carries the sign — and a credit line never upserts into a sale line of the same SKU: the basket shows both, like a paper receipt. `REFUND_THEN_CHARGE` charges sale lines and restores the full return value through allocations; `NET` moves only the signed difference.
 
 ---
 

@@ -57,6 +57,26 @@ public final class SaleItemMapper {
         return map(basket, true, true);
     }
 
+    /**
+     * Maps a refund-dominant mixed basket for a net refund request. Return
+     * lines are positive because the request's direction is Refund; sale
+     * lines are negative offsets, so the item amounts sum to the net refund.
+     */
+    public static List<SaleItem> toNetRefundSaleItems(Basket basket) {
+        List<SaleItem> items = new ArrayList<>(basket.getItemCount());
+        for (BasketLineItem line : basket.getItems()) {
+            boolean returned = line.isCredit();
+            BigDecimal amount = line.getAdjustedTotal().abs();
+            double quantity = line.getQuantity();
+            if (!returned) {
+                amount = amount.negate();
+                quantity = -quantity;
+            }
+            items.add(saleItem(line, amount, quantity));
+        }
+        return items;
+    }
+
     private static List<SaleItem> map(Basket basket, boolean adjusted, boolean magnitudes) {
         List<SaleItem> items = new ArrayList<>(basket.getItemCount());
         for (BasketLineItem line : basket.getItems()) {
@@ -67,17 +87,22 @@ public final class SaleItemMapper {
             } else if (line.isCredit()) {
                 quantity = -quantity;
             }
-            items.add(SaleItem.builder()
-                    .itemID(Long.parseLong(line.getItemId()))
-                    .productCode(line.getSku())
-                    .productLabel(line.getDescription())
-                    .additionalProductInfo(line.getCategory())
-                    .quantity(quantity)
-                    .unitPrice(line.getUnitPrice().doubleValue())
-                    .itemAmount(amount.doubleValue())
-                    .unitOfMeasure(UnitOfMeasureEnum.OTHER)
-                    .build());
+            items.add(saleItem(line, amount, quantity));
         }
         return items;
+    }
+
+    private static SaleItem saleItem(BasketLineItem line, BigDecimal amount,
+                                     double quantity) {
+        return SaleItem.builder()
+                .itemID(Long.parseLong(line.getItemId()))
+                .productCode(line.getSku())
+                .productLabel(line.getDescription())
+                .additionalProductInfo(line.getCategory())
+                .quantity(quantity)
+                .unitPrice(line.getUnitPrice().doubleValue())
+                .itemAmount(amount.doubleValue())
+                .unitOfMeasure(UnitOfMeasureEnum.OTHER)
+                .build();
     }
 }

@@ -9,13 +9,13 @@
  */
 package com.bilt.pos.session;
 
-import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
-import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.payment.PointRedemptionResult;
 import com.bilt.pos.session.payment.RebateRedemptionResult;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementMovement;
+import com.bilt.pos.session.settlement.SettlementOptions;
+import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
 
 import java.math.BigDecimal;
@@ -27,9 +27,11 @@ import java.util.function.Function;
 /**
  * The settlement orchestration chain returned by {@code CheckoutSession.settle()}.
  *
- * <p>Registering handlers sends nothing; the sequence — refund allocations
- * (including external register-managed refunds), rebate redemption, point
- * redemption, stored value, card charge, award — runs when
+ * <p>Registering handlers sends nothing. With the default settlement option,
+ * the sequence is refund allocations (including external register-managed
+ * refunds), rebate redemption, point redemption, stored value, card charge,
+ * award. With net settlement, only the signed basket difference is charged or
+ * refunded. The sequence runs when
  * {@link #execute()} (asynchronously, on the session's operation thread),
  * {@link #executeSync()} (blocking), {@link #get()}, or {@link #getOrNull()}
  * is invoked. Each step handler receives that step's result and returns the

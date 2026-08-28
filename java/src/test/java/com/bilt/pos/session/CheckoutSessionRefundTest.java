@@ -7,6 +7,7 @@ import com.bilt.pos.nexo.model.StoredValueData;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.SettlementMovement;
+import com.bilt.pos.session.settlement.SettlementOption;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
@@ -354,6 +355,140 @@ class CheckoutSessionRefundTest {
         assertEquals(109.00, requests.get(1).getPaymentRequest().getPaymentTransaction()
                 .getAmountsReq().getRequestedAmount(),
                 "sale-side tax share must be included in the card charge");
+    }
+
+    @Test
+    void netSettlementChargesOnlyPositiveDifference() throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.of("BUY-1", "New item", 1, "75.00"));
+        session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
+
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-CARD-SALE-1", 35.00)));
+
+        SettlementResult result = session.settle(SettlementOptions.builder()
+                .settlementOption(SettlementOption.NET)
+                .build()).get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(0, new BigDecimal("35.00").compareTo(result.getCardAmountCharged()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getCardRefundedAmount()));
+        assertEquals(0, new BigDecimal("35.00").compareTo(
+                result.getFinalBasket().getGrandTotal()));
+        assertEquals(List.of(SettlementStep.CARD_CHARGE), result.getMovements().stream()
+                .map(SettlementMovement::getStep).toList());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(1, requests.size());
+        assertEquals(35.00, requests.get(0).getPaymentRequest().getPaymentTransaction()
+                .getAmountsReq().getRequestedAmount());
+        com.bilt.pos.nexo.model.SaleItem[] items = requests.get(0).getPaymentRequest()
+                .getPaymentTransaction().getSaleItem();
+        assertEquals(2, items.length);
+        assertEquals("BUY-1", items[0].getProductCode());
+        assertEquals(75.00, items[0].getItemAmount());
+        assertEquals(1.0, items[0].getQuantity());
+        assertEquals("RET-1", items[1].getProductCode());
+        assertEquals(-40.00, items[1].getItemAmount());
+        assertEquals(-1.0, items[1].getQuantity());
+
+        SessionException voidFailure = assertThrows(SessionException.class,
+                () -> session.voidTransaction().get());
+        assertTrue(voidFailure.getError().getMessage().contains("pure sale settlement"));
+    }
+
+    @Test
+    void netSettlementRefundsOnlyNegativeDifferenceToSingleAllocation() throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.of("BUY-1", "New item", 1, "25.00"));
+        session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
+
+        server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 15.00)));
+
+        SettlementResult result = session.settle(SettlementOptions.builder()
+                .settlementOption(SettlementOption.NET)
+                .addRefundAllocation(RefundAllocation.card(new BigDecimal("15.00"),
+                        "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
+                .build()).get();
+
+        assertTrue(result.isSuccess());
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getCardAmountCharged()));
+        assertEquals(0, new BigDecimal("15.00").compareTo(result.getCardRefundedAmount()));
+        assertEquals(0, new BigDecimal("-15.00").compareTo(
+                result.getFinalBasket().getGrandTotal()));
+        assertEquals(List.of(SettlementStep.CARD_REFUND), result.getMovements().stream()
+                .map(SettlementMovement::getStep).toList());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(1, requests.size());
+        SaleToPOIRequest refund = requests.get(0);
+        assertEquals(15.00, refund.getPaymentRequest().getPaymentTransaction()
+                .getAmountsReq().getRequestedAmount());
+        com.bilt.pos.nexo.model.SaleItem[] items = refund.getPaymentRequest()
+                .getPaymentTransaction().getSaleItem();
+        assertEquals(2, items.length);
+        assertEquals("BUY-1", items[0].getProductCode());
+        assertEquals(-25.00, items[0].getItemAmount());
+        assertEquals(-1.0, items[0].getQuantity());
+        assertEquals("RET-1", items[1].getProductCode());
+        assertEquals(40.00, items[1].getItemAmount());
+        assertEquals(1.0, items[1].getQuantity());
+    }
+
+    @Test
+    void netSettlementAcceptsAllocationsForTheRefundDifference() throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.of("BUY-1", "New item", 1, "15.00"));
+        session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
+
+        SettlementResult result = session.settle(SettlementOptions.builder()
+                .settlementOption(SettlementOption.NET)
+                .addRefundAllocation(RefundAllocation.external(new BigDecimal("25.00")))
+                .build()).get();
+
+        assertEquals(0, new BigDecimal("25.00").compareTo(
+                result.getExternalRefundedAmount()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getCardAmountCharged()));
+        assertEquals(1, server.getRequestCount(),
+                "an explicitly allocated external net refund stays off-terminal");
+    }
+
+    @Test
+    void netSettlementMovesNoMoneyWhenSaleAndReturnAreEqual() throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.of("BUY-1", "New item", 1, "40.00"));
+        session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
+
+        SettlementResult result = session.settle(SettlementOptions.builder()
+                .settlementOption(SettlementOption.NET)
+                .build()).get();
+
+        assertTrue(result.isSuccess());
+        assertTrue(result.getMovements().isEmpty());
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getAuthorizedAmount()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getCardRefundedAmount()));
+        assertEquals(1, server.getRequestCount(), "only session start should reach the wire");
+    }
+
+    @Test
+    void netSettlementRejectsAllocationsThatDoNotMatchRefundDifference()
+            throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.of("BUY-1", "New item", 1, "15.00"));
+        session.basket().addItem(BasketItem.credit("RET-1", "Returned item", 1, "40.00"));
+
+        SessionException error = assertThrows(SessionException.class,
+                () -> session.settle(SettlementOptions.builder()
+                        .settlementOption(SettlementOption.NET)
+                        .addRefundAllocation(RefundAllocation.card(new BigDecimal("25.00"),
+                                "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
+                        .addRefundAllocation(RefundAllocation.storedValue(
+                                new BigDecimal("15.00"), ORIGINAL_STORED_VALUE_TXN,
+                                ORIGINAL_TIMESTAMP))
+                        .build()).get());
+
+        assertEquals(SessionErrorCode.INVALID_STATE, error.getError().getCode());
+        assertTrue(error.getError().getMessage().contains("net refund amount is 25.00"));
+        assertEquals(1, server.getRequestCount(), "no refund may be sent before allocation");
     }
 
     @Test
