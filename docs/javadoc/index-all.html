@@ -85,10 +85,6 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#acquirerTransactionId(java.lang.String)" class="member-name-link">acquirerTransactionId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
 <dd>&nbsp;</dd>
-<dt><a href="com/bilt/pos/session/SessionState.html#ACTIVE" class="member-name-link">ACTIVE</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">The basket contains at least one item.</div>
-</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#acType" class="member-name-link">acType</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#acValue" class="member-name-link">acValue</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
@@ -481,11 +477,16 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.html" class="type-name-link" title="class in com.bilt.pos.session">CheckoutSession</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
-<div class="block">A stateful, loyalty-enabled checkout on top of <a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client"><code>BiltNexoTerminalClient</code></a>.</div>
+<div class="block">A loyalty-enabled terminal session on top of <a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client"><code>BiltNexoTerminalClient</code></a>.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.Builder.html" class="type-name-link" title="class in com.bilt.pos.session">CheckoutSession.Builder</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">Builder for <a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/SessionBasket.html#clear()" class="member-name-link">clear()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></dt>
+<dd>
+<div class="block">Clears all items and tax, starts a fresh basket with a new cart ID,
+ and clears the stored-value card selected for split tender.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.Builder.html#client(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">client(BiltNexoTerminalClient)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></dt>
 <dd>
@@ -498,7 +499,7 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/CheckoutSession.html#close()" class="member-name-link">close()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a></dt>
 <dd>
 <div class="block">Best-effort <a href="com/bilt/pos/session/CheckoutSession.html#end()"><code>CheckoutSession.end()</code></a> for try-with-resources: a failure to send
- the end signal, or a lifecycle state that refuses <code>end()</code>, is
+ the end signal, or an unresolved movement that refuses <code>end()</code>, is
  logged, not thrown, and an already-ended session is left alone.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/Terminal.html#close()" class="member-name-link">close()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/Terminal.html" title="class in com.bilt.pos.session">Terminal</a></dt>
@@ -535,10 +536,6 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/CommittedStep.html#%3Cinit%3E(com.bilt.pos.session.settlement.SettlementStep,java.lang.String,java.lang.String,java.time.Instant,boolean)" class="member-name-link">CommittedStep(SettlementStep, String, String, Instant, boolean)</a> - Constructor for class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CommittedStep.html" title="class in com.bilt.pos.session.settlement">CommittedStep</a></dt>
 <dd>&nbsp;</dd>
-<dt><a href="com/bilt/pos/session/SessionState.html#COMPLETED" class="member-name-link">COMPLETED</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">The settlement sequence completed successfully.</div>
-</dd>
 <dt><a href="com/bilt/pos/display/InputPayload.html#confirmation" class="member-name-link">confirmation</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/InputPayload.html" title="class in com.bilt.pos.display">InputPayload</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayloadHelper.html#confirmation(java.lang.String)" class="member-name-link">confirmation(String)</a> - Static method in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayloadHelper.html" title="class in com.bilt.pos.display">DisplayPayloadHelper</a></dt>
@@ -800,7 +797,7 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Context handed to a <a href="com/bilt/pos/session/display/DisplayRenderer.html" title="interface in com.bilt.pos.session.display"><code>DisplayRenderer</code></a> alongside the basket.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/display/DisplayContext.html#%3Cinit%3E(com.bilt.pos.session.SessionState,com.bilt.pos.session.display.DisplayTarget,java.lang.String)" class="member-name-link">DisplayContext(SessionState, DisplayTarget, String)</a> - Constructor for class com.bilt.pos.session.display.<a href="com/bilt/pos/session/display/DisplayContext.html" title="class in com.bilt.pos.session.display">DisplayContext</a></dt>
+<dt><a href="com/bilt/pos/session/display/DisplayContext.html#%3Cinit%3E(com.bilt.pos.session.display.DisplayTarget,java.lang.String)" class="member-name-link">DisplayContext(DisplayTarget, String)</a> - Constructor for class com.bilt.pos.session.display.<a href="com/bilt/pos/session/display/DisplayContext.html" title="class in com.bilt.pos.session.display">DisplayContext</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayload.html" class="type-name-link" title="class in com.bilt.pos.display">DisplayPayload</a> - Class in <a href="com/bilt/pos/display/package-summary.html">com.bilt.pos.display</a></dt>
 <dd>
@@ -865,15 +862,7 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/CheckoutSession.html#end()" class="member-name-link">end()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a></dt>
 <dd>
 <div class="block">Ends the session: tells the terminal to discard the session-scoped
- data it accumulated (Nexo <code>Admin</code> session end signal) and moves
- the session to <a href="com/bilt/pos/session/SessionState.html#ENDED"><code>SessionState.ENDED</code></a>, from which no operation of
- any kind — including a restart — is allowed.</div>
-</dd>
-<dt><a href="com/bilt/pos/session/SessionState.html#ENDED" class="member-name-link">ENDED</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">The session was ended: the terminal was told to discard its
- session-scoped data, and no further operation of any kind is allowed
- — create a new session for the next checkout.</div>
+ data it accumulated (Nexo <code>Admin</code> session end signal).</div>
 </dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html#endpoint(java.lang.String)" class="member-name-link">endpoint(String)</a> - Method in class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient.Builder</a></dt>
 <dd>
@@ -974,10 +963,6 @@ loadScripts(document, 'script');</script>
 </dl>
 <h2 class="title" id="I:F">F</h2>
 <dl class="index">
-<dt><a href="com/bilt/pos/session/SessionState.html#FAILED" class="member-name-link">FAILED</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">The settlement sequence failed or was aborted.</div>
-</dd>
 <dt><a href="com/bilt/pos/session/identity/EntryMode.html#FILE" class="member-name-link">FILE</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/EntryMode.html" title="enum class in com.bilt.pos.session.identity">EntryMode</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/ForceEntryMode.html#FILE" class="member-name-link">FILE</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/ForceEntryMode.html" title="enum class in com.bilt.pos.session.identity">ForceEntryMode</a></dt>
@@ -2043,14 +2028,6 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Gets the value of the standby property.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/CheckoutSession.html#getState()" class="member-name-link">getState()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a></dt>
-<dd>
-<div class="block">The session's current lifecycle state.</div>
-</dd>
-<dt><a href="com/bilt/pos/session/display/DisplayContext.html#getState()" class="member-name-link">getState()</a> - Method in class com.bilt.pos.session.display.<a href="com/bilt/pos/session/display/DisplayContext.html" title="class in com.bilt.pos.session.display">DisplayContext</a></dt>
-<dd>
-<div class="block">The session state at render time.</div>
-</dd>
 <dt><a href="com/bilt/pos/session/identity/IdentifyResult.html#getStatus()" class="member-name-link">getStatus()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/CommittedStep.html#getStep()" class="member-name-link">getStep()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CommittedStep.html" title="class in com.bilt.pos.session.settlement">CommittedStep</a></dt>
@@ -2433,10 +2410,6 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/ForceEntryMode.html#ICC" class="member-name-link">ICC</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/ForceEntryMode.html" title="enum class in com.bilt.pos.session.identity">ForceEntryMode</a></dt>
 <dd>&nbsp;</dd>
-<dt><a href="com/bilt/pos/session/SessionState.html#IDENTIFIED" class="member-name-link">IDENTIFIED</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">A member was explicitly identified; basket is still empty.</div>
-</dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.html#identifyMember()" class="member-name-link">identifyMember()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a></dt>
 <dd>
 <div class="block">Prompts the customer on the terminal to identify themselves.</div>
@@ -2465,10 +2438,6 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/identity/IdentifyStatus.html" class="type-name-link" title="enum class in com.bilt.pos.session.identity">IdentifyStatus</a> - Enum Class in <a href="com/bilt/pos/session/identity/package-summary.html">com.bilt.pos.session.identity</a></dt>
 <dd>
 <div class="block">Outcome of a member identification attempt.</div>
-</dd>
-<dt><a href="com/bilt/pos/session/SessionState.html#IDLE" class="member-name-link">IDLE</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">Session created; no member identified and no items in the basket.</div>
 </dd>
 <dt><a href="com/bilt/pos/display/DisplayPayload.html#image" class="member-name-link">image</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a></dt>
 <dd>&nbsp;</dd>
@@ -2562,10 +2531,6 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/VoidResult.html#isSuccess()" class="member-name-link">isSuccess()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a></dt>
 <dd>&nbsp;</dd>
-<dt><a href="com/bilt/pos/session/SessionState.html#isTerminal()" class="member-name-link">isTerminal()</a> - Method in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">Returns <code>true</code> if no further operations are possible from this state.</div>
-</dd>
 <dt><a href="com/bilt/pos/session/input/PinResult.html#isVerified()" class="member-name-link">isVerified()</a> - Method in class com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/PinResult.html" title="class in com.bilt.pos.session.input">PinResult</a></dt>
 <dd>
 <div class="block">For the verify modes: whether the PIN matched.</div>
@@ -3553,10 +3518,6 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">A lazy, single-shot session operation.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/SessionState.html" class="type-name-link" title="enum class in com.bilt.pos.session">SessionState</a> - Enum Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
-<dd>
-<div class="block">Lifecycle state of a <a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a>.</div>
-</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#setAcquirerID(java.lang.String)" class="member-name-link">setAcquirerID(String)</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Sets the value of the acquirerID property.</div>
@@ -3997,10 +3958,6 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/SettlementStep.html" class="type-name-link" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a> - Enum Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
 <div class="block">A step of the settlement sequence.</div>
-</dd>
-<dt><a href="com/bilt/pos/session/SessionState.html#SETTLING" class="member-name-link">SETTLING</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">Settlement orchestration is in progress; the basket is frozen.</div>
 </dd>
 <dt><a href="com/bilt/pos/display/ReceiptType.html#setTotal(com.bilt.pos.display.LabeledAmountType)" class="member-name-link">setTotal(LabeledAmountType)</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/ReceiptType.html" title="class in com.bilt.pos.display">ReceiptType</a></dt>
 <dd>
@@ -4625,10 +4582,6 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/SessionState.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">Returns the enum constant of this class with the specified name.</div>
-</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocationType.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></dt>
 <dd>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
@@ -4707,11 +4660,6 @@ the order they are declared.</div>
 <div class="block">Returns an array containing the constants of this enum class, in
 the order they are declared.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/SessionState.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">Returns an array containing the constants of this enum class, in
-the order they are declared.</div>
-</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocationType.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></dt>
 <dd>
 <div class="block">Returns an array containing the constants of this enum class, in
@@ -4739,14 +4687,6 @@ the order they are declared.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html#voidAndAbort(boolean)" class="member-name-link">voidAndAbort(boolean)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></dt>
 <dd>&nbsp;</dd>
-<dt><a href="com/bilt/pos/session/SessionState.html#VOIDED" class="member-name-link">VOIDED</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">The transaction was voided.</div>
-</dd>
-<dt><a href="com/bilt/pos/session/SessionState.html#VOIDING" class="member-name-link">VOIDING</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></dt>
-<dd>
-<div class="block">A void of the completed transaction is in progress.</div>
-</dd>
 <dt><a href="com/bilt/pos/session/VoidResult.html" class="type-name-link" title="class in com.bilt.pos.session">VoidResult</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">Outcome of <code>voidTransaction()</code>: the payment reversal plus a

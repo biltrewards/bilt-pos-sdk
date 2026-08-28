@@ -125,8 +125,6 @@ class CheckoutSessionIdentityTest {
         assertNotNull(delivered.get());
         assertEquals(IdentifyStatus.FOUND, delivered.get().getStatus());
         assertNotNull(session.getMember());
-        assertEquals(SessionState.IDENTIFIED, session.getState(),
-                "abort does not end the session; the checkout continues");
     }
 
     @Test
@@ -151,7 +149,6 @@ class CheckoutSessionIdentityTest {
         assertEquals(RewardType.COUPON, result.getRewards().get(1).getType());
 
         assertSame(result, session.getMember());
-        assertEquals(SessionState.IDENTIFIED, session.getState());
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("CardAcquisition", sent.getMessageHeader().getMessageCategory().toValue());
@@ -196,7 +193,6 @@ class CheckoutSessionIdentityTest {
 
         assertEquals(IdentifyStatus.CANCELLED, result.getStatus());
         assertNull(session.getMember());
-        assertEquals(SessionState.IDLE, session.getState());
     }
 
     @Test
@@ -221,7 +217,6 @@ class CheckoutSessionIdentityTest {
         assertEquals(IdentifyStatus.NOT_FOUND, result.getStatus());
         assertNull(result.getMemberId());
         assertNull(session.getMember());
-        assertEquals(SessionState.IDLE, session.getState());
     }
 
     @Test
@@ -245,7 +240,6 @@ class CheckoutSessionIdentityTest {
                         + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
         session.identifyMember().executeSync();
         assertNotNull(session.getMember());
-        assertEquals(SessionState.IDENTIFIED, session.getState());
 
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
@@ -253,7 +247,6 @@ class CheckoutSessionIdentityTest {
         session.identifyMember().executeSync();
 
         assertNull(session.getMember(), "a NOT_FOUND re-identify must detach the old member");
-        assertEquals(SessionState.IDLE, session.getState());
     }
 
     @Test
@@ -271,11 +264,9 @@ class CheckoutSessionIdentityTest {
         session.identifyMember().executeSync();
 
         assertNull(session.getMember());
-        assertEquals(SessionState.ACTIVE, session.getState());
 
-        // emptying the basket now returns to IDLE, not IDENTIFIED
         session.basket().removeItemBySku("SKU-1");
-        assertEquals(SessionState.IDLE, session.getState());
+        assertTrue(session.basket().snapshot().isEmpty());
     }
 
     @Test
@@ -293,7 +284,6 @@ class CheckoutSessionIdentityTest {
 
         assertNotNull(session.getMember(), "a dismissed prompt must not drop the identified member");
         assertEquals("98234", session.getMember().getMemberId());
-        assertEquals(SessionState.IDENTIFIED, session.getState());
     }
 
     @Test
@@ -337,7 +327,6 @@ class CheckoutSessionIdentityTest {
         assertEquals("98234", result.getMemberId());
         assertEquals(1240, result.getPointBalance());
         assertEquals(2, result.getRewards().size());
-        assertEquals(SessionState.IDENTIFIED, session.getState());
 
         SaleToPOIRequest sent = recordedRequest();
         assertEquals("BalanceInquiry", sent.getMessageHeader().getMessageCategory().toValue());

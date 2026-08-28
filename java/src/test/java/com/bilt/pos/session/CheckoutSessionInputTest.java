@@ -158,8 +158,6 @@ class CheckoutSessionInputTest {
         // continues unchanged
         assertNull(failure.get());
         assertEquals(Boolean.TRUE, delivered.get());
-        assertEquals(SessionState.IDLE, session.getState(),
-                "abort does not end the session; the checkout continues");
     }
 
     @Test

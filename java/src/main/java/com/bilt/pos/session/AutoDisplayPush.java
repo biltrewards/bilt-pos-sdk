@@ -12,10 +12,9 @@ package com.bilt.pos.session;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.internal.BasketDisplay;
 
-import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
+import java.util.function.BooleanSupplier;
 
 /**
  * The asynchronous customer-display push behind {@code autoDisplay}, shared
@@ -42,23 +41,18 @@ final class AutoDisplayPush {
 
     private final SessionOperations operations;
     private final BasketDisplay display;
-    private final Supplier<SessionState> state;
-    private final Set<SessionState> basketLiveStates;
+    private final BooleanSupplier current;
 
     /**
-     * @param basketLiveStates the states in which the owner's basket is
-     *        live — the same set that accepts mutations. A push that runs
-     *        outside them outlived its basket (the payment completed, a
-     *        void sealed the cart, or the session ended between enqueue
-     *        and run) and sends nothing: the settled screen — a payment's
-     *        final display, the End bracket — supersedes the snapshot.
+     * @param current whether the snapshot still belongs on the display. A
+     *        push that outlived its basket or session sends nothing because
+     *        the settlement display or End bracket supersedes it.
      */
     AutoDisplayPush(SessionOperations operations, BasketDisplay display,
-                    Supplier<SessionState> state, Set<SessionState> basketLiveStates) {
+                    BooleanSupplier current) {
         this.operations = operations;
         this.display = display;
-        this.state = state;
-        this.basketLiveStates = basketLiveStates;
+        this.current = current;
     }
 
     void push(Basket snapshot) {
@@ -79,12 +73,11 @@ final class AutoDisplayPush {
         if (snapshot == null) {
             return;
         }
-        SessionState current = state.get();
-        if (!basketLiveStates.contains(current)) {
+        if (!current.getAsBoolean()) {
             return;
         }
         try {
-            display.show(snapshot, current);
+            display.show(snapshot);
         } catch (RuntimeException e) {
             operations.backgroundError("the automatic display push", e);
         }

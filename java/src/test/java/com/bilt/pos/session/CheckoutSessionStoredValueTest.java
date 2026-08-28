@@ -119,6 +119,26 @@ class CheckoutSessionStoredValueTest {
     }
 
     @Test
+    void storedValueOperationCanRunAfterSettlementInTheSameSession() throws Exception {
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-PAY-1\"}},"
+                        + "\"PaymentResult\":{\"AmountsResp\":{\"Currency\":\"USD\","
+                        + "\"AuthorizedAmount\":10.00}}}}}"));
+        assertTrue(session.settle().get().isSuccess());
+        recordedRequest();
+
+        server.enqueue(new MockResponse().setBody(storedValueOk("Load", 10.00, 10.00)));
+        session.storedValueLoad(StoredValueCard.number("GC-1"),
+                new BigDecimal("10.00")).executeSync();
+
+        assertEquals("Load", recordedRequest().getStoredValueRequest()
+                .getStoredValueData()[0].getStoredValueTransactionType().toValue());
+    }
+
+    @Test
     void deactivateIsUnloadWithZeroAmount() throws Exception {
         server.enqueue(new MockResponse().setBody(storedValueOk("Unload", 0.00, 0.00)));
 

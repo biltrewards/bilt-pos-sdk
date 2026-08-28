@@ -138,7 +138,12 @@ class CheckoutSessionPaymentTest {
 
     /** Identifies the member (consumes one enqueued response + one request). */
     private void identifyMember() throws Exception {
-        server.enqueue(new MockResponse().setBody(IDENTIFY_OK));
+        identifyMember("98234");
+    }
+
+    /** Identifies a specific member from the reusable terminal fixture. */
+    private void identifyMember(String memberId) throws Exception {
+        server.enqueue(new MockResponse().setBody(IDENTIFY_OK.replace("98234", memberId)));
         session.identifyMember().executeSync();
         server.takeRequest(5, TimeUnit.SECONDS);
     }
@@ -240,7 +245,6 @@ class CheckoutSessionPaymentTest {
         assertNotNull(seen.get(), "a failed standing-movement drain must reach onError");
         assertTrue(seen.get().getMessage().contains("retry did not start"),
                 seen.get().getMessage());
-        assertEquals(SessionState.FAILED, session.getState());
     }
 
     @Test
@@ -252,11 +256,9 @@ class CheckoutSessionPaymentTest {
                 .onError(e -> SettlementOptions.voidAndAbort());
 
         assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
-        assertEquals(SessionState.ACTIVE, session.getState());
 
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
         flow.executeSync();
-        assertEquals(SessionState.COMPLETED, session.getState());
         assertThrows(IllegalStateException.class, flow::executeSync);
         assertThrows(IllegalStateException.class, () -> flow.onSuccess(r -> { }));
     }
@@ -283,7 +285,7 @@ class CheckoutSessionPaymentTest {
     @Test
     void payRequiresAPositiveBasketTotal() {
         // zero-priced items are allowed in the basket, but there is nothing
-        // to pay — a zero total must not mint a COMPLETED checkout
+        // to pay — a zero total must not produce a successful settlement
         addHundredDollarItem();
         SettlementFlow flow = session.settle();   // created while the total is positive
         session.basket().mutate(m -> m
@@ -293,7 +295,6 @@ class CheckoutSessionPaymentTest {
         SessionException failure = assertThrows(SessionException.class, flow::get);
         assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
         assertEquals(1, server.getRequestCount(), "nothing beyond the session start may reach the wire");
-        assertEquals(SessionState.ACTIVE, session.getState());
     }
 
     @Test
@@ -337,7 +338,6 @@ class CheckoutSessionPaymentTest {
         assertEquals("APPR7", result.getApprovalCode());
         assertEquals("Visa", result.getPaymentBrand());
         assertEquals("POI-PAY-1", result.getPoiTransactionId());
-        assertEquals(SessionState.COMPLETED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(1, requests.size(), "guest checkout must send only the card payment");
@@ -346,6 +346,107 @@ class CheckoutSessionPaymentTest {
                 .getAmountsReq().getRequestedAmount());
         assertEquals(1, requests.get(0).getPaymentRequest().getPaymentTransaction()
                 .getSaleItem().length);
+    }
+
+    @Test
+    void settledBasketCannotBeChargedTwice() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        session.settle().get();
+        drainRequests();
+        int requestsBeforeRetry = server.getRequestCount();
+
+        SessionException failure = assertThrows(SessionException.class,
+                () -> session.settle().get());
+
+        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
+        assertTrue(failure.getError().getMessage().contains("basket().clear()"));
+        assertEquals(requestsBeforeRetry, server.getRequestCount(),
+                "the second settlement must fail before another payment request");
+    }
+
+    @Test
+    void clearingSettledBasketAllowsAnotherSettlementInTheSameSession() throws Exception {
+        addHundredDollarItem();
+        String firstCartId = session.basket().snapshot().getCartId();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        SettlementResult first = session.settle().get();
+        drainRequests();
+
+        assertEquals("POI-PAY-1", first.getPoiTransactionId());
+        assertThrows(IllegalStateException.class,
+                () -> session.basket().addItem(BasketItem.of("SKU-2", "Item", 1, "25.00")));
+
+        assertTrue(session.basket().clear().isEmpty());
+        assertNotEquals(firstCartId, session.basket().snapshot().getCartId());
+        session.basket().addItem(BasketItem.of("SKU-2", "Item", 1, "25.00"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 25.00)));
+
+        SettlementResult second = session.settle().get();
+
+        assertEquals("POI-PAY-2", second.getPoiTransactionId());
+        SaleToPOIRequest request = nextRequest();
+        assertEquals(25.00, request.getPaymentRequest().getPaymentTransaction()
+                .getAmountsReq().getRequestedAmount());
+    }
+
+    @Test
+    void clearingBasketClearsTheSelectedStoredValueTender() throws Exception {
+        session.setStoredValueCard("GC-1234");
+        session.basket().addItem(BasketItem.of("DRAFT", "Draft", 1, "1.00"));
+
+        session.basket().clear();
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 10.00)));
+
+        session.settle().get();
+
+        assertNotNull(nextRequest().getPaymentRequest(),
+                "a stored-value tender selected for the cleared basket must not leak");
+    }
+
+    @Test
+    void aLaterSettlementReplacesTheSameSessionVoidTarget() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        session.settle().get();
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        session.voidTransaction().get();
+        drainRequests();
+
+        session.basket().clear();
+        session.basket().addItem(BasketItem.of("SKU-2", "Item", 1, "25.00"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 25.00)));
+        session.settle().get();
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+
+        SaleToPOIRequest reversal = nextRequest();
+        assertEquals("POI-PAY-2", reversal.getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
+    void sameSessionPaymentCannotBeVoidedTwice() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        session.settle().get();
+        drainRequests();
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        session.voidTransaction().get();
+        drainRequests();
+        int requestsAfterVoid = server.getRequestCount();
+
+        SessionException failure = assertThrows(SessionException.class,
+                () -> session.voidTransaction().get());
+
+        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
+        assertTrue(failure.getError().getMessage().contains("already been voided"));
+        assertEquals(requestsAfterVoid, server.getRequestCount());
     }
 
     @Test
@@ -441,7 +542,6 @@ class CheckoutSessionPaymentTest {
                         .build()).get());
 
         assertEquals(SessionErrorCode.DECLINED, failure.getError().getCode());
-        assertEquals(SessionState.FAILED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(2, requests.size());
@@ -635,13 +735,10 @@ class CheckoutSessionPaymentTest {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         assertThrows(SessionException.class, () -> session.settle().get());
-        assertEquals(SessionState.FAILED, session.getState());
 
         assertThrows(IllegalArgumentException.class,
                 () -> session.basket().removeItemBySku("NO-SUCH-SKU"));
 
-        assertEquals(SessionState.FAILED, session.getState(),
-                "a mutation that failed must not flip FAILED to ACTIVE");
         assertEquals(1, session.basket().snapshot().getItemCount());
     }
 
@@ -667,7 +764,6 @@ class CheckoutSessionPaymentTest {
 
         assertEquals(2, errorCalls.get(),
                 "the consultation, then the notification that the retry was refused");
-        assertEquals(SessionState.FAILED, session.getState());
         assertTrue(failure.getError().getMessage().contains("REBATE"),
                 "the error must name the movement that is still standing: "
                         + failure.getError().getMessage());
@@ -692,13 +788,11 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));     // redemption refund ok
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // rebate refund FAILS
         assertThrows(SessionException.class, () -> session.settle().get());
-        assertEquals(SessionState.FAILED, session.getState());
         drainRequests();
 
         // voiding the failed session retries exactly the standing reversal
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(1, requests.size(), "only the movement still standing is reversed");
@@ -718,21 +812,17 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // redemption refund
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // rebate refund
         assertThrows(SessionException.class, () -> session.settle().get());
-        assertEquals(SessionState.FAILED, session.getState());
         drainRequests();
 
         // first void attempt: redemption refund succeeds, rebate refund fails
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));
         assertThrows(SessionException.class, () -> session.voidTransaction().get());
-        assertEquals(SessionState.FAILED, session.getState(),
-                "a failed unwind resume restores the pre-void state");
         assertEquals(2, drainRequests().size());
 
         // retry resumes at the rebate leg — the redemption is not re-credited
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(1, requests.size(), "the reversed movement must not run again");
@@ -760,14 +850,11 @@ class CheckoutSessionPaymentTest {
         assertEquals(SessionErrorCode.ABORTED, failure.getError().getCode());
         assertTrue(failure.getError().getMessage().contains("POINT_REDEMPTION"),
                 failure.getError().getMessage());
-        assertEquals(SessionState.FAILED, session.getState(),
-                "an abort whose rollback is incomplete must stay recoverable, not ABORTED");
         assertEquals(4, drainRequests().size());
 
-        // the session can finish the unwind, unlike a terminal ABORTED state
+        // the session remains available to finish the unwind
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
         assertEquals("RedemptionRefund", drainRequests().get(0).getLoyaltyRequest()
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
     }
@@ -782,7 +869,6 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));     // redemption refund
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // rebate refund FAILS
         assertThrows(SessionException.class, () -> session.settle().get());
-        assertEquals(SessionState.FAILED, session.getState());
         drainRequests();
     }
 
@@ -790,26 +876,22 @@ class CheckoutSessionPaymentTest {
     void emptyBasketCannotPayFromAFailedSessionWithStandingMovements() throws Exception {
         failPaymentWithStandingRebate();
 
-        // create the flow while items exist, then empty the basket — the
-        // incomplete rollback keeps the session FAILED, not IDLE
+        // Create the flow while items exist, then empty the basket. The
+        // concrete rollback progress remains available independently.
         SettlementFlow flow = session.settle();
         session.basket().removeItemBySku("SKU-1");
-        assertEquals(SessionState.FAILED, session.getState());
         assertEquals(0, session.basket().snapshot().getItemCount());
 
         // execute-time: the lazy flow must not run a zero-amount checkout
         int requestsBefore = server.getRequestCount();
         SessionException failure = assertThrows(SessionException.class, flow::get);
         assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
-        assertEquals(SessionState.FAILED, session.getState(),
-                "no zero-amount COMPLETED checkout may be minted");
         assertEquals(requestsBefore, server.getRequestCount(),
                 "nothing may reach the wire");
 
         // the standing movement is untouched and the void still finishes it
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
     }
 
     @Test
@@ -817,7 +899,6 @@ class CheckoutSessionPaymentTest {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         assertThrows(SessionException.class, () -> session.settle().get());
-        assertEquals(SessionState.FAILED, session.getState());
         drainRequests();
 
         // a return processed while the checkout is in recovery
@@ -834,7 +915,6 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
         assertEquals("POI-PAY-2", drainRequests().get(0).getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID(),
                 "the void reverses the new payment, which no refund has touched");
@@ -845,13 +925,10 @@ class CheckoutSessionPaymentTest {
         failPaymentWithStandingRebate();
 
         session.basket().updateItemQuantityBySku("SKU-1", 2);
-        assertEquals(SessionState.FAILED, session.getState(),
-                "an edit must not cut off the void path while a movement stands");
 
         // the void still finishes the unwind
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
     }
 
     @Test
@@ -861,16 +938,14 @@ class CheckoutSessionPaymentTest {
         int requestsBefore = server.getRequestCount();
         session.abort().executeSync();
 
-        // abort is operation-scoped: with nothing in flight it neither
-        // drains nor changes state — finishing the unwind is the job of
+        // Abort is operation-scoped: with nothing in flight it does not
+        // drain recovery progress. Finishing the unwind is the job of
         // voidTransaction() (or a retried settle())
-        assertEquals(SessionState.FAILED, session.getState());
         assertEquals(requestsBefore, server.getRequestCount(),
                 "an abort with nothing in flight sends nothing");
 
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
     }
 
     @Test
@@ -883,7 +958,6 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));     // redemption refund
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // rebate refund FAILS
         assertThrows(SessionException.class, () -> session.settle().get());
-        assertEquals(SessionState.FAILED, session.getState());
         drainRequests();
 
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));     // standing rebate refund
@@ -893,7 +967,6 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(AWARD_OK));
 
         assertTrue(session.settle().get().isSuccess());
-        assertEquals(SessionState.COMPLETED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(5, requests.size());
@@ -921,14 +994,12 @@ class CheckoutSessionPaymentTest {
                 () -> session.settle().get());
         assertTrue(failure.getError().getMessage().contains("retry did not start"),
                 failure.getError().getMessage());
-        assertEquals(SessionState.FAILED, session.getState());
         assertEquals(1, drainRequests().size(),
                 "no new charge may start over a standing movement");
 
         // the standing movement is retained: the void can still finish it
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
     }
 
     @Test
@@ -1022,7 +1093,6 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // award refund
 
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(4, requests.size(),
@@ -1061,7 +1131,6 @@ class CheckoutSessionPaymentTest {
 
         assertTrue(session.voidTransaction().get().isSuccess(),
                 "the tender was reversed; a loyalty refund failure is best-effort (SAF)");
-        assertEquals(SessionState.VOIDED, session.getState());
         assertEquals(4, drainRequests().size(),
                 "the remaining loyalty refunds still run after one fails");
     }
@@ -1075,7 +1144,6 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // award refund
 
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(3, requests.size());
@@ -1108,15 +1176,12 @@ class CheckoutSessionPaymentTest {
                 () -> session.voidTransaction().get());
         assertTrue(failure.getError().getMessage().contains("POI-RD-1"),
                 "the error must say the redemption was already refunded");
-        assertEquals(SessionState.COMPLETED, session.getState(),
-                "a failed void restores the pre-void state");
         assertEquals(2, drainRequests().size());
 
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // rebate refund
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // award refund
 
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(2, requests.size(), "the redemption leg must not be re-credited");
@@ -1149,7 +1214,6 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // rebate refund
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));   // award refund
         assertTrue(later.voidTransaction(sale.toOriginalSaleRecord("98234")).get().isSuccess());
-        assertEquals(SessionState.VOIDED, later.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(4, requests.size(),
@@ -1182,18 +1246,68 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
-    void originalSaleRecordVoidRequiresIdleCheckoutSession() {
+    void originalSaleRecordVoidRejectsTheMostRecentSessionPayment() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        SettlementResult sale = session.settle().get();
+        drainRequests();
+
+        SessionException referencedVoid = assertThrows(SessionException.class,
+                () -> session.voidTransaction(sale.toOriginalSaleRecord(null)).get());
+        assertEquals(SessionErrorCode.INVALID_STATE, referencedVoid.getError().getCode());
+        assertTrue(referencedVoid.getError().getMessage().contains(
+                "parameterless voidTransaction()"));
+        assertEquals(0, drainRequests().size(),
+                "a referenced void must not bypass the latest payment's guards");
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+        drainRequests();
+
+        SessionException refundRefused = assertThrows(SessionException.class,
+                () -> session.refund(new BigDecimal("10.00")).get());
+        assertEquals(SessionErrorCode.INVALID_STATE, refundRefused.getError().getCode());
+        assertEquals(0, drainRequests().size(),
+                "the shared guard must prevent refunding the voided payment");
+    }
+
+    @Test
+    void originalSaleRecordVoidCanTargetAnOlderSettlementInTheSameSession() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        SettlementResult olderSale = session.settle().get();
+        drainRequests();
+
+        session.basket().clear();
+        session.basket().addItem(BasketItem.of("SKU-2", "Item", 1, "25.00"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 25.00)));
+        session.settle().get();
+        drainRequests();
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        assertTrue(session.voidTransaction(
+                olderSale.toOriginalSaleRecord(null)).get().isSuccess());
+
+        SaleToPOIRequest reversal = nextRequest();
+        assertEquals("POI-PAY-1", reversal.getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
+    void originalSaleRecordVoidCanRunAlongsideAnUnsettledBasket() throws Exception {
         session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
 
-        SessionException failure = assertThrows(SessionException.class,
-                () -> session.voidTransaction(OriginalSaleRecord.builder()
-                        .cardPoiTransactionId(PRIOR_CARD_POI_TXN)
-                        .cardPoiTransactionTimestamp(ORIGINAL_TIME)
-                        .build()).get());
+        VoidResult result = session.voidTransaction(OriginalSaleRecord.builder()
+                .cardPoiTransactionId(PRIOR_CARD_POI_TXN)
+                .cardPoiTransactionTimestamp(ORIGINAL_TIME)
+                .build()).get();
 
-        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
-        assertTrue(failure.getError().getMessage().contains("state ACTIVE"));
-        assertEquals(1, server.getRequestCount(), "the rejected void must not hit the wire");
+        assertTrue(result.isSuccess());
+        assertEquals(1, session.basket().snapshot().getItemCount(),
+                "a prior-sale void must not consume the current basket");
+        assertEquals(PRIOR_CARD_POI_TXN, nextRequest().getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
     }
 
     @Test
@@ -1206,7 +1320,6 @@ class CheckoutSessionPaymentTest {
                 .build()).get();
 
         assertTrue(result.isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
 
         SaleToPOIRequest reversal = nextRequest();
         assertEquals("Reversal", reversal.getMessageHeader().getMessageCategory().toValue());
@@ -1288,8 +1401,6 @@ class CheckoutSessionPaymentTest {
                 PRIOR_CARD_POI_TXN + " was reversed"));
         assertTrue(failure.getError().getMessage().contains(
                 PRIOR_STORED_VALUE_POI_TXN + " was not"));
-        assertEquals(SessionState.IDLE, session.getState(),
-                "a failed prior-sale void restores the fresh session to IDLE");
 
         List<SaleToPOIRequest> firstAttempt = drainRequests();
         assertEquals(2, firstAttempt.size());
@@ -1297,6 +1408,19 @@ class CheckoutSessionPaymentTest {
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
         assertEquals(PRIOR_STORED_VALUE_POI_TXN, firstAttempt.get(1).getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+
+        SessionException endRefused = assertThrows(SessionException.class,
+                () -> session.end().get());
+        assertEquals(SessionErrorCode.INVALID_STATE, endRefused.getError().getCode());
+        assertTrue(endRefused.getError().getMessage().contains(
+                "voidTransaction(OriginalSaleRecord)"));
+        assertEquals(0, drainRequests().size(),
+                "end must not discard prior-sale void resume progress");
+
+        assertDoesNotThrow(session::close,
+                "best-effort close must leave the guarded session open");
+        assertEquals(0, drainRequests().size(),
+                "close must inherit end's prior-sale progress guard");
 
         SessionException wrongSale = assertThrows(SessionException.class,
                 () -> session.voidTransaction(OriginalSaleRecord.builder()
@@ -1313,13 +1437,16 @@ class CheckoutSessionPaymentTest {
         VoidResult retried = session.voidTransaction(originalSale).get();
 
         assertTrue(retried.isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
 
         List<SaleToPOIRequest> retry = drainRequests();
         assertEquals(1, retry.size());
         assertEquals(PRIOR_STORED_VALUE_POI_TXN, retry.get(0).getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID(),
                 "retry must not reverse the already-completed card leg again");
+
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+        assertDoesNotThrow(() -> session.end().get(),
+                "end is allowed after the prior-sale void finishes");
     }
 
     @Test
@@ -1537,7 +1664,6 @@ class CheckoutSessionPaymentTest {
 
         assertNull(flow.getOrNull());
         assertEquals(SessionErrorCode.DECLINED, seen.get().getCode());
-        assertEquals(SessionState.FAILED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(5, requests.size());
@@ -1573,7 +1699,6 @@ class CheckoutSessionPaymentTest {
 
         assertTrue(result.isSuccess());
         assertEquals(0, new BigDecimal("100.00").compareTo(result.getCardAmountCharged()));
-        assertEquals(SessionState.COMPLETED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(3, requests.size());
@@ -1601,25 +1726,22 @@ class CheckoutSessionPaymentTest {
         assertEquals(4, errorCalls.get(),
                 "3 consultations plus the notification that the last retry was refused");
         assertEquals(4, server.getRequestCount(), "retry cap stops the loop (plus the session start)");
-        assertEquals(SessionState.FAILED, session.getState());
     }
 
     @Test
     void staleAbortFlagDoesNotKillAPaymentRetry() throws Exception {
         addHundredDollarItem();
 
-        // abort() races a decline: the payment settles FAILED on its own
+        // abort() races a decline: the payment failure completes on its own
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         session.settle().onError(error -> {
             session.abort().executeSync();  // deferred: the payment thread owns the outcome
             return SettlementOptions.voidAndAbort();
         }).getOrNull();
-        assertEquals(SessionState.FAILED, session.getState());
 
         // the leftover flag must not abort the legitimate retry
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
         assertTrue(session.settle().get().isSuccess());
-        assertEquals(SessionState.COMPLETED, session.getState());
     }
 
     @Test
@@ -1628,26 +1750,22 @@ class CheckoutSessionPaymentTest {
         session.basket().addItem(BasketItem.of("SKU-2", "Expensive Item", 1, "50.00"));
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         session.settle().getOrNull();
-        assertEquals(SessionState.FAILED, session.getState());
 
         // the customer drops an item and the register retries
         session.basket().removeItemBySku("SKU-2");
-        assertEquals(SessionState.ACTIVE, session.getState());
 
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
         SettlementResult result = session.settle().get();
         assertEquals(0, new BigDecimal("100.00").compareTo(result.getCardAmountCharged()));
-        assertEquals(SessionState.COMPLETED, session.getState());
     }
 
     @Test
-    void emptyingTheBasketAfterAFailedPaymentReturnsToIdle() throws Exception {
+    void basketCanBeEmptiedAfterAFailedPayment() throws Exception {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         session.settle().getOrNull();
 
         session.basket().removeItemBySku("SKU-1");
-        assertEquals(SessionState.IDLE, session.getState());
     }
 
     @Test
@@ -1655,13 +1773,11 @@ class CheckoutSessionPaymentTest {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         session.settle().getOrNull();
-        assertEquals(SessionState.FAILED, session.getState());
 
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
         SettlementResult result = session.settle().get();
 
         assertTrue(result.isSuccess());
-        assertEquals(SessionState.COMPLETED, session.getState());
     }
 
     @Test
@@ -1685,7 +1801,6 @@ class CheckoutSessionPaymentTest {
         assertEquals(SessionErrorCode.DECLINED, seen.get().getCode());
         assertTrue(seen.get().getMessage().contains("60.00"));
         assertTrue(seen.get().getMessage().contains("100.00"));
-        assertEquals(SessionState.FAILED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(2, requests.size());
@@ -1715,8 +1830,6 @@ class CheckoutSessionPaymentTest {
         assertNull(flow.getOrNull());
         assertEquals(SessionErrorCode.UNKNOWN, seen.get().getCode());
         assertTrue(seen.get().getCause() instanceof NullPointerException);
-        assertEquals(SessionState.FAILED, session.getState(),
-                "the session must not stay frozen in SETTLING");
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(2, requests.size());
@@ -1730,7 +1843,6 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
         server.enqueue(new MockResponse().setBody(AWARD_OK));
         assertTrue(session.settle(SettlementOptions.retryWithoutLoyalty()).get().isSuccess());
-        assertEquals(SessionState.COMPLETED, session.getState());
     }
 
     // ─── Award failure is non-fatal ───
@@ -1759,7 +1871,6 @@ class CheckoutSessionPaymentTest {
         assertNotNull(success.get());
         assertEquals(0, success.get().getTotalPointsEarned());
         assertFalse(success.get().getWarnings().isEmpty());
-        assertEquals(SessionState.COMPLETED, session.getState());
     }
 
     @Test
@@ -1768,12 +1879,10 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         assertThrows(SessionException.class, () -> session.settle().get());
         drainRequests();
-        assertEquals(SessionState.FAILED, session.getState());
 
-        // the register attaches the member on the FAILED session, then
+        // the register attaches the member after the failed settlement, then
         // retries the payment with the loyalty steps enabled
         identifyMember();
-        assertEquals(SessionState.FAILED, session.getState());
         assertNotNull(session.getMember());
 
         server.enqueue(new MockResponse().setBody(REBATE_OK));
@@ -1785,7 +1894,6 @@ class CheckoutSessionPaymentTest {
 
         assertEquals(0, new BigDecimal("10.00").compareTo(result.getTotalRebateAmount()));
         assertEquals(0, new BigDecimal("5.00").compareTo(result.getPointsMonetaryValue()));
-        assertEquals(SessionState.COMPLETED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(4, requests.size(), "rebate, redemption, payment, award");
@@ -1809,7 +1917,6 @@ class CheckoutSessionPaymentTest {
         assertNull(result.getAwardPoiTransactionId());
         assertEquals(0, new BigDecimal("10.00").compareTo(result.getTotalRebateAmount()));
         assertEquals(0, new BigDecimal("5.00").compareTo(result.getPointsMonetaryValue()));
-        assertEquals(SessionState.COMPLETED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(3, requests.size(), "rebate, redemption, payment — no award");
@@ -1840,8 +1947,6 @@ class CheckoutSessionPaymentTest {
 
         SessionException e = assertThrows(SessionException.class, flow::get);
         assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
-        assertEquals(SessionState.FAILED, session.getState(),
-                "a payment-scoped abort must leave the session retryable");
         drainRequests();
 
         // the same session retries and completes
@@ -1853,7 +1958,6 @@ class CheckoutSessionPaymentTest {
         SettlementResult result = session.settle().get();
 
         assertTrue(result.isSuccess());
-        assertEquals(SessionState.COMPLETED, session.getState());
         assertEquals(4, drainRequests().size(), "rebate, redemption, payment, award");
     }
 
@@ -1870,10 +1974,8 @@ class CheckoutSessionPaymentTest {
         SettlementFlow flow = session.settle()
                 .onPointsRedeemed(points -> {
                     session.abort().executeSync();  // customer walked away
-                    // abort() defers to the payment thread while SETTLING: the
-                    // state must not flip mid-run (that would race the
-                    // COMPLETED/FAILED decision after orchestration returns)
-                    assertEquals(SessionState.SETTLING, session.getState());
+                    // abort() defers the settlement outcome to its operation
+                    // thread so this callback cannot race finalization
                     return points.getSuggestedTotal();
                 })
                 .onError(error -> {
@@ -1883,8 +1985,6 @@ class CheckoutSessionPaymentTest {
 
         SessionException e = assertThrows(SessionException.class, flow::get);
         assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
-        assertEquals(SessionState.FAILED, session.getState(),
-                "an aborted payment settles retryable; the session continues");
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(4, requests.size());
@@ -1923,7 +2023,6 @@ class CheckoutSessionPaymentTest {
 
         SessionException e = assertThrows(SessionException.class, flow::get);
         assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
-        assertEquals(SessionState.FAILED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(8, requests.size());
@@ -1962,7 +2061,6 @@ class CheckoutSessionPaymentTest {
 
         SessionException e = assertThrows(SessionException.class, flow::get);
         assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
-        assertEquals(SessionState.FAILED, session.getState());
     }
 
     @Test
@@ -1981,7 +2079,6 @@ class CheckoutSessionPaymentTest {
 
         assertEquals(SessionErrorCode.ABORTED, seen.get().getCode(),
                 "a spontaneous terminal abort is surfaced to the register via onError");
-        assertEquals(SessionState.FAILED, session.getState());
     }
 
     // ─── Post-payment void uses the payment's references ───
@@ -1992,7 +2089,6 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
         session.settle().executeSync();
         drainRequests();
-        assertEquals(SessionState.COMPLETED, session.getState());
 
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
@@ -2002,11 +2098,35 @@ class CheckoutSessionPaymentTest {
         RefundResult refund = session.refund(new BigDecimal("25.00")).get();
 
         assertTrue(refund.isSuccess());
-        assertEquals(SessionState.COMPLETED, session.getState(), "refund leaves the state alone");
         SaleToPOIRequest sent = nextRequest();
         assertEquals("Refund", sent.getPaymentRequest().getPaymentData().getPaymentType().toValue());
         assertEquals("POI-PAY-1", sent.getPaymentRequest().getPaymentTransaction()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
+    void refundAfterReidentifyUsesTheSettlementMember() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+        session.settle(SettlementOptions.builder()
+                .disableRebates(true).disablePoints(true).build()).executeSync();
+        drainRequests();
+
+        session.basket().clear();
+        identifyMember("56789");
+        assertEquals("56789", session.getMember().getMemberId());
+
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.refundOk(25.00)));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        assertTrue(session.refund(new BigDecimal("25.00")).get().isSuccess());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size());
+        assertEquals("98234", requests.get(1).getLoyaltyRequest().getLoyaltyData()[0]
+                .getLoyaltyAccountID().getLoyaltyID(),
+                "the award refund belongs to the member on the settled payment");
     }
 
     @Test
@@ -2033,7 +2153,6 @@ class CheckoutSessionPaymentTest {
         // reverses the card leg without re-crediting the reversed award
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(1, requests.size(),
                 "one reversal, no second AwardRefund for the already-reversed award");
@@ -2083,14 +2202,12 @@ class CheckoutSessionPaymentTest {
         assertThrows(SessionException.class, () -> session.voidTransaction().get());
 
         // the payment still stands: no second charge may be authorized
-        assertEquals(SessionState.COMPLETED, session.getState());
         assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
                 () -> session.settle().get()).getError().getCode());
 
         // but the void can be retried
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
     }
 
     @Test
@@ -2117,7 +2234,6 @@ class CheckoutSessionPaymentTest {
 
         assertEquals(0, new BigDecimal("100.00").compareTo(voided.getReversedAmount()),
                 "both legs must be reversed");
-        assertEquals(SessionState.VOIDED, session.getState());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(2, requests.size(),
@@ -2167,9 +2283,22 @@ class CheckoutSessionPaymentTest {
                 () -> session.voidTransaction().get());
         assertTrue(e.getError().getMessage().contains("POI-PAY-1 was reversed"));
         assertTrue(e.getError().getMessage().contains("POI-GC-1 was not"));
-        assertEquals(SessionState.COMPLETED, session.getState(),
-                "the void failed; the session returns to its pre-void state");
         drainRequests();
+
+        IllegalStateException clearRefused = assertThrows(IllegalStateException.class,
+                () -> session.basket().clear());
+        assertTrue(clearRefused.getMessage().contains("voidTransaction"),
+                "the error must steer the register to resuming the void: "
+                        + clearRefused.getMessage());
+
+        SessionException endRefused = assertThrows(SessionException.class,
+                () -> session.end().get());
+        assertEquals(SessionErrorCode.INVALID_STATE, endRefused.getError().getCode());
+        assertTrue(endRefused.getError().getMessage().contains("voidTransaction"),
+                "the session must retain the in-memory void progress: "
+                        + endRefused.getError().getMessage());
+        assertEquals(0, drainRequests().size(),
+                "clear and end guards must not reach the wire");
 
         // the card leg is already reversed: a refund against it would
         // double-return the money, so refunds are refused mid-void
@@ -2185,13 +2314,49 @@ class CheckoutSessionPaymentTest {
         // payment must not be reversed a second time
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
 
         List<SaleToPOIRequest> retryRequests = drainRequests();
         assertEquals(1, retryRequests.size());
         assertEquals("POI-GC-1", retryRequests.get(0).getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID(),
                 "only the stored value leg remains to reverse");
+
+        assertTrue(session.basket().clear().isEmpty(),
+                "the basket can be replaced after the void finishes");
+    }
+
+    @Test
+    void settlementCannotReplaceAPartiallyVoidedPayment() throws Exception {
+        addHundredDollarItem();
+        session.setStoredValueCard("GC-1234-5678");
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Partial\"},"
+                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-GC-1\"}},"
+                        + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":35.00}}}}}"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 65.00)));
+        session.settle().executeSync();
+        drainRequests();
+
+        session.basket().clear();
+        addHundredDollarItem();
+
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\","
+                        + "\"ErrorCondition\":\"UnreachableHost\"}}}}"));
+        assertThrows(SessionException.class, () -> session.voidTransaction().get());
+        drainRequests();
+
+        SessionException settlementRefused = assertThrows(SessionException.class,
+                () -> session.settle().get());
+        assertEquals(SessionErrorCode.INVALID_STATE, settlementRefused.getError().getCode());
+        assertTrue(settlementRefused.getError().getMessage().contains("voidTransaction"),
+                "the error must preserve the partial void target: "
+                        + settlementRefused.getError().getMessage());
+        assertEquals(0, drainRequests().size(),
+                "the replacement settlement must not reach the wire");
     }
 
     @Test
@@ -2203,6 +2368,10 @@ class CheckoutSessionPaymentTest {
         session.settle(SettlementOptions.builder()
                 .disableRebates(true).disablePoints(true).build()).executeSync();
         drainRequests();
+
+        session.basket().clear();
+        identifyMember("56789");
+        assertEquals("56789", session.getMember().getMemberId());
 
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
         server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
@@ -2217,7 +2386,7 @@ class CheckoutSessionPaymentTest {
                 "the reversal must reference the award, not the payment");
         assertEquals("98234", awardRefund.getLoyaltyRequest().getLoyaltyData()[0]
                 .getLoyaltyAccountID().getLoyaltyID(),
-                "the reversal must carry the member's LoyaltyData");
+                "the reversal must carry the settled payment's member, not the live member");
     }
 
     @Test
@@ -2231,7 +2400,6 @@ class CheckoutSessionPaymentTest {
         VoidResult voided = session.voidTransaction().get();
 
         assertTrue(voided.isSuccess());
-        assertEquals(SessionState.VOIDED, session.getState());
         SaleToPOIRequest reversal = nextRequest();
         assertEquals("POI-PAY-1", reversal.getReversalRequest()
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());

@@ -30,8 +30,7 @@ import java.util.logging.Logger;
  * session types.
  *
  * <p>Owns the session's operation executor: a single lazily-created thread,
- * so operations run one at a time in submission order — the session is a
- * stateful machine and concurrent operations on it are invalid. Every
+ * so operations run one at a time in submission order. Every
  * execution funnels through it: {@code execute()} submits and returns,
  * while the synchronous paths ({@code executeSync()}, first-run
  * {@code get()}) submit through {@link #callOrdered} and block for their

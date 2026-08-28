@@ -139,19 +139,23 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
-    void voidAfterUnlinkedRefundIsRejected() throws Exception {
-        server.enqueue(new MockResponse().setBody(REFUND_OK));
+    void unlinkedRefundDoesNotPreventVoidingTheLatestPayment() throws Exception {
         CheckoutSession session = session();
+        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        assertTrue(session.settle().get().isSuccess());
+        recordedRequest();
+
+        server.enqueue(new MockResponse().setBody(REFUND_OK));
         assertTrue(session.refundUnlinked(new BigDecimal("15.00")).get().isSuccess());
         recordedRequest();
 
-        SessionException failure = assertThrows(SessionException.class,
-                () -> session.voidTransaction().get());
-        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
-        assertTrue(failure.getError().getMessage().contains("refund"),
-                "the error must steer the register to further refunds");
-        assertEquals(2, server.getRequestCount(),
-                "the rejected void must not reach the wire (start plus the refund)");
+        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.REVERSAL_OK));
+        assertTrue(session.voidTransaction().get().isSuccess());
+
+        SaleToPOIRequest reversal = recordedRequest();
+        assertEquals("POI-PAY-1", reversal.getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
     }
 
     @Test
@@ -388,7 +392,6 @@ class CheckoutSessionRefundTest {
                         .get());
 
         assertEquals(SessionErrorCode.DECLINED, e.getError().getCode());
-        assertEquals(SessionState.FAILED, session.getState());
         assertEquals(1, errors.size());
         assertEquals(SessionErrorCode.DECLINED, errors.get(0).getCode());
         List<SaleToPOIRequest> requests = drainRequests();
@@ -447,7 +450,6 @@ class CheckoutSessionRefundTest {
         SessionException firstFailure = assertThrows(SessionException.class,
                 () -> session.settle(splitRefundOptions()).get());
         assertEquals(SessionErrorCode.DECLINED, firstFailure.getError().getCode());
-        assertEquals(SessionState.FAILED, session.getState());
         assertThrows(IllegalStateException.class,
                 () -> session.basket().addItem(BasketItem.of("EXTRA", "Extra", 1, "1.00")));
         SessionException voidFailure = assertThrows(SessionException.class,
@@ -460,8 +462,6 @@ class CheckoutSessionRefundTest {
         assertTrue(endFailure.getError().getMessage().contains(
                 "retry settle() with the same refund allocations before ending"));
         session.close();
-        assertEquals(SessionState.FAILED, session.getState(),
-                "close() must log and leave the session retryable, not end it");
 
         List<SaleToPOIRequest> firstAttempt = drainRequests();
         assertEquals(3, firstAttempt.size());
@@ -518,7 +518,6 @@ class CheckoutSessionRefundTest {
         SessionException firstFailure = assertThrows(SessionException.class,
                 () -> session.settle(splitRefundOptions()).get());
         assertEquals(SessionErrorCode.DECLINED, firstFailure.getError().getCode());
-        assertEquals(SessionState.FAILED, session.getState());
 
         List<SaleToPOIRequest> firstAttempt = drainRequests();
         assertEquals(2, firstAttempt.size());

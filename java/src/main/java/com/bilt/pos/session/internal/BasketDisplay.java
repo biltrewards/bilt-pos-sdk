@@ -17,7 +17,6 @@ import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
-import com.bilt.pos.session.SessionState;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.display.DisplayContext;
 import com.bilt.pos.session.display.DisplayRenderer;
@@ -51,8 +50,8 @@ public final class BasketDisplay {
      * Renders the basket and sends it to the customer display. A renderer
      * returning {@code null} means "nothing to show" and skips the send.
      */
-    public void show(Basket basket, SessionState state) {
-        DisplayContext context = new DisplayContext(state,
+    public void show(Basket basket) {
+        DisplayContext context = new DisplayContext(
                 exchange.router().hasExternalDisplay()
                         ? DisplayTarget.EXTERNAL : DisplayTarget.TERMINAL,
                 currency);

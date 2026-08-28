@@ -104,8 +104,7 @@ loadScripts(document, 'script');</script>
 <div class="summary-table two-column-summary">
 <div class="table-header col-first">Constructor</div>
 <div class="table-header col-last">Description</div>
-<div class="col-constructor-name even-row-color"><code><a href="#%3Cinit%3E(com.bilt.pos.session.SessionState,com.bilt.pos.session.display.DisplayTarget,java.lang.String)" class="member-name-link">DisplayContext</a><wbr>(<a href="../SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a>&nbsp;state,
- <a href="DisplayTarget.html" title="enum class in com.bilt.pos.session.display">DisplayTarget</a>&nbsp;target,
+<div class="col-constructor-name even-row-color"><code><a href="#%3Cinit%3E(com.bilt.pos.session.display.DisplayTarget,java.lang.String)" class="member-name-link">DisplayContext</a><wbr>(<a href="DisplayTarget.html" title="enum class in com.bilt.pos.session.display">DisplayTarget</a>&nbsp;target,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;currency)</code></div>
 <div class="col-last even-row-color">&nbsp;</div>
 </div>
@@ -127,14 +126,9 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">The session's ISO 4217 currency code.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="../SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getState()" class="member-name-link">getState</a>()</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="DisplayTarget.html" title="enum class in com.bilt.pos.session.display">DisplayTarget</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getTarget()" class="member-name-link">getTarget</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">The session state at render time.</div>
-</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="DisplayTarget.html" title="enum class in com.bilt.pos.session.display">DisplayTarget</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getTarget()" class="member-name-link">getTarget</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">The device the payload will be rendered on.</div>
 </div>
 </div>
@@ -155,10 +149,9 @@ loadScripts(document, 'script');</script>
 <h2>Constructor Details</h2>
 <ul class="member-list">
 <li>
-<section class="detail" id="&lt;init&gt;(com.bilt.pos.session.SessionState,com.bilt.pos.session.display.DisplayTarget,java.lang.String)">
+<section class="detail" id="&lt;init&gt;(com.bilt.pos.session.display.DisplayTarget,java.lang.String)">
 <h3>DisplayContext</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="element-name">DisplayContext</span><wbr><span class="parameters">(<a href="../SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a>&nbsp;state,
- <a href="DisplayTarget.html" title="enum class in com.bilt.pos.session.display">DisplayTarget</a>&nbsp;target,
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="element-name">DisplayContext</span><wbr><span class="parameters">(<a href="DisplayTarget.html" title="enum class in com.bilt.pos.session.display">DisplayTarget</a>&nbsp;target,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;currency)</span></div>
 </section>
 </li>
@@ -170,13 +163,6 @@ loadScripts(document, 'script');</script>
 <section class="method-details" id="method-detail">
 <h2>Method Details</h2>
 <ul class="member-list">
-<li>
-<section class="detail" id="getState()">
-<h3>getState</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="../SessionState.html" title="enum class in com.bilt.pos.session">SessionState</a></span>&nbsp;<span class="element-name">getState</span>()</div>
-<div class="block">The session state at render time.</div>
-</section>
-</li>
 <li>
 <section class="detail" id="getTarget()">
 <h3>getTarget</h3>
