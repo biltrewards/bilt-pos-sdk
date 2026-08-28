@@ -1003,8 +1003,10 @@ class NexoEmulatorController(
             // every referenced movement — the tender legs, redemption,
             // rebate, and the award. After an item-based partial refund it
             // would return the full legs on top of what was already given
-            // back, so it is refused then.
-            if (stored.refunds.isNotEmpty()) {
+            // back, so it is refused then. Per-leg FULL records are
+            // different: they are the residue of a void that failed midway,
+            // and the retry omits those references — see executeFullRefund.
+            if (stored.refunds.any { !it.full }) {
                 log("The sale was already partially refunded — refund the remaining items instead")
                 return@launch
             }
@@ -1137,7 +1139,7 @@ class NexoEmulatorController(
                 }
                 conn.pendingReturns = conn.pendingReturns + PendingReturn(
                     saleId = sale.id,
-                    original = originalSaleRecord(sale),
+                    original = originalSaleRecord(sale, stored),
                     legType = leg.type,
                     items = items,
                     amount = items.fold(BigDecimal.ZERO) { acc, item ->
@@ -1254,20 +1256,34 @@ class NexoEmulatorController(
                 "movement of the prior sale (${sale.legs.size} reference(s))…"
         )
         runRefundSession(conn, sale) { session ->
-            val result = session.voidTransaction(originalSaleRecord(sale))
-                .onError { step, error ->
-                    log("Refund step ${step ?: "(none ran)"} failed: ${error.message}")
-                    // the default policy, replicated so logging doesn't
-                    // change behavior: a failed tender reversal aborts, a
-                    // loyalty movement riding along is skipped (the
-                    // terminal can retry it via store-and-forward)
-                    if (step == ReversalStep.CARD || step == ReversalStep.STORED_VALUE) {
-                        ReversalDecision.ABORT
-                    } else {
-                        ReversalDecision.SKIP
+            // The step a money reversal aborted on. The SDK resumes a
+            // partial void only on the same session instance — which this
+            // flow closes — so cross-session resume is reconstructed via
+            // the store: reversal order is CARD, STORED_VALUE, then the
+            // loyalty movements, and only money steps abort here, so a
+            // failure at [failedMoneyStep] means every referenced tender
+            // leg ordered before it committed and must not be sent again.
+            var failedMoneyStep: ReversalStep? = null
+            val result = try {
+                session.voidTransaction(originalSaleRecord(sale, stored))
+                    .onError { step, error ->
+                        log("Refund step ${step ?: "(none ran)"} failed: ${error.message}")
+                        // the default policy, replicated so logging doesn't
+                        // change behavior: a failed tender reversal aborts, a
+                        // loyalty movement riding along is skipped (the
+                        // terminal can retry it via store-and-forward)
+                        if (step == ReversalStep.CARD || step == ReversalStep.STORED_VALUE) {
+                            failedMoneyStep = step
+                            ReversalDecision.ABORT
+                        } else {
+                            ReversalDecision.SKIP
+                        }
                     }
-                }
-                .get()
+                    .get()
+            } catch (e: SessionException) {
+                recordPartialVoid(stored, failedMoneyStep)
+                throw e
+            }
             if (result.isSuccess) {
                 // Money moved on the terminal, so the refund is recorded
                 // even when the operator disconnected mid-call — same
@@ -1367,18 +1383,25 @@ class NexoEmulatorController(
         }
     }
 
-    /** The prior sale's persisted terminal references, as the settlement
-     *  API takes them. */
-    private fun originalSaleRecord(sale: SaleRecord): OriginalSaleRecord {
+    /**
+     * The prior sale's persisted terminal references, as the settlement
+     * API takes them — MINUS what earlier refunds already reversed: a
+     * tender leg with a full per-leg record, and the award once any record
+     * says it is gone. The SDK reverses only the references supplied, so a
+     * void retried after a partial failure sends just the outstanding
+     * movements instead of re-crediting the reversed ones.
+     */
+    private fun originalSaleRecord(sale: SaleRecord, stored: StoredSale): OriginalSaleRecord {
         val builder = OriginalSaleRecord.builder()
-        sale.leg(LegType.CARD)?.let {
+        sale.leg(LegType.CARD)?.takeUnless { stored.legRefunded(LegType.CARD) }?.let {
             builder.cardPoiTransactionId(it.poiTransactionId)
             parseInstant(it.poiTimestamp)?.let(builder::cardPoiTransactionTimestamp)
         }
-        sale.leg(LegType.STORED_VALUE)?.let {
-            builder.storedValuePoiTransactionId(it.poiTransactionId)
-            parseInstant(it.poiTimestamp)?.let(builder::storedValuePoiTransactionTimestamp)
-        }
+        sale.leg(LegType.STORED_VALUE)
+            ?.takeUnless { stored.legRefunded(LegType.STORED_VALUE) }?.let {
+                builder.storedValuePoiTransactionId(it.poiTransactionId)
+                parseInstant(it.poiTimestamp)?.let(builder::storedValuePoiTransactionTimestamp)
+            }
         sale.leg(LegType.REBATE)?.let {
             builder.rebatePoiTransactionId(it.poiTransactionId)
             parseInstant(it.poiTimestamp)?.let(builder::rebatePoiTransactionTimestamp)
@@ -1387,12 +1410,41 @@ class NexoEmulatorController(
             builder.redemptionPoiTransactionId(it.poiTransactionId)
             parseInstant(it.poiTimestamp)?.let(builder::redemptionPoiTransactionTimestamp)
         }
-        sale.leg(LegType.AWARD)?.let {
+        sale.leg(LegType.AWARD)?.takeUnless { stored.awardReversed }?.let {
             builder.awardPoiTransactionId(it.poiTransactionId)
             parseInstant(it.poiTimestamp)?.let(builder::awardPoiTransactionTimestamp)
         }
         sale.memberId?.let(builder::memberId)
         return builder.build()
+    }
+
+    /**
+     * Persists a failed void's progress: the tender legs the void reversed
+     * before aborting on [failedMoneyStep], each as a full per-leg record.
+     * Money legs reverse first and in a fixed order (card, then stored
+     * value), so everything referenced ahead of the failed step committed.
+     * The retry's [originalSaleRecord] then omits those legs; the loyalty
+     * movements never ran (they reverse after the tenders).
+     */
+    private fun recordPartialVoid(stored: StoredSale, failedMoneyStep: ReversalStep?) {
+        if (failedMoneyStep != ReversalStep.STORED_VALUE) {
+            // a CARD failure aborts at the first movement; a pre-step
+            // rejection ran nothing — either way there is no progress
+            return
+        }
+        val sale = stored.sale
+        val committed = sale.leg(LegType.CARD)
+            ?.takeUnless { stored.legRefunded(LegType.CARD) } ?: return
+        recordRefund(sale.id, RefundRecord(
+            amount = committed.amount,
+            recordedAt = Instant.now().toString(),
+            full = true,
+            leg = committed.type,
+        ))
+        log(
+            "The ${legLabel(committed.type)} leg was reversed before the failure — " +
+                "recorded; retrying the full refund covers only what is outstanding"
+        )
     }
 
     /** The outcome popup for a refund stopped by the abort flag before it

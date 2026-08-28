@@ -78,6 +78,10 @@ class NexoEmulatorControllerRefundTest {
                 "PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":34.99},
                     "PaymentAcquirerData":{"ApprovalCode":"APPR02"}}}}}"""
 
+        const val REVERSAL_FAIL =
+            """{"SaleToPOIResponse":{"ReversalResponse":{
+                "Response":{"Result":"Failure","ErrorCondition":"UnavailableService"}}}}"""
+
         const val DISPLAY_OK =
             """{"SaleToPOIResponse":{"DisplayResponse":{
                 "OutputResult":[{"Response":{"Result":"Success"}}]}}}"""
@@ -113,29 +117,34 @@ class NexoEmulatorControllerRefundTest {
             .build()
         server = MockWebServer().apply {
             useHttps(tls.sslSocketFactory(), false)
-            dispatcher = object : Dispatcher() {
-                override fun dispatch(request: RecordedRequest): MockResponse {
-                    val body = request.body.clone().readUtf8()
-                    requests.add(body)
-                    return MockResponse().setBody(
-                        when {
-                            "\"DiagnosisRequest\"" in body -> DIAGNOSIS_OK
-                            "\"AdminRequest\"" in body -> ADMIN_OK
-                            "\"DisplayRequest\"" in body -> DISPLAY_OK
-                            "\"LoyaltyRequest\"" in body -> LOYALTY_OK
-                            "\"ReversalRequest\"" in body -> REVERSAL_OK
-                            // the refund leg of a settlement carries the
-                            // Refund payment type; a charge does not
-                            "\"PaymentRequest\"" in body && "Refund" in body -> REFUND_OK
-                            "\"PaymentRequest\"" in body -> PAYMENT_OK
-                            else -> ADMIN_OK
-                        }
-                    )
-                }
-            }
+            dispatcher = respondingWith(::defaultResponse)
             // the controller's endpoint is fixed: https://<address>:8443/nexo
             start(InetAddress.getByName("127.0.0.1"), 8443)
         }
+    }
+
+    /** A dispatcher recording every request and answering via [respond];
+     *  tests swap in a wrapper to inject failures. */
+    private fun respondingWith(respond: (String) -> String): Dispatcher =
+        object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val body = request.body.clone().readUtf8()
+                requests.add(body)
+                return MockResponse().setBody(respond(body))
+            }
+        }
+
+    private fun defaultResponse(body: String): String = when {
+        "\"DiagnosisRequest\"" in body -> DIAGNOSIS_OK
+        "\"AdminRequest\"" in body -> ADMIN_OK
+        "\"DisplayRequest\"" in body -> DISPLAY_OK
+        "\"LoyaltyRequest\"" in body -> LOYALTY_OK
+        "\"ReversalRequest\"" in body -> REVERSAL_OK
+        // the refund leg of a settlement carries the Refund payment type;
+        // a charge does not
+        "\"PaymentRequest\"" in body && "Refund" in body -> REFUND_OK
+        "\"PaymentRequest\"" in body -> PAYMENT_OK
+        else -> ADMIN_OK
     }
 
     @AfterTest
@@ -655,6 +664,82 @@ class NexoEmulatorControllerRefundTest {
             withTimeout(10_000) { controller.state.first { it.sales.size == 2 } }
             val newSale = store.listSales().first { it.sale.id != "sale-1" }.sale
             assertEquals(listOf("SKU-NEW"), newSale.items.map { it.sku })
+        }
+    }
+
+    @Test
+    fun partialVoidRecordsProgressAndTheRetryCoversOnlyTheOutstandingLeg() {
+        val store = JsonlSaleStore(
+            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
+        )
+        store.recordSale(
+            SaleRecord(
+                id = "sale-2",
+                sessionId = "session-2",
+                saleId = "bilt-emulator",
+                poiId = "EMULATOR",
+                currency = "USD",
+                completedAt = "2026-08-06T11:00:00Z",
+                authorizedAmount = "30.00",
+                legs = listOf(
+                    TransactionLeg(LegType.CARD, "poi-card-2", amount = "20.00"),
+                    TransactionLeg(LegType.STORED_VALUE, "poi-sv-2", amount = "10.00"),
+                ),
+            )
+        )
+        // the stored value reversal fails once: the card leg reverses,
+        // then the void aborts
+        var svFailures = 1
+        server.dispatcher = respondingWith { body ->
+            if ("\"ReversalRequest\"" in body && "poi-sv-2" in body && svFailures > 0) {
+                svFailures--
+                REVERSAL_FAIL
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+
+            controller.refundSale("sale-2")
+            val failure = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(!failure.success, "the first attempt must fail on the SV leg")
+
+            // the reversed card leg is recorded, so the sale is partially
+            // refunded — not exhausted, and not offered as fully refundable
+            val partial = assertNotNull(store.findSale("sale-2"))
+            val record = partial.refunds.single()
+            assertTrue(record.full)
+            assertEquals(LegType.CARD, record.leg)
+            assertEquals("20.00", record.amount)
+            assertTrue(!partial.fullyRefunded)
+
+            // the retry sends ONLY the outstanding stored value leg — the
+            // reversed card must not be re-credited
+            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+            controller.refundSale("sale-2")
+            withTimeout(10_000) {
+                controller.state.first {
+                    it.paymentOutcome?.title == "Refund complete"
+                }
+            }
+            assertEquals(
+                1,
+                requests.count { "\"ReversalRequest\"" in it && "poi-card-2" in it },
+                "the reversed card leg was sent again",
+            )
+            assertEquals(
+                2,
+                requests.count { "\"ReversalRequest\"" in it && "poi-sv-2" in it },
+                "expected the failed SV reversal plus its retry",
+            )
+            assertTrue(assertNotNull(store.findSale("sale-2")).fullyRefunded)
         }
     }
 
