@@ -35,7 +35,7 @@ import java.util.function.Consumer;
  *
  * <pre>{@code
  * session.basket().addItem(
- *         BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+ *         BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, new BigDecimal("24.99")));
  * session.basket().setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
  * Basket basket = session.basket().snapshot();
  * }</pre>

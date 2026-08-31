@@ -19,7 +19,7 @@ import java.util.List;
  *
  * <pre>{@code
  * session.basket().mutate(basket -> basket
- *     .addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"))
+ *     .addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, new BigDecimal("24.99")))
  *     .removeItemBySku("KRK-FRAME-5X7-BLK")
  *     .setTaxTotal(new BigDecimal("7.43")));
  * }</pre>

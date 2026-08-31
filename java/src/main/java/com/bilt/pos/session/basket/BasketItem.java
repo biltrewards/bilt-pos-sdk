@@ -64,12 +64,6 @@ public final class BasketItem {
 
     /** Shorthand factory for ordinary merchandise sold to the customer. */
     public static BasketItem sale(String sku, String description, int quantity,
-                                  String unitPrice) {
-        return sale(sku, description, quantity, new BigDecimal(unitPrice));
-    }
-
-    /** Shorthand factory for ordinary merchandise sold to the customer. */
-    public static BasketItem sale(String sku, String description, int quantity,
                                   BigDecimal unitPrice) {
         return builder()
                 .sku(sku)
@@ -77,12 +71,6 @@ public final class BasketItem {
                 .quantity(quantity)
                 .unitPrice(unitPrice)
                 .build();
-    }
-
-    /** Shorthand factory for a merchandise return or trade-in. */
-    public static BasketItem returnItem(String sku, String description, int quantity,
-                                        String unitPrice) {
-        return returnItem(sku, description, quantity, new BigDecimal(unitPrice));
     }
 
     /** Shorthand factory for a merchandise return or trade-in. */
@@ -99,12 +87,6 @@ public final class BasketItem {
 
     /** Shorthand factory for an offer or other register-originated credit. */
     public static BasketItem credit(String sku, String description, int quantity,
-                                    String unitPrice) {
-        return credit(sku, description, quantity, new BigDecimal(unitPrice));
-    }
-
-    /** Shorthand factory for an offer or other register-originated credit. */
-    public static BasketItem credit(String sku, String description, int quantity,
                                     BigDecimal unitPrice) {
         return builder()
                 .sku(sku)
@@ -113,19 +95,6 @@ public final class BasketItem {
                 .unitPrice(unitPrice)
                 .direction(BasketItemDirection.CREDIT)
                 .build();
-    }
-
-    /**
-     * Value sold for activation or loading onto one stored value card.
-     * Quantity is one and tax is zero; sell activation fees as separate
-     * merchandise lines.
-     *
-     * @param reference register-stable reference used by the matching
-     *                  settlement fulfillment
-     */
-    public static BasketItem storedValueLoad(String reference, String sku,
-                                             String description, String amount) {
-        return storedValueLoad(reference, sku, description, new BigDecimal(amount));
     }
 
     /**

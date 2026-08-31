@@ -120,7 +120,7 @@ class CheckoutSessionStoredValueTest {
 
     @Test
     void storedValueOperationCanRunAfterSettlementInTheSameSession() throws Exception {
-        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "10.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
                         + "\"Response\":{\"Result\":\"Success\"},"
@@ -224,7 +224,7 @@ class CheckoutSessionStoredValueTest {
 
     @Test
     void payStoredValueStepCarriesProviderAndEntryMode() throws Exception {
-        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "50.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("50.00")));
         session.setStoredValueCard(StoredValueCard.scanned("GC-9").withProvider("svs"));
 
         server.enqueue(new MockResponse().setBody(

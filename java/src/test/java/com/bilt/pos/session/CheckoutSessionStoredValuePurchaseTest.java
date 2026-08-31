@@ -147,7 +147,7 @@ class CheckoutSessionStoredValuePurchaseTest {
                 "gift-card-1", "GIFT-CARD", "Customer service gift card",
                 new BigDecimal("50.00")));
         session.basket().addItem(BasketItem.credit(
-                "GOODWILL", "Customer service credit", 1, "50.00"));
+                "GOODWILL", "Customer service credit", 1, new BigDecimal("50.00")));
         server.enqueue(new MockResponse().setBody(
                 storedValueOk("Activate", "POI-LOAD-1", 50.00, 50.00)));
 

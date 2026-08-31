@@ -211,7 +211,7 @@ CheckoutSession session = CheckoutSession.builder()
     .start()
     .get();
 
-session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
 
 session.settle()
     .onSuccess(result -> register.printReceipt(result.getMerchantReceipt()))
@@ -257,14 +257,14 @@ session.identifyMember()
     .execute();
 
 // --- 2. Scan items ---
-Basket basket = session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+Basket basket = session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, new BigDecimal("24.99")));
 register.setTotal(basket.getGrandTotal());  // $49.98
 
-basket = session.basket().addItem(BasketItem.sale("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99"));
+basket = session.basket().addItem(BasketItem.sale("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, new BigDecimal("14.99")));
 register.setTotal(basket.getGrandTotal());  // $64.97
 
 // Scan same candle again — upserts, now qty 3
-basket = session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+basket = session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
 register.setTotal(basket.getGrandTotal());  // $89.96
 
 // --- 3. Tax ---
@@ -379,10 +379,10 @@ session.identifyMember(MemberIdentifier.phoneNumber("555-867-5309")).execute();
 The session owns the basket. Adding an item whose SKU is already present increments its quantity (upsert). Every mutation is local compute returning the updated `Basket` synchronously; with `autoDisplay` (default on) it also enqueues an asynchronous refresh of the customer display with an itemised virtual receipt — conflated, so rapid scanning sends the newest snapshot rather than one roundtrip per item, and ordered on the session's operation lane, so a `settle()` executed after ring-up runs after the display is current. A failed automatic refresh, including the final display refresh after settlement, never interrupts the checkout; register `onBackgroundError` on the builder to observe those failures.
 
 ```java
-Basket basket = session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+Basket basket = session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, new BigDecimal("24.99")));
 register.setTotal(basket.getGrandTotal());   // 49.98
 
-session.basket().addItem(BasketItem.sale("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99"));
+session.basket().addItem(BasketItem.sale("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, new BigDecimal("14.99")));
 
 // Tax — item-level rate, item-level fixed amount, or basket-level override
 session.basket().setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
@@ -399,7 +399,7 @@ After `settle()` succeeds, that basket is consumed and cannot be charged or modi
 
 ```java
 session.basket().clear();  // new cart ID; also clears the selected split-tender gift card
-session.basket().addItem(BasketItem.sale("NEXT-SKU", "Next item", 1, "12.00"));
+session.basket().addItem(BasketItem.sale("NEXT-SKU", "Next item", 1, new BigDecimal("12.00")));
 session.settle().execute();
 ```
 
@@ -486,9 +486,9 @@ try (CheckoutSession session = CheckoutSession.builder()
         .start()
         .get()) {
     session.basket().addItem(BasketItem.returnItem(
-            "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+            "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
     session.basket().addItem(BasketItem.sale(
-            "KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "34.99"));
+            "KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, new BigDecimal("34.99")));
 
     session.settle(SettlementOptions.builder()
             .addRefund(RefundAllocation.card(
@@ -510,9 +510,9 @@ Select `SettlementType.NET` to move only the difference between sale and return 
 
 ```java
 session.basket().addItem(BasketItem.sale(
-        "NEW-ITEM", "New item", 1, "15.00"));
+        "NEW-ITEM", "New item", 1, new BigDecimal("15.00")));
 session.basket().addItem(BasketItem.returnItem(
-        "RETURN-ITEM", "Return item", 1, "40.00"));
+        "RETURN-ITEM", "Return item", 1, new BigDecimal("40.00")));
 
 Basket basket = session.basket().snapshot();
 BigDecimal refund = basket.getRefundAmount(SettlementType.NET); // $40 - $15 = $25
@@ -542,7 +542,7 @@ Use `RefundAllocation.storedValue(amount, originalSale)` when refunding back to 
 Register-known discounts belong on the item and remain distinct from terminal-applied rebates:
 
 ```java
-BasketItem discounted = BasketItem.sale("SKU-1", "Offer item", 1, "20.00")
+BasketItem discounted = BasketItem.sale("SKU-1", "Offer item", 1, new BigDecimal("20.00"))
         .withDiscount(BasketDiscount.offer(
                 "OFFER-42", "Complimentary item", new BigDecimal("20.00")));
 session.basket().addItem(discounted);
@@ -581,7 +581,7 @@ session.basket().addItem(BasketItem.storedValueLoad(
         "gift-card-1", "GIFT-CARD", "Customer service gift card",
         new BigDecimal("50.00")));
 session.basket().addItem(BasketItem.credit(
-        "GOODWILL", "Customer service credit", 1, "50.00"));
+        "GOODWILL", "Customer service credit", 1, new BigDecimal("50.00")));
 
 session.settle(SettlementOptions.builder()
         .addFulfillment(StoredValueLoad.activate(

@@ -22,6 +22,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.concurrent.CountDownLatch;
@@ -256,7 +257,7 @@ class CheckoutSessionIdentityTest {
                         + "\"Response\":{\"Result\":\"Success\"},"
                         + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
         session.identifyMember().executeSync();
-        session.basket().addItem(com.bilt.pos.session.basket.BasketItem.sale("SKU-1", "Item", 1, "10.00"));
+        session.basket().addItem(com.bilt.pos.session.basket.BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
 
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"

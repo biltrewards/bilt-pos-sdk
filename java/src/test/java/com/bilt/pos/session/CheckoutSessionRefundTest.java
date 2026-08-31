@@ -143,7 +143,7 @@ class CheckoutSessionRefundTest {
     @Test
     void unlinkedRefundDoesNotPreventVoidingTheLatestPayment() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "100.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("100.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
         assertTrue(session.settle().get().isSuccess());
         recordedRequest();
@@ -195,7 +195,7 @@ class CheckoutSessionRefundTest {
     @Test
     void settlementRefundAllocationsCanSplitReturnAcrossCardAndGiftCard() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 25.00)));
         server.enqueue(new MockResponse().setBody(refundOk("POI-SV-REF-1", 15.00)));
@@ -239,7 +239,7 @@ class CheckoutSessionRefundTest {
     @Test
     void settlementCanIssueStoreCreditByLoadingStoredValueCard() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "15.00"));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("15.00")));
 
         server.enqueue(new MockResponse().setBody(storedValueOk("POI-SV-LOAD-1", 15.00, 65.00)));
 
@@ -271,10 +271,10 @@ class CheckoutSessionRefundTest {
     @Test
     void settlementExchangeRefundsReturnAllocationsAndChargesSaleLines() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, "75.00"));
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("75.00")));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
         session.basket().addItem(BasketItem.credit(
-                "OFFER-1", "Customer service credit", 1, "10.00"));
+                "OFFER-1", "Customer service credit", 1, new BigDecimal("10.00")));
         List<SettlementStep> callbacks = new ArrayList<>();
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 25.00)));
@@ -334,8 +334,8 @@ class CheckoutSessionRefundTest {
     void exchangeSettlementPreservesBasketTaxTotalOverrideAcrossSaleAndReturnSides()
             throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, "100.00"));
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("100.00")));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
         session.basket().setTaxTotal(new BigDecimal("5.40"));
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 43.60)));
@@ -367,8 +367,8 @@ class CheckoutSessionRefundTest {
     @Test
     void netSettlementChargesOnlyPositiveDifference() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, "75.00"));
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("75.00")));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
 
         server.enqueue(new MockResponse().setBody(paymentOk("POI-CARD-SALE-1", 35.00)));
 
@@ -408,10 +408,10 @@ class CheckoutSessionRefundTest {
     @Test
     void netSettlementRefundsOnlyNegativeDifferenceToSingleAllocation() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, "25.00"));
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("25.00")));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
         session.basket().addItem(BasketItem.credit(
-                "OFFER-1", "Customer service credit", 1, "5.00"));
+                "OFFER-1", "Customer service credit", 1, new BigDecimal("5.00")));
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 20.00)));
 
@@ -451,8 +451,8 @@ class CheckoutSessionRefundTest {
     @Test
     void netSettlementRefundsWhenSaleLineHasZeroValue() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("FREE-1", "Free item", 1, "0.00"));
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.sale("FREE-1", "Free item", 1, new BigDecimal("0.00")));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 40.00)));
 
@@ -477,8 +477,8 @@ class CheckoutSessionRefundTest {
     @Test
     void netSettlementAcceptsAllocationsForTheRefundDifference() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, "15.00"));
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("15.00")));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
 
         SettlementResult result = session.settle(SettlementOptions.builder()
                 .settlementType(SettlementType.NET)
@@ -496,9 +496,9 @@ class CheckoutSessionRefundTest {
     void registerCreditReducesTheChargeWithoutARefundAllocation() throws Exception {
         CheckoutSession session = session();
         session.basket().addItem(BasketItem.sale(
-                "BUY-1", "New item", 1, "50.00"));
+                "BUY-1", "New item", 1, new BigDecimal("50.00")));
         session.basket().addItem(BasketItem.credit(
-                "OFFER-CREDIT", "Customer service credit", 1, "10.00"));
+                "OFFER-CREDIT", "Customer service credit", 1, new BigDecimal("10.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-CARD-SALE-1", 40.00)));
 
         SettlementResult result = session.settle().get();
@@ -518,7 +518,7 @@ class CheckoutSessionRefundTest {
     void registerCreditCannotCreateACustomerPayout() throws Exception {
         CheckoutSession session = session();
         session.basket().addItem(BasketItem.credit(
-                "OFFER-CREDIT", "Customer service credit", 1, "10.00"));
+                "OFFER-CREDIT", "Customer service credit", 1, new BigDecimal("10.00")));
 
         SessionException error = assertThrows(SessionException.class,
                 () -> session.settle().get());
@@ -533,9 +533,9 @@ class CheckoutSessionRefundTest {
     @Test
     void refundAllocationCannotBeAttachedToCreditLines() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, "50.00"));
+        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("50.00")));
         session.basket().addItem(BasketItem.credit(
-                "OFFER-CREDIT", "Customer service credit", 1, "10.00"));
+                "OFFER-CREDIT", "Customer service credit", 1, new BigDecimal("10.00")));
 
         SessionException error = assertThrows(SessionException.class,
                 () -> session.settle(SettlementOptions.builder()
@@ -552,8 +552,8 @@ class CheckoutSessionRefundTest {
     @Test
     void netSettlementMovesNoMoneyWhenSaleAndReturnAreEqual() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, "40.00"));
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("40.00")));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
 
         SettlementResult result = session.settle(SettlementOptions.builder()
                 .settlementType(SettlementType.NET)
@@ -570,8 +570,8 @@ class CheckoutSessionRefundTest {
     void netSettlementRejectsAllocationsThatDoNotMatchRefundDifference()
             throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, "15.00"));
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("15.00")));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
 
         SessionException error = assertThrows(SessionException.class,
                 () -> session.settle(SettlementOptions.builder()
@@ -591,7 +591,7 @@ class CheckoutSessionRefundTest {
     @Test
     void settlementRequiresRefundAllocationsToMatchReturnTotal() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
 
         SessionException e = assertThrows(SessionException.class,
                 () -> session.settle(SettlementOptions.builder()
@@ -608,7 +608,7 @@ class CheckoutSessionRefundTest {
     @Test
     void refundAllocationFailureNotifiesOnErrorWithoutInRunRecovery() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
         List<SessionError> errors = new ArrayList<>();
 
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
@@ -637,7 +637,7 @@ class CheckoutSessionRefundTest {
     void settlementCanRecordExternalRefundAllocationWithoutTerminalMovement()
             throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
         List<SettlementStep> beforeSteps = new ArrayList<>();
         List<SettlementStep> movementCallbacks = new ArrayList<>();
 
@@ -673,8 +673,8 @@ class CheckoutSessionRefundTest {
     @Test
     void settlementRetryDoesNotResendCommittedRefundAllocations() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, "75.00"));
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("75.00")));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 25.00)));
         server.enqueue(new MockResponse().setBody(refundOk("POI-SV-REF-1", 15.00)));
@@ -684,7 +684,7 @@ class CheckoutSessionRefundTest {
                 () -> session.settle(splitRefundOptions()).get());
         assertEquals(SessionErrorCode.DECLINED, firstFailure.getError().getCode());
         assertThrows(IllegalStateException.class,
-                () -> session.basket().addItem(BasketItem.sale("EXTRA", "Extra", 1, "1.00")));
+                () -> session.basket().addItem(BasketItem.sale("EXTRA", "Extra", 1, new BigDecimal("1.00"))));
         SessionException voidFailure = assertThrows(SessionException.class,
                 () -> session.voidTransaction().get());
         assertTrue(voidFailure.getError().getMessage().contains(
@@ -743,7 +743,7 @@ class CheckoutSessionRefundTest {
     void settlementRetryDoesNotReattachRefundItemsAfterCommittedRefundLeg()
             throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 25.00)));
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
@@ -780,8 +780,8 @@ class CheckoutSessionRefundTest {
     @Test
     void settlementRetryRequiresSameCommittedRefundAllocationPrefix() throws Exception {
         CheckoutSession session = session();
-        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, "75.00"));
-        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, "40.00"));
+        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("75.00")));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
 
         server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 25.00)));
         server.enqueue(new MockResponse().setBody(refundOk("POI-SV-REF-1", 15.00)));

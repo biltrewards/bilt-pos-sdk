@@ -17,11 +17,11 @@ import static org.junit.jupiter.api.Assertions.*;
 class BasketEngineTest {
 
     private static BasketItem candle(int quantity) {
-        return BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", quantity, "24.99");
+        return BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", quantity, new BigDecimal("24.99"));
     }
 
     private static BasketItem frame() {
-        return BasketItem.sale("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99");
+        return BasketItem.sale("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, new BigDecimal("14.99"));
     }
 
     @Test
@@ -63,7 +63,7 @@ class BasketEngineTest {
     @Test
     void registerDiscountsCannotExceedTheGrossLineValue() {
         assertThrows(IllegalArgumentException.class, () -> BasketItem.sale(
-                        "SKU-1", "Item", 1, "10.00")
+                        "SKU-1", "Item", 1, new BigDecimal("10.00"))
                 .withDiscount(BasketDiscount.manual("Too much", new BigDecimal("10.01"))));
     }
 
@@ -173,7 +173,7 @@ class BasketEngineTest {
         BasketEngine engine = new BasketEngine();
         engine.addItem(candle(1));
         assertThrows(IllegalArgumentException.class, () -> engine.addItem(
-                BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "19.99")));
+                BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("19.99"))));
     }
 
     @Test
@@ -382,7 +382,7 @@ class BasketEngineTest {
     @Test
     void returnLineWithFixedTaxAmountNegatesTheMagnitude() {
         BasketEngine engine = new BasketEngine();
-        engine.addItem(BasketItem.returnItem("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+        engine.addItem(BasketItem.returnItem("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
         engine.setTaxAmountBySku("KRK-CNDL-LRG-VAN", new BigDecimal("2.00"));
 
         Basket basket = engine.snapshot();
@@ -395,7 +395,7 @@ class BasketEngineTest {
     void saleAndReturnLinesOfTheSameSkuStaySeparate() {
         BasketEngine engine = new BasketEngine();
         engine.addItem(candle(2));
-        engine.addItem(BasketItem.returnItem("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+        engine.addItem(BasketItem.returnItem("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
 
         Basket basket = engine.snapshot();
         assertEquals(2, basket.getItemCount(),
@@ -404,7 +404,7 @@ class BasketEngineTest {
 
         // the upsert keys on (SKU, direction): another return of the same
         // SKU lands on the return line
-        engine.addItem(BasketItem.returnItem("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+        engine.addItem(BasketItem.returnItem("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
         basket = engine.snapshot();
         assertEquals(2, basket.getItemCount());
         assertEquals(new BigDecimal("0.00"), basket.getGrandTotal());
@@ -413,9 +413,9 @@ class BasketEngineTest {
     @Test
     void returnsAndCreditsUseSeparateSettlementSides() {
         BasketEngine engine = new BasketEngine();
-        engine.addItem(BasketItem.sale("SKU-SALE", "Sale", 1, "100.00"));
-        engine.addItem(BasketItem.returnItem("SKU-RETURN", "Return", 1, "20.00"));
-        engine.addItem(BasketItem.credit("OFFER-1", "Offer credit", 1, "10.00"));
+        engine.addItem(BasketItem.sale("SKU-SALE", "Sale", 1, new BigDecimal("100.00")));
+        engine.addItem(BasketItem.returnItem("SKU-RETURN", "Return", 1, new BigDecimal("20.00")));
+        engine.addItem(BasketItem.credit("OFFER-1", "Offer credit", 1, new BigDecimal("10.00")));
 
         Basket basket = engine.snapshot();
 
@@ -434,9 +434,9 @@ class BasketEngineTest {
     @Test
     void basketTaxOverrideSplitsAcrossSaleReturnAndCreditDirections() {
         BasketEngine engine = new BasketEngine();
-        engine.addItem(BasketItem.sale("SKU-SALE", "Sale", 1, "100.00"));
-        engine.addItem(BasketItem.returnItem("SKU-RETURN", "Return", 1, "20.00"));
-        engine.addItem(BasketItem.credit("OFFER-1", "Offer credit", 1, "10.00"));
+        engine.addItem(BasketItem.sale("SKU-SALE", "Sale", 1, new BigDecimal("100.00")));
+        engine.addItem(BasketItem.returnItem("SKU-RETURN", "Return", 1, new BigDecimal("20.00")));
+        engine.addItem(BasketItem.credit("OFFER-1", "Offer credit", 1, new BigDecimal("10.00")));
         engine.setTaxTotal(new BigDecimal("7.00"));
 
         Basket basket = engine.snapshot();
@@ -485,8 +485,8 @@ class BasketEngineTest {
     @Test
     void basketPortionsPreserveTaxTotalOverride() {
         BasketEngine engine = new BasketEngine();
-        engine.addItem(BasketItem.sale("SKU-SALE", "Sale Item", 1, "100.00"));
-        engine.addItem(BasketItem.returnItem("SKU-RETURN", "Return Item", 1, "25.00"));
+        engine.addItem(BasketItem.sale("SKU-SALE", "Sale Item", 1, new BigDecimal("100.00")));
+        engine.addItem(BasketItem.returnItem("SKU-RETURN", "Return Item", 1, new BigDecimal("25.00")));
         engine.setTaxTotal(new BigDecimal("6.00"));
 
         Basket basket = engine.snapshot();
@@ -576,7 +576,7 @@ class BasketEngineTest {
         BasketEngine engine = new BasketEngine();
         engine.addItem(candle(2));                                             // itemId 1
         engine.addItem(BasketItem.returnItem(
-                "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));      // itemId 2
+                "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));      // itemId 2
 
         engine.updateItemQuantityBySku("KRK-CNDL-LRG-VAN", 5);
 
@@ -596,7 +596,7 @@ class BasketEngineTest {
     void returnBasketNegatesTheTaxTotalOverride() {
         BasketEngine cart = new BasketEngine();
         cart.addItem(BasketItem.returnItem(
-                "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+                "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
         cart.setTaxTotal(new BigDecimal("2.00"));
 
         Basket basket = cart.snapshot();
@@ -609,12 +609,12 @@ class BasketEngineTest {
     @Test
     void refundAmountReflectsSettlementType() {
         BasketEngine refundBasket = new BasketEngine();
-        refundBasket.addItem(BasketItem.sale("BUY", "New item", 1, "15.00"));
-        refundBasket.addItem(BasketItem.returnItem("RETURN", "Returned item", 1, "40.00"));
+        refundBasket.addItem(BasketItem.sale("BUY", "New item", 1, new BigDecimal("15.00")));
+        refundBasket.addItem(BasketItem.returnItem("RETURN", "Returned item", 1, new BigDecimal("40.00")));
 
         BasketEngine chargeBasket = new BasketEngine();
-        chargeBasket.addItem(BasketItem.sale("BUY", "New item", 1, "40.00"));
-        chargeBasket.addItem(BasketItem.returnItem("RETURN", "Returned item", 1, "15.00"));
+        chargeBasket.addItem(BasketItem.sale("BUY", "New item", 1, new BigDecimal("40.00")));
+        chargeBasket.addItem(BasketItem.returnItem("RETURN", "Returned item", 1, new BigDecimal("15.00")));
 
         assertEquals(new BigDecimal("25.00"),
                 refundBasket.snapshot().getRefundAmount(SettlementType.NET));
@@ -630,7 +630,7 @@ class BasketEngineTest {
     void returnBasketCanBeCleared() {
         BasketEngine cart = new BasketEngine();
         cart.addItem(BasketItem.returnItem(
-                "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+                "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
 
         Basket basket = cart.snapshot();
         assertTrue(basket.getItem("1").isReturn());

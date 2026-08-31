@@ -123,7 +123,7 @@ class CheckoutSessionAutoDisplayTest {
         CheckoutSession session = start(sessionBuilder());
 
         for (int i = 1; i <= 5; i++) {
-            session.basket().addItem(BasketItem.sale("SKU-" + i, "Item " + i, 1, "10.00"));
+            session.basket().addItem(BasketItem.sale("SKU-" + i, "Item " + i, 1, new BigDecimal("10.00")));
         }
         ringUpDone.countDown();
         // queued behind any pending push, so its completion proves the
@@ -161,7 +161,7 @@ class CheckoutSessionAutoDisplayTest {
         CheckoutSession session = start(sessionBuilder());
 
         CountDownLatch paid = new CountDownLatch(1);
-        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "50.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("50.00")));
         session.settle().onComplete(paid::countDown).execute();
         assertTrue(paid.await(5, TimeUnit.SECONDS));
 
@@ -207,14 +207,14 @@ class CheckoutSessionAutoDisplayTest {
         });
         CheckoutSession session = start(sessionBuilder());
 
-        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "50.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("50.00")));
         assertTrue(firstPushOnTheWire.await(5, TimeUnit.SECONDS));
         CountDownLatch paid = new CountDownLatch(1);
         session.settle().onComplete(paid::countDown).execute();
         // Accepted because the queued settlement has not started. The item
         // is part of the charged basket; its push, queued behind settlement,
         // must not replace the final settled display.
-        session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, "10.00"));
+        session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("10.00")));
         lateItemRung.countDown();
         assertTrue(paid.await(5, TimeUnit.SECONDS));
         session.end().get();
@@ -256,7 +256,7 @@ class CheckoutSessionAutoDisplayTest {
         try {
             assertThrows(IllegalStateException.class,
                     () -> session.basket().addItem(
-                            BasketItem.sale("SKU-1", "Item", 1, "10.00")));
+                            BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00"))));
         } finally {
             mutated.countDown();
         }
@@ -294,7 +294,7 @@ class CheckoutSessionAutoDisplayTest {
                         reported.countDown();
                     }));
 
-            session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "10.00"));
+            session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
 
             assertTrue(reported.await(5, TimeUnit.SECONDS),
                     "the failed push must reach onBackgroundError");
@@ -302,7 +302,7 @@ class CheckoutSessionAutoDisplayTest {
             assertEquals("register-ui", deliveryThread.get(),
                     "background errors deliver on the callback executor");
             assertEquals(new BigDecimal("20.00"), session.basket()
-                    .addItem(BasketItem.sale("SKU-2", "Item", 1, "10.00")).getGrandTotal());
+                    .addItem(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("10.00"))).getGrandTotal());
         } finally {
             callbackExecutor.shutdownNow();
         }
@@ -341,7 +341,7 @@ class CheckoutSessionAutoDisplayTest {
                         reported.countDown();
                     }));
 
-            session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "50.00"));
+            session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("50.00")));
             assertTrue(session.settle().get().isSuccess(),
                     "final display failures are best-effort");
 
@@ -413,7 +413,7 @@ class CheckoutSessionAutoDisplayTest {
             }
         });
         CheckoutSession session = start(sessionBuilder().autoDisplay(false));
-        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "50.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("50.00")));
 
         CountDownLatch paymentSettled = new CountDownLatch(1);
         session.settle().onComplete(paymentSettled::countDown).execute();

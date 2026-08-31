@@ -150,7 +150,7 @@ class CheckoutSessionPaymentTest {
     }
 
     private void addHundredDollarItem() {
-        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "100.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("100.00")));
     }
 
     private SaleToPOIRequest nextRequest() throws Exception {
@@ -291,7 +291,7 @@ class CheckoutSessionPaymentTest {
         SettlementFlow flow = session.settle();   // created while the total is positive
         session.basket().mutate(m -> m
                 .removeItemBySku("SKU-1")
-                .addItem(BasketItem.sale("SKU-FREE", "Comped Item", 1, "0.00")));
+                .addItem(BasketItem.sale("SKU-FREE", "Comped Item", 1, new BigDecimal("0.00"))));
 
         assertTrue(flow.get().isSuccess());
         assertEquals(1, server.getRequestCount(), "nothing beyond the session start may reach the wire");
@@ -313,7 +313,7 @@ class CheckoutSessionPaymentTest {
                 .start()
                 .get();
         server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
-        storeSession.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "10.00"));
+        storeSession.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 10.00)));
 
         storeSession.settle().executeSync();
@@ -375,11 +375,11 @@ class CheckoutSessionPaymentTest {
 
         assertEquals("POI-PAY-1", first.getPoiTransactionId());
         assertThrows(IllegalStateException.class,
-                () -> session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, "25.00")));
+                () -> session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("25.00"))));
 
         assertTrue(session.basket().clear().isEmpty());
         assertNotEquals(firstCartId, session.basket().snapshot().getCartId());
-        session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, "25.00"));
+        session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("25.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 25.00)));
 
         SettlementResult second = session.settle().get();
@@ -393,10 +393,10 @@ class CheckoutSessionPaymentTest {
     @Test
     void clearingBasketClearsTheSelectedStoredValueTender() throws Exception {
         session.setStoredValueCard("GC-1234");
-        session.basket().addItem(BasketItem.sale("DRAFT", "Draft", 1, "1.00"));
+        session.basket().addItem(BasketItem.sale("DRAFT", "Draft", 1, new BigDecimal("1.00")));
 
         session.basket().clear();
-        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "10.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 10.00)));
 
         session.settle().get();
@@ -417,7 +417,7 @@ class CheckoutSessionPaymentTest {
         drainRequests();
 
         session.basket().clear();
-        session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, "25.00"));
+        session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("25.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 25.00)));
         session.settle().get();
         drainRequests();
@@ -647,8 +647,8 @@ class CheckoutSessionPaymentTest {
                         + "\"RebateLabel\":\"Fall Promo\"}}]}}}";
 
         identifyMember();
-        session.basket().addItem(BasketItem.sale("SKU-1", "Item A", 1, "50.00"));
-        session.basket().addItem(BasketItem.sale("SKU-2", "Item B", 1, "25.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item A", 1, new BigDecimal("50.00")));
+        session.basket().addItem(BasketItem.sale("SKU-2", "Item B", 1, new BigDecimal("25.00")));
 
         server.enqueue(new MockResponse().setBody(globalRebate));
         server.enqueue(new MockResponse().setBody(REDEEM_OK));
@@ -1047,7 +1047,7 @@ class CheckoutSessionPaymentTest {
 
         identifyMember();
         for (int i = 1; i <= 7; i++) {
-            session.basket().addItem(BasketItem.sale("SKU-" + i, "Item " + i, 1, "10.00"));
+            session.basket().addItem(BasketItem.sale("SKU-" + i, "Item " + i, 1, new BigDecimal("10.00")));
         }
         server.enqueue(new MockResponse().setBody(tinyGlobalRebate));
         server.enqueue(new MockResponse().setBody(REDEEM_OK));                     // -5.00
@@ -1279,7 +1279,7 @@ class CheckoutSessionPaymentTest {
         drainRequests();
 
         session.basket().clear();
-        session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, "25.00"));
+        session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("25.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 25.00)));
         session.settle().get();
         drainRequests();
@@ -1295,7 +1295,7 @@ class CheckoutSessionPaymentTest {
 
     @Test
     void originalSaleRecordVoidCanRunAlongsideAnUnsettledBasket() throws Exception {
-        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "10.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
 
         VoidResult result = session.voidTransaction(OriginalSaleRecord.builder()
@@ -1452,7 +1452,7 @@ class CheckoutSessionPaymentTest {
     @Test
     void finalBasketReflectsHandlerRecalculatedTax() throws Exception {
         identifyMember();
-        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "100.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("100.00")));
         session.basket().setTaxRateBySku("SKU-1", new BigDecimal("0.08"));  // grand 108.00
 
         server.enqueue(new MockResponse().setBody(REBATE_OK));                    // -10.00
@@ -1745,7 +1745,7 @@ class CheckoutSessionPaymentTest {
     @Test
     void basketCanBeAdjustedAfterAFailedPayment() throws Exception {
         addHundredDollarItem();
-        session.basket().addItem(BasketItem.sale("SKU-2", "Expensive Item", 1, "50.00"));
+        session.basket().addItem(BasketItem.sale("SKU-2", "Expensive Item", 1, new BigDecimal("50.00")));
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         session.settle().getOrNull();
 
