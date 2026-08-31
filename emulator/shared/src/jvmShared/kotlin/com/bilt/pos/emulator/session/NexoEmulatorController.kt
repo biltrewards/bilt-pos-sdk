@@ -16,6 +16,7 @@ import com.bilt.pos.session.CheckoutSession
 import com.bilt.pos.session.Receipt
 import com.bilt.pos.session.ReversalDecision
 import com.bilt.pos.session.ReversalStep
+import com.bilt.pos.session.SessionError
 import com.bilt.pos.session.SessionErrorCode
 import com.bilt.pos.session.SessionException
 import com.bilt.pos.session.Terminal
@@ -1297,7 +1298,15 @@ class NexoEmulatorController(
                     }
                     .get()
             } catch (e: SessionException) {
-                recordPartialVoid(stored, failedMoneyStep)
+                if (!recordPartialVoid(stored, failedMoneyStep)) {
+                    // the reversed leg has no record: the failure popup must
+                    // carry the double-reversal warning, not just the error
+                    throw SessionException(SessionError(
+                        e.error.code,
+                        e.error.message + "\nWARNING: a reversed tender leg could NOT " +
+                            "be recorded — retrying the full refund would reverse it again",
+                    ))
+                }
                 throw e
             }
             if (result.isSuccess) {
@@ -1443,25 +1452,32 @@ class NexoEmulatorController(
      * The retry's [originalSaleRecord] then omits those legs; the loyalty
      * movements never ran (they reverse after the tenders).
      */
-    private fun recordPartialVoid(stored: StoredSale, failedMoneyStep: ReversalStep?) {
+    private fun recordPartialVoid(stored: StoredSale, failedMoneyStep: ReversalStep?): Boolean {
         if (failedMoneyStep != ReversalStep.STORED_VALUE) {
             // a CARD failure aborts at the first movement; a pre-step
             // rejection ran nothing — either way there is no progress
-            return
+            return true
         }
         val sale = stored.sale
         val committed = sale.leg(LegType.CARD)
-            ?.takeUnless { stored.legRefunded(LegType.CARD) } ?: return
-        recordRefund(sale.id, RefundRecord(
+            ?.takeUnless { stored.legRefunded(LegType.CARD) } ?: return true
+        val recorded = recordRefund(sale.id, RefundRecord(
             amount = committed.amount,
             recordedAt = Instant.now().toString(),
             full = true,
             leg = committed.type,
         ))
         log(
-            "The ${legLabel(committed.type)} leg was reversed before the failure — " +
-                "recorded; retrying the full refund covers only what is outstanding"
+            if (recorded) {
+                "The ${legLabel(committed.type)} leg was reversed before the failure — " +
+                    "recorded; retrying the full refund covers only what is outstanding"
+            } else {
+                "WARNING: the ${legLabel(committed.type)} leg was reversed but its " +
+                    "record could NOT be stored — retrying the full refund would " +
+                    "reverse it AGAIN"
+            }
         )
+        return recorded
     }
 
     /** The outcome popup for a refund stopped by the abort flag before it

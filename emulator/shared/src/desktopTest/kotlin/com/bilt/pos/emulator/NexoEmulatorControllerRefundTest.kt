@@ -744,6 +744,51 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
+    fun partialVoidWithAFailedRecordWarnsAboutTheDoubleReversal() {
+        val backing = JsonlSaleStore(
+            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
+        )
+        backing.recordSale(
+            SaleRecord(
+                id = "sale-2",
+                sessionId = "session-2",
+                saleId = "bilt-emulator",
+                poiId = "EMULATOR",
+                currency = "USD",
+                completedAt = "2026-08-06T11:00:00Z",
+                authorizedAmount = "30.00",
+                legs = listOf(
+                    TransactionLeg(LegType.CARD, "poi-card-2", amount = "20.00"),
+                    TransactionLeg(LegType.STORED_VALUE, "poi-sv-2", amount = "10.00"),
+                ),
+            )
+        )
+        server.dispatcher = respondingWith { body ->
+            if ("\"ReversalRequest\"" in body && "poi-sv-2" in body) REVERSAL_FAIL
+            else defaultResponse(body)
+        }
+        // the card reverses, the SV leg fails the void — and the card's
+        // progress record cannot be stored either
+        val controller = controller(RefundWriteFailingStore(backing))
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.refundSale("sale-2")
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(!outcome.success)
+            assertTrue(
+                "could NOT be recorded" in outcome.message,
+                "the lost partial-void record must warn on the popup: ${outcome.message}",
+            )
+            assertTrue(assertNotNull(backing.findSale("sale-2")).refunds.isEmpty())
+        }
+    }
+
+    @Test
     fun grossSettlementRefundsAndChargesSeparately() {
         val store = storeWithOneSale()
         val controller = controller(store)
