@@ -20,9 +20,9 @@ import java.util.Objects;
 /**
  * An item added to the basket by the register.
  *
- * <p>Factories state the commercial direction directly: {@link #sale},
+ * <p>Factories state the settlement type directly: {@link #sale},
  * {@link #returnItem}, or {@link #credit}. Unreferenced items are upserted by
- * SKU and direction. A referenced item remains a distinct line and can be
+ * SKU and type. A referenced item remains a distinct line and can be
  * targeted by settlement-time fulfillment.</p>
  */
 public final class BasketItem {
@@ -33,7 +33,7 @@ public final class BasketItem {
     private final int quantity;
     private final BigDecimal unitPrice;
     private final List<BasketDiscount> discounts;
-    private final BasketItemDirection direction;
+    private final BasketItemType type;
     private final String category;
     private final BigDecimal taxRate;
     private final BigDecimal taxAmount;
@@ -46,7 +46,7 @@ public final class BasketItem {
         this.quantity = builder.quantity;
         this.unitPrice = builder.unitPrice;
         this.discounts = Collections.unmodifiableList(new ArrayList<>(builder.discounts));
-        this.direction = builder.direction;
+        this.type = builder.type;
         this.category = builder.category;
         this.taxRate = builder.taxRate;
         this.taxAmount = builder.taxAmount;
@@ -74,7 +74,7 @@ public final class BasketItem {
                 .description(description)
                 .quantity(quantity)
                 .unitPrice(unitPrice)
-                .direction(BasketItemDirection.RETURN)
+                .type(BasketItemType.RETURN)
                 .build();
     }
 
@@ -86,7 +86,7 @@ public final class BasketItem {
                 .description(description)
                 .quantity(quantity)
                 .unitPrice(unitPrice)
-                .direction(BasketItemDirection.CREDIT)
+                .type(BasketItemType.CREDIT)
                 .build();
     }
 
@@ -138,7 +138,7 @@ public final class BasketItem {
                 .description(description)
                 .quantity(quantity)
                 .unitPrice(unitPrice)
-                .direction(direction)
+                .type(type)
                 .category(category)
                 .taxRate(taxRate)
                 .taxAmount(taxAmount)
@@ -146,8 +146,8 @@ public final class BasketItem {
                 .discounts(discounts);
     }
 
-    public BasketItemDirection getDirection() {
-        return direction;
+    public BasketItemType getType() {
+        return type;
     }
 
     /** Optional product category; aids terminal-side offer matching. */
@@ -179,7 +179,7 @@ public final class BasketItem {
         private int quantity = 1;
         private BigDecimal unitPrice;
         private List<BasketDiscount> discounts = new ArrayList<>();
-        private BasketItemDirection direction = BasketItemDirection.SALE;
+        private BasketItemType type = BasketItemType.SALE;
         private String category;
         private BigDecimal taxRate;
         private BigDecimal taxAmount;
@@ -226,9 +226,9 @@ public final class BasketItem {
             return this;
         }
 
-        /** Default {@link BasketItemDirection#SALE}. */
-        public Builder direction(BasketItemDirection direction) {
-            this.direction = direction;
+        /** Default {@link BasketItemType#SALE}. */
+        public Builder type(BasketItemType type) {
+            this.type = type;
             return this;
         }
 
@@ -256,7 +256,7 @@ public final class BasketItem {
             Objects.requireNonNull(sku, "sku is required");
             Objects.requireNonNull(description, "description is required");
             Objects.requireNonNull(unitPrice, "unitPrice is required");
-            Objects.requireNonNull(direction, "direction is required");
+            Objects.requireNonNull(type, "type is required");
             if (sku.isEmpty()) {
                 throw new IllegalArgumentException("sku must not be empty");
             }

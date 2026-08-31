@@ -9,8 +9,8 @@
  */
 package com.bilt.pos.session.basket;
 
-/** Commercial direction of a basket line. */
-public enum BasketItemDirection {
+/** Settlement treatment of a basket line. */
+public enum BasketItemType {
 
     /** A line sold to the customer. */
     SALE,

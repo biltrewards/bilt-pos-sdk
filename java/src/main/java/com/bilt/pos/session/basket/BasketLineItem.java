@@ -39,7 +39,7 @@ public final class BasketLineItem {
     private final List<BasketDiscount> discounts;
     private final BigDecimal discountTotal;
     private final BigDecimal subtotal;
-    private final BasketItemDirection direction;
+    private final BasketItemType type;
     private final BigDecimal originalTotal;
     private final BigDecimal rebateAmount;
     private final String rebateLabel;
@@ -62,7 +62,7 @@ public final class BasketLineItem {
         this.discountTotal = builder.discountTotal;
         this.subtotal = builder.subtotal == null && builder.originalTotal != null
                 ? builder.originalTotal.subtract(builder.discountTotal) : builder.subtotal;
-        this.direction = builder.direction;
+        this.type = builder.type;
         this.originalTotal = builder.originalTotal;
         this.rebateAmount = builder.rebateAmount;
         this.rebateLabel = builder.rebateLabel;
@@ -124,23 +124,23 @@ public final class BasketLineItem {
         return subtotal;
     }
 
-    public BasketItemDirection getDirection() {
-        return direction;
+    public BasketItemType getType() {
+        return type;
     }
 
     /** Whether this line adds sale value to the basket. */
     public boolean isSale() {
-        return direction == BasketItemDirection.SALE;
+        return type == BasketItemType.SALE;
     }
 
     /** Whether this line returns value to the customer. */
     public boolean isReturn() {
-        return direction == BasketItemDirection.RETURN;
+        return type == BasketItemType.RETURN;
     }
 
     /** Whether this is a register-originated credit rather than a return. */
     public boolean isCredit() {
-        return direction == BasketItemDirection.CREDIT;
+        return type == BasketItemType.CREDIT;
     }
 
     /** {@code unitPrice × quantity}, negated on a return or credit line. */
@@ -191,7 +191,7 @@ public final class BasketLineItem {
         private List<BasketDiscount> discounts = new ArrayList<>();
         private BigDecimal discountTotal = BigDecimal.ZERO;
         private BigDecimal subtotal;
-        private BasketItemDirection direction = BasketItemDirection.SALE;
+        private BasketItemType type = BasketItemType.SALE;
         private BigDecimal originalTotal;
         private BigDecimal rebateAmount = BigDecimal.ZERO;
         private String rebateLabel;
@@ -253,8 +253,8 @@ public final class BasketLineItem {
             return this;
         }
 
-        public Builder direction(BasketItemDirection direction) {
-            this.direction = direction;
+        public Builder type(BasketItemType type) {
+            this.type = type;
             return this;
         }
 

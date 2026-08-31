@@ -3,7 +3,7 @@ package com.bilt.pos.session;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketDiscount;
 import com.bilt.pos.session.basket.BasketItem;
-import com.bilt.pos.session.basket.BasketItemDirection;
+import com.bilt.pos.session.basket.BasketItemType;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.internal.BasketEngine;
 import com.bilt.pos.session.settlement.SettlementType;
@@ -366,7 +366,7 @@ class BasketEngineTest {
                 .sku("KRK-CNDL-LRG-VAN").description("Large Vanilla Candle")
                 .quantity(2).unitPrice(new BigDecimal("24.99"))
                 .taxRate(new BigDecimal("0.08875"))
-                .direction(BasketItemDirection.RETURN)
+                .type(BasketItemType.RETURN)
                 .build());
 
         Basket basket = engine.snapshot();
@@ -377,7 +377,7 @@ class BasketEngineTest {
                 "unit price stays the catalog price");
         assertEquals(new BigDecimal("-49.98"), line.getOriginalTotal());
         assertEquals(new BigDecimal("-4.44"), line.getTaxAmount(),
-                "tax follows the line's direction");
+                "tax follows the line's type");
         assertEquals(new BigDecimal("-54.42"), basket.getGrandTotal());
     }
 
@@ -389,7 +389,7 @@ class BasketEngineTest {
 
         Basket basket = engine.snapshot();
         assertEquals(new BigDecimal("-2.00"), basket.getItem("1").getTaxAmount(),
-                "tax amounts are set as magnitudes; the direction supplies the sign");
+                "tax amounts are set as magnitudes; the item type supplies the sign");
         assertEquals(new BigDecimal("-26.99"), basket.getGrandTotal());
     }
 
@@ -401,10 +401,10 @@ class BasketEngineTest {
 
         Basket basket = engine.snapshot();
         assertEquals(2, basket.getItemCount(),
-                "opposite directions never upsert into each other");
+                "different item types never upsert into each other");
         assertEquals(new BigDecimal("24.99"), basket.getGrandTotal());
 
-        // the upsert keys on (SKU, direction): another return of the same
+        // the upsert keys on (SKU, type): another return of the same
         // SKU lands on the return line
         engine.addItem(BasketItem.returnItem("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
         basket = engine.snapshot();
@@ -434,7 +434,7 @@ class BasketEngineTest {
     }
 
     @Test
-    void basketTaxOverrideSplitsAcrossSaleReturnAndCreditDirections() {
+    void basketTaxOverrideSplitsAcrossSaleReturnAndCreditTypes() {
         BasketEngine engine = new BasketEngine();
         engine.addItem(BasketItem.sale("SKU-SALE", "Sale", 1, new BigDecimal("100.00")));
         engine.addItem(BasketItem.returnItem("SKU-RETURN", "Return", 1, new BigDecimal("20.00")));
@@ -462,7 +462,7 @@ class BasketEngineTest {
                 .sku("SKU-RETURN").description("Return Item")
                 .quantity(1).unitPrice(new BigDecimal("4.00"))
                 .taxAmount(new BigDecimal("0.32"))
-                .direction(BasketItemDirection.RETURN)
+                .type(BasketItemType.RETURN)
                 .build());
 
         Basket basket = engine.snapshot();
@@ -527,7 +527,7 @@ class BasketEngineTest {
                 .sku("SKU-RETURN").description("Return Item")
                 .quantity(1).unitPrice(new BigDecimal("4.00"))
                 .taxAmount(new BigDecimal("0.32"))
-                .direction(BasketItemDirection.RETURN)
+                .type(BasketItemType.RETURN)
                 .build());
 
         Basket full = engine.snapshot();
@@ -584,7 +584,7 @@ class BasketEngineTest {
 
         Basket basket = engine.snapshot();
         assertEquals(5, basket.getItem("1").getQuantity(),
-                "BySku targets the sale line when both directions exist");
+                "BySku targets the sale line when multiple types exist");
         assertEquals(1, basket.getItem("2").getQuantity());
         assertEquals("1", basket.getItemBySku("KRK-CNDL-LRG-VAN").getItemId());
 
@@ -603,7 +603,7 @@ class BasketEngineTest {
 
         Basket basket = cart.snapshot();
         assertEquals(new BigDecimal("-2.00"), basket.getTaxTotal(),
-                "the override is a magnitude; the cart's direction supplies the sign");
+                "the override is a magnitude; the item types supply the sign");
         assertEquals(new BigDecimal("-26.99"), basket.getGrandTotal(),
                 "tax returned with the merchandise, not netted against it");
     }

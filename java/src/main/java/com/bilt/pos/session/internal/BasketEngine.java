@@ -14,7 +14,7 @@ package com.bilt.pos.session.internal;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketDiscount;
 import com.bilt.pos.session.basket.BasketItem;
-import com.bilt.pos.session.basket.BasketItemDirection;
+import com.bilt.pos.session.basket.BasketItemType;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.basket.BasketMutation;
 
@@ -41,7 +41,7 @@ import java.util.UUID;
  *       override was set via {@link #setTaxTotal}.</li>
  * </ol>
  *
- * <p>Unreferenced lines are keyed by SKU and direction: returns and credits
+ * <p>Unreferenced lines are keyed by SKU and type: returns and credits
  * never upsert into a sale line of the same SKU. Referenced lines are keyed by
  * their register reference and remain distinct even when several lines share a
  * SKU. Tax values are magnitudes; return and credit totals and tax are negated
@@ -63,7 +63,7 @@ public final class BasketEngine implements BasketMutation {
         final String category;
         final BigDecimal unitPrice;
         final List<BasketDiscount> discounts;
-        final BasketItemDirection direction;
+        final BasketItemType type;
         final Map<String, String> metadata;
         int quantity;
         BigDecimal taxRate;
@@ -77,7 +77,7 @@ public final class BasketEngine implements BasketMutation {
             this.category = item.getCategory();
             this.unitPrice = item.getUnitPrice();
             this.discounts = new ArrayList<>(item.getDiscounts());
-            this.direction = item.getDirection();
+            this.type = item.getType();
             this.metadata = item.getMetadata();
             this.quantity = item.getQuantity();
             this.taxRate = item.getTaxRate();
@@ -92,7 +92,7 @@ public final class BasketEngine implements BasketMutation {
             this.category = other.category;
             this.unitPrice = other.unitPrice;
             this.discounts = new ArrayList<>(other.discounts);
-            this.direction = other.direction;
+            this.type = other.type;
             this.metadata = other.metadata;
             this.quantity = other.quantity;
             this.taxRate = other.taxRate;
@@ -337,7 +337,7 @@ public final class BasketEngine implements BasketMutation {
                     .setScale(MONEY_SCALE, ROUNDING);
             BigDecimal lineSubtotal = lineTotal.subtract(lineDiscount);
             BigDecimal lineTax = lineTax(line, lineSubtotal);
-            if (line.direction != BasketItemDirection.SALE) {
+            if (line.type != BasketItemType.SALE) {
                 lineTotal = lineTotal.negate();
                 lineDiscount = lineDiscount.negate();
                 lineSubtotal = lineSubtotal.negate();
@@ -358,7 +358,7 @@ public final class BasketEngine implements BasketMutation {
                     .discounts(line.discounts)
                     .discountTotal(lineDiscount)
                     .subtotal(lineSubtotal)
-                    .direction(line.direction)
+                    .type(line.type)
                     .originalTotal(lineTotal)
                     .adjustedTotal(lineSubtotal)
                     .taxRate(line.taxRate)
@@ -370,7 +370,7 @@ public final class BasketEngine implements BasketMutation {
         if (taxTotalOverride != null) {
             taxTotal = taxTotalOverride.setScale(MONEY_SCALE, ROUNDING);
             if (!lines.isEmpty() && lines.values().stream()
-                    .noneMatch(line -> line.direction == BasketItemDirection.SALE)) {
+                    .noneMatch(line -> line.type == BasketItemType.SALE)) {
                 // Tax inputs are magnitudes. An all-return basket carries
                 // that override in the same negative direction as its lines.
                 taxTotal = taxTotal.negate();
@@ -395,18 +395,18 @@ public final class BasketEngine implements BasketMutation {
         if (item.getReference() != null) {
             return "reference\0" + item.getReference();
         }
-        return key(item.getSku(), item.getDirection());
+        return key(item.getSku(), item.getType());
     }
 
     private static String key(Line line) {
         if (line.reference != null) {
             return "reference\0" + line.reference;
         }
-        return key(line.sku, line.direction);
+        return key(line.sku, line.type);
     }
 
-    private static String key(String sku, BasketItemDirection direction) {
-        switch (direction) {
+    private static String key(String sku, BasketItemType type) {
+        switch (type) {
             case SALE:
                 return "sale\0" + sku;
             case RETURN:
@@ -414,7 +414,7 @@ public final class BasketEngine implements BasketMutation {
             case CREDIT:
                 return "credit\0" + sku;
             default:
-                throw new IllegalArgumentException("unsupported basket direction " + direction);
+                throw new IllegalArgumentException("unsupported basket item type " + type);
         }
     }
 
@@ -429,18 +429,18 @@ public final class BasketEngine implements BasketMutation {
     }
 
     /**
-     * When a SKU is present in both directions the sale line wins — return
+     * When a SKU is present with multiple types the sale line wins — return
      * lines are rarer and always deliberate, so they are addressed by
-     * itemId. With one direction present, the SKU alone is unambiguous.
+     * itemId. With one type present, the SKU alone is unambiguous.
      */
     private Line requireBySku(String sku) {
         Objects.requireNonNull(sku, "sku");
-        Line line = lines.get(key(sku, BasketItemDirection.SALE));
+        Line line = lines.get(key(sku, BasketItemType.SALE));
         if (line == null) {
-            line = lines.get(key(sku, BasketItemDirection.RETURN));
+            line = lines.get(key(sku, BasketItemType.RETURN));
         }
         if (line == null) {
-            line = lines.get(key(sku, BasketItemDirection.CREDIT));
+            line = lines.get(key(sku, BasketItemType.CREDIT));
         }
         if (line == null) {
             for (Line candidate : lines.values()) {

@@ -153,7 +153,7 @@ public final class Basket {
 
     /**
      * The line with the given SKU, or {@code null}. When the SKU is present
-     * in multiple directions, the sale line is returned. Return and credit
+     * with multiple types, the sale line is returned. Return and credit
      * lines can always be addressed by itemId.
      */
     public BasketLineItem getItemBySku(String sku) {
@@ -182,17 +182,17 @@ public final class Basket {
 
     /** Whether the basket contains at least one sale line. */
     public boolean hasSaleLines() {
-        return hasLines(BasketItemDirection.SALE);
+        return hasLines(BasketItemType.SALE);
     }
 
     /** Whether the basket contains at least one return line. */
     public boolean hasReturnLines() {
-        return hasLines(BasketItemDirection.RETURN);
+        return hasLines(BasketItemType.RETURN);
     }
 
     /** Whether the basket contains at least one register-originated credit line. */
     public boolean hasCreditLines() {
-        return hasLines(BasketItemDirection.CREDIT);
+        return hasLines(BasketItemType.CREDIT);
     }
 
     /**
@@ -203,7 +203,7 @@ public final class Basket {
         if (!hasReturnLines() && !hasCreditLines()) {
             return this;
         }
-        return filteredPortion(EnumSet.of(BasketItemDirection.SALE));
+        return filteredPortion(EnumSet.of(BasketItemType.SALE));
     }
 
     /**
@@ -215,7 +215,7 @@ public final class Basket {
             return this;
         }
         return filteredPortion(EnumSet.of(
-                BasketItemDirection.SALE, BasketItemDirection.CREDIT));
+                BasketItemType.SALE, BasketItemType.CREDIT));
     }
 
     /**
@@ -223,12 +223,12 @@ public final class Basket {
      * available separately through {@link #creditPortion()}.
      */
     public Basket returnPortion() {
-        return filteredPortion(EnumSet.of(BasketItemDirection.RETURN));
+        return filteredPortion(EnumSet.of(BasketItemType.RETURN));
     }
 
     /** Register-originated credits in this basket. */
     public Basket creditPortion() {
-        return filteredPortion(EnumSet.of(BasketItemDirection.CREDIT));
+        return filteredPortion(EnumSet.of(BasketItemType.CREDIT));
     }
 
     /** Positive amount represented by all return lines. */
@@ -291,14 +291,14 @@ public final class Basket {
                 .build();
     }
 
-    private Basket filteredPortion(Set<BasketItemDirection> directions) {
+    private Basket filteredPortion(Set<BasketItemType> types) {
         List<BasketLineItem> filteredItems = new ArrayList<>();
         BigDecimal filteredOriginalTotal = BigDecimal.ZERO;
         BigDecimal filteredDiscountTotal = BigDecimal.ZERO;
         BigDecimal filteredSubtotal = BigDecimal.ZERO;
         BigDecimal filteredLineTaxTotal = BigDecimal.ZERO;
         for (BasketLineItem line : items) {
-            if (directions.contains(line.getDirection())) {
+            if (types.contains(line.getType())) {
                 filteredItems.add(line);
                 filteredOriginalTotal = filteredOriginalTotal.add(line.getOriginalTotal());
                 filteredDiscountTotal = filteredDiscountTotal.add(line.getDiscountTotal());
@@ -306,7 +306,7 @@ public final class Basket {
                 filteredLineTaxTotal = filteredLineTaxTotal.add(line.getTaxAmount());
             }
         }
-        BigDecimal filteredTaxTotal = filteredTaxTotal(directions, filteredLineTaxTotal,
+        BigDecimal filteredTaxTotal = filteredTaxTotal(types, filteredLineTaxTotal,
                 !filteredItems.isEmpty());
         return Basket.builder()
                 .cartId(cartId)
@@ -320,7 +320,7 @@ public final class Basket {
                 .build();
     }
 
-    private BigDecimal filteredTaxTotal(Set<BasketItemDirection> directions,
+    private BigDecimal filteredTaxTotal(Set<BasketItemType> types,
             BigDecimal filteredLineTaxTotal,
             boolean hasFilteredItems) {
         if (!hasFilteredItems) {
@@ -329,7 +329,7 @@ public final class Basket {
         if (taxTotal.compareTo(lineTaxTotal()) == 0) {
             return filteredLineTaxTotal;
         }
-        if (directionsCoverBasket(directions)) {
+        if (typesCoverBasket(types)) {
             return taxTotal;
         }
 
@@ -338,19 +338,19 @@ public final class Basket {
         // per-line taxes. Treat it as net basket tax and split by signed
         // subtotals; the refund side therefore receives a negative share.
         if (subtotal.compareTo(BigDecimal.ZERO) == 0) {
-            return directions.contains(BasketItemDirection.SALE) ? taxTotal : BigDecimal.ZERO;
+            return types.contains(BasketItemType.SALE) ? taxTotal : BigDecimal.ZERO;
         }
         BigDecimal filteredSubtotal = BigDecimal.ZERO;
-        for (BasketItemDirection direction : directions) {
-            filteredSubtotal = filteredSubtotal.add(subtotal(direction));
+        for (BasketItemType type : types) {
+            filteredSubtotal = filteredSubtotal.add(subtotal(type));
         }
         return taxTotal.multiply(filteredSubtotal)
                 .divide(subtotal, MONEY_SCALE, RoundingMode.HALF_UP);
     }
 
-    private boolean directionsCoverBasket(Set<BasketItemDirection> directions) {
+    private boolean typesCoverBasket(Set<BasketItemType> types) {
         for (BasketLineItem line : items) {
-            if (!directions.contains(line.getDirection())) {
+            if (!types.contains(line.getType())) {
                 return false;
             }
         }
@@ -365,19 +365,19 @@ public final class Basket {
         return total;
     }
 
-    private BigDecimal subtotal(BasketItemDirection direction) {
+    private BigDecimal subtotal(BasketItemType type) {
         BigDecimal total = BigDecimal.ZERO;
         for (BasketLineItem line : items) {
-            if (line.getDirection() == direction) {
+            if (line.getType() == type) {
                 total = total.add(line.getSubtotal());
             }
         }
         return total;
     }
 
-    private boolean hasLines(BasketItemDirection direction) {
+    private boolean hasLines(BasketItemType type) {
         for (BasketLineItem line : items) {
-            if (line.getDirection() == direction) {
+            if (line.getType() == type) {
                 return true;
             }
         }

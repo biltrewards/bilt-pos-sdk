@@ -253,9 +253,9 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Builder for <a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket"><code>BasketItem</code></a>.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/basket/BasketItemDirection.html" class="type-name-link" title="enum class in com.bilt.pos.session.basket">BasketItemDirection</a> - Enum Class in <a href="com/bilt/pos/session/basket/package-summary.html">com.bilt.pos.session.basket</a></dt>
+<dt><a href="com/bilt/pos/session/basket/BasketItemType.html" class="type-name-link" title="enum class in com.bilt.pos.session.basket">BasketItemType</a> - Enum Class in <a href="com/bilt/pos/session/basket/package-summary.html">com.bilt.pos.session.basket</a></dt>
 <dd>
-<div class="block">Commercial direction of a basket line.</div>
+<div class="block">Settlement treatment of a basket line.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementTarget.html#basketLine(java.lang.String)" class="member-name-link">basketLine(String)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementTarget.html" title="class in com.bilt.pos.session.settlement">SettlementTarget</a></dt>
 <dd>&nbsp;</dd>
@@ -719,7 +719,7 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Shorthand factory for an offer or other register-originated credit.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/basket/BasketItemDirection.html#CREDIT" class="member-name-link">CREDIT</a> - Enum constant in enum class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItemDirection.html" title="enum class in com.bilt.pos.session.basket">BasketItemDirection</a></dt>
+<dt><a href="com/bilt/pos/session/basket/BasketItemType.html#CREDIT" class="member-name-link">CREDIT</a> - Enum constant in enum class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItemType.html" title="enum class in com.bilt.pos.session.basket">BasketItemType</a></dt>
 <dd>
 <div class="block">A register-originated credit whose totals subtract from the basket.</div>
 </dd>
@@ -809,12 +809,6 @@ loadScripts(document, 'script');</script>
 <div class="block">Outcome of <a href="com/bilt/pos/session/Terminal.html#diagnose()"><code>Terminal.diagnose()</code></a>.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/DiagnosisResult.html#%3Cinit%3E(com.bilt.pos.nexo.model.POIStatus,java.util.List)" class="member-name-link">DiagnosisResult(POIStatus, List&lt;HostStatus&gt;)</a> - Constructor for class com.bilt.pos.session.<a href="com/bilt/pos/session/DiagnosisResult.html" title="class in com.bilt.pos.session">DiagnosisResult</a></dt>
-<dd>&nbsp;</dd>
-<dt><a href="com/bilt/pos/session/basket/BasketItem.Builder.html#direction(com.bilt.pos.session.basket.BasketItemDirection)" class="member-name-link">direction(BasketItemDirection)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></dt>
-<dd>
-<div class="block">Default <a href="com/bilt/pos/session/basket/BasketItemDirection.html#SALE"><code>BasketItemDirection.SALE</code></a>.</div>
-</dd>
-<dt><a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html#direction(com.bilt.pos.session.basket.BasketItemDirection)" class="member-name-link">direction(BasketItemDirection)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html#disableAward(boolean)" class="member-name-link">disableAward(boolean)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></dt>
 <dd>
@@ -1448,10 +1442,6 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/identity/Reward.html#getDescription()" class="member-name-link">getDescription()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/Reward.html" title="class in com.bilt.pos.session.identity">Reward</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/payment/EarnedReward.html#getDescription()" class="member-name-link">getDescription()</a> - Method in class com.bilt.pos.session.payment.<a href="com/bilt/pos/session/payment/EarnedReward.html" title="class in com.bilt.pos.session.payment">EarnedReward</a></dt>
-<dd>&nbsp;</dd>
-<dt><a href="com/bilt/pos/session/basket/BasketItem.html#getDirection()" class="member-name-link">getDirection()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
-<dd>&nbsp;</dd>
-<dt><a href="com/bilt/pos/session/basket/BasketLineItem.html#getDirection()" class="member-name-link">getDirection()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#getDisableAward()" class="member-name-link">getDisableAward()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
 <dd>
@@ -2451,6 +2441,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Gets the value of the type property.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/basket/BasketItem.html#getType()" class="member-name-link">getType()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/basket/BasketLineItem.html#getType()" class="member-name-link">getType()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/MemberIdentifier.html#getType()" class="member-name-link">getType()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/MemberIdentifier.html" title="class in com.bilt.pos.session.identity">MemberIdentifier</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/Reward.html#getType()" class="member-name-link">getType()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/Reward.html" title="class in com.bilt.pos.session.identity">Reward</a></dt>
@@ -3644,7 +3638,7 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/display/LineItemKindType.html#RETURN" class="member-name-link">RETURN</a> - Enum constant in enum class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemKindType.html" title="enum class in com.bilt.pos.display">LineItemKindType</a></dt>
 <dd>&nbsp;</dd>
-<dt><a href="com/bilt/pos/session/basket/BasketItemDirection.html#RETURN" class="member-name-link">RETURN</a> - Enum constant in enum class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItemDirection.html" title="enum class in com.bilt.pos.session.basket">BasketItemDirection</a></dt>
+<dt><a href="com/bilt/pos/session/basket/BasketItemType.html#RETURN" class="member-name-link">RETURN</a> - Enum constant in enum class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItemType.html" title="enum class in com.bilt.pos.session.basket">BasketItemType</a></dt>
 <dd>
 <div class="block">A merchandise return or trade-in whose totals subtract from the basket.</div>
 </dd>
@@ -3702,7 +3696,7 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Shorthand factory for ordinary merchandise sold to the customer.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/basket/BasketItemDirection.html#SALE" class="member-name-link">SALE</a> - Enum constant in enum class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItemDirection.html" title="enum class in com.bilt.pos.session.basket">BasketItemDirection</a></dt>
+<dt><a href="com/bilt/pos/session/basket/BasketItemType.html#SALE" class="member-name-link">SALE</a> - Enum constant in enum class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItemType.html" title="enum class in com.bilt.pos.session.basket">BasketItemType</a></dt>
 <dd>
 <div class="block">A line sold to the customer.</div>
 </dd>
@@ -4812,6 +4806,12 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptType.html#type" class="member-name-link">type</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptType.html" title="class in com.bilt.pos.receipt">ReceiptType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/basket/BasketItem.Builder.html#type(com.bilt.pos.session.basket.BasketItemType)" class="member-name-link">type(BasketItemType)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></dt>
+<dd>
+<div class="block">Default <a href="com/bilt/pos/session/basket/BasketItemType.html#SALE"><code>BasketItemType.SALE</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html#type(com.bilt.pos.session.basket.BasketItemType)" class="member-name-link">type(BasketItemType)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html#type(com.bilt.pos.session.settlement.RefundAllocationType)" class="member-name-link">type(RefundAllocationType)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html" title="class in com.bilt.pos.session.settlement">RefundAllocation.Builder</a></dt>
 <dd>&nbsp;</dd>
 </dl>
@@ -4887,7 +4887,7 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/basket/BasketItemDirection.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItemDirection.html" title="enum class in com.bilt.pos.session.basket">BasketItemDirection</a></dt>
+<dt><a href="com/bilt/pos/session/basket/BasketItemType.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItemType.html" title="enum class in com.bilt.pos.session.basket">BasketItemType</a></dt>
 <dd>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
 </dd>
@@ -4970,7 +4970,7 @@ the order they are declared.</div>
 <div class="block">Returns an array containing the constants of this enum class, in
 the order they are declared.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/basket/BasketItemDirection.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItemDirection.html" title="enum class in com.bilt.pos.session.basket">BasketItemDirection</a></dt>
+<dt><a href="com/bilt/pos/session/basket/BasketItemType.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItemType.html" title="enum class in com.bilt.pos.session.basket">BasketItemType</a></dt>
 <dd>
 <div class="block">Returns an array containing the constants of this enum class, in
 the order they are declared.</div>

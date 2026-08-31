@@ -2,7 +2,7 @@ package com.bilt.pos.session;
 
 import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.session.basket.Basket;
-import com.bilt.pos.session.basket.BasketItemDirection;
+import com.bilt.pos.session.basket.BasketItemType;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.display.DisplayContext;
 import com.bilt.pos.session.display.DisplayTarget;
@@ -118,7 +118,7 @@ class BasketDisplayRendererTest {
         BasketLineItem returnLine = BasketLineItem.builder()
                 .itemId("1").sku("SKU-1").description("Return Item")
                 .quantity(1).unitPrice(new BigDecimal("24.99"))
-                .direction(BasketItemDirection.RETURN)
+                .type(BasketItemType.RETURN)
                 .originalTotal(new BigDecimal("-24.99"))
                 .adjustedTotal(new BigDecimal("-24.99"))
                 .taxAmount(new BigDecimal("-2.22"))
