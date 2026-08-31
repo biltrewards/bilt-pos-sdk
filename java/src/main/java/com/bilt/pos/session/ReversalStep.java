@@ -15,12 +15,16 @@ package com.bilt.pos.session;
  * the leg, not the wire verb — which operation was running is already
  * known from the flow the handler is registered on.
  *
- * <p>A void reverses the known legs in this order: {@link #CARD},
- * {@link #STORED_VALUE}, {@link #REDEMPTION}, {@link #REBATE},
+ * <p>A void reverses the known legs in this order: {@link #STORED_VALUE_LOAD},
+ * {@link #CARD}, {@link #STORED_VALUE},
+ * {@link #REDEMPTION}, {@link #REBATE},
  * {@link #AWARD}. A refund flow has at most two steps: {@link #CARD} (the
  * tender refund) and {@link #AWARD}.</p>
  */
 public enum ReversalStep {
+
+    /** A stored value activation or load fulfilled for a purchased basket line. */
+    STORED_VALUE_LOAD,
 
     /**
      * The card payment leg. A void reverses it (Nexo

@@ -10,6 +10,7 @@
 package com.bilt.pos.session.basket;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Receiver for batched basket mutations via
@@ -18,7 +19,7 @@ import java.math.BigDecimal;
  *
  * <pre>{@code
  * session.basket().mutate(basket -> basket
- *     .addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"))
+ *     .addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"))
  *     .removeItemBySku("KRK-FRAME-5X7-BLK")
  *     .setTaxTotal(new BigDecimal("7.43")));
  * }</pre>
@@ -43,7 +44,13 @@ public interface BasketMutation {
     /** Sets an absolute quantity by SKU; {@code 0} removes the line. */
     BasketMutation updateItemQuantityBySku(String sku, int quantity);
 
-    /** Sets the tax rate on a line ({@code taxAmount = adjustedTotal × rate});
+    /** Replaces the register-applied discounts on a line; an empty list clears them. */
+    BasketMutation setDiscounts(String itemId, List<BasketDiscount> discounts);
+
+    /** Replaces the register-applied discounts on a line by SKU. */
+    BasketMutation setDiscountsBySku(String sku, List<BasketDiscount> discounts);
+
+    /** Sets the tax rate on a line ({@code taxAmount = subtotal × rate});
      * clears any explicit fixed tax amount previously set on it. */
     BasketMutation setTaxRate(String itemId, BigDecimal rate);
 

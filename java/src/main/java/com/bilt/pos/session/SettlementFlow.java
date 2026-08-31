@@ -14,7 +14,7 @@ import com.bilt.pos.session.payment.PointRedemptionResult;
 import com.bilt.pos.session.payment.RebateRedemptionResult;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementMovement;
-import com.bilt.pos.session.settlement.SettlementOptions;
+import com.bilt.pos.session.settlement.SettlementRecovery;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
 
@@ -29,8 +29,8 @@ import java.util.function.Function;
  *
  * <p>Registering handlers sends nothing. With the default settlement option,
  * the sequence is refund allocations (including external register-managed
- * refunds), rebate redemption, point redemption, stored value, card charge,
- * award. With net settlement, only the signed basket difference is charged or
+ * refunds), rebate redemption, point redemption, stored value tender, card charge,
+ * stored value line fulfillment, and award. With net settlement, only the signed basket difference is charged or
  * refunded. The sequence runs when
  * {@link #execute()} (asynchronously, on the session's operation thread),
  * {@link #executeSync()} (blocking), {@link #get()}, or {@link #getOrNull()}
@@ -43,7 +43,7 @@ import java.util.function.Function;
  *     .onRebatesRedeemed(rebates -> rebates.getSuggestedTotal())
  *     .onPointsRedeemed(points -> points.getSuggestedTotal())
  *     .onSuccess(result -> register.printReceipt(result.getMerchantReceipt()))
- *     .onError(error -> SettlementOptions.voidAndAbort())
+ *     .onError(error -> SettlementRecovery.abort())
  *     .execute();
  * }</pre>
  *
@@ -61,13 +61,13 @@ import java.util.function.Function;
  * on the thread executing the sequence.</p>
  *
  * <p>If a charge-side step fails after refund allocations, the {@code onError}
- * handler decides how to recover via the {@link SettlementOptions} it returns;
+ * handler decides how to recover via the {@link SettlementRecovery} it returns;
  * committed charge-side steps are reversed before a retry or failure. Refund
  * allocation failures are different: they are not retried in the same run, and
  * committed refund allocations are not unwound. Retry by calling
  * {@code settle()} again with the same committed allocation prefix. The
  * default charge-side policy (no handler) is
- * {@link SettlementOptions#voidAndAbort()}.</p>
+ * {@link SettlementRecovery#abort()}.</p>
  *
  * <p>Movement callbacks are immediate observations, not the authoritative
  * final ledger. Charge-side movements may be reversed by a later same-run
@@ -87,6 +87,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     private Function<GiftCardPaymentResult, BigDecimal> giftCardHandler;
     private Consumer<SettlementMovement> cardChargeHandler;
     private Consumer<SettlementMovement> awardHandler;
+    private Consumer<SettlementMovement> storedValueLoadedHandler;
     private Consumer<SettlementMovement> cardRefundHandler;
     private Consumer<SettlementMovement> giftCardRefundHandler;
     private Consumer<SettlementMovement> externalRefundHandler;
@@ -94,7 +95,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     private Consumer<SettlementMovement> rebateRefundHandler;
     private Consumer<SettlementMovement> awardRefundHandler;
     private Consumer<SettlementMovement> movementHandler;
-    private Function<SessionError, SettlementOptions> errorHandler;
+    private Function<SessionError, SettlementRecovery> errorHandler;
 
     private boolean errorHandlerConsulted;
     private boolean retryRequested;
@@ -169,6 +170,11 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         return register(() -> this.awardHandler = requireHandler(handler));
     }
 
+    /** Called when a purchased stored value line is activated or loaded. */
+    public SettlementFlow onStoredValueLoaded(Consumer<SettlementMovement> handler) {
+        return register(() -> this.storedValueLoadedHandler = requireHandler(handler));
+    }
+
     /** Called when a card refund allocation commits. */
     public SettlementFlow onCardRefunded(Consumer<SettlementMovement> handler) {
         return register(() -> this.cardRefundHandler = requireHandler(handler));
@@ -220,15 +226,15 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
 
     /**
      * Called when settlement fails. For charge-side failures after refund
-     * allocations, the returned {@link SettlementOptions} controls recovery —
-     * retry (e.g. {@code retryWithoutLoyalty()}) or {@code voidAndAbort()}.
+     * allocations, the returned {@link SettlementRecovery} controls recovery —
+     * retry (e.g. {@code retryWithoutLoyalty()}) or {@code abort()}.
      * For refund allocation failures, the handler is a terminal failure
-     * notification: the returned options are ignored, committed refund
+     * notification: the returned recovery decision is ignored, committed refund
      * allocations stay recorded, and the register retries with the same
      * committed allocation prefix. Default charge-side policy:
-     * {@code voidAndAbort()}.
+     * {@code abort()}.
      */
-    public SettlementFlow onError(Function<SessionError, SettlementOptions> handler) {
+    public SettlementFlow onError(Function<SessionError, SettlementRecovery> handler) {
         return register(() -> this.errorHandler = requireHandler(handler));
     }
 
@@ -259,7 +265,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         // handler at all, and a consultation whose RETRY resolution was
         // refused (incomplete unwind, retry cap) leaves the register
         // believing a retry is underway. Both are delivered here; the
-        // returned options are ignored — there is nothing left to resolve.
+        // returned recovery decision is ignored — there is nothing left to resolve.
         // ABORTED outcomes stay bypassed by design: the register initiated
         // the abort, and it must not surface as a failure to resolve.
         if (errorHandler != null
@@ -311,6 +317,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         if (movementHandler == null
                 && cardChargeHandler == null
                 && awardHandler == null
+                && storedValueLoadedHandler == null
                 && cardRefundHandler == null
                 && giftCardRefundHandler == null
                 && externalRefundHandler == null
@@ -330,7 +337,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         });
     }
 
-    Function<SessionError, SettlementOptions> errorHandler() {
+    Function<SessionError, SettlementRecovery> errorHandler() {
         if (errorHandler == null) {
             return null;
         }
@@ -338,10 +345,10 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         // awaited hand-off publishes them back to the operation thread
         return marshalled(error -> {
             errorHandlerConsulted = true;
-            SettlementOptions resolution = errorHandler.apply(error);
+            SettlementRecovery resolution = errorHandler.apply(error);
             // a retry answer obliges us to tell the register if settlement
             // ends in failure anyway (see deliverFailure)
-            retryRequested = resolution != null && !resolution.isVoidAndAbort();
+            retryRequested = resolution != null && !resolution.isAbort();
             return resolution;
         });
     }
@@ -352,6 +359,8 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
                 return cardChargeHandler;
             case AWARD:
                 return awardHandler;
+            case STORED_VALUE_LOAD:
+                return storedValueLoadedHandler;
             case CARD_REFUND:
                 return cardRefundHandler;
             case STORED_VALUE_REFUND:

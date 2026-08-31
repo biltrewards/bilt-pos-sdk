@@ -201,7 +201,7 @@ class CheckoutSessionLifecycleTest {
     @Test
     void failedEndKeepsTheSessionUsableForARetry() throws Exception {
         CheckoutSession session = startedSession();
-        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "10.00"));
 
         server.enqueue(new MockResponse().setBody(ADMIN_FAILED));
         SessionException e = assertThrows(SessionException.class, () -> session.end().get());
@@ -260,7 +260,7 @@ class CheckoutSessionLifecycleTest {
         int requestsBefore = server.getRequestCount();
 
         assertThrows(IllegalStateException.class,
-                () -> session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00")));
+                () -> session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, "10.00")));
         assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
                 () -> session.settle().get()).getError().getCode());
         assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,

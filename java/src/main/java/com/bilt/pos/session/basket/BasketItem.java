@@ -11,6 +11,8 @@ package com.bilt.pos.session.basket;
 
 import java.math.BigDecimal;
 import java.util.Collections;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -18,47 +20,40 @@ import java.util.Objects;
 /**
  * An item added to the basket by the register.
  *
- * <p>The SKU is the primary identifier: adding an item whose SKU is already
- * in the basket increments that line's quantity (upsert). A <em>credit</em>
- * item subtracts from the basket — a return or trade-in rung into a sale —
- * and is kept as its own line: the upsert matches on SKU <em>and</em>
- * direction, so selling and taking back the same SKU produces two lines.
- * Quantity and unit price are always positive; the direction carries the
- * sign.</p>
+ * <p>Factories state the commercial intent directly: {@link #sale},
+ * {@link #returnItem}, {@link #credit}, or {@link #storedValueLoad}. Ordinary merchandise is
+ * upserted by SKU and direction. Stored value load lines are distinct
+ * obligations keyed by their register reference, so buying two cards with
+ * the same SKU produces two lines instead of quantity two.</p>
  *
- * <pre>{@code
- * session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
- *
- * // a return in the same sale: displays and totals as -24.99
- * session.basket().addItem(BasketItem.credit("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "24.99"));
- *
- * session.basket().addItem(BasketItem.builder()
- *     .sku("KRK-FRAME-5X7-BLK")
- *     .description("5x7 Black Frame")
- *     .quantity(1)
- *     .unitPrice(new BigDecimal("14.99"))
- *     .taxRate(new BigDecimal("0.08875"))
- *     .build());
- * }</pre>
+ * <p>A stored value load line contains only receipt-safe commercial data.
+ * The card and activation/reload instruction belong in the settlement
+ * options and are joined to this line by {@link #getReference()}.</p>
  */
 public final class BasketItem {
 
+    private final String reference;
     private final String sku;
     private final String description;
     private final int quantity;
     private final BigDecimal unitPrice;
-    private final boolean credit;
+    private final List<BasketDiscount> discounts;
+    private final BasketItemDirection direction;
+    private final BasketItemPurpose purpose;
     private final String category;
     private final BigDecimal taxRate;
     private final BigDecimal taxAmount;
     private final Map<String, String> metadata;
 
     private BasketItem(Builder builder) {
+        this.reference = builder.reference;
         this.sku = builder.sku;
         this.description = builder.description;
         this.quantity = builder.quantity;
         this.unitPrice = builder.unitPrice;
-        this.credit = builder.credit;
+        this.discounts = Collections.unmodifiableList(new ArrayList<>(builder.discounts));
+        this.direction = builder.direction;
+        this.purpose = builder.purpose;
         this.category = builder.category;
         this.taxRate = builder.taxRate;
         this.taxAmount = builder.taxAmount;
@@ -67,25 +62,88 @@ public final class BasketItem {
                 : Collections.unmodifiableMap(new LinkedHashMap<>(builder.metadata));
     }
 
-    /** Shorthand factory for the required fields. */
-    public static BasketItem of(String sku, String description, int quantity, String unitPrice) {
+    /** Shorthand factory for ordinary merchandise sold to the customer. */
+    public static BasketItem sale(String sku, String description, int quantity,
+                                  String unitPrice) {
+        return sale(sku, description, quantity, new BigDecimal(unitPrice));
+    }
+
+    /** Shorthand factory for ordinary merchandise sold to the customer. */
+    public static BasketItem sale(String sku, String description, int quantity,
+                                  BigDecimal unitPrice) {
         return builder()
                 .sku(sku)
                 .description(description)
                 .quantity(quantity)
-                .unitPrice(new BigDecimal(unitPrice))
+                .unitPrice(unitPrice)
                 .build();
     }
 
-    /** Shorthand factory for a credit (negative) line — a return or trade-in. */
-    public static BasketItem credit(String sku, String description, int quantity,
-                                    String unitPrice) {
+    /** Shorthand factory for a merchandise return or trade-in. */
+    public static BasketItem returnItem(String sku, String description, int quantity,
+                                        String unitPrice) {
+        return returnItem(sku, description, quantity, new BigDecimal(unitPrice));
+    }
+
+    /** Shorthand factory for a merchandise return or trade-in. */
+    public static BasketItem returnItem(String sku, String description, int quantity,
+                                        BigDecimal unitPrice) {
         return builder()
                 .sku(sku)
                 .description(description)
                 .quantity(quantity)
-                .unitPrice(new BigDecimal(unitPrice))
-                .credit(true)
+                .unitPrice(unitPrice)
+                .direction(BasketItemDirection.RETURN)
+                .build();
+    }
+
+    /** Shorthand factory for an offer or other register-originated credit. */
+    public static BasketItem credit(String sku, String description, int quantity,
+                                    String unitPrice) {
+        return credit(sku, description, quantity, new BigDecimal(unitPrice));
+    }
+
+    /** Shorthand factory for an offer or other register-originated credit. */
+    public static BasketItem credit(String sku, String description, int quantity,
+                                    BigDecimal unitPrice) {
+        return builder()
+                .sku(sku)
+                .description(description)
+                .quantity(quantity)
+                .unitPrice(unitPrice)
+                .direction(BasketItemDirection.CREDIT)
+                .build();
+    }
+
+    /**
+     * Value sold for activation or loading onto one stored value card.
+     * Quantity is one and tax is zero; sell activation fees as separate
+     * merchandise lines.
+     *
+     * @param reference register-stable reference used by the matching
+     *                  settlement fulfillment
+     */
+    public static BasketItem storedValueLoad(String reference, String sku,
+                                             String description, String amount) {
+        return storedValueLoad(reference, sku, description, new BigDecimal(amount));
+    }
+
+    /**
+     * Value sold for activation or loading onto one stored value card.
+     * Quantity is one and tax is zero; sell activation fees as separate
+     * merchandise lines.
+     *
+     * @param reference register-stable reference used by the matching
+     *                  settlement fulfillment
+     */
+    public static BasketItem storedValueLoad(String reference, String sku,
+                                             String description, BigDecimal amount) {
+        return builder()
+                .reference(reference)
+                .sku(sku)
+                .description(description)
+                .unitPrice(amount)
+                .purpose(BasketItemPurpose.STORED_VALUE_LOAD)
                 .build();
     }
 
@@ -93,7 +151,12 @@ public final class BasketItem {
         return new Builder();
     }
 
-    /** Primary identifier of the product. */
+    /** Register-stable reference for settlement-time fulfillment, or {@code null}. */
+    public String getReference() {
+        return reference;
+    }
+
+    /** Primary catalog identifier of the product. */
     public String getSku() {
         return sku;
     }
@@ -110,9 +173,35 @@ public final class BasketItem {
         return unitPrice;
     }
 
-    /** Whether this line subtracts from the basket (return, trade-in). */
-    public boolean isCredit() {
-        return credit;
+    /** Register-applied discounts, in application order. */
+    public List<BasketDiscount> getDiscounts() {
+        return discounts;
+    }
+
+    /** Returns a copy carrying one additional register-applied discount. */
+    public BasketItem withDiscount(BasketDiscount discount) {
+        Builder copy = builder()
+                .reference(reference)
+                .sku(sku)
+                .description(description)
+                .quantity(quantity)
+                .unitPrice(unitPrice)
+                .direction(direction)
+                .purpose(purpose)
+                .category(category)
+                .taxRate(taxRate)
+                .taxAmount(taxAmount)
+                .metadata(metadata)
+                .discounts(discounts);
+        return copy.addDiscount(discount).build();
+    }
+
+    public BasketItemDirection getDirection() {
+        return direction;
+    }
+
+    public BasketItemPurpose getPurpose() {
+        return purpose;
     }
 
     /** Optional product category; aids terminal-side offer matching. */
@@ -138,17 +227,25 @@ public final class BasketItem {
     /** Builder for {@link BasketItem}. */
     public static final class Builder {
 
+        private String reference;
         private String sku;
         private String description;
         private int quantity = 1;
         private BigDecimal unitPrice;
-        private boolean credit;
+        private List<BasketDiscount> discounts = new ArrayList<>();
+        private BasketItemDirection direction = BasketItemDirection.SALE;
+        private BasketItemPurpose purpose = BasketItemPurpose.MERCHANDISE;
         private String category;
         private BigDecimal taxRate;
         private BigDecimal taxAmount;
         private Map<String, String> metadata;
 
         private Builder() {
+        }
+
+        public Builder reference(String reference) {
+            this.reference = reference;
+            return this;
         }
 
         public Builder sku(String sku) {
@@ -172,13 +269,26 @@ public final class BasketItem {
             return this;
         }
 
-        /**
-         * Marks the line as a credit: its totals (and tax) subtract from
-         * the basket. Quantity and unit price stay positive — the
-         * direction carries the sign. Default {@code false}.
-         */
-        public Builder credit(boolean credit) {
-            this.credit = credit;
+        public Builder discounts(List<BasketDiscount> discounts) {
+            this.discounts = discounts == null
+                    ? new ArrayList<>() : new ArrayList<>(discounts);
+            return this;
+        }
+
+        public Builder addDiscount(BasketDiscount discount) {
+            this.discounts.add(Objects.requireNonNull(discount, "discount"));
+            return this;
+        }
+
+        /** Default {@link BasketItemDirection#SALE}. */
+        public Builder direction(BasketItemDirection direction) {
+            this.direction = direction;
+            return this;
+        }
+
+        /** Default {@link BasketItemPurpose#MERCHANDISE}. */
+        public Builder purpose(BasketItemPurpose purpose) {
+            this.purpose = purpose;
             return this;
         }
 
@@ -206,8 +316,13 @@ public final class BasketItem {
             Objects.requireNonNull(sku, "sku is required");
             Objects.requireNonNull(description, "description is required");
             Objects.requireNonNull(unitPrice, "unitPrice is required");
+            Objects.requireNonNull(direction, "direction is required");
+            Objects.requireNonNull(purpose, "purpose is required");
             if (sku.isEmpty()) {
                 throw new IllegalArgumentException("sku must not be empty");
+            }
+            if (reference != null && reference.isEmpty()) {
+                throw new IllegalArgumentException("reference must not be empty");
             }
             if (quantity < 1) {
                 throw new IllegalArgumentException("quantity must be at least 1");
@@ -215,7 +330,39 @@ public final class BasketItem {
             if (unitPrice.signum() < 0) {
                 throw new IllegalArgumentException("unitPrice must not be negative");
             }
+            BigDecimal gross = unitPrice.multiply(BigDecimal.valueOf(quantity));
+            BigDecimal discountTotal = discounts.stream()
+                    .map(BasketDiscount::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (discountTotal.compareTo(gross) > 0) {
+                throw new IllegalArgumentException("discounts total " + discountTotal
+                        + " but line value is only " + gross);
+            }
+            validateStoredValueLoad();
             return new BasketItem(this);
+        }
+
+        private void validateStoredValueLoad() {
+            if (purpose != BasketItemPurpose.STORED_VALUE_LOAD) {
+                return;
+            }
+            if (direction != BasketItemDirection.SALE) {
+                throw new IllegalArgumentException("stored value load lines must be sales");
+            }
+            if (reference == null) {
+                throw new NullPointerException("stored value load reference is required");
+            }
+            if (quantity != 1) {
+                throw new IllegalArgumentException("stored value load quantity must be 1");
+            }
+            if (unitPrice.signum() <= 0) {
+                throw new IllegalArgumentException("stored value load amount must be positive");
+            }
+            if ((taxRate != null && taxRate.signum() != 0)
+                    || (taxAmount != null && taxAmount.signum() != 0)) {
+                throw new IllegalArgumentException("stored value load lines cannot be taxed; "
+                        + "add fees as separate merchandise lines");
+            }
         }
     }
 }

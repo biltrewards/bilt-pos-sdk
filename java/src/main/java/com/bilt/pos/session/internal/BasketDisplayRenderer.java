@@ -49,7 +49,7 @@ public final class BasketDisplayRenderer implements DisplayRenderer {
                     currency,
                     line.getUnitPrice(),
                     line.getAdjustedTotal());
-            if (line.isCredit()) {
+            if (!line.isSale()) {
                 item.setKind(LineItemKindType.RETURN);
             }
             lineItems.getLineItem().add(item);
@@ -60,7 +60,7 @@ public final class BasketDisplayRenderer implements DisplayRenderer {
         // line sum, point redemptions show as an order-level adjustment, and
         // the total is what the customer actually pays. During cart-building
         // all breakdown fields are zero and this matches the raw totals.
-        BigDecimal subtotal = basket.getOriginalTotal().subtract(basket.getRebateTotal());
+        BigDecimal subtotal = basket.getSubtotal().subtract(basket.getRebateTotal());
         BigDecimal total = basket.getGrandTotal()
                 .subtract(basket.getRebateTotal())
                 .subtract(basket.getPointDiscountTotal());

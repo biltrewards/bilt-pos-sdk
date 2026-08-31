@@ -27,8 +27,8 @@ import jakarta.xml.bind.JAXBException;
 /**
  * The customer-display side of a session: renders basket snapshots through
  * the configured {@link DisplayRenderer} and sends the payload as a Nexo
- * {@code DisplayRequest}. Sale lines and return credit lines go through the
- * same pipeline; credit lines simply render negative.
+ * {@code DisplayRequest}. Sale, return, and credit lines go through the
+ * same pipeline; return and credit lines render negative.
  *
  * <p>Failures — renderer, serialization, or wire — surface as
  * {@link SessionException}; whether a display update is best-effort is the

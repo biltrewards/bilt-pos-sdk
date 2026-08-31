@@ -9,11 +9,11 @@
  */
 package com.bilt.pos.session.settlement;
 
-/** How a settlement containing both sale and return lines moves money. */
+/** How a settlement containing sale, credit, and return lines moves money. */
 public enum SettlementType {
 
     /**
-     * Execute the return allocations first, then charge the sale portion.
+     * Execute return refund allocations first, then charge sales less credits.
      * This is the default and preserves the original settlement behavior.
      */
     REFUND_THEN_CHARGE,

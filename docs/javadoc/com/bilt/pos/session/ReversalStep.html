@@ -103,8 +103,9 @@ loadScripts(document, 'script');</script>
  the leg, not the wire verb — which operation was running is already
  known from the flow the handler is registered on.
 
- <p>A void reverses the known legs in this order: <a href="#CARD"><code>CARD</code></a>,
- <a href="#STORED_VALUE"><code>STORED_VALUE</code></a>, <a href="#REDEMPTION"><code>REDEMPTION</code></a>, <a href="#REBATE"><code>REBATE</code></a>,
+ <p>A void reverses the known legs in this order: <a href="#STORED_VALUE_LOAD"><code>STORED_VALUE_LOAD</code></a>,
+ <a href="#CARD"><code>CARD</code></a>, <a href="#STORED_VALUE"><code>STORED_VALUE</code></a>,
+ <a href="#REDEMPTION"><code>REDEMPTION</code></a>, <a href="#REBATE"><code>REBATE</code></a>,
  <a href="#AWARD"><code>AWARD</code></a>. A refund flow has at most two steps: <a href="#CARD"><code>CARD</code></a> (the
  tender refund) and <a href="#AWARD"><code>AWARD</code></a>.</p></div>
 </section>
@@ -151,6 +152,10 @@ loadScripts(document, 'script');</script>
 <div class="block">The stored value (gift card) leg of a split tender (Nexo
  <code>ReversalRequest</code>).</div>
 </div>
+<div class="col-first odd-row-color"><code><a href="#STORED_VALUE_LOAD" class="member-name-link">STORED_VALUE_LOAD</a></code></div>
+<div class="col-last odd-row-color">
+<div class="block">A stored value activation or load fulfilled for a purchased basket line.</div>
+</div>
 </div>
 </section>
 </li>
@@ -196,6 +201,13 @@ the order they are declared.</div>
 <section class="constant-details" id="enum-constant-detail">
 <h2>Enum Constant Details</h2>
 <ul class="member-list">
+<li>
+<section class="detail" id="STORED_VALUE_LOAD">
+<h3>STORED_VALUE_LOAD</h3>
+<div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></span>&nbsp;<span class="element-name">STORED_VALUE_LOAD</span></div>
+<div class="block">A stored value activation or load fulfilled for a purchased basket line.</div>
+</section>
+</li>
 <li>
 <section class="detail" id="CARD">
 <h3>CARD</h3>

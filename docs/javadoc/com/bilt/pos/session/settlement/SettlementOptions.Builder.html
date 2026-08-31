@@ -112,47 +112,58 @@ loadScripts(document, 'script');</script>
 <div class="table-header col-second">Method</div>
 <div class="table-header col-last">Description</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#addRefundAllocation(com.bilt.pos.session.settlement.RefundAllocation)" class="member-name-link">addRefundAllocation</a><wbr>(<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&nbsp;allocation)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#addFulfillment(com.bilt.pos.session.settlement.StoredValueLoad)" class="member-name-link">addFulfillment</a><wbr>(<a href="StoredValueLoad.html" title="class in com.bilt.pos.session.settlement">StoredValueLoad</a>&nbsp;fulfillment)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Adds one register-selected refund/restoration allocation.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#build()" class="member-name-link">build</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#cashback(java.math.BigDecimal)" class="member-name-link">cashback</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;cashback)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Cashback to hand the customer, authorized on top of the sale
- amount.</div>
+<div class="block">Adds one activation or reload instruction for a referenced basket line.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#disableAward(boolean)" class="member-name-link">disableAward</a><wbr>(boolean&nbsp;disableAward)</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#addRefund(com.bilt.pos.session.settlement.RefundAllocation)" class="member-name-link">addRefund</a><wbr>(<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&nbsp;refund)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Skips the loyalty award step, so the member earns no points on
- this checkout.</div>
+<div class="block">Adds one register-selected refund allocation.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#disablePoints(boolean)" class="member-name-link">disablePoints</a><wbr>(boolean&nbsp;disablePoints)</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#build()" class="member-name-link">build</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#disableRebates(boolean)" class="member-name-link">disableRebates</a><wbr>(boolean&nbsp;disableRebates)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#cashback(java.math.BigDecimal)" class="member-name-link">cashback</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;cashback)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Requests positive cashback in addition to the card charge.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#disableAward(boolean)" class="member-name-link">disableAward</a><wbr>(boolean&nbsp;disableAward)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Disables the post-payment loyalty award for this settlement.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#disablePoints(boolean)" class="member-name-link">disablePoints</a><wbr>(boolean&nbsp;disablePoints)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Disables point/reward redemption for this settlement.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#disableRebates(boolean)" class="member-name-link">disableRebates</a><wbr>(boolean&nbsp;disableRebates)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Disables terminal offer/rebate redemption for this settlement.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#fulfillments(java.util.List)" class="member-name-link">fulfillments</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="StoredValueLoad.html" title="class in com.bilt.pos.session.settlement">StoredValueLoad</a>&gt;&nbsp;fulfillments)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Replaces the stored value line fulfillments.</div>
+</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#paymentProcessingDisplay(com.bilt.pos.display.DisplayPayload)" class="member-name-link">paymentProcessingDisplay</a><wbr>(<a href="../../display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a>&nbsp;paymentProcessingDisplay)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Overrides the display shown while the card payment is processing.</div>
+</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#refundAllocations(java.util.List)" class="member-name-link">refundAllocations</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&gt;&nbsp;refundAllocations)</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#refunds(java.util.List)" class="member-name-link">refunds</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&gt;&nbsp;refunds)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Replaces the settlement's refund/restoration allocations.</div>
+<div class="block">Replaces the allocations resolving the basket's return target.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#settlementType(com.bilt.pos.session.settlement.SettlementType)" class="member-name-link">settlementType</a><wbr>(<a href="SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a>&nbsp;settlementType)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Selects how a mixed sale/return basket moves money.</div>
+<div class="block">Default <a href="SettlementType.html#REFUND_THEN_CHARGE"><code>SettlementType.REFUND_THEN_CHARGE</code></a>.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#voidAndAbort(boolean)" class="member-name-link">voidAndAbort</a><wbr>(boolean&nbsp;voidAndAbort)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 </div>
 </div>
 </div>
@@ -174,68 +185,70 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="disableRebates(boolean)">
 <h3>disableRebates</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">disableRebates</span><wbr><span class="parameters">(boolean&nbsp;disableRebates)</span></div>
+<div class="block">Disables terminal offer/rebate redemption for this settlement.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="disablePoints(boolean)">
 <h3>disablePoints</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">disablePoints</span><wbr><span class="parameters">(boolean&nbsp;disablePoints)</span></div>
+<div class="block">Disables point/reward redemption for this settlement.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="disableAward(boolean)">
 <h3>disableAward</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">disableAward</span><wbr><span class="parameters">(boolean&nbsp;disableAward)</span></div>
-<div class="block">Skips the loyalty award step, so the member earns no points on
- this checkout. Redemptions are unaffected — combine with
- <a href="#disableRebates(boolean)"><code>disableRebates(boolean)</code></a> and <a href="#disablePoints(boolean)"><code>disablePoints(boolean)</code></a>
- to run a fully loyalty-free charge sequence.</div>
+<div class="block">Disables the post-payment loyalty award for this settlement.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="cashback(java.math.BigDecimal)">
 <h3>cashback</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">cashback</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;cashback)</span></div>
-<div class="block">Cashback to hand the customer, authorized on top of the sale
- amount. Must be positive — a negative value would reduce the
- amount charged and complete the checkout underpaid. Leave unset
- for no cashback.</div>
+<div class="block">Requests positive cashback in addition to the card charge.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="paymentProcessingDisplay(com.bilt.pos.display.DisplayPayload)">
 <h3>paymentProcessingDisplay</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">paymentProcessingDisplay</span><wbr><span class="parameters">(<a href="../../display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a>&nbsp;paymentProcessingDisplay)</span></div>
+<div class="block">Overrides the display shown while the card payment is processing.</div>
 </section>
 </li>
 <li>
-<section class="detail" id="refundAllocations(java.util.List)">
-<h3>refundAllocations</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">refundAllocations</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&gt;&nbsp;refundAllocations)</span></div>
-<div class="block">Replaces the settlement's refund/restoration allocations. See
- <a href="SettlementOptions.html#getRefundAllocations()"><code>SettlementOptions.getRefundAllocations()</code></a> for net-settlement
- totals.</div>
+<section class="detail" id="refunds(java.util.List)">
+<h3>refunds</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">refunds</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&gt;&nbsp;refunds)</span></div>
+<div class="block">Replaces the allocations resolving the basket's return target.</div>
 </section>
 </li>
 <li>
-<section class="detail" id="addRefundAllocation(com.bilt.pos.session.settlement.RefundAllocation)">
-<h3>addRefundAllocation</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">addRefundAllocation</span><wbr><span class="parameters">(<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&nbsp;allocation)</span></div>
-<div class="block">Adds one register-selected refund/restoration allocation.</div>
+<section class="detail" id="addRefund(com.bilt.pos.session.settlement.RefundAllocation)">
+<h3>addRefund</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">addRefund</span><wbr><span class="parameters">(<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&nbsp;refund)</span></div>
+<div class="block">Adds one register-selected refund allocation.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="fulfillments(java.util.List)">
+<h3>fulfillments</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">fulfillments</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="StoredValueLoad.html" title="class in com.bilt.pos.session.settlement">StoredValueLoad</a>&gt;&nbsp;fulfillments)</span></div>
+<div class="block">Replaces the stored value line fulfillments.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="addFulfillment(com.bilt.pos.session.settlement.StoredValueLoad)">
+<h3>addFulfillment</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">addFulfillment</span><wbr><span class="parameters">(<a href="StoredValueLoad.html" title="class in com.bilt.pos.session.settlement">StoredValueLoad</a>&nbsp;fulfillment)</span></div>
+<div class="block">Adds one activation or reload instruction for a referenced basket line.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="settlementType(com.bilt.pos.session.settlement.SettlementType)">
 <h3>settlementType</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">settlementType</span><wbr><span class="parameters">(<a href="SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a>&nbsp;settlementType)</span></div>
-<div class="block">Selects how a mixed sale/return basket moves money. Default:
- <a href="SettlementType.html#REFUND_THEN_CHARGE"><code>SettlementType.REFUND_THEN_CHARGE</code></a>.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="voidAndAbort(boolean)">
-<h3>voidAndAbort</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">voidAndAbort</span><wbr><span class="parameters">(boolean&nbsp;voidAndAbort)</span></div>
+<div class="block">Default <a href="SettlementType.html#REFUND_THEN_CHARGE"><code>SettlementType.REFUND_THEN_CHARGE</code></a>.</div>
 </section>
 </li>
 <li>

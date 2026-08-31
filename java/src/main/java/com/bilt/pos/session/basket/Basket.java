@@ -16,8 +16,10 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * An immutable snapshot of the session's basket.
@@ -38,6 +40,8 @@ public final class Basket {
     private final List<BasketLineItem> items;
     private final BigDecimal taxTotal;
     private final BigDecimal originalTotal;
+    private final BigDecimal discountTotal;
+    private final BigDecimal subtotal;
     private final BigDecimal grandTotal;
     private final BigDecimal rebateTotal;
     private final BigDecimal pointDiscountTotal;
@@ -50,6 +54,9 @@ public final class Basket {
         this.items = Collections.unmodifiableList(new ArrayList<>(builder.items));
         this.taxTotal = builder.taxTotal;
         this.originalTotal = builder.originalTotal;
+        this.discountTotal = builder.discountTotal;
+        this.subtotal = builder.subtotal == null
+                ? builder.originalTotal.subtract(builder.discountTotal) : builder.subtotal;
         this.grandTotal = builder.grandTotal;
         this.rebateTotal = builder.rebateTotal;
         this.pointDiscountTotal = builder.pointDiscountTotal;
@@ -78,12 +85,22 @@ public final class Basket {
         return taxTotal;
     }
 
-    /** Sum of {@code unitPrice × quantity} across items, before tax. */
+    /** Signed gross item value before register discounts and tax. */
     public BigDecimal getOriginalTotal() {
         return originalTotal;
     }
 
-    /** {@code originalTotal + taxTotal}. */
+    /** Signed total of register-applied line discounts. */
+    public BigDecimal getDiscountTotal() {
+        return discountTotal;
+    }
+
+    /** Signed item value after register discounts and before tax. */
+    public BigDecimal getSubtotal() {
+        return subtotal;
+    }
+
+    /** {@code subtotal + taxTotal}. */
     public BigDecimal getGrandTotal() {
         return grandTotal;
     }
@@ -123,24 +140,35 @@ public final class Basket {
         return null;
     }
 
+    /** The line with the given register reference, or {@code null}. */
+    public BasketLineItem getItemByReference(String reference) {
+        Objects.requireNonNull(reference, "reference");
+        for (BasketLineItem item : items) {
+            if (reference.equals(item.getReference())) {
+                return item;
+            }
+        }
+        return null;
+    }
+
     /**
      * The line with the given SKU, or {@code null}. When the SKU is present
-     * in both directions (a sale line and a credit line), the sale line is
-     * returned — credit lines are addressed by itemId.
+     * in multiple directions, the sale line is returned. Return and credit
+     * lines can always be addressed by itemId.
      */
     public BasketLineItem getItemBySku(String sku) {
-        BasketLineItem creditLine = null;
+        BasketLineItem returnLine = null;
         for (BasketLineItem item : items) {
             if (item.getSku().equals(sku)) {
-                if (!item.isCredit()) {
+                if (item.isSale()) {
                     return item;
                 }
-                if (creditLine == null) {
-                    creditLine = item;
+                if (returnLine == null) {
+                    returnLine = item;
                 }
             }
         }
-        return creditLine;
+        return returnLine;
     }
 
     public boolean isEmpty() {
@@ -152,38 +180,69 @@ public final class Basket {
         return items.size();
     }
 
-    /** Whether the basket contains at least one sale/non-credit line. */
+    /** Whether the basket contains at least one sale line. */
     public boolean hasSaleLines() {
-        return hasLines(false);
+        return hasLines(BasketItemDirection.SALE);
     }
 
-    /** Whether the basket contains at least one credit/return line. */
+    /** Whether the basket contains at least one return line. */
+    public boolean hasReturnLines() {
+        return hasLines(BasketItemDirection.RETURN);
+    }
+
+    /** Whether the basket contains at least one register-originated credit line. */
     public boolean hasCreditLines() {
-        return hasLines(true);
+        return hasLines(BasketItemDirection.CREDIT);
+    }
+
+    /** Stored value load obligations, in basket order. */
+    public List<BasketLineItem> getStoredValueLoadItems() {
+        List<BasketLineItem> loads = new ArrayList<>();
+        for (BasketLineItem item : items) {
+            if (item.getPurpose() == BasketItemPurpose.STORED_VALUE_LOAD) {
+                loads.add(item);
+            }
+        }
+        return Collections.unmodifiableList(loads);
     }
 
     /**
-     * The sale side of this basket, with credit lines removed. If this
-     * basket has no credit lines, the current snapshot is already the sale
-     * portion and is returned unchanged.
+     * Sale lines in this basket, with returns and register-originated credits
+     * removed.
      */
     public Basket salePortion() {
-        if (!hasCreditLines()) {
+        if (!hasReturnLines() && !hasCreditLines()) {
             return this;
         }
-        return filteredPortion(false);
+        return filteredPortion(EnumSet.of(BasketItemDirection.SALE));
     }
 
     /**
-     * The return side of this basket, with sale lines removed. Totals keep
-     * their credit-line sign, so {@link #returnTotal()} exposes the
-     * positive refund magnitude.
+     * The amount collected from the customer under separate settlement:
+     * sale lines reduced by register-originated credits, with returns removed.
      */
-    public Basket returnPortion() {
-        return filteredPortion(true);
+    public Basket chargePortion() {
+        if (!hasReturnLines()) {
+            return this;
+        }
+        return filteredPortion(EnumSet.of(
+                BasketItemDirection.SALE, BasketItemDirection.CREDIT));
     }
 
-    /** Positive amount that must be returned for the credit lines. */
+    /**
+     * Merchandise return lines in this basket. Register-originated credits are
+     * available separately through {@link #creditPortion()}.
+     */
+    public Basket returnPortion() {
+        return filteredPortion(EnumSet.of(BasketItemDirection.RETURN));
+    }
+
+    /** Register-originated credits in this basket. */
+    public Basket creditPortion() {
+        return filteredPortion(EnumSet.of(BasketItemDirection.CREDIT));
+    }
+
+    /** Positive amount represented by all return lines. */
     public BigDecimal returnTotal() {
         return returnPortion().getGrandTotal().abs();
     }
@@ -191,8 +250,8 @@ public final class Basket {
     /**
      * Positive monetary refund allocation required by the selected settlement
      * mode. {@link SettlementType#REFUND_THEN_CHARGE} returns the full value
-     * of the credit lines. {@link SettlementType#NET} returns only a negative
-     * basket's refund difference, or zero when sales cover the returns.
+     * of the return lines. {@link SettlementType#NET} returns only a negative
+     * basket's refund difference, or zero when the charge side covers it.
      */
     public BigDecimal getRefundAmount(SettlementType settlementType) {
         Objects.requireNonNull(settlementType, "settlementType");
@@ -203,65 +262,77 @@ public final class Basket {
     }
 
     /**
-     * Returns a full-basket snapshot whose sale lines and payment
-     * breakdown totals come from {@code settledSalePortion}, while this
-     * basket's credit lines remain present. Used after a mixed sale/return
-     * settlement, where only the sale portion went through payment
-     * orchestration but the final result still needs to describe the whole
-     * register basket.
+     * Returns a full-basket snapshot whose sale and credit lines and payment
+     * breakdown totals come from {@code settledChargePortion}, while this
+     * basket's return lines remain present. Used after a separate settlement,
+     * where only the charge portion went through payment orchestration but the
+     * final result still needs to describe the whole register basket.
      */
-    public Basket withSettledSalePortion(Basket settledSalePortion) {
-        Objects.requireNonNull(settledSalePortion, "settledSalePortion");
-        if (!hasCreditLines()) {
-            return settledSalePortion;
+    public Basket withSettledChargePortion(Basket settledChargePortion) {
+        Objects.requireNonNull(settledChargePortion, "settledChargePortion");
+        if (!hasReturnLines()) {
+            return settledChargePortion;
         }
         List<BasketLineItem> mergedItems = new ArrayList<>();
         for (BasketLineItem line : items) {
-            BasketLineItem settledLine = settledSalePortion.getItem(line.getItemId());
+            BasketLineItem settledLine = settledChargePortion.getItem(line.getItemId());
             mergedItems.add(settledLine != null ? settledLine : line);
         }
         Basket returns = returnPortion();
-        BigDecimal mergedOriginalTotal = settledSalePortion.getOriginalTotal()
+        BigDecimal mergedOriginalTotal = settledChargePortion.getOriginalTotal()
                 .add(returns.getOriginalTotal());
-        BigDecimal mergedTaxTotal = settledSalePortion.getTaxTotal()
+        BigDecimal mergedDiscountTotal = settledChargePortion.getDiscountTotal()
+                .add(returns.getDiscountTotal());
+        BigDecimal mergedSubtotal = settledChargePortion.getSubtotal()
+                .add(returns.getSubtotal());
+        BigDecimal mergedTaxTotal = settledChargePortion.getTaxTotal()
                 .add(returns.getTaxTotal());
         return Basket.builder()
                 .cartId(cartId)
                 .items(mergedItems)
                 .originalTotal(mergedOriginalTotal)
+                .discountTotal(mergedDiscountTotal)
+                .subtotal(mergedSubtotal)
                 .taxTotal(mergedTaxTotal)
-                .grandTotal(mergedOriginalTotal.add(mergedTaxTotal))
-                .rebateTotal(settledSalePortion.getRebateTotal())
-                .pointDiscountTotal(settledSalePortion.getPointDiscountTotal())
-                .storedValueTotal(settledSalePortion.getStoredValueTotal())
-                .cardPaymentTotal(settledSalePortion.getCardPaymentTotal())
+                .grandTotal(mergedSubtotal.add(mergedTaxTotal))
+                .rebateTotal(settledChargePortion.getRebateTotal())
+                .pointDiscountTotal(settledChargePortion.getPointDiscountTotal())
+                .storedValueTotal(settledChargePortion.getStoredValueTotal())
+                .cardPaymentTotal(settledChargePortion.getCardPaymentTotal())
                 .build();
     }
 
-    private Basket filteredPortion(boolean credit) {
+    private Basket filteredPortion(Set<BasketItemDirection> directions) {
         List<BasketLineItem> filteredItems = new ArrayList<>();
         BigDecimal filteredOriginalTotal = BigDecimal.ZERO;
+        BigDecimal filteredDiscountTotal = BigDecimal.ZERO;
+        BigDecimal filteredSubtotal = BigDecimal.ZERO;
         BigDecimal filteredLineTaxTotal = BigDecimal.ZERO;
         for (BasketLineItem line : items) {
-            if (line.isCredit() == credit) {
+            if (directions.contains(line.getDirection())) {
                 filteredItems.add(line);
                 filteredOriginalTotal = filteredOriginalTotal.add(line.getOriginalTotal());
+                filteredDiscountTotal = filteredDiscountTotal.add(line.getDiscountTotal());
+                filteredSubtotal = filteredSubtotal.add(line.getSubtotal());
                 filteredLineTaxTotal = filteredLineTaxTotal.add(line.getTaxAmount());
             }
         }
-        BigDecimal filteredTaxTotal = filteredTaxTotal(credit, filteredLineTaxTotal,
+        BigDecimal filteredTaxTotal = filteredTaxTotal(directions, filteredLineTaxTotal,
                 !filteredItems.isEmpty());
         return Basket.builder()
                 .cartId(cartId)
                 .items(filteredItems)
                 .originalTotal(filteredOriginalTotal)
+                .discountTotal(filteredDiscountTotal)
+                .subtotal(filteredSubtotal)
                 .taxTotal(filteredTaxTotal)
-                .grandTotal(filteredOriginalTotal.add(filteredTaxTotal))
+                .grandTotal(filteredSubtotal.add(filteredTaxTotal))
                 .updatedAt(updatedAt)
                 .build();
     }
 
-    private BigDecimal filteredTaxTotal(boolean credit, BigDecimal filteredLineTaxTotal,
+    private BigDecimal filteredTaxTotal(Set<BasketItemDirection> directions,
+            BigDecimal filteredLineTaxTotal,
             boolean hasFilteredItems) {
         if (!hasFilteredItems) {
             return BigDecimal.ZERO;
@@ -269,21 +340,32 @@ public final class Basket {
         if (taxTotal.compareTo(lineTaxTotal()) == 0) {
             return filteredLineTaxTotal;
         }
-        if (!(hasSaleLines() && hasCreditLines())) {
+        if (directionsCoverBasket(directions)) {
             return taxTotal;
         }
 
         // A basket-level override supersedes item tax, so splitting the
         // basket must preserve that override instead of falling back to
         // per-line taxes. Treat it as net basket tax and split by signed
-        // subtotals; the return side therefore receives a negative share.
-        if (originalTotal.compareTo(BigDecimal.ZERO) == 0) {
-            return credit ? BigDecimal.ZERO : taxTotal;
+        // subtotals; the refund side therefore receives a negative share.
+        if (subtotal.compareTo(BigDecimal.ZERO) == 0) {
+            return directions.contains(BasketItemDirection.SALE) ? taxTotal : BigDecimal.ZERO;
         }
-        BigDecimal saleTaxTotal = taxTotal
-                .multiply(originalTotal(false))
-                .divide(originalTotal, MONEY_SCALE, RoundingMode.HALF_UP);
-        return credit ? taxTotal.subtract(saleTaxTotal) : saleTaxTotal;
+        BigDecimal filteredSubtotal = BigDecimal.ZERO;
+        for (BasketItemDirection direction : directions) {
+            filteredSubtotal = filteredSubtotal.add(subtotal(direction));
+        }
+        return taxTotal.multiply(filteredSubtotal)
+                .divide(subtotal, MONEY_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private boolean directionsCoverBasket(Set<BasketItemDirection> directions) {
+        for (BasketLineItem line : items) {
+            if (!directions.contains(line.getDirection())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private BigDecimal lineTaxTotal() {
@@ -294,19 +376,19 @@ public final class Basket {
         return total;
     }
 
-    private BigDecimal originalTotal(boolean credit) {
+    private BigDecimal subtotal(BasketItemDirection direction) {
         BigDecimal total = BigDecimal.ZERO;
         for (BasketLineItem line : items) {
-            if (line.isCredit() == credit) {
-                total = total.add(line.getOriginalTotal());
+            if (line.getDirection() == direction) {
+                total = total.add(line.getSubtotal());
             }
         }
         return total;
     }
 
-    private boolean hasLines(boolean credit) {
+    private boolean hasLines(BasketItemDirection direction) {
         for (BasketLineItem line : items) {
-            if (line.isCredit() == credit) {
+            if (line.getDirection() == direction) {
                 return true;
             }
         }
@@ -320,6 +402,8 @@ public final class Basket {
         private List<BasketLineItem> items = new ArrayList<>();
         private BigDecimal taxTotal = BigDecimal.ZERO;
         private BigDecimal originalTotal = BigDecimal.ZERO;
+        private BigDecimal discountTotal = BigDecimal.ZERO;
+        private BigDecimal subtotal;
         private BigDecimal grandTotal = BigDecimal.ZERO;
         private BigDecimal rebateTotal = BigDecimal.ZERO;
         private BigDecimal pointDiscountTotal = BigDecimal.ZERO;
@@ -347,6 +431,16 @@ public final class Basket {
 
         public Builder originalTotal(BigDecimal originalTotal) {
             this.originalTotal = originalTotal;
+            return this;
+        }
+
+        public Builder discountTotal(BigDecimal discountTotal) {
+            this.discountTotal = discountTotal;
+            return this;
+        }
+
+        public Builder subtotal(BigDecimal subtotal) {
+            this.subtotal = subtotal;
             return this;
         }
 

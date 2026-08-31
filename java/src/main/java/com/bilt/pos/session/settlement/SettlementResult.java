@@ -41,6 +41,7 @@ public final class SettlementResult {
     // Charge-side breakdown
     private final BigDecimal authorizedAmount;
     private final BigDecimal storedValueAmountUsed;
+    private final BigDecimal storedValueLoadedAmount;
     private final BigDecimal cardAmountCharged;
     private final String approvalCode;
     private final String acquirerTransactionId;
@@ -86,6 +87,7 @@ public final class SettlementResult {
         this.finalBasket = builder.finalBasket;
         this.authorizedAmount = builder.authorizedAmount;
         this.storedValueAmountUsed = builder.storedValueAmountUsed;
+        this.storedValueLoadedAmount = builder.storedValueLoadedAmount;
         this.cardAmountCharged = builder.cardAmountCharged;
         this.approvalCode = builder.approvalCode;
         this.acquirerTransactionId = builder.acquirerTransactionId;
@@ -144,6 +146,30 @@ public final class SettlementResult {
     /** Amount charged to the stored value card; zero if no split. */
     public BigDecimal getStoredValueAmountUsed() {
         return storedValueAmountUsed;
+    }
+
+    /** Total value activated or loaded for stored value basket lines. */
+    public BigDecimal getStoredValueLoadedAmount() {
+        return storedValueLoadedAmount;
+    }
+
+    /** References for each stored value basket line fulfilled by this settlement. */
+    public List<StoredValueLoadRecord> getStoredValueLoads() {
+        List<StoredValueLoadRecord> loads = new ArrayList<>();
+        for (SettlementMovement movement : movements) {
+            if (movement.getStep() == SettlementStep.STORED_VALUE_LOAD
+                    && movement.getPoiTransactionId() != null
+                    && movement.getTarget() != null
+                    && movement.getTarget().getType() == SettlementTarget.Type.BASKET_LINE) {
+                loads.add(StoredValueLoadRecord.builder()
+                        .basketReference(movement.getTarget().getBasketReference())
+                        .amount(movement.getAmount())
+                        .poiTransactionId(movement.getPoiTransactionId())
+                        .poiTransactionTimestamp(movement.getPoiTransactionTimestamp())
+                        .build());
+            }
+        }
+        return Collections.unmodifiableList(loads);
     }
 
     /** Amount charged to the payment card; zero if fully covered otherwise. */
@@ -311,6 +337,7 @@ public final class SettlementResult {
         private Basket finalBasket;
         private BigDecimal authorizedAmount = BigDecimal.ZERO;
         private BigDecimal storedValueAmountUsed = BigDecimal.ZERO;
+        private BigDecimal storedValueLoadedAmount = BigDecimal.ZERO;
         private BigDecimal cardAmountCharged = BigDecimal.ZERO;
         private String approvalCode;
         private String acquirerTransactionId;
@@ -350,6 +377,7 @@ public final class SettlementResult {
             this.finalBasket = result.finalBasket;
             this.authorizedAmount = result.authorizedAmount;
             this.storedValueAmountUsed = result.storedValueAmountUsed;
+            this.storedValueLoadedAmount = result.storedValueLoadedAmount;
             this.cardAmountCharged = result.cardAmountCharged;
             this.approvalCode = result.approvalCode;
             this.acquirerTransactionId = result.acquirerTransactionId;
@@ -399,6 +427,11 @@ public final class SettlementResult {
 
         public Builder storedValueAmountUsed(BigDecimal storedValueAmountUsed) {
             this.storedValueAmountUsed = storedValueAmountUsed;
+            return this;
+        }
+
+        public Builder storedValueLoadedAmount(BigDecimal storedValueLoadedAmount) {
+            this.storedValueLoadedAmount = storedValueLoadedAmount;
             return this;
         }
 

@@ -20,10 +20,10 @@ try (CheckoutSession session = CheckoutSession.builder()
         .start()
         .get()) {
 
-    session.basket().addItem(BasketItem.of("SKU-1", "Large Vanilla Candle", 2, "24.99"));
+    session.basket().addItem(BasketItem.sale("SKU-1", "Large Vanilla Candle", 2, "24.99"));
     session.settle()
             .onSuccess(result -> printReceipt(result.getMerchantReceipt()))
-            .onError(error -> SettlementOptions.voidAndAbort())
+            .onError(error -> SettlementRecovery.abort())
             .execute();
 }
 ```

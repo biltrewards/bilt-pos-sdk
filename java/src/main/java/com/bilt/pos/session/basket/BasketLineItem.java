@@ -10,7 +10,9 @@
 package com.bilt.pos.session.basket;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -21,19 +23,24 @@ import java.util.Map;
  * the cart is being built; they are populated on the baskets delivered during
  * payment orchestration, after the terminal commits offers.</p>
  *
- * <p>On a credit line ({@link #isCredit()}) the totals — {@code originalTotal},
+ * <p>On a return or credit line the totals — {@code originalTotal},
  * {@code adjustedTotal}, and {@code taxAmount} — are negative; quantity and
  * unit price stay positive counts and catalog prices.</p>
  */
 public final class BasketLineItem {
 
     private final String itemId;
+    private final String reference;
     private final String sku;
     private final String description;
     private final String category;
     private final int quantity;
     private final BigDecimal unitPrice;
-    private final boolean credit;
+    private final List<BasketDiscount> discounts;
+    private final BigDecimal discountTotal;
+    private final BigDecimal subtotal;
+    private final BasketItemDirection direction;
+    private final BasketItemPurpose purpose;
     private final BigDecimal originalTotal;
     private final BigDecimal rebateAmount;
     private final String rebateLabel;
@@ -44,12 +51,20 @@ public final class BasketLineItem {
 
     private BasketLineItem(Builder builder) {
         this.itemId = builder.itemId;
+        this.reference = builder.reference;
         this.sku = builder.sku;
         this.description = builder.description;
         this.category = builder.category;
         this.quantity = builder.quantity;
         this.unitPrice = builder.unitPrice;
-        this.credit = builder.credit;
+        this.discounts = builder.discounts == null
+                ? Collections.emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(builder.discounts));
+        this.discountTotal = builder.discountTotal;
+        this.subtotal = builder.subtotal == null && builder.originalTotal != null
+                ? builder.originalTotal.subtract(builder.discountTotal) : builder.subtotal;
+        this.direction = builder.direction;
+        this.purpose = builder.purpose;
         this.originalTotal = builder.originalTotal;
         this.rebateAmount = builder.rebateAmount;
         this.rebateLabel = builder.rebateLabel;
@@ -69,6 +84,11 @@ public final class BasketLineItem {
     /** Session-assigned identifier: {@code "1"}, {@code "2"}, ... */
     public String getItemId() {
         return itemId;
+    }
+
+    /** Register-stable reference for settlement-time fulfillment, or {@code null}. */
+    public String getReference() {
+        return reference;
     }
 
     public String getSku() {
@@ -91,15 +111,45 @@ public final class BasketLineItem {
         return unitPrice;
     }
 
-    /**
-     * Whether this line subtracts from the basket (return, trade-in); its
-     * totals and tax are negative.
-     */
-    public boolean isCredit() {
-        return credit;
+    /** Register-applied discounts, in application order. */
+    public List<BasketDiscount> getDiscounts() {
+        return discounts;
     }
 
-    /** {@code unitPrice × quantity}, negated on a credit line. */
+    /** Signed register discount total; negative on a return or credit line. */
+    public BigDecimal getDiscountTotal() {
+        return discountTotal;
+    }
+
+    /** Signed line value after register discounts and before terminal rebates. */
+    public BigDecimal getSubtotal() {
+        return subtotal;
+    }
+
+    public BasketItemDirection getDirection() {
+        return direction;
+    }
+
+    public BasketItemPurpose getPurpose() {
+        return purpose;
+    }
+
+    /** Whether this line adds sale value to the basket. */
+    public boolean isSale() {
+        return direction == BasketItemDirection.SALE;
+    }
+
+    /** Whether this line returns value to the customer. */
+    public boolean isReturn() {
+        return direction == BasketItemDirection.RETURN;
+    }
+
+    /** Whether this is a register-originated credit rather than a return. */
+    public boolean isCredit() {
+        return direction == BasketItemDirection.CREDIT;
+    }
+
+    /** {@code unitPrice × quantity}, negated on a return or credit line. */
     public BigDecimal getOriginalTotal() {
         return originalTotal;
     }
@@ -114,7 +164,7 @@ public final class BasketLineItem {
         return rebateLabel;
     }
 
-    /** {@code originalTotal − rebateAmount}. */
+    /** {@code subtotal − rebateAmount}. */
     public BigDecimal getAdjustedTotal() {
         return adjustedTotal;
     }
@@ -138,12 +188,17 @@ public final class BasketLineItem {
     public static final class Builder {
 
         private String itemId;
+        private String reference;
         private String sku;
         private String description;
         private String category;
         private int quantity;
         private BigDecimal unitPrice;
-        private boolean credit;
+        private List<BasketDiscount> discounts = new ArrayList<>();
+        private BigDecimal discountTotal = BigDecimal.ZERO;
+        private BigDecimal subtotal;
+        private BasketItemDirection direction = BasketItemDirection.SALE;
+        private BasketItemPurpose purpose = BasketItemPurpose.MERCHANDISE;
         private BigDecimal originalTotal;
         private BigDecimal rebateAmount = BigDecimal.ZERO;
         private String rebateLabel;
@@ -157,6 +212,11 @@ public final class BasketLineItem {
 
         public Builder itemId(String itemId) {
             this.itemId = itemId;
+            return this;
+        }
+
+        public Builder reference(String reference) {
+            this.reference = reference;
             return this;
         }
 
@@ -185,8 +245,28 @@ public final class BasketLineItem {
             return this;
         }
 
-        public Builder credit(boolean credit) {
-            this.credit = credit;
+        public Builder discounts(List<BasketDiscount> discounts) {
+            this.discounts = discounts;
+            return this;
+        }
+
+        public Builder discountTotal(BigDecimal discountTotal) {
+            this.discountTotal = discountTotal;
+            return this;
+        }
+
+        public Builder subtotal(BigDecimal subtotal) {
+            this.subtotal = subtotal;
+            return this;
+        }
+
+        public Builder direction(BasketItemDirection direction) {
+            this.direction = direction;
+            return this;
+        }
+
+        public Builder purpose(BasketItemPurpose purpose) {
+            this.purpose = purpose;
             return this;
         }
 

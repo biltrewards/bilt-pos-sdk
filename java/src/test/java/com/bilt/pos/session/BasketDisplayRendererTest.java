@@ -2,6 +2,7 @@ package com.bilt.pos.session;
 
 import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.basket.BasketItemDirection;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.display.DisplayContext;
 import com.bilt.pos.session.display.DisplayTarget;
@@ -111,19 +112,19 @@ class BasketDisplayRendererTest {
     }
 
     @Test
-    void creditLinesRenderNegativeAmounts() {
-        // a sale's return line: the credit line's totals are negative in the
+    void returnLinesRenderNegativeAmounts() {
+        // a sale's return line: the line totals are negative in the
         // snapshot and flow to the receipt unchanged
-        BasketLineItem returned = BasketLineItem.builder()
-                .itemId("1").sku("SKU-1").description("Returned Item")
+        BasketLineItem returnLine = BasketLineItem.builder()
+                .itemId("1").sku("SKU-1").description("Return Item")
                 .quantity(1).unitPrice(new BigDecimal("24.99"))
-                .credit(true)
+                .direction(BasketItemDirection.RETURN)
                 .originalTotal(new BigDecimal("-24.99"))
                 .adjustedTotal(new BigDecimal("-24.99"))
                 .taxAmount(new BigDecimal("-2.22"))
                 .build();
         Basket basket = Basket.builder()
-                .items(List.of(returned))
+                .items(List.of(returnLine))
                 .originalTotal(new BigDecimal("-24.99"))
                 .taxTotal(new BigDecimal("-2.22"))
                 .grandTotal(new BigDecimal("-27.21"))

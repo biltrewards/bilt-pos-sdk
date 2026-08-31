@@ -84,7 +84,7 @@ loadScripts(document, 'script');</script>
 </li>
 <li>
 <div id="class-summary">
-<div class="table-tabs" role="tablist" aria-orientation="horizontal"><button id="class-summary-tab0" role="tab" aria-selected="true" aria-controls="class-summary.tabpanel" tabindex="0" onkeydown="switchTab(event)" onclick="show('class-summary', 'class-summary', 2)" class="active-table-tab">All Classes and Interfaces</button><button id="class-summary-tab1" role="tab" aria-selected="false" aria-controls="class-summary.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('class-summary', 'class-summary-tab1', 2)" class="table-tab">Interfaces</button><button id="class-summary-tab2" role="tab" aria-selected="false" aria-controls="class-summary.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('class-summary', 'class-summary-tab2', 2)" class="table-tab">Classes</button></div>
+<div class="table-tabs" role="tablist" aria-orientation="horizontal"><button id="class-summary-tab0" role="tab" aria-selected="true" aria-controls="class-summary.tabpanel" tabindex="0" onkeydown="switchTab(event)" onclick="show('class-summary', 'class-summary', 2)" class="active-table-tab">All Classes and Interfaces</button><button id="class-summary-tab1" role="tab" aria-selected="false" aria-controls="class-summary.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('class-summary', 'class-summary-tab1', 2)" class="table-tab">Interfaces</button><button id="class-summary-tab2" role="tab" aria-selected="false" aria-controls="class-summary.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('class-summary', 'class-summary-tab2', 2)" class="table-tab">Classes</button><button id="class-summary-tab3" role="tab" aria-selected="false" aria-controls="class-summary.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('class-summary', 'class-summary-tab3', 2)" class="table-tab">Enum Classes</button></div>
 <div id="class-summary.tabpanel" role="tabpanel" aria-labelledby="class-summary-tab0">
 <div class="summary-table two-column-summary">
 <div class="table-header col-first">Class</div>
@@ -97,24 +97,36 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="Basket.html" title="class in com.bilt.pos.session.basket"><code>Basket</code></a>.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></div>
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a></div>
 <div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="block">A register-applied discount on one basket line.</div>
+</div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">An item added to the basket by the register.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="BasketItem.html" title="class in com.bilt.pos.session.basket"><code>BasketItem</code></a>.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="BasketItemDirection.html" title="enum class in com.bilt.pos.session.basket">BasketItemDirection</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab3">
+<div class="block">Commercial direction of a basket line.</div>
+</div>
+<div class="col-first even-row-color class-summary class-summary-tab3"><a href="BasketItemPurpose.html" title="enum class in com.bilt.pos.session.basket">BasketItemPurpose</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab3">
+<div class="block">What completing a basket line requires beyond collecting or returning money.</div>
+</div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">An immutable line of a <a href="Basket.html" title="class in com.bilt.pos.session.basket"><code>Basket</code></a> snapshot.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="BasketLineItem.html" title="class in com.bilt.pos.session.basket"><code>BasketLineItem</code></a>.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab1"><a href="BasketMutation.html" title="interface in com.bilt.pos.session.basket">BasketMutation</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab1">
+<div class="col-first odd-row-color class-summary class-summary-tab1"><a href="BasketMutation.html" title="interface in com.bilt.pos.session.basket">BasketMutation</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab1">
 <div class="block">Receiver for batched basket mutations via
  <code>session.basket().mutate(...)</code>: all changes are applied atomically and
  followed by a single display update.</div>

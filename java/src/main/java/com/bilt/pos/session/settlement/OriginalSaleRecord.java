@@ -10,6 +10,9 @@
 package com.bilt.pos.session.settlement;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -22,6 +25,7 @@ public final class OriginalSaleRecord {
     private final Instant cardPoiTransactionTimestamp;
     private final String storedValuePoiTransactionId;
     private final Instant storedValuePoiTransactionTimestamp;
+    private final List<StoredValueLoadRecord> storedValueLoads;
     private final String rebatePoiTransactionId;
     private final Instant rebatePoiTransactionTimestamp;
     private final String redemptionPoiTransactionId;
@@ -35,6 +39,8 @@ public final class OriginalSaleRecord {
         this.cardPoiTransactionTimestamp = builder.cardPoiTransactionTimestamp;
         this.storedValuePoiTransactionId = builder.storedValuePoiTransactionId;
         this.storedValuePoiTransactionTimestamp = builder.storedValuePoiTransactionTimestamp;
+        this.storedValueLoads = Collections.unmodifiableList(
+                new ArrayList<>(builder.storedValueLoads));
         this.rebatePoiTransactionId = builder.rebatePoiTransactionId;
         this.rebatePoiTransactionTimestamp = builder.rebatePoiTransactionTimestamp;
         this.redemptionPoiTransactionId = builder.redemptionPoiTransactionId;
@@ -56,6 +62,7 @@ public final class OriginalSaleRecord {
                 .storedValuePoiTransactionId(result.getStoredValuePoiTransactionId())
                 .storedValuePoiTransactionTimestamp(
                         result.getStoredValuePoiTransactionTimestamp())
+                .storedValueLoads(result.getStoredValueLoads())
                 .rebatePoiTransactionId(result.getRebatePoiTransactionId())
                 .rebatePoiTransactionTimestamp(result.getRebatePoiTransactionTimestamp())
                 .redemptionPoiTransactionId(result.getRedemptionPoiTransactionId())
@@ -81,6 +88,11 @@ public final class OriginalSaleRecord {
 
     public Instant getStoredValuePoiTransactionTimestamp() {
         return storedValuePoiTransactionTimestamp;
+    }
+
+    /** Stored value basket-line fulfillments that must be reversed by a whole-sale void. */
+    public List<StoredValueLoadRecord> getStoredValueLoads() {
+        return storedValueLoads;
     }
 
     public String getRebatePoiTransactionId() {
@@ -115,6 +127,7 @@ public final class OriginalSaleRecord {
     public boolean hasMovement() {
         return cardPoiTransactionId != null
                 || storedValuePoiTransactionId != null
+                || !storedValueLoads.isEmpty()
                 || rebatePoiTransactionId != null
                 || redemptionPoiTransactionId != null
                 || awardPoiTransactionId != null;
@@ -135,6 +148,7 @@ public final class OriginalSaleRecord {
                         that.storedValuePoiTransactionId)
                 && Objects.equals(storedValuePoiTransactionTimestamp,
                         that.storedValuePoiTransactionTimestamp)
+                && Objects.equals(storedValueLoads, that.storedValueLoads)
                 && Objects.equals(rebatePoiTransactionId, that.rebatePoiTransactionId)
                 && Objects.equals(rebatePoiTransactionTimestamp,
                         that.rebatePoiTransactionTimestamp)
@@ -152,6 +166,7 @@ public final class OriginalSaleRecord {
     public int hashCode() {
         return Objects.hash(cardPoiTransactionId, cardPoiTransactionTimestamp,
                 storedValuePoiTransactionId, storedValuePoiTransactionTimestamp,
+                storedValueLoads,
                 rebatePoiTransactionId, rebatePoiTransactionTimestamp,
                 redemptionPoiTransactionId, redemptionPoiTransactionTimestamp,
                 awardPoiTransactionId, awardPoiTransactionTimestamp, memberId);
@@ -164,6 +179,7 @@ public final class OriginalSaleRecord {
         private Instant cardPoiTransactionTimestamp;
         private String storedValuePoiTransactionId;
         private Instant storedValuePoiTransactionTimestamp;
+        private List<StoredValueLoadRecord> storedValueLoads = new ArrayList<>();
         private String rebatePoiTransactionId;
         private Instant rebatePoiTransactionTimestamp;
         private String redemptionPoiTransactionId;
@@ -193,6 +209,18 @@ public final class OriginalSaleRecord {
         public Builder storedValuePoiTransactionTimestamp(
                 Instant storedValuePoiTransactionTimestamp) {
             this.storedValuePoiTransactionTimestamp = storedValuePoiTransactionTimestamp;
+            return this;
+        }
+
+        public Builder storedValueLoads(List<StoredValueLoadRecord> storedValueLoads) {
+            this.storedValueLoads = storedValueLoads == null
+                    ? new ArrayList<>() : new ArrayList<>(storedValueLoads);
+            return this;
+        }
+
+        public Builder addStoredValueLoad(StoredValueLoadRecord storedValueLoad) {
+            this.storedValueLoads.add(Objects.requireNonNull(storedValueLoad,
+                    "storedValueLoad"));
             return this;
         }
 
