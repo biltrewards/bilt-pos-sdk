@@ -88,7 +88,7 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 3. **Point redemption** (identified members, if enabled and a balance remains) — terminal redeems points for monetary value → `onPointsRedeemed`
 4. **Stored value charge** (if a card was registered and a balance remains) — terminal charges the gift card → `onGiftCardPayment`
 5. **Card charge** (if a balance remains) — terminal processes the card for the remaining amount → `onCardCharged`
-6. **Stored value fulfillment** (for each referenced `storedValueLoad` basket line) — terminal activates or reloads the purchased card after funding commits → `onStoredValueLoaded`
+6. **Stored value fulfillment** (for each supplied fulfillment targeting a referenced sale line) — terminal activates or reloads the purchased card after funding commits → `onStoredValueLoaded`
 7. **Award** — terminal submits the loyalty award (Store-and-Forward if loyalty is down) → `onAwarded`
 8. `onSuccess` / `onError`
 
@@ -559,8 +559,9 @@ Discounts may reduce a line to exactly zero, never below zero. The basket expose
 The basket owns the commercial line and `SettlementOptions` owns the card-specific terminal instruction. A stable reference joins them, so the face value has one source of truth:
 
 ```java
-session.basket().addItem(BasketItem.storedValueLoad(
-        "gift-card-1", "GIFT-CARD", "Gift card", new BigDecimal("50.00")));
+session.basket().addItem(BasketItem.sale(
+        "GIFT-CARD", "Gift card", 1, new BigDecimal("50.00"))
+        .withReference("gift-card-1"));
 
 SettlementOptions options = SettlementOptions.builder()
         .addFulfillment(StoredValueLoad.activate(
@@ -572,14 +573,14 @@ SettlementResult result = session.settle(options)
         .get();
 ```
 
-Settlement first funds the basket, then activates or reloads each referenced card. Every stored-value-load line requires exactly one matching fulfillment. If fulfillment fails, committed loads and charge-side funding are unwound in reverse order. `SettlementResult.getStoredValueLoads()` carries persistable references; whole-sale voids reverse those loads before reversing their funding. A line discount can reduce the customer price, including to zero, while fulfillment still loads the line's original face value.
+Settlement first funds the basket, then activates or reloads each supplied fulfillment. A fulfillment must target an existing referenced sale line with a positive original total, and a line can have at most one fulfillment. The basket does not otherwise classify gift-card products or require fulfillment; that decision belongs to the register. If fulfillment fails, committed loads and charge-side funding are unwound in reverse order. `SettlementResult.getStoredValueLoads()` carries persistable references; whole-sale voids reverse those loads before reversing their funding. A line discount can reduce the customer price, including to zero, while fulfillment still loads the line's original value.
 
 To issue a merchant-funded gift card, offset the load line with a credit. The credit reduces the charge to zero but does not require a refund allocation; the fulfillment still loads the card's full face value:
 
 ```java
-session.basket().addItem(BasketItem.storedValueLoad(
-        "gift-card-1", "GIFT-CARD", "Customer service gift card",
-        new BigDecimal("50.00")));
+session.basket().addItem(BasketItem.sale(
+        "GIFT-CARD", "Customer service gift card", 1, new BigDecimal("50.00"))
+        .withReference("gift-card-1"));
 session.basket().addItem(BasketItem.credit(
         "GOODWILL", "Customer service credit", 1, new BigDecimal("50.00")));
 
@@ -710,7 +711,7 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | Refund | `refund()`, `refund(amount)`, `refundUnlinked(amount)` |
 | Item-based refund of a prior sale | `basket().addItem(BasketItem.returnItem(...))` + `session.settle(SettlementOptions.builder().addRefund(...).build())` |
 | Register-originated credit | `basket().addItem(BasketItem.credit(...))` (reduces sales; no refund allocation) |
-| Sell a gift card | `basket().addItem(BasketItem.storedValueLoad(...))` + `SettlementOptions.builder().addFulfillment(StoredValueLoad.activate/reload(...))` |
+| Sell a gift card | referenced `BasketItem.sale(...).withReference(...)` + `SettlementOptions.builder().addFulfillment(StoredValueLoad.activate/reload(...))` |
 | Void a completed txn | `session.voidTransaction()` or `session.voidTransaction(originalSaleRecord)` |
 | Cancel in-progress op | `session.abort().execute()` (safe from any thread; overtakes the operation lane) |
 | Refresh customer display manually | `session.updateDisplay(basket)` / `.updateDisplay(payload)` → `.execute()` |

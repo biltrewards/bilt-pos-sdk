@@ -94,15 +94,10 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">An item added to the basket by the register.
 
- <p>Factories state the commercial intent directly: <a href="#sale(java.lang.String,java.lang.String,int,java.math.BigDecimal)"><code>sale(java.lang.String, java.lang.String, int, java.math.BigDecimal)</code></a>,
- <a href="#returnItem(java.lang.String,java.lang.String,int,java.math.BigDecimal)"><code>returnItem(java.lang.String, java.lang.String, int, java.math.BigDecimal)</code></a>, <a href="#credit(java.lang.String,java.lang.String,int,java.math.BigDecimal)"><code>credit(java.lang.String, java.lang.String, int, java.math.BigDecimal)</code></a>, or <a href="#storedValueLoad(java.lang.String,java.lang.String,java.lang.String,java.math.BigDecimal)"><code>storedValueLoad(java.lang.String, java.lang.String, java.lang.String, java.math.BigDecimal)</code></a>. Ordinary merchandise is
- upserted by SKU and direction. Stored value load lines are distinct
- obligations keyed by their register reference, so buying two cards with
- the same SKU produces two lines instead of quantity two.</p>
-
- <p>A stored value load line contains only receipt-safe commercial data.
- The card and activation/reload instruction belong in the settlement
- options and are joined to this line by <a href="#getReference()"><code>getReference()</code></a>.</p></div>
+ <p>Factories state the commercial direction directly: <a href="#sale(java.lang.String,java.lang.String,int,java.math.BigDecimal)"><code>sale(java.lang.String, java.lang.String, int, java.math.BigDecimal)</code></a>,
+ <a href="#returnItem(java.lang.String,java.lang.String,int,java.math.BigDecimal)"><code>returnItem(java.lang.String, java.lang.String, int, java.math.BigDecimal)</code></a>, or <a href="#credit(java.lang.String,java.lang.String,int,java.math.BigDecimal)"><code>credit(java.lang.String, java.lang.String, int, java.math.BigDecimal)</code></a>. Unreferenced items are upserted by
+ SKU and direction. A referenced item remains a distinct line and can be
+ targeted by settlement-time fulfillment.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -166,63 +161,57 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Pass-through metadata.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="BasketItemPurpose.html" title="enum class in com.bilt.pos.session.basket">BasketItemPurpose</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPurpose()" class="member-name-link">getPurpose</a>()</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getQuantity()" class="member-name-link">getQuantity</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getQuantity()" class="member-name-link">getQuantity</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getReference()" class="member-name-link">getReference</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getReference()" class="member-name-link">getReference</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Register-stable reference for settlement-time fulfillment, or <code>null</code>.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getSku()" class="member-name-link">getSku</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getSku()" class="member-name-link">getSku</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Primary catalog identifier of the product.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getTaxAmount()" class="member-name-link">getTaxAmount</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getTaxAmount()" class="member-name-link">getTaxAmount</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Optional fixed tax amount; overrides <a href="#getTaxRate()"><code>getTaxRate()</code></a>.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getTaxRate()" class="member-name-link">getTaxRate</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getTaxRate()" class="member-name-link">getTaxRate</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Optional tax rate, e.g.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getUnitPrice()" class="member-name-link">getUnitPrice</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#returnItem(java.lang.String,java.lang.String,int,java.math.BigDecimal)" class="member-name-link">returnItem</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;description,
- int&nbsp;quantity,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;unitPrice)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">Shorthand factory for a merchandise return or trade-in.</div>
-</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getUnitPrice()" class="member-name-link">getUnitPrice</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#sale(java.lang.String,java.lang.String,int,java.math.BigDecimal)" class="member-name-link">sale</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#returnItem(java.lang.String,java.lang.String,int,java.math.BigDecimal)" class="member-name-link">returnItem</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;description,
  int&nbsp;quantity,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;unitPrice)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">Shorthand factory for ordinary merchandise sold to the customer.</div>
+<div class="block">Shorthand factory for a merchandise return or trade-in.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#storedValueLoad(java.lang.String,java.lang.String,java.lang.String,java.math.BigDecimal)" class="member-name-link">storedValueLoad</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;reference,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
+<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#sale(java.lang.String,java.lang.String,int,java.math.BigDecimal)" class="member-name-link">sale</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;description,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
+ int&nbsp;quantity,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;unitPrice)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">Value sold for activation or loading onto one stored value card.</div>
+<div class="block">Shorthand factory for ordinary merchandise sold to the customer.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#withDiscount(com.bilt.pos.session.basket.BasketDiscount)" class="member-name-link">withDiscount</a><wbr>(<a href="BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a>&nbsp;discount)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Returns a copy carrying one additional register-applied discount.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#withReference(java.lang.String)" class="member-name-link">withReference</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;reference)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Returns a copy with a stable reference for settlement-time fulfillment.</div>
 </div>
 </div>
 </div>
@@ -272,23 +261,6 @@ loadScripts(document, 'script');</script>
 </section>
 </li>
 <li>
-<section class="detail" id="storedValueLoad(java.lang.String,java.lang.String,java.lang.String,java.math.BigDecimal)">
-<h3>storedValueLoad</h3>
-<div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></span>&nbsp;<span class="element-name">storedValueLoad</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;reference,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;description,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
-<div class="block">Value sold for activation or loading onto one stored value card.
- Quantity is one and tax is zero; sell activation fees as separate
- merchandise lines.</div>
-<dl class="notes">
-<dt>Parameters:</dt>
-<dd><code>reference</code> - register-stable reference used by the matching
-                  settlement fulfillment</dd>
-</dl>
-</section>
-</li>
-<li>
 <section class="detail" id="builder()">
 <h3>builder</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></span>&nbsp;<span class="element-name">builder</span>()</div>
@@ -334,6 +306,13 @@ loadScripts(document, 'script');</script>
 </section>
 </li>
 <li>
+<section class="detail" id="withReference(java.lang.String)">
+<h3>withReference</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></span>&nbsp;<span class="element-name">withReference</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;reference)</span></div>
+<div class="block">Returns a copy with a stable reference for settlement-time fulfillment.</div>
+</section>
+</li>
+<li>
 <section class="detail" id="withDiscount(com.bilt.pos.session.basket.BasketDiscount)">
 <h3>withDiscount</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></span>&nbsp;<span class="element-name">withDiscount</span><wbr><span class="parameters">(<a href="BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a>&nbsp;discount)</span></div>
@@ -344,12 +323,6 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getDirection()">
 <h3>getDirection</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="BasketItemDirection.html" title="enum class in com.bilt.pos.session.basket">BasketItemDirection</a></span>&nbsp;<span class="element-name">getDirection</span>()</div>
-</section>
-</li>
-<li>
-<section class="detail" id="getPurpose()">
-<h3>getPurpose</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="BasketItemPurpose.html" title="enum class in com.bilt.pos.session.basket">BasketItemPurpose</a></span>&nbsp;<span class="element-name">getPurpose</span>()</div>
 </section>
 </li>
 <li>

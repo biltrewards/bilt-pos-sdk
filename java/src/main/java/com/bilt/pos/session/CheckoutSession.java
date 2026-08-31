@@ -30,7 +30,6 @@ import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
 import com.bilt.pos.nexo.model.TransactionStatusRequest;
 import com.bilt.pos.nexo.model.TransactionStatusResponse;
 import com.bilt.pos.session.basket.Basket;
-import com.bilt.pos.session.basket.BasketItemPurpose;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.basket.BasketMutation;
 import com.bilt.pos.session.display.DisplayRenderer;
@@ -1232,15 +1231,13 @@ public final class CheckoutSession implements AutoCloseable {
                 throw invalidState("stored value fulfillment references missing basket line "
                         + reference);
             }
-            if (line.getPurpose() != BasketItemPurpose.STORED_VALUE_LOAD) {
+            if (!line.isSale()) {
                 throw invalidState("basket line " + reference
-                        + " is not a stored value load");
+                        + " is not a sale and cannot be fulfilled");
             }
-        }
-        for (BasketLineItem line : basket.getStoredValueLoadItems()) {
-            if (!fulfilled.contains(line.getReference())) {
-                throw invalidState("stored value load basket line " + line.getReference()
-                        + " requires a settlement fulfillment");
+            if (line.getOriginalTotal().signum() <= 0) {
+                throw invalidState("basket line " + reference
+                        + " must have a positive original total for fulfillment");
             }
         }
     }

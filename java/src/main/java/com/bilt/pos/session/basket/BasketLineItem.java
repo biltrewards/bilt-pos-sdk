@@ -40,7 +40,6 @@ public final class BasketLineItem {
     private final BigDecimal discountTotal;
     private final BigDecimal subtotal;
     private final BasketItemDirection direction;
-    private final BasketItemPurpose purpose;
     private final BigDecimal originalTotal;
     private final BigDecimal rebateAmount;
     private final String rebateLabel;
@@ -64,7 +63,6 @@ public final class BasketLineItem {
         this.subtotal = builder.subtotal == null && builder.originalTotal != null
                 ? builder.originalTotal.subtract(builder.discountTotal) : builder.subtotal;
         this.direction = builder.direction;
-        this.purpose = builder.purpose;
         this.originalTotal = builder.originalTotal;
         this.rebateAmount = builder.rebateAmount;
         this.rebateLabel = builder.rebateLabel;
@@ -128,10 +126,6 @@ public final class BasketLineItem {
 
     public BasketItemDirection getDirection() {
         return direction;
-    }
-
-    public BasketItemPurpose getPurpose() {
-        return purpose;
     }
 
     /** Whether this line adds sale value to the basket. */
@@ -198,7 +192,6 @@ public final class BasketLineItem {
         private BigDecimal discountTotal = BigDecimal.ZERO;
         private BigDecimal subtotal;
         private BasketItemDirection direction = BasketItemDirection.SALE;
-        private BasketItemPurpose purpose = BasketItemPurpose.MERCHANDISE;
         private BigDecimal originalTotal;
         private BigDecimal rebateAmount = BigDecimal.ZERO;
         private String rebateLabel;
@@ -262,11 +255,6 @@ public final class BasketLineItem {
 
         public Builder direction(BasketItemDirection direction) {
             this.direction = direction;
-            return this;
-        }
-
-        public Builder purpose(BasketItemPurpose purpose) {
-            this.purpose = purpose;
             return this;
         }
 

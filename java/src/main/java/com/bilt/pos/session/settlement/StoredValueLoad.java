@@ -14,9 +14,9 @@ import com.bilt.pos.session.storedvalue.StoredValueCard;
 import java.util.Objects;
 
 /**
- * Settlement-time fulfillment for a referenced
- * {@code BasketItem.storedValueLoad(...)} line. The amount comes from the
- * basket line so commercial value has one source of truth.
+ * Settlement-time stored value fulfillment for a referenced sale line. The
+ * amount comes from the basket line's original total so commercial value has
+ * one source of truth.
  */
 public final class StoredValueLoad {
 

@@ -1058,7 +1058,6 @@ public final class PaymentOrchestrator {
                     .discountTotal(line.getDiscountTotal())
                     .subtotal(line.getSubtotal())
                     .direction(line.getDirection())
-                    .purpose(line.getPurpose())
                     .originalTotal(line.getOriginalTotal())
                     .rebateAmount(rebateAmount)
                     .rebateLabel(rebateLabel)

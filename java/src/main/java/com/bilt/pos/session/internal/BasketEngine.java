@@ -15,7 +15,6 @@ import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketDiscount;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.basket.BasketItemDirection;
-import com.bilt.pos.session.basket.BasketItemPurpose;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.basket.BasketMutation;
 
@@ -42,11 +41,11 @@ import java.util.UUID;
  *       override was set via {@link #setTaxTotal}.</li>
  * </ol>
  *
- * <p>Merchandise lines are keyed by SKU and direction: returns and credits never
- * upsert into a sale line of the same SKU. Stored value load lines are keyed
- * by their register reference because each line represents one physical card,
- * even when several cards share a SKU. Tax values are magnitudes; return and
- * credit totals and tax are negated at snapshot time.</p>
+ * <p>Unreferenced lines are keyed by SKU and direction: returns and credits
+ * never upsert into a sale line of the same SKU. Referenced lines are keyed by
+ * their register reference and remain distinct even when several lines share a
+ * SKU. Tax values are magnitudes; return and credit totals and tax are negated
+ * at snapshot time.</p>
  *
  * <p>Callers must guard access with the session lock; this class performs no
  * synchronization. Money is computed at scale 2, {@code HALF_UP}.</p>
@@ -65,7 +64,6 @@ public final class BasketEngine implements BasketMutation {
         final BigDecimal unitPrice;
         final List<BasketDiscount> discounts;
         final BasketItemDirection direction;
-        final BasketItemPurpose purpose;
         final Map<String, String> metadata;
         int quantity;
         BigDecimal taxRate;
@@ -80,7 +78,6 @@ public final class BasketEngine implements BasketMutation {
             this.unitPrice = item.getUnitPrice();
             this.discounts = new ArrayList<>(item.getDiscounts());
             this.direction = item.getDirection();
-            this.purpose = item.getPurpose();
             this.metadata = item.getMetadata();
             this.quantity = item.getQuantity();
             this.taxRate = item.getTaxRate();
@@ -96,7 +93,6 @@ public final class BasketEngine implements BasketMutation {
             this.unitPrice = other.unitPrice;
             this.discounts = new ArrayList<>(other.discounts);
             this.direction = other.direction;
-            this.purpose = other.purpose;
             this.metadata = other.metadata;
             this.quantity = other.quantity;
             this.taxRate = other.taxRate;
@@ -150,8 +146,8 @@ public final class BasketEngine implements BasketMutation {
         Line existing = lines.get(key);
         requireUniqueReference(item.getReference(), existing);
         if (existing != null) {
-            if (item.getPurpose() == BasketItemPurpose.STORED_VALUE_LOAD) {
-                throw new IllegalArgumentException("stored value load reference "
+            if (item.getReference() != null) {
+                throw new IllegalArgumentException("basket reference "
                         + item.getReference() + " is already in the basket");
             }
             if (explicitItemId != null && !explicitItemId.equals(existing.itemId)) {
@@ -256,9 +252,6 @@ public final class BasketEngine implements BasketMutation {
         if (quantity == 0) {
             lines.remove(key(line));
         } else {
-            if (line.purpose == BasketItemPurpose.STORED_VALUE_LOAD && quantity != 1) {
-                throw new IllegalArgumentException("stored value load quantity must be 1");
-            }
             if (discountTotal(line.discounts).compareTo(line.unitPrice
                     .multiply(BigDecimal.valueOf(quantity))) > 0) {
                 throw new IllegalArgumentException("quantity would reduce the line below its "
@@ -280,7 +273,6 @@ public final class BasketEngine implements BasketMutation {
     }
 
     private BasketEngine applyTaxRate(Line line, BigDecimal rate) {
-        requireTaxable(line, rate, "taxRate");
         line.taxRate = requireNonNegative(rate, "taxRate");
         // last write wins: an explicit fixed amount would otherwise take
         // precedence forever, with no way back to rate-based tax
@@ -291,7 +283,6 @@ public final class BasketEngine implements BasketMutation {
     @Override
     public BasketEngine setTaxAmount(String itemId, BigDecimal amount) {
         Line line = requireByItemId(itemId);
-        requireTaxable(line, amount, "taxAmount");
         line.taxAmount = requireNonNegative(amount, "taxAmount");
         return this;
     }
@@ -299,7 +290,6 @@ public final class BasketEngine implements BasketMutation {
     @Override
     public BasketEngine setTaxAmountBySku(String sku, BigDecimal amount) {
         Line line = requireBySku(sku);
-        requireTaxable(line, amount, "taxAmount");
         line.taxAmount = requireNonNegative(amount, "taxAmount");
         return this;
     }
@@ -369,7 +359,6 @@ public final class BasketEngine implements BasketMutation {
                     .discountTotal(lineDiscount)
                     .subtotal(lineSubtotal)
                     .direction(line.direction)
-                    .purpose(line.purpose)
                     .originalTotal(lineTotal)
                     .adjustedTotal(lineSubtotal)
                     .taxRate(line.taxRate)
@@ -403,15 +392,15 @@ public final class BasketEngine implements BasketMutation {
     // ─── Internals ───
 
     private static String key(BasketItem item) {
-        if (item.getPurpose() == BasketItemPurpose.STORED_VALUE_LOAD) {
-            return "load\0" + item.getReference();
+        if (item.getReference() != null) {
+            return "reference\0" + item.getReference();
         }
         return key(item.getSku(), item.getDirection());
     }
 
     private static String key(Line line) {
-        if (line.purpose == BasketItemPurpose.STORED_VALUE_LOAD) {
-            return "load\0" + line.reference;
+        if (line.reference != null) {
+            return "reference\0" + line.reference;
         }
         return key(line.sku, line.direction);
     }
@@ -494,13 +483,6 @@ public final class BasketEngine implements BasketMutation {
                 throw new IllegalArgumentException("basket reference " + reference
                         + " is already in use");
             }
-        }
-    }
-
-    private static void requireTaxable(Line line, BigDecimal value, String field) {
-        if (line.purpose == BasketItemPurpose.STORED_VALUE_LOAD
-                && value != null && value.signum() != 0) {
-            throw new IllegalArgumentException("stored value load lines cannot set " + field);
         }
     }
 

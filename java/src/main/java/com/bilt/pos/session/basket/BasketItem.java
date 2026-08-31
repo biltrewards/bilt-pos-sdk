@@ -20,15 +20,10 @@ import java.util.Objects;
 /**
  * An item added to the basket by the register.
  *
- * <p>Factories state the commercial intent directly: {@link #sale},
- * {@link #returnItem}, {@link #credit}, or {@link #storedValueLoad}. Ordinary merchandise is
- * upserted by SKU and direction. Stored value load lines are distinct
- * obligations keyed by their register reference, so buying two cards with
- * the same SKU produces two lines instead of quantity two.</p>
- *
- * <p>A stored value load line contains only receipt-safe commercial data.
- * The card and activation/reload instruction belong in the settlement
- * options and are joined to this line by {@link #getReference()}.</p>
+ * <p>Factories state the commercial direction directly: {@link #sale},
+ * {@link #returnItem}, or {@link #credit}. Unreferenced items are upserted by
+ * SKU and direction. A referenced item remains a distinct line and can be
+ * targeted by settlement-time fulfillment.</p>
  */
 public final class BasketItem {
 
@@ -39,7 +34,6 @@ public final class BasketItem {
     private final BigDecimal unitPrice;
     private final List<BasketDiscount> discounts;
     private final BasketItemDirection direction;
-    private final BasketItemPurpose purpose;
     private final String category;
     private final BigDecimal taxRate;
     private final BigDecimal taxAmount;
@@ -53,7 +47,6 @@ public final class BasketItem {
         this.unitPrice = builder.unitPrice;
         this.discounts = Collections.unmodifiableList(new ArrayList<>(builder.discounts));
         this.direction = builder.direction;
-        this.purpose = builder.purpose;
         this.category = builder.category;
         this.taxRate = builder.taxRate;
         this.taxAmount = builder.taxAmount;
@@ -97,25 +90,6 @@ public final class BasketItem {
                 .build();
     }
 
-    /**
-     * Value sold for activation or loading onto one stored value card.
-     * Quantity is one and tax is zero; sell activation fees as separate
-     * merchandise lines.
-     *
-     * @param reference register-stable reference used by the matching
-     *                  settlement fulfillment
-     */
-    public static BasketItem storedValueLoad(String reference, String sku,
-                                             String description, BigDecimal amount) {
-        return builder()
-                .reference(reference)
-                .sku(sku)
-                .description(description)
-                .unitPrice(amount)
-                .purpose(BasketItemPurpose.STORED_VALUE_LOAD)
-                .build();
-    }
-
     public static Builder builder() {
         return new Builder();
     }
@@ -147,30 +121,33 @@ public final class BasketItem {
         return discounts;
     }
 
+    /** Returns a copy with a stable reference for settlement-time fulfillment. */
+    public BasketItem withReference(String reference) {
+        return toBuilder().reference(reference).build();
+    }
+
     /** Returns a copy carrying one additional register-applied discount. */
     public BasketItem withDiscount(BasketDiscount discount) {
-        Builder copy = builder()
+        return toBuilder().addDiscount(discount).build();
+    }
+
+    private Builder toBuilder() {
+        return builder()
                 .reference(reference)
                 .sku(sku)
                 .description(description)
                 .quantity(quantity)
                 .unitPrice(unitPrice)
                 .direction(direction)
-                .purpose(purpose)
                 .category(category)
                 .taxRate(taxRate)
                 .taxAmount(taxAmount)
                 .metadata(metadata)
                 .discounts(discounts);
-        return copy.addDiscount(discount).build();
     }
 
     public BasketItemDirection getDirection() {
         return direction;
-    }
-
-    public BasketItemPurpose getPurpose() {
-        return purpose;
     }
 
     /** Optional product category; aids terminal-side offer matching. */
@@ -203,7 +180,6 @@ public final class BasketItem {
         private BigDecimal unitPrice;
         private List<BasketDiscount> discounts = new ArrayList<>();
         private BasketItemDirection direction = BasketItemDirection.SALE;
-        private BasketItemPurpose purpose = BasketItemPurpose.MERCHANDISE;
         private String category;
         private BigDecimal taxRate;
         private BigDecimal taxAmount;
@@ -212,6 +188,7 @@ public final class BasketItem {
         private Builder() {
         }
 
+        /** Stable reference for settlement-time fulfillment. */
         public Builder reference(String reference) {
             this.reference = reference;
             return this;
@@ -255,12 +232,6 @@ public final class BasketItem {
             return this;
         }
 
-        /** Default {@link BasketItemPurpose#MERCHANDISE}. */
-        public Builder purpose(BasketItemPurpose purpose) {
-            this.purpose = purpose;
-            return this;
-        }
-
         public Builder category(String category) {
             this.category = category;
             return this;
@@ -286,7 +257,6 @@ public final class BasketItem {
             Objects.requireNonNull(description, "description is required");
             Objects.requireNonNull(unitPrice, "unitPrice is required");
             Objects.requireNonNull(direction, "direction is required");
-            Objects.requireNonNull(purpose, "purpose is required");
             if (sku.isEmpty()) {
                 throw new IllegalArgumentException("sku must not be empty");
             }
@@ -307,31 +277,7 @@ public final class BasketItem {
                 throw new IllegalArgumentException("discounts total " + discountTotal
                         + " but line value is only " + gross);
             }
-            validateStoredValueLoad();
             return new BasketItem(this);
-        }
-
-        private void validateStoredValueLoad() {
-            if (purpose != BasketItemPurpose.STORED_VALUE_LOAD) {
-                return;
-            }
-            if (direction != BasketItemDirection.SALE) {
-                throw new IllegalArgumentException("stored value load lines must be sales");
-            }
-            if (reference == null) {
-                throw new NullPointerException("stored value load reference is required");
-            }
-            if (quantity != 1) {
-                throw new IllegalArgumentException("stored value load quantity must be 1");
-            }
-            if (unitPrice.signum() <= 0) {
-                throw new IllegalArgumentException("stored value load amount must be positive");
-            }
-            if ((taxRate != null && taxRate.signum() != 0)
-                    || (taxAmount != null && taxAmount.signum() != 0)) {
-                throw new IllegalArgumentException("stored value load lines cannot be taxed; "
-                        + "add fees as separate merchandise lines");
-            }
         }
     }
 }

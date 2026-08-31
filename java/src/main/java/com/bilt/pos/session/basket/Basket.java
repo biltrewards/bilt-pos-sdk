@@ -195,17 +195,6 @@ public final class Basket {
         return hasLines(BasketItemDirection.CREDIT);
     }
 
-    /** Stored value load obligations, in basket order. */
-    public List<BasketLineItem> getStoredValueLoadItems() {
-        List<BasketLineItem> loads = new ArrayList<>();
-        for (BasketLineItem item : items) {
-            if (item.getPurpose() == BasketItemPurpose.STORED_VALUE_LOAD) {
-                loads.add(item);
-            }
-        }
-        return Collections.unmodifiableList(loads);
-    }
-
     /**
      * Sale lines in this basket, with returns and register-originated credits
      * removed.

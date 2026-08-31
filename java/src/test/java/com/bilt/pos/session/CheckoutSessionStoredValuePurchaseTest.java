@@ -69,8 +69,8 @@ class CheckoutSessionStoredValuePurchaseTest {
 
     @Test
     void settlementChargesThenActivatesTheReferencedStoredValueLine() throws Exception {
-        session.basket().addItem(BasketItem.storedValueLoad(
-                "gift-card-1", "GIFT-CARD", "Gift card", new BigDecimal("25.00")));
+        session.basket().addItem(giftCard(
+                "gift-card-1", "Gift card", new BigDecimal("25.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 25.00)));
         server.enqueue(new MockResponse().setBody(
                 storedValueOk("Activate", "POI-LOAD-1", 25.00, 25.00)));
@@ -108,9 +108,8 @@ class CheckoutSessionStoredValuePurchaseTest {
 
     @Test
     void fullyDiscountedStoredValueLineLoadsItsFaceValueWithoutACharge() throws Exception {
-        session.basket().addItem(BasketItem.storedValueLoad(
-                        "gift-card-1", "GIFT-CARD", "Promotional gift card",
-                        new BigDecimal("25.00"))
+        session.basket().addItem(giftCard(
+                        "gift-card-1", "Promotional gift card", new BigDecimal("25.00"))
                 .withDiscount(BasketDiscount.offer("OFFER-1", "Complimentary card",
                         new BigDecimal("25.00"))));
         server.enqueue(new MockResponse().setBody(
@@ -143,9 +142,8 @@ class CheckoutSessionStoredValuePurchaseTest {
 
     @Test
     void registerCreditCanFundAStoredValueLoadWithoutARefundAllocation() throws Exception {
-        session.basket().addItem(BasketItem.storedValueLoad(
-                "gift-card-1", "GIFT-CARD", "Customer service gift card",
-                new BigDecimal("50.00")));
+        session.basket().addItem(giftCard(
+                "gift-card-1", "Customer service gift card", new BigDecimal("50.00")));
         session.basket().addItem(BasketItem.credit(
                 "GOODWILL", "Customer service credit", 1, new BigDecimal("50.00")));
         server.enqueue(new MockResponse().setBody(
@@ -168,28 +166,67 @@ class CheckoutSessionStoredValuePurchaseTest {
     }
 
     @Test
-    void everyStoredValueLoadLineRequiresExactlyOneMatchingFulfillment() {
-        session.basket().addItem(BasketItem.storedValueLoad(
-                "gift-card-1", "GIFT-CARD", "Gift card", new BigDecimal("25.00")));
-
-        SessionException missing = assertThrows(SessionException.class,
-                () -> session.settle().get());
-        assertEquals(SessionErrorCode.INVALID_STATE, missing.getError().getCode());
-
+    void fulfillmentMustReferenceAnExistingSaleLine() {
+        session.basket().addItem(giftCard(
+                "gift-card-1", "Gift card", new BigDecimal("25.00")));
         SessionException orphan = assertThrows(SessionException.class,
                 () -> session.settle(SettlementOptions.builder()
                         .addFulfillment(StoredValueLoad.activate(
                                 "missing", StoredValueCard.number("GC-1")))
                         .build()).get());
         assertEquals(SessionErrorCode.INVALID_STATE, orphan.getError().getCode());
+
+        session.basket().addItem(BasketItem.credit(
+                        "CREDIT", "Credit", 1, new BigDecimal("5.00"))
+                .withReference("credit-1"));
+        SessionException creditTarget = assertThrows(SessionException.class,
+                () -> session.settle(SettlementOptions.builder()
+                        .addFulfillment(StoredValueLoad.activate(
+                                "credit-1", StoredValueCard.number("GC-1")))
+                        .build()).get());
+        assertTrue(creditTarget.getError().getMessage().contains("is not a sale"));
+
+        session.basket().addItem(BasketItem.sale(
+                        "FREE", "Free item", 1, BigDecimal.ZERO)
+                .withReference("zero-sale"));
+        SessionException zeroTarget = assertThrows(SessionException.class,
+                () -> session.settle(SettlementOptions.builder()
+                        .addFulfillment(StoredValueLoad.activate(
+                                "zero-sale", StoredValueCard.number("GC-1")))
+                        .build()).get());
+        assertTrue(zeroTarget.getError().getMessage().contains("positive original total"));
+
+        SessionException duplicate = assertThrows(SessionException.class,
+                () -> session.settle(SettlementOptions.builder()
+                        .addFulfillment(StoredValueLoad.activate(
+                                "gift-card-1", StoredValueCard.number("GC-1")))
+                        .addFulfillment(StoredValueLoad.reload(
+                                "gift-card-1", StoredValueCard.number("GC-1")))
+                        .build()).get());
+        assertTrue(duplicate.getError().getMessage().contains("more than one"));
         assertEquals(1, server.getRequestCount(),
                 "validation must not send anything after the session-start request");
     }
 
     @Test
+    void referencedSaleDoesNotRequireFulfillment() throws Exception {
+        session.basket().addItem(giftCard(
+                "gift-card-1", "Gift card", new BigDecimal("25.00")));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 25.00)));
+
+        SettlementResult result = session.settle().get();
+
+        assertEquals(new BigDecimal("25.00"), result.getCardAmountCharged());
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getStoredValueLoadedAmount()));
+        SaleToPOIRequest onlyRequest = recordedRequest();
+        assertNotNull(onlyRequest.getPaymentRequest());
+        assertNull(server.takeRequest(200, TimeUnit.MILLISECONDS));
+    }
+
+    @Test
     void failedActivationReversesTheFundingCharge() throws Exception {
-        session.basket().addItem(BasketItem.storedValueLoad(
-                "gift-card-1", "GIFT-CARD", "Gift card", new BigDecimal("25.00")));
+        session.basket().addItem(giftCard(
+                "gift-card-1", "Gift card", new BigDecimal("25.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 25.00)));
         server.enqueue(new MockResponse().setBody(STORED_VALUE_FAILED));
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.REVERSAL_OK));
@@ -208,8 +245,8 @@ class CheckoutSessionStoredValuePurchaseTest {
 
     @Test
     void partialActivationIsReversedWithItsFundingCharge() throws Exception {
-        session.basket().addItem(BasketItem.storedValueLoad(
-                "gift-card-1", "GIFT-CARD", "Gift card", new BigDecimal("25.00")));
+        session.basket().addItem(giftCard(
+                "gift-card-1", "Gift card", new BigDecimal("25.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 25.00)));
         server.enqueue(new MockResponse().setBody(
                 storedValueOk("Activate", "POI-LOAD-1", 20.00, 20.00)));
@@ -235,8 +272,8 @@ class CheckoutSessionStoredValuePurchaseTest {
 
     @Test
     void wholeSettlementVoidReversesTheLoadBeforeItsFundingCharge() throws Exception {
-        session.basket().addItem(BasketItem.storedValueLoad(
-                "gift-card-1", "GIFT-CARD", "Gift card", new BigDecimal("25.00")));
+        session.basket().addItem(giftCard(
+                "gift-card-1", "Gift card", new BigDecimal("25.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 25.00)));
         server.enqueue(new MockResponse().setBody(
                 storedValueOk("Activate", "POI-LOAD-1", 25.00, 25.00)));
@@ -264,10 +301,10 @@ class CheckoutSessionStoredValuePurchaseTest {
 
     @Test
     void multipleStoredValueLinesKeepIndependentFulfillmentAndVoidReferences() throws Exception {
-        session.basket().addItem(BasketItem.storedValueLoad(
-                "gift-card-1", "GIFT-CARD", "Gift card", new BigDecimal("10.00")));
-        session.basket().addItem(BasketItem.storedValueLoad(
-                "gift-card-2", "GIFT-CARD", "Gift card", new BigDecimal("15.00")));
+        session.basket().addItem(giftCard(
+                "gift-card-1", "Gift card", new BigDecimal("10.00")));
+        session.basket().addItem(giftCard(
+                "gift-card-2", "Gift card", new BigDecimal("15.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 25.00)));
         server.enqueue(new MockResponse().setBody(
                 storedValueOk("Activate", "POI-LOAD-1", 10.00, 10.00)));
@@ -303,6 +340,12 @@ class CheckoutSessionStoredValuePurchaseTest {
     private static String originalStoredValueTransaction(SaleToPOIRequest request) {
         return request.getStoredValueRequest().getStoredValueData()[0]
                 .getOriginalPOITransaction().getPoiTransactionID().getTransactionID();
+    }
+
+    private static BasketItem giftCard(String reference, String description,
+                                       BigDecimal amount) {
+        return BasketItem.sale("GIFT-CARD", description, 1, amount)
+                .withReference(reference);
     }
 
     private SaleToPOIRequest recordedRequest() throws Exception {

@@ -91,22 +91,24 @@ class BasketEngineTest {
     }
 
     @Test
-    void storedValueLoadsUseReferencesInsteadOfUpsertingBySku() {
+    void referencedItemsRemainDistinctInsteadOfUpsertingBySku() {
         BasketEngine engine = new BasketEngine();
-        engine.addItem(BasketItem.storedValueLoad(
-                "gift-card-1", "GIFT-CARD", "Gift card", new BigDecimal("25.00")));
-        engine.addItem(BasketItem.storedValueLoad(
-                "gift-card-2", "GIFT-CARD", "Gift card", new BigDecimal("50.00")));
+        engine.addItem(BasketItem.sale(
+                "GIFT-CARD", "Gift card", 1, new BigDecimal("25.00"))
+                .withReference("gift-card-1"));
+        engine.addItem(BasketItem.sale(
+                "GIFT-CARD", "Gift card", 1, new BigDecimal("50.00"))
+                .withReference("gift-card-2"));
 
         Basket basket = engine.snapshot();
 
-        assertEquals(2, basket.getStoredValueLoadItems().size());
+        assertEquals(2, basket.getItemCount());
         assertEquals(new BigDecimal("75.00"), basket.getGrandTotal());
         assertEquals("gift-card-1", basket.getItem("1").getReference());
         assertEquals("gift-card-2", basket.getItem("2").getReference());
         assertThrows(IllegalArgumentException.class, () -> engine.addItem(
-                BasketItem.storedValueLoad("gift-card-1", "GIFT-CARD", "Gift card",
-                        new BigDecimal("10.00"))));
+                BasketItem.sale("GIFT-CARD", "Gift card", 1, new BigDecimal("10.00"))
+                        .withReference("gift-card-1")));
     }
 
     @Test
