@@ -727,11 +727,20 @@ class NexoEmulatorController(
         }
         try {
             val value = requireMoney(amount, "credit amount", allowZero = false)
-            val target = session.basket().snapshot().getItem(itemId)
+            val snapshot = session.basket().snapshot()
+            val target = snapshot.getItem(itemId)
                 ?: throw IllegalArgumentException("no basket item with itemId $itemId")
             require(target.isSale) { "credits can only be applied to sale lines" }
             require(value <= target.adjustedTotal) {
                 "credit amount cannot exceed the line's remaining value ${target.adjustedTotal}"
+            }
+            val saleSubtotal = snapshot.items.filter { it.isSale }
+                .fold(BigDecimal.ZERO) { total, line -> total.add(line.adjustedTotal) }
+            val existingCreditTotal = snapshot.items.filter { it.isCredit }
+                .fold(BigDecimal.ZERO) { total, line -> total.subtract(line.adjustedTotal) }
+            val remainingSaleValue = saleSubtotal.subtract(existingCreditTotal)
+            require(value <= remainingSaleValue) {
+                "credit amount cannot exceed the basket's remaining sale value $remainingSaleValue"
             }
             val description = label.trim().ifEmpty { "Credit for ${target.description}" }
             val credit = BasketItem.credit(

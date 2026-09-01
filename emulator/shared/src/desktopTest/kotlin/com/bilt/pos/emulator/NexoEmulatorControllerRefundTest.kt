@@ -985,6 +985,16 @@ class NexoEmulatorControllerRefundTest {
             assertEquals(2, credited.basket.size)
             assertTrue(credited.basket.any { it.type == BasketLineType.CREDIT })
             assertTrue(credited.basket.any { it.description == "Service recovery" })
+
+            val eventCount = credited.events.size
+            controller.applyCredit(itemId, "11.00", "Excess credit")
+
+            val rejected = controller.state.value
+            assertEquals("10.00", rejected.basketTotal)
+            assertEquals(2, rejected.basket.size)
+            assertTrue(rejected.events.drop(eventCount).any {
+                "credit amount cannot exceed the basket's remaining sale value 10.00" in it
+            })
         }
     }
 
