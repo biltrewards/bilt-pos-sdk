@@ -81,7 +81,9 @@ fun SettlementResult.toSaleRecord(
     // Only ordinary sale lines are item-refundable. Returns belong to the
     // earlier sales' refund history, credits to neither, and gift-card
     // purchases are unwound by reversing their stored-value load as part of
-    // a full refund rather than as merchandise returns.
+    // a full refund rather than as merchandise returns. A sale containing a
+    // fulfilled gift-card purchase is therefore full-refund-only, keeping
+    // the load and its original funding reversal atomic.
     val items = finalBasket?.items.orEmpty().filter {
         it.isSale && it.reference !in fulfilledReferences
     }.map { line ->
