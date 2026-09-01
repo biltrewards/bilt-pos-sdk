@@ -27,7 +27,7 @@ import java.util.List;
  * number on the wire); amounts are converted from {@code BigDecimal} to the
  * wire's floating-point representation at the last possible moment.</p>
  *
- * <p>Credit lines carry their sign onto the wire in a normal (sale)
+ * <p>Return and credit lines carry their sign onto the wire in a normal (sale)
  * request: negative {@code Quantity} and {@code ItemAmount}, positive
  * {@code UnitPrice} — the mixed-basket return-line convention. In an
  * itemized refund request, {@code PaymentType=Refund} already carries the
@@ -59,16 +59,17 @@ public final class SaleItemMapper {
 
     /**
      * Maps a refund-dominant mixed basket for a net refund request. Return
-     * lines are positive because the request's direction is Refund; sale
-     * lines are negative offsets, so the item amounts sum to the net refund.
+     * lines and charge-side credits are positive because the request's direction
+     * is Refund; sale lines are negative offsets, so the item amounts sum to the
+     * net refund.
      */
     public static List<SaleItem> toNetRefundSaleItems(Basket basket) {
         List<SaleItem> items = new ArrayList<>(basket.getItemCount());
         for (BasketLineItem line : basket.getItems()) {
-            boolean returned = line.isCredit();
+            boolean refundDirection = !line.isSale();
             BigDecimal amount = line.getAdjustedTotal().abs();
             double quantity = line.getQuantity();
-            if (!returned) {
+            if (!refundDirection) {
                 amount = amount.negate();
                 quantity = -quantity;
             }
@@ -80,11 +81,11 @@ public final class SaleItemMapper {
     private static List<SaleItem> map(Basket basket, boolean adjusted, boolean magnitudes) {
         List<SaleItem> items = new ArrayList<>(basket.getItemCount());
         for (BasketLineItem line : basket.getItems()) {
-            BigDecimal amount = adjusted ? line.getAdjustedTotal() : line.getOriginalTotal();
+            BigDecimal amount = adjusted ? line.getAdjustedTotal() : line.getSubtotal();
             double quantity = line.getQuantity();
             if (magnitudes) {
                 amount = amount.abs();
-            } else if (line.isCredit()) {
+            } else if (!line.isSale()) {
                 quantity = -quantity;
             }
             items.add(saleItem(line, amount, quantity));

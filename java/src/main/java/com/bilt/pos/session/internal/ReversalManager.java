@@ -28,12 +28,14 @@ import com.bilt.pos.nexo.model.ReversalResponse;
 import com.bilt.pos.nexo.model.SaleItem;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
+import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
 import com.bilt.pos.session.RefundResult;
 import com.bilt.pos.session.ReversalDecision;
 import com.bilt.pos.session.ReversalStep;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.VoidResult;
+import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -41,6 +43,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -87,10 +90,14 @@ public final class ReversalManager {
 
     private final NexoExchange exchange;
     private final String currency;
+    private final StoredValueManager storedValueManager;
 
-    public ReversalManager(NexoExchange exchange, String currency) {
+    public ReversalManager(NexoExchange exchange, String currency,
+                           StoredValueManager storedValueManager) {
         this.exchange = exchange;
         this.currency = currency;
+        this.storedValueManager = Objects.requireNonNull(
+                storedValueManager, "storedValueManager");
     }
 
     // ─── Refund ───
@@ -282,14 +289,14 @@ public final class ReversalManager {
 
     /**
      * Reverses the sale's movements in order, skipping the steps already
-     * recorded in {@code reversedSteps} so a retried void resumes at the
+     * recorded in {@code reversedMovements} so a retried void resumes at the
      * movements still standing. Each failed step is resolved by the
      * decider — retry, leave standing, or abort. A skipped money leg is
      * honored (the remaining steps still run) but leaves the void
      * incomplete: after the loop the failure is rethrown, since a standing
      * money leg has no store-and-forward retry and a completed void would
      * strand the charge beyond a retry's reach. A step that reverses is
-     * added to {@code reversedSteps}, and on abort the failure is
+     * added to {@code reversedMovements}, and on abort the failure is
      * annotated with what this attempt reversed so the register can retry
      * or escalate. If nothing of the sale was ever reversed — this attempt
      * skipped every step and no prior attempt made progress — the last
@@ -309,18 +316,20 @@ public final class ReversalManager {
      * best-effort.</p>
      */
     public VoidResult voidMovements(List<ReversalMovement> movements, String memberId,
-                                    StepDecider decider, Set<ReversalStep> reversedSteps) {
+                                    StepDecider decider,
+                                    Set<ReversalMovement.Key> reversedMovements) {
         StepDecider effective = decider != null ? decider : defaultPolicy(
                 movements.stream().anyMatch(movement -> isMoneyLeg(movement.getStep())));
-        boolean priorProgress = !reversedSteps.isEmpty();
+        boolean priorProgress = !reversedMovements.isEmpty();
         List<ReversalMovement> remaining = movements.stream()
-                .filter(movement -> !reversedSteps.contains(movement.getStep()))
+                .filter(movement -> !reversedMovements.contains(movement.key()))
                 .collect(Collectors.toList());
         if (remaining.isEmpty()) {
             return VoidResult.builder().success(true).build();
         }
         Map<ReversalStep, ReversalResponse> money = new EnumMap<>(ReversalStep.class);
         Map<ReversalStep, LoyaltyResponse> loyalty = new EnumMap<>(ReversalStep.class);
+        List<StoredValueOperationResult> storedValueLoads = new ArrayList<>();
         List<ReversalMovement> reversed = new ArrayList<>();
         List<ReversalMovement> skippedMoneyLegs = new ArrayList<>();
         SessionException[] lastFailure = new SessionException[1];
@@ -329,7 +338,7 @@ public final class ReversalManager {
         for (ReversalMovement movement : remaining) {
             Boolean sent = runStep(movement.getStep(), effective,
                     () -> {
-                        execute(movement, memberId, money, loyalty);
+                        execute(movement, memberId, money, loyalty, storedValueLoads);
                         return true;
                     },
                     e -> {
@@ -348,7 +357,7 @@ public final class ReversalManager {
                     e -> abortError(reversed, movement, e));
             if (sent != null) {
                 reversed.add(movement);
-                reversedSteps.add(movement.getStep());
+                reversedMovements.add(movement.key());
             }
         }
         if (!skippedMoneyLegs.isEmpty()) {
@@ -371,7 +380,7 @@ public final class ReversalManager {
             // skip in a single-attempt void
             return VoidResult.builder().success(true).build();
         }
-        return buildVoidResult(money, loyalty);
+        return buildVoidResult(money, loyalty, storedValueLoads);
     }
 
     /**
@@ -393,8 +402,16 @@ public final class ReversalManager {
 
     private void execute(ReversalMovement movement, String memberId,
                          Map<ReversalStep, ReversalResponse> money,
-                         Map<ReversalStep, LoyaltyResponse> loyalty) {
+                         Map<ReversalStep, LoyaltyResponse> loyalty,
+                         List<StoredValueOperationResult> storedValueLoads) {
         ReversalStep step = movement.getStep();
+        if (step == ReversalStep.STORED_VALUE_LOAD) {
+            storedValueLoads.add(storedValueManager.operation(
+                    StoredValueTransactionTypeEnum.REVERSE,
+                    null, null, movement.poiTransactionId,
+                    movement.poiTransactionTimestamp));
+            return;
+        }
         if (isMoneyLeg(step)) {
             money.put(step, reverse(
                     movement.poiTransactionId, movement.poiTransactionTimestamp));
@@ -409,7 +426,8 @@ public final class ReversalManager {
     }
 
     private static VoidResult buildVoidResult(Map<ReversalStep, ReversalResponse> money,
-                                              Map<ReversalStep, LoyaltyResponse> loyalty) {
+                                              Map<ReversalStep, LoyaltyResponse> loyalty,
+                                              List<StoredValueOperationResult> storedValueLoads) {
         ReversalResponse cardLeg = money.get(ReversalStep.CARD);
         ReversalResponse storedValueLeg = money.get(ReversalStep.STORED_VALUE);
         ReversalResponse primaryMoney = cardLeg != null ? cardLeg : storedValueLeg;
@@ -418,10 +436,12 @@ public final class ReversalManager {
 
         // the reversed amount is what the money legs report; a void with no
         // money legs reports the monetary value of the loyalty refunds
-        BigDecimal reversedAmount = primaryMoney == null
-                ? sumLoyaltyAmounts(loyalty.get(ReversalStep.REDEMPTION),
-                        loyalty.get(ReversalStep.REBATE))
-                : sumReversedAmounts(cardLeg, storedValueLeg);
+        BigDecimal loyaltyAmount = sumLoyaltyAmounts(loyalty.get(ReversalStep.REDEMPTION),
+                loyalty.get(ReversalStep.REBATE));
+        BigDecimal reversedAmount = primaryMoney != null
+                ? sumReversedAmounts(cardLeg, storedValueLeg)
+                : loyaltyAmount != null && loyaltyAmount.signum() != 0 ? loyaltyAmount
+                        : sumStoredValueAmounts(storedValueLoads);
 
         VoidResult.Builder result = VoidResult.builder()
                 .success(true)
@@ -436,12 +456,27 @@ public final class ReversalManager {
                             primaryMoney.getPaymentReceipt()))
                     .merchantReceipt(ReceiptMapper.merchantReceipt(
                             primaryMoney.getPaymentReceipt()));
-        } else {
+        } else if (!loyalty.isEmpty()) {
             LoyaltyResponse primary = loyalty.values().iterator().next();
             result.poiTransactionId(Wire.txnId(primary.getPoiData()))
                     .poiTransactionTimestamp(Wire.txnTimestamp(primary.getPoiData()));
+        } else if (!storedValueLoads.isEmpty()) {
+            StoredValueOperationResult primary = storedValueLoads.get(0);
+            result.poiTransactionId(primary.getPoiTransactionId())
+                    .poiTransactionTimestamp(primary.getPoiTransactionTimestamp());
         }
         return result.build();
+    }
+
+    private static BigDecimal sumStoredValueAmounts(
+            List<StoredValueOperationResult> storedValueLoads) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (StoredValueOperationResult load : storedValueLoads) {
+            if (load.getAmount() != null) {
+                total = total.add(load.getAmount());
+            }
+        }
+        return total;
     }
 
     // ─── Step mechanics ───
@@ -485,14 +520,15 @@ public final class ReversalManager {
                 case REBATE:
                 case AWARD:
                     return moneyAnchored ? ReversalDecision.SKIP : ReversalDecision.ABORT;
-                default:  // CARD, STORED_VALUE — the money moved
+                default:  // Stored value load, card, or stored value tender
                     return ReversalDecision.ABORT;
             }
         };
     }
 
     private static boolean isMoneyLeg(ReversalStep step) {
-        return step == ReversalStep.CARD || step == ReversalStep.STORED_VALUE;
+        return step == ReversalStep.STORED_VALUE_LOAD
+                || step == ReversalStep.CARD || step == ReversalStep.STORED_VALUE;
     }
 
     /**
@@ -517,6 +553,7 @@ public final class ReversalManager {
 
     private static String label(ReversalStep step) {
         switch (step) {
+            case STORED_VALUE_LOAD: return "the stored value load";
             case STORED_VALUE: return "the stored value leg";
             case REDEMPTION: return "the redemption";
             case REBATE: return "the rebate";

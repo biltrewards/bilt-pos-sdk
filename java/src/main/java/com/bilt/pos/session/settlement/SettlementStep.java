@@ -24,6 +24,9 @@ public enum SettlementStep {
     /** Terminal processes the card payment for the remaining amount. */
     CARD_CHARGE,
 
+    /** Terminal activates or reloads a stored value card purchased in the basket. */
+    STORED_VALUE_LOAD,
+
     /** Terminal submits the loyalty award. */
     AWARD,
 

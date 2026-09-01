@@ -5,6 +5,7 @@ import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
+import com.bilt.pos.session.settlement.SettlementRecovery;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementStep;
@@ -149,7 +150,7 @@ class CheckoutSessionPaymentTest {
     }
 
     private void addHundredDollarItem() {
-        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("100.00")));
     }
 
     private SaleToPOIRequest nextRequest() throws Exception {
@@ -208,7 +209,7 @@ class CheckoutSessionPaymentTest {
         AtomicReference<SessionError> seen = new AtomicReference<>();
         flow.onError(error -> {
             seen.set(error);
-            return SettlementOptions.voidAndAbort();
+            return SettlementRecovery.abort();
         });
 
         server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
@@ -238,7 +239,7 @@ class CheckoutSessionPaymentTest {
         session.settle()
                 .onError(error -> {
                     seen.set(error);
-                    return SettlementOptions.voidAndAbort();
+                    return SettlementRecovery.abort();
                 })
                 .executeSync();
 
@@ -253,7 +254,7 @@ class CheckoutSessionPaymentTest {
 
         SettlementFlow flow = session.settle()
                 .onSuccess(r -> { })
-                .onError(e -> SettlementOptions.voidAndAbort());
+                .onError(e -> SettlementRecovery.abort());
 
         assertEquals(1, server.getRequestCount(), "only the session start may hit the wire");
 
@@ -272,7 +273,7 @@ class CheckoutSessionPaymentTest {
         session.settle()
                 .onError(e -> {
                     error.set(e);
-                    return SettlementOptions.voidAndAbort();
+                    return SettlementRecovery.abort();
                 })
                 .executeSync();
 
@@ -283,17 +284,16 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
-    void payRequiresAPositiveBasketTotal() {
-        // zero-priced items are allowed in the basket, but there is nothing
-        // to pay — a zero total must not produce a successful settlement
+    void settlementAllowsAZeroTotalBasket() {
+        // Free and fully discounted items are still completed commercial lines,
+        // even though settlement has no external movement to execute.
         addHundredDollarItem();
         SettlementFlow flow = session.settle();   // created while the total is positive
         session.basket().mutate(m -> m
                 .removeItemBySku("SKU-1")
-                .addItem(BasketItem.of("SKU-FREE", "Comped Item", 1, "0.00")));
+                .addItem(BasketItem.sale("SKU-FREE", "Comped Item", 1, new BigDecimal("0.00"))));
 
-        SessionException failure = assertThrows(SessionException.class, flow::get);
-        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
+        assertTrue(flow.get().isSuccess());
         assertEquals(1, server.getRequestCount(), "nothing beyond the session start may reach the wire");
     }
 
@@ -313,7 +313,7 @@ class CheckoutSessionPaymentTest {
                 .start()
                 .get();
         server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
-        storeSession.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        storeSession.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 10.00)));
 
         storeSession.settle().executeSync();
@@ -375,11 +375,11 @@ class CheckoutSessionPaymentTest {
 
         assertEquals("POI-PAY-1", first.getPoiTransactionId());
         assertThrows(IllegalStateException.class,
-                () -> session.basket().addItem(BasketItem.of("SKU-2", "Item", 1, "25.00")));
+                () -> session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("25.00"))));
 
         assertTrue(session.basket().clear().isEmpty());
         assertNotEquals(firstCartId, session.basket().snapshot().getCartId());
-        session.basket().addItem(BasketItem.of("SKU-2", "Item", 1, "25.00"));
+        session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("25.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 25.00)));
 
         SettlementResult second = session.settle().get();
@@ -393,10 +393,10 @@ class CheckoutSessionPaymentTest {
     @Test
     void clearingBasketClearsTheSelectedStoredValueTender() throws Exception {
         session.setStoredValueCard("GC-1234");
-        session.basket().addItem(BasketItem.of("DRAFT", "Draft", 1, "1.00"));
+        session.basket().addItem(BasketItem.sale("DRAFT", "Draft", 1, new BigDecimal("1.00")));
 
         session.basket().clear();
-        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 10.00)));
 
         session.settle().get();
@@ -417,7 +417,7 @@ class CheckoutSessionPaymentTest {
         drainRequests();
 
         session.basket().clear();
-        session.basket().addItem(BasketItem.of("SKU-2", "Item", 1, "25.00"));
+        session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("25.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 25.00)));
         session.settle().get();
         drainRequests();
@@ -647,8 +647,8 @@ class CheckoutSessionPaymentTest {
                         + "\"RebateLabel\":\"Fall Promo\"}}]}}}";
 
         identifyMember();
-        session.basket().addItem(BasketItem.of("SKU-1", "Item A", 1, "50.00"));
-        session.basket().addItem(BasketItem.of("SKU-2", "Item B", 1, "25.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item A", 1, new BigDecimal("50.00")));
+        session.basket().addItem(BasketItem.sale("SKU-2", "Item B", 1, new BigDecimal("25.00")));
 
         server.enqueue(new MockResponse().setBody(globalRebate));
         server.enqueue(new MockResponse().setBody(REDEEM_OK));
@@ -758,7 +758,7 @@ class CheckoutSessionPaymentTest {
                 session.settle()
                         .onError(error -> {
                             errorCalls.incrementAndGet();
-                            return SettlementOptions.retryWithoutLoyalty();   // must be refused
+                            return SettlementRecovery.retryWithoutLoyalty();   // must be refused
                         })
                         .get());
 
@@ -1047,7 +1047,7 @@ class CheckoutSessionPaymentTest {
 
         identifyMember();
         for (int i = 1; i <= 7; i++) {
-            session.basket().addItem(BasketItem.of("SKU-" + i, "Item " + i, 1, "10.00"));
+            session.basket().addItem(BasketItem.sale("SKU-" + i, "Item " + i, 1, new BigDecimal("10.00")));
         }
         server.enqueue(new MockResponse().setBody(tinyGlobalRebate));
         server.enqueue(new MockResponse().setBody(REDEEM_OK));                     // -5.00
@@ -1279,7 +1279,7 @@ class CheckoutSessionPaymentTest {
         drainRequests();
 
         session.basket().clear();
-        session.basket().addItem(BasketItem.of("SKU-2", "Item", 1, "25.00"));
+        session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("25.00")));
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 25.00)));
         session.settle().get();
         drainRequests();
@@ -1295,7 +1295,7 @@ class CheckoutSessionPaymentTest {
 
     @Test
     void originalSaleRecordVoidCanRunAlongsideAnUnsettledBasket() throws Exception {
-        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "10.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
 
         VoidResult result = session.voidTransaction(OriginalSaleRecord.builder()
@@ -1452,7 +1452,7 @@ class CheckoutSessionPaymentTest {
     @Test
     void finalBasketReflectsHandlerRecalculatedTax() throws Exception {
         identifyMember();
-        session.basket().addItem(BasketItem.of("SKU-1", "Item", 1, "100.00"));
+        session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("100.00")));
         session.basket().setTaxRateBySku("SKU-1", new BigDecimal("0.08"));  // grand 108.00
 
         server.enqueue(new MockResponse().setBody(REBATE_OK));                    // -10.00
@@ -1617,7 +1617,7 @@ class CheckoutSessionPaymentTest {
         AtomicReference<SessionError> seen = new AtomicReference<>();
         session.settle().onError(error -> {
             seen.set(error);
-            return SettlementOptions.voidAndAbort();
+            return SettlementRecovery.abort();
         }).getOrNull();
 
         assertEquals(SessionErrorCode.STORED_VALUE_INSUFFICIENT, seen.get().getCode());
@@ -1636,7 +1636,7 @@ class CheckoutSessionPaymentTest {
         AtomicReference<SessionError> seen = new AtomicReference<>();
         session.settle().onError(error -> {
             seen.set(error);
-            return SettlementOptions.voidAndAbort();
+            return SettlementRecovery.abort();
         }).getOrNull();
 
         assertEquals(SessionErrorCode.DECLINED, seen.get().getCode(),
@@ -1659,7 +1659,7 @@ class CheckoutSessionPaymentTest {
         AtomicReference<SessionError> seen = new AtomicReference<>();
         SettlementFlow flow = session.settle().onError(error -> {
             seen.set(error);
-            return SettlementOptions.voidAndAbort();
+            return SettlementRecovery.abort();
         });
 
         assertNull(flow.getOrNull());
@@ -1693,7 +1693,7 @@ class CheckoutSessionPaymentTest {
         SettlementResult result = session.settle()
                 .onError(error -> {
                     assertEquals(SessionErrorCode.LOYALTY_UNAVAILABLE, error.getCode());
-                    return SettlementOptions.retryWithoutLoyalty();
+                    return SettlementRecovery.retryWithoutLoyalty();
                 })
                 .get();
 
@@ -1701,10 +1701,8 @@ class CheckoutSessionPaymentTest {
         assertEquals(0, new BigDecimal("100.00").compareTo(result.getCardAmountCharged()));
 
         List<SaleToPOIRequest> requests = drainRequests();
-        assertEquals(3, requests.size());
+        assertEquals(2, requests.size());
         assertNotNull(requests.get(1).getPaymentRequest(), "retry goes straight to card payment");
-        assertEquals("Award", requests.get(2).getLoyaltyRequest()
-                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
     }
 
     @Test
@@ -1717,7 +1715,7 @@ class CheckoutSessionPaymentTest {
         AtomicInteger errorCalls = new AtomicInteger();
         SettlementFlow flow = session.settle().onError(error -> {
             errorCalls.incrementAndGet();
-            return SettlementOptions.defaults();  // always retry
+            return SettlementRecovery.retry();  // always retry
         });
 
         SessionException failure = assertThrows(SessionException.class, flow::get);
@@ -1736,7 +1734,7 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         session.settle().onError(error -> {
             session.abort().executeSync();  // deferred: the payment thread owns the outcome
-            return SettlementOptions.voidAndAbort();
+            return SettlementRecovery.abort();
         }).getOrNull();
 
         // the leftover flag must not abort the legitimate retry
@@ -1747,7 +1745,7 @@ class CheckoutSessionPaymentTest {
     @Test
     void basketCanBeAdjustedAfterAFailedPayment() throws Exception {
         addHundredDollarItem();
-        session.basket().addItem(BasketItem.of("SKU-2", "Expensive Item", 1, "50.00"));
+        session.basket().addItem(BasketItem.sale("SKU-2", "Expensive Item", 1, new BigDecimal("50.00")));
         server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
         session.settle().getOrNull();
 
@@ -1794,7 +1792,7 @@ class CheckoutSessionPaymentTest {
         AtomicReference<SessionError> seen = new AtomicReference<>();
         SettlementFlow flow = session.settle().onError(error -> {
             seen.set(error);
-            return SettlementOptions.voidAndAbort();
+            return SettlementRecovery.abort();
         });
 
         assertNull(flow.getOrNull());
@@ -1824,7 +1822,7 @@ class CheckoutSessionPaymentTest {
                 })
                 .onError(error -> {
                     seen.set(error);
-                    return SettlementOptions.voidAndAbort();
+                    return SettlementRecovery.abort();
                 });
 
         assertNull(flow.getOrNull());
@@ -1842,7 +1840,10 @@ class CheckoutSessionPaymentTest {
         // award, which still runs for the identified member
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
         server.enqueue(new MockResponse().setBody(AWARD_OK));
-        assertTrue(session.settle(SettlementOptions.retryWithoutLoyalty()).get().isSuccess());
+        assertTrue(session.settle(SettlementOptions.builder()
+                .disableRebates(true)
+                .disablePoints(true)
+                .build()).get().isSuccess());
     }
 
     // ─── Award failure is non-fatal ───
@@ -1864,7 +1865,7 @@ class CheckoutSessionPaymentTest {
                 .onSuccess(success::set)
                 .onError(error -> {
                     fail("award failure must not reach onError");
-                    return SettlementOptions.voidAndAbort();
+                    return SettlementRecovery.abort();
                 })
                 .executeSync();
 
@@ -2074,7 +2075,7 @@ class CheckoutSessionPaymentTest {
         AtomicReference<SessionError> seen = new AtomicReference<>();
         session.settle().onError(error -> {
             seen.set(error);
-            return SettlementOptions.voidAndAbort();
+            return SettlementRecovery.abort();
         }).getOrNull();
 
         assertEquals(SessionErrorCode.ABORTED, seen.get().getCode(),

@@ -16,6 +16,7 @@ import java.time.Instant;
 public final class SettlementMovement {
 
     private final SettlementStep step;
+    private final SettlementTarget target;
     private final BigDecimal amount;
     private final String saleTransactionId;
     private final String poiTransactionId;
@@ -26,6 +27,7 @@ public final class SettlementMovement {
 
     private SettlementMovement(Builder builder) {
         this.step = builder.step;
+        this.target = builder.target;
         this.amount = builder.amount;
         this.saleTransactionId = builder.saleTransactionId;
         this.poiTransactionId = builder.poiTransactionId;
@@ -41,6 +43,11 @@ public final class SettlementMovement {
 
     public SettlementStep getStep() {
         return step;
+    }
+
+    /** Basket obligation resolved by this movement. */
+    public SettlementTarget getTarget() {
+        return target;
     }
 
     public BigDecimal getAmount() {
@@ -75,6 +82,7 @@ public final class SettlementMovement {
     public static final class Builder {
 
         private SettlementStep step;
+        private SettlementTarget target = SettlementTarget.sales();
         private BigDecimal amount = BigDecimal.ZERO;
         private String saleTransactionId;
         private String poiTransactionId;
@@ -88,6 +96,11 @@ public final class SettlementMovement {
 
         public Builder step(SettlementStep step) {
             this.step = step;
+            return this;
+        }
+
+        public Builder target(SettlementTarget target) {
+            this.target = target;
             return this;
         }
 

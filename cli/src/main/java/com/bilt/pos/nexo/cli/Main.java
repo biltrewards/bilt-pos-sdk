@@ -937,7 +937,7 @@ public final class Main {
                     })
                     .onError(error -> {
                         LOG.severe("Payment failed: " + error);
-                        return com.bilt.pos.session.settlement.SettlementOptions.voidAndAbort();
+                        return com.bilt.pos.session.settlement.SettlementRecovery.abort();
                     })
                     .getOrNull();
 

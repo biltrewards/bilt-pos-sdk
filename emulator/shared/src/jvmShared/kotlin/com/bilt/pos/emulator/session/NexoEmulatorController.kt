@@ -15,8 +15,9 @@ import com.bilt.pos.session.identity.CardAcquisitionOptions
 import com.bilt.pos.session.identity.ForceEntryMode
 import com.bilt.pos.session.identity.IdentifyOptions
 import com.bilt.pos.session.identity.IdentifyStatus
-import com.bilt.pos.session.settlement.SettlementResult
 import com.bilt.pos.session.settlement.SettlementOptions
+import com.bilt.pos.session.settlement.SettlementRecovery
+import com.bilt.pos.session.settlement.SettlementResult
 import com.bilt.pos.session.storedvalue.StoredValueCard
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -551,7 +552,7 @@ class NexoEmulatorController(
                         ))
                     }
                 }
-                SettlementOptions.voidAndAbort()
+                SettlementRecovery.abort()
             }
             .onSuccess { result ->
                 attempt = PaymentAttempt.SUCCEEDED

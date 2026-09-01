@@ -10,17 +10,19 @@
 package com.bilt.pos.session;
 
 import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.basket.BasketDiscount;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.basket.BasketMutation;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
  * The basket surface of a checkout session: item and tax mutations, batch
- * edits, and immutable snapshots. Credit items represent returns in the
- * same basket as sale items.
+ * edits, and immutable snapshots. Sale, return, and register-credit items
+ * can coexist in one basket.
  *
  * <p>Every mutation is applied atomically, returning the updated snapshot
  * synchronously; when the session has automatic display enabled it also
@@ -33,7 +35,7 @@ import java.util.function.Consumer;
  *
  * <pre>{@code
  * session.basket().addItem(
- *         BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+ *         BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, new BigDecimal("24.99")));
  * session.basket().setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
  * Basket basket = session.basket().snapshot();
  * }</pre>
@@ -134,6 +136,20 @@ public final class SessionBasket {
         return host.mutate(basket -> basket.updateItemQuantityBySku(sku, quantity));
     }
 
+    /** Replaces the register-applied discounts on a line; an empty list clears them. */
+    public Basket setDiscounts(String itemId, List<BasketDiscount> discounts) {
+        Objects.requireNonNull(itemId, "itemId");
+        Objects.requireNonNull(discounts, "discounts");
+        return host.mutate(basket -> basket.setDiscounts(itemId, discounts));
+    }
+
+    /** Replaces the register-applied discounts on a line by SKU. */
+    public Basket setDiscountsBySku(String sku, List<BasketDiscount> discounts) {
+        Objects.requireNonNull(sku, "sku");
+        Objects.requireNonNull(discounts, "discounts");
+        return host.mutate(basket -> basket.setDiscountsBySku(sku, discounts));
+    }
+
     /**
      * Applies a batch of basket mutations atomically, with a single
      * display update for the whole batch.
@@ -145,7 +161,7 @@ public final class SessionBasket {
 
     // ─── Tax ───
 
-    /** Sets the tax rate on a line ({@code taxAmount = adjustedTotal × rate});
+    /** Sets the tax rate on a line ({@code taxAmount = subtotal × rate});
      * clears any explicit fixed tax amount previously set on it. */
     public Basket setTaxRate(String itemId, BigDecimal rate) {
         Objects.requireNonNull(itemId, "itemId");
@@ -177,8 +193,7 @@ public final class SessionBasket {
     /**
      * Overrides the basket's total tax; passing {@code null} restores
      * item-level computation. Like every tax value the override is a
-     * magnitude; credit-side basket engines subtract it with their returned
-     * lines.
+     * magnitude; an all-refund basket carries it with a negative sign.
      */
     public Basket setTaxTotal(BigDecimal amount) {
         return host.mutate(basket -> basket.setTaxTotal(amount));

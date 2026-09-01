@@ -93,8 +93,8 @@ loadScripts(document, 'script');</script>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">SessionBasket</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">The basket surface of a checkout session: item and tax mutations, batch
- edits, and immutable snapshots. Credit items represent returns in the
- same basket as sale items.
+ edits, and immutable snapshots. Sale, return, and register-credit items
+ can coexist in one basket.
 
  <p>Every mutation is applied atomically, returning the updated snapshot
  synchronously; when the session has automatic display enabled it also
@@ -107,7 +107,7 @@ loadScripts(document, 'script');</script>
 
  <pre><code>
  session.basket().addItem(
-         BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+         BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, new BigDecimal("24.99")));
  session.basket().setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
  Basket basket = session.basket().snapshot();
  </code></pre>
@@ -162,6 +162,18 @@ loadScripts(document, 'script');</script>
 <div class="block">Removes the line with the given SKU.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setDiscounts(java.lang.String,java.util.List)" class="member-name-link">setDiscounts</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="basket/BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a>&gt;&nbsp;discounts)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Replaces the register-applied discounts on a line; an empty list clears them.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setDiscountsBySku(java.lang.String,java.util.List)" class="member-name-link">setDiscountsBySku</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="basket/BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a>&gt;&nbsp;discounts)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Replaces the register-applied discounts on a line by SKU.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setTaxAmount(java.lang.String,java.math.BigDecimal)" class="member-name-link">setTaxAmount</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
@@ -177,7 +189,7 @@ loadScripts(document, 'script');</script>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setTaxRate(java.lang.String,java.math.BigDecimal)" class="member-name-link">setTaxRate</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;rate)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Sets the tax rate on a line (<code>taxAmount = adjustedTotal × rate</code>);
+<div class="block">Sets the tax rate on a line (<code>taxAmount = subtotal × rate</code>);
  clears any explicit fixed tax amount previously set on it.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
@@ -307,6 +319,22 @@ loadScripts(document, 'script');</script>
 </section>
 </li>
 <li>
+<section class="detail" id="setDiscounts(java.lang.String,java.util.List)">
+<h3>setDiscounts</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setDiscounts</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="basket/BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a>&gt;&nbsp;discounts)</span></div>
+<div class="block">Replaces the register-applied discounts on a line; an empty list clears them.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="setDiscountsBySku(java.lang.String,java.util.List)">
+<h3>setDiscountsBySku</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setDiscountsBySku</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="basket/BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a>&gt;&nbsp;discounts)</span></div>
+<div class="block">Replaces the register-applied discounts on a line by SKU.</div>
+</section>
+</li>
+<li>
 <section class="detail" id="mutate(java.util.function.Consumer)">
 <h3>mutate</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">mutate</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/BasketMutation.html" title="interface in com.bilt.pos.session.basket">BasketMutation</a>&gt;&nbsp;mutation)</span></div>
@@ -319,7 +347,7 @@ loadScripts(document, 'script');</script>
 <h3>setTaxRate</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setTaxRate</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;rate)</span></div>
-<div class="block">Sets the tax rate on a line (<code>taxAmount = adjustedTotal × rate</code>);
+<div class="block">Sets the tax rate on a line (<code>taxAmount = subtotal × rate</code>);
  clears any explicit fixed tax amount previously set on it.</div>
 </section>
 </li>
@@ -353,8 +381,7 @@ loadScripts(document, 'script');</script>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setTaxTotal</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
 <div class="block">Overrides the basket's total tax; passing <code>null</code> restores
  item-level computation. Like every tax value the override is a
- magnitude; credit-side basket engines subtract it with their returned
- lines.</div>
+ magnitude; an all-refund basket carries it with a negative sign.</div>
 </section>
 </li>
 </ul>

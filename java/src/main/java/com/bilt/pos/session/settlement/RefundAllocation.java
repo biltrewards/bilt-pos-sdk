@@ -20,7 +20,7 @@ import java.util.Objects;
  *
  * <p>The SDK does not infer tender allocation policy. For a mixed card/gift
  * card/points/cash sale, the register supplies one allocation per movement it
- * wants recorded or executed, including split refunds for a single returned
+ * wants recorded or executed, including split refunds for a single return
  * item.</p>
  */
 public final class RefundAllocation {
@@ -189,8 +189,13 @@ public final class RefundAllocation {
         return type;
     }
 
+    /** Every refund allocation resolves the basket's aggregate return target. */
+    public SettlementTarget getTarget() {
+        return SettlementTarget.refunds();
+    }
+
     /**
-     * Monetary value this movement contributes to the returned merchandise
+     * Monetary value this movement contributes to the merchandise return
      * allocation. Award reversals are bookkeeping and use zero.
      */
     public BigDecimal getAmount() {
@@ -213,7 +218,7 @@ public final class RefundAllocation {
         return memberId;
     }
 
-    /** Whether this allocation counts toward the monetary value of returned items. */
+    /** Whether this allocation counts toward the monetary value of return items. */
     public boolean countsTowardRefundTotal() {
         return type != RefundAllocationType.AWARD;
     }

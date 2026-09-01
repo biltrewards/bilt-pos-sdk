@@ -13,7 +13,7 @@ data class Product(
     val priceMinor: Long,
     val category: String,
 ) {
-    /** Decimal price string, e.g. `79.99` — the format `BasketItem.of` expects. */
+    /** Decimal price string, e.g. `79.99` — the format `BasketItem.sale` expects. */
     val priceDecimal: String
         get() = minorUnitsToDecimal(priceMinor)
 

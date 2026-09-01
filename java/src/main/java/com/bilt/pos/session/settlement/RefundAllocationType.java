@@ -9,7 +9,7 @@
  */
 package com.bilt.pos.session.settlement;
 
-/** The destination/source being restored for a returned item during settlement. */
+/** The destination/source being restored for a return item during settlement. */
 public enum RefundAllocationType {
 
     /** Return money to a payment card using a Nexo PaymentRequest(Refund). */
@@ -18,7 +18,7 @@ public enum RefundAllocationType {
     /** Return money to the original stored value tender using a Nexo PaymentRequest(Refund). */
     STORED_VALUE,
 
-    /** Restore returned value by loading a register-supplied stored value card. */
+    /** Restore return value by loading a register-supplied stored value card. */
     STORE_CREDIT,
 
     /** Refund value outside the terminal, such as cash from the register drawer. */

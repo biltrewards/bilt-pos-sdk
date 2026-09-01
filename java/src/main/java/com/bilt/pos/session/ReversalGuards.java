@@ -9,6 +9,8 @@
  */
 package com.bilt.pos.session;
 
+import com.bilt.pos.session.internal.ReversalMovement;
+
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -30,13 +32,14 @@ import java.util.concurrent.ConcurrentHashMap;
  *       award.</li>
  * </ul>
  *
- * <p>{@link #reversedSteps()} doubles as the void's resume state — the
+ * <p>{@link #reversedMovements()} doubles as the void's resume state — the
  * sale's movements already reversed, fed to and updated by
  * {@code ReversalManager.voidMovements}.</p>
  */
 final class ReversalGuards {
 
-    private final Set<ReversalStep> reversedSteps = ConcurrentHashMap.newKeySet();
+    private final Set<ReversalMovement.Key> reversedMovements =
+            ConcurrentHashMap.newKeySet();
     private volatile boolean refundIssued;
     private final String subject;
 
@@ -46,8 +49,8 @@ final class ReversalGuards {
     }
 
     /** The sale's movements already reversed, by a void or a refund's award reversal. */
-    Set<ReversalStep> reversedSteps() {
-        return reversedSteps;
+    Set<ReversalMovement.Key> reversedMovements() {
+        return reversedMovements;
     }
 
     /** Guards {@code voidTransaction()}: refused once a refund returned money. */
@@ -62,8 +65,9 @@ final class ReversalGuards {
 
     /** Guards {@code refund()}: refused while a void has a money leg reversed. */
     void requireNoReversedMoneyLeg() {
-        if (reversedSteps.contains(ReversalStep.CARD)
-                || reversedSteps.contains(ReversalStep.STORED_VALUE)) {
+        if (hasReversed(ReversalStep.STORED_VALUE_LOAD)
+                || hasReversed(ReversalStep.CARD)
+                || hasReversed(ReversalStep.STORED_VALUE)) {
             throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
                     "a void of this " + subject + " is partially complete; finish it "
                             + "with voidTransaction() — a refund cannot mix with a "
@@ -79,16 +83,25 @@ final class ReversalGuards {
     /** A new payment replaced the guarded sale and all of its reversal progress. */
     void reset() {
         refundIssued = false;
-        reversedSteps.clear();
+        reversedMovements.clear();
     }
 
     /** Whether a refund flow already reversed the award. */
     boolean awardReversed() {
-        return reversedSteps.contains(ReversalStep.AWARD);
+        return hasReversed(ReversalStep.AWARD);
     }
 
     /** A refund flow reversed the award; nothing may re-credit it. */
-    void markAwardReversed() {
-        reversedSteps.add(ReversalStep.AWARD);
+    void markAwardReversed(String poiTransactionId) {
+        reversedMovements.add(ReversalMovement.key(ReversalStep.AWARD, poiTransactionId));
+    }
+
+    private boolean hasReversed(ReversalStep step) {
+        for (ReversalMovement.Key movement : reversedMovements) {
+            if (movement.getStep() == step) {
+                return true;
+            }
+        }
+        return false;
     }
 }

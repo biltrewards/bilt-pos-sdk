@@ -98,7 +98,7 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public enum </span><span class="element-name type-name-label">SettlementType</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Enum.html" title="class or interface in java.lang" class="external-link">Enum</a>&lt;<a href="SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a>&gt;</span></div>
-<div class="block">How a settlement containing both sale and return lines moves money.</div>
+<div class="block">How a settlement containing sale, credit, and return lines moves money.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -126,7 +126,7 @@ loadScripts(document, 'script');</script>
 </div>
 <div class="col-first odd-row-color"><code><a href="#REFUND_THEN_CHARGE" class="member-name-link">REFUND_THEN_CHARGE</a></code></div>
 <div class="col-last odd-row-color">
-<div class="block">Execute the return allocations first, then charge the sale portion.</div>
+<div class="block">Execute return refund allocations first, then charge sales less credits.</div>
 </div>
 </div>
 </section>
@@ -177,7 +177,7 @@ the order they are declared.</div>
 <section class="detail" id="REFUND_THEN_CHARGE">
 <h3>REFUND_THEN_CHARGE</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a></span>&nbsp;<span class="element-name">REFUND_THEN_CHARGE</span></div>
-<div class="block">Execute the return allocations first, then charge the sale portion.
+<div class="block">Execute return refund allocations first, then charge sales less credits.
  This is the default and preserves the original settlement behavior.</div>
 </section>
 </li>

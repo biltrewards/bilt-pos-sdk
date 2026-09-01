@@ -11,6 +11,7 @@
  */
 package com.bilt.pos.session.internal;
 
+import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.nexo.model.AmountsReq;
 import com.bilt.pos.nexo.model.LoyaltyAmount;
 import com.bilt.pos.nexo.model.LoyaltyData;
@@ -34,6 +35,7 @@ import com.bilt.pos.nexo.model.SaleItem;
 import com.bilt.pos.nexo.model.SaleItemRebate;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
+import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.Receipt;
 import com.bilt.pos.session.SessionError;
@@ -42,22 +44,27 @@ import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.identity.IdentifyResult;
-import com.bilt.pos.session.settlement.SettlementResult;
-import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
-import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.payment.PointRedemptionResult;
 import com.bilt.pos.session.payment.RebateRedemptionResult;
 import com.bilt.pos.session.payment.RedeemedRebate;
+import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementMovement;
+import com.bilt.pos.session.settlement.SettlementOptions;
+import com.bilt.pos.session.settlement.SettlementRecovery;
+import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
+import com.bilt.pos.session.settlement.SettlementTarget;
+import com.bilt.pos.session.settlement.StoredValueLoad;
+import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -66,9 +73,9 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /**
- * Runs the payment sequence — rebate → points → stored value → card → award —
- * with commit tracking, best-effort rollback, and {@code onError}-driven
- * retry. All steps and handlers run on the calling thread.
+ * Runs the charge-side sequence — rebate, points, tender, stored value line
+ * fulfillment, award — with commit tracking, best-effort rollback, and
+ * {@code onError}-driven retry. All steps and handlers run on the calling thread.
  */
 public final class PaymentOrchestrator {
 
@@ -82,7 +89,7 @@ public final class PaymentOrchestrator {
         public Function<PointRedemptionResult, BigDecimal> onPointsRedeemed;
         public Function<GiftCardPaymentResult, BigDecimal> onGiftCardPayment;
         public Consumer<SettlementMovement> onMovement;
-        public Function<SessionError, SettlementOptions> onError;
+        public Function<SessionError, SettlementRecovery> onError;
     }
 
     /** Inputs to a payment run. */
@@ -148,12 +155,45 @@ public final class PaymentOrchestrator {
         }
     }
 
+    /** Retry-varying charge policy; basket obligations remain on the request. */
+    private static final class AttemptOptions {
+        final BigDecimal cashback;
+        final DisplayPayload paymentProcessingDisplay;
+        boolean disableRebates;
+        boolean disablePoints;
+        boolean disableAward;
+
+        AttemptOptions(SettlementOptions request) {
+            this.cashback = request.getCashback();
+            this.paymentProcessingDisplay = request.getPaymentProcessingDisplay();
+            this.disableRebates = request.isDisableRebates();
+            this.disablePoints = request.isDisablePoints();
+            this.disableAward = request.isDisableAward();
+        }
+
+        void apply(SettlementRecovery recovery) {
+            if (recovery.getDisableRebates() != null) {
+                disableRebates = recovery.getDisableRebates();
+            }
+            if (recovery.getDisablePoints() != null) {
+                disablePoints = recovery.getDisablePoints();
+            }
+            if (recovery.getDisableAward() != null) {
+                disableAward = recovery.getDisableAward();
+            }
+        }
+    }
+
     private final NexoExchange exchange;
     private final String currency;
+    private final StoredValueManager storedValueManager;
 
-    public PaymentOrchestrator(NexoExchange exchange, String currency) {
+    public PaymentOrchestrator(NexoExchange exchange, String currency,
+                               StoredValueManager storedValueManager) {
         this.exchange = exchange;
         this.currency = currency;
+        this.storedValueManager = Objects.requireNonNull(
+                storedValueManager, "storedValueManager");
     }
 
     /**
@@ -162,7 +202,7 @@ public final class PaymentOrchestrator {
      * {@link SessionErrorCode#ABORTED} when the run was aborted.
      */
     public SettlementResult run(Request request) {
-        SettlementOptions options = request.options;
+        AttemptOptions options = new AttemptOptions(request.options);
         int resolutions = 0;
         while (true) {
             List<Commit> committed = new ArrayList<>();
@@ -193,10 +233,10 @@ public final class PaymentOrchestrator {
                     throw new SessionException(error);
                 }
                 resolutions++;
-                SettlementOptions resolution = request.handlers.onError == null
-                        ? SettlementOptions.voidAndAbort()
+                SettlementRecovery resolution = request.handlers.onError == null
+                        ? SettlementRecovery.abort()
                         : request.handlers.onError.apply(error);
-                boolean wantsRetry = resolution != null && !resolution.isVoidAndAbort();
+                boolean wantsRetry = resolution != null && !resolution.isAbort();
                 if (!wantsRetry) {
                     throw new SessionException(error);
                 }
@@ -217,18 +257,19 @@ public final class PaymentOrchestrator {
                             + "; the retry limit was reached and the payment failed",
                             error.getCause()));
                 }
-                options = resolution;
+                options.apply(resolution);
             }
         }
     }
 
     // ─── The sequence ───
 
-    private SettlementResult runSequence(Request request, SettlementOptions options,
+    private SettlementResult runSequence(Request request, AttemptOptions options,
                                        List<Commit> committed) {
         Basket workingBasket = request.basket;
         BigDecimal currentTotal = workingBasket.getGrandTotal();
         boolean loyalty = request.member != null;
+        boolean chargeDue = currentTotal.signum() > 0;
 
         SettlementResult.Builder result = SettlementResult.builder().success(true);
         List<RedeemedRebate> redeemedRebates = new ArrayList<>();
@@ -237,9 +278,10 @@ public final class PaymentOrchestrator {
         BigDecimal pointsValue = BigDecimal.ZERO;
         BigDecimal storedValueCharged = BigDecimal.ZERO;
         BigDecimal cardCharged = BigDecimal.ZERO;
+        BigDecimal storedValueLoaded = BigDecimal.ZERO;
 
         // 1. Rebate redemption
-        if (loyalty && !options.isDisableRebates()) {
+        if (chargeDue && loyalty && !options.disableRebates) {
             checkAbort(request);
             String saleTxnId = beforeStep(request, SettlementStep.REBATE_REDEMPTION,
                     workingBasket, currentTotal, committed);
@@ -256,7 +298,7 @@ public final class PaymentOrchestrator {
         // steps, skipped once rebates (or the register's handler) have
         // brought the running total to zero: there is nothing left to pay,
         // so redeeming would take the member's points for no discount
-        if (loyalty && !options.isDisablePoints() && !request.member.getRewards().isEmpty()
+        if (loyalty && !options.disablePoints && !request.member.getRewards().isEmpty()
                 && currentTotal.signum() > 0) {
             checkAbort(request);
             String saleTxnId = beforeStep(request, SettlementStep.POINT_REDEMPTION,
@@ -285,8 +327,8 @@ public final class PaymentOrchestrator {
         // 4. Card payment
         if (currentTotal.signum() > 0) {
             checkAbort(request);
-            if (options.getPaymentProcessingDisplay() != null) {
-                showProcessingDisplay(options.getPaymentProcessingDisplay());
+            if (options.paymentProcessingDisplay != null) {
+                showProcessingDisplay(options.paymentProcessingDisplay);
             }
             String saleTxnId = beforeStep(request, SettlementStep.CARD_CHARGE,
                     workingBasket, currentTotal, committed);
@@ -294,8 +336,24 @@ public final class PaymentOrchestrator {
                     saleTxnId, committed, result);
         }
 
-        // 5. Award (best-effort — never fails the checkout; terminal SAFs)
-        if (loyalty && !options.isDisableAward()) {
+        // 5. Fulfill each stored value line after its funding commits. A
+        // failure reverses earlier loads and the charge-side movements.
+        for (StoredValueLoad fulfillment : request.options.getFulfillments()) {
+            checkAbort(request);
+            BasketLineItem line = Objects.requireNonNull(
+                    request.basket.getItemByReference(fulfillment.getBasketReference()),
+                    () -> "fulfillment references basket line "
+                            + fulfillment.getBasketReference()
+                            + " which is absent from the charge basket");
+            BigDecimal amount = line.getOriginalTotal();
+            String saleTxnId = beforeStep(request, SettlementStep.STORED_VALUE_LOAD,
+                    workingBasket, amount, committed);
+            storedValueLoaded = storedValueLoaded.add(storedValueLoadStep(request,
+                    fulfillment, amount, saleTxnId, committed, result));
+        }
+
+        // 6. Award (best-effort — never fails the checkout; terminal SAFs)
+        if (chargeDue && loyalty && !options.disableAward) {
             checkAbort(request);
             String saleTxnId = beforeStep(request, SettlementStep.AWARD,
                     workingBasket, storedValueCharged.add(cardCharged), committed);
@@ -307,8 +365,10 @@ public final class PaymentOrchestrator {
         // a rollback request, not an award failure.
         checkAbort(request);
 
-        Basket finalBasket = withPaymentTotals(workingBasket, rebateTotal, pointsValue,
-                storedValueCharged, cardCharged, options.getCashback());
+        Basket finalBasket = chargeDue
+                ? withPaymentTotals(workingBasket, rebateTotal, pointsValue,
+                        storedValueCharged, cardCharged, options.cashback)
+                : workingBasket;
 
         // last look before success is declared; later aborts are too late
         // and the completed payment stands (void it explicitly instead)
@@ -319,6 +379,7 @@ public final class PaymentOrchestrator {
                 .authorizedAmount(storedValueCharged.add(cardCharged))
                 .storedValueAmountUsed(storedValueCharged)
                 .cardAmountCharged(cardCharged)
+                .storedValueLoadedAmount(storedValueLoaded)
                 .redeemedRebates(redeemedRebates)
                 .totalRebateAmount(rebateTotal)
                 .pointsRedeemed(pointsRedeemed)
@@ -509,19 +570,51 @@ public final class PaymentOrchestrator {
                 currentTotal.subtract(charged));
     }
 
+    private BigDecimal storedValueLoadStep(Request request, StoredValueLoad fulfillment,
+            BigDecimal amount, String saleTxnId, List<Commit> committed,
+            SettlementResult.Builder result) {
+        StoredValueTransactionTypeEnum type = fulfillment.getType() == StoredValueLoad.Type.ACTIVATE
+                ? StoredValueTransactionTypeEnum.ACTIVATE : StoredValueTransactionTypeEnum.LOAD;
+        StoredValueOperationResult loaded;
+        try {
+            loaded = storedValueManager.operation(type, fulfillment.getCard(), amount,
+                    null, null, saleTxnId);
+        } catch (SessionException e) {
+            throw new StepFailure(e.getError(), false);
+        }
+        BigDecimal actualAmount = loaded.getAmount() == null ? amount : loaded.getAmount();
+        Runnable rollback = loaded.getPoiTransactionId() == null ? null : () ->
+                storedValueManager.operation(StoredValueTransactionTypeEnum.REVERSE,
+                        null, null, loaded.getPoiTransactionId(),
+                        loaded.getPoiTransactionTimestamp());
+        commit(committed, SettlementStep.STORED_VALUE_LOAD, saleTxnId,
+                loaded.getPoiTransactionId(), loaded.getPoiTransactionTimestamp(), rollback);
+        publishMovement(request, result, movement(SettlementStep.STORED_VALUE_LOAD,
+                fulfillment.getTarget(), actualAmount, saleTxnId,
+                loaded.getPoiTransactionId(), loaded.getPoiTransactionTimestamp(),
+                null, null, null));
+        if (actualAmount.compareTo(amount) != 0) {
+            throw new StepFailure(new SessionError(SessionErrorCode.DECLINED,
+                    "the stored value fulfillment loaded " + actualAmount
+                            + " instead of the basket line's " + amount
+                            + "; the partial load is reversed"), false);
+        }
+        return actualAmount;
+    }
+
     private BigDecimal cardStep(Request request, Basket basket, BigDecimal currentTotal,
-                                SettlementOptions options, String saleTxnId,
+                                AttemptOptions options, String saleTxnId,
                                 List<Commit> committed, SettlementResult.Builder result) {
         // nexo contract: RequestedAmount is the TOTAL requested for payment
         // INCLUDING cashback — the terminal authorizes sale + cashback as
         // one amount, with CashBackAmount identifying the cash portion
-        BigDecimal grossTotal = options.getCashback() != null
-                ? currentTotal.add(options.getCashback()) : currentTotal;
+        BigDecimal grossTotal = options.cashback != null
+                ? currentTotal.add(options.cashback) : currentTotal;
         AmountsReq.Builder amounts = AmountsReq.builder()
                 .currency(currency)
                 .requestedAmount(grossTotal.doubleValue());
-        if (options.getCashback() != null) {
-            amounts.cashBackAmount(options.getCashback().doubleValue());
+        if (options.cashback != null) {
+            amounts.cashBackAmount(options.cashback.doubleValue());
         }
         SaleToPOIRequest wireRequest = SaleToPOIRequest.builder()
                 .messageHeader(exchange.factory().header(
@@ -787,10 +880,17 @@ public final class PaymentOrchestrator {
                         com.bilt.pos.nexo.model.POIData poiData, Runnable rollback) {
         TransactionIdentificationType poiTxn = poiData == null
                 ? null : poiData.getPoiTransactionID();
+        commit(committed, step, saleTxnId,
+                poiTxn == null ? null : poiTxn.getTransactionID(),
+                poiTxn == null ? null : Wire.instant(poiTxn.getTimeStamp()), rollback);
+    }
+
+    private void commit(List<Commit> committed, SettlementStep step, String saleTxnId,
+                        String poiTransactionId, Instant poiTransactionTimestamp,
+                        Runnable rollback) {
         committed.add(new Commit(
                 new CommittedStep(step, saleTxnId,
-                        poiTxn == null ? null : poiTxn.getTransactionID(),
-                        poiTxn == null ? null : Wire.instant(poiTxn.getTimeStamp()),
+                        poiTransactionId, poiTransactionTimestamp,
                         true),
                 rollback));
     }
@@ -800,12 +900,23 @@ public final class PaymentOrchestrator {
             Integer points, Integer pointBalance) {
         TransactionIdentificationType poiTxn = poiData == null
                 ? null : poiData.getPoiTransactionID();
+        return movement(step, SettlementTarget.sales(), amount, saleTxnId,
+                poiTxn == null ? null : poiTxn.getTransactionID(),
+                poiTxn == null ? null : Wire.instant(poiTxn.getTimeStamp()), memberId,
+                points, pointBalance);
+    }
+
+    private static SettlementMovement movement(SettlementStep step, SettlementTarget target,
+            BigDecimal amount, String saleTxnId, String poiTransactionId,
+            Instant poiTransactionTimestamp, String memberId, Integer points,
+            Integer pointBalance) {
         return SettlementMovement.builder()
                 .step(step)
+                .target(target)
                 .amount(amount)
                 .saleTransactionId(saleTxnId)
-                .poiTransactionId(poiTxn == null ? null : poiTxn.getTransactionID())
-                .poiTransactionTimestamp(poiTxn == null ? null : Wire.instant(poiTxn.getTimeStamp()))
+                .poiTransactionId(poiTransactionId)
+                .poiTransactionTimestamp(poiTransactionTimestamp)
                 .memberId(memberId)
                 .points(points)
                 .pointBalance(pointBalance)
@@ -943,16 +1054,20 @@ public final class PaymentOrchestrator {
                     ? itemLabels.get(i) : cartLevelLabel;
             items.add(BasketLineItem.builder()
                     .itemId(line.getItemId())
+                    .reference(line.getReference())
                     .sku(line.getSku())
                     .description(line.getDescription())
                     .category(line.getCategory())
                     .quantity(line.getQuantity())
                     .unitPrice(line.getUnitPrice())
-                    .credit(line.isCredit())
+                    .discounts(line.getDiscounts())
+                    .discountTotal(line.getDiscountTotal())
+                    .subtotal(line.getSubtotal())
+                    .type(line.getType())
                     .originalTotal(line.getOriginalTotal())
                     .rebateAmount(rebateAmount)
                     .rebateLabel(rebateLabel)
-                    .adjustedTotal(line.getOriginalTotal().subtract(rebateAmount))
+                    .adjustedTotal(line.getSubtotal().subtract(rebateAmount))
                     .taxRate(line.getTaxRate())
                     .taxAmount(line.getTaxAmount())
                     .metadata(line.getMetadata())
@@ -962,6 +1077,8 @@ public final class PaymentOrchestrator {
                 .cartId(basket.getCartId())
                 .items(items)
                 .originalTotal(basket.getOriginalTotal())
+                .discountTotal(basket.getDiscountTotal())
+                .subtotal(basket.getSubtotal())
                 .taxTotal(basket.getTaxTotal())
                 .grandTotal(basket.getGrandTotal())
                 .rebateTotal(totalRebate)
@@ -984,7 +1101,7 @@ public final class PaymentOrchestrator {
         BigDecimal weightSum = BigDecimal.ZERO;
         int lastWeighted = -1;
         for (int i = 0; i < basket.getItemCount(); i++) {
-            BigDecimal weight = basket.getItems().get(i).getOriginalTotal()
+            BigDecimal weight = basket.getItems().get(i).getSubtotal()
                     .subtract(itemAttributed.get(i));
             weights.add(weight);
             if (weight.signum() > 0) {
@@ -1037,14 +1154,16 @@ public final class PaymentOrchestrator {
             netCharged = netCharged.subtract(cashback);
         }
         BigDecimal effectiveTax = netCharged
-                .subtract(basket.getOriginalTotal().subtract(rebateTotal))
+                .subtract(basket.getSubtotal().subtract(rebateTotal))
                 .add(pointsValue);
         return Basket.builder()
                 .cartId(basket.getCartId())
                 .items(basket.getItems())
                 .originalTotal(basket.getOriginalTotal())
+                .discountTotal(basket.getDiscountTotal())
+                .subtotal(basket.getSubtotal())
                 .taxTotal(effectiveTax)
-                .grandTotal(basket.getOriginalTotal().add(effectiveTax))
+                .grandTotal(basket.getSubtotal().add(effectiveTax))
                 .rebateTotal(rebateTotal)
                 .pointDiscountTotal(pointsValue)
                 .storedValueTotal(storedValue)

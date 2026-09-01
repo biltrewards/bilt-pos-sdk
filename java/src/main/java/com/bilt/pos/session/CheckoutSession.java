@@ -30,6 +30,7 @@ import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
 import com.bilt.pos.nexo.model.TransactionStatusRequest;
 import com.bilt.pos.nexo.model.TransactionStatusResponse;
 import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.basket.BasketMutation;
 import com.bilt.pos.session.display.DisplayRenderer;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
@@ -72,6 +73,8 @@ import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementStep;
+import com.bilt.pos.session.settlement.StoredValueLoad;
+import com.bilt.pos.session.settlement.StoredValueLoadRecord;
 import com.bilt.pos.session.storedvalue.StoredValueBalance;
 import com.bilt.pos.session.storedvalue.StoredValueCard;
 import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
@@ -81,6 +84,7 @@ import jakarta.xml.bind.JAXBException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
@@ -211,7 +215,7 @@ public final class CheckoutSession implements AutoCloseable {
     // one failed. The target record prevents applying that progress to a
     // different prior sale.
     private volatile OriginalSaleRecord priorSaleVoidTarget;
-    private volatile Set<ReversalStep> priorSaleVoidReversedSteps =
+    private volatile Set<ReversalMovement.Key> priorSaleVoidReversedMovements =
             ConcurrentHashMap.newKeySet();
 
     // the session's Terminal facade, created lazily by terminal(); it has
@@ -235,9 +239,11 @@ public final class CheckoutSession implements AutoCloseable {
         this.exchange = new NexoExchange(router, factory);
         this.identityManager = new IdentityManager(exchange);
         this.inputManager = new InputManager(exchange);
-        this.reversalManager = new ReversalManager(exchange, builder.currency);
-        this.paymentOrchestrator = new PaymentOrchestrator(exchange, builder.currency);
         this.storedValueManager = new StoredValueManager(exchange, builder.currency);
+        this.reversalManager = new ReversalManager(
+                exchange, builder.currency, storedValueManager);
+        this.paymentOrchestrator = new PaymentOrchestrator(
+                exchange, builder.currency, storedValueManager);
         this.display = new BasketDisplay(exchange, displayRenderer, builder.currency);
         this.autoDisplayPush = new AutoDisplayPush(operations, display,
                 this::basketDisplayIsCurrent);
@@ -278,6 +284,7 @@ public final class CheckoutSession implements AutoCloseable {
         final Instant poiTransactionTimestamp;
         final String storedValuePoiTransactionId;
         final Instant storedValuePoiTransactionTimestamp;
+        final List<StoredValueLoadRecord> storedValueLoads;
         final String awardPoiTransactionId;
         final Instant awardPoiTransactionTimestamp;
         final String rebatePoiTransactionId;
@@ -293,6 +300,7 @@ public final class CheckoutSession implements AutoCloseable {
                     ? null : result.getStoredValuePoiTransactionId();
             storedValuePoiTransactionTimestamp = result == null
                     ? null : result.getStoredValuePoiTransactionTimestamp();
+            storedValueLoads = result == null ? List.of() : result.getStoredValueLoads();
             awardPoiTransactionId = result == null ? null : result.getAwardPoiTransactionId();
             awardPoiTransactionTimestamp = result == null
                     ? null : result.getAwardPoiTransactionTimestamp();
@@ -308,22 +316,38 @@ public final class CheckoutSession implements AutoCloseable {
 
         /** Whether a persisted record includes any movement of this payment. */
         boolean sharesMovementWith(OriginalSaleRecord sale) {
-            return references(sale.getCardPoiTransactionId())
+            if (references(sale.getCardPoiTransactionId())
                     || references(sale.getStoredValuePoiTransactionId())
                     || references(sale.getRedemptionPoiTransactionId())
                     || references(sale.getRebatePoiTransactionId())
-                    || references(sale.getAwardPoiTransactionId());
+                    || references(sale.getAwardPoiTransactionId())) {
+                return true;
+            }
+            for (StoredValueLoadRecord load : sale.getStoredValueLoads()) {
+                if (references(load.getPoiTransactionId())) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private boolean references(String transactionId) {
             if (transactionId == null) {
                 return false;
             }
-            return transactionId.equals(poiTransactionId)
+            if (transactionId.equals(poiTransactionId)
                     || transactionId.equals(storedValuePoiTransactionId)
                     || transactionId.equals(redemptionPoiTransactionId)
                     || transactionId.equals(rebatePoiTransactionId)
-                    || transactionId.equals(awardPoiTransactionId);
+                    || transactionId.equals(awardPoiTransactionId)) {
+                return true;
+            }
+            for (StoredValueLoadRecord load : storedValueLoads) {
+                if (transactionId.equals(load.getPoiTransactionId())) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -843,16 +867,16 @@ public final class CheckoutSession implements AutoCloseable {
      * {@code execute()}, {@code executeSync()}, {@code get()}, or
      * {@code getOrNull()} is invoked: the session must then be open with a
      * non-empty, unconsumed basket. With the default
-     * {@link SettlementType#REFUND_THEN_CHARGE}, sale lines are charged
-     * through the normal tender sequence and credit lines are covered by
-     * register-supplied refund allocations. With
+     * {@link SettlementType#REFUND_THEN_CHARGE}, sale lines less credits are
+     * charged through the normal tender sequence and return lines are covered
+     * by register-supplied refund allocations. With
      * {@link SettlementType#NET}, only the signed basket difference moves:
      * a positive balance is charged, a negative balance is allocated as a
      * refund, and a zero balance sends no monetary movement.
      *
      * <p>Terminal-backed refund allocations carry itemization on the first
      * {@code PaymentRequest(Refund)} leg only. A separate refund carries the
-     * return lines; a net refund carries the signed mixed basket. Additional
+     * refund-side lines; a net refund carries the signed mixed basket. Additional
      * refund legs are amount-only because allocations are tender-level, not
      * line-level.</p>
      *
@@ -861,7 +885,7 @@ public final class CheckoutSession implements AutoCloseable {
      * recorded, and the register retries
      * by calling {@code settle()} again with the same committed allocation
      * prefix. Charge-side failures after refund allocations use
-     * {@link SettlementFlow#onError} recovery options.</p>
+     * {@link SettlementFlow#onError} recovery decisions.</p>
      *
      * <p>A same-session void that already reversed one or more movements
      * must be retried to completion before another settlement can replace
@@ -874,11 +898,12 @@ public final class CheckoutSession implements AutoCloseable {
                 .session(operations);
     }
 
-    private SettlementResult executeSettlement(SettlementFlow flow, SettlementOptions options) {
+    private SettlementResult executeSettlement(SettlementFlow flow,
+            SettlementOptions options) {
         operations.begin("settle");
         PaymentOrchestrator.Request request = new PaymentOrchestrator.Request();
         Basket fullBasket;
-        Basket purchaseBasket;
+        Basket chargePortion;
         BigDecimal returnTotal;
         BigDecimal refundAmount;
         boolean netSettlement;
@@ -900,20 +925,16 @@ public final class CheckoutSession implements AutoCloseable {
                 throw invalidState("the basket is empty; settlement cannot start");
             }
             fullBasket = basketEngine.snapshot();
-            purchaseBasket = fullBasket.salePortion();
+            chargePortion = fullBasket.chargePortion();
             returnTotal = fullBasket.returnTotal();
             netSettlement = options.getSettlementType() == SettlementType.NET;
             refundAmount = fullBasket.getRefundAmount(options.getSettlementType());
-            validateRefundAllocations(returnTotal, refundAmount, options);
-            if (purchaseBasket.isEmpty() && returnTotal.signum() == 0) {
-                throw invalidState("settlement requires a sale line or a return line");
+            validateSettlementOptions(fullBasket, chargePortion, returnTotal,
+                    refundAmount, options);
+            if (chargePortion.isEmpty() && returnTotal.signum() == 0) {
+                throw invalidState("settlement requires a sale, return, or credit line");
             }
-            if (!netSettlement && !purchaseBasket.isEmpty()
-                    && purchaseBasket.getGrandTotal().signum() <= 0) {
-                throw invalidState("the sale portion of the basket is not positive; "
-                        + "settlement cannot charge it");
-            }
-            Basket chargeBasket = netSettlement ? fullBasket : purchaseBasket;
+            Basket chargeBasket = netSettlement ? fullBasket : chargePortion;
             if ((chargeBasket.isEmpty() || chargeBasket.getGrandTotal().signum() <= 0)
                     && options.getCashback() != null) {
                 throw invalidState("cashback requires a card charge in the settlement");
@@ -929,7 +950,7 @@ public final class CheckoutSession implements AutoCloseable {
         request.member = getMember();
         request.storedValueCard = storedValueCard;
         request.options = options;
-        request.basket = netSettlement ? fullBasket : purchaseBasket;
+        request.basket = netSettlement ? fullBasket : chargePortion;
         request.abortRequested = () -> abortRequested;
         // movements an incomplete unwind left standing are kept so that
         // voidTransaction() on the failed session can finish the reversal
@@ -958,19 +979,20 @@ public final class CheckoutSession implements AutoCloseable {
                     committedRefundMovementsSnapshot());
             List<CommittedStep> committedRefundSteps = committedRefundSteps(refundMovements);
             int committedRefundCount = committedRefundAllocationsCount();
-            List<RefundAllocation> refundAllocations = options.getRefundAllocations();
-            validateCommittedRefundRetry(refundAllocations);
-            List<RefundAllocation> pendingAllocations = refundAllocations
-                    .subList(committedRefundCount, refundAllocations.size());
+            List<RefundAllocation> refunds = options.getRefunds();
+            validateCommittedRefundRetry(refunds);
+            List<RefundAllocation> pendingAllocations = refunds
+                    .subList(committedRefundCount, refunds.size());
             refundMovements.addAll(executeRefundAllocations(flow, fullBasket,
                     pendingAllocations, committedRefundSteps,
                     hasItemizedRefundAllocation(
-                            refundAllocations.subList(0, committedRefundCount)),
+                            refunds.subList(0, committedRefundCount)),
                     netSettlement && refundAmount.signum() > 0));
             request.priorSteps = committedRefundSteps;
-            SettlementResult purchaseResult = request.basket.isEmpty()
-                    || request.basket.getGrandTotal().signum() <= 0
-                    ? null : paymentOrchestrator.run(request);
+            boolean chargeSideWork = request.basket.getGrandTotal().signum() > 0
+                    || !options.getFulfillments().isEmpty();
+            SettlementResult purchaseResult = chargeSideWork
+                    ? paymentOrchestrator.run(request) : null;
             SettlementResult result = combineSettlementResult(fullBasket, purchaseResult,
                     refundMovements, netSettlement);
             showFinalSettlement(result.getFinalBasket());
@@ -1132,6 +1154,7 @@ public final class CheckoutSession implements AutoCloseable {
         BigDecimal amount = actualAmount != null ? actualAmount : allocation.getAmount();
         return SettlementMovement.builder()
                 .step(step)
+                .target(allocation.getTarget())
                 .amount(amount)
                 .saleTransactionId(saleTransactionId)
                 .poiTransactionId(poiTransactionId)
@@ -1162,9 +1185,19 @@ public final class CheckoutSession implements AutoCloseable {
         }
     }
 
+    private static void validateSettlementOptions(Basket basket, Basket chargePortion,
+            BigDecimal returnTotal, BigDecimal netRefundAmount, SettlementOptions options) {
+        if (chargePortion.getGrandTotal().signum() < 0) {
+            throw invalidState("credit lines exceed the sale-side value; credits cannot "
+                    + "create a customer payout");
+        }
+        validateRefundAllocations(returnTotal, netRefundAmount, options);
+        validateFulfillments(basket, options.getFulfillments());
+    }
+
     private static void validateRefundAllocations(BigDecimal returnTotal,
             BigDecimal netRefundAmount, SettlementOptions options) {
-        List<RefundAllocation> allocations = options.getRefundAllocations();
+        List<RefundAllocation> allocations = options.getRefunds();
         if (returnTotal.signum() == 0 && !allocations.isEmpty()) {
             throw invalidState("refund allocations require at least one return line");
         }
@@ -1183,6 +1216,31 @@ public final class CheckoutSession implements AutoCloseable {
         if (allocated.compareTo(netRefundAmount) != 0) {
             throw invalidState("net refund allocations total " + allocated
                     + " but the net refund amount is " + netRefundAmount);
+        }
+    }
+
+    private static void validateFulfillments(Basket basket,
+            List<StoredValueLoad> fulfillments) {
+        HashSet<String> fulfilled = new HashSet<>();
+        for (StoredValueLoad fulfillment : fulfillments) {
+            String reference = fulfillment.getBasketReference();
+            if (!fulfilled.add(reference)) {
+                throw invalidState("basket line " + reference
+                        + " has more than one stored value fulfillment");
+            }
+            BasketLineItem line = basket.getItemByReference(reference);
+            if (line == null) {
+                throw invalidState("stored value fulfillment references missing basket line "
+                        + reference);
+            }
+            if (!line.isSale()) {
+                throw invalidState("basket line " + reference
+                        + " is not a sale and cannot be fulfilled");
+            }
+            if (line.getOriginalTotal().signum() <= 0) {
+                throw invalidState("basket line " + reference
+                        + " must have a positive original total for fulfillment");
+            }
         }
     }
 
@@ -1277,7 +1335,7 @@ public final class CheckoutSession implements AutoCloseable {
         Basket finalBasket = purchase == null
                 ? fullBasket
                 : netSettlement ? purchase.getFinalBasket()
-                        : fullBasket.withSettledSalePortion(purchase.getFinalBasket());
+                        : fullBasket.withSettledChargePortion(purchase.getFinalBasket());
         return (purchase == null ? SettlementResult.builder() : purchase.toBuilder())
                 .success(true)
                 .finalBasket(finalBasket)
@@ -1386,7 +1444,8 @@ public final class CheckoutSession implements AutoCloseable {
                 linked ? paid.memberId : null,
                 flow.decider(),
                 linked ? guards::markRefunded : () -> { },
-                linked ? guards::markAwardReversed : () -> { });
+                linked ? () -> guards.markAwardReversed(paid.awardPoiTransactionId)
+                        : () -> { });
     }
 
     private void requireRefundable(String operationName) {
@@ -1448,7 +1507,7 @@ public final class CheckoutSession implements AutoCloseable {
      * whole-transaction void: every referenced card, stored value, rebate,
      * redemption, and award movement is reversed in the same order as a
      * same-session void. If the void partially fails, retry it on the same
-     * session instance because the in-memory reversed-step progress is what
+     * session instance because the in-memory reversed-movement progress is what
      * prevents already-reversed legs from being sent again; {@link #end()} is
      * refused until that retry succeeds. Mixed sale/return settlements should
      * use {@link #settle(SettlementOptions)} with refund allocations instead.
@@ -1467,7 +1526,7 @@ public final class CheckoutSession implements AutoCloseable {
         operations.begin("voidTransaction");
         beginVoid();
         boolean sameSessionVoidStarted = false;
-        Set<ReversalStep> reversedBefore = Set.of();
+        Set<ReversalMovement.Key> reversedBefore = Set.of();
         LastPayment paid = LastPayment.NONE;
         try {
             // A failed settlement whose rollback was incomplete left
@@ -1499,15 +1558,15 @@ public final class CheckoutSession implements AutoCloseable {
             if (resumeRollback) {
                 drainStandingMovements();
             } else {
-                reversedBefore = Set.copyOf(guards.reversedSteps());
+                reversedBefore = Set.copyOf(guards.reversedMovements());
                 sameSessionVoidStarted = true;
             }
-            // the manager filters against the reversed-steps set (and
+            // the manager filters against the reversed-movement set (and
             // records progress into it), so a retry resumes at the
             // movements still standing while the default policy still sees
             // the whole target
             VoidResult result = reversalManager.voidMovements(movements, paid.memberId,
-                    flow.decider(), guards.reversedSteps());
+                    flow.decider(), guards.reversedMovements());
             if (!resumeRollback) {
                 lastPaymentVoided = true;
                 lastPaymentVoidIncomplete = false;
@@ -1515,7 +1574,7 @@ public final class CheckoutSession implements AutoCloseable {
             return result;
         } catch (RuntimeException e) {
             if (sameSessionVoidStarted
-                    && !guards.reversedSteps().equals(reversedBefore)) {
+                    && !guards.reversedMovements().equals(reversedBefore)) {
                 lastPaymentVoidIncomplete = true;
             }
             throw e;
@@ -1539,10 +1598,10 @@ public final class CheckoutSession implements AutoCloseable {
                         + "so its refund and void guards remain consistent");
             }
             List<ReversalMovement> movements = voidTarget(originalSale);
-            Set<ReversalStep> reversedSteps = priorSaleVoidProgress(originalSale);
+            Set<ReversalMovement.Key> reversedMovements = priorSaleVoidProgress(originalSale);
             VoidResult result = reversalManager.voidMovements(movements,
                     originalSale.getMemberId(), flow.decider(),
-                    reversedSteps);
+                    reversedMovements);
             clearPriorSaleVoidProgress(originalSale);
             return result;
         } finally {
@@ -1576,6 +1635,7 @@ public final class CheckoutSession implements AutoCloseable {
     /** The completed payment's movements, in reversal order. */
     private static List<ReversalMovement> voidTarget(LastPayment paid) {
         return ReversalMovement.ofSale(
+                paid.storedValueLoads,
                 PoiRef.ofNullable(paid.poiTransactionId, paid.poiTransactionTimestamp),
                 PoiRef.ofNullable(paid.storedValuePoiTransactionId,
                         paid.storedValuePoiTransactionTimestamp),
@@ -1587,6 +1647,7 @@ public final class CheckoutSession implements AutoCloseable {
 
     private static List<ReversalMovement> voidTarget(OriginalSaleRecord originalSale) {
         return ReversalMovement.ofSale(
+                originalSale.getStoredValueLoads(),
                 PoiRef.ofNullable(originalSale.getCardPoiTransactionId(),
                         originalSale.getCardPoiTransactionTimestamp()),
                 PoiRef.ofNullable(originalSale.getStoredValuePoiTransactionId(),
@@ -1599,24 +1660,24 @@ public final class CheckoutSession implements AutoCloseable {
                         originalSale.getAwardPoiTransactionTimestamp()));
     }
 
-    private Set<ReversalStep> priorSaleVoidProgress(OriginalSaleRecord originalSale) {
+    private Set<ReversalMovement.Key> priorSaleVoidProgress(OriginalSaleRecord originalSale) {
         lock.lock();
         try {
             if (priorSaleVoidTarget == null) {
                 priorSaleVoidTarget = originalSale;
-                return priorSaleVoidReversedSteps;
+                return priorSaleVoidReversedMovements;
             }
             if (Objects.equals(priorSaleVoidTarget, originalSale)) {
-                return priorSaleVoidReversedSteps;
+                return priorSaleVoidReversedMovements;
             }
-            if (!priorSaleVoidReversedSteps.isEmpty()) {
+            if (!priorSaleVoidReversedMovements.isEmpty()) {
                 throw invalidState("a void of another prior sale is partially complete; "
                         + "retry voidTransaction(OriginalSaleRecord) with the same "
                         + "original sale record before voiding another sale");
             }
             priorSaleVoidTarget = originalSale;
-            priorSaleVoidReversedSteps = ConcurrentHashMap.newKeySet();
-            return priorSaleVoidReversedSteps;
+            priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();
+            return priorSaleVoidReversedMovements;
         } finally {
             lock.unlock();
         }
@@ -1627,7 +1688,7 @@ public final class CheckoutSession implements AutoCloseable {
         try {
             if (Objects.equals(priorSaleVoidTarget, originalSale)) {
                 priorSaleVoidTarget = null;
-                priorSaleVoidReversedSteps = ConcurrentHashMap.newKeySet();
+                priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();
             }
         } finally {
             lock.unlock();
@@ -1836,7 +1897,7 @@ public final class CheckoutSession implements AutoCloseable {
                     throw invalidState("a void of the most recent payment is partially "
                             + "complete; retry voidTransaction() before ending the session");
                 }
-                if (!priorSaleVoidReversedSteps.isEmpty()) {
+                if (!priorSaleVoidReversedMovements.isEmpty()) {
                     throw invalidState("a prior-sale void is partially complete; retry "
                             + "voidTransaction(OriginalSaleRecord) with the same original "
                             + "sale record before ending the session");

@@ -96,7 +96,7 @@ loadScripts(document, 'script');</script>
 
  <p>The SDK does not infer tender allocation policy. For a mixed card/gift
  card/points/cash sale, the register supplies one allocation per movement it
- wants recorded or executed, including split refunds for a single returned
+ wants recorded or executed, including split refunds for a single return
  item.</p></div>
 </section>
 <section class="summary">
@@ -165,7 +165,7 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#countsTowardRefundTotal()" class="member-name-link">countsTowardRefundTotal</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Whether this allocation counts toward the monetary value of returned items.</div>
+<div class="block">Whether this allocation counts toward the monetary value of return items.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#equals(java.lang.Object)" class="member-name-link">equals</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a>&nbsp;other)</code></div>
@@ -179,7 +179,7 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getAmount()" class="member-name-link">getAmount</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Monetary value this movement contributes to the returned merchandise
+<div class="block">Monetary value this movement contributes to the merchandise return
  allocation.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
@@ -194,57 +194,62 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="../storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getStoredValueCard()" class="member-name-link">getStoredValueCard</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getType()" class="member-name-link">getType</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#hashCode()" class="member-name-link">hashCode</a>()</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementTarget.html" title="class in com.bilt.pos.session.settlement">SettlementTarget</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getTarget()" class="member-name-link">getTarget</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Every refund allocation resolves the basket's aggregate return target.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getType()" class="member-name-link">getType</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#pointRedemption(java.math.BigDecimal,com.bilt.pos.session.settlement.OriginalSaleRecord)" class="member-name-link">pointRedemption</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#hashCode()" class="member-name-link">hashCode</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#pointRedemption(java.math.BigDecimal,com.bilt.pos.session.settlement.OriginalSaleRecord)" class="member-name-link">pointRedemption</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a>&nbsp;originalSale)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
 <div class="block">Refund a prior points/rewards redemption from a persisted original sale record.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#pointRedemption(java.math.BigDecimal,java.lang.String,java.time.Instant,java.lang.String)" class="member-name-link">pointRedemption</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
+<div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#pointRedemption(java.math.BigDecimal,java.lang.String,java.time.Instant,java.lang.String)" class="member-name-link">pointRedemption</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;originalPoiTransactionId,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a>&nbsp;originalPoiTransactionTimestamp,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;memberId)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
 <div class="block">Refund a prior points/rewards redemption by original POI transaction reference.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#rebate(java.math.BigDecimal,com.bilt.pos.session.settlement.OriginalSaleRecord)" class="member-name-link">rebate</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#rebate(java.math.BigDecimal,com.bilt.pos.session.settlement.OriginalSaleRecord)" class="member-name-link">rebate</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a>&nbsp;originalSale)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
 <div class="block">Refund a prior rebate/coupon redemption from a persisted original sale record.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#rebate(java.math.BigDecimal,java.lang.String,java.time.Instant,java.lang.String)" class="member-name-link">rebate</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
+<div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#rebate(java.math.BigDecimal,java.lang.String,java.time.Instant,java.lang.String)" class="member-name-link">rebate</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;originalPoiTransactionId,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a>&nbsp;originalPoiTransactionTimestamp,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;memberId)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
 <div class="block">Refund a prior rebate/coupon redemption by original POI transaction reference.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#storeCredit(com.bilt.pos.session.storedvalue.StoredValueCard,java.math.BigDecimal)" class="member-name-link">storeCredit</a><wbr>(<a href="../storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a>&nbsp;card,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#storeCredit(com.bilt.pos.session.storedvalue.StoredValueCard,java.math.BigDecimal)" class="member-name-link">storeCredit</a><wbr>(<a href="../storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a>&nbsp;card,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
 <div class="block">Store-credit refund/restoration as a load onto the supplied stored value card.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#storedValue(java.math.BigDecimal,com.bilt.pos.session.settlement.OriginalSaleRecord)" class="member-name-link">storedValue</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
+<div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#storedValue(java.math.BigDecimal,com.bilt.pos.session.settlement.OriginalSaleRecord)" class="member-name-link">storedValue</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a>&nbsp;originalSale)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
 <div class="block">Linked stored value refund against a persisted original sale record.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#storedValue(java.math.BigDecimal,java.lang.String,java.time.Instant)" class="member-name-link">storedValue</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#storedValue(java.math.BigDecimal,java.lang.String,java.time.Instant)" class="member-name-link">storedValue</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;originalPoiTransactionId,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a>&nbsp;originalPoiTransactionTimestamp)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
 <div class="block">Linked stored value refund using a Nexo PaymentRequest(Refund).</div>
 </div>
 </div>
@@ -392,10 +397,17 @@ loadScripts(document, 'script');</script>
 </section>
 </li>
 <li>
+<section class="detail" id="getTarget()">
+<h3>getTarget</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementTarget.html" title="class in com.bilt.pos.session.settlement">SettlementTarget</a></span>&nbsp;<span class="element-name">getTarget</span>()</div>
+<div class="block">Every refund allocation resolves the basket's aggregate return target.</div>
+</section>
+</li>
+<li>
 <section class="detail" id="getAmount()">
 <h3>getAmount</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getAmount</span>()</div>
-<div class="block">Monetary value this movement contributes to the returned merchandise
+<div class="block">Monetary value this movement contributes to the merchandise return
  allocation. Award reversals are bookkeeping and use zero.</div>
 </section>
 </li>
@@ -427,7 +439,7 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="countsTowardRefundTotal()">
 <h3>countsTowardRefundTotal</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">countsTowardRefundTotal</span>()</div>
-<div class="block">Whether this allocation counts toward the monetary value of returned items.</div>
+<div class="block">Whether this allocation counts toward the monetary value of return items.</div>
 </section>
 </li>
 <li>

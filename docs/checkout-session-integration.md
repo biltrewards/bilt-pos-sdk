@@ -67,6 +67,7 @@ Register                    CheckoutSession                  Terminal (POI)
    │ ─── updated total ─────────> │     if a card was registered)  │
    │                              │                                │
    │                              │ ── PaymentRequest ───────────> │  card approved
+   │                              │ ── StoredValueRequest ──────> │  purchased cards activated/loaded
    │                              │ ── LoyaltyRequest(Award) ────> │  points earned (SAF)
    │                              │ ── DisplayRequest (receipt) ─> │
    │ <── onSuccess(result) ────── │                                │
@@ -82,13 +83,14 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 
 `settle()` returns a `SettlementFlow` — a chainable builder where the register hooks into each step, executed when you call `.execute()` / `.get()` / `.getOrNull()`. `beforeStep` is called before every terminal movement or register-recorded external refund with a `SettlementContext`; it is a chance to persist pending state and return the sale transaction ID to use for that step. The default `REFUND_THEN_CHARGE` sequence is:
 
-1. **Refund allocations** (if the basket has credit lines) — the register supplies the allocation split in `SettlementOptions`, and the SDK executes or records each card, stored value, external, point, rebate, or award refund movement → `onCardRefunded` / `onGiftCardRefunded` / `onExternalRefunded` / `onPointsRefunded` / `onRebateRefunded` / `onAwardRefunded`
+1. **Refund allocations** (if the basket has return lines) — the register supplies the allocation split in `SettlementOptions`, and the SDK executes or records each card, stored value, external, point, rebate, or award refund movement → `onCardRefunded` / `onGiftCardRefunded` / `onExternalRefunded` / `onPointsRefunded` / `onRebateRefunded` / `onAwardRefunded`
 2. **Rebate redemption** (identified members, if enabled, sale lines only) — terminal commits applicable offers/coupons → `onRebatesRedeemed`
 3. **Point redemption** (identified members, if enabled and a balance remains) — terminal redeems points for monetary value → `onPointsRedeemed`
 4. **Stored value charge** (if a card was registered and a balance remains) — terminal charges the gift card → `onGiftCardPayment`
 5. **Card charge** (if a balance remains) — terminal processes the card for the remaining amount → `onCardCharged`
-6. **Award** — terminal submits the loyalty award (Store-and-Forward if loyalty is down) → `onAwarded`
-7. `onSuccess` / `onError`
+6. **Stored value fulfillment** (for each supplied fulfillment targeting a referenced sale line) — terminal activates or reloads the purchased card after funding commits → `onStoredValueLoaded`
+7. **Award** — terminal submits the loyalty award (Store-and-Forward if loyalty is down) → `onAwarded`
+8. `onSuccess` / `onError`
 
 With `SettlementType.NET`, the SDK uses the complete signed basket instead. A positive total enters the loyalty/stored-value/card charge sequence for only that difference. A negative total skips the charge sequence and executes refund allocations for only the absolute difference. A zero total sends no monetary movement. Award-reversal allocations remain bookkeeping movements and are retained even when the return value is fully absorbed by a net charge.
 
@@ -106,15 +108,15 @@ Treat charge-side movement callbacks as provisional until settlement succeeds. A
 | `onGiftCardPayment` | Accept charge. New total = previous − amount charged. |
 | `onMovement` and per-movement callbacks | No-op. |
 | `onSuccess` | No-op (the result is still available via `.get()`). |
-| `onError` | For charge-side failures, `SettlementOptions.voidAndAbort()` — roll back and fail the settlement. Refund allocation failures notify `onError`, but its returned options are ignored. |
+| `onError` | For charge-side failures, `SettlementRecovery.abort()` — roll back and fail the settlement. Refund allocation failures notify `onError`, but the returned recovery decision is ignored. |
 
-**Abort / error rollback.** `abort()` returns a lazy `SessionResult<Void>` like every terminal operation — `abort().execute()` returns immediately, `abort().executeSync()` blocks for the roundtrip — and is deliberately **unordered**: it exists to interrupt the operation occupying the session's operation lane, so it overtakes whatever is in flight instead of queueing behind the very thing it cancels (`updateInputDisplay` shares this lane for the same reason). It is operation-scoped: it interrupts the in-flight operation and the session continues. If it fires mid-settlement (e.g. after rebates committed but before card charge), the session reverses the committed charge-side movements — rebate refunds, redemption refunds, stored-value reversals — and leaves the basket intact so `settle()` can retry (the thrown error carries the `ABORTED` code); these unwind reversals do not produce movement callbacks. If a reversal fails, `voidTransaction()` finishes the unwind. Refund allocations that have already committed are reported in `SettlementResult` movements and are not automatically re-charged as compensation. Aborted prompts (input, PIN, identification) deliver their aborted/cancelled outcome; with nothing in flight `abort()` is a no-op. `abort()` is safe to call from any thread. An operation that completes on the terminal despite a racing abort always delivers its outcome — a prompt was genuinely answered, money may have genuinely moved, and the register must know. For charge-side errors after refund allocations, the `SettlementOptions` returned by `onError` decides what happens next:
+**Abort / error rollback.** `abort()` returns a lazy `SessionResult<Void>` like every terminal operation — `abort().execute()` returns immediately, `abort().executeSync()` blocks for the roundtrip — and is deliberately **unordered**: it exists to interrupt the operation occupying the session's operation lane, so it overtakes whatever is in flight instead of queueing behind the very thing it cancels (`updateInputDisplay` shares this lane for the same reason). It is operation-scoped: it interrupts the in-flight operation and the session continues. If it fires mid-settlement (e.g. after rebates committed but before card charge), the session reverses the committed charge-side movements — rebate refunds, redemption refunds, stored-value loads, and tender reversals — and leaves the basket intact so `settle()` can retry (the thrown error carries the `ABORTED` code); these unwind reversals do not produce movement callbacks. If a reversal fails, `voidTransaction()` finishes the unwind. Refund allocations that have already committed are reported in `SettlementResult` movements and are not automatically re-charged as compensation. Aborted prompts (input, PIN, identification) deliver their aborted/cancelled outcome; with nothing in flight `abort()` is a no-op. `abort()` is safe to call from any thread. An operation that completes on the terminal despite a racing abort always delivers its outcome — a prompt was genuinely answered, money may have genuinely moved, and the register must know. For charge-side errors after refund allocations, the `SettlementRecovery` returned by `onError` decides what happens next:
 
-- `SettlementOptions.voidAndAbort()` (the default) — roll back committed charge-side steps in reverse order and fail. The same basket remains available for a `settle()` retry. If the rollback itself was incomplete, a retried `settle()` first finishes the standing reversals — and refuses to start if one still cannot go through.
-- `SettlementOptions.retryWithoutLoyalty()` — roll back the loyalty steps and restart the sequence with rebates and points disabled.
-- Any other options — full rollback, then restart with those options. At most 3 recoveries per execution.
+- `SettlementRecovery.abort()` (the default) — roll back committed charge-side steps in reverse order and fail. The same basket remains available for a `settle()` retry. If the rollback itself was incomplete, a retried `settle()` first finishes the standing reversals — and refuses to start if one still cannot go through.
+- `SettlementRecovery.retryWithoutLoyalty()` — roll back and restart with rebate, point, and award steps disabled.
+- `SettlementRecovery.retry()` — full rollback, then restart with the same `SettlementOptions`. At most 3 recoveries are attempted per execution.
 
-Refund allocation failures are terminal for that settlement run. The `onError` handler is still called so the register can display/log the failure, but its returned `SettlementOptions` are ignored. Retry with the same committed allocation prefix so already-committed refund allocation movements are preserved and not resent.
+Refund allocation failures are terminal for that settlement run. The `onError` handler is still called so the register can display/log the failure, but its returned `SettlementRecovery` is ignored. Retry with the same committed allocation prefix so already-committed refund allocation movements are preserved and not resent.
 
 **A failed award never reverses a completed charge:** the checkout completes with the failure reported in `SettlementResult.getWarnings()`, and the terminal retries the award via Store-and-Forward.
 
@@ -209,13 +211,13 @@ CheckoutSession session = CheckoutSession.builder()
     .start()
     .get();
 
-session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
 
 session.settle()
     .onSuccess(result -> register.printReceipt(result.getMerchantReceipt()))
     .onError(error -> {
         register.showError(error.getMessage());
-        return SettlementOptions.voidAndAbort();
+        return SettlementRecovery.abort();
     })
     .execute();
 
@@ -255,14 +257,14 @@ session.identifyMember()
     .execute();
 
 // --- 2. Scan items ---
-Basket basket = session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+Basket basket = session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, new BigDecimal("24.99")));
 register.setTotal(basket.getGrandTotal());  // $49.98
 
-basket = session.basket().addItem(BasketItem.of("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99"));
+basket = session.basket().addItem(BasketItem.sale("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, new BigDecimal("14.99")));
 register.setTotal(basket.getGrandTotal());  // $64.97
 
 // Scan same candle again — upserts, now qty 3
-basket = session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
+basket = session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
 register.setTotal(basket.getGrandTotal());  // $89.96
 
 // --- 3. Tax ---
@@ -298,7 +300,7 @@ session.settle()
     })
     .onError(error -> {
         register.showError(error.getMessage());
-        return SettlementOptions.voidAndAbort();
+        return SettlementRecovery.abort();
     })
     .execute();
 
@@ -337,10 +339,10 @@ session.settle()
     .onError(error -> {
         if (error.getCode() == SessionErrorCode.LOYALTY_UNAVAILABLE) {
             register.showMessage("Loyalty unavailable, retrying without loyalty...");
-            return SettlementOptions.retryWithoutLoyalty();
+            return SettlementRecovery.retryWithoutLoyalty();
         }
         register.showError("Settlement failed: " + error.getMessage());
-        return SettlementOptions.voidAndAbort();
+        return SettlementRecovery.abort();
     })
     .execute();
 ```
@@ -377,10 +379,10 @@ session.identifyMember(MemberIdentifier.phoneNumber("555-867-5309")).execute();
 The session owns the basket. Adding an item whose SKU is already present increments its quantity (upsert). Every mutation is local compute returning the updated `Basket` synchronously; with `autoDisplay` (default on) it also enqueues an asynchronous refresh of the customer display with an itemised virtual receipt — conflated, so rapid scanning sends the newest snapshot rather than one roundtrip per item, and ordered on the session's operation lane, so a `settle()` executed after ring-up runs after the display is current. A failed automatic refresh, including the final display refresh after settlement, never interrupts the checkout; register `onBackgroundError` on the builder to observe those failures.
 
 ```java
-Basket basket = session.basket().addItem(BasketItem.of("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, "24.99"));
+Basket basket = session.basket().addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, new BigDecimal("24.99")));
 register.setTotal(basket.getGrandTotal());   // 49.98
 
-session.basket().addItem(BasketItem.of("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "14.99"));
+session.basket().addItem(BasketItem.sale("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, new BigDecimal("14.99")));
 
 // Tax — item-level rate, item-level fixed amount, or basket-level override
 session.basket().setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
@@ -397,7 +399,7 @@ After `settle()` succeeds, that basket is consumed and cannot be charged or modi
 
 ```java
 session.basket().clear();  // new cart ID; also clears the selected split-tender gift card
-session.basket().addItem(BasketItem.of("NEXT-SKU", "Next item", 1, "12.00"));
+session.basket().addItem(BasketItem.sale("NEXT-SKU", "Next item", 1, new BigDecimal("12.00")));
 session.settle().execute();
 ```
 
@@ -409,7 +411,7 @@ The identified member stays attached across `clear()`. Re-identifying later chan
 
 ## Refund and void
 
-`CheckoutSession` can still reverse the positive sale it took itself: `refund()` and `voidTransaction()` work on the session's most recent completed pure-sale settlement, no references needed. Returns from an earlier sale are handled in `settle(...)` by adding credit lines to the basket and supplying register-selected `RefundAllocation`s in `SettlementOptions`. A pure older-sale void uses `voidTransaction(OriginalSaleRecord)` — see [Reversing a prior sale](#reversing-a-prior-sale-originalsalerecord) below.
+`CheckoutSession` can still reverse the positive sale it took itself: `refund()` and `voidTransaction()` work on the session's most recent completed pure-sale settlement, no references needed. Returns from an earlier sale are handled in `settle(...)` by adding return lines to the basket and supplying register-selected `RefundAllocation`s in `SettlementOptions`. A pure older-sale void uses `voidTransaction(OriginalSaleRecord)` — see [Reversing a prior sale](#reversing-a-prior-sale-originalsalerecord) below.
 
 - `refund()` / `refund(amount)` — linked refunds of the most recent successful settlement's card payment; also reverse the loyalty award when one ran, best-effort by default. Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once a linked refund has returned money, that payment can no longer be voided from the session: a void would return the full amount on top of the refund. Refunds cover the card leg + award only; the sale's committed rebate and redemption movements are reversed by `voidTransaction()`.
 - `refundUnlinked(amount)` — payment-only, not tied to a prior transaction, no loyalty reversal, and does not alter the latest settlement's refund/void guards.
@@ -469,11 +471,11 @@ try (CheckoutSession session = CheckoutSession.builder()
 
 Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. The same `ReversalFlow` decision handling applies as on `CheckoutSession`. If the record includes any POI transaction ID from this session's most recent settlement, the call is refused; use parameterless `voidTransaction()` so a later refund or second void cannot bypass that settlement's shared guards.
 
-If a prior-sale void partially fails after reversing one or more legs, retry that void on the same `CheckoutSession` instance. The reversed-step progress is held in memory so the retry resumes at the first still-standing movement; `end()` is refused until the void finishes because a new session created with the same `OriginalSaleRecord` has no memory of that progress and would send the full void sequence again.
+If a prior-sale void partially fails after reversing one or more legs, retry that void on the same `CheckoutSession` instance. The reversed-movement progress is held in memory so the retry resumes at the first still-standing movement; `end()` is refused until the void finishes because a new session created with the same `OriginalSaleRecord` has no memory of that progress and would send the full void sequence again.
 
 ### Item-based refunds in settlement
 
-To refund specific items of a prior sale, add them to the checkout basket as credit lines and settle with allocations chosen by the register. The allocations can split one returned amount across card, the original stored value tender, store credit, external tender such as cash, points, and rebate restoration:
+To refund specific items of a prior sale, add them to the checkout basket as return lines and settle with allocations chosen by the register. The allocations can split one return amount across card, the original stored value tender, store credit, external tender such as cash, points, and rebate restoration:
 
 ```java
 try (CheckoutSession session = CheckoutSession.builder()
@@ -483,34 +485,34 @@ try (CheckoutSession session = CheckoutSession.builder()
         .currency("USD")
         .start()
         .get()) {
-    session.basket().addItem(BasketItem.credit(
-            "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, "24.99"));
-    session.basket().addItem(BasketItem.of(
-            "KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, "34.99"));
+    session.basket().addItem(BasketItem.returnItem(
+            "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));
+    session.basket().addItem(BasketItem.sale(
+            "KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, new BigDecimal("34.99")));
 
     session.settle(SettlementOptions.builder()
-            .addRefundAllocation(RefundAllocation.card(
+            .addRefund(RefundAllocation.card(
                     new BigDecimal("10.00"), originalSale))
-            .addRefundAllocation(RefundAllocation.storedValue(
+            .addRefund(RefundAllocation.storedValue(
                     new BigDecimal("9.99"), originalSale))
-            .addRefundAllocation(RefundAllocation.external(
+            .addRefund(RefundAllocation.external(
                     new BigDecimal("5.00")))
             .build())
             .execute();
 }
 ```
 
-The cart is free-form — which items may be returned, and in what quantities, is the register's decision. Under the default `REFUND_THEN_CHARGE` option, the SDK verifies that allocation totals match the credit-line total but does not decide how much should go to each tender type.
+The basket is free-form — which items may be returned, and in what quantities, is the register's decision. Under the default `REFUND_THEN_CHARGE` option, the SDK verifies that allocation totals match the return value but does not decide how much should go to each tender type.
 
 ### Net settlement
 
 Select `SettlementType.NET` to move only the difference between sale and return lines:
 
 ```java
-session.basket().addItem(BasketItem.of(
-        "NEW-ITEM", "New item", 1, "15.00"));
-session.basket().addItem(BasketItem.credit(
-        "RETURNED-ITEM", "Returned item", 1, "40.00"));
+session.basket().addItem(BasketItem.sale(
+        "NEW-ITEM", "New item", 1, new BigDecimal("15.00")));
+session.basket().addItem(BasketItem.returnItem(
+        "RETURN-ITEM", "Return item", 1, new BigDecimal("40.00")));
 
 Basket basket = session.basket().snapshot();
 BigDecimal refund = basket.getRefundAmount(SettlementType.NET); // $40 - $15 = $25
@@ -518,22 +520,75 @@ BigDecimal refund = basket.getRefundAmount(SettlementType.NET); // $40 - $15 = $
 SettlementOptions options = SettlementOptions.builder()
         .settlementType(SettlementType.NET)
         // The register chooses destinations totaling the $25 difference.
-        .addRefundAllocation(RefundAllocation.card(
+        .addRefund(RefundAllocation.card(
                 refund.subtract(new BigDecimal("15.00")), originalSale))
-        .addRefundAllocation(RefundAllocation.storedValue(
+        .addRefund(RefundAllocation.storedValue(
                 new BigDecimal("15.00"), originalSale))
         .build();
 
 session.settle(options).execute();
 ```
 
-The amount is known before settlement: `Basket.getRefundAmount(SettlementType.NET)` returns the positive refund difference, or zero when the basket is payment-dominant or balanced. The same method with `REFUND_THEN_CHARGE` returns the full credit-line value. Supply monetary allocations totaling exactly the amount returned for the selected mode. The register owns the split across original card, stored value, store credit, or external tender.
+The amount is known before settlement: `Basket.getRefundAmount(SettlementType.NET)` returns the positive refund difference, or zero when the basket is payment-dominant or balanced. The same method with `REFUND_THEN_CHARGE` returns the full return value. Supply monetary allocations totaling exactly the amount returned for the selected mode. The register owns the split across original card, stored value, store credit, or external tender.
 
 For terminal-backed refund allocations (`card`, `cardUnlinked`, `storedValue`), the SDK sends itemization on the first `PaymentRequest(Refund)` leg. A separate refund sends return-side magnitudes. A net refund sends the mixed basket with return lines positive and purchase lines negative, so the itemization sums to the refund difference. Additional terminal refund legs are amount-only because refund allocations are tender-level, not line-level; this keeps split refunds from duplicating receipt lines.
 
 Use `RefundAllocation.storedValue(amount, originalSale)` when refunding back to the original stored value tender; the SDK sends a linked `PaymentRequest(Refund)` against the stored value leg's POI transaction reference and does not need the card number. Use `RefundAllocation.storeCredit(card, amount)` when the refund should be issued as store credit onto a supplied stored value card; the SDK sends a `StoredValueRequest(Load)`. Use `RefundAllocation.external(amount)` for register-managed refunds such as cash from the drawer; it counts toward the required allocation total, produces an `EXTERNAL_REFUND` movement, and sends no terminal request.
 
-**Credit lines on a sale.** `BasketItem.credit(sku, desc, qty, price)` (or `.credit(true)` on the builder) makes the line subtract from the basket and display as a return. Quantities and unit prices stay positive — the direction carries the sign — and a credit line never upserts into a sale line of the same SKU: the basket shows both, like a paper receipt. `REFUND_THEN_CHARGE` charges sale lines and restores the full return value through allocations; `NET` moves only the signed difference.
+**Return and credit lines.** `BasketItem.returnItem(...)` represents merchandise coming back and is resolved through refund allocations. `BasketItem.credit(...)` represents register-originated value such as an offer or customer-service credit; it reduces the sale-side charge and never requires a refund allocation. Quantities and unit prices stay positive because the item type determines the sign. Credits cannot exceed the sale-side value because they do not create customer payouts. Under `REFUND_THEN_CHARGE`, the SDK refunds all returns and separately charges sales less credits; `NET` moves only the signed basket difference.
+
+### Register discounts
+
+Register-known discounts belong on the item and remain distinct from terminal-applied rebates:
+
+```java
+BasketItem discounted = BasketItem.sale("SKU-1", "Offer item", 1, new BigDecimal("20.00"))
+        .withDiscount(BasketDiscount.offer(
+                "OFFER-42", "Complimentary item", new BigDecimal("20.00")));
+session.basket().addItem(discounted);
+
+// Offers discovered after the item was rung can replace the line's discounts.
+session.basket().setDiscountsBySku("SKU-1", List.of(
+        BasketDiscount.offer("OFFER-43", "Member offer", new BigDecimal("5.00"))));
+```
+
+Discounts may reduce a line to exactly zero, never below zero. The basket exposes gross `originalTotal`, signed `discountTotal`, and post-discount `subtotal`; rate-based tax is calculated from the subtotal.
+
+### Sell and fulfill a gift card
+
+The basket owns the commercial line and `SettlementOptions` owns the card-specific terminal instruction. A stable reference joins them, so the face value has one source of truth:
+
+```java
+session.basket().addItem(BasketItem.sale(
+        "GIFT-CARD", "Gift card", 1, new BigDecimal("50.00"))
+        .withReference("gift-card-1"));
+
+SettlementOptions options = SettlementOptions.builder()
+        .addFulfillment(StoredValueLoad.activate(
+                "gift-card-1", StoredValueCard.scanned("6006491260550218157")))
+        .build();
+
+SettlementResult result = session.settle(options)
+        .onStoredValueLoaded(movement -> register.persist(movement))
+        .get();
+```
+
+Settlement first funds the basket, then activates or reloads each supplied fulfillment. A fulfillment must target an existing referenced sale line with a positive original total, and a line can have at most one fulfillment. The basket does not otherwise classify gift-card products or require fulfillment; that decision belongs to the register. If fulfillment fails, committed loads and charge-side funding are unwound in reverse order. `SettlementResult.getStoredValueLoads()` carries persistable references; whole-sale voids reverse those loads before reversing their funding. A line discount can reduce the customer price, including to zero, while fulfillment still loads the line's original value.
+
+To issue a merchant-funded gift card, offset the load line with a credit. The credit reduces the charge to zero but does not require a refund allocation; the fulfillment still loads the card's full face value:
+
+```java
+session.basket().addItem(BasketItem.sale(
+        "GIFT-CARD", "Customer service gift card", 1, new BigDecimal("50.00"))
+        .withReference("gift-card-1"));
+session.basket().addItem(BasketItem.credit(
+        "GOODWILL", "Customer service credit", 1, new BigDecimal("50.00")));
+
+session.settle(SettlementOptions.builder()
+        .addFulfillment(StoredValueLoad.activate(
+                "gift-card-1", StoredValueCard.scanned("6006491260550218157")))
+        .build()).execute();
+```
 
 ---
 
@@ -643,6 +698,7 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | Prompt customer to identify | `session.identifyMember()` |
 | POS-driven member lookup (no prompt) | `session.identifyMember(identifier)` |
 | Add / remove / update item | `session.basket().addItem(item)`, `.removeItemBySku(sku)`, `.updateItemQuantityBySku(sku, qty)` |
+| Apply or clear line discounts | `session.basket().setDiscountsBySku(sku, discounts)` / `.setDiscounts(itemId, List.of())` |
 | Batch edits, one display update | `session.basket().mutate(m -> ...)` |
 | Set tax | `session.basket().setTaxRateBySku(...)`, `.setTaxAmountBySku(...)`, `.setTaxTotal(...)` |
 | Basket snapshot | `session.basket().snapshot()` |
@@ -653,7 +709,9 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | Settle | `session.settle()` → `.beforeStep / .onRebatesRedeemed / .onPointsRedeemed / .onGiftCardPayment / .onCardRefunded / .onGiftCardRefunded / .onExternalRefunded / .onSuccess / .onError` → `.execute()` |
 | Sync settle | `session.settle().get()` |
 | Refund | `refund()`, `refund(amount)`, `refundUnlinked(amount)` |
-| Item-based refund of a prior sale | `basket().addItem(BasketItem.credit(...))` + `session.settle(SettlementOptions.builder().addRefundAllocation(...).build())` |
+| Item-based refund of a prior sale | `basket().addItem(BasketItem.returnItem(...))` + `session.settle(SettlementOptions.builder().addRefund(...).build())` |
+| Register-originated credit | `basket().addItem(BasketItem.credit(...))` (reduces sales; no refund allocation) |
+| Sell a gift card | referenced `BasketItem.sale(...).withReference(...)` + `SettlementOptions.builder().addFulfillment(StoredValueLoad.activate/reload(...))` |
 | Void a completed txn | `session.voidTransaction()` or `session.voidTransaction(originalSaleRecord)` |
 | Cancel in-progress op | `session.abort().execute()` (safe from any thread; overtakes the operation lane) |
 | Refresh customer display manually | `session.updateDisplay(basket)` / `.updateDisplay(payload)` → `.execute()` |

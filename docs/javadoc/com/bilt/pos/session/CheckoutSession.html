@@ -781,16 +781,16 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  <code>execute()</code>, <code>executeSync()</code>, <code>get()</code>, or
  <code>getOrNull()</code> is invoked: the session must then be open with a
  non-empty, unconsumed basket. With the default
- <a href="settlement/SettlementType.html#REFUND_THEN_CHARGE"><code>SettlementType.REFUND_THEN_CHARGE</code></a>, sale lines are charged
- through the normal tender sequence and credit lines are covered by
- register-supplied refund allocations. With
+ <a href="settlement/SettlementType.html#REFUND_THEN_CHARGE"><code>SettlementType.REFUND_THEN_CHARGE</code></a>, sale lines less credits are
+ charged through the normal tender sequence and return lines are covered
+ by register-supplied refund allocations. With
  <a href="settlement/SettlementType.html#NET"><code>SettlementType.NET</code></a>, only the signed basket difference moves:
  a positive balance is charged, a negative balance is allocated as a
  refund, and a zero balance sends no monetary movement.
 
  <p>Terminal-backed refund allocations carry itemization on the first
  <code>PaymentRequest(Refund)</code> leg only. A separate refund carries the
- return lines; a net refund carries the signed mixed basket. Additional
+ refund-side lines; a net refund carries the signed mixed basket. Additional
  refund legs are amount-only because allocations are tender-level, not
  line-level.</p>
 
@@ -799,7 +799,7 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  recorded, and the register retries
  by calling <code>settle()</code> again with the same committed allocation
  prefix. Charge-side failures after refund allocations use
- <a href="SettlementFlow.html#onError(java.util.function.Function)"><code>SettlementFlow.onError(java.util.function.Function&lt;com.bilt.pos.session.SessionError, com.bilt.pos.session.settlement.SettlementOptions&gt;)</code></a> recovery options.</p>
+ <a href="SettlementFlow.html#onError(java.util.function.Function)"><code>SettlementFlow.onError(java.util.function.Function&lt;com.bilt.pos.session.SessionError, com.bilt.pos.session.settlement.SettlementRecovery&gt;)</code></a> recovery decisions.</p>
 
  <p>A same-session void that already reversed one or more movements
  must be retried to completion before another settlement can replace
@@ -886,7 +886,7 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  whole-transaction void: every referenced card, stored value, rebate,
  redemption, and award movement is reversed in the same order as a
  same-session void. If the void partially fails, retry it on the same
- session instance because the in-memory reversed-step progress is what
+ session instance because the in-memory reversed-movement progress is what
  prevents already-reversed legs from being sent again; <a href="#end()"><code>end()</code></a> is
  refused until that retry succeeds. Mixed sale/return settlements should
  use <a href="#settle(com.bilt.pos.session.settlement.SettlementOptions)"><code>settle(SettlementOptions)</code></a> with refund allocations instead.

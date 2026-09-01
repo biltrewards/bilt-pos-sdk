@@ -92,13 +92,13 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">SettlementOptions</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">Options controlling a settlement run.
+<div class="block">The register's complete plan for resolving a basket during settlement.
 
- <p>Also serves as the return value of <code>SettlementFlow.onError</code>: the
- options decide how the flow recovers — <a href="#voidAndAbort()"><code>voidAndAbort()</code></a> reverses
- everything committed so far and fails the settlement, while any other options
- (e.g. <a href="#retryWithoutLoyalty()"><code>retryWithoutLoyalty()</code></a>) reverse the committed steps and
- restart the sequence with those options.</p></div>
+ <p>The basket declares commercial obligations. These options supply the
+ execution choices that cannot be inferred from it: how the aggregate return
+ value is allocated and which referenced sale lines receive stored value
+ fulfillment. Retry decisions are deliberately separate in <a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement"><code>SettlementRecovery</code></a>
+ so recovery never replaces or drops these instructions.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -136,54 +136,47 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#defaults()" class="member-name-link">defaults</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">Standard options: loyalty enabled, no cashback.</div>
+<div class="block">Standard options: loyalty enabled, no cashback, refunds, or fulfillments.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCashback()" class="member-name-link">getCashback</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Cashback to request with the card payment, or <code>null</code>.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="../../display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPaymentProcessingDisplay()" class="member-name-link">getPaymentProcessingDisplay</a>()</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="StoredValueLoad.html" title="class in com.bilt.pos.session.settlement">StoredValueLoad</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getFulfillments()" class="member-name-link">getFulfillments</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Stored value operations fulfilling referenced basket lines.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="../../display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPaymentProcessingDisplay()" class="member-name-link">getPaymentProcessingDisplay</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Display shown while the card payment is processing, or <code>null</code>.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRefundAllocations()" class="member-name-link">getRefundAllocations</a>()</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRefunds()" class="member-name-link">getRefunds</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Allocations resolving the basket's aggregate return target.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getSettlementType()" class="member-name-link">getSettlementType</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Register-specified refund/restoration movements.</div>
+<div class="block">How a mixed sale/return basket moves money.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getSettlementType()" class="member-name-link">getSettlementType</a>()</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isDisableAward()" class="member-name-link">isDisableAward</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Whether mixed sale/return baskets execute separate refund and charge
- legs or move only their net difference.</div>
+<div class="block">Whether the post-payment loyalty award is disabled.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isDisableAward()" class="member-name-link">isDisableAward</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isDisablePoints()" class="member-name-link">isDisablePoints</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Whether point/reward redemption is disabled.</div>
+</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isDisablePoints()" class="member-name-link">isDisablePoints</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isDisableRebates()" class="member-name-link">isDisableRebates</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isVoidAndAbort()" class="member-name-link">isVoidAndAbort</a>()</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isDisableRebates()" class="member-name-link">isDisableRebates</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Whether these options mean "unwind and fail" when returned from <code>onError</code>.</div>
-</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#retryWithoutLoyalty()" class="member-name-link">retryWithoutLoyalty</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">From <code>onError</code>: reverse the committed steps and retry the
- settlement with rebates and points disabled.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#voidAndAbort()" class="member-name-link">voidAndAbort</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">From <code>onError</code>: reverse everything committed so far and fail the
- settlement.</div>
+<div class="block">Whether terminal offer/rebate redemption is disabled.</div>
 </div>
 </div>
 </div>
@@ -212,41 +205,28 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="defaults()">
 <h3>defaults</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></span>&nbsp;<span class="element-name">defaults</span>()</div>
-<div class="block">Standard options: loyalty enabled, no cashback.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="voidAndAbort()">
-<h3>voidAndAbort</h3>
-<div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></span>&nbsp;<span class="element-name">voidAndAbort</span>()</div>
-<div class="block">From <code>onError</code>: reverse everything committed so far and fail the
- settlement.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="retryWithoutLoyalty()">
-<h3>retryWithoutLoyalty</h3>
-<div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></span>&nbsp;<span class="element-name">retryWithoutLoyalty</span>()</div>
-<div class="block">From <code>onError</code>: reverse the committed steps and retry the
- settlement with rebates and points disabled.</div>
+<div class="block">Standard options: loyalty enabled, no cashback, refunds, or fulfillments.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="isDisableRebates()">
 <h3>isDisableRebates</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">isDisableRebates</span>()</div>
+<div class="block">Whether terminal offer/rebate redemption is disabled.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="isDisablePoints()">
 <h3>isDisablePoints</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">isDisablePoints</span>()</div>
+<div class="block">Whether point/reward redemption is disabled.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="isDisableAward()">
 <h3>isDisableAward</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">isDisableAward</span>()</div>
+<div class="block">Whether the post-payment loyalty award is disabled.</div>
 </section>
 </li>
 <li>
@@ -264,29 +244,24 @@ loadScripts(document, 'script');</script>
 </section>
 </li>
 <li>
-<section class="detail" id="getRefundAllocations()">
-<h3>getRefundAllocations</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&gt;</span>&nbsp;<span class="element-name">getRefundAllocations</span>()</div>
-<div class="block">Register-specified refund/restoration movements. In
- <a href="SettlementType.html#REFUND_THEN_CHARGE"><code>SettlementType.REFUND_THEN_CHARGE</code></a> their monetary total must
- equal the full return value. In <a href="SettlementType.html#NET"><code>SettlementType.NET</code></a>, a
- refund-dominant basket requires allocations totaling the net refund;
- a charge-dominant or balanced basket requires no monetary allocations.</div>
+<section class="detail" id="getRefunds()">
+<h3>getRefunds</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a>&gt;</span>&nbsp;<span class="element-name">getRefunds</span>()</div>
+<div class="block">Allocations resolving the basket's aggregate return target.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getFulfillments()">
+<h3>getFulfillments</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="StoredValueLoad.html" title="class in com.bilt.pos.session.settlement">StoredValueLoad</a>&gt;</span>&nbsp;<span class="element-name">getFulfillments</span>()</div>
+<div class="block">Stored value operations fulfilling referenced basket lines.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="getSettlementType()">
 <h3>getSettlementType</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a></span>&nbsp;<span class="element-name">getSettlementType</span>()</div>
-<div class="block">Whether mixed sale/return baskets execute separate refund and charge
- legs or move only their net difference.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="isVoidAndAbort()">
-<h3>isVoidAndAbort</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">isVoidAndAbort</span>()</div>
-<div class="block">Whether these options mean "unwind and fail" when returned from <code>onError</code>.</div>
+<div class="block">How a mixed sale/return basket moves money.</div>
 </section>
 </li>
 </ul>
