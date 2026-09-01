@@ -146,6 +146,9 @@ data class StoredSaleUi(
     /** Loyalty account of the identified member; null for a guest checkout. */
     val memberId: String? = null,
     val items: List<SaleItemUi> = emptyList(),
+    /** Gift-card loads and their funding must be reversed together, so a
+     *  sale containing one is full-refund-only. */
+    val hasGiftCardPurchase: Boolean = false,
     /** True when refunds were already recorded against the sale. */
     val refunded: Boolean = false,
     /** True once a full-amount refund ran — nothing left to refund. */

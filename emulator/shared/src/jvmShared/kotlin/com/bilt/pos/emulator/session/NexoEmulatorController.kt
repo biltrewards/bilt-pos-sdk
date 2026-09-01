@@ -1263,6 +1263,13 @@ class NexoEmulatorController(
                 return@launch
             }
             val sale = stored.sale
+            if (sale.giftCardLoads.isNotEmpty()) {
+                log(
+                    "The sale contains a gift card purchase — use the full refund " +
+                        "to reverse its load and funding together"
+                )
+                return@launch
+            }
             if (stored.moneyLegs.isEmpty()) {
                 log("The sale has no tender leg (rewards covered everything) — use the full refund")
                 return@launch
@@ -1951,6 +1958,7 @@ class NexoEmulatorController(
                 remainingQuantity = remaining,
             )
         },
+        hasGiftCardPurchase = sale.giftCardLoads.isNotEmpty(),
         refunded = refunds.isNotEmpty(),
         fullyRefunded = fullyRefunded,
         fullRefundAvailable = refundable && refunds.all { it.full || it.reversalProgress },

@@ -305,8 +305,11 @@ private fun RefundDetailsCard(
         mutableStateOf(if (fullAvailable) RefundMode.FULL else RefundMode.ITEMS)
     }
     var selectedSkus by remember(sale.id) { mutableStateOf(emptySet<String>()) }
-    // per-item refunds need recorded line items to select from
-    val itemsAvailable = sale.items.isNotEmpty()
+    // Gift-card loads and their funding must stay atomic: the controller
+    // only unwinds them via a full refund, so mixed sales cannot offer their
+    // ordinary merchandise as a separate item refund.
+    val hasRecordedItems = sale.items.isNotEmpty()
+    val itemsAvailable = hasRecordedItems && !sale.hasGiftCardPurchase
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -349,7 +352,15 @@ private fun RefundDetailsCard(
                     mode = RefundMode.ITEMS
                 }
             }
-            if (itemsAvailable) {
+            if (hasRecordedItems) {
+                if (sale.hasGiftCardPurchase) {
+                    Text(
+                        "Contains a gift card purchase — refund the full sale to reverse " +
+                            "the load and its funding together",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(sale.items, key = { it.sku }) { item ->
                         // rows show what a refund can still return: the
@@ -372,8 +383,8 @@ private fun RefundDetailsCard(
                                 // the refundable guard is not redundant with the
                                 // radio's: a refresh can void the sale while the
                                 // mode is already ITEMS
-                                enabled = mode == RefundMode.ITEMS && sale.refundable &&
-                                    item.remainingQuantity > 0,
+                                enabled = itemsAvailable && mode == RefundMode.ITEMS &&
+                                    sale.refundable && item.remainingQuantity > 0,
                             )
                         }
                     }
