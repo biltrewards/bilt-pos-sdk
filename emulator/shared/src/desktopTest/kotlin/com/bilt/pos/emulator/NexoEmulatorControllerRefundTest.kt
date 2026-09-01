@@ -870,9 +870,12 @@ class NexoEmulatorControllerRefundTest {
                 "\"RequestedAmount\":32.75" in refundLeg,
                 "the tender must be asked for what it collected, not shelf value: $refundLeg",
             )
-            // the full return value is recorded against the netted sale
+            // the full return value is recorded against the netted sale,
+            // with the tender's actual draw kept apart so later capacity
+            // math doesn't over-subtract
             val refund = assertNotNull(store.findSale(netted.sale.id)).refunds.single()
             assertEquals("34.99", refund.amount)
+            assertEquals("32.75", refund.tenderAmount)
             assertEquals(LegType.CARD, refund.leg)
         }
     }

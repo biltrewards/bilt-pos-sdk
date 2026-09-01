@@ -1273,8 +1273,10 @@ class NexoEmulatorController(
                 recordedAt = Instant.now().toString(),
                 full = false,
                 // the leg names a tender money moved back to; a fully
-                // netted return touched none
+                // netted return touched none — and only the allocated
+                // portion drew on it, not the netted/register-paid shares
                 leg = planned.legType.takeIf { refunded },
+                tenderAmount = planned.allocated.toPlainString().takeIf { refunded },
                 items = planned.items.map { RefundedItem(it.sku, it.quantity) },
             )) && recorded
         }
@@ -1501,6 +1503,9 @@ class NexoEmulatorController(
             recordedAt = Instant.now().toString(),
             full = true,
             leg = committed.type,
+            // a void reverses the leg itself: the tender returned exactly
+            // what it collected
+            tenderAmount = committed.amount,
         ))
         log(
             if (recorded) {

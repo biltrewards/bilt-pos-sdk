@@ -97,6 +97,12 @@ data class RefundRecord(
      *  before leg tracking; a legless full record counts for the whole
      *  sale. */
     val leg: LegType? = null,
+    /** What actually flowed back to [leg] — [amount] is the whole return
+     *  value, which may include shares netted against a charge or paid out
+     *  by the register. Null on records from before the split; the
+     *  capacity math then falls back to [amount], which can only make a
+     *  later refund under-ask the tender, never over-ask it. */
+    val tenderAmount: String? = null,
     /** True when this refund also reversed the sale's loyalty award. The
      *  SDK's own award guard lives inside one ReversalSession; across
      *  sessions this record is what keeps a retry or a later refund from
@@ -167,7 +173,7 @@ data class StoredSale(
     fun remainingLegAmount(type: LegType): java.math.BigDecimal? {
         val collected = sale.leg(type)?.amount?.toBigDecimalOrNull() ?: return null
         val drawn = refunds.filter { it.leg == type }
-            .sumOf { it.amount?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO }
+            .sumOf { (it.tenderAmount ?: it.amount)?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO }
         return collected.subtract(drawn).max(java.math.BigDecimal.ZERO)
     }
 
