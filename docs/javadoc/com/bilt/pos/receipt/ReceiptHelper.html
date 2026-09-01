@@ -218,10 +218,17 @@ loadScripts(document, 'script');</script>
 <h3>fromBase64</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="ReceiptType.html" title="class in com.bilt.pos.receipt">ReceiptType</a></span>&nbsp;<span class="element-name">fromBase64</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;base64)</span>
                               throws <span class="exceptions">jakarta.xml.bind.JAXBException</span></div>
-<div class="block">Deserializes a <a href="ReceiptType.html" title="class in com.bilt.pos.receipt"><code>ReceiptType</code></a> from a Base64-encoded XML string.</div>
+<div class="block">Deserializes a <a href="ReceiptType.html" title="class in com.bilt.pos.receipt"><code>ReceiptType</code></a> from a Base64-encoded XML string.
+
+ <p>Some terminals put the receipt XML into <code>OutputXHTML</code> raw,
+ skipping the Base64 encoding the schema calls for. A payload opening
+ with <code>'&lt;'</code> cannot be Base64 (<code>'&lt;'</code> is outside the
+ alphabet), so it is unambiguously the raw form and parsed as XML
+ directly.</div>
 <dl class="notes">
 <dt>Parameters:</dt>
-<dd><code>base64</code> - the Base64-encoded XML string (as found in <code>OutputXHTML</code>)</dd>
+<dd><code>base64</code> - the Base64-encoded (or raw) XML string, as found in
+        <code>OutputXHTML</code></dd>
 <dt>Returns:</dt>
 <dd>the deserialized receipt</dd>
 <dt>Throws:</dt>

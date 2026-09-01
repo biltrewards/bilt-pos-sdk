@@ -34,22 +34,33 @@ class ScreenshotGenerator {
     private class FakeController(state: EmulatorState) : EmulatorController {
         override val state: StateFlow<EmulatorState> = MutableStateFlow(state)
         override fun autodetectAddress() = Unit
-        override fun connect(address: String, encryptionEnabled: Boolean, passphraseOverride: String?) = Unit
+        override fun connect(
+            address: String,
+            encryptionEnabled: Boolean,
+            passphraseOverride: String?,
+            adbTunnel: Boolean,
+        ) = Unit
         override fun disconnect() = Unit
         override fun startSession(identifyOnStart: Boolean) = Unit
         override fun endSession() = Unit
         override fun addProduct(product: Product) = Unit
-        override fun settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?) = Unit
+        override fun settle(
+            loyalty: LoyaltyOptions,
+            storedValue: StoredValueOptions?,
+            net: Boolean,
+        ) = Unit
         override fun acquireCard() = Unit
+        override fun refundSale(saleId: String) = Unit
+        override fun addReturnToBasket(saleId: String, skus: Set<String>) = Unit
         override fun abort() = Unit
         override fun dismissPaymentOutcome() = Unit
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
     private fun render(state: EmulatorState, file: File, initialTab: EmulatorTab = EmulatorTab.SALE) {
-        // 1100x800 dp at 2x density — the desktop window's default size,
-        // above the 700dp breakpoint so the wide layout renders
-        val scene = ImageComposeScene(width = 2200, height = 1600, density = Density(2f)) {
+        // 1500x1000 dp at 2x density — the desktop window's default size,
+        // above the side-log breakpoint so the log column renders
+        val scene = ImageComposeScene(width = 3000, height = 2000, density = Density(2f)) {
             EmulatorApp(FakeController(state), MockProductProvider.products(), initialTab)
         }
         val png = scene.render().encodeToData(EncodedImageFormat.PNG)!!.bytes
@@ -99,17 +110,17 @@ class ScreenshotGenerator {
             basket = emptyList(),
             basketTotal = "0.00",
             basketTax = "0.00",
-            lastPayment = "Paid $174.89 — card $169.89 (Visa), rebates −$10.00, " +
+            lastPayment = "Settled $174.89 — card $169.89 (Visa), rebates −$10.00, " +
                 "5 pts −$5.00, earned 175 pts (balance 964)",
             events = midCheckout.events + listOf(
                 "10:41:40 Identifying member on the terminal…",
                 "10:41:47 Member identified: 98234 (K-Club), 789 pts, 1 reward(s)",
-                "10:41:48 Starting payment — rebates on, redemption on, award on",
+                "10:41:48 Starting settlement — rebates on, redemption on, award on",
                 "10:41:50 Rebates applied: −$10.00 → total $179.89",
                 "10:41:51 Points redeemed: 5 (−$5.00) → total $174.89",
-                "10:42:03 Paid $174.89 — card $169.89 (Visa), rebates −$10.00, " +
+                "10:42:03 Settled $174.89 — card $169.89 (Visa), rebates −$10.00, " +
                     "5 pts −$5.00, earned 175 pts (balance 964)",
-                "10:42:03 Payment complete — ending the checkout automatically",
+                "10:42:03 Settlement complete — ending the checkout automatically",
                 "10:42:04 Checkout ended",
             ),
         )
@@ -136,6 +147,7 @@ class ScreenshotGenerator {
                         SaleItemUi("SKU-007", "Coffee Beans 1kg", 1, 4250),
                     ),
                     refunded = true,
+                    fullyRefunded = true,
                 ),
                 StoredSaleUi(
                     id = "e2c76a91-3d40-4b6f-95c8-1a09d4f7b325",

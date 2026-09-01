@@ -69,7 +69,9 @@ fun SettlementResult.toSaleRecord(
         loyaltyLeg(LegType.REDEMPTION, redemptionPoiTransactionId,
             redemptionPoiTransactionTimestamp, pointsMonetaryValue)
     }
-    val items = finalBasket?.items.orEmpty().map { line ->
+    // only sale lines are this sale's refundable items — returns belong
+    // to the EARLIER sales' refund history, credits to neither
+    val items = finalBasket?.items.orEmpty().filter { it.isSale }.map { line ->
         SaleItem(
             sku = line.sku,
             description = line.description,

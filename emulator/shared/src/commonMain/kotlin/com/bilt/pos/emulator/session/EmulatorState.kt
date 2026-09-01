@@ -43,12 +43,22 @@ data class BasketLine(
     val description: String,
     val quantity: Int,
     val lineTotal: String,
+    /** True for a return rung into the basket — the line subtracts, and
+     *  settlement restores its value to the original sale's tender. */
+    val credit: Boolean = false,
 )
 
-/** Outcome of the last payment attempt, shown as a popup until dismissed. */
+/** Outcome of the last payment or refund attempt, shown as a popup until
+ *  dismissed. */
 data class PaymentOutcome(
     val success: Boolean,
+    /** Dialog title, e.g. "Payment successful" or "Refund failed". */
+    val title: String,
     val message: String,
+    /** The transaction's receipt as the terminal rendered it (customer
+     *  copy, falling back to the merchant copy); null when the terminal
+     *  returned none. */
+    val receipt: String? = null,
 )
 
 /**
@@ -92,12 +102,20 @@ data class AcquiredCard(
 data class SaleItemUi(
     val sku: String,
     val description: String,
+    /** Quantity sold. */
     val quantity: Int,
-    /** Line total in minor currency units (cents), so per-item refund
-     *  selections sum as Longs instead of decimal-string arithmetic. */
-    val lineTotalMinor: Long,
+    /** What an item-based refund returns for this line — shelf price plus
+     *  tax of the [remainingQuantity], matching the credit line the refund
+     *  cart will ring — in minor currency units (cents), so selections sum
+     *  as Longs instead of decimal-string arithmetic. */
+    val refundMinor: Long,
+    /** Quantity earlier refunds have not returned yet; zero means the line
+     *  cannot be refunded again. */
+    val remainingQuantity: Int = quantity,
 ) {
-    val lineTotalLabel: String get() = "$" + minorUnitsToDecimal(lineTotalMinor)
+    val refundLabel: String get() = "$" + minorUnitsToDecimal(refundMinor)
+
+    val refundedQuantity: Int get() = quantity - remainingQuantity
 }
 
 /**
@@ -117,10 +135,19 @@ data class StoredSaleUi(
     val items: List<SaleItemUi> = emptyList(),
     /** True when refunds were already recorded against the sale. */
     val refunded: Boolean = false,
+    /** True once a full-amount refund ran — nothing left to refund. */
+    val fullyRefunded: Boolean = false,
     val voided: Boolean = false,
+    /** Whether the Full amount mode may run — mirrors the controller's
+     *  guard exactly: item refunds block it (a void would over-return),
+     *  but the per-leg residue of a void that failed midway does NOT — a
+     *  retried full refund is precisely how the outstanding tender gets
+     *  finished. */
+    val fullRefundAvailable: Boolean = !voided && !fullyRefunded,
 ) {
-    /** A voided sale cannot be refunded (mirrors `StoredSale.refundable`). */
-    val refundable: Boolean get() = !voided
+    /** A voided or fully refunded sale cannot be refunded again (mirrors
+     *  `StoredSale.refundable`). */
+    val refundable: Boolean get() = !voided && !fullyRefunded
 
     val memberLabel: String get() = memberId?.let { "member $it" } ?: "guest"
 
@@ -131,7 +158,8 @@ data class StoredSaleUi(
             memberLabel,
             when {
                 voided -> "voided"
-                refunded -> "refunded"
+                fullyRefunded -> "refunded"
+                refunded -> "partially refunded"
                 else -> null
             },
         ).joinToString(" · ")
@@ -160,12 +188,14 @@ data class EmulatorState(
     /** True while the session-start member identification prompt is on the
      *  wire. */
     val identifyInProgress: Boolean = false,
+    /** True while a referenced refund (ReversalSession) is on the wire. */
+    val refundInProgress: Boolean = false,
     /** One-line summary of the checkout's completed payment; null until
      *  paid. A fully collected payment ends the checkout automatically; the
      *  summary stays visible until the next one starts. */
     val lastPayment: String? = null,
-    /** Success/failure of the last payment attempt, rendered as a popup
-     *  until dismissed; cleared when a new payment starts. */
+    /** Success/failure of the last payment or refund attempt, rendered as
+     *  a popup until dismissed; cleared when a new attempt starts. */
     val paymentOutcome: PaymentOutcome? = null,
     /** Last terminal card read that carried a full card number; the gift
      *  card field adopts each new read. */
@@ -196,8 +226,17 @@ interface EmulatorController {
      * @param encryptionEnabled whether to encrypt messages on this connection
      * @param passphraseOverride passphrase entered in the UI; blank/null falls
      *   back to the configured `NEXO_PASSPHRASE`
+     * @param adbTunnel connect through a localhost `adb forward` tunnel to
+     *   the device instead of dialing it directly — the way around macOS
+     *   denying the JVM process local-network access. Requires the terminal
+     *   attached via adb (USB, or wifi adb at the same address).
      */
-    fun connect(address: String, encryptionEnabled: Boolean, passphraseOverride: String? = null)
+    fun connect(
+        address: String,
+        encryptionEnabled: Boolean,
+        passphraseOverride: String? = null,
+        adbTunnel: Boolean = false,
+    )
 
     fun disconnect()
 
@@ -221,7 +260,19 @@ interface EmulatorController {
      * steps run; [storedValue] adds a gift card as the first tender —
      * anything it doesn't cover falls through to the standard card payment.
      */
-    fun settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions? = null)
+    /**
+     * Settles the active checkout. With [net] (the default) a mixed basket
+     * moves only the signed difference: a payment-dominant basket charges
+     * the difference and the returns' value is absorbed by it; a
+     * refund-dominant basket refunds only the difference to the original
+     * tenders. Without [net], returns are refunded in full to their
+     * original tenders and the sale lines are charged in full.
+     */
+    fun settle(
+        loyalty: LoyaltyOptions,
+        storedValue: StoredValueOptions? = null,
+        net: Boolean = true,
+    )
 
     /**
      * Read a card on the terminal (nexo CardAcquisition request) without
@@ -230,6 +281,28 @@ interface EmulatorController {
      * masked-only read is just logged.
      */
     fun acquireCard()
+
+    /**
+     * Full refund of the stored sale [saleId], run on a fresh checkout
+     * session against the connected terminal — the originating checkout is
+     * long gone; the stored transaction references identify what to
+     * reverse. Voids every referenced movement (tender legs, redemption,
+     * rebate, award). Requires a connection with no active checkout
+     * session. The outcome reports as [EmulatorState.paymentOutcome], like
+     * a payment.
+     */
+    fun refundSale(saleId: String)
+
+    /**
+     * Rings the selected items of the stored sale [saleId] into the ACTIVE
+     * checkout's basket as returns (credit lines, shelf price plus tax per
+     * line). The basket may mix returns with new items — settlement then
+     * charges the sale lines and restores each return's value to its
+     * original sale's outstanding tender via a refund allocation. Rung
+     * returns are held until the settlement succeeds (recorded against
+     * their sales then) or the checkout ends.
+     */
+    fun addReturnToBasket(saleId: String, skus: Set<String>)
 
     /**
      * Abort whatever is in flight, mirroring the SDK's operation-scoped

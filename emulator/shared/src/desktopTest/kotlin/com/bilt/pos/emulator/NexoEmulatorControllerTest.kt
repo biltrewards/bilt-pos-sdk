@@ -48,6 +48,7 @@ class NexoEmulatorControllerTest {
                         description = "Water",
                         quantity = 2,
                         unitPrice = "1.05",
+                        taxRate = "0.06625",
                         lineTotal = "2.10",
                     )
                 ),
@@ -83,7 +84,10 @@ class NexoEmulatorControllerTest {
             assertEquals("sale-1", sale.id)
             assertEquals("2.10", sale.totalAmount)
             assertEquals("member-42", sale.memberId)
-            assertEquals(210L, sale.items.single().lineTotalMinor)
+            // the refund value is shelf price plus tax, rounded per line
+            // like the refund cart's credit line: 2.10 + round(2.10 ×
+            // 0.06625 = 0.139125) = 2.10 + 0.14
+            assertEquals(224L, sale.items.single().refundMinor)
             // the label must be formatted, not the raw-ISO fallback that a
             // not-yet-initialized formatter would silently produce (the
             // exact text depends on the system zone, so only assert the

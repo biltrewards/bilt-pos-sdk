@@ -25,5 +25,7 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "com.bilt.pos.emulator.desktop.MainKt"
+        // terminals live on IPv4 LANs; a dual-stack JVM would try IPv6 first
+        jvmArgs += "-Djava.net.preferIPv4Stack=true"
     }
 }

@@ -6,22 +6,31 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -53,6 +62,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bilt.pos.emulator.catalog.Product
@@ -70,6 +80,10 @@ internal enum class EmulatorTab(val label: String) { SALE("Sale"), REFUND("Refun
 
 /** Width at which tab content switches from stacked to side-by-side panes. */
 private val WIDE_LAYOUT_BREAKPOINT = 700.dp
+
+/** Width from which the event log moves into its own right-hand column;
+ *  below it the log stacks under the tab content instead of starving it. */
+private val SIDE_LOG_BREAKPOINT = 1000.dp
 
 /**
  * Root composable of the terminal emulator, shared by the Android and
@@ -129,48 +143,47 @@ internal fun EmulatorApp(
                 }
             },
         ) { padding ->
-            Column(
+            BoxWithConstraints(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                ConnectionPanel(state, controller)
-                // weight(1f), not fillMaxSize(): a non-weighted child measures
-                // against the Column's full height and would overflow by the
-                // connection panel's height
-                when (selectedTab) {
-                    EmulatorTab.SALE ->
-                        SaleTab(state, controller, products, Modifier.fillMaxWidth().weight(1f))
-                    EmulatorTab.REFUND ->
-                        RefundTab(state.sales, Modifier.fillMaxWidth().weight(1f))
+                val sideLog = maxWidth >= SIDE_LOG_BREAKPOINT
+                // The basket sits above the tab content and is shared by
+                // every tab: a settlement may mix new items (Sale tab) with
+                // returns of prior sales (Refund tab) in one basket. The
+                // event log is shared too — its own right-hand column when
+                // the window is wide, stacked below otherwise. Weights, not
+                // fillMaxSize(): a non-weighted child measures against the
+                // full height and would overflow by its siblings' heights.
+                val basketAndTab: @Composable ColumnScope.() -> Unit = {
+                    BasketCard(state, controller, Modifier.fillMaxWidth().weight(1f))
+                    when (selectedTab) {
+                        EmulatorTab.SALE ->
+                            ProductGrid(products, controller, Modifier.fillMaxWidth().weight(1.1f))
+                        EmulatorTab.REFUND ->
+                            RefundTab(state, controller, Modifier.fillMaxWidth().weight(1.1f))
+                    }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SaleTab(
-    state: EmulatorState,
-    controller: EmulatorController,
-    products: List<Product>,
-    modifier: Modifier = Modifier,
-) {
-    BoxWithConstraints(modifier = modifier) {
-        if (maxWidth < WIDE_LAYOUT_BREAKPOINT) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                ProductGrid(products, controller, Modifier.weight(1.4f))
-                BasketCard(state, controller, Modifier.weight(0.8f))
-                EventsCard(state, Modifier.weight(0.8f))
-            }
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                ProductGrid(products, controller, Modifier.weight(1f))
                 Column(
-                    modifier = Modifier.weight(2f),
+                    modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    BasketCard(state, controller, Modifier.weight(1f))
-                    EventsCard(state, Modifier.weight(1f))
+                    ConnectionPanel(state, controller)
+                    if (sideLog) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(2f).fillMaxHeight(),
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                content = basketAndTab,
+                            )
+                            EventsCard(state, Modifier.weight(1f).fillMaxHeight())
+                        }
+                    } else {
+                        basketAndTab()
+                        EventsCard(state, Modifier.fillMaxWidth().weight(0.5f))
+                    }
                 }
             }
         }
@@ -178,7 +191,12 @@ private fun SaleTab(
 }
 
 @Composable
-private fun RefundTab(sales: List<StoredSaleUi>, modifier: Modifier = Modifier) {
+private fun RefundTab(
+    state: EmulatorState,
+    controller: EmulatorController,
+    modifier: Modifier = Modifier,
+) {
+    val sales = state.sales
     var selectedSaleId by rememberSaveable { mutableStateOf<String?>(null) }
     // resolve against the current list (a refresh may have dropped the
     // sale); with no explicit pick, default to the newest sale — the one a
@@ -191,7 +209,7 @@ private fun RefundTab(sales: List<StoredSaleUi>, modifier: Modifier = Modifier) 
     // no details card without a sale — that only happens with nothing
     // stored, and the list's empty message is the single empty state
     val details: (@Composable (Modifier) -> Unit)? = selected?.let { sale ->
-        { m -> RefundDetailsCard(sale, m) }
+        { m -> RefundDetailsCard(sale, state, controller, m) }
     }
     BoxWithConstraints(modifier = modifier) {
         if (maxWidth < WIDE_LAYOUT_BREAKPOINT) {
@@ -266,9 +284,21 @@ private fun SalesListCard(
 private enum class RefundMode { FULL, ITEMS }
 
 @Composable
-private fun RefundDetailsCard(sale: StoredSaleUi, modifier: Modifier = Modifier) {
+private fun RefundDetailsCard(
+    sale: StoredSaleUi,
+    state: EmulatorState,
+    controller: EmulatorController,
+    modifier: Modifier = Modifier,
+) {
+    // A full refund voids every movement of the prior sale, so it is only
+    // offered while no ITEM refunds exist — those would make it
+    // over-return. The per-leg residue of a void that failed midway keeps
+    // it available: retrying is how the outstanding tender gets finished.
+    val fullAvailable = sale.fullRefundAvailable
     // keyed on the sale so picking another sale resets the selections
-    var mode by remember(sale.id) { mutableStateOf(RefundMode.FULL) }
+    var mode by remember(sale.id) {
+        mutableStateOf(if (fullAvailable) RefundMode.FULL else RefundMode.ITEMS)
+    }
     var selectedSkus by remember(sale.id) { mutableStateOf(emptySet<String>()) }
     // per-item refunds need recorded line items to select from
     val itemsAvailable = sale.items.isNotEmpty()
@@ -286,6 +316,15 @@ private fun RefundDetailsCard(sale: StoredSaleUi, modifier: Modifier = Modifier)
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
+                sale.fullyRefunded -> Text(
+                    "Refunded in full — nothing left to refund",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                sale.refunded && fullAvailable -> Text(
+                    "Partially refunded — Full amount reverses what is outstanding",
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 sale.refunded -> Text(
                     "Already partially refunded",
                     style = MaterialTheme.typography.bodySmall,
@@ -293,7 +332,8 @@ private fun RefundDetailsCard(sale: StoredSaleUi, modifier: Modifier = Modifier)
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                LabeledRadio("Full amount", mode == RefundMode.FULL, sale.refundable) {
+                LabeledRadio("Full amount", mode == RefundMode.FULL,
+                    sale.refundable && fullAvailable) {
                     mode = RefundMode.FULL
                 }
                 LabeledRadio(
@@ -307,7 +347,16 @@ private fun RefundDetailsCard(sale: StoredSaleUi, modifier: Modifier = Modifier)
             if (itemsAvailable) {
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(sale.items, key = { it.sku }) { item ->
-                        LineItemRow(item.quantity, item.description, item.lineTotalLabel) {
+                        // rows show what a refund can still return: the
+                        // remaining quantity and its value, with the already
+                        // returned part called out
+                        val description = if (item.refundedQuantity > 0) {
+                            "${item.description} (${item.refundedQuantity} of " +
+                                "${item.quantity} refunded)"
+                        } else {
+                            item.description
+                        }
+                        LineItemRow(item.remainingQuantity, description, item.refundLabel) {
                             Checkbox(
                                 checked = item.sku in selectedSkus,
                                 onCheckedChange = { checked ->
@@ -318,7 +367,8 @@ private fun RefundDetailsCard(sale: StoredSaleUi, modifier: Modifier = Modifier)
                                 // the refundable guard is not redundant with the
                                 // radio's: a refresh can void the sale while the
                                 // mode is already ITEMS
-                                enabled = mode == RefundMode.ITEMS && sale.refundable,
+                                enabled = mode == RefundMode.ITEMS && sale.refundable &&
+                                    item.remainingQuantity > 0,
                             )
                         }
                     }
@@ -331,30 +381,68 @@ private fun RefundDetailsCard(sale: StoredSaleUi, modifier: Modifier = Modifier)
                 )
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            // The two bases deliberately differ while the button is unwired:
-            // FULL is what the terminal charged (authorizedAmount — tax in,
-            // loyalty tenders deducted), ITEMS sums merchandise line totals
-            // (post-rebate, no tax, no points proration) — so selecting every
-            // item shows less than Full amount. How a per-item refund
-            // allocates tax and loyalty value is a decision of the redesigned
-            // refund flow; until that lands the item total is indicative,
-            // not a charge amount.
+            // The two bases differ by design: FULL voids every movement of
+            // the prior sale (tenders, loyalty, and award), so the label
+            // shows what was charged (authorizedAmount) and the outcome
+            // popup reports what actually came back; ITEMS settles credit
+            // lines against the outstanding tender — shelf price plus tax
+            // of each selected return, the same figure its rows show.
+            // Rebate/points proration is out of scope.
+            // exhausted lines contribute zero (their refundMinor already is),
+            // so a selection that outlived a refresh can't inflate the amount
+            val itemsMinor = sale.items.filter { it.sku in selectedSkus }.sumOf { it.refundMinor }
             val amount = when (mode) {
                 RefundMode.FULL -> sale.totalAmount
-                RefundMode.ITEMS -> minorUnitsToDecimal(
-                    sale.items.filter { it.sku in selectedSkus }.sumOf { it.lineTotalMinor }
+                RefundMode.ITEMS -> minorUnitsToDecimal(itemsMinor)
+            }
+            // The two modes need opposite session states: the full refund
+            // voids the prior sale on its own session (no active checkout),
+            // while item returns ring into the ACTIVE checkout's basket and
+            // settle with it. Each disabled state says so — stored sales
+            // browse fine offline, so a silently gray button would read as
+            // broken.
+            val connected = state.connection.phase != ConnectionPhase.DISCONNECTED
+            val sessionActive = state.sessionId != null
+            when {
+                !connected -> Text(
+                    "Connect to the terminal to run a refund",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                mode == RefundMode.FULL && sessionActive -> Text(
+                    "End the active checkout to run a full refund",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                mode == RefundMode.ITEMS && !sessionActive -> Text(
+                    "Start a checkout to ring returns into its basket",
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
             Button(
                 onClick = {
-                    // deliberately unwired: the refund flow is being redesigned
-                    // and will land with it
+                    when (mode) {
+                        RefundMode.FULL -> controller.refundSale(sale.id)
+                        RefundMode.ITEMS -> {
+                            controller.addReturnToBasket(sale.id, selectedSkus)
+                            // the rung lines re-project with zero remaining;
+                            // a stale selection would just read confusingly
+                            selectedSkus = emptySet()
+                        }
+                    }
                 },
-                enabled = sale.refundable &&
-                    (mode == RefundMode.FULL || selectedSkus.isNotEmpty()),
+                enabled = sale.refundable && connected && when (mode) {
+                    RefundMode.FULL ->
+                        fullAvailable && !sessionActive && !state.refundInProgress
+                    RefundMode.ITEMS -> sessionActive && itemsMinor > 0
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Refund $$amount")
+                Text(
+                    when {
+                        mode == RefundMode.FULL && state.refundInProgress -> "Refunding…"
+                        mode == RefundMode.FULL -> "Refund $$amount"
+                        else -> "Add return to basket ($$amount)"
+                    }
+                )
             }
         }
     }
@@ -402,11 +490,31 @@ private fun PaymentOutcomeDialog(outcome: PaymentOutcome, onDismiss: () -> Unit)
         onDismissRequest = onDismiss,
         title = {
             Text(
-                if (outcome.success) "Payment successful" else "Payment failed",
+                outcome.title,
                 color = if (outcome.success) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
             )
         },
-        text = { Text(outcome.message) },
+        text = {
+            Column {
+                Text(outcome.message)
+                outcome.receipt?.let { receipt ->
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    // the receipt as the terminal rendered it: monospace to
+                    // keep its column layout, capped and scrollable so a
+                    // long one doesn't push the dialog off screen
+                    SelectionContainer {
+                        Text(
+                            receipt,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier
+                                .heightIn(max = 240.dp)
+                                .verticalScroll(rememberScrollState()),
+                        )
+                    }
+                }
+            }
+        },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("OK") }
         },
@@ -419,6 +527,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
     // the passphrase is deliberately plain remember — secrets don't belong
     // in saved instance state
     var terminalIp by rememberSaveable { mutableStateOf("") }
+    var adbTunnel by rememberSaveable { mutableStateOf(false) }
     var encryptionOn by rememberSaveable { mutableStateOf(state.encryptionEnabled) }
     var passphrase by remember { mutableStateOf("") }
     var identifyOnStart by rememberSaveable { mutableStateOf(false) }
@@ -433,7 +542,10 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
     val connected = state.connection.phase != ConnectionPhase.DISCONNECTED
     // Encryption needs a passphrase from somewhere: the field or NEXO_PASSPHRASE
     val passphraseAvailable = state.hasConfiguredPassphrase || passphrase.isNotBlank()
-    val canConnect = terminalIp.isNotBlank() && (!encryptionOn || passphraseAvailable)
+    // The adb tunnel needs no address — a USB-only terminal has none; the
+    // field then only narrows the device pick (by serial or wifi-adb ip)
+    val canConnect = (terminalIp.isNotBlank() || adbTunnel) &&
+        (!encryptionOn || passphraseAvailable)
 
     val passphrasePlaceholder = if (state.hasConfiguredPassphrase) {
         "passphrase (NEXO_PASSPHRASE)"
@@ -481,13 +593,28 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         Text("Encrypt", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+                // Connect through a localhost `adb forward` instead of
+                // dialing the terminal directly — the way around macOS
+                // denying the JVM process local-network access
+                val tunnelToggle: @Composable () -> Unit = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = adbTunnel,
+                            onCheckedChange = { adbTunnel = it },
+                            enabled = !connected,
+                        )
+                        Text("adb tunnel", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
                 val connectButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
                         onClick = {
                             if (connected) {
                                 controller.disconnect()
                             } else {
-                                controller.connect(terminalIp.trim(), encryptionOn, passphrase)
+                                controller.connect(
+                                    terminalIp.trim(), encryptionOn, passphrase, adbTunnel,
+                                )
                             }
                         },
                         enabled = connected || canConnect,
@@ -534,7 +661,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                     Button(
                         onClick = { controller.abort() },
                         enabled = state.paymentInProgress || state.cardReadInProgress ||
-                            state.identifyInProgress,
+                            state.identifyInProgress || state.refundInProgress,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError,
@@ -550,6 +677,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         ipField(Modifier.fillMaxWidth())
+                        tunnelToggle()
                         encryptToggle()
                         if (encryptionOn) {
                             passphraseField(Modifier.fillMaxWidth())
@@ -560,21 +688,37 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         abortButton(Modifier.fillMaxWidth())
                     }
                 } else {
-                    Row(
+                    // Two rows, one per concern: reaching the terminal, then
+                    // driving the checkout. One row no longer fits — an
+                    // overflowing Row squeezes its last children into
+                    // word-per-line buttons that blow the panel up vertically.
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        ipField(Modifier.width(160.dp))
-                        connectButton(Modifier)
-                        sessionButton(Modifier)
-                        identifyToggle()
-                        encryptToggle()
-                        if (encryptionOn) {
-                            passphraseField(Modifier.width(240.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ipField(Modifier.width(160.dp))
+                            tunnelToggle()
+                            encryptToggle()
+                            if (encryptionOn) {
+                                passphraseField(Modifier.width(240.dp))
+                            }
+                            connectButton(Modifier)
                         }
-                        Spacer(Modifier.weight(1f))
-                        abortButton(Modifier)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            sessionButton(Modifier)
+                            identifyToggle()
+                            Spacer(Modifier.weight(1f))
+                            abortButton(Modifier)
+                        }
                     }
                 }
             }
@@ -667,25 +811,28 @@ private fun ProductGrid(
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text("Products", style = MaterialTheme.typography.titleMedium)
-            // weight(1f) so the list measures against the space under the
-            // header instead of the card's full height (clips the last rows)
-            LazyColumn(
+            // weight(1f) so the grid measures against the space under the
+            // header instead of the card's full height (clips the last rows).
+            // Adaptive columns: as many compact bubbles per row as fit.
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 150.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(top = 8.dp).weight(1f),
             ) {
                 items(products, key = { it.sku }) { product ->
                     Button(
                         onClick = { controller.addProduct(product) },
-                        modifier = Modifier.fillMaxWidth(),
+                        // fixed height so rows stay even when names differ
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 product.name,
-                                style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             Text(product.priceLabel, style = MaterialTheme.typography.labelMedium)
                         }
@@ -719,10 +866,12 @@ private fun BasketCard(
                 Text("Empty", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
-                    items(state.basket, key = { it.sku }) { line ->
+                    // keyed on sku AND direction: a mixed basket may hold a
+                    // sale line and a return of the same sku side by side
+                    items(state.basket, key = { "${it.sku}:${it.credit}" }) { line ->
                         LineItemRow(
                             line.quantity,
-                            line.description,
+                            if (line.credit) "${line.description} (return)" else line.description,
                             "$${line.lineTotal}",
                             Modifier.padding(vertical = 2.dp),
                         )
@@ -746,6 +895,10 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
     var award by rememberSaveable { mutableStateOf(false) }
     // Gift card tender: charged first, remainder goes to the card payment
     var giftCard by rememberSaveable { mutableStateOf(false) }
+    // Net by default: a mixed basket moves only the signed difference;
+    // unchecked, returns refund in full to their original tenders and the
+    // sale lines are charged in full
+    var netSettlement by rememberSaveable { mutableStateOf(true) }
     var giftCardNumber by rememberSaveable { mutableStateOf("") }
 
     // One payment per checkout: pay again only after the next Start Checkout
@@ -766,6 +919,9 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             LoyaltyCheckbox("Redemption", redemption, !state.paymentInProgress) { redemption = it }
             LoyaltyCheckbox("Award", award, !state.paymentInProgress) { award = it }
             LoyaltyCheckbox("Gift card", giftCard, !state.paymentInProgress) { giftCard = it }
+            LoyaltyCheckbox("Net settlement", netSettlement, !state.paymentInProgress) {
+                netSettlement = it
+            }
         }
         if (giftCard) {
             // Adopt each terminal card read into the field. Tracking the
@@ -824,16 +980,21 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                         award = award,
                     ),
                     if (giftCard) StoredValueOptions(cardNumber = giftCardNumber) else null,
+                    net = netSettlement,
                 )
             },
             enabled = canPay,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
+                // "Settle", not "Pay": a settlement may collect, refund
+                // (returns exceed additions), or both across mixed tenders
                 when {
-                    state.paymentInProgress -> "Paying…"
-                    paid -> "Paid"
-                    else -> "Pay $${state.basketTotal}"
+                    state.paymentInProgress -> "Settling…"
+                    paid -> "Settled"
+                    state.basketTotal.startsWith("-") ->
+                        "Settle (refund $${state.basketTotal.drop(1)})"
+                    else -> "Settle $${state.basketTotal}"
                 }
             )
         }
