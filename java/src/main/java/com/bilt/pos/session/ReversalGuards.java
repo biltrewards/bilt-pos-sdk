@@ -32,9 +32,10 @@ import java.util.concurrent.ConcurrentHashMap;
  *       award.</li>
  * </ul>
  *
- * <p>{@link #reversedMovements()} doubles as the void's resume state — the
- * sale's movements already reversed, fed to and updated by
- * {@code ReversalManager.voidMovements}.</p>
+ * <p>{@link #reversedMovements()} is the current void attempt's resume state —
+ * the sale's movements already reversed, fed to and updated by
+ * {@code ReversalManager.voidMovements}. It is cleared when the void completes;
+ * the terminal, not the SDK, decides whether a later void is a duplicate.</p>
  */
 final class ReversalGuards {
 
@@ -83,6 +84,11 @@ final class ReversalGuards {
     /** A new payment replaced the guarded sale and all of its reversal progress. */
     void reset() {
         refundIssued = false;
+        reversedMovements.clear();
+    }
+
+    /** A completed void no longer needs in-memory resume progress. */
+    void completeVoid() {
         reversedMovements.clear();
     }
 

@@ -183,6 +183,12 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Whether the record contains at least one movement reference.</div>
 </div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#sharesMovementWith(com.bilt.pos.session.settlement.OriginalSaleRecord)" class="member-name-link">sharesMovementWith</a><wbr>(<a href="OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a>&nbsp;other)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Whether this record and <code>other</code> reference any of the same POI
+ transactions.</div>
+</div>
 </div>
 </div>
 </div>
@@ -292,6 +298,23 @@ loadScripts(document, 'script');</script>
 <h3>hasMovement</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">hasMovement</span>()</div>
 <div class="block">Whether the record contains at least one movement reference.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="sharesMovementWith(com.bilt.pos.session.settlement.OriginalSaleRecord)">
+<h3>sharesMovementWith</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">sharesMovementWith</span><wbr><span class="parameters">(<a href="OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a>&nbsp;other)</span></div>
+<div class="block">Whether this record and <code>other</code> reference any of the same POI
+ transactions. Movement type is deliberately ignored: a transaction ID
+ reused in different legs still identifies an overlapping sale target.</div>
+<dl class="notes">
+<dt>Parameters:</dt>
+<dd><code>other</code> - record to compare with this one</dd>
+<dt>Returns:</dt>
+<dd>whether the records share at least one POI transaction ID</dd>
+<dt>Throws:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/NullPointerException.html" title="class or interface in java.lang" class="external-link">NullPointerException</a></code> - if <code>other</code> is null</dd>
+</dl>
 </section>
 </li>
 <li>

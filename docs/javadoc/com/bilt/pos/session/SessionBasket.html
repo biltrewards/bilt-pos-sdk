@@ -254,7 +254,10 @@ loadScripts(document, 'script');</script>
 
  <p>This is the explicit transaction boundary for a session that runs
  more than one settlement. A settled basket cannot be charged again;
- clear it before ringing the next one.</p></div>
+ clear it before ringing the next one. Clearing never abandons financial
+ recovery. When recovery cannot be completed, call
+ <a href="CheckoutSession.html#forceEnd(java.lang.String)"><code>CheckoutSession.forceEnd(String)</code></a> and start a new session rather
+ than reusing this basket.</p></div>
 <dl class="notes">
 <dt>Returns:</dt>
 <dd>the new empty basket snapshot</dd>

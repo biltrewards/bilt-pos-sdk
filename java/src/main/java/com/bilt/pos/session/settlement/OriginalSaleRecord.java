@@ -133,6 +133,51 @@ public final class OriginalSaleRecord {
                 || awardPoiTransactionId != null;
     }
 
+    /**
+     * Whether this record and {@code other} reference any of the same POI
+     * transactions. Movement type is deliberately ignored: a transaction ID
+     * reused in different legs still identifies an overlapping sale target.
+     *
+     * @param other record to compare with this one
+     * @return whether the records share at least one POI transaction ID
+     * @throws NullPointerException if {@code other} is null
+     */
+    public boolean sharesMovementWith(OriginalSaleRecord other) {
+        Objects.requireNonNull(other, "other");
+        if (references(other.cardPoiTransactionId)
+                || references(other.storedValuePoiTransactionId)
+                || references(other.rebatePoiTransactionId)
+                || references(other.redemptionPoiTransactionId)
+                || references(other.awardPoiTransactionId)) {
+            return true;
+        }
+        for (StoredValueLoadRecord load : other.storedValueLoads) {
+            if (references(load.getPoiTransactionId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean references(String poiTransactionId) {
+        if (poiTransactionId == null) {
+            return false;
+        }
+        if (poiTransactionId.equals(cardPoiTransactionId)
+                || poiTransactionId.equals(storedValuePoiTransactionId)
+                || poiTransactionId.equals(rebatePoiTransactionId)
+                || poiTransactionId.equals(redemptionPoiTransactionId)
+                || poiTransactionId.equals(awardPoiTransactionId)) {
+            return true;
+        }
+        for (StoredValueLoadRecord load : storedValueLoads) {
+            if (poiTransactionId.equals(load.getPoiTransactionId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public boolean equals(Object other) {
         if (this == other) {

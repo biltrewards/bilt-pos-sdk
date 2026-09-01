@@ -79,7 +79,10 @@ public final class SessionBasket {
      *
      * <p>This is the explicit transaction boundary for a session that runs
      * more than one settlement. A settled basket cannot be charged again;
-     * clear it before ringing the next one.</p>
+     * clear it before ringing the next one. Clearing never abandons financial
+     * recovery. When recovery cannot be completed, call
+     * {@link CheckoutSession#forceEnd(String)} and start a new session rather
+     * than reusing this basket.</p>
      *
      * @return the new empty basket snapshot
      * @throws IllegalStateException if money movement, settlement recovery,

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (breaking)
 
+- Completed void status is terminal-owned: after `voidTransaction()` succeeds, `CheckoutSession` discards its temporary reversal progress instead of locally rejecting later void or linked-refund attempts. Partial-void progress remains guarded and retryable until the attempt completes.
 - `CheckoutSession.pay()` is replaced by `CheckoutSession.settle()`. `SettlementFlow` now handles sale, return, and register-credit lines, refund allocations, stored-value fulfillment, exchanges, and refund-only settlements while retaining the total-returning callbacks for rebate, point, and gift-card charge steps.
 - `PaymentFlow`, `PaymentOptions`, `CheckoutResult`, `TransactionContext`, and `TransactionStep` are now `SettlementFlow`, `SettlementOptions`, `SettlementResult`, `SettlementContext`, and `SettlementStep`.
 - `SessionState`, `SessionStateMachine`, and `CheckoutSession.getState()` are removed. A checkout session is now an open terminal bracket that can run multiple sequential settlements and other operations; the register owns the business flow while the SDK retains targeted in-flight, rollback, refund, and void safety guards.
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `CheckoutSession.forceEnd(reason)` as an explicit escape hatch for unrecoverable settlement rollback, committed-refund, or partial-void state. It logs the abandoned recovery categories, attempts the terminal End signal, and seals the local session even if that signal fails; normal `end()`, `close()`, and `basket().clear()` retain their recovery guards.
 - Net settlement for mixed sale/return baskets: `SettlementOptions.builder().settlementType(SettlementType.NET)` charges or refunds only the signed difference. `Basket.getRefundAmount(SettlementType)` exposes the required allocation total for either settlement mode before settlement starts.
 - `onBackgroundError(Consumer<SessionError>)` on the `CheckoutSession` builder: a handler for failures of work the session performs on its own behalf, with no result object to report through. Today that is the automatic display push after a basket mutation; the reserved reactive `onBasketUpdated` channel will report here too.
 - `Terminal` — the session-less home of the device and admin operations (`com.bilt.pos.session`). `Terminal.builder()` takes `client`/`saleId`/`poiId` plus optional `storeLocation` and `callbackExecutor`, and `build()` sends nothing — there is no bracket. Operations are lazy `SessionResult`s with the full async `execute()` machinery. `CheckoutSession.terminal()` returns a cached `Terminal` built from the session's configuration, keeping the operations one call away mid-checkout.
