@@ -1724,6 +1724,7 @@ class NexoEmulatorController(
         },
         refunded = refunds.isNotEmpty(),
         fullyRefunded = fullyRefunded,
+        fullRefundAvailable = refundable && refunds.all { it.full },
         voided = voided != null,
     )
 

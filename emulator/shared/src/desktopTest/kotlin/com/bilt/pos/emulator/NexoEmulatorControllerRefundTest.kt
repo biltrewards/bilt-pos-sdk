@@ -589,6 +589,13 @@ class NexoEmulatorControllerRefundTest {
             assertEquals(listOf(RefundedItem("SKU-1", 2)), refund.items)
             assertTrue(!refund.full, "an item return must not exhaust the sale")
             assertEquals(LegType.CARD, refund.leg)
+            // an item refund DOES block the full mode — a void would
+            // return the full legs on top of it
+            withTimeout(10_000) {
+                controller.state.first { s ->
+                    s.sales.singleOrNull()?.fullRefundAvailable == false
+                }
+            }
             assertEquals("2.24", refund.amount)
 
             // the settlement auto-ended the checkout; a fresh one offers
@@ -719,6 +726,13 @@ class NexoEmulatorControllerRefundTest {
             assertEquals(LegType.CARD, record.leg)
             assertEquals("20.00", record.amount)
             assertTrue(!partial.fullyRefunded)
+            // the UI keeps Full amount available: the residue is a void to
+            // finish, not an item refund that would over-return
+            withTimeout(10_000) {
+                controller.state.first { s ->
+                    s.sales.singleOrNull()?.let { it.refunded && it.fullRefundAvailable } == true
+                }
+            }
 
             // the retry sends ONLY the outstanding stored value leg — the
             // reversed card must not be re-credited

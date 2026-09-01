@@ -291,9 +291,10 @@ private fun RefundDetailsCard(
     modifier: Modifier = Modifier,
 ) {
     // A full refund voids every movement of the prior sale, so it is only
-    // offered while nothing was refunded yet — after a partial item refund
-    // it would return the full legs on top of what was already given back
-    val fullAvailable = !sale.refunded
+    // offered while no ITEM refunds exist — those would make it
+    // over-return. The per-leg residue of a void that failed midway keeps
+    // it available: retrying is how the outstanding tender gets finished.
+    val fullAvailable = sale.fullRefundAvailable
     // keyed on the sale so picking another sale resets the selections
     var mode by remember(sale.id) {
         mutableStateOf(if (fullAvailable) RefundMode.FULL else RefundMode.ITEMS)
@@ -319,6 +320,10 @@ private fun RefundDetailsCard(
                     "Refunded in full — nothing left to refund",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                )
+                sale.refunded && fullAvailable -> Text(
+                    "Partially refunded — Full amount reverses what is outstanding",
+                    style = MaterialTheme.typography.bodySmall,
                 )
                 sale.refunded -> Text(
                     "Already partially refunded",

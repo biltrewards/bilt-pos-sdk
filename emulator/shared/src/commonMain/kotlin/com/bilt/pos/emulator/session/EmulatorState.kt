@@ -138,6 +138,12 @@ data class StoredSaleUi(
     /** True once a full-amount refund ran — nothing left to refund. */
     val fullyRefunded: Boolean = false,
     val voided: Boolean = false,
+    /** Whether the Full amount mode may run — mirrors the controller's
+     *  guard exactly: item refunds block it (a void would over-return),
+     *  but the per-leg residue of a void that failed midway does NOT — a
+     *  retried full refund is precisely how the outstanding tender gets
+     *  finished. */
+    val fullRefundAvailable: Boolean = !voided && !fullyRefunded,
 ) {
     /** A voided or fully refunded sale cannot be refunded again (mirrors
      *  `StoredSale.refundable`). */
