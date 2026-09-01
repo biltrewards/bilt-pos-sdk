@@ -213,6 +213,33 @@ class CheckoutSessionLifecycleTest {
     }
 
     @Test
+    void failedForceEndStillSealsTheLocalSession() throws Exception {
+        CheckoutSession session = startedSession();
+        server.enqueue(new MockResponse().setBody(ADMIN_FAILED));
+
+        SessionException failure = assertThrows(SessionException.class,
+                () -> session.forceEnd("terminal cleanup escalated").get());
+
+        assertEquals(SessionErrorCode.TERMINAL_ERROR, failure.getError().getCode());
+        assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
+                () -> session.identifyMember().get()).getError().getCode());
+        assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
+                () -> session.forceEnd("second attempt").get()).getError().getCode());
+        assertEquals(2, server.getRequestCount(),
+                "a failed forced end cannot be retried on the sealed session");
+    }
+
+    @Test
+    void forceEndRequiresAnOperationalReason() throws Exception {
+        CheckoutSession session = startedSession();
+
+        assertThrows(NullPointerException.class, () -> session.forceEnd(null));
+        assertThrows(IllegalArgumentException.class, () -> session.forceEnd("  \t"));
+        assertEquals(1, server.getRequestCount(),
+                "invalid reasons must fail before creating or sending an operation");
+    }
+
+    @Test
     void abortDoesNotCancelAnInFlightEnd() throws Exception {
         CountDownLatch endOnTheWire = new CountDownLatch(1);
         CountDownLatch abortIssued = new CountDownLatch(1);

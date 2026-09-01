@@ -29,7 +29,7 @@ A few principles explain most of the behavior:
 - **Terminal operations are lazy.** Methods returning a `SessionResult` or `SettlementFlow` send nothing until you call `.execute()` (asynchronous, handlers deliver the outcome), `.executeSync()`, `.get()`, or `.getOrNull()` (blocking). Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
 - **Cart-building is local + auto-display.** The basket surface lives on `session.basket()`: `addItem` / `removeItem` / `updateItemQuantity` update the local basket and return the updated `Basket` immediately — pure local compute, safe to call from a UI thread. With `autoDisplay=true` (the default) each mutation also enqueues an **asynchronous, conflated** `DisplayRequest` push: pushes run on the session's operation lane (ordered against settlement — a `settle()` executed after ring-up queues behind the pending push and waits at most one roundtrip), and a fast ring-up conflates to the newest snapshot, so the customer display skips straight to the current state instead of replaying every tap. Automatic display failures — cart pushes and the final settlement display refresh — are best-effort: logged, never interrupting the checkout, and reported through the builder's `onBackgroundError` handler when one is registered. The terminal may independently evaluate offers while items are scanned, but those offers are **only committed during `settle()`**.
 - **`settle()` supports separate and net movement,** with explicit callbacks for committed refund/charge movements and blocking callbacks after each loyalty/stored-value charge step so the register can update its own model and recompute tax, then return the total that feeds the next step. `SettlementType.REFUND_THEN_CHARGE` is the backward-compatible default. `SettlementType.NET` sends only the signed basket difference: a charge, a refund, or no monetary movement. Loyalty runs only for identified members and can be disabled; stored value runs only when a gift card is registered; card runs whenever a positive balance remains.
-- **Errors and aborts roll back cleanly.** If a charge-side step fails or `abort()` is called mid-sequence, everything already committed by that charge sequence (rebates, points, stored value) is reversed in the opposite order — basket intact, `settle()` retryable. Refund allocation failures are not recovered in-run; committed refund allocation movements stand, and the register retries `settle()` with the same committed allocation prefix. An abort is a register maneuver, not an abandonment; `end()` is the abandonment path when no recovery-required movement is pending.
+- **Errors and aborts roll back cleanly.** If a charge-side step fails or `abort()` is called mid-sequence, everything already committed by that charge sequence (rebates, points, stored value) is reversed in the opposite order — basket intact, `settle()` retryable. Refund allocation failures are not recovered in-run; committed refund allocation movements stand, and the register retries `settle()` with the same committed allocation prefix. An abort is a register maneuver, not an abandonment; `end()` closes a recovered session, while `forceEnd(reason)` is the explicit last resort when recovery cannot be completed.
 
 ### Built-in loyalty handling
 
@@ -132,7 +132,7 @@ Refund allocation failures are terminal for that settlement run. The `onError` h
 - A failed settlement does not consume the basket. The register may correct it and retry. If refund allocations committed, the retry must retain the same allocation prefix; if rollback is incomplete, the retry first finishes it.
 - `refund()` and parameterless `voidTransaction()` refer to the most recent successful settlement in this session. Persist `SettlementResult.toOriginalSaleRecord()` when an older settlement may need to be referenced later.
 - `voidTransaction(OriginalSaleRecord)` is independent of the current basket and can target an older settlement anywhere inside the open session. A record containing any movement of the most recent settlement is refused; use parameterless `voidTransaction()` so its refund/void guards remain authoritative. A partially failed prior-sale void must still be retried on the same session instance so its in-memory progress is retained.
-- Only a successful `end()` permanently seals the session. It is refused while money or required recovery is unresolved.
+- A successful `end()` permanently seals the session and is refused while money or required recovery is unresolved. `forceEnd(reason)` may explicitly abandon recovery and seals the local session even if the terminal rejects its end signal.
 
 ---
 
@@ -167,7 +167,15 @@ session.end().execute();          // or in a handler-style chain, or .get()
 - If the end signal itself fails, the session remains open and `end()` can be retried.
 - A concurrent `abort()` never cancels an in-flight `end()` — like an in-flight void, the end exchange always settles (cancelling cleanup would only strand terminal-side session data).
 
-`CheckoutSession` is `AutoCloseable`: `close()` is a best-effort `end()` (failures and lifecycle refusals are logged, an already-ended session is left alone), so try-with-resources attempts terminal cleanup even on exception paths:
+When recovery cannot be completed, use the explicit forced path only after recording the incident and its transaction references for reconciliation:
+
+```java
+session.forceEnd("operator escalated incomplete refund recovery").get();
+```
+
+`forceEnd(reason)` bypasses incomplete rollback, committed-refund, and partial-void guards, logs the reason and abandoned recovery categories, sends the terminal End signal best-effort, and permanently seals the local session. It still refuses while settlement, void, or recovery money movement is actively on the wire. If the End signal fails, the returned `SessionResult` reports the terminal error but this Java session remains ended; create a new session rather than retrying it. A new session has none of the abandoned duplicate-movement protection, so any later financial recovery must use progress persisted by the register.
+
+`CheckoutSession` is `AutoCloseable`: `close()` is a best-effort normal `end()` (failures and lifecycle refusals are logged, an already-ended session is left alone), so try-with-resources attempts terminal cleanup even on exception paths. It never calls `forceEnd()` or silently abandons recovery:
 
 ```java
 try (CheckoutSession session = CheckoutSession.builder()....start().get()) {
@@ -415,7 +423,7 @@ The identified member stays attached across `clear()`. Re-identifying later chan
 
 - `refund()` / `refund(amount)` — linked refunds of the most recent successful settlement's card payment; also reverse the loyalty award when one ran, best-effort by default. Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once a linked refund has returned money, that payment can no longer be voided from the session: a void would return the full amount on top of the refund. Refunds cover the card leg + award only; the sale's committed rebate and redemption movements are reversed by `voidTransaction()`.
 - `refundUnlinked(amount)` — payment-only, not tied to a prior transaction, no loyalty reversal, and does not alter the latest settlement's refund/void guards.
-- `voidTransaction()` — reverses every movement the completed pure-sale settlement committed, in order: card and stored value legs (nexo `ReversalRequest`), then the redemption, rebate, and award (their `LoyaltyRequest` refund types). A checkout fully covered by rewards has no money leg; voiding it refunds the loyalty movements alone. And when a failed settlement's rollback was incomplete (the error names the movements still standing), `voidTransaction()` on that session finishes the unwind by retrying the reversals that did not go through.
+- `voidTransaction()` — reverses every movement the completed pure-sale settlement committed, in order: card and stored value legs (nexo `ReversalRequest`), then the redemption, rebate, and award (their `LoyaltyRequest` refund types). A checkout fully covered by rewards has no money leg; voiding it refunds the loyalty movements alone. When a failed settlement's rollback was incomplete (the error names the movements still standing), `voidTransaction()` on that session finishes the unwind by retrying the reversals that did not go through. After a successful void the SDK discards its resume progress; a later void or linked refund is sent to the terminal, which owns already-voided transaction enforcement.
 
 Both return a `ReversalFlow` — lazy like every session operation (`execute()` / `get()` / `getOrNull()`). When a step fails, the `onError` handler decides how to proceed:
 
@@ -469,7 +477,7 @@ try (CheckoutSession session = CheckoutSession.builder()
 }
 ```
 
-Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. The same `ReversalFlow` decision handling applies as on `CheckoutSession`. If the record includes any POI transaction ID from this session's most recent settlement, the call is refused; use parameterless `voidTransaction()` so a later refund or second void cannot bypass that settlement's shared guards.
+Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. The same `ReversalFlow` decision handling applies as on `CheckoutSession`. If the record includes any POI transaction ID from this session's most recent settlement, the call is refused; use parameterless `voidTransaction()` so an in-progress partial void or prior refund cannot be bypassed.
 
 If a prior-sale void partially fails after reversing one or more legs, retry that void on the same `CheckoutSession` instance. The reversed-movement progress is held in memory so the retry resumes at the first still-standing movement; `end()` is refused until the void finishes because a new session created with the same `OriginalSaleRecord` has no memory of that progress and would send the full void sequence again.
 
@@ -695,6 +703,7 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | --- | --- |
 | Start a session | `CheckoutSession.builder()...start().get()` |
 | End the session (terminal discards its data) | `session.end()` |
+| Abandon an unrecoverable session | `session.forceEnd(reason)` |
 | Prompt customer to identify | `session.identifyMember()` |
 | POS-driven member lookup (no prompt) | `session.identifyMember(identifier)` |
 | Add / remove / update item | `session.basket().addItem(item)`, `.removeItemBySku(sku)`, `.updateItemQuantityBySku(sku, qty)` |

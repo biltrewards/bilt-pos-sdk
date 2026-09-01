@@ -431,7 +431,7 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
-    void sameSessionPaymentCannotBeVoidedTwice() throws Exception {
+    void completedVoidStatusIsOwnedByTheTerminal() throws Exception {
         addHundredDollarItem();
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
         session.settle().get();
@@ -439,14 +439,24 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
         session.voidTransaction().get();
         drainRequests();
-        int requestsAfterVoid = server.getRequestCount();
+        server.enqueue(new MockResponse().setBody(REVERSAL_UNREACHABLE));
 
-        SessionException failure = assertThrows(SessionException.class,
-                () -> session.voidTransaction().get());
+        assertThrows(SessionException.class, () -> session.voidTransaction().get());
 
-        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
-        assertTrue(failure.getError().getMessage().contains("already been voided"));
-        assertEquals(requestsAfterVoid, server.getRequestCount());
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(1, requests.size());
+        assertEquals("POI-PAY-1", requests.get(0).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        assertThrows(SessionException.class,
+                () -> session.refund(new BigDecimal("10.00")).get());
+
+        SaleToPOIRequest refund = nextRequest();
+        assertEquals("Refund", refund.getPaymentRequest().getPaymentData()
+                .getPaymentType().toValue());
+        assertEquals("POI-PAY-1", refund.getPaymentRequest().getPaymentTransaction()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
     }
 
     @Test
@@ -1263,12 +1273,6 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(REVERSAL_OK));
         assertTrue(session.voidTransaction().get().isSuccess());
         drainRequests();
-
-        SessionException refundRefused = assertThrows(SessionException.class,
-                () -> session.refund(new BigDecimal("10.00")).get());
-        assertEquals(SessionErrorCode.INVALID_STATE, refundRefused.getError().getCode());
-        assertEquals(0, drainRequests().size(),
-                "the shared guard must prevent refunding the voided payment");
     }
 
     @Test

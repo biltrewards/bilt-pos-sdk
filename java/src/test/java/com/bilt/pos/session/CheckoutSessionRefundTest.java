@@ -740,6 +740,31 @@ class CheckoutSessionRefundTest {
     }
 
     @Test
+    void forceEndCanAbandonCommittedRefundRecovery() throws Exception {
+        CheckoutSession session = session();
+        session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1,
+                new BigDecimal("75.00")));
+        session.basket().addItem(BasketItem.returnItem("RET-1", "Returned item", 1,
+                new BigDecimal("40.00")));
+
+        server.enqueue(new MockResponse().setBody(refundOk("POI-CARD-REF-1", 25.00)));
+        server.enqueue(new MockResponse().setBody(refundOk("POI-SV-REF-1", 15.00)));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        assertThrows(SessionException.class,
+                () -> session.settle(splitRefundOptions()).get());
+        assertEquals(3, drainRequests().size());
+
+        session.forceEnd("operator escalated the committed refund").get();
+
+        SaleToPOIRequest end = recordedRequest();
+        assertEquals("BiltSession,End,v1," + session.getSessionId(),
+                end.getAdminRequest().getServiceIdentification());
+        assertThrows(IllegalStateException.class, () -> session.basket().clear());
+        assertEquals(SessionErrorCode.INVALID_STATE, assertThrows(SessionException.class,
+                () -> session.settle(splitRefundOptions()).get()).getError().getCode());
+    }
+
+    @Test
     void settlementRetryDoesNotReattachRefundItemsAfterCommittedRefundLeg()
             throws Exception {
         CheckoutSession session = session();

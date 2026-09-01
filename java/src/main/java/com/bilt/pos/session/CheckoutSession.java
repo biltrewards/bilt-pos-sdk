@@ -74,7 +74,6 @@ import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementStep;
 import com.bilt.pos.session.settlement.StoredValueLoad;
-import com.bilt.pos.session.settlement.StoredValueLoadRecord;
 import com.bilt.pos.session.storedvalue.StoredValueBalance;
 import com.bilt.pos.session.storedvalue.StoredValueCard;
 import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
@@ -123,9 +122,10 @@ import java.util.logging.Logger;
  * session-scoped data it accumulated. An ended session cannot be used or
  * restarted. The register may run multiple sequential settlements and other
  * operations before ending the bracket; {@link SessionBasket#clear()} starts
- * a fresh basket after a successful settlement. Sessions are
- * {@link AutoCloseable}, so try-with-resources sends the end signal even on
- * exception paths.</p>
+ * a fresh basket after a successful settlement. {@link #forceEnd(String)} is
+ * the explicit escape hatch when financial recovery cannot be completed.
+ * Sessions are {@link AutoCloseable}, so try-with-resources sends the normal,
+ * guarded end signal even on exception paths.</p>
  *
  * <pre>{@code
  * try (CheckoutSession session = CheckoutSession.builder()
@@ -146,6 +146,8 @@ import java.util.logging.Logger;
 public final class CheckoutSession implements AutoCloseable {
 
     private static final Logger LOGGER = Logger.getLogger(CheckoutSession.class.getName());
+    private static final OriginalSaleRecord NO_SETTLEMENT =
+            OriginalSaleRecord.builder().build();
 
     /** Mutually exclusive runtime activity; recovery and basket state live separately. */
     private enum SessionPhase {
@@ -185,9 +187,10 @@ public final class CheckoutSession implements AutoCloseable {
     private volatile boolean basketConsumed;
     private volatile IdentifyResult member;
     private volatile StoredValueCard storedValueCard;
-    private volatile LastPayment lastPayment = LastPayment.NONE;
+    // Compact reversal/refund metadata for the latest settlement. Keeping
+    // the public result itself would retain its basket, receipts, and ledger.
+    private volatile OriginalSaleRecord lastSettlementRecord = NO_SETTLEMENT;
     private volatile boolean lastSettlementIncludesRefunds;
-    private volatile boolean lastPaymentVoided;
     // Raised only when a same-session void reverses at least one movement
     // before failing. Replacing or ending the session would discard the
     // in-memory progress that makes the next void retry idempotent.
@@ -210,10 +213,10 @@ public final class CheckoutSession implements AutoCloseable {
     // may continue only with the same allocation prefix.
     private volatile List<RefundAllocation> committedRefundAllocations = List.of();
     private volatile List<SettlementMovement> committedRefundMovements = List.of();
-    // Prior-sale voids do not use this session's lastPayment/guards, but
-    // they still need resume state when one movement reversed and a later
-    // one failed. The target record prevents applying that progress to a
-    // different prior sale.
+    // Prior-sale voids do not use this session's latest settlement record or
+    // guards, but they still need resume state when one movement reversed and
+    // a later one failed. The target record prevents applying that progress
+    // to a different prior sale.
     private volatile OriginalSaleRecord priorSaleVoidTarget;
     private volatile Set<ReversalMovement.Key> priorSaleVoidReversedMovements =
             ConcurrentHashMap.newKeySet();
@@ -268,87 +271,6 @@ public final class CheckoutSession implements AutoCloseable {
                 return clearBasket();
             }
         });
-    }
-
-    /**
-     * The reversal metadata of this session's completed payment, kept for
-     * void and refund. One immutable snapshot: written atomically when a
-     * payment completes, read as a group afterwards — deliberately just the
-     * references and settlement-time member ID, so receipts and the final
-     * basket are not pinned for the session's lifetime.
-     */
-    private static final class LastPayment {
-        static final LastPayment NONE = new LastPayment(null, null);
-
-        final String poiTransactionId;
-        final Instant poiTransactionTimestamp;
-        final String storedValuePoiTransactionId;
-        final Instant storedValuePoiTransactionTimestamp;
-        final List<StoredValueLoadRecord> storedValueLoads;
-        final String awardPoiTransactionId;
-        final Instant awardPoiTransactionTimestamp;
-        final String rebatePoiTransactionId;
-        final Instant rebatePoiTransactionTimestamp;
-        final String redemptionPoiTransactionId;
-        final Instant redemptionPoiTransactionTimestamp;
-        final String memberId;
-
-        LastPayment(SettlementResult result, String memberId) {
-            poiTransactionId = result == null ? null : result.getPoiTransactionId();
-            poiTransactionTimestamp = result == null ? null : result.getPoiTransactionTimestamp();
-            storedValuePoiTransactionId = result == null
-                    ? null : result.getStoredValuePoiTransactionId();
-            storedValuePoiTransactionTimestamp = result == null
-                    ? null : result.getStoredValuePoiTransactionTimestamp();
-            storedValueLoads = result == null ? List.of() : result.getStoredValueLoads();
-            awardPoiTransactionId = result == null ? null : result.getAwardPoiTransactionId();
-            awardPoiTransactionTimestamp = result == null
-                    ? null : result.getAwardPoiTransactionTimestamp();
-            rebatePoiTransactionId = result == null ? null : result.getRebatePoiTransactionId();
-            rebatePoiTransactionTimestamp = result == null
-                    ? null : result.getRebatePoiTransactionTimestamp();
-            redemptionPoiTransactionId = result == null
-                    ? null : result.getRedemptionPoiTransactionId();
-            redemptionPoiTransactionTimestamp = result == null
-                    ? null : result.getRedemptionPoiTransactionTimestamp();
-            this.memberId = memberId;
-        }
-
-        /** Whether a persisted record includes any movement of this payment. */
-        boolean sharesMovementWith(OriginalSaleRecord sale) {
-            if (references(sale.getCardPoiTransactionId())
-                    || references(sale.getStoredValuePoiTransactionId())
-                    || references(sale.getRedemptionPoiTransactionId())
-                    || references(sale.getRebatePoiTransactionId())
-                    || references(sale.getAwardPoiTransactionId())) {
-                return true;
-            }
-            for (StoredValueLoadRecord load : sale.getStoredValueLoads()) {
-                if (references(load.getPoiTransactionId())) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private boolean references(String transactionId) {
-            if (transactionId == null) {
-                return false;
-            }
-            if (transactionId.equals(poiTransactionId)
-                    || transactionId.equals(storedValuePoiTransactionId)
-                    || transactionId.equals(redemptionPoiTransactionId)
-                    || transactionId.equals(rebatePoiTransactionId)
-                    || transactionId.equals(awardPoiTransactionId)) {
-                return true;
-            }
-            for (StoredValueLoadRecord load : storedValueLoads) {
-                if (transactionId.equals(load.getPoiTransactionId())) {
-                    return true;
-                }
-            }
-            return false;
-        }
     }
 
     public static Builder builder() {
@@ -999,10 +921,9 @@ public final class CheckoutSession implements AutoCloseable {
             lock.lock();
             try {
                 basketConsumed = true;
-                lastPayment = new LastPayment(result, request.member == null
+                lastSettlementRecord = result.toOriginalSaleRecord(request.member == null
                         ? null : request.member.getMemberId());
                 lastSettlementIncludesRefunds = returnTotal.signum() > 0;
-                lastPaymentVoided = false;
                 lastPaymentVoidIncomplete = false;
                 clearCommittedRefundAllocations();
                 // this settlement replaced the void target, so the guard on
@@ -1430,21 +1351,21 @@ public final class CheckoutSession implements AutoCloseable {
         if (linked) {
             guards.requireNoReversedMoneyLeg();
         }
-        LastPayment paid = linked ? lastPayment : LastPayment.NONE;
-        if (linked && paid.poiTransactionId == null) {
+        OriginalSaleRecord paid = linked ? lastSettlementRecord : NO_SETTLEMENT;
+        if (linked && paid.getCardPoiTransactionId() == null) {
             throw invalidState("a linked refund requires a completed payment in this "
                     + "session; refund a prior sale through settle() with return lines "
                     + "and SettlementOptions refund allocations");
         }
         boolean awardReversed = linked && guards.awardReversed();
         return reversalManager.refund(amount, null,
-                paid.poiTransactionId, paid.poiTransactionTimestamp,
-                awardReversed ? null : paid.awardPoiTransactionId,
-                awardReversed ? null : paid.awardPoiTransactionTimestamp,
-                linked ? paid.memberId : null,
+                paid.getCardPoiTransactionId(), paid.getCardPoiTransactionTimestamp(),
+                awardReversed ? null : paid.getAwardPoiTransactionId(),
+                awardReversed ? null : paid.getAwardPoiTransactionTimestamp(),
+                linked ? paid.getMemberId() : null,
                 flow.decider(),
                 linked ? guards::markRefunded : () -> { },
-                linked ? () -> guards.markAwardReversed(paid.awardPoiTransactionId)
+                linked ? () -> guards.markAwardReversed(paid.getAwardPoiTransactionId())
                         : () -> { });
     }
 
@@ -1486,7 +1407,9 @@ public final class CheckoutSession implements AutoCloseable {
      * movements that call sent. Until that retry succeeds, the session
      * refuses {@code basket().clear()}, another settlement, and
      * {@link #end()} because each would discard the in-memory resume
-     * progress.</p>
+     * progress. After the void succeeds, that progress is discarded; a later
+     * void or linked refund reaches the terminal, which owns already-voided
+     * transaction enforcement.</p>
      *
      * <p>On a session whose payment failed with an incomplete rollback,
      * {@code voidTransaction()} finishes the unwind by retrying the
@@ -1527,7 +1450,7 @@ public final class CheckoutSession implements AutoCloseable {
         beginVoid();
         boolean sameSessionVoidStarted = false;
         Set<ReversalMovement.Key> reversedBefore = Set.of();
-        LastPayment paid = LastPayment.NONE;
+        OriginalSaleRecord paid = NO_SETTLEMENT;
         try {
             // A failed settlement whose rollback was incomplete left
             // movements standing; voiding that session finishes the unwind.
@@ -1543,10 +1466,7 @@ public final class CheckoutSession implements AutoCloseable {
                     throw invalidState("voidTransaction is only supported for a pure sale "
                             + "settlement; this settlement included return lines");
                 }
-                if (lastPaymentVoided) {
-                    throw invalidState("the most recent payment has already been voided");
-                }
-                paid = lastPayment;
+                paid = lastSettlementRecord;
                 movements = voidTarget(paid);
                 if (movements.isEmpty()) {
                     throw invalidState(
@@ -1565,10 +1485,10 @@ public final class CheckoutSession implements AutoCloseable {
             // records progress into it), so a retry resumes at the
             // movements still standing while the default policy still sees
             // the whole target
-            VoidResult result = reversalManager.voidMovements(movements, paid.memberId,
+            VoidResult result = reversalManager.voidMovements(movements, paid.getMemberId(),
                     flow.decider(), guards.reversedMovements());
             if (!resumeRollback) {
-                lastPaymentVoided = true;
+                guards.completeVoid();
                 lastPaymentVoidIncomplete = false;
             }
             return result;
@@ -1592,7 +1512,7 @@ public final class CheckoutSession implements AutoCloseable {
         }
         beginVoid();
         try {
-            if (lastPayment.sharesMovementWith(originalSale)) {
+            if (lastSettlementRecord.sharesMovementWith(originalSale)) {
                 throw invalidState("the original sale record references the most recent "
                         + "settlement in this session; use parameterless voidTransaction() "
                         + "so its refund and void guards remain consistent");
@@ -1630,19 +1550,6 @@ public final class CheckoutSession implements AutoCloseable {
         } finally {
             lock.unlock();
         }
-    }
-
-    /** The completed payment's movements, in reversal order. */
-    private static List<ReversalMovement> voidTarget(LastPayment paid) {
-        return ReversalMovement.ofSale(
-                paid.storedValueLoads,
-                PoiRef.ofNullable(paid.poiTransactionId, paid.poiTransactionTimestamp),
-                PoiRef.ofNullable(paid.storedValuePoiTransactionId,
-                        paid.storedValuePoiTransactionTimestamp),
-                PoiRef.ofNullable(paid.redemptionPoiTransactionId,
-                        paid.redemptionPoiTransactionTimestamp),
-                PoiRef.ofNullable(paid.rebatePoiTransactionId, paid.rebatePoiTransactionTimestamp),
-                PoiRef.ofNullable(paid.awardPoiTransactionId, paid.awardPoiTransactionTimestamp));
     }
 
     private static List<ReversalMovement> voidTarget(OriginalSaleRecord originalSale) {
@@ -1801,7 +1708,8 @@ public final class CheckoutSession implements AutoCloseable {
      * Aborts the in-flight operation. The session itself continues — an
      * abort is a normal register maneuver (cancel the signature prompt, stop
      * a tender to take a gift card first), not an abandonment; to abandon
-     * the checkout, {@link #end()} the session.
+     * the checkout after recovery, {@link #end()} the session. If recovery
+     * cannot be completed, use {@link #forceEnd(String)} explicitly.
      *
      * <p>If a terminal operation is awaiting a response, a Nexo
      * {@code AbortRequest} referencing it is sent (best-effort) to the
@@ -1877,62 +1785,39 @@ public final class CheckoutSession implements AutoCloseable {
      * exchange always settles.</p>
      */
     public SessionResult<Void> end() {
-        return operation("end", () -> {
-            lock.lock();
-            try {
-                if (phase == SessionPhase.ENDING || phase == SessionPhase.ENDED) {
-                    throw invalidState(
-                            "the session has already ended; create a new session");
-                }
-                if (moneyMovementInFlight()) {
-                    throw invalidState("end() is not allowed while money movement "
-                            + "is in flight");
-                }
-                if (rollbackIncomplete()) {
-                    throw invalidState("a failed payment's rollback is incomplete; "
-                            + "finish the unwind with voidTransaction() before ending "
-                            + "the session");
-                }
-                if (lastPaymentVoidIncomplete) {
-                    throw invalidState("a void of the most recent payment is partially "
-                            + "complete; retry voidTransaction() before ending the session");
-                }
-                if (!priorSaleVoidReversedMovements.isEmpty()) {
-                    throw invalidState("a prior-sale void is partially complete; retry "
-                            + "voidTransaction(OriginalSaleRecord) with the same original "
-                            + "sale record before ending the session");
-                }
-                if (hasCommittedRefundAllocations()) {
-                    throw invalidState("refund allocations from a failed settlement are "
-                            + "committed; retry settle() with the same refund allocations "
-                            + "before ending the session");
-                }
-                phase = SessionPhase.ENDING;
-            } finally {
-                lock.unlock();
-            }
-            try {
-                exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
-            } catch (RuntimeException e) {
-                lock.lock();
-                try {
-                    phase = SessionPhase.OPEN;
-                } finally {
-                    lock.unlock();
-                }
-                throw e;
-            }
-            lock.lock();
-            try {
-                phase = SessionPhase.ENDED;
-            } finally {
-                lock.unlock();
-            }
-            // no further operations may run; asynchronous submissions after
-            // this fail into their handlers instead of queueing forever
-            operations.shutdown();
-            return null;
-        });
+        return endSession(false, null);
+    }
+
+    /**
+     * Irrevocably abandons this session and its in-memory recovery progress.
+     * Use only when an incomplete settlement rollback, refund allocation, or
+     * void cannot be recovered and the register has recorded the incident for
+     * reconciliation. Start a new {@code CheckoutSession} afterwards; forced
+     * termination never makes this instance reusable.
+     *
+     * <p>Unlike {@link #end()}, this operation bypasses unresolved-recovery
+     * guards. It still refuses to run while a settlement, void, or recovery
+     * drain is actively moving money. The supplied reason and the abandoned
+     * recovery categories are logged. The terminal end signal remains
+     * best-effort: if it fails, the returned result reports that failure, but
+     * the local session is still sealed and cannot be retried. A later
+     * recovery from a new session must use externally persisted transaction
+     * progress; this session's duplicate-movement protection is discarded.</p>
+     *
+     * <p>{@link #close()} deliberately does not call this method. Automatic
+     * resource cleanup must never silently abandon financial recovery.</p>
+     *
+     * @param reason nonblank operational reason recorded in the warning log
+     * @throws NullPointerException if {@code reason} is null
+     * @throws IllegalArgumentException if {@code reason} is blank
+     */
+    public SessionResult<Void> forceEnd(String reason) {
+        Objects.requireNonNull(reason, "reason");
+        String normalizedReason = reason.strip();
+        if (normalizedReason.isEmpty()) {
+            throw new IllegalArgumentException("reason must not be blank");
+        }
+        return endSession(true, normalizedReason);
     }
 
     /**
@@ -2141,6 +2026,127 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     // ─── Internals ───
+
+    private SessionResult<Void> endSession(boolean forced, String reason) {
+        String operationName = forced ? "forceEnd" : "end";
+        return operation(operationName, () -> {
+            String abandonedRecovery = null;
+            lock.lock();
+            try {
+                if (phase == SessionPhase.ENDING || phase == SessionPhase.ENDED) {
+                    throw invalidState(
+                            "the session has already ended; create a new session");
+                }
+                if (moneyMovementInFlight()) {
+                    throw invalidState(operationName + "() is not allowed while money movement "
+                            + "is in flight");
+                }
+                if (forced) {
+                    if (drainInFlight) {
+                        throw invalidState("forceEnd() is not allowed while settlement "
+                                + "recovery is moving money");
+                    }
+                    abandonedRecovery = unresolvedRecoverySummary();
+                } else {
+                    requireRecoveryCompleteForEnd();
+                }
+                phase = SessionPhase.ENDING;
+            } finally {
+                lock.unlock();
+            }
+
+            if (!forced) {
+                try {
+                    exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
+                } catch (RuntimeException e) {
+                    lock.lock();
+                    try {
+                        phase = SessionPhase.OPEN;
+                    } finally {
+                        lock.unlock();
+                    }
+                    throw e;
+                }
+                sealSession(false);
+                return null;
+            }
+
+            try {
+                LOGGER.warning("forceEnd() is abandoning session " + sessionId
+                        + " (reason: " + reason + "); unresolved recovery: "
+                        + abandonedRecovery);
+                exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
+            } finally {
+                // This is the escape hatch: local teardown is final even if
+                // the terminal cannot acknowledge its own cleanup.
+                sealSession(true);
+            }
+            return null;
+        });
+    }
+
+    private void requireRecoveryCompleteForEnd() {
+        if (rollbackIncomplete()) {
+            throw invalidState("a failed payment's rollback is incomplete; "
+                    + "finish the unwind with voidTransaction() before ending "
+                    + "the session");
+        }
+        if (lastPaymentVoidIncomplete) {
+            throw invalidState("a void of the most recent payment is partially "
+                    + "complete; retry voidTransaction() before ending the session");
+        }
+        if (!priorSaleVoidReversedMovements.isEmpty()) {
+            throw invalidState("a prior-sale void is partially complete; retry "
+                    + "voidTransaction(OriginalSaleRecord) with the same original "
+                    + "sale record before ending the session");
+        }
+        if (hasCommittedRefundAllocations()) {
+            throw invalidState("refund allocations from a failed settlement are "
+                    + "committed; retry settle() with the same refund allocations "
+                    + "before ending the session");
+        }
+    }
+
+    private String unresolvedRecoverySummary() {
+        List<String> unresolved = new ArrayList<>();
+        if (!standingMovements.isEmpty()) {
+            unresolved.add(standingMovements.size() + " standing rollback movement(s)");
+        }
+        if (lastPaymentVoidIncomplete) {
+            unresolved.add(guards.reversedMovements().size()
+                    + " reversed same-session void movement(s)");
+        }
+        if (!priorSaleVoidReversedMovements.isEmpty()) {
+            unresolved.add(priorSaleVoidReversedMovements.size()
+                    + " reversed prior-sale void movement(s)");
+        }
+        if (hasCommittedRefundAllocations()) {
+            unresolved.add(committedRefundAllocations.size()
+                    + " committed refund allocation(s)");
+        }
+        return unresolved.isEmpty() ? "none" : String.join(", ", unresolved);
+    }
+
+    private void sealSession(boolean abandonRecovery) {
+        lock.lock();
+        try {
+            if (abandonRecovery) {
+                standingMovements = List.of();
+                committedRefundAllocations = List.of();
+                committedRefundMovements = List.of();
+                lastPaymentVoidIncomplete = false;
+                guards.reset();
+                priorSaleVoidTarget = null;
+                priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();
+            }
+            phase = SessionPhase.ENDED;
+        } finally {
+            lock.unlock();
+        }
+        // no further operations may run; asynchronous submissions after
+        // this fail into their handlers instead of queueing forever
+        operations.shutdown();
+    }
 
     private <T> SessionResult<T> operation(String name, Supplier<T> body) {
         return operations.operation(name, body);

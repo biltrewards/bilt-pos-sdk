@@ -105,6 +105,8 @@ Send the End signal when the checkout is over — completed, voided, or abandone
 
 3. On `Success`, the session is over. Nothing may be sent for it afterwards — a new checkout requires a new Start with a new session ID. On `Failure`, the session is still open: the End may be retried.
 
+The SDK's normal `CheckoutSession.end()` follows those semantics and refuses to discard in-memory progress for an incomplete rollback, committed refund allocation, or partial void. When that recovery cannot be completed, `CheckoutSession.forceEnd(reason)` is an explicit local escape hatch: it logs what is being abandoned, sends End best-effort, and permanently seals the Java session even when the terminal reports failure. The register must persist the incident before forcing termination because a new session cannot resume from the abandoned in-memory progress. `CheckoutSession.close()` never forces termination.
+
 ---
 
 ## Session signal response
