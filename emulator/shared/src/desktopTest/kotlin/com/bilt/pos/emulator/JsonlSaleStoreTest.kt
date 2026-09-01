@@ -1,6 +1,7 @@
 package com.bilt.pos.emulator
 
 import com.bilt.pos.emulator.store.JsonlSaleStore
+import com.bilt.pos.emulator.store.GiftCardLoad
 import com.bilt.pos.emulator.store.LegType
 import com.bilt.pos.emulator.store.RefundRecord
 import com.bilt.pos.emulator.store.SaleItem
@@ -55,7 +56,14 @@ class JsonlSaleStoreTest {
             TransactionLeg(LegType.REDEMPTION, "poi-5", amount = "0.25",
                 rewardRefs = listOf("ref-a", "ref-b")),
         )
-        val recorded = sale("s1", legs)
+        val recorded = sale("s1", legs).copy(
+            giftCardLoads = listOf(GiftCardLoad(
+                basketReference = "gift-card-1",
+                amount = "25.00",
+                poiTransactionId = "poi-load-1",
+                poiTimestamp = "2026-08-04T10:15:31Z",
+            ))
+        )
         store.recordSale(recorded)
 
         val found = store.findSale("s1")
@@ -65,6 +73,7 @@ class JsonlSaleStoreTest {
         assertTrue(found.refundable)
         assertEquals("poi-5", found.sale.leg(LegType.REDEMPTION)?.poiTransactionId)
         assertEquals(listOf("ref-a", "ref-b"), found.sale.leg(LegType.REDEMPTION)?.rewardRefs)
+        assertEquals("poi-load-1", found.sale.giftCardLoads.single().poiTransactionId)
     }
 
     @Test

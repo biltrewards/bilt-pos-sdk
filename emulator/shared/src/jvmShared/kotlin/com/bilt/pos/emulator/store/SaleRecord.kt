@@ -44,6 +44,16 @@ data class SaleItem(
     val lineTotal: String,
 )
 
+/** Persisted reference for a gift-card activation/load fulfilled by the
+ * sale. A later whole-sale refund reverses it before reversing its funding. */
+@Serializable
+data class GiftCardLoad(
+    val basketReference: String,
+    val amount: String,
+    val poiTransactionId: String,
+    val poiTimestamp: String? = null,
+)
+
 /**
  * A completed sale with everything a later referenced refund or void needs:
  * the cart contents, the totals, the member, and every committed movement's
@@ -69,6 +79,7 @@ data class SaleRecord(
     val pointsRedeemed: Int = 0,
     val totalPointsEarned: Int = 0,
     val legs: List<TransactionLeg> = emptyList(),
+    val giftCardLoads: List<GiftCardLoad> = emptyList(),
 ) {
     fun leg(type: LegType): TransactionLeg? = legs.firstOrNull { it.type == type }
 }
@@ -111,6 +122,11 @@ data class RefundRecord(
     /** The returned items of an item-based refund; empty for a full-amount
      *  refund. What was already returned is not returnable again. */
     val items: List<RefundedItem> = emptyList(),
+    /** Gift-card loads already reversed by a whole-sale refund attempt that
+     * later failed. They are omitted when that refund is retried. */
+    val reversedGiftCardLoadIds: List<String> = emptyList(),
+    /** This is cross-session reversal progress, not an item refund. */
+    val reversalProgress: Boolean = false,
 )
 
 /** A void issued against a stored sale. */
@@ -159,6 +175,9 @@ data class StoredSale(
     /** Whether an earlier refund already reversed the loyalty award —
      *  reversing it again would debit the member's points twice. */
     val awardReversed: Boolean get() = refunds.any { it.awardReversed }
+
+    val reversedGiftCardLoadIds: Set<String>
+        get() = refunds.flatMapTo(mutableSetOf()) { it.reversedGiftCardLoadIds }
 
     val refundable: Boolean get() = voided == null && !fullyRefunded
 

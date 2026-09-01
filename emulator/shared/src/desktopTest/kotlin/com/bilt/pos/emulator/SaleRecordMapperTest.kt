@@ -5,6 +5,9 @@ import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketLineItem
 import com.bilt.pos.session.settlement.SettlementResult
+import com.bilt.pos.session.settlement.SettlementMovement
+import com.bilt.pos.session.settlement.SettlementStep
+import com.bilt.pos.session.settlement.SettlementTarget
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.test.Test
@@ -174,5 +177,44 @@ class SaleRecordMapperTest {
         val sale = record(result)
 
         assertEquals(listOf(LegType.REBATE, LegType.REDEMPTION), sale.legs.map { it.type })
+    }
+
+    @Test
+    fun giftCardPurchasePersistsItsLoadAndIsNotItemRefundable() {
+        val result = SettlementResult.builder()
+            .success(true)
+            .authorizedAmount(BigDecimal("25.00"))
+            .cardAmountCharged(BigDecimal("25.00"))
+            .storedValueLoadedAmount(BigDecimal("25.00"))
+            .poiTransactionId("poi-card")
+            .finalBasket(Basket.builder()
+                .items(listOf(BasketLineItem.builder()
+                    .itemId("1")
+                    .reference("gift-card-1")
+                    .sku("GIFT-CARD")
+                    .description("Gift card")
+                    .quantity(1)
+                    .unitPrice(BigDecimal("25.00"))
+                    .originalTotal(BigDecimal("25.00"))
+                    .adjustedTotal(BigDecimal("25.00"))
+                    .build()))
+                .build())
+            .movements(listOf(SettlementMovement.builder()
+                .step(SettlementStep.STORED_VALUE_LOAD)
+                .target(SettlementTarget.basketLine("gift-card-1"))
+                .amount(BigDecimal("25.00"))
+                .poiTransactionId("poi-load")
+                .poiTransactionTimestamp(cardTime)
+                .build()))
+            .build()
+
+        val sale = record(result)
+
+        assertEquals(emptyList(), sale.items)
+        val load = sale.giftCardLoads.single()
+        assertEquals("gift-card-1", load.basketReference)
+        assertEquals("25.00", load.amount)
+        assertEquals("poi-load", load.poiTransactionId)
+        assertEquals(cardTime.toString(), load.poiTimestamp)
     }
 }
