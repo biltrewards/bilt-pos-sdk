@@ -22,6 +22,7 @@ import com.bilt.pos.session.SessionException
 import com.bilt.pos.session.Terminal
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketItem
+import com.bilt.pos.session.basket.BasketItemType
 import com.bilt.pos.session.identity.CardAcquisitionOptions
 import com.bilt.pos.session.identity.ForceEntryMode
 import com.bilt.pos.session.identity.IdentifyOptions
@@ -775,7 +776,7 @@ class NexoEmulatorController(
             .disablePoints(!loyalty.redemption)
             .disableAward(!loyalty.award)
         returns.filter { it.allocated.signum() > 0 }.forEach { planned ->
-            optionsBuilder.addRefundAllocation(
+            optionsBuilder.addRefund(
                 if (planned.legType == LegType.CARD) {
                     RefundAllocation.card(planned.allocated, planned.original)
                 } else {
@@ -1147,7 +1148,7 @@ class NexoEmulatorController(
                             .description(item.description)
                             .quantity(item.quantity)
                             .unitPrice(BigDecimal(item.unitPrice))
-                            .credit(true)
+                            .type(BasketItemType.RETURN)
                             .apply { item.category?.let(::category) }
                             .apply { item.taxRate?.let { rate -> taxRate(BigDecimal(rate)) } }
                             .build()
@@ -1609,7 +1610,7 @@ class NexoEmulatorController(
                 // a settlement that sold nothing (returns only) is not a
                 // sale — its movements live on the ORIGINAL sales' refund
                 // history, and an empty record would clutter the Refund tab
-                if (result.finalBasket?.items.orEmpty().none { !it.isCredit }) {
+                if (result.finalBasket?.items.orEmpty().none { it.isSale }) {
                     return@launch
                 }
                 val record = result.toSaleRecord(
@@ -1842,7 +1843,7 @@ class NexoEmulatorController(
                         description = line.description,
                         quantity = line.quantity,
                         lineTotal = line.adjustedTotal.toPlainString(),
-                        credit = line.isCredit,
+                        credit = line.isReturn || line.isCredit,
                     )
                 },
                 basketTotal = basket.grandTotal.toPlainString(),
