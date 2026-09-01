@@ -64,6 +64,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -337,8 +338,11 @@ public final class PaymentOrchestrator {
         // failure reverses earlier loads and the charge-side movements.
         for (StoredValueLoad fulfillment : request.options.getFulfillments()) {
             checkAbort(request);
-            BasketLineItem line = request.basket.getItemByReference(
-                    fulfillment.getBasketReference());
+            BasketLineItem line = Objects.requireNonNull(
+                    request.basket.getItemByReference(fulfillment.getBasketReference()),
+                    () -> "fulfillment references basket line "
+                            + fulfillment.getBasketReference()
+                            + " which is absent from the charge basket");
             BigDecimal amount = line.getOriginalTotal();
             String saleTxnId = beforeStep(request, SettlementStep.STORED_VALUE_LOAD,
                     workingBasket, amount, committed);
