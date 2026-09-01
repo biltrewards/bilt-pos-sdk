@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -91,10 +92,12 @@ public final class ReversalManager {
     private final String currency;
     private final StoredValueManager storedValueManager;
 
-    public ReversalManager(NexoExchange exchange, String currency) {
+    public ReversalManager(NexoExchange exchange, String currency,
+                           StoredValueManager storedValueManager) {
         this.exchange = exchange;
         this.currency = currency;
-        this.storedValueManager = new StoredValueManager(exchange, currency);
+        this.storedValueManager = Objects.requireNonNull(
+                storedValueManager, "storedValueManager");
     }
 
     // ─── Refund ───

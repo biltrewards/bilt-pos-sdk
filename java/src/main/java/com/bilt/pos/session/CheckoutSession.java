@@ -239,9 +239,11 @@ public final class CheckoutSession implements AutoCloseable {
         this.exchange = new NexoExchange(router, factory);
         this.identityManager = new IdentityManager(exchange);
         this.inputManager = new InputManager(exchange);
-        this.reversalManager = new ReversalManager(exchange, builder.currency);
-        this.paymentOrchestrator = new PaymentOrchestrator(exchange, builder.currency);
         this.storedValueManager = new StoredValueManager(exchange, builder.currency);
+        this.reversalManager = new ReversalManager(
+                exchange, builder.currency, storedValueManager);
+        this.paymentOrchestrator = new PaymentOrchestrator(
+                exchange, builder.currency, storedValueManager);
         this.display = new BasketDisplay(exchange, displayRenderer, builder.currency);
         this.autoDisplayPush = new AutoDisplayPush(operations, display,
                 this::basketDisplayIsCurrent);

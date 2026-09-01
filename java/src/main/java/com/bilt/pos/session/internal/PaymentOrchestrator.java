@@ -188,10 +188,12 @@ public final class PaymentOrchestrator {
     private final String currency;
     private final StoredValueManager storedValueManager;
 
-    public PaymentOrchestrator(NexoExchange exchange, String currency) {
+    public PaymentOrchestrator(NexoExchange exchange, String currency,
+                               StoredValueManager storedValueManager) {
         this.exchange = exchange;
         this.currency = currency;
-        this.storedValueManager = new StoredValueManager(exchange, currency);
+        this.storedValueManager = Objects.requireNonNull(
+                storedValueManager, "storedValueManager");
     }
 
     /**
