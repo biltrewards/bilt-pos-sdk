@@ -9,6 +9,8 @@
  */
 package com.bilt.pos.session.basket;
 
+import com.bilt.pos.session.internal.BasketDiscountRules;
+
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.ArrayList;
@@ -269,14 +271,9 @@ public final class BasketItem {
             if (unitPrice.signum() < 0) {
                 throw new IllegalArgumentException("unitPrice must not be negative");
             }
-            BigDecimal gross = unitPrice.multiply(BigDecimal.valueOf(quantity));
-            BigDecimal discountTotal = discounts.stream()
-                    .map(BasketDiscount::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            if (discountTotal.compareTo(gross) > 0) {
-                throw new IllegalArgumentException("discounts total " + discountTotal
-                        + " but line value is only " + gross);
-            }
+            BigDecimal discountTotal = BasketDiscountRules.discountTotal(discounts);
+            BasketDiscountRules.requireDiscountsWithinLineValue(
+                    discountTotal, unitPrice, quantity, sku);
             return new BasketItem(this);
         }
     }

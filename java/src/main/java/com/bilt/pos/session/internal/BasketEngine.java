@@ -162,11 +162,9 @@ public final class BasketEngine implements BasketMutation {
             int newQuantity = existing.quantity + item.getQuantity();
             List<BasketDiscount> newDiscounts = new ArrayList<>(existing.discounts);
             newDiscounts.addAll(item.getDiscounts());
-            if (discountTotal(newDiscounts).compareTo(existing.unitPrice
-                    .multiply(BigDecimal.valueOf(newQuantity))) > 0) {
-                throw new IllegalArgumentException("discounts exceed the upserted line value for "
-                        + item.getSku());
-            }
+            BasketDiscountRules.requireDiscountsWithinLineValue(
+                    BasketDiscountRules.discountTotal(newDiscounts), existing.unitPrice,
+                    newQuantity, item.getSku());
             existing.quantity = newQuantity;
             existing.discounts.addAll(item.getDiscounts());
             if (item.getTaxRate() != null) {
@@ -236,10 +234,9 @@ public final class BasketEngine implements BasketMutation {
         for (BasketDiscount discount : discounts) {
             copy.add(Objects.requireNonNull(discount, "discount"));
         }
-        BigDecimal gross = line.unitPrice.multiply(BigDecimal.valueOf(line.quantity));
-        if (discountTotal(copy).compareTo(gross) > 0) {
-            throw new IllegalArgumentException("discounts exceed the line value for " + line.sku);
-        }
+        BasketDiscountRules.requireDiscountsWithinLineValue(
+                BasketDiscountRules.discountTotal(copy), line.unitPrice,
+                line.quantity, line.sku);
         line.discounts.clear();
         line.discounts.addAll(copy);
         return this;
@@ -252,11 +249,9 @@ public final class BasketEngine implements BasketMutation {
         if (quantity == 0) {
             lines.remove(key(line));
         } else {
-            if (discountTotal(line.discounts).compareTo(line.unitPrice
-                    .multiply(BigDecimal.valueOf(quantity))) > 0) {
-                throw new IllegalArgumentException("quantity would reduce the line below its "
-                        + "register-applied discounts");
-            }
+            BasketDiscountRules.requireDiscountsWithinLineValue(
+                    BasketDiscountRules.discountTotal(line.discounts), line.unitPrice,
+                    quantity, line.sku);
             line.quantity = quantity;
         }
         return this;
@@ -333,7 +328,7 @@ public final class BasketEngine implements BasketMutation {
             BigDecimal lineTotal = line.unitPrice
                     .multiply(BigDecimal.valueOf(line.quantity))
                     .setScale(MONEY_SCALE, ROUNDING);
-            BigDecimal lineDiscount = discountTotal(line.discounts)
+            BigDecimal lineDiscount = BasketDiscountRules.discountTotal(line.discounts)
                     .setScale(MONEY_SCALE, ROUNDING);
             BigDecimal lineSubtotal = lineTotal.subtract(lineDiscount);
             BigDecimal lineTax = lineTax(line, lineSubtotal);
@@ -477,14 +472,6 @@ public final class BasketEngine implements BasketMutation {
             return lineTotal.multiply(line.taxRate).setScale(MONEY_SCALE, ROUNDING);
         }
         return BigDecimal.ZERO.setScale(MONEY_SCALE, ROUNDING);
-    }
-
-    private static BigDecimal discountTotal(List<BasketDiscount> discounts) {
-        BigDecimal total = BigDecimal.ZERO;
-        for (BasketDiscount discount : discounts) {
-            total = total.add(discount.getAmount());
-        }
-        return total;
     }
 
     private void requireUniqueReference(String reference, Line sameLine) {
