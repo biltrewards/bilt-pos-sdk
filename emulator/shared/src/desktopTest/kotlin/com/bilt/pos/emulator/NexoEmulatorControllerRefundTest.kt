@@ -6,6 +6,7 @@ import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorConfig
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.NexoEmulatorController
+import com.bilt.pos.emulator.store.GiftCardLoad
 import com.bilt.pos.emulator.store.JsonlSaleStore
 import com.bilt.pos.emulator.store.LegType
 import com.bilt.pos.emulator.store.RefundRecord
@@ -414,6 +415,48 @@ class NexoEmulatorControllerRefundTest {
                 2,
                 controller.state.value.sales.single().items.single().remainingQuantity,
             )
+        }
+    }
+
+    @Test
+    fun mixedGiftCardSaleRejectsItemReturnsAndPreservesFullRefund() {
+        val store = storeWithOneSale()
+        val original = assertNotNull(store.findSale("sale-1")).sale
+        val mixedSale = original.copy(
+            id = "sale-with-gift-card",
+            authorizedAmount = "27.10",
+            giftCardLoads = listOf(GiftCardLoad(
+                basketReference = "gift-card-1",
+                amount = "25.00",
+                poiTransactionId = "poi-load-1",
+            )),
+        )
+        store.recordSale(mixedSale)
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.addReturnToBasket(mixedSale.id, setOf("SKU-1"))
+
+            withTimeout(10_000) {
+                controller.state.first { state ->
+                    !state.refundInProgress && state.events.any {
+                        "use the full refund to reverse its load and funding together" in it
+                    }
+                }
+            }
+            assertTrue(controller.state.value.basket.isEmpty())
+            assertTrue(assertNotNull(store.findSale(mixedSale.id)).refunds.isEmpty())
+            val sale = assertNotNull(
+                controller.state.value.sales.firstOrNull { it.id == mixedSale.id }
+            )
+            assertTrue(sale.hasGiftCardPurchase)
+            assertTrue(sale.fullRefundAvailable)
         }
     }
 
