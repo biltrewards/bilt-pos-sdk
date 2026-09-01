@@ -76,7 +76,7 @@ public final class ReversalMovement {
     }
 
     public Key key() {
-        return new Key(step, poiTransactionId);
+        return key(step, poiTransactionId);
     }
 
     public static Key key(ReversalStep step, String poiTransactionId) {
