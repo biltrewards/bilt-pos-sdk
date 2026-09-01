@@ -97,7 +97,12 @@ loadScripts(document, 'script');</script>
      .addItem(BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, new BigDecimal("24.99")))
      .removeItemBySku("KRK-FRAME-5X7-BLK")
      .setTaxTotal(new BigDecimal("7.43")));
- </code></pre></div>
+ </code></pre>
+
+ <p>SKU-addressed mutations prefer a unique sale line when a SKU is used by
+ multiple item types. They reject ambiguous SKUs rather than choosing among
+ multiple sale lines, or among multiple non-sale lines when no sale exists;
+ use itemId to address those lines.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">

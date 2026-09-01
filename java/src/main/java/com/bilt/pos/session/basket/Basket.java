@@ -153,22 +153,41 @@ public final class Basket {
 
     /**
      * The line with the given SKU, or {@code null}. When the SKU is present
-     * with multiple types, the sale line is returned. Return and credit
-     * lines can always be addressed by itemId.
+     * with multiple types, a unique sale line is returned. If multiple sale
+     * lines exist, or multiple non-sale lines exist without a sale line, the
+     * SKU is ambiguous and this method throws; use itemId or reference instead.
      */
     public BasketLineItem getItemBySku(String sku) {
-        BasketLineItem returnLine = null;
+        Objects.requireNonNull(sku, "sku");
+        BasketLineItem sale = null;
+        BasketLineItem nonSale = null;
+        boolean multipleNonSales = false;
         for (BasketLineItem item : items) {
             if (item.getSku().equals(sku)) {
                 if (item.isSale()) {
-                    return item;
-                }
-                if (returnLine == null) {
-                    returnLine = item;
+                    if (sale != null) {
+                        throw ambiguousSku(sku);
+                    }
+                    sale = item;
+                } else if (nonSale == null) {
+                    nonSale = item;
+                } else {
+                    multipleNonSales = true;
                 }
             }
         }
-        return returnLine;
+        if (sale != null) {
+            return sale;
+        }
+        if (multipleNonSales) {
+            throw ambiguousSku(sku);
+        }
+        return nonSale;
+    }
+
+    private static IllegalArgumentException ambiguousSku(String sku) {
+        return new IllegalArgumentException("more than one basket item has SKU " + sku
+                + "; use itemId or reference to address a specific line");
     }
 
     public boolean isEmpty() {

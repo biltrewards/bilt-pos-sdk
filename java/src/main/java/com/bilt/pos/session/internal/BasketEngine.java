@@ -429,31 +429,44 @@ public final class BasketEngine implements BasketMutation {
     }
 
     /**
-     * When a SKU is present with multiple types the sale line wins — return
-     * lines are rarer and always deliberate, so they are addressed by
-     * itemId. With one type present, the SKU alone is unambiguous.
+     * A unique sale line wins when a SKU spans item types. Multiple sale
+     * lines, or multiple non-sale lines without a sale, require itemId.
      */
     private Line requireBySku(String sku) {
         Objects.requireNonNull(sku, "sku");
-        Line line = lines.get(key(sku, BasketItemType.SALE));
-        if (line == null) {
-            line = lines.get(key(sku, BasketItemType.RETURN));
-        }
-        if (line == null) {
-            line = lines.get(key(sku, BasketItemType.CREDIT));
-        }
-        if (line == null) {
-            for (Line candidate : lines.values()) {
-                if (candidate.sku.equals(sku)) {
-                    line = candidate;
-                    break;
+        Line sale = null;
+        Line nonSale = null;
+        boolean multipleNonSales = false;
+        for (Line candidate : lines.values()) {
+            if (!candidate.sku.equals(sku)) {
+                continue;
+            }
+            if (candidate.type == BasketItemType.SALE) {
+                if (sale != null) {
+                    throw ambiguousSku(sku);
                 }
+                sale = candidate;
+            } else if (nonSale == null) {
+                nonSale = candidate;
+            } else {
+                multipleNonSales = true;
             }
         }
-        if (line == null) {
+        if (sale != null) {
+            return sale;
+        }
+        if (multipleNonSales) {
+            throw ambiguousSku(sku);
+        }
+        if (nonSale == null) {
             throw new IllegalArgumentException("no basket item with SKU " + sku);
         }
-        return line;
+        return nonSale;
+    }
+
+    private static IllegalArgumentException ambiguousSku(String sku) {
+        return new IllegalArgumentException("more than one basket item has SKU " + sku
+                + "; use itemId to address a specific line");
     }
 
     private static BigDecimal lineTax(Line line, BigDecimal lineTotal) {

@@ -23,6 +23,11 @@ import java.util.List;
  *     .removeItemBySku("KRK-FRAME-5X7-BLK")
  *     .setTaxTotal(new BigDecimal("7.43")));
  * }</pre>
+ *
+ * <p>SKU-addressed mutations prefer a unique sale line when a SKU is used by
+ * multiple item types. They reject ambiguous SKUs rather than choosing among
+ * multiple sale lines, or among multiple non-sale lines when no sale exists;
+ * use itemId to address those lines.</p>
  */
 public interface BasketMutation {
 

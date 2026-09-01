@@ -106,6 +106,12 @@ class BasketEngineTest {
         assertEquals(new BigDecimal("75.00"), basket.getGrandTotal());
         assertEquals("gift-card-1", basket.getItem("1").getReference());
         assertEquals("gift-card-2", basket.getItem("2").getReference());
+        IllegalArgumentException lookupError = assertThrows(IllegalArgumentException.class,
+                () -> basket.getItemBySku("GIFT-CARD"));
+        assertTrue(lookupError.getMessage().contains("use itemId or reference"));
+        IllegalArgumentException mutationError = assertThrows(IllegalArgumentException.class,
+                () -> engine.updateItemQuantityBySku("GIFT-CARD", 2));
+        assertTrue(mutationError.getMessage().contains("use itemId"));
         assertThrows(IllegalArgumentException.class, () -> engine.addItem(
                 BasketItem.sale("GIFT-CARD", "Gift card", 1, new BigDecimal("10.00"))
                         .withReference("gift-card-1")));
@@ -576,7 +582,7 @@ class BasketEngineTest {
     @Test
     void bySkuAddressingPrefersTheSaleLine() {
         BasketEngine engine = new BasketEngine();
-        engine.addItem(candle(2));                                             // itemId 1
+        engine.addItem(candle(2).withReference("sale-1"));                     // itemId 1
         engine.addItem(BasketItem.returnItem(
                 "KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 1, new BigDecimal("24.99")));      // itemId 2
 
