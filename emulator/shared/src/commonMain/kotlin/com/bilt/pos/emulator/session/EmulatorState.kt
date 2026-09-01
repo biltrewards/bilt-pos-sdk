@@ -43,10 +43,23 @@ data class BasketLine(
     val description: String,
     val quantity: Int,
     val lineTotal: String,
-    /** True for a return rung into the basket — the line subtracts, and
-     *  settlement restores its value to the original sale's tender. */
+    /** Compatibility flag for subtractive lines (returns and register
+     *  credits). [type] distinguishes their settlement behavior. */
     val credit: Boolean = false,
+    /** Session-assigned id used for mutations that must target one exact
+     *  line (notably discounts when several referenced gift-card lines use
+     *  the same SKU). */
+    val itemId: String = sku,
+    val type: BasketLineType = if (credit) BasketLineType.RETURN else BasketLineType.SALE,
+    /** Signed pre-discount value and register discount total. */
+    val originalTotal: String = lineTotal,
+    val discountTotal: String = "0.00",
+    val discountLabels: List<String> = emptyList(),
+    /** True when this sale line has a settlement-time stored-value load. */
+    val giftCard: Boolean = false,
 )
+
+enum class BasketLineType { SALE, RETURN, CREDIT }
 
 /** Outcome of the last payment or refund attempt, shown as a popup until
  *  dismissed. */
@@ -254,6 +267,23 @@ interface EmulatorController {
 
     /** Ring up one unit of [product] on the active session. */
     fun addProduct(product: Product)
+
+    /**
+     * Ring a gift-card sale line and arrange for the terminal to activate
+     * and load that card after the basket has been funded. [amount] is the
+     * face value. A blank [cardNumber] asks the terminal to read the card.
+     */
+    fun addGiftCardPurchase(amount: String, cardNumber: String = "")
+
+    /**
+     * Add a register-originated credit associated with the selected sale
+     * line. It is represented as its own credit line because credits reduce
+     * the charge without changing the fulfilled value of a gift-card line.
+     */
+    fun applyCredit(itemId: String, amount: String, label: String = "")
+
+    /** Replace the selected sale line's register discount; zero clears it. */
+    fun applyDiscount(itemId: String, amount: String, label: String = "")
 
     /**
      * Run settlement on the active session. [loyalty] picks which loyalty
