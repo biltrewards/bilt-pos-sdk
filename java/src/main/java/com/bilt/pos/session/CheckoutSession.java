@@ -1820,127 +1820,6 @@ public final class CheckoutSession implements AutoCloseable {
         return endSession(true, normalizedReason);
     }
 
-    private SessionResult<Void> endSession(boolean forced, String reason) {
-        String operationName = forced ? "forceEnd" : "end";
-        return operation(operationName, () -> {
-            String abandonedRecovery = null;
-            lock.lock();
-            try {
-                if (phase == SessionPhase.ENDING || phase == SessionPhase.ENDED) {
-                    throw invalidState(
-                            "the session has already ended; create a new session");
-                }
-                if (moneyMovementInFlight()) {
-                    throw invalidState(operationName + "() is not allowed while money movement "
-                            + "is in flight");
-                }
-                if (forced) {
-                    if (drainInFlight) {
-                        throw invalidState("forceEnd() is not allowed while settlement "
-                                + "recovery is moving money");
-                    }
-                    abandonedRecovery = unresolvedRecoverySummary();
-                } else {
-                    requireRecoveryCompleteForEnd();
-                }
-                phase = SessionPhase.ENDING;
-            } finally {
-                lock.unlock();
-            }
-
-            if (!forced) {
-                try {
-                    exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
-                } catch (RuntimeException e) {
-                    lock.lock();
-                    try {
-                        phase = SessionPhase.OPEN;
-                    } finally {
-                        lock.unlock();
-                    }
-                    throw e;
-                }
-                sealSession(false);
-                return null;
-            }
-
-            try {
-                LOGGER.warning("forceEnd() is abandoning session " + sessionId
-                        + " (reason: " + reason + "); unresolved recovery: "
-                        + abandonedRecovery);
-                exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
-            } finally {
-                // This is the escape hatch: local teardown is final even if
-                // the terminal cannot acknowledge its own cleanup.
-                sealSession(true);
-            }
-            return null;
-        });
-    }
-
-    private void requireRecoveryCompleteForEnd() {
-        if (rollbackIncomplete()) {
-            throw invalidState("a failed payment's rollback is incomplete; "
-                    + "finish the unwind with voidTransaction() before ending "
-                    + "the session");
-        }
-        if (lastPaymentVoidIncomplete) {
-            throw invalidState("a void of the most recent payment is partially "
-                    + "complete; retry voidTransaction() before ending the session");
-        }
-        if (!priorSaleVoidReversedMovements.isEmpty()) {
-            throw invalidState("a prior-sale void is partially complete; retry "
-                    + "voidTransaction(OriginalSaleRecord) with the same original "
-                    + "sale record before ending the session");
-        }
-        if (hasCommittedRefundAllocations()) {
-            throw invalidState("refund allocations from a failed settlement are "
-                    + "committed; retry settle() with the same refund allocations "
-                    + "before ending the session");
-        }
-    }
-
-    private String unresolvedRecoverySummary() {
-        List<String> unresolved = new ArrayList<>();
-        if (!standingMovements.isEmpty()) {
-            unresolved.add(standingMovements.size() + " standing rollback movement(s)");
-        }
-        if (lastPaymentVoidIncomplete) {
-            unresolved.add(guards.reversedMovements().size()
-                    + " reversed same-session void movement(s)");
-        }
-        if (!priorSaleVoidReversedMovements.isEmpty()) {
-            unresolved.add(priorSaleVoidReversedMovements.size()
-                    + " reversed prior-sale void movement(s)");
-        }
-        if (hasCommittedRefundAllocations()) {
-            unresolved.add(committedRefundAllocations.size()
-                    + " committed refund allocation(s)");
-        }
-        return unresolved.isEmpty() ? "none" : String.join(", ", unresolved);
-    }
-
-    private void sealSession(boolean abandonRecovery) {
-        lock.lock();
-        try {
-            if (abandonRecovery) {
-                standingMovements = List.of();
-                committedRefundAllocations = List.of();
-                committedRefundMovements = List.of();
-                lastPaymentVoidIncomplete = false;
-                guards.reset();
-                priorSaleVoidTarget = null;
-                priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();
-            }
-            phase = SessionPhase.ENDED;
-        } finally {
-            lock.unlock();
-        }
-        // no further operations may run; asynchronous submissions after
-        // this fail into their handlers instead of queueing forever
-        operations.shutdown();
-    }
-
     /**
      * Best-effort {@link #end()} for try-with-resources: a failure to send
      * the end signal, or an unresolved movement that refuses {@code end()}, is
@@ -2147,6 +2026,127 @@ public final class CheckoutSession implements AutoCloseable {
     }
 
     // ─── Internals ───
+
+    private SessionResult<Void> endSession(boolean forced, String reason) {
+        String operationName = forced ? "forceEnd" : "end";
+        return operation(operationName, () -> {
+            String abandonedRecovery = null;
+            lock.lock();
+            try {
+                if (phase == SessionPhase.ENDING || phase == SessionPhase.ENDED) {
+                    throw invalidState(
+                            "the session has already ended; create a new session");
+                }
+                if (moneyMovementInFlight()) {
+                    throw invalidState(operationName + "() is not allowed while money movement "
+                            + "is in flight");
+                }
+                if (forced) {
+                    if (drainInFlight) {
+                        throw invalidState("forceEnd() is not allowed while settlement "
+                                + "recovery is moving money");
+                    }
+                    abandonedRecovery = unresolvedRecoverySummary();
+                } else {
+                    requireRecoveryCompleteForEnd();
+                }
+                phase = SessionPhase.ENDING;
+            } finally {
+                lock.unlock();
+            }
+
+            if (!forced) {
+                try {
+                    exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
+                } catch (RuntimeException e) {
+                    lock.lock();
+                    try {
+                        phase = SessionPhase.OPEN;
+                    } finally {
+                        lock.unlock();
+                    }
+                    throw e;
+                }
+                sealSession(false);
+                return null;
+            }
+
+            try {
+                LOGGER.warning("forceEnd() is abandoning session " + sessionId
+                        + " (reason: " + reason + "); unresolved recovery: "
+                        + abandonedRecovery);
+                exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
+            } finally {
+                // This is the escape hatch: local teardown is final even if
+                // the terminal cannot acknowledge its own cleanup.
+                sealSession(true);
+            }
+            return null;
+        });
+    }
+
+    private void requireRecoveryCompleteForEnd() {
+        if (rollbackIncomplete()) {
+            throw invalidState("a failed payment's rollback is incomplete; "
+                    + "finish the unwind with voidTransaction() before ending "
+                    + "the session");
+        }
+        if (lastPaymentVoidIncomplete) {
+            throw invalidState("a void of the most recent payment is partially "
+                    + "complete; retry voidTransaction() before ending the session");
+        }
+        if (!priorSaleVoidReversedMovements.isEmpty()) {
+            throw invalidState("a prior-sale void is partially complete; retry "
+                    + "voidTransaction(OriginalSaleRecord) with the same original "
+                    + "sale record before ending the session");
+        }
+        if (hasCommittedRefundAllocations()) {
+            throw invalidState("refund allocations from a failed settlement are "
+                    + "committed; retry settle() with the same refund allocations "
+                    + "before ending the session");
+        }
+    }
+
+    private String unresolvedRecoverySummary() {
+        List<String> unresolved = new ArrayList<>();
+        if (!standingMovements.isEmpty()) {
+            unresolved.add(standingMovements.size() + " standing rollback movement(s)");
+        }
+        if (lastPaymentVoidIncomplete) {
+            unresolved.add(guards.reversedMovements().size()
+                    + " reversed same-session void movement(s)");
+        }
+        if (!priorSaleVoidReversedMovements.isEmpty()) {
+            unresolved.add(priorSaleVoidReversedMovements.size()
+                    + " reversed prior-sale void movement(s)");
+        }
+        if (hasCommittedRefundAllocations()) {
+            unresolved.add(committedRefundAllocations.size()
+                    + " committed refund allocation(s)");
+        }
+        return unresolved.isEmpty() ? "none" : String.join(", ", unresolved);
+    }
+
+    private void sealSession(boolean abandonRecovery) {
+        lock.lock();
+        try {
+            if (abandonRecovery) {
+                standingMovements = List.of();
+                committedRefundAllocations = List.of();
+                committedRefundMovements = List.of();
+                lastPaymentVoidIncomplete = false;
+                guards.reset();
+                priorSaleVoidTarget = null;
+                priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();
+            }
+            phase = SessionPhase.ENDED;
+        } finally {
+            lock.unlock();
+        }
+        // no further operations may run; asynchronous submissions after
+        // this fail into their handlers instead of queueing forever
+        operations.shutdown();
+    }
 
     private <T> SessionResult<T> operation(String name, Supplier<T> body) {
         return operations.operation(name, body);
