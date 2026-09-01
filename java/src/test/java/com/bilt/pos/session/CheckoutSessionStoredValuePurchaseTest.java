@@ -125,8 +125,10 @@ class CheckoutSessionStoredValuePurchaseTest {
         assertEquals(new BigDecimal("0.00"), result.getFinalBasket().getGrandTotal());
         SaleToPOIRequest onlyRequest = recordedRequest();
         assertNull(onlyRequest.getPaymentRequest());
-        assertEquals("Activate", onlyRequest.getStoredValueRequest()
-                .getStoredValueData()[0].getStoredValueTransactionType().toValue());
+        StoredValueData load = onlyRequest.getStoredValueRequest().getStoredValueData()[0];
+        assertEquals("Activate", load.getStoredValueTransactionType().toValue());
+        assertEquals(25.00, load.getItemAmount(),
+                "the terminal receives the pre-discount face value");
         assertNull(server.takeRequest(200, TimeUnit.MILLISECONDS));
 
         server.enqueue(new MockResponse().setBody(

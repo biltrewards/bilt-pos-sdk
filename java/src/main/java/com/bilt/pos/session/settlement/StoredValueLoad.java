@@ -15,16 +15,17 @@ import java.util.Objects;
 
 /**
  * Settlement-time stored value fulfillment for a referenced sale line. The
- * amount comes from the basket line's original total so commercial value has
- * one source of truth.
+ * card is loaded with the line's original, pre-discount value. Register
+ * discounts reduce only the amount charged to the customer, so a fully
+ * discounted line still loads the card's full face value.
  */
 public final class StoredValueLoad {
 
     public enum Type {
-        /** Activate a new card and load the basket line's value. */
+        /** Activate a new card and load the basket line's pre-discount value. */
         ACTIVATE,
 
-        /** Add the basket line's value to an already active card. */
+        /** Add the basket line's pre-discount value to an already active card. */
         RELOAD
     }
 
