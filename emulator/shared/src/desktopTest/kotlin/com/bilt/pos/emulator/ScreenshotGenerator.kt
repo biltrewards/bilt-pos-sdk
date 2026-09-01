@@ -44,6 +44,9 @@ class ScreenshotGenerator {
         override fun startSession(identifyOnStart: Boolean) = Unit
         override fun endSession() = Unit
         override fun addProduct(product: Product) = Unit
+        override fun addGiftCardPurchase(amount: String, cardNumber: String) = Unit
+        override fun applyCredit(itemId: String, amount: String, label: String) = Unit
+        override fun applyDiscount(itemId: String, amount: String, label: String) = Unit
         override fun settle(
             loyalty: LoyaltyOptions,
             storedValue: StoredValueOptions?,

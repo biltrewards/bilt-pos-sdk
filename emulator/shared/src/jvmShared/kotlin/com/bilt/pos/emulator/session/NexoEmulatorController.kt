@@ -21,6 +21,7 @@ import com.bilt.pos.session.SessionErrorCode
 import com.bilt.pos.session.SessionException
 import com.bilt.pos.session.Terminal
 import com.bilt.pos.session.basket.Basket
+import com.bilt.pos.session.basket.BasketDiscount
 import com.bilt.pos.session.basket.BasketItem
 import com.bilt.pos.session.basket.BasketItemType
 import com.bilt.pos.session.identity.CardAcquisitionOptions
@@ -34,6 +35,8 @@ import com.bilt.pos.session.settlement.SettlementRecovery
 import com.bilt.pos.session.settlement.SettlementResult
 import com.bilt.pos.session.settlement.SettlementStep
 import com.bilt.pos.session.settlement.SettlementType
+import com.bilt.pos.session.settlement.StoredValueLoad
+import com.bilt.pos.session.settlement.StoredValueLoadRecord
 import com.bilt.pos.session.storedvalue.StoredValueCard
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -139,6 +142,14 @@ class NexoEmulatorController(
         val external: BigDecimal,
     )
 
+    /** A gift-card sale line waiting to be activated and loaded when this
+     * checkout settles. The basket reference joins the commercial line to
+     * the card-specific terminal instruction. */
+    private class PendingGiftCard(
+        val basketReference: String,
+        val card: StoredValueCard,
+    )
+
     private class Connection(
         val scope: CoroutineScope,
         val dispatcher: CoroutineDispatcher,
@@ -159,6 +170,10 @@ class NexoEmulatorController(
          *  claim, reads (the sales projection) may race and need a
          *  consistent snapshot. Cleared with the checkout. */
         @Volatile var pendingReturns: List<PendingReturn> = emptyList()
+
+        /** Copy-on-write for the same reason as [pendingReturns]: settle
+         * takes one stable snapshot while UI basket mutations are local. */
+        @Volatile var pendingGiftCards: List<PendingGiftCard> = emptyList()
 
         /** Set by [abort] for the current refund attempt. It covers the
          *  windows the SDK's abort cannot: during the store lookup, the
@@ -621,6 +636,9 @@ class NexoEmulatorController(
                 conn.session = null
                 // unsettled returns are discarded with the basket
                 clearPendingReturns(conn)
+                // and so are gift-card fulfillments whose sale lines were
+                // abandoned with it
+                conn.pendingGiftCards = emptyList()
                 if (connection === conn) {
                     _state.update { it.withCheckoutCleared(lastPayment = null) }
                     log("Checkout session ended")
@@ -662,6 +680,115 @@ class NexoEmulatorController(
             log("Added ${product.name} (${product.priceLabel})")
         } catch (e: Exception) {
             log("Failed to add ${product.name}: ${e.message}")
+            detailedLog(e.stackTraceToString())
+        }
+    }
+
+    override fun addGiftCardPurchase(amount: String, cardNumber: String) {
+        val conn = connection
+        val session = conn?.session
+        if (conn == null || session == null) {
+            log("No active checkout session — press Start Checkout first")
+            return
+        }
+        try {
+            val faceValue = requireMoney(amount, "gift card amount", allowZero = false)
+            val reference = "gift-card-${UUID.randomUUID()}"
+            val item = BasketItem.sale(
+                "GIFT-CARD",
+                "Gift card",
+                1,
+                faceValue,
+            ).withReference(reference)
+            val number = cardNumber.trim()
+            val card = if (number.isEmpty()) {
+                StoredValueCard.swiped()
+            } else {
+                StoredValueCard.number(number)
+            }
+            val basket = session.basket().addItem(item)
+            conn.pendingGiftCards = conn.pendingGiftCards + PendingGiftCard(reference, card)
+            publishBasket(basket)
+            log(
+                "Added gift card purchase ($${faceValue.toPlainString()}, " +
+                    if (number.isEmpty()) "read on terminal at settlement)" else "card $number)"
+            )
+        } catch (e: Exception) {
+            log("Failed to add gift card purchase: ${e.message}")
+            detailedLog(e.stackTraceToString())
+        }
+    }
+
+    override fun applyCredit(itemId: String, amount: String, label: String) {
+        val session = connection?.session
+        if (session == null) {
+            log("No active checkout session — press Start Checkout first")
+            return
+        }
+        try {
+            val value = requireMoney(amount, "credit amount", allowZero = false)
+            val target = session.basket().snapshot().getItem(itemId)
+                ?: throw IllegalArgumentException("no basket item with itemId $itemId")
+            require(target.isSale) { "credits can only be applied to sale lines" }
+            require(value <= target.adjustedTotal) {
+                "credit amount cannot exceed the line's remaining value ${target.adjustedTotal}"
+            }
+            val description = label.trim().ifEmpty { "Credit for ${target.description}" }
+            val credit = BasketItem.credit(
+                "CREDIT-${target.sku}",
+                description,
+                1,
+                value,
+            ).withReference("credit-${UUID.randomUUID()}")
+            publishBasket(session.basket().addItem(credit))
+            log("Applied $description (−$${value.toPlainString()})")
+        } catch (e: Exception) {
+            log("Failed to apply credit: ${e.message}")
+            detailedLog(e.stackTraceToString())
+        }
+    }
+
+    override fun applyDiscount(itemId: String, amount: String, label: String) {
+        val session = connection?.session
+        if (session == null) {
+            log("No active checkout session — press Start Checkout first")
+            return
+        }
+        try {
+            val value = requireMoney(amount, "discount amount", allowZero = true)
+            val snapshot = session.basket().snapshot()
+            val target = snapshot.getItem(itemId)
+                ?: throw IllegalArgumentException("no basket item with itemId $itemId")
+            require(target.isSale) { "discounts can only be applied to sale lines" }
+            val saleSubtotal = snapshot.items.filter { it.isSale && it.itemId != itemId }
+                .fold(target.originalTotal.subtract(value)) { total, line ->
+                    total.add(line.adjustedTotal)
+                }
+            val creditTotal = snapshot.items.filter { it.isCredit }
+                .fold(BigDecimal.ZERO) { total, line ->
+                    total.subtract(line.adjustedTotal)
+                }
+            require(creditTotal <= saleSubtotal) {
+                "discount would make credits exceed the remaining sale value"
+            }
+            val discounts = if (value.signum() == 0) {
+                emptyList()
+            } else {
+                listOf(BasketDiscount.manual(
+                    label.trim().ifEmpty { "Emulator discount" },
+                    value,
+                ))
+            }
+            publishBasket(session.basket().setDiscounts(itemId, discounts))
+            log(
+                if (value.signum() == 0) {
+                    "Cleared discount from ${target.description}"
+                } else {
+                    "Applied discount to ${target.description} (−$${value.toPlainString()})"
+                }
+            )
+        } catch (e: Exception) {
+            log("Failed to apply discount: ${e.message}")
             detailedLog(e.stackTraceToString())
         }
     }
@@ -760,6 +887,7 @@ class NexoEmulatorController(
         // absorbs the returns). One allocation per returned sale, filled
         // in ring order until the required total is covered. Read under
         // the claim, so it matches exactly the credit lines in the basket.
+        val giftCards = conn.pendingGiftCards
         val settlementType =
             if (net) SettlementType.NET else SettlementType.REFUND_THEN_CHARGE
         val required = session.basket().snapshot().getRefundAmount(settlementType)
@@ -803,11 +931,18 @@ class NexoEmulatorController(
                 optionsBuilder.addRefund(RefundAllocation.external(planned.external))
             }
         }
+        giftCards.forEach { pending ->
+            optionsBuilder.addFulfillment(
+                StoredValueLoad.activate(pending.basketReference, pending.card)
+            )
+        }
         val options = optionsBuilder.build()
         log(
             "Starting ${if (net) "net " else ""}settlement — rebates ${onOff(loyalty.rebates)}, " +
                 "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}" +
                 (card?.let { ", gift card ${it.storedValueId ?: "(swipe on terminal)"}" } ?: "") +
+                (if (giftCards.isEmpty()) "" else
+                    ", ${giftCards.size} gift card purchase(s) to activate") +
                 (if (returns.isEmpty()) "" else
                     ", ${returns.size} prior sale(s) returned" +
                         " ($${required.toPlainString()} to refund after netting)")
@@ -842,6 +977,12 @@ class NexoEmulatorController(
                 )
                 giftCard.suggestedTotal
             }
+            .onStoredValueLoaded { movement ->
+                log(
+                    "Gift card activated and loaded: $${movement.amount?.toPlainString()}" +
+                        " (txn ${movement.poiTransactionId})"
+                )
+            }
             .onError { error ->
                 attempt = PaymentAttempt.FAILED
                 if (connection === conn) {
@@ -865,6 +1006,7 @@ class NexoEmulatorController(
                 // the IO write runs.
                 persistSale(session.sessionId, session.member?.memberId, result)
                 val returnParts = recordSettledReturns(conn, returns, result)
+                conn.pendingGiftCards = emptyList()
                 if (connection === conn) {
                     publishPaymentResult(result, returnParts)
                     log("Settlement complete — ending the checkout automatically")
@@ -1041,7 +1183,7 @@ class NexoEmulatorController(
             // back, so it is refused then. Per-leg FULL records are
             // different: they are the residue of a void that failed midway,
             // and the retry omits those references — see executeFullRefund.
-            if (stored.refunds.any { !it.full }) {
+            if (stored.refunds.any { !it.full && !it.reversalProgress }) {
                 log("The sale was already partially refunded — refund the remaining items instead")
                 return@launch
             }
@@ -1049,7 +1191,7 @@ class NexoEmulatorController(
                 log("The sale has returns in the basket — settle or end the checkout first")
                 return@launch
             }
-            if (sale.legs.isEmpty()) {
+            if (sale.legs.isEmpty() && sale.giftCardLoads.isEmpty()) {
                 log("The sale has no recorded movements — nothing to reverse")
                 return@launch
             }
@@ -1307,16 +1449,16 @@ class NexoEmulatorController(
         val sale = stored.sale
         log(
             "Starting full refund of sale ${sale.id.take(8)} — voiding every " +
-                "movement of the prior sale (${sale.legs.size} reference(s))…"
+                "movement of the prior sale " +
+                "(${sale.legs.size + sale.giftCardLoads.size} reference(s))…"
         )
         runRefundSession(conn, sale) { session ->
             // The step a money reversal aborted on. The SDK resumes a
             // partial void only on the same session instance — which this
             // flow closes — so cross-session resume is reconstructed via
-            // the store: reversal order is CARD, STORED_VALUE, then the
-            // loyalty movements, and only money steps abort here, so a
-            // failure at [failedMoneyStep] means every referenced tender
-            // leg ordered before it committed and must not be sent again.
+            // the store. Gift-card loads reverse first, then CARD,
+            // STORED_VALUE, and loyalty; everything ahead of the failed
+            // money step must be omitted from the next session's retry.
             var failedMoneyStep: ReversalStep? = null
             val result = try {
                 session.voidTransaction(originalSaleRecord(sale, stored))
@@ -1326,7 +1468,9 @@ class NexoEmulatorController(
                         // change behavior: a failed tender reversal aborts, a
                         // loyalty movement riding along is skipped (the
                         // terminal can retry it via store-and-forward)
-                        if (step == ReversalStep.CARD || step == ReversalStep.STORED_VALUE) {
+                        if (step == ReversalStep.STORED_VALUE_LOAD ||
+                            step == ReversalStep.CARD || step == ReversalStep.STORED_VALUE
+                        ) {
                             failedMoneyStep = step
                             ReversalDecision.ABORT
                         } else {
@@ -1335,12 +1479,12 @@ class NexoEmulatorController(
                     }
                     .get()
             } catch (e: SessionException) {
-                if (!recordPartialVoid(stored, failedMoneyStep)) {
-                    // the reversed leg has no record: the failure popup must
+                if (!recordPartialVoid(stored, failedMoneyStep, e.error.message)) {
+                    // the reversed movement has no record: the failure popup must
                     // carry the double-reversal warning, not just the error
                     throw SessionException(SessionError(
                         e.error.code,
-                        e.error.message + "\nWARNING: a reversed tender leg could NOT " +
+                        e.error.message + "\nWARNING: a reversed movement could NOT " +
                             "be recorded — retrying the full refund would reverse it again",
                     ))
                 }
@@ -1449,10 +1593,10 @@ class NexoEmulatorController(
     /**
      * The prior sale's persisted terminal references, as the settlement
      * API takes them — MINUS what earlier refunds already reversed: a
-     * tender leg with a full per-leg record, and the award once any record
-     * says it is gone. The SDK reverses only the references supplied, so a
-     * void retried after a partial failure sends just the outstanding
-     * movements instead of re-crediting the reversed ones.
+     * gift-card load recorded as reversed, a tender leg with a full per-leg
+     * record, and the award once any record says it is gone. The SDK
+     * reverses only the references supplied, so a void retried after a
+     * partial failure sends just the outstanding movements.
      */
     private fun originalSaleRecord(sale: SaleRecord, stored: StoredSale): OriginalSaleRecord {
         val builder = OriginalSaleRecord.builder()
@@ -1465,6 +1609,19 @@ class NexoEmulatorController(
                 builder.storedValuePoiTransactionId(it.poiTransactionId)
                 parseInstant(it.poiTimestamp)?.let(builder::storedValuePoiTransactionTimestamp)
             }
+        val reversedLoads = stored.reversedGiftCardLoadIds
+        sale.giftCardLoads.filterNot { it.poiTransactionId in reversedLoads }.forEach { load ->
+            builder.addStoredValueLoad(
+                StoredValueLoadRecord.builder()
+                    .basketReference(load.basketReference)
+                    .amount(BigDecimal(load.amount))
+                    .poiTransactionId(load.poiTransactionId)
+                    .apply {
+                        parseInstant(load.poiTimestamp)?.let(::poiTransactionTimestamp)
+                    }
+                    .build()
+            )
+        }
         sale.leg(LegType.REBATE)?.let {
             builder.rebatePoiTransactionId(it.poiTransactionId)
             parseInstant(it.poiTimestamp)?.let(builder::rebatePoiTransactionTimestamp)
@@ -1482,37 +1639,58 @@ class NexoEmulatorController(
     }
 
     /**
-     * Persists a failed void's progress: the tender legs the void reversed
-     * before aborting on [failedMoneyStep], each as a full per-leg record.
-     * Money legs reverse first and in a fixed order (card, then stored
-     * value), so everything referenced ahead of the failed step committed.
-     * The retry's [originalSaleRecord] then omits those legs; the loyalty
-     * movements never ran (they reverse after the tenders).
+     * Persists a failed void's progress: gift-card loads and the card leg
+     * reversed before [failedMoneyStep]. The retry's [originalSaleRecord]
+     * then omits those movements; loyalty never ran because it follows all
+     * money movements.
      */
-    private fun recordPartialVoid(stored: StoredSale, failedMoneyStep: ReversalStep?): Boolean {
-        if (failedMoneyStep != ReversalStep.STORED_VALUE) {
-            // a CARD failure aborts at the first movement; a pre-step
-            // rejection ran nothing — either way there is no progress
+    private fun recordPartialVoid(
+        stored: StoredSale,
+        failedMoneyStep: ReversalStep?,
+        failureMessage: String,
+    ): Boolean {
+        val sale = stored.sale
+        // The SDK annotates a mid-void error with every POI transaction it
+        // reversed before the failing step. This is needed when the second
+        // of several gift-card loads fails: the step enum alone cannot say
+        // which earlier loads committed.
+        val reversedPrefix = listOf(" was reversed but ", " were reversed but ")
+            .firstOrNull { it in failureMessage }
+            ?.let { marker -> failureMessage.substringBefore(marker) }
+            .orEmpty()
+        val reversedLoads = sale.giftCardLoads.filter {
+            it.poiTransactionId in reversedPrefix &&
+                it.poiTransactionId !in stored.reversedGiftCardLoadIds
+        }.map { it.poiTransactionId }
+        val committedCard = if (failedMoneyStep == ReversalStep.STORED_VALUE) {
+            sale.leg(LegType.CARD)?.takeUnless { stored.legRefunded(LegType.CARD) }
+        } else {
+            null
+        }
+        if (reversedLoads.isEmpty() && committedCard == null) {
             return true
         }
-        val sale = stored.sale
-        val committed = sale.leg(LegType.CARD)
-            ?.takeUnless { stored.legRefunded(LegType.CARD) } ?: return true
         val recorded = recordRefund(sale.id, RefundRecord(
-            amount = committed.amount,
+            amount = committedCard?.amount,
             recordedAt = Instant.now().toString(),
-            full = true,
-            leg = committed.type,
+            full = committedCard != null,
+            leg = committedCard?.type,
             // a void reverses the leg itself: the tender returned exactly
             // what it collected
-            tenderAmount = committed.amount,
+            tenderAmount = committedCard?.amount,
+            reversedGiftCardLoadIds = reversedLoads,
+            reversalProgress = true,
         ))
+        val movements = buildList {
+            if (reversedLoads.isNotEmpty()) add("${reversedLoads.size} gift card load(s)")
+            if (committedCard != null) add("the ${legLabel(committedCard.type)} leg")
+        }.joinToString(" and ")
         log(
             if (recorded) {
-                "The ${legLabel(committed.type)} leg was reversed before the failure — " +
+                "$movements reversed before the failure — " +
                     "recorded; retrying the full refund covers only what is outstanding"
             } else {
-                "WARNING: the ${legLabel(committed.type)} leg was reversed but its " +
+                "WARNING: $movements reversed but the " +
                     "record could NOT be stored — retrying the full refund would " +
                     "reverse it AGAIN"
             }
@@ -1687,6 +1865,9 @@ class NexoEmulatorController(
             if (result.storedValueAmountUsed.signum() > 0) {
                 add("gift card $${result.storedValueAmountUsed.toPlainString()}")
             }
+            if (result.storedValueLoadedAmount.signum() > 0) {
+                add("gift card loaded $${result.storedValueLoadedAmount.toPlainString()}")
+            }
             if (result.totalRebateAmount.signum() > 0) {
                 add("rebates −$${result.totalRebateAmount.toPlainString()}")
             }
@@ -1763,7 +1944,7 @@ class NexoEmulatorController(
         },
         refunded = refunds.isNotEmpty(),
         fullyRefunded = fullyRefunded,
-        fullRefundAvailable = refundable && refunds.all { it.full },
+        fullRefundAvailable = refundable && refunds.all { it.full || it.reversalProgress },
         voided = voided != null,
     )
 
@@ -1800,6 +1981,19 @@ class NexoEmulatorController(
     private fun StoredValueOptions.toCard(): StoredValueCard {
         val number = cardNumber.trim()
         return if (number.isEmpty()) StoredValueCard.swiped() else StoredValueCard.number(number)
+    }
+
+    /** Parses a user-entered USD amount without silently rounding it. */
+    private fun requireMoney(amount: String, field: String, allowZero: Boolean): BigDecimal {
+        val value = try {
+            BigDecimal(amount.trim()).setScale(2, RoundingMode.UNNECESSARY)
+        } catch (_: Exception) {
+            throw IllegalArgumentException("$field must be a decimal amount with at most 2 places")
+        }
+        require(if (allowZero) value.signum() >= 0 else value.signum() > 0) {
+            "$field must be ${if (allowZero) "zero or positive" else "positive"}"
+        }
+        return value
     }
 
     private fun onOff(enabled: Boolean) = if (enabled) "on" else "off"
@@ -1875,6 +2069,9 @@ class NexoEmulatorController(
     )
 
     private fun publishBasket(basket: Basket) {
+        val giftCardReferences = connection?.pendingGiftCards
+            ?.mapTo(mutableSetOf()) { it.basketReference }
+            .orEmpty()
         _state.update { state ->
             state.copy(
                 basket = basket.items.map { line ->
@@ -1884,6 +2081,16 @@ class NexoEmulatorController(
                         quantity = line.quantity,
                         lineTotal = line.adjustedTotal.toPlainString(),
                         credit = line.isReturn || line.isCredit,
+                        itemId = line.itemId,
+                        type = when (line.type) {
+                            BasketItemType.SALE -> BasketLineType.SALE
+                            BasketItemType.RETURN -> BasketLineType.RETURN
+                            BasketItemType.CREDIT -> BasketLineType.CREDIT
+                        },
+                        originalTotal = line.originalTotal.toPlainString(),
+                        discountTotal = line.discountTotal.toPlainString(),
+                        discountLabels = line.discounts.map { it.label },
+                        giftCard = line.reference in giftCardReferences,
                     )
                 },
                 basketTotal = basket.grandTotal.toPlainString(),

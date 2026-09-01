@@ -67,6 +67,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.catalog.minorUnitsToDecimal
+import com.bilt.pos.emulator.session.BasketLine
+import com.bilt.pos.emulator.session.BasketLineType
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
@@ -158,7 +160,10 @@ internal fun EmulatorApp(
                     BasketCard(state, controller, Modifier.fillMaxWidth().weight(1f))
                     when (selectedTab) {
                         EmulatorTab.SALE ->
-                            ProductGrid(products, controller, Modifier.fillMaxWidth().weight(1.1f))
+                            ProductGrid(
+                                products, state, controller,
+                                Modifier.fillMaxWidth().weight(1.1f),
+                            )
                         EmulatorTab.REFUND ->
                             RefundTab(state, controller, Modifier.fillMaxWidth().weight(1.1f))
                     }
@@ -469,6 +474,7 @@ private fun LineItemRow(
     amountLabel: String,
     modifier: Modifier = Modifier,
     leading: @Composable () -> Unit = {},
+    trailing: @Composable () -> Unit = {},
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -481,6 +487,7 @@ private fun LineItemRow(
             modifier = Modifier.weight(1f),
         )
         Text(amountLabel, style = MaterialTheme.typography.bodyMedium)
+        trailing()
     }
 }
 
@@ -805,12 +812,45 @@ private fun StatusIndicators(state: EmulatorState) {
 @Composable
 private fun ProductGrid(
     products: List<Product>,
+    state: EmulatorState,
     controller: EmulatorController,
     modifier: Modifier = Modifier,
 ) {
+    val canRingProducts = state.canRingProducts
+    var showGiftCardDialog by rememberSaveable { mutableStateOf(false) }
+    if (showGiftCardDialog) {
+        GiftCardPurchaseDialog(
+            state = state,
+            controller = controller,
+            onDismiss = { showGiftCardDialog = false },
+        )
+    }
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text("Products", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Products",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = { showGiftCardDialog = true },
+                    enabled = canRingProducts,
+                ) {
+                    Text("Gift card purchase")
+                }
+            }
+            if (state.sessionId == null) {
+                Text(
+                    "Start Checkout to add products to the basket",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             // weight(1f) so the grid measures against the space under the
             // header instead of the card's full height (clips the last rows).
             // Adaptive columns: as many compact bubbles per row as fit.
@@ -823,6 +863,7 @@ private fun ProductGrid(
                 items(products, key = { it.sku }) { product ->
                     Button(
                         onClick = { controller.addProduct(product) },
+                        enabled = canRingProducts,
                         // fixed height so rows stay even when names differ
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -844,11 +885,90 @@ private fun ProductGrid(
 }
 
 @Composable
+private fun GiftCardPurchaseDialog(
+    state: EmulatorState,
+    controller: EmulatorController,
+    onDismiss: () -> Unit,
+) {
+    val canRingProducts = state.canRingProducts
+    var amount by rememberSaveable { mutableStateOf("") }
+    var cardNumber by rememberSaveable { mutableStateOf("") }
+    var consumedReadSequence by rememberSaveable { mutableStateOf(0) }
+    LaunchedEffect(state.acquiredCard) {
+        val read = state.acquiredCard ?: return@LaunchedEffect
+        if (read.sequence > consumedReadSequence) {
+            consumedReadSequence = read.sequence
+            cardNumber = read.number
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Purchase gift card") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "The customer pays the basket price, then the terminal activates " +
+                        "and loads the card with its face value.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                CompactTextField(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    placeholder = "Face value (for example 25.00)",
+                    enabled = !state.paymentInProgress,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CompactTextField(
+                        value = cardNumber,
+                        onValueChange = { cardNumber = it },
+                        placeholder = "Card number (blank = read at settlement)",
+                        enabled = !state.paymentInProgress,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Button(
+                        onClick = { controller.acquireCard() },
+                        enabled = state.sessionId != null && !state.paymentInProgress &&
+                            !state.cardReadInProgress && !state.identifyInProgress,
+                    ) {
+                        Text(if (state.cardReadInProgress) "Reading…" else "Read card")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    controller.addGiftCardPurchase(amount, cardNumber)
+                    onDismiss()
+                },
+                enabled = positiveMoneyMinor(amount) != null && canRingProducts,
+            ) {
+                Text("Add to basket")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+private enum class AdjustmentKind { CREDIT, DISCOUNT }
+
+private data class BasketAdjustment(val line: BasketLine, val kind: AdjustmentKind)
+
+@Composable
 private fun BasketCard(
     state: EmulatorState,
     controller: EmulatorController,
     modifier: Modifier = Modifier,
 ) {
+    var adjustment by remember { mutableStateOf<BasketAdjustment?>(null) }
+    adjustment?.let { selected ->
+        BasketAdjustmentDialog(selected, state, controller) { adjustment = null }
+    }
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
@@ -868,12 +988,53 @@ private fun BasketCard(
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     // keyed on sku AND direction: a mixed basket may hold a
                     // sale line and a return of the same sku side by side
-                    items(state.basket, key = { "${it.sku}:${it.credit}" }) { line ->
+                    items(state.basket, key = { it.itemId }) { line ->
                         LineItemRow(
                             line.quantity,
-                            if (line.credit) "${line.description} (return)" else line.description,
+                            buildString {
+                                append(line.description)
+                                when (line.type) {
+                                    BasketLineType.SALE -> if (line.giftCard) append(" (gift card)")
+                                    BasketLineType.RETURN -> append(" (return)")
+                                    BasketLineType.CREDIT -> append(" (credit)")
+                                }
+                                if (line.discountLabels.isNotEmpty()) {
+                                    append(" · ")
+                                    append(line.discountLabels.joinToString())
+                                    append(" −$")
+                                    append(line.discountTotal)
+                                }
+                            },
                             "$${line.lineTotal}",
                             Modifier.padding(vertical = 2.dp),
+                            trailing = {
+                                if (line.type == BasketLineType.SALE) {
+                                    TextButton(
+                                        onClick = {
+                                            adjustment = BasketAdjustment(
+                                                line, AdjustmentKind.DISCOUNT,
+                                            )
+                                        },
+                                        enabled = state.sessionId != null &&
+                                            !state.paymentInProgress,
+                                        contentPadding = PaddingValues(horizontal = 6.dp),
+                                    ) {
+                                        Text("Discount")
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            adjustment = BasketAdjustment(
+                                                line, AdjustmentKind.CREDIT,
+                                            )
+                                        },
+                                        enabled = state.sessionId != null &&
+                                            !state.paymentInProgress,
+                                        contentPadding = PaddingValues(horizontal = 6.dp),
+                                    ) {
+                                        Text("Credit")
+                                    }
+                                }
+                            },
                         )
                     }
                 }
@@ -883,6 +1044,100 @@ private fun BasketCard(
         }
     }
 }
+
+@Composable
+private fun BasketAdjustmentDialog(
+    adjustment: BasketAdjustment,
+    state: EmulatorState,
+    controller: EmulatorController,
+    onDismiss: () -> Unit,
+) {
+    val line = adjustment.line
+    val discount = adjustment.kind == AdjustmentKind.DISCOUNT
+    var amount by remember(adjustment) {
+        mutableStateOf(
+            if (discount && line.discountTotal != "0.00") {
+                line.discountTotal.removePrefix("-")
+            } else {
+                ""
+            }
+        )
+    }
+    var label by remember(adjustment) {
+        mutableStateOf(
+            if (discount) line.discountLabels.firstOrNull().orEmpty()
+            else "Credit for ${line.description}"
+        )
+    }
+    val enteredMinor = nonNegativeMoneyMinor(amount)
+    val maximumMinor = nonNegativeMoneyMinor(
+        if (discount) line.originalTotal else line.lineTotal
+    ) ?: 0L
+    val valid = enteredMinor != null && enteredMinor <= maximumMinor &&
+        (discount || enteredMinor > 0L)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (discount) "Apply line discount" else "Apply item credit") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "${line.quantity}× ${line.description} · maximum $${minorUnitsToDecimal(maximumMinor)}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                CompactTextField(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    placeholder = if (discount) "Amount (0 clears)" else "Credit amount",
+                    enabled = !state.paymentInProgress,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                CompactTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    placeholder = "Receipt label",
+                    enabled = !state.paymentInProgress,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (discount) {
+                        controller.applyDiscount(line.itemId, amount, label)
+                    } else {
+                        controller.applyCredit(line.itemId, amount, label)
+                    }
+                    onDismiss()
+                },
+                enabled = valid && !state.paymentInProgress,
+            ) {
+                Text(if (discount && enteredMinor == 0L) "Clear" else "Apply")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Exact two-decimal parser for UI validation; controller parsing remains
+ * authoritative and uses BigDecimal on JVM. */
+private fun nonNegativeMoneyMinor(raw: String): Long? {
+    val value = raw.trim()
+    if (!Regex("\\d+(\\.\\d{0,2})?").matches(value)) return null
+    val pieces = value.split('.', limit = 2)
+    val whole = pieces[0].toLongOrNull() ?: return null
+    if (whole > Long.MAX_VALUE / 100) return null
+    val fraction = pieces.getOrNull(1).orEmpty().padEnd(2, '0').ifEmpty { "00" }
+    val minor = whole * 100 + (fraction.toLongOrNull() ?: return null)
+    return minor.takeIf { it >= 0 }
+}
+
+private fun positiveMoneyMinor(raw: String): Long? =
+    nonNegativeMoneyMinor(raw)?.takeIf { it > 0 }
+
+private val EmulatorState.canRingProducts: Boolean
+    get() = sessionId != null && !paymentInProgress && !cardReadInProgress &&
+        !identifyInProgress && !refundInProgress
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
