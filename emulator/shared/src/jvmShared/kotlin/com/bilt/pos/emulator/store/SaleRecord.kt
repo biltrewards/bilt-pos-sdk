@@ -156,6 +156,21 @@ data class StoredSale(
 
     val refundable: Boolean get() = voided == null && !fullyRefunded
 
+    /**
+     * What the [type] tender leg can still return: the amount it collected
+     * minus what earlier refunds already drew from it. Null when unknown
+     * (missing leg or unrecorded amounts) — the acquirer then enforces the
+     * cap. Matters for netted sales, whose tender collected less than the
+     * items' shelf value: a later item refund must not ask the terminal
+     * for more than the transaction took.
+     */
+    fun remainingLegAmount(type: LegType): java.math.BigDecimal? {
+        val collected = sale.leg(type)?.amount?.toBigDecimalOrNull() ?: return null
+        val drawn = refunds.filter { it.leg == type }
+            .sumOf { it.amount?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO }
+        return collected.subtract(drawn).max(java.math.BigDecimal.ZERO)
+    }
+
     /** How much of the sold quantity of [sku] earlier refunds already
      *  returned; what remains is the most a further refund may return. */
     fun refundedQuantity(sku: String): Int =

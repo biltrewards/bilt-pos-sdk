@@ -78,6 +78,16 @@ class NexoEmulatorControllerRefundTest {
                 "PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":34.99},
                     "PaymentAcquirerData":{"ApprovalCode":"APPR02"}}}}}"""
 
+        /** A charge reply echoing the netted amount, so the persisted card
+         *  leg records what the transaction actually collected. */
+        const val PAYMENT_OK_NETTED =
+            """{"SaleToPOIResponse":{"PaymentResponse":{
+                "Response":{"Result":"Success"},
+                "POIData":{"POITransactionID":{"TransactionID":"POI-NET-1",
+                    "TimeStamp":"2026-03-02T16:20:00+00:00"}},
+                "PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":32.75},
+                    "PaymentAcquirerData":{"ApprovalCode":"APPR03"}}}}}"""
+
         const val REVERSAL_FAIL =
             """{"SaleToPOIResponse":{"ReversalResponse":{
                 "Response":{"Result":"Failure","ErrorCondition":"UnavailableService"}}}}"""
@@ -799,6 +809,71 @@ class NexoEmulatorControllerRefundTest {
                 "the lost partial-void record must warn on the popup: ${outcome.message}",
             )
             assertTrue(assertNotNull(backing.findSale("sale-2")).refunds.isEmpty())
+        }
+    }
+
+    @Test
+    fun itemRefundOfANettedSaleCapsTheTenderAtWhatItCollected() {
+        val store = storeWithOneSale()
+        server.dispatcher = respondingWith { body ->
+            if ("\"PaymentRequest\"" in body && "Refund" !in body) PAYMENT_OK_NETTED
+            else defaultResponse(body)
+        }
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            // a netted exchange: buy 34.99, return 2.24 — the card collects
+            // only the 32.75 difference
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+            controller.addProduct(Product("SKU-NEW", "Desk Lamp", 3499, "Grocery"))
+            controller.addReturnToBasket("sale-1", setOf("SKU-1"))
+            withTimeout(10_000) { controller.state.first { s -> s.basket.any { it.credit } } }
+            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+            controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
+            withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome?.success == true }
+            }
+            withTimeout(10_000) { controller.state.first { it.sales.size == 2 } }
+            val netted = store.listSales().first { it.sale.id != "sale-1" }
+            assertEquals("32.75", netted.sale.leg(LegType.CARD)?.amount)
+
+            // returning the lamp from the netted sale: worth 34.99, but the
+            // card can only give back the 32.75 it collected — the register
+            // pays the overflow itself, and the terminal is never over-asked
+            controller.dismissPaymentOutcome()
+            withTimeout(10_000) { controller.state.first { it.sessionId == null } }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+            controller.addReturnToBasket(netted.sale.id, setOf("SKU-NEW"))
+            withTimeout(10_000) { controller.state.first { s -> s.basket.any { it.credit } } }
+            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+            requests.clear()
+            controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(outcome.success, "expected a successful settlement, got: ${outcome.message}")
+            assertTrue(
+                "register-paid" in outcome.message,
+                "the overflow past the tender's cap must be called out: ${outcome.message}",
+            )
+
+            val refundLeg = assertNotNull(
+                requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" in it },
+                "no refund PaymentRequest reached the terminal",
+            )
+            assertTrue(
+                "\"RequestedAmount\":32.75" in refundLeg,
+                "the tender must be asked for what it collected, not shelf value: $refundLeg",
+            )
+            // the full return value is recorded against the netted sale
+            val refund = assertNotNull(store.findSale(netted.sale.id)).refunds.single()
+            assertEquals("34.99", refund.amount)
+            assertEquals(LegType.CARD, refund.leg)
         }
     }
 

@@ -117,11 +117,18 @@ class NexoEmulatorController(
         val legType: LegType,
         val items: List<SaleItem>,
         val amount: BigDecimal,
+        /** What the tender leg can still return (collected minus already
+         *  refunded), captured at ring time; null when unrecorded. A netted
+         *  sale collected less than its items' shelf value, and the
+         *  terminal must not be asked for more than the transaction took. */
+        val legCapacity: BigDecimal?,
     )
 
     /** One returned sale's plan within a settlement: its [total] return
-     *  value, and how much of it goes back to the tender as a refund
-     *  allocation ([allocated]) — the rest is netted against the charge. */
+     *  value, how much goes back to the tender as a refund allocation
+     *  ([allocated], capped by what the tender collected), how much the
+     *  register pays out itself ([external] — the overflow past that cap),
+     *  and the rest is netted against the charge. */
     private class PlannedReturn(
         val saleId: String,
         val original: OriginalSaleRecord,
@@ -129,6 +136,7 @@ class NexoEmulatorController(
         val items: List<SaleItem>,
         val total: BigDecimal,
         val allocated: BigDecimal,
+        val external: BigDecimal,
     )
 
     private class Connection(
@@ -761,13 +769,19 @@ class NexoEmulatorController(
                 .setScale(2, RoundingMode.HALF_UP)
             val allocated = if (total <= unallocated) total else unallocated
             unallocated = unallocated.subtract(allocated)
+            // the tender can only give back what it collected — a netted
+            // sale collected less than shelf value; the overflow is paid
+            // out by the register (an external allocation, no wire)
+            val capacity = group.first().legCapacity
+            val toTender = if (capacity != null && capacity < allocated) capacity else allocated
             PlannedReturn(
                 saleId = group.first().saleId,
                 legType = group.first().legType,
                 original = group.first().original,
                 items = group.flatMap { it.items },
                 total = total,
-                allocated = allocated,
+                allocated = toTender,
+                external = allocated.subtract(toTender),
             )
         }
         val optionsBuilder = SettlementOptions.builder()
@@ -775,14 +789,19 @@ class NexoEmulatorController(
             .disableRebates(!loyalty.rebates)
             .disablePoints(!loyalty.redemption)
             .disableAward(!loyalty.award)
-        returns.filter { it.allocated.signum() > 0 }.forEach { planned ->
-            optionsBuilder.addRefund(
-                if (planned.legType == LegType.CARD) {
-                    RefundAllocation.card(planned.allocated, planned.original)
-                } else {
-                    RefundAllocation.storedValue(planned.allocated, planned.original)
-                }
-            )
+        returns.forEach { planned ->
+            if (planned.allocated.signum() > 0) {
+                optionsBuilder.addRefund(
+                    if (planned.legType == LegType.CARD) {
+                        RefundAllocation.card(planned.allocated, planned.original)
+                    } else {
+                        RefundAllocation.storedValue(planned.allocated, planned.original)
+                    }
+                )
+            }
+            if (planned.external.signum() > 0) {
+                optionsBuilder.addRefund(RefundAllocation.external(planned.external))
+            }
         }
         val options = optionsBuilder.build()
         log(
@@ -1162,6 +1181,7 @@ class NexoEmulatorController(
                     amount = items.fold(BigDecimal.ZERO) { acc, item ->
                         acc.add(refundValue(item, item.quantity))
                     }.setScale(2, RoundingMode.HALF_UP),
+                    legCapacity = stored.remainingLegAmount(leg.type),
                 )
                 publishBasket(session.basket().snapshot())
                 // the sales projection nets rung returns off the remaining
@@ -1220,15 +1240,29 @@ class NexoEmulatorController(
         returns.forEach { planned ->
             val refunded = planned.allocated.signum() > 0
             val movement = if (refunded) movements.getOrNull(movementIndex++) else null
-            parts += when {
-                !refunded ->
-                    "netted $${planned.total.toPlainString()} against the purchase"
-                planned.allocated < planned.total ->
-                    "returned $${planned.total.toPlainString()} " +
-                        "($${planned.allocated.toPlainString()} to the " +
-                        "${legLabel(planned.legType)}, the rest netted)"
-                else ->
-                    "returned $${planned.total.toPlainString()} to the ${legLabel(planned.legType)}"
+            val netted = planned.total.subtract(planned.allocated).subtract(planned.external)
+            parts += if (planned.allocated == planned.total) {
+                "returned $${planned.total.toPlainString()} to the ${legLabel(planned.legType)}"
+            } else if (planned.total.signum() > 0 && planned.allocated.signum() == 0 &&
+                planned.external.signum() == 0
+            ) {
+                "netted $${planned.total.toPlainString()} against the purchase"
+            } else {
+                val details = buildList {
+                    if (refunded) {
+                        add("$${planned.allocated.toPlainString()} to the ${legLabel(planned.legType)}")
+                    }
+                    if (planned.external.signum() > 0) {
+                        add(
+                            "$${planned.external.toPlainString()} register-paid — the " +
+                                "${legLabel(planned.legType)} collected less than the shelf value"
+                        )
+                    }
+                    if (netted.signum() > 0) {
+                        add("$${netted.toPlainString()} netted")
+                    }
+                }
+                "returned $${planned.total.toPlainString()} (${details.joinToString(", ")})"
             }
             recorded = recordRefund(planned.saleId, RefundRecord(
                 // the full return value: the customer received it all, as
