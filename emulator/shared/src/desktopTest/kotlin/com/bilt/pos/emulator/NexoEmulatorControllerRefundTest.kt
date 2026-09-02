@@ -121,6 +121,10 @@ class NexoEmulatorControllerRefundTest {
                 "Response":{"Result":"Success"},
                 "PaymentAccountStatus":{"CurrentBalance":65.00,"Currency":"USD"}}}}"""
 
+        const val STORED_VALUE_BALANCE_ABORTED =
+            """{"SaleToPOIResponse":{"BalanceInquiryResponse":{
+                "Response":{"Result":"Failure","ErrorCondition":"Aborted"}}}}"""
+
         const val STORED_VALUE_REVERSE_OK =
             """{"SaleToPOIResponse":{"StoredValueResponse":{
                 "Response":{"Result":"Success"},
@@ -1168,6 +1172,49 @@ class NexoEmulatorControllerRefundTest {
                 "activation should not load unfunded value: $activate",
             )
             assertTrue(controller.state.value.basket.isEmpty())
+        }
+    }
+
+    @Test
+    fun abortingStoredValueInquiryDoesNotShowFailureOutcome() {
+        val inquiryOnWire = java.util.concurrent.CountDownLatch(1)
+        val abortSeen = java.util.concurrent.CountDownLatch(1)
+        server.dispatcher = respondingWith { body ->
+            when {
+                "\"BalanceInquiryRequest\"" in body -> {
+                    inquiryOnWire.countDown()
+                    abortSeen.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                    STORED_VALUE_BALANCE_ABORTED
+                }
+                "\"AbortRequest\"" in body -> {
+                    abortSeen.countDown()
+                    ADMIN_OK
+                }
+                else -> defaultResponse(body)
+            }
+        }
+        val controller = controller(storeWithOneSale())
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.inquireStoredValueBalance("GC-123")
+            assertTrue(inquiryOnWire.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            controller.abort()
+
+            withTimeout(10_000) {
+                controller.state.first { state ->
+                    !state.storedValueInProgress &&
+                        state.events.any { "Balance inquiry aborted" in it }
+                }
+            }
+            assertTrue(abortSeen.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(null, controller.state.value.paymentOutcome)
+            assertTrue(requests.any { "\"AbortRequest\"" in it })
         }
     }
 
