@@ -67,6 +67,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.catalog.minorUnitsToDecimal
+import com.bilt.pos.emulator.session.BasketLine
+import com.bilt.pos.emulator.session.BasketLineType
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
@@ -76,7 +78,9 @@ import com.bilt.pos.emulator.session.StoredSaleUi
 import com.bilt.pos.emulator.session.StoredValueOptions
 
 /** Top-level screens of the emulator. */
-internal enum class EmulatorTab(val label: String) { SALE("Sale"), REFUND("Refund") }
+internal enum class EmulatorTab(val label: String) {
+    SALE("Sale"), STORED_VALUE("Stored Value"), REFUND("Refund")
+}
 
 /** Width at which tab content switches from stacked to side-by-side panes. */
 private val WIDE_LAYOUT_BREAKPOINT = 700.dp
@@ -148,17 +152,26 @@ internal fun EmulatorApp(
             ) {
                 val sideLog = maxWidth >= SIDE_LOG_BREAKPOINT
                 // The basket sits above the tab content and is shared by
-                // every tab: a settlement may mix new items (Sale tab) with
-                // returns of prior sales (Refund tab) in one basket. The
-                // event log is shared too — its own right-hand column when
-                // the window is wide, stacked below otherwise. Weights, not
-                // fillMaxSize(): a non-weighted child measures against the
-                // full height and would overflow by its siblings' heights.
+                // every tab: a settlement may mix new items (Sale or Stored
+                // Value tabs) with returns of prior sales (Refund tab) in one
+                // basket. The event log is shared too — its own right-hand
+                // column when the window is wide, stacked below otherwise.
+                // Weights, not fillMaxSize(): a non-weighted child measures
+                // against the full height and would overflow by its siblings'
+                // heights.
                 val basketAndTab: @Composable ColumnScope.() -> Unit = {
                     BasketCard(state, controller, Modifier.fillMaxWidth().weight(1f))
                     when (selectedTab) {
                         EmulatorTab.SALE ->
-                            ProductGrid(products, controller, Modifier.fillMaxWidth().weight(1.1f))
+                            ProductGrid(
+                                products, state, controller,
+                                Modifier.fillMaxWidth().weight(1.1f),
+                            )
+                        EmulatorTab.STORED_VALUE ->
+                            StoredValueTab(
+                                state, controller,
+                                Modifier.fillMaxWidth().weight(1.1f),
+                            )
                         EmulatorTab.REFUND ->
                             RefundTab(state, controller, Modifier.fillMaxWidth().weight(1.1f))
                     }
@@ -300,8 +313,11 @@ private fun RefundDetailsCard(
         mutableStateOf(if (fullAvailable) RefundMode.FULL else RefundMode.ITEMS)
     }
     var selectedSkus by remember(sale.id) { mutableStateOf(emptySet<String>()) }
-    // per-item refunds need recorded line items to select from
-    val itemsAvailable = sale.items.isNotEmpty()
+    // Gift-card loads and their funding must stay atomic: the controller
+    // only unwinds them via a full refund, so mixed sales cannot offer their
+    // ordinary merchandise as a separate item refund.
+    val hasRecordedItems = sale.items.isNotEmpty()
+    val itemsAvailable = hasRecordedItems && !sale.hasGiftCardPurchase
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -344,7 +360,15 @@ private fun RefundDetailsCard(
                     mode = RefundMode.ITEMS
                 }
             }
-            if (itemsAvailable) {
+            if (hasRecordedItems) {
+                if (sale.hasGiftCardPurchase) {
+                    Text(
+                        "Contains a gift card purchase — refund the full sale to reverse " +
+                            "the load and its funding together",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(sale.items, key = { it.sku }) { item ->
                         // rows show what a refund can still return: the
@@ -367,8 +391,8 @@ private fun RefundDetailsCard(
                                 // the refundable guard is not redundant with the
                                 // radio's: a refresh can void the sale while the
                                 // mode is already ITEMS
-                                enabled = mode == RefundMode.ITEMS && sale.refundable &&
-                                    item.remainingQuantity > 0,
+                                enabled = itemsAvailable && mode == RefundMode.ITEMS &&
+                                    sale.refundable && item.remainingQuantity > 0,
                             )
                         }
                     }
@@ -469,6 +493,7 @@ private fun LineItemRow(
     amountLabel: String,
     modifier: Modifier = Modifier,
     leading: @Composable () -> Unit = {},
+    trailing: @Composable () -> Unit = {},
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -481,6 +506,7 @@ private fun LineItemRow(
             modifier = Modifier.weight(1f),
         )
         Text(amountLabel, style = MaterialTheme.typography.bodyMedium)
+        trailing()
     }
 }
 
@@ -660,8 +686,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                 val abortButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
                         onClick = { controller.abort() },
-                        enabled = state.paymentInProgress || state.cardReadInProgress ||
-                            state.identifyInProgress || state.refundInProgress,
+                        enabled = state.sessionOperationInProgress,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError,
@@ -669,6 +694,17 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         modifier = modifier,
                     ) {
                         Text("Abort operation")
+                    }
+                }
+                val clearBasketButton: @Composable (Modifier) -> Unit = { modifier ->
+                    Button(
+                        onClick = { controller.clearBasket() },
+                        enabled = state.sessionId != null && state.basket.isNotEmpty() &&
+                            !state.sessionOperationInProgress,
+                        colors = ButtonDefaults.filledTonalButtonColors(),
+                        modifier = modifier,
+                    ) {
+                        Text("Clear basket")
                     }
                 }
                 if (compact) {
@@ -685,7 +721,13 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         connectButton(Modifier.fillMaxWidth())
                         identifyToggle()
                         sessionButton(Modifier.fillMaxWidth())
-                        abortButton(Modifier.fillMaxWidth())
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            clearBasketButton(Modifier.weight(1f))
+                            abortButton(Modifier.weight(1f))
+                        }
                     }
                 } else {
                     // Two rows, one per concern: reaching the terminal, then
@@ -717,6 +759,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                             sessionButton(Modifier)
                             identifyToggle()
                             Spacer(Modifier.weight(1f))
+                            clearBasketButton(Modifier)
                             abortButton(Modifier)
                         }
                     }
@@ -802,18 +845,46 @@ private fun StatusIndicators(state: EmulatorState) {
     }
 }
 
+private enum class StoredValueAction(val label: String) {
+    BALANCE("Balance inquiry"), ACTIVATION("Activation"), PURCHASE("Purchase")
+}
+
+@Composable
+private fun StoredValueTab(
+    state: EmulatorState,
+    controller: EmulatorController,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text("Stored value", style = MaterialTheme.typography.titleMedium)
+            StoredValuePanel(
+                state = state,
+                controller = controller,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
+        }
+    }
+}
+
 @Composable
 private fun ProductGrid(
     products: List<Product>,
+    state: EmulatorState,
     controller: EmulatorController,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text("Products", style = MaterialTheme.typography.titleMedium)
-            // weight(1f) so the grid measures against the space under the
-            // header instead of the card's full height (clips the last rows).
-            // Adaptive columns: as many compact bubbles per row as fit.
+            if (state.sessionId == null) {
+                Text(
+                    "Start Checkout to add products to the basket",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 150.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -823,7 +894,7 @@ private fun ProductGrid(
                 items(products, key = { it.sku }) { product ->
                     Button(
                         onClick = { controller.addProduct(product) },
-                        // fixed height so rows stay even when names differ
+                        enabled = state.canRingProducts,
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                     ) {
@@ -844,11 +915,142 @@ private fun ProductGrid(
 }
 
 @Composable
+private fun StoredValuePanel(
+    state: EmulatorState,
+    controller: EmulatorController,
+    modifier: Modifier = Modifier,
+) {
+    var selectedActionIndex by rememberSaveable {
+        mutableStateOf(StoredValueAction.BALANCE.ordinal)
+    }
+    val action = StoredValueAction.entries[selectedActionIndex]
+    var cardNumber by rememberSaveable { mutableStateOf("") }
+    var amount by rememberSaveable { mutableStateOf("") }
+    var consumedReadSequence by rememberSaveable { mutableStateOf(0) }
+    LaunchedEffect(state.acquiredCard) {
+        val read = state.acquiredCard ?: return@LaunchedEffect
+        if (read.sequence > consumedReadSequence) {
+            consumedReadSequence = read.sequence
+            cardNumber = read.number
+        }
+    }
+    val canOperate = state.sessionId != null && !state.sessionOperationInProgress
+
+    Column(
+        modifier = modifier.padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        TabRow(
+            selectedTabIndex = selectedActionIndex,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            StoredValueAction.entries.forEach { option ->
+                Tab(
+                    selected = option.ordinal == selectedActionIndex,
+                    onClick = { selectedActionIndex = option.ordinal },
+                    text = { Text(option.label) },
+                )
+            }
+        }
+        Text(
+            when (action) {
+                StoredValueAction.BALANCE ->
+                    "Query the available balance without changing the card."
+                StoredValueAction.ACTIVATION ->
+                    "Activate a new card with a zero starting balance."
+                StoredValueAction.PURCHASE ->
+                    "Add a funded card purchase to the basket; activation runs after payment."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CompactTextField(
+                value = cardNumber,
+                onValueChange = { cardNumber = it },
+                placeholder = when (action) {
+                    StoredValueAction.PURCHASE ->
+                        "Card number (blank = read at settlement)"
+                    else -> "Card number (blank = read on terminal)"
+                },
+                enabled = !state.sessionOperationInProgress,
+                modifier = Modifier.weight(1f),
+            )
+            Button(
+                onClick = { controller.acquireCard() },
+                enabled = canOperate,
+            ) {
+                Text(if (state.cardReadInProgress) "Reading…" else "Read card")
+            }
+        }
+        if (action == StoredValueAction.PURCHASE) {
+            CompactTextField(
+                value = amount,
+                onValueChange = { amount = it },
+                placeholder = "Purchase amount (for example 25.00)",
+                enabled = !state.sessionOperationInProgress,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (state.sessionId == null) {
+            Text(
+                "Start Checkout to use stored value operations",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        Button(
+            onClick = {
+                when (action) {
+                    StoredValueAction.BALANCE ->
+                        controller.inquireStoredValueBalance(cardNumber)
+                    StoredValueAction.ACTIVATION ->
+                        controller.activateStoredValue(cardNumber)
+                    StoredValueAction.PURCHASE -> {
+                        controller.addGiftCardPurchase(amount, cardNumber)
+                        amount = ""
+                        cardNumber = ""
+                    }
+                }
+            },
+            enabled = when (action) {
+                StoredValueAction.PURCHASE ->
+                    positiveMoneyMinor(amount) != null && state.canRingProducts
+                else -> canOperate
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                when {
+                    state.storedValueInProgress -> "Working…"
+                    action == StoredValueAction.BALANCE -> "Check balance"
+                    action == StoredValueAction.ACTIVATION -> "Activate card"
+                    else -> "Add purchase to basket"
+                }
+            )
+        }
+    }
+}
+
+private enum class AdjustmentKind { CREDIT, DISCOUNT }
+
+private data class BasketAdjustment(val line: BasketLine, val kind: AdjustmentKind)
+
+@Composable
 private fun BasketCard(
     state: EmulatorState,
     controller: EmulatorController,
     modifier: Modifier = Modifier,
 ) {
+    var adjustment by remember { mutableStateOf<BasketAdjustment?>(null) }
+    adjustment?.let { selected ->
+        BasketAdjustmentDialog(selected, state, controller) { adjustment = null }
+    }
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
@@ -868,12 +1070,55 @@ private fun BasketCard(
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     // keyed on sku AND direction: a mixed basket may hold a
                     // sale line and a return of the same sku side by side
-                    items(state.basket, key = { "${it.sku}:${it.credit}" }) { line ->
+                    items(state.basket, key = { it.itemId }) { line ->
                         LineItemRow(
                             line.quantity,
-                            if (line.credit) "${line.description} (return)" else line.description,
+                            buildString {
+                                append(line.description)
+                                when (line.type) {
+                                    BasketLineType.SALE -> if (line.giftCard) {
+                                        append(" (stored value purchase)")
+                                    }
+                                    BasketLineType.RETURN -> append(" (return)")
+                                    BasketLineType.CREDIT -> append(" (credit)")
+                                }
+                                if (line.discountLabels.isNotEmpty()) {
+                                    append(" · ")
+                                    append(line.discountLabels.joinToString())
+                                    append(" −$")
+                                    append(line.discountTotal)
+                                }
+                            },
                             "$${line.lineTotal}",
                             Modifier.padding(vertical = 2.dp),
+                            trailing = {
+                                if (line.type == BasketLineType.SALE) {
+                                    TextButton(
+                                        onClick = {
+                                            adjustment = BasketAdjustment(
+                                                line, AdjustmentKind.DISCOUNT,
+                                            )
+                                        },
+                                        enabled = state.sessionId != null &&
+                                            !state.paymentInProgress,
+                                        contentPadding = PaddingValues(horizontal = 6.dp),
+                                    ) {
+                                        Text("Discount")
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            adjustment = BasketAdjustment(
+                                                line, AdjustmentKind.CREDIT,
+                                            )
+                                        },
+                                        enabled = state.sessionId != null &&
+                                            !state.paymentInProgress,
+                                        contentPadding = PaddingValues(horizontal = 6.dp),
+                                    ) {
+                                        Text("Credit")
+                                    }
+                                }
+                            },
                         )
                     }
                 }
@@ -883,6 +1128,103 @@ private fun BasketCard(
         }
     }
 }
+
+@Composable
+private fun BasketAdjustmentDialog(
+    adjustment: BasketAdjustment,
+    state: EmulatorState,
+    controller: EmulatorController,
+    onDismiss: () -> Unit,
+) {
+    val line = adjustment.line
+    val discount = adjustment.kind == AdjustmentKind.DISCOUNT
+    var amount by remember(adjustment) {
+        mutableStateOf(
+            if (discount && line.discountTotal != "0.00") {
+                line.discountTotal.removePrefix("-")
+            } else {
+                ""
+            }
+        )
+    }
+    var label by remember(adjustment) {
+        mutableStateOf(
+            if (discount) line.discountLabels.firstOrNull().orEmpty()
+            else "Credit for ${line.description}"
+        )
+    }
+    val enteredMinor = nonNegativeMoneyMinor(amount)
+    val maximumMinor = nonNegativeMoneyMinor(
+        if (discount) line.originalTotal else line.lineTotal
+    ) ?: 0L
+    val valid = enteredMinor != null && enteredMinor <= maximumMinor &&
+        (discount || enteredMinor > 0L)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (discount) "Apply line discount" else "Apply item credit") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "${line.quantity}× ${line.description} · maximum $${minorUnitsToDecimal(maximumMinor)}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                CompactTextField(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    placeholder = if (discount) "Amount (0 clears)" else "Credit amount",
+                    enabled = !state.paymentInProgress,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                CompactTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    placeholder = "Receipt label",
+                    enabled = !state.paymentInProgress,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (discount) {
+                        controller.applyDiscount(line.itemId, amount, label)
+                    } else {
+                        controller.applyCredit(line.itemId, amount, label)
+                    }
+                    onDismiss()
+                },
+                enabled = valid && !state.sessionOperationInProgress,
+            ) {
+                Text(if (discount && enteredMinor == 0L) "Clear" else "Apply")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Exact two-decimal parser for UI validation; controller parsing remains
+ * authoritative and uses BigDecimal on JVM. */
+private fun nonNegativeMoneyMinor(raw: String): Long? {
+    val value = raw.trim()
+    if (!Regex("\\d+(\\.\\d{0,2})?").matches(value)) return null
+    val pieces = value.split('.', limit = 2)
+    val whole = pieces[0].toLongOrNull() ?: return null
+    if (whole > Long.MAX_VALUE / 100) return null
+    val fraction = pieces.getOrNull(1).orEmpty().padEnd(2, '0').ifEmpty { "00" }
+    val minor = whole * 100 + (fraction.toLongOrNull() ?: return null)
+    return minor.takeIf { it >= 0 }
+}
+
+private fun positiveMoneyMinor(raw: String): Long? =
+    nonNegativeMoneyMinor(raw)?.takeIf { it > 0 }
+
+private val EmulatorState.sessionOperationInProgress: Boolean
+    get() = paymentInProgress || cardReadInProgress || storedValueInProgress ||
+        identifyInProgress || refundInProgress
+
+private val EmulatorState.canRingProducts: Boolean
+    get() = sessionId != null && !sessionOperationInProgress
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -906,8 +1248,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
     // no Pay during a card read or identify prompt: the shared operation
     // claim would refuse it
     val canPay = state.sessionId != null && state.basket.isNotEmpty() &&
-        !state.paymentInProgress && !state.cardReadInProgress &&
-        !state.identifyInProgress && !paid
+        !state.sessionOperationInProgress && !paid
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // FlowRow: five labeled checkboxes overflow a narrow card; wrap
@@ -950,8 +1291,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                 )
                 Button(
                     onClick = { controller.acquireCard() },
-                    enabled = state.sessionId != null && !state.paymentInProgress &&
-                        !state.cardReadInProgress && !state.identifyInProgress,
+                    enabled = state.sessionId != null && !state.sessionOperationInProgress,
                 ) {
                     Text("Read card")
                 }
