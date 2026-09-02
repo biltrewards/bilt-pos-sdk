@@ -160,7 +160,7 @@ internal fun EmulatorApp(
                     BasketCard(state, controller, Modifier.fillMaxWidth().weight(1f))
                     when (selectedTab) {
                         EmulatorTab.SALE ->
-                            ProductGrid(
+                            SaleWorkspace(
                                 products, state, controller,
                                 Modifier.fillMaxWidth().weight(1.1f),
                             )
@@ -678,8 +678,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                 val abortButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
                         onClick = { controller.abort() },
-                        enabled = state.paymentInProgress || state.cardReadInProgress ||
-                            state.identifyInProgress || state.refundInProgress,
+                        enabled = state.sessionOperationInProgress,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError,
@@ -693,8 +692,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                     Button(
                         onClick = { controller.clearBasket() },
                         enabled = state.sessionId != null && state.basket.isNotEmpty() &&
-                            !state.paymentInProgress && !state.cardReadInProgress &&
-                            !state.identifyInProgress && !state.refundInProgress,
+                            !state.sessionOperationInProgress,
                         colors = ButtonDefaults.filledTonalButtonColors(),
                         modifier = modifier,
                     ) {
@@ -839,6 +837,53 @@ private fun StatusIndicators(state: EmulatorState) {
     }
 }
 
+private enum class SaleWorkspaceTab(val label: String) {
+    PRODUCTS("Products"), STORED_VALUE("Stored Value")
+}
+
+private enum class StoredValueAction(val label: String) {
+    BALANCE("Balance inquiry"), ACTIVATION("Activation"), PURCHASE("Purchase")
+}
+
+@Composable
+private fun SaleWorkspace(
+    products: List<Product>,
+    state: EmulatorState,
+    controller: EmulatorController,
+    modifier: Modifier = Modifier,
+) {
+    var selectedTabIndex by rememberSaveable { mutableStateOf(SaleWorkspaceTab.PRODUCTS.ordinal) }
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            TabRow(
+                selectedTabIndex = selectedTabIndex,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SaleWorkspaceTab.entries.forEach { tab ->
+                    Tab(
+                        selected = tab.ordinal == selectedTabIndex,
+                        onClick = { selectedTabIndex = tab.ordinal },
+                        text = { Text(tab.label) },
+                    )
+                }
+            }
+            when (SaleWorkspaceTab.entries[selectedTabIndex]) {
+                SaleWorkspaceTab.PRODUCTS -> ProductGrid(
+                    products = products,
+                    state = state,
+                    controller = controller,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
+                SaleWorkspaceTab.STORED_VALUE -> StoredValuePanel(
+                    state = state,
+                    controller = controller,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun ProductGrid(
     products: List<Product>,
@@ -846,67 +891,38 @@ private fun ProductGrid(
     controller: EmulatorController,
     modifier: Modifier = Modifier,
 ) {
-    val canRingProducts = state.canRingProducts
-    var showGiftCardDialog by rememberSaveable { mutableStateOf(false) }
-    if (showGiftCardDialog) {
-        GiftCardPurchaseDialog(
-            state = state,
-            controller = controller,
-            onDismiss = { showGiftCardDialog = false },
-        )
-    }
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "Products",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
+    Column(modifier = modifier) {
+        if (state.sessionId == null) {
+            Text(
+                "Start Checkout to add products to the basket",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        // weight(1f) so the grid measures against the space under the
+        // tabs instead of the card's full height (clips the last rows).
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 150.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(top = 8.dp).weight(1f),
+        ) {
+            items(products, key = { it.sku }) { product ->
                 Button(
-                    onClick = { showGiftCardDialog = true },
-                    enabled = canRingProducts,
+                    onClick = { controller.addProduct(product) },
+                    enabled = state.canRingProducts,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 ) {
-                    Text("Gift card purchase")
-                }
-            }
-            if (state.sessionId == null) {
-                Text(
-                    "Start Checkout to add products to the basket",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            // weight(1f) so the grid measures against the space under the
-            // header instead of the card's full height (clips the last rows).
-            // Adaptive columns: as many compact bubbles per row as fit.
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 150.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(top = 8.dp).weight(1f),
-            ) {
-                items(products, key = { it.sku }) { product ->
-                    Button(
-                        onClick = { controller.addProduct(product) },
-                        enabled = canRingProducts,
-                        // fixed height so rows stay even when names differ
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                product.name,
-                                style = MaterialTheme.typography.labelMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(product.priceLabel, style = MaterialTheme.typography.labelMedium)
-                        }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            product.name,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(product.priceLabel, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -915,14 +931,17 @@ private fun ProductGrid(
 }
 
 @Composable
-private fun GiftCardPurchaseDialog(
+private fun StoredValuePanel(
     state: EmulatorState,
     controller: EmulatorController,
-    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val canRingProducts = state.canRingProducts
-    var amount by rememberSaveable { mutableStateOf("") }
+    var selectedActionIndex by rememberSaveable {
+        mutableStateOf(StoredValueAction.BALANCE.ordinal)
+    }
+    val action = StoredValueAction.entries[selectedActionIndex]
     var cardNumber by rememberSaveable { mutableStateOf("") }
+    var amount by rememberSaveable { mutableStateOf("") }
     var consumedReadSequence by rememberSaveable { mutableStateOf(0) }
     LaunchedEffect(state.acquiredCard) {
         val read = state.acquiredCard ?: return@LaunchedEffect
@@ -931,58 +950,107 @@ private fun GiftCardPurchaseDialog(
             cardNumber = read.number
         }
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Purchase gift card") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    "The customer pays the basket price, then the terminal activates " +
-                        "and loads the card with its face value.",
-                    style = MaterialTheme.typography.bodySmall,
+    val canOperate = state.sessionId != null && !state.sessionOperationInProgress
+
+    Column(
+        modifier = modifier.padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        TabRow(
+            selectedTabIndex = selectedActionIndex,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            StoredValueAction.entries.forEach { option ->
+                Tab(
+                    selected = option.ordinal == selectedActionIndex,
+                    onClick = { selectedActionIndex = option.ordinal },
+                    text = { Text(option.label) },
                 )
-                CompactTextField(
-                    value = amount,
-                    onValueChange = { amount = it },
-                    placeholder = "Face value (for example 25.00)",
-                    enabled = !state.paymentInProgress,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CompactTextField(
-                        value = cardNumber,
-                        onValueChange = { cardNumber = it },
-                        placeholder = "Card number (blank = read at settlement)",
-                        enabled = !state.paymentInProgress,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Button(
-                        onClick = { controller.acquireCard() },
-                        enabled = state.sessionId != null && !state.paymentInProgress &&
-                            !state.cardReadInProgress && !state.identifyInProgress,
-                    ) {
-                        Text(if (state.cardReadInProgress) "Reading…" else "Read card")
+            }
+        }
+        Text(
+            when (action) {
+                StoredValueAction.BALANCE ->
+                    "Query the available balance without changing the card."
+                StoredValueAction.ACTIVATION ->
+                    "Activate a new card with a zero starting balance."
+                StoredValueAction.PURCHASE ->
+                    "Add a funded card purchase to the basket; activation runs after payment."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CompactTextField(
+                value = cardNumber,
+                onValueChange = { cardNumber = it },
+                placeholder = when (action) {
+                    StoredValueAction.PURCHASE ->
+                        "Card number (blank = read at settlement)"
+                    else -> "Card number (blank = read on terminal)"
+                },
+                enabled = !state.sessionOperationInProgress,
+                modifier = Modifier.weight(1f),
+            )
+            Button(
+                onClick = { controller.acquireCard() },
+                enabled = canOperate,
+            ) {
+                Text(if (state.cardReadInProgress) "Reading…" else "Read card")
+            }
+        }
+        if (action == StoredValueAction.PURCHASE) {
+            CompactTextField(
+                value = amount,
+                onValueChange = { amount = it },
+                placeholder = "Purchase amount (for example 25.00)",
+                enabled = !state.sessionOperationInProgress,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (state.sessionId == null) {
+            Text(
+                "Start Checkout to use stored value operations",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        Button(
+            onClick = {
+                when (action) {
+                    StoredValueAction.BALANCE ->
+                        controller.inquireStoredValueBalance(cardNumber)
+                    StoredValueAction.ACTIVATION ->
+                        controller.activateStoredValue(cardNumber)
+                    StoredValueAction.PURCHASE -> {
+                        controller.addGiftCardPurchase(amount, cardNumber)
+                        amount = ""
+                        cardNumber = ""
                     }
                 }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    controller.addGiftCardPurchase(amount, cardNumber)
-                    onDismiss()
-                },
-                enabled = positiveMoneyMinor(amount) != null && canRingProducts,
-            ) {
-                Text("Add to basket")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+            },
+            enabled = when (action) {
+                StoredValueAction.PURCHASE ->
+                    positiveMoneyMinor(amount) != null && state.canRingProducts
+                else -> canOperate
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                when {
+                    state.storedValueInProgress -> "Working…"
+                    action == StoredValueAction.BALANCE -> "Check balance"
+                    action == StoredValueAction.ACTIVATION -> "Activate card"
+                    else -> "Add purchase to basket"
+                }
+            )
+        }
+    }
 }
 
 private enum class AdjustmentKind { CREDIT, DISCOUNT }
@@ -1024,7 +1092,9 @@ private fun BasketCard(
                             buildString {
                                 append(line.description)
                                 when (line.type) {
-                                    BasketLineType.SALE -> if (line.giftCard) append(" (gift card)")
+                                    BasketLineType.SALE -> if (line.giftCard) {
+                                        append(" (stored value purchase)")
+                                    }
                                     BasketLineType.RETURN -> append(" (return)")
                                     BasketLineType.CREDIT -> append(" (credit)")
                                 }
@@ -1140,7 +1210,7 @@ private fun BasketAdjustmentDialog(
                     }
                     onDismiss()
                 },
-                enabled = valid && !state.paymentInProgress,
+                enabled = valid && !state.sessionOperationInProgress,
             ) {
                 Text(if (discount && enteredMinor == 0L) "Clear" else "Apply")
             }
@@ -1165,9 +1235,12 @@ private fun nonNegativeMoneyMinor(raw: String): Long? {
 private fun positiveMoneyMinor(raw: String): Long? =
     nonNegativeMoneyMinor(raw)?.takeIf { it > 0 }
 
+private val EmulatorState.sessionOperationInProgress: Boolean
+    get() = paymentInProgress || cardReadInProgress || storedValueInProgress ||
+        identifyInProgress || refundInProgress
+
 private val EmulatorState.canRingProducts: Boolean
-    get() = sessionId != null && !paymentInProgress && !cardReadInProgress &&
-        !identifyInProgress && !refundInProgress
+    get() = sessionId != null && !sessionOperationInProgress
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1191,8 +1264,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
     // no Pay during a card read or identify prompt: the shared operation
     // claim would refuse it
     val canPay = state.sessionId != null && state.basket.isNotEmpty() &&
-        !state.paymentInProgress && !state.cardReadInProgress &&
-        !state.identifyInProgress && !paid
+        !state.sessionOperationInProgress && !paid
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // FlowRow: five labeled checkboxes overflow a narrow card; wrap
@@ -1235,8 +1307,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                 )
                 Button(
                     onClick = { controller.acquireCard() },
-                    enabled = state.sessionId != null && !state.paymentInProgress &&
-                        !state.cardReadInProgress && !state.identifyInProgress,
+                    enabled = state.sessionId != null && !state.sessionOperationInProgress,
                 ) {
                     Text("Read card")
                 }

@@ -61,8 +61,8 @@ data class BasketLine(
 
 enum class BasketLineType { SALE, RETURN, CREDIT }
 
-/** Outcome of the last payment or refund attempt, shown as a popup until
- *  dismissed. */
+/** Outcome of the last settlement, refund, or stored-value operation,
+ *  shown as a popup until dismissed. */
 data class PaymentOutcome(
     val success: Boolean,
     /** Dialog title, e.g. "Payment successful" or "Refund failed". */
@@ -102,7 +102,7 @@ data class StoredValueOptions(
 
 /**
  * A card read from the terminal (CardAcquisition request) that returned a
- * full card number, published for the gift card field to adopt. [sequence]
+ * full card number, published for stored-value fields to adopt. [sequence]
  * increments per read so re-reading the same card still counts as a new
  * value for UI effects keyed on it.
  */
@@ -201,6 +201,8 @@ data class EmulatorState(
     val paymentInProgress: Boolean = false,
     /** True while a terminal card read (CardAcquisition) is on the wire. */
     val cardReadInProgress: Boolean = false,
+    /** True while a balance inquiry or direct activation is on the wire. */
+    val storedValueInProgress: Boolean = false,
     /** True while the session-start member identification prompt is on the
      *  wire. */
     val identifyInProgress: Boolean = false,
@@ -210,8 +212,8 @@ data class EmulatorState(
      *  paid. A fully collected payment ends the checkout automatically; the
      *  summary stays visible until the next one starts. */
     val lastPayment: String? = null,
-    /** Success/failure of the last payment or refund attempt, rendered as
-     *  a popup until dismissed; cleared when a new attempt starts. */
+    /** Success/failure of the last settlement, refund, or stored-value
+     *  operation, rendered as a popup until dismissed. */
     val paymentOutcome: PaymentOutcome? = null,
     /** Last terminal card read that carried a full card number; the gift
      *  card field adopts each new read. */
@@ -278,6 +280,12 @@ interface EmulatorController {
      */
     fun addGiftCardPurchase(amount: String, cardNumber: String = "")
 
+    /** Query a stored-value card's available balance. Blank reads the card on the terminal. */
+    fun inquireStoredValueBalance(cardNumber: String = "")
+
+    /** Activate a stored-value card with a zero starting balance. Blank reads it on the terminal. */
+    fun activateStoredValue(cardNumber: String = "")
+
     /**
      * Add a register-originated credit associated with the selected sale
      * line. It is represented as its own credit line because credits reduce
@@ -310,7 +318,7 @@ interface EmulatorController {
     /**
      * Read a card on the terminal (nexo CardAcquisition request) without
      * charging it. A read that returns a full card number is published as
-     * [EmulatorState.acquiredCard] so the gift card field can adopt it; a
+     * [EmulatorState.acquiredCard] so stored-value card fields can adopt it; a
      * masked-only read is just logged.
      */
     fun acquireCard()

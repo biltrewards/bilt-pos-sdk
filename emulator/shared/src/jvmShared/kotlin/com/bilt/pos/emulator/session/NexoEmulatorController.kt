@@ -19,6 +19,7 @@ import com.bilt.pos.session.ReversalStep
 import com.bilt.pos.session.SessionError
 import com.bilt.pos.session.SessionErrorCode
 import com.bilt.pos.session.SessionException
+import com.bilt.pos.session.SessionResult
 import com.bilt.pos.session.Terminal
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketDiscount
@@ -110,6 +111,12 @@ class NexoEmulatorController(
      *  RUNNING as aborted (no outcome handler fired). */
     private enum class PaymentAttempt { RUNNING, SUCCEEDED, FAILED }
 
+    private data class StoredValueOutcome(
+        val title: String,
+        val message: String,
+        val event: String = message,
+    )
+
     /** One return rung into the basket: which sale it came from, the
      *  references its refund allocation presents, the tender it restores
      *  to, the returned quantities, and the allocation amount (shelf price
@@ -192,9 +199,9 @@ class NexoEmulatorController(
          *  [session] is only installed once the Start roundtrip acknowledges. */
         val startClaimed = AtomicBoolean(false)
 
-        /** One claim across [pay] and [acquireCard]: the UI's disabled
-         *  states publish only on recomposition, so a quick second tap
-         *  would otherwise queue its prompt behind the in-flight operation.
+        /** One claim across payment, card reads, stored-value operations,
+         *  and refunds: UI disabled states publish only on recomposition,
+         *  so a quick second tap must not queue behind the active operation.
          *  Released by each operation's `onComplete`. */
         val operationClaimed = AtomicBoolean(false)
 
@@ -701,11 +708,7 @@ class NexoEmulatorController(
                 faceValue,
             ).withReference(reference)
             val number = cardNumber.trim()
-            val card = if (number.isEmpty()) {
-                StoredValueCard.swiped()
-            } else {
-                StoredValueCard.number(number)
-            }
+            val card = storedValueCard(number)
             val basket = session.basket().addItem(item)
             conn.pendingGiftCards = conn.pendingGiftCards + PendingGiftCard(reference, card)
             publishBasket(basket)
@@ -716,6 +719,111 @@ class NexoEmulatorController(
         } catch (e: Exception) {
             log("Failed to add gift card purchase: ${e.message}")
             detailedLog(e.stackTraceToString())
+        }
+    }
+
+    override fun inquireStoredValueBalance(cardNumber: String) {
+        runStoredValueOperation(
+            cardNumber = cardNumber,
+            startMessage = "Checking stored value balance…",
+            failureTitle = "Balance inquiry",
+            operation = { session, card -> session.storedValueBalance(card) },
+        ) { result ->
+            val currency = result.currency ?: "USD"
+            val balance = result.balance.setScale(2, RoundingMode.HALF_UP).toPlainString()
+            StoredValueOutcome(
+                title = "Balance inquiry complete",
+                message = "Available balance: $$balance $currency",
+                event = "Stored value balance: $$balance $currency",
+            )
+        }
+    }
+
+    override fun activateStoredValue(cardNumber: String) {
+        runStoredValueOperation(
+            cardNumber = cardNumber,
+            startMessage = "Activating stored value card…",
+            failureTitle = "Activation",
+            operation = { session, card ->
+                session.storedValueActivate(card, BigDecimal.ZERO.setScale(2))
+            },
+        ) { result ->
+            val details = buildList {
+                result.currentBalance?.let { balance ->
+                    val currency = result.currency ?: "USD"
+                    add("balance $${balance.setScale(2, RoundingMode.HALF_UP).toPlainString()} $currency")
+                }
+                result.poiTransactionId?.let { add("txn $it") }
+            }
+            val suffix = if (details.isEmpty()) "" else " (${details.joinToString(", ")})"
+            StoredValueOutcome(
+                title = "Activation complete",
+                message = "Stored value card activated$suffix",
+            )
+        }
+    }
+
+    private fun <T> runStoredValueOperation(
+        cardNumber: String,
+        startMessage: String,
+        failureTitle: String,
+        operation: (CheckoutSession, StoredValueCard) -> SessionResult<T>,
+        describe: (T) -> StoredValueOutcome,
+    ) {
+        val conn = connection
+        val session = conn?.session
+        if (conn == null || session == null) {
+            log("No active checkout session — press Start Checkout first")
+            return
+        }
+        if (!conn.operationClaimed.compareAndSet(false, true)) {
+            log("Another operation is already in progress")
+            return
+        }
+        _state.update {
+            it.copy(storedValueInProgress = true, paymentOutcome = null)
+        }
+        log(startMessage)
+        try {
+            operation(session, storedValueCard(cardNumber))
+                .onSuccess { result ->
+                    if (connection !== conn) return@onSuccess
+                    val outcome = describe(result)
+                    log(outcome.event)
+                    _state.update {
+                        it.copy(paymentOutcome = PaymentOutcome(
+                            success = true,
+                            title = outcome.title,
+                            message = outcome.message,
+                        ))
+                    }
+                }
+                .onError { error ->
+                    if (connection !== conn) return@onError
+                    log("$failureTitle failed: ${error.message}")
+                    error.cause?.let { detailedLog(it.stackTraceToString()) }
+                    _state.update {
+                        it.copy(paymentOutcome = PaymentOutcome(
+                            success = false,
+                            title = "$failureTitle failed",
+                            message = "${error.code}\n${error.message}",
+                        ))
+                    }
+                }
+                .onComplete {
+                    conn.operationClaimed.set(false)
+                    if (connection === conn) {
+                        _state.update { it.copy(storedValueInProgress = false) }
+                    }
+                }
+                .execute()
+        } catch (e: Exception) {
+            conn.operationClaimed.set(false)
+            if (connection === conn) {
+                _state.update { it.copy(storedValueInProgress = false) }
+                log("$failureTitle failed: ${e.message}")
+                detailedLog(e.stackTraceToString())
+            }
         }
     }
 
@@ -1118,7 +1226,7 @@ class NexoEmulatorController(
                             sequence = (it.acquiredCard?.sequence ?: 0) + 1,
                         ))
                     }
-                    log("Card read: $label — filled into the gift card field")
+                    log("Card read: $label — filled into the stored value field")
                 }
             }
             .onError { error ->
@@ -2020,10 +2128,12 @@ class NexoEmulatorController(
     }
 
     /** A typed number is keyed entry; blank hands entry to the terminal. */
-    private fun StoredValueOptions.toCard(): StoredValueCard {
+    private fun storedValueCard(cardNumber: String): StoredValueCard {
         val number = cardNumber.trim()
         return if (number.isEmpty()) StoredValueCard.swiped() else StoredValueCard.number(number)
     }
+
+    private fun StoredValueOptions.toCard(): StoredValueCard = storedValueCard(cardNumber)
 
     /** Parses a user-entered USD amount without silently rounding it. */
     private fun requireMoney(amount: String, field: String, allowZero: Boolean): BigDecimal {
@@ -2089,6 +2199,7 @@ class NexoEmulatorController(
                 tls = TlsStatus.Unknown, // per-connection fact; stale FAILED would outlive it
                 paymentInProgress = false,
                 cardReadInProgress = false,
+                storedValueInProgress = false,
                 identifyInProgress = false,
                 refundInProgress = false,
                 paymentOutcome = null,
