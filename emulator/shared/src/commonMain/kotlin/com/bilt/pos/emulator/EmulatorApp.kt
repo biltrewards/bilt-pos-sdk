@@ -82,7 +82,9 @@ import com.bilt.pos.emulator.session.StoredSaleUi
 import com.bilt.pos.emulator.session.StoredValueOptions
 
 /** Top-level screens of the emulator. */
-internal enum class EmulatorTab(val label: String) { SALE("Sale"), REFUND("Refund") }
+internal enum class EmulatorTab(val label: String) {
+    SALE("Sale"), STORED_VALUE("Stored Value"), REFUND("Refund")
+}
 
 /** The two ways the Sale tab rings an item up: off the catalog grid, or by
  *  keying an amount. */
@@ -226,12 +228,13 @@ internal fun EmulatorApp(
             ) {
                 val sideLog = maxWidth >= SIDE_LOG_BREAKPOINT
                 // The basket sits above the tab content and is shared by
-                // every tab: a settlement may mix new items (Sale tab) with
-                // returns of prior sales (Refund tab) in one basket. The
-                // event log is shared too — its own right-hand column when
-                // the window is wide, stacked below otherwise. Weights, not
-                // fillMaxSize(): a non-weighted child measures against the
-                // full height and would overflow by its siblings' heights.
+                // every tab: a settlement may mix new items (Sale or Stored
+                // Value tabs) with returns of prior sales (Refund tab) in one
+                // basket. The event log is shared too — its own right-hand
+                // column when the window is wide, stacked below otherwise.
+                // Weights, not fillMaxSize(): a non-weighted child measures
+                // against the full height and would overflow by its siblings'
+                // heights.
                 val basketAndTab: @Composable ColumnScope.() -> Unit = {
                     BasketCard(
                         state = state,
@@ -248,7 +251,7 @@ internal fun EmulatorApp(
                     )
                     when (selectedTab) {
                         EmulatorTab.SALE ->
-                            SaleWorkspace(
+                            SaleTab(
                                 products = products,
                                 state = state,
                                 controller = controller,
@@ -256,6 +259,11 @@ internal fun EmulatorApp(
                                 selectedPane = SaleTabPane.entries[salePaneIndex],
                                 onSelectPane = { salePaneIndex = it.ordinal },
                                 modifier = Modifier.fillMaxWidth().weight(1.1f),
+                            )
+                        EmulatorTab.STORED_VALUE ->
+                            StoredValueTab(
+                                state, controller,
+                                Modifier.fillMaxWidth().weight(1.1f),
                             )
                         EmulatorTab.REFUND ->
                             RefundTab(state, controller, Modifier.fillMaxWidth().weight(1.1f))
@@ -930,55 +938,24 @@ private fun StatusIndicators(state: EmulatorState) {
     }
 }
 
-private enum class SaleWorkspaceTab(val label: String) {
-    PRODUCTS("Products"), STORED_VALUE("Stored Value")
-}
-
 private enum class StoredValueAction(val label: String) {
     BALANCE("Balance inquiry"), ACTIVATION("Activation"), PURCHASE("Purchase")
 }
 
 @Composable
-private fun SaleWorkspace(
-    products: List<Product>,
+private fun StoredValueTab(
     state: EmulatorState,
     controller: EmulatorController,
-    keypad: KeypadEntry,
-    selectedPane: SaleTabPane,
-    onSelectPane: (SaleTabPane) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedTabIndex by rememberSaveable { mutableStateOf(SaleWorkspaceTab.PRODUCTS.ordinal) }
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
-            TabRow(
-                selectedTabIndex = selectedTabIndex,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                SaleWorkspaceTab.entries.forEach { tab ->
-                    Tab(
-                        selected = tab.ordinal == selectedTabIndex,
-                        onClick = { selectedTabIndex = tab.ordinal },
-                        text = { Text(tab.label) },
-                    )
-                }
-            }
-            when (SaleWorkspaceTab.entries[selectedTabIndex]) {
-                SaleWorkspaceTab.PRODUCTS -> SaleTab(
-                    products = products,
-                    state = state,
-                    controller = controller,
-                    keypad = keypad,
-                    selectedPane = selectedPane,
-                    onSelectPane = onSelectPane,
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                )
-                SaleWorkspaceTab.STORED_VALUE -> StoredValuePanel(
-                    state = state,
-                    controller = controller,
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                )
-            }
+            Text("Stored value", style = MaterialTheme.typography.titleMedium)
+            StoredValuePanel(
+                state = state,
+                controller = controller,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
         }
     }
 }
