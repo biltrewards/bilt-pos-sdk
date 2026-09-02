@@ -107,6 +107,20 @@ class NexoEmulatorControllerRefundTest {
                     "ItemAmount":25.00,"Currency":"USD",
                     "StoredValueAccountStatus":{"CurrentBalance":25.00}}]}}}"""
 
+        const val STORED_VALUE_ACTIVATE_OK =
+            """{"SaleToPOIResponse":{"StoredValueResponse":{
+                "Response":{"Result":"Success"},
+                "POIData":{"POITransactionID":{"TransactionID":"POI-GIFT-ACTIVATE",
+                    "TimeStamp":"2026-03-02T16:29:01+00:00"}},
+                "StoredValueResult":[{"StoredValueTransactionType":"Activate",
+                    "ItemAmount":0.00,"Currency":"USD",
+                    "StoredValueAccountStatus":{"CurrentBalance":0.00}}]}}}"""
+
+        const val STORED_VALUE_BALANCE_OK =
+            """{"SaleToPOIResponse":{"BalanceInquiryResponse":{
+                "Response":{"Result":"Success"},
+                "PaymentAccountStatus":{"CurrentBalance":65.00,"Currency":"USD"}}}}"""
+
         const val STORED_VALUE_REVERSE_OK =
             """{"SaleToPOIResponse":{"StoredValueResponse":{
                 "Response":{"Result":"Success"},
@@ -1091,6 +1105,69 @@ class NexoEmulatorControllerRefundTest {
                 requests.none { "\"StoredValueRequest\"" in it },
                 "cleared gift card was still fulfilled",
             )
+        }
+    }
+
+    @Test
+    fun storedValueBalanceAndActivationRunWithoutBasketLines() {
+        server.dispatcher = respondingWith { body ->
+            when {
+                "\"BalanceInquiryRequest\"" in body -> STORED_VALUE_BALANCE_OK
+                "\"StoredValueRequest\"" in body && "\"Activate\"" in body ->
+                    STORED_VALUE_ACTIVATE_OK
+                else -> defaultResponse(body)
+            }
+        }
+        val controller = controller(storeWithOneSale())
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.inquireStoredValueBalance("GC-123")
+
+            val balance = withTimeout(10_000) {
+                controller.state.first {
+                    it.paymentOutcome?.title == "Balance inquiry complete"
+                }.paymentOutcome!!
+            }
+            assertTrue(balance.success)
+            assertTrue("Available balance: $65.00 USD" in balance.message, balance.message)
+            withTimeout(10_000) {
+                controller.state.first { !it.storedValueInProgress }
+            }
+            val inquiry = assertNotNull(
+                requests.firstOrNull { "\"BalanceInquiryRequest\"" in it }
+            )
+            assertTrue("GC-123" in inquiry)
+
+            controller.dismissPaymentOutcome()
+            controller.activateStoredValue("GC-123")
+
+            val activation = withTimeout(10_000) {
+                controller.state.first {
+                    it.paymentOutcome?.title == "Activation complete"
+                }.paymentOutcome!!
+            }
+            assertTrue(activation.success)
+            assertTrue("Stored value card activated" in activation.message)
+            withTimeout(10_000) {
+                controller.state.first { !it.storedValueInProgress }
+            }
+            val activate = assertNotNull(
+                requests.firstOrNull {
+                    "\"StoredValueRequest\"" in it && "\"Activate\"" in it
+                }
+            )
+            assertTrue("GC-123" in activate)
+            assertTrue(
+                Regex("\"ItemAmount\"\\s*:\\s*0(?:\\.0)?").containsMatchIn(activate),
+                "activation should not load unfunded value: $activate",
+            )
+            assertTrue(controller.state.value.basket.isEmpty())
         }
     }
 

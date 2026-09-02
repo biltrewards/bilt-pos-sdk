@@ -45,6 +45,8 @@ class ScreenshotGenerator {
         override fun endSession() = Unit
         override fun addProduct(product: Product) = Unit
         override fun addGiftCardPurchase(amount: String, cardNumber: String) = Unit
+        override fun inquireStoredValueBalance(cardNumber: String) = Unit
+        override fun activateStoredValue(cardNumber: String) = Unit
         override fun applyCredit(itemId: String, amount: String, label: String) = Unit
         override fun applyDiscount(itemId: String, amount: String, label: String) = Unit
         override fun settle(
