@@ -78,7 +78,9 @@ import com.bilt.pos.emulator.session.StoredSaleUi
 import com.bilt.pos.emulator.session.StoredValueOptions
 
 /** Top-level screens of the emulator. */
-internal enum class EmulatorTab(val label: String) { SALE("Sale"), REFUND("Refund") }
+internal enum class EmulatorTab(val label: String) {
+    SALE("Sale"), STORED_VALUE("Stored Value"), REFUND("Refund")
+}
 
 /** Width at which tab content switches from stacked to side-by-side panes. */
 private val WIDE_LAYOUT_BREAKPOINT = 700.dp
@@ -150,18 +152,24 @@ internal fun EmulatorApp(
             ) {
                 val sideLog = maxWidth >= SIDE_LOG_BREAKPOINT
                 // The basket sits above the tab content and is shared by
-                // every tab: a settlement may mix new items (Sale tab) with
-                // returns of prior sales (Refund tab) in one basket. The
-                // event log is shared too — its own right-hand column when
-                // the window is wide, stacked below otherwise. Weights, not
-                // fillMaxSize(): a non-weighted child measures against the
-                // full height and would overflow by its siblings' heights.
+                // every tab: a settlement may mix new items (Sale or Stored
+                // Value tabs) with returns of prior sales (Refund tab) in one
+                // basket. The event log is shared too — its own right-hand
+                // column when the window is wide, stacked below otherwise.
+                // Weights, not fillMaxSize(): a non-weighted child measures
+                // against the full height and would overflow by its siblings'
+                // heights.
                 val basketAndTab: @Composable ColumnScope.() -> Unit = {
                     BasketCard(state, controller, Modifier.fillMaxWidth().weight(1f))
                     when (selectedTab) {
                         EmulatorTab.SALE ->
-                            SaleWorkspace(
+                            ProductGrid(
                                 products, state, controller,
+                                Modifier.fillMaxWidth().weight(1.1f),
+                            )
+                        EmulatorTab.STORED_VALUE ->
+                            StoredValueTab(
+                                state, controller,
                                 Modifier.fillMaxWidth().weight(1.1f),
                             )
                         EmulatorTab.REFUND ->
@@ -837,49 +845,24 @@ private fun StatusIndicators(state: EmulatorState) {
     }
 }
 
-private enum class SaleWorkspaceTab(val label: String) {
-    PRODUCTS("Products"), STORED_VALUE("Stored Value")
-}
-
 private enum class StoredValueAction(val label: String) {
     BALANCE("Balance inquiry"), ACTIVATION("Activation"), PURCHASE("Purchase")
 }
 
 @Composable
-private fun SaleWorkspace(
-    products: List<Product>,
+private fun StoredValueTab(
     state: EmulatorState,
     controller: EmulatorController,
     modifier: Modifier = Modifier,
 ) {
-    var selectedTabIndex by rememberSaveable { mutableStateOf(SaleWorkspaceTab.PRODUCTS.ordinal) }
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
-            TabRow(
-                selectedTabIndex = selectedTabIndex,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                SaleWorkspaceTab.entries.forEach { tab ->
-                    Tab(
-                        selected = tab.ordinal == selectedTabIndex,
-                        onClick = { selectedTabIndex = tab.ordinal },
-                        text = { Text(tab.label) },
-                    )
-                }
-            }
-            when (SaleWorkspaceTab.entries[selectedTabIndex]) {
-                SaleWorkspaceTab.PRODUCTS -> ProductGrid(
-                    products = products,
-                    state = state,
-                    controller = controller,
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                )
-                SaleWorkspaceTab.STORED_VALUE -> StoredValuePanel(
-                    state = state,
-                    controller = controller,
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                )
-            }
+            Text("Stored value", style = MaterialTheme.typography.titleMedium)
+            StoredValuePanel(
+                state = state,
+                controller = controller,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
         }
     }
 }
@@ -891,38 +874,39 @@ private fun ProductGrid(
     controller: EmulatorController,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier) {
-        if (state.sessionId == null) {
-            Text(
-                "Start Checkout to add products to the basket",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-        // weight(1f) so the grid measures against the space under the
-        // tabs instead of the card's full height (clips the last rows).
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 150.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.padding(top = 8.dp).weight(1f),
-        ) {
-            items(products, key = { it.sku }) { product ->
-                Button(
-                    onClick = { controller.addProduct(product) },
-                    enabled = state.canRingProducts,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            product.name,
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(product.priceLabel, style = MaterialTheme.typography.labelMedium)
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text("Products", style = MaterialTheme.typography.titleMedium)
+            if (state.sessionId == null) {
+                Text(
+                    "Start Checkout to add products to the basket",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 150.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(top = 8.dp).weight(1f),
+            ) {
+                items(products, key = { it.sku }) { product ->
+                    Button(
+                        onClick = { controller.addProduct(product) },
+                        enabled = state.canRingProducts,
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                product.name,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(product.priceLabel, style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
             }
