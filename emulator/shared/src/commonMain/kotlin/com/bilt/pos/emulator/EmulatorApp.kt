@@ -782,6 +782,18 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         Text("Abort operation")
                     }
                 }
+                val clearBasketButton: @Composable (Modifier) -> Unit = { modifier ->
+                    Button(
+                        onClick = { controller.clearBasket() },
+                        enabled = state.sessionId != null && state.basket.isNotEmpty() &&
+                            !state.paymentInProgress && !state.cardReadInProgress &&
+                            !state.identifyInProgress && !state.refundInProgress,
+                        colors = ButtonDefaults.filledTonalButtonColors(),
+                        modifier = modifier,
+                    ) {
+                        Text("Clear basket")
+                    }
+                }
                 if (compact) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -796,7 +808,13 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         connectButton(Modifier.fillMaxWidth())
                         identifyToggle()
                         sessionButton(Modifier.fillMaxWidth())
-                        abortButton(Modifier.fillMaxWidth())
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            clearBasketButton(Modifier.weight(1f))
+                            abortButton(Modifier.weight(1f))
+                        }
                     }
                 } else {
                     // Two rows, one per concern: reaching the terminal, then
@@ -828,6 +846,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                             sessionButton(Modifier)
                             identifyToggle()
                             Spacer(Modifier.weight(1f))
+                            clearBasketButton(Modifier)
                             abortButton(Modifier)
                         }
                     }

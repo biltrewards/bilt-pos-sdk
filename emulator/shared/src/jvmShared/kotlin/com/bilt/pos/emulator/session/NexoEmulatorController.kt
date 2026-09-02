@@ -1899,6 +1899,31 @@ class NexoEmulatorController(
     private fun parseInstant(iso: String?): Instant? =
         iso?.let { runCatching { Instant.parse(it) }.getOrNull() }
 
+    override fun clearBasket() {
+        val conn = connection
+        val session = conn?.session
+        if (conn == null || session == null) {
+            log("No active checkout session — press Start Checkout first")
+            return
+        }
+        if (!conn.operationClaimed.compareAndSet(false, true)) {
+            log("Another operation is already in progress")
+            return
+        }
+        try {
+            val basket = session.basket().clear()
+            conn.pendingGiftCards = emptyList()
+            clearPendingReturns(conn)
+            publishBasket(basket)
+            log("Basket cleared")
+        } catch (e: Exception) {
+            log("Failed to clear basket: ${e.message}")
+            detailedLog(e.stackTraceToString())
+        } finally {
+            conn.operationClaimed.set(false)
+        }
+    }
+
     override fun abort() {
         val conn = connection
         if (conn == null) {
