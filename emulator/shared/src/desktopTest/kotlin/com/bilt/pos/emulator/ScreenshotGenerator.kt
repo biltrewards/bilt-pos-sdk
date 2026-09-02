@@ -49,6 +49,8 @@ class ScreenshotGenerator {
         override fun updateCustomItemPrice(sku: String, priceMinor: Long) = true
         override fun removeCustomItem(sku: String) = true
         override fun addGiftCardPurchase(amount: String, cardNumber: String) = Unit
+        override fun inquireStoredValueBalance(cardNumber: String) = Unit
+        override fun activateStoredValue(cardNumber: String) = Unit
         override fun applyCredit(itemId: String, amount: String, label: String) = Unit
         override fun applyDiscount(itemId: String, amount: String, label: String) = Unit
         override fun settle(
