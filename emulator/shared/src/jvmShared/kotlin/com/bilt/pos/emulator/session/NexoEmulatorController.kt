@@ -800,6 +800,10 @@ class NexoEmulatorController(
                 }
                 .onError { error ->
                     if (connection !== conn) return@onError
+                    if (error.code == SessionErrorCode.ABORTED) {
+                        log("$failureTitle aborted")
+                        return@onError
+                    }
                     log("$failureTitle failed: ${error.message}")
                     error.cause?.let { detailedLog(it.stackTraceToString()) }
                     _state.update {
