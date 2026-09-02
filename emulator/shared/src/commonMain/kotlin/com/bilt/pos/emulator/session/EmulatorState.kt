@@ -338,6 +338,12 @@ interface EmulatorController {
     fun addReturnToBasket(saleId: String, skus: Set<String>)
 
     /**
+     * Discard every line in the active checkout basket, including pending
+     * gift-card fulfillments and returns associated with those lines.
+     */
+    fun clearBasket()
+
+    /**
      * Abort whatever is in flight, mirroring the SDK's operation-scoped
      * `abort()`: an aborted payment has its committed steps reversed and
      * the session settles retryable — the basket stays intact and Pay may

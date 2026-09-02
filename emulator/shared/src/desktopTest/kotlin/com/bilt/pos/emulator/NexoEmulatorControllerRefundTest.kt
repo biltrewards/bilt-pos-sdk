@@ -1042,6 +1042,59 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
+    fun clearBasketDiscardsPendingReturnsAndGiftCardLoads() {
+        val store = storeWithOneSale()
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.addReturnToBasket("sale-1", setOf("SKU-1"))
+            withTimeout(10_000) {
+                controller.state.first { state ->
+                    !state.refundInProgress && state.basket.any {
+                        it.type == BasketLineType.RETURN
+                    }
+                }
+            }
+            controller.addGiftCardPurchase("25.00", "GC-123")
+            assertEquals(2, controller.state.value.basket.size)
+
+            controller.clearBasket()
+
+            val cleared = controller.state.value
+            assertTrue(cleared.basket.isEmpty())
+            assertEquals("0.00", cleared.basketTotal)
+            assertEquals("0.00", cleared.basketTax)
+            assertTrue(cleared.events.any { "Basket cleared" in it })
+            withTimeout(10_000) {
+                controller.state.first { state ->
+                    state.sales.single().items.single().remainingQuantity == 2
+                }
+            }
+            assertTrue(assertNotNull(store.findSale("sale-1")).refunds.isEmpty())
+
+            controller.addProduct(Product("SKU-NEW", "Desk Lamp", 3_499, "Grocery"))
+            requests.clear()
+            controller.settle(
+                LoyaltyOptions(rebates = false, redemption = false, award = false)
+            )
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(outcome.success, outcome.message)
+            assertTrue(
+                requests.none { "\"StoredValueRequest\"" in it },
+                "cleared gift card was still fulfilled",
+            )
+        }
+    }
+
+    @Test
     fun giftCardPurchaseFundsThenActivatesAndPersistsTheLoad() {
         val store = JsonlSaleStore(
             Files.createTempDirectory("gift-purchase-e2e").resolve("sales.jsonl").toFile()

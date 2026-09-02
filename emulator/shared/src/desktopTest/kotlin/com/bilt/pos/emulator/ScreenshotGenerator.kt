@@ -55,6 +55,7 @@ class ScreenshotGenerator {
         override fun acquireCard() = Unit
         override fun refundSale(saleId: String) = Unit
         override fun addReturnToBasket(saleId: String, skus: Set<String>) = Unit
+        override fun clearBasket() = Unit
         override fun abort() = Unit
         override fun dismissPaymentOutcome() = Unit
     }
