@@ -12,9 +12,10 @@ package com.bilt.pos.session;
 /**
  * Describes why a session operation failed.
  *
- * <p>Delivered to {@code onError} handlers and carried by
- * {@link SessionException} when a failed result is unwrapped via
- * {@link SessionResult#get()}.</p>
+ * <p>Delivered directly to ordinary {@code SessionResult.onError} handlers,
+ * wrapped by {@code SettlementFailure} for {@code SettlementFlow.onError},
+ * and carried by {@link SessionException} when a failed result is unwrapped
+ * via {@link SessionResult#get()}.</p>
  */
 public final class SessionError {
 

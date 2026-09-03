@@ -106,7 +106,7 @@ class FlowAsyncExecutionTest {
         SettlementFlow flow = new SettlementFlow(f -> SettlementResult.builder().build())
                 .session(operations)
                 .onError(error -> {
-                    received.set(error);
+                    received.set(error.getError());
                     return null;
                 })
                 .onComplete(complete::countDown);

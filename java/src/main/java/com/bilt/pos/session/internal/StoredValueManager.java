@@ -69,6 +69,19 @@ public final class StoredValueManager {
                                                 String originalPoiTxnId,
                                                 Instant originalPoiTimestamp,
                                                 String saleTransactionId) {
+        SaleToPOIRequest request = operationRequest(type, card, amount, originalPoiTxnId,
+                originalPoiTimestamp, saleTransactionId);
+        SaleToPOIResponse response = exchange.sendExpectingBody(
+                MessageCategoryType.STORED_VALUE, request);
+        return operationResult(type, amount, response);
+    }
+
+    /** Builds a stored-value request for checkpointed settlement orchestration. */
+    public SaleToPOIRequest operationRequest(StoredValueTransactionTypeEnum type,
+                                             StoredValueCard card, BigDecimal amount,
+                                             String originalPoiTxnId,
+                                             Instant originalPoiTimestamp,
+                                             String saleTransactionId) {
         StoredValueData.Builder data = StoredValueData.builder()
                 .storedValueTransactionType(type)
                 .currency(currency)
@@ -83,7 +96,7 @@ public final class StoredValueManager {
             data.originalPOITransaction(Wire.originalTransaction(
                     originalPoiTxnId, originalPoiTimestamp));
         }
-        SaleToPOIRequest request = SaleToPOIRequest.builder()
+        return SaleToPOIRequest.builder()
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.STORED_VALUE))
                 .storedValueRequest(StoredValueRequest.builder()
@@ -93,9 +106,12 @@ public final class StoredValueManager {
                         .storedValueData(new StoredValueData[] {data.build()})
                         .build())
                 .build();
+    }
 
-        SaleToPOIResponse response = exchange.sendExpectingBody(
-                MessageCategoryType.STORED_VALUE, request);
+    /** Parses and validates a stored-value response, including a repeated status response. */
+    public StoredValueOperationResult operationResult(StoredValueTransactionTypeEnum type,
+                                                      BigDecimal amount,
+                                                      SaleToPOIResponse response) {
         StoredValueResponse body = response.getStoredValueResponse();
         if (body == null) {
             throw Wire.missing("StoredValueResponse");

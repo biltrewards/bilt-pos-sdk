@@ -24,6 +24,9 @@ public enum SettlementStep {
     /** Terminal processes the card payment for the remaining amount. */
     CARD_CHARGE,
 
+    /** Register records payment collected outside the terminal. */
+    EXTERNAL_PAYMENT,
+
     /** Terminal activates or reloads a stored value card purchased in the basket. */
     STORED_VALUE_LOAD,
 

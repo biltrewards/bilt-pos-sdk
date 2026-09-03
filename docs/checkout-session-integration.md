@@ -87,16 +87,16 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 2. **Rebate redemption** (identified members, if enabled, sale lines only) — terminal commits applicable offers/coupons → `onRebatesRedeemed`
 3. **Point redemption** (identified members, if enabled and a balance remains) — terminal redeems points for monetary value → `onPointsRedeemed`
 4. **Stored value charge** (if a card was registered and a balance remains) — terminal charges the gift card → `onGiftCardPayment`
-5. **Card charge** (if a balance remains) — terminal processes the card for the remaining amount → `onCardCharged`
+5. **Card charge** (if a balance remains) — terminal processes the card for the remaining amount → `onCardCharged`; after a failure, the register may satisfy this final tender externally (for example, with cash) → `onExternallyPaid`
 6. **Stored value fulfillment** (for each supplied fulfillment targeting a referenced sale line) — terminal activates or reloads the purchased card after funding commits → `onStoredValueLoaded`
 7. **Award** — terminal submits the loyalty award (Store-and-Forward if loyalty is down) → `onAwarded`
-8. `onSuccess` / `onError`
+8. `onSuccess` / `onError` / `onAbandoned`
 
 With `SettlementType.NET`, the SDK uses the complete signed basket instead. A positive total enters the loyalty/stored-value/card charge sequence for only that difference. A negative total skips the charge sequence and executes refund allocations for only the absolute difference. A zero total sends no monetary movement. Award-reversal allocations remain bookkeeping movements and are retained even when the return value is fully absorbed by a net charge.
 
 **Callbacks are synchronous and blocking.** The total-returning callbacks run on the calling thread, and the `BigDecimal` they return becomes the total passed to the next step. This is deliberate: some jurisdictions tax the discounted price, so the register may need to recompute tax after each discount and feed the corrected total forward. That total → tax → total pipeline only works if the steps are sequential. Movement callbacks are also synchronous, but they report movement observations instead of changing the running total.
 
-Treat charge-side movement callbacks as provisional until settlement succeeds. A later failure, abort, or `onError` retry can unwind those movements in the same run without emitting compensating movement callbacks. Refund allocation movements are durable because the SDK never unwinds them; for the final successful transaction ledger, use `SettlementResult.getMovements()` from `onSuccess` or the blocking result.
+Treat charge-side movement callbacks as provisional until settlement succeeds. `abort()` can unwind them, while retry, skip, or external replacement can reverse only a partially committed failed step before continuing. Earlier completed steps remain committed. These reversals do not emit compensating movement callbacks. Refund allocation movements are durable because the SDK never unwinds them; for the final successful transaction ledger, use `SettlementResult.getMovements()` from `onSuccess` or the blocking result.
 
 **Defaults when a callback isn't registered:**
 
@@ -109,12 +109,19 @@ Treat charge-side movement callbacks as provisional until settlement succeeds. A
 | `onMovement` and per-movement callbacks | No-op. |
 | `onSuccess` | No-op (the result is still available via `.get()`). |
 | `onError` | For charge-side failures, `SettlementRecovery.abort()` — roll back and fail the settlement. Refund allocation failures notify `onError`, but the returned recovery decision is ignored. |
+| `onAbandoned` | No-op (the record is still available from `SessionException.getAbandonedSettlement()`). |
 
-**Abort / error rollback.** `abort()` returns a lazy `SessionResult<Void>` like every terminal operation — `abort().execute()` returns immediately, `abort().executeSync()` blocks for the roundtrip — and is deliberately **unordered**: it exists to interrupt the operation occupying the session's operation lane, so it overtakes whatever is in flight instead of queueing behind the very thing it cancels (`updateInputDisplay` shares this lane for the same reason). It is operation-scoped: it interrupts the in-flight operation and the session continues. If it fires mid-settlement (e.g. after rebates committed but before card charge), the session reverses the committed charge-side movements — rebate refunds, redemption refunds, stored-value loads, and tender reversals — and leaves the basket intact so `settle()` can retry (the thrown error carries the `ABORTED` code); these unwind reversals do not produce movement callbacks. If a reversal fails, `voidTransaction()` finishes the unwind. Refund allocations that have already committed are reported in `SettlementResult` movements and are not automatically re-charged as compensation. Aborted prompts (input, PIN, identification) deliver their aborted/cancelled outcome; with nothing in flight `abort()` is a no-op. `abort()` is safe to call from any thread. An operation that completes on the terminal despite a racing abort always delivers its outcome — a prompt was genuinely answered, money may have genuinely moved, and the register must know. For charge-side errors after refund allocations, the `SettlementRecovery` returned by `onError` decides what happens next:
+**Abort / error recovery.** `abort()` returns a lazy `SessionResult<Void>` like every terminal operation — `abort().execute()` returns immediately, `abort().executeSync()` blocks for the roundtrip — and is deliberately **unordered**: it exists to interrupt the operation occupying the session's operation lane, so it overtakes whatever is in flight instead of queueing behind the very thing it cancels (`updateInputDisplay` shares this lane for the same reason). It is operation-scoped: it interrupts the in-flight operation and the session continues. If it fires mid-settlement (e.g. after rebates committed but before card charge), the session reverses the committed charge-side movements — rebate refunds, redemption refunds, stored-value loads, and tender reversals — and leaves the basket intact so `settle()` can retry (the thrown error carries the `ABORTED` code); these unwind reversals do not produce movement callbacks. If a reversal fails, `voidTransaction()` finishes the unwind. Refund allocations that have already committed are reported in `SettlementResult` movements and are not automatically re-charged as compensation. Aborted prompts (input, PIN, identification) deliver their aborted/cancelled outcome; with nothing in flight `abort()` is a no-op. `abort()` is safe to call from any thread. An operation that completes on the terminal despite a racing abort always delivers its outcome — a prompt was genuinely answered, money may have genuinely moved, and the register must know.
+
+For a charge-side error, `onError` receives a `SettlementFailure` **before any recovery or unwind**. It identifies the failed step, outstanding amount, committed movement ledger, and whether the terminal request's outcome is indeterminate. The returned `SettlementRecovery` controls the next action:
 
 - `SettlementRecovery.abort()` (the default) — roll back committed charge-side steps in reverse order and fail. The same basket remains available for a `settle()` retry. If the rollback itself was incomplete, a retried `settle()` first finishes the standing reversals — and refuses to start if one still cannot go through.
-- `SettlementRecovery.retryWithoutLoyalty()` — roll back and restart with rebate, point, and award steps disabled.
-- `SettlementRecovery.retry()` — full rollback, then restart with the same `SettlementOptions`. At most 3 recoveries are attempted per execution.
+- `SettlementRecovery.retry()` — retry only the failed step. Earlier successful rebate, point, and tender steps stay committed. There is no SDK retry limit; the register decides when to choose another action.
+- `SettlementRecovery.skip()` — skip a failed optional rebate, point, or stored-value charge and continue. Required final tender and stored-value fulfillment steps cannot be skipped.
+- `SettlementRecovery.external(ExternalPayment)` — after the final card tender fails, record a register-managed tender such as cash and continue. Its amount must exactly equal `failure.getAmountDue()`; cashback transactions cannot use this substitution.
+- `SettlementRecovery.abandon()` — immediately stop without TransactionStatus, retry, or unwind. `onAbandoned` (and `SessionException.getAbandonedSettlement()` for blocking calls) receives the basket, failure, outstanding amount, and committed ledger. The SDK clears this attempt's recovery state but does not consume or clear the basket, so another `settle()` can start immediately. This is an unguarded manual takeover: the register must reconcile the abandoned movements first or risk duplicate discounts and payments.
+
+When the failed terminal request may have completed despite a timeout or network error, the SDK resolves its `ServiceID` with TransactionStatus before applying retry, skip, external replacement, or abort. A recovered successful response is consumed as the step result instead of resending the request. `abandon()` deliberately performs no additional terminal I/O.
 
 Refund allocation failures are terminal for that settlement run. The `onError` handler is still called so the register can display/log the failure, but its returned `SettlementRecovery` is ignored. Retry with the same committed allocation prefix so already-committed refund allocation movements are preserved and not resent.
 
@@ -129,7 +136,7 @@ Refund allocation failures are terminal for that settlement run. The `onError` h
 - Terminal operations run sequentially in submission order. A settlement or void already in flight cannot be started again re-entrantly.
 - A successful settlement consumes its basket. Calling `settle()` again or mutating that basket fails before another payment can be sent.
 - Call `session.basket().clear()` to begin another settlement in the same session. It creates a fresh empty basket with a new cart ID and clears the stored-value card selected for the previous basket. The identified member remains attached.
-- A failed settlement does not consume the basket. The register may correct it and retry. If refund allocations committed, the retry must retain the same allocation prefix; if rollback is incomplete, the retry first finishes it.
+- A failed settlement does not consume the basket. The register may correct it and retry. If refund allocations committed, the retry must retain the same allocation prefix; if rollback is incomplete, the retry first finishes it. An abandoned settlement also leaves the basket immediately reusable, but transfers all duplicate-prevention and reconciliation responsibility to the register.
 - `refund()` and parameterless `voidTransaction()` refer to the most recent successful settlement in this session. Persist `SettlementResult.toOriginalSaleRecord()` when an older settlement may need to be referenced later.
 - `voidTransaction(OriginalSaleRecord)` is independent of the current basket and can target an older settlement anywhere inside the open session. A record containing any movement of the most recent settlement is refused; use parameterless `voidTransaction()` so its refund/void guards remain authoritative. A partially failed prior-sale void must still be retried on the same session instance so its in-memory progress is retained.
 - A successful `end()` permanently seals the session and is refused while money or required recovery is unresolved. `forceEnd(reason)` may explicitly abandon recovery and seals the local session even if the terminal rejects its end signal.
@@ -339,15 +346,15 @@ session.settle()
 
 When the gift card balance is insufficient, the charge is a partial authorization and the remainder flows to the card payment step.
 
-### Variant: retry without loyalty
+### Variant: skip unavailable loyalty
 
 ```java
 session.settle()
     .onSuccess(result -> register.printReceipt(result.getMerchantReceipt()))
     .onError(error -> {
         if (error.getCode() == SessionErrorCode.LOYALTY_UNAVAILABLE) {
-            register.showMessage("Loyalty unavailable, retrying without loyalty...");
-            return SettlementRecovery.retryWithoutLoyalty();
+            register.showMessage("Loyalty unavailable; continuing without this step...");
+            return SettlementRecovery.skip();
         }
         register.showError("Settlement failed: " + error.getMessage());
         return SettlementRecovery.abort();

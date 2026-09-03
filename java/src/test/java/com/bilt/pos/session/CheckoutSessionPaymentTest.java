@@ -4,7 +4,10 @@ import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.session.basket.BasketItem;
+import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
+import com.bilt.pos.session.settlement.ExternalPayment;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
+import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementRecovery;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementOptions;
@@ -20,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -208,7 +212,7 @@ class CheckoutSessionPaymentTest {
         SettlementFlow flow = session.settle();
         AtomicReference<SessionError> seen = new AtomicReference<>();
         flow.onError(error -> {
-            seen.set(error);
+            seen.set(error.getError());
             return SettlementRecovery.abort();
         });
 
@@ -238,7 +242,7 @@ class CheckoutSessionPaymentTest {
         AtomicReference<SessionError> seen = new AtomicReference<>();
         session.settle()
                 .onError(error -> {
-                    seen.set(error);
+                    seen.set(error.getError());
                     return SettlementRecovery.abort();
                 })
                 .executeSync();
@@ -272,7 +276,7 @@ class CheckoutSessionPaymentTest {
         AtomicReference<SessionError> error = new AtomicReference<>();
         session.settle()
                 .onError(e -> {
-                    error.set(e);
+                    error.set(e.getError());
                     return SettlementRecovery.abort();
                 })
                 .executeSync();
@@ -768,18 +772,15 @@ class CheckoutSessionPaymentTest {
                 session.settle()
                         .onError(error -> {
                             errorCalls.incrementAndGet();
-                            return SettlementRecovery.retryWithoutLoyalty();   // must be refused
+                            return SettlementRecovery.abort();
                         })
                         .get());
 
-        assertEquals(2, errorCalls.get(),
-                "the consultation, then the notification that the retry was refused");
+        assertEquals(1, errorCalls.get());
         assertTrue(failure.getError().getMessage().contains("REBATE"),
                 "the error must name the movement that is still standing: "
                         + failure.getError().getMessage());
         assertTrue(failure.getError().getMessage().contains("manual reconciliation"));
-        assertTrue(failure.getError().getMessage().contains("retry was refused"),
-                failure.getError().getMessage());
 
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(5, requests.size(),
@@ -1620,7 +1621,7 @@ class CheckoutSessionPaymentTest {
 
         AtomicReference<SessionError> seen = new AtomicReference<>();
         session.settle().onError(error -> {
-            seen.set(error);
+            seen.set(error.getError());
             return SettlementRecovery.abort();
         }).getOrNull();
 
@@ -1639,7 +1640,7 @@ class CheckoutSessionPaymentTest {
 
         AtomicReference<SessionError> seen = new AtomicReference<>();
         session.settle().onError(error -> {
-            seen.set(error);
+            seen.set(error.getError());
             return SettlementRecovery.abort();
         }).getOrNull();
 
@@ -1662,7 +1663,7 @@ class CheckoutSessionPaymentTest {
 
         AtomicReference<SessionError> seen = new AtomicReference<>();
         SettlementFlow flow = session.settle().onError(error -> {
-            seen.set(error);
+            seen.set(error.getError());
             return SettlementRecovery.abort();
         });
 
@@ -1684,10 +1685,13 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
-    void retryWithoutLoyaltySucceedsPaymentOnly() throws Exception {
+    void skipFailedRebateContinuesWithPayment() throws Exception {
         identifyMember();
         addHundredDollarItem();
 
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnavailableService\"}}}}"));
         server.enqueue(new MockResponse().setBody(
                 "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
                         + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnavailableService\"}}}}"));
@@ -1697,7 +1701,7 @@ class CheckoutSessionPaymentTest {
         SettlementResult result = session.settle()
                 .onError(error -> {
                     assertEquals(SessionErrorCode.LOYALTY_UNAVAILABLE, error.getCode());
-                    return SettlementRecovery.retryWithoutLoyalty();
+                    return SettlementRecovery.skip();
                 })
                 .get();
 
@@ -1705,12 +1709,277 @@ class CheckoutSessionPaymentTest {
         assertEquals(0, new BigDecimal("100.00").compareTo(result.getCardAmountCharged()));
 
         List<SaleToPOIRequest> requests = drainRequests();
-        assertEquals(2, requests.size());
-        assertNotNull(requests.get(1).getPaymentRequest(), "retry goes straight to card payment");
+        assertEquals(4, requests.size());
+        assertNotNull(requests.get(2).getPaymentRequest(),
+                "each failed optional loyalty step is skipped before card payment");
     }
 
     @Test
-    void retryLimitForcesFailure() throws Exception {
+    void retryResendsOnlyTheFailedCardStepAndPreservesLoyalty() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 85.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+        AtomicInteger failures = new AtomicInteger();
+        SettlementResult result = session.settle().onError(failure -> {
+            failures.incrementAndGet();
+            assertEquals(SettlementStep.CARD_CHARGE, failure.getStep());
+            assertEquals(0, new BigDecimal("85.00").compareTo(failure.getAmountDue()));
+            assertEquals(2, failure.getCommittedMovements().size());
+            return SettlementRecovery.retry();
+        }).get();
+
+        assertEquals(1, failures.get());
+        assertEquals(0, new BigDecimal("85.00").compareTo(result.getCardAmountCharged()));
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(5, requests.size());
+        assertNotNull(requests.get(2).getPaymentRequest());
+        assertNotNull(requests.get(3).getPaymentRequest());
+        assertTrue(requests.stream().noneMatch(request -> request.getReversalRequest() != null));
+    }
+
+    @Test
+    void onErrorRunsBeforeAbortUnwindsCommittedSteps() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        AtomicReference<List<SaleToPOIRequest>> requestsSeenByHandler =
+                new AtomicReference<>();
+
+        assertThrows(SessionException.class, () -> session.settle().onError(failure -> {
+            assertEquals(2, failure.getCommittedMovements().size());
+            try {
+                requestsSeenByHandler.set(drainRequests());
+            } catch (Exception e) {
+                throw new AssertionError(e);
+            }
+            return SettlementRecovery.abort();
+        }).get());
+
+        assertEquals(3, requestsSeenByHandler.get().size());
+        assertTrue(requestsSeenByHandler.get().stream().noneMatch(request ->
+                request.getReversalRequest() != null
+                        || (request.getLoyaltyRequest() != null
+                        && request.getLoyaltyRequest().getLoyaltyTransaction()
+                                .getLoyaltyTransactionType().toValue().endsWith("Refund"))));
+        List<SaleToPOIRequest> unwindRequests = drainRequests();
+        assertEquals(2, unwindRequests.size(), "unwind starts only after abort is returned");
+        assertTrue(unwindRequests.stream().allMatch(request ->
+                request.getLoyaltyRequest().getLoyaltyTransaction()
+                        .getLoyaltyTransactionType().toValue().endsWith("Refund")));
+    }
+
+    @Test
+    void storedValueChargeCanBeSkippedWithoutUnwinding() throws Exception {
+        addHundredDollarItem();
+        session.setStoredValueCard("GC-1234-5678");
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+
+        SettlementResult result = session.settle().onError(failure -> {
+            assertEquals(SettlementStep.STORED_VALUE_CHARGE, failure.getStep());
+            return SettlementRecovery.skip();
+        }).get();
+
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getStoredValueAmountUsed()));
+        assertEquals(0, new BigDecimal("100.00").compareTo(result.getCardAmountCharged()));
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size());
+        assertNull(requests.get(1).getPaymentRequest().getPaymentData());
+    }
+
+    @Test
+    void failedCardCanBeReplacedByExternalCashPayment() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        AtomicReference<com.bilt.pos.session.settlement.SettlementMovement> external =
+                new AtomicReference<>();
+
+        SettlementResult result = session.settle()
+                .onExternallyPaid(external::set)
+                .onError(failure -> SettlementRecovery.external(
+                        ExternalPayment.cash(failure.getAmountDue(), "DRAWER-42")))
+                .get();
+
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getCardAmountCharged()));
+        assertEquals(0, new BigDecimal("100.00").compareTo(
+                result.getExternalPaymentAmount()));
+        assertEquals(0, new BigDecimal("100.00").compareTo(
+                result.getFinalBasket().getExternalPaymentTotal()));
+        assertEquals(SettlementStep.EXTERNAL_PAYMENT, external.get().getStep());
+        assertEquals("CASH", external.get().getExternalTenderType());
+        assertEquals("DRAWER-42", external.get().getExternalReference());
+        assertEquals(1, drainRequests().size(),
+                "register-managed cash must send no second terminal payment");
+    }
+
+    @Test
+    void finalCardTenderCannotBeSkipped() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+
+        SessionException failure = assertThrows(SessionException.class, () ->
+                session.settle().onError(error -> error.getStep() == SettlementStep.CARD_CHARGE
+                        ? SettlementRecovery.skip() : SettlementRecovery.abort()).get());
+
+        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
+        assertTrue(failure.getError().getMessage().contains("required basket obligation"));
+        assertEquals(1, drainRequests().size());
+    }
+
+    @Test
+    void abandonTransfersCommittedMovementsAndLeavesBasketImmediatelyReusable()
+            throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        AtomicReference<AbandonedSettlementRecord> callbackRecord = new AtomicReference<>();
+
+        SettlementFlow abandoned = session.settle()
+                .onAbandoned(callbackRecord::set)
+                .onError(failure -> SettlementRecovery.abandon());
+        SessionException failure = assertThrows(SessionException.class, abandoned::get);
+
+        assertEquals(SessionErrorCode.ABANDONED, failure.getError().getCode());
+        assertSame(callbackRecord.get(), failure.getAbandonedSettlement());
+        assertEquals(SettlementStep.CARD_CHARGE,
+                callbackRecord.get().getFailure().getStep());
+        assertEquals(2, callbackRecord.get().getCommittedMovements().size());
+        assertEquals(1, session.basket().snapshot().getItemCount());
+        List<SaleToPOIRequest> firstAttempt = drainRequests();
+        assertEquals(3, firstAttempt.size());
+        assertTrue(firstAttempt.stream().noneMatch(request ->
+                request.getReversalRequest() != null));
+
+        // No clear and no recovery guard: this is an independent settlement
+        // whose potential duplication is now the register's responsibility.
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(REDEEM_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 85.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+        assertTrue(session.settle().get().isSuccess());
+        assertEquals(4, drainRequests().size());
+    }
+
+    @Test
+    void storedValueChargeCanBeAbandoned() throws Exception {
+        addHundredDollarItem();
+        session.setStoredValueCard("GC-1234-5678");
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+
+        SessionException failure = assertThrows(SessionException.class, () ->
+                session.settle().onError(error -> SettlementRecovery.abandon()).get());
+
+        assertEquals(SessionErrorCode.ABANDONED, failure.getError().getCode());
+        assertEquals(SettlementStep.STORED_VALUE_CHARGE,
+                failure.getAbandonedSettlement().getFailure().getStep());
+    }
+
+    @Test
+    void indeterminateCardCanBeAbandonedWithoutTransactionStatus() throws Exception {
+        session = start(sessionBuilder().client(BiltNexoTerminalClient.builder()
+                .endpoint(server.url("/nexo").toString())
+                .readTimeout(Duration.ofMillis(100))
+                .disableRecoveryOnNetworkError()
+                .build()));
+        addHundredDollarItem();
+        server.enqueue(new MockResponse()
+                .setBodyDelay(500, TimeUnit.MILLISECONDS)
+                .setBody(paymentOk("POI-PAY-UNKNOWN", 100.00)));
+
+        SessionException failure = assertThrows(SessionException.class, () ->
+                session.settle().onError(ignored -> SettlementRecovery.abandon()).get());
+
+        assertTrue(failure.getAbandonedSettlement().getFailure().isIndeterminate());
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(1, requests.size(),
+                "abandon must not perform status recovery or any other terminal I/O");
+        assertNotNull(requests.get(0).getPaymentRequest());
+    }
+
+    @Test
+    void indeterminateCardRetryUsesTransactionStatusBeforeResending() throws Exception {
+        session = start(sessionBuilder().client(BiltNexoTerminalClient.builder()
+                .endpoint(server.url("/nexo").toString())
+                .readTimeout(Duration.ofMillis(100))
+                .disableRecoveryOnNetworkError()
+                .build()));
+        addHundredDollarItem();
+        server.enqueue(new MockResponse()
+                .setBodyDelay(500, TimeUnit.MILLISECONDS)
+                .setBody(paymentOk("POI-PAY-STATUS", 100.00)));
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"RepeatedMessageResponse\":{"
+                        + "\"MessageHeader\":{\"MessageCategory\":\"Payment\"},"
+                        + "\"RepeatedResponseMessageBody\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"},"
+                        + "\"POIData\":{\"POITransactionID\":{"
+                        + "\"TransactionID\":\"POI-PAY-STATUS\","
+                        + "\"TimeStamp\":\"2026-07-20T10:00:03Z\"}},"
+                        + "\"PaymentResult\":{\"AmountsResp\":{"
+                        + "\"Currency\":\"USD\",\"AuthorizedAmount\":100.00}}"
+                        + "}}}}}}}"));
+        AtomicReference<String> failedServiceId = new AtomicReference<>();
+
+        SettlementResult result = session.settle().onError(failure -> {
+            assertEquals(SessionErrorCode.TIMEOUT, failure.getCode());
+            assertTrue(failure.isIndeterminate());
+            failedServiceId.set(failure.getServiceId());
+            return SettlementRecovery.retry();
+        }).get();
+
+        assertEquals("POI-PAY-STATUS", result.getPoiTransactionId());
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size(), "status recovery must avoid a second payment request");
+        assertNotNull(requests.get(0).getPaymentRequest());
+        assertNotNull(requests.get(1).getTransactionStatusRequest());
+        assertEquals(failedServiceId.get(), requests.get(1).getTransactionStatusRequest()
+                .getMessageReference().getServiceID());
+    }
+
+    @Test
+    void indeterminateCardRetryDoesNotResendWithoutARepeatedStatusBody() throws Exception {
+        session = start(sessionBuilder().client(BiltNexoTerminalClient.builder()
+                .endpoint(server.url("/nexo").toString())
+                .readTimeout(Duration.ofMillis(100))
+                .disableRecoveryOnNetworkError()
+                .build()));
+        addHundredDollarItem();
+        server.enqueue(new MockResponse()
+                .setBodyDelay(500, TimeUnit.MILLISECONDS)
+                .setBody(paymentOk("POI-PAY-STATUS", 100.00)));
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"}}}}"));
+        AtomicInteger failures = new AtomicInteger();
+
+        SessionException failure = assertThrows(SessionException.class, () ->
+                session.settle().onError(ignored -> failures.incrementAndGet() == 1
+                        ? SettlementRecovery.retry() : SettlementRecovery.abort()).get());
+
+        assertEquals(SessionErrorCode.TERMINAL_ERROR, failure.getError().getCode());
+        assertTrue(failure.getError().getMessage().contains("RepeatedMessageResponse"));
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size(),
+                "an inconclusive status response must never cause a duplicate payment");
+        assertNotNull(requests.get(0).getPaymentRequest());
+        assertNotNull(requests.get(1).getTransactionStatusRequest());
+    }
+
+    @Test
+    void registerCanStopRetryingWithAbort() throws Exception {
         addHundredDollarItem();
         for (int i = 0; i < 4; i++) {
             server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
@@ -1718,16 +1987,14 @@ class CheckoutSessionPaymentTest {
 
         AtomicInteger errorCalls = new AtomicInteger();
         SettlementFlow flow = session.settle().onError(error -> {
-            errorCalls.incrementAndGet();
-            return SettlementRecovery.retry();  // always retry
+            return errorCalls.incrementAndGet() < 4
+                    ? SettlementRecovery.retry() : SettlementRecovery.abort();
         });
 
         SessionException failure = assertThrows(SessionException.class, flow::get);
-        assertTrue(failure.getError().getMessage().contains("retry limit"),
-                failure.getError().getMessage());
-        assertEquals(4, errorCalls.get(),
-                "3 consultations plus the notification that the last retry was refused");
-        assertEquals(4, server.getRequestCount(), "retry cap stops the loop (plus the session start)");
+        assertEquals(SessionErrorCode.DECLINED, failure.getError().getCode());
+        assertEquals(4, errorCalls.get());
+        assertEquals(5, server.getRequestCount(), "four attempts plus the session start");
     }
 
     @Test
@@ -1795,7 +2062,7 @@ class CheckoutSessionPaymentTest {
 
         AtomicReference<SessionError> seen = new AtomicReference<>();
         SettlementFlow flow = session.settle().onError(error -> {
-            seen.set(error);
+            seen.set(error.getError());
             return SettlementRecovery.abort();
         });
 
@@ -1812,6 +2079,31 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void retryResetsOnlyAPartiallyCommittedFailedCardStep() throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Partial\"},"
+                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-PAY-1\"}},"
+                        + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":60.00}}}}}"));
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
+
+        SettlementResult result = session.settle()
+                .onError(error -> SettlementRecovery.retry())
+                .get();
+
+        assertEquals("POI-PAY-2", result.getPoiTransactionId());
+        assertEquals(1, result.getMovements().size(),
+                "the reversed partial authorization must leave the final ledger");
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(3, requests.size());
+        assertEquals("POI-PAY-1", requests.get(1).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+        assertNotNull(requests.get(2).getPaymentRequest());
+    }
+
+    @Test
     void throwingHandlerUnwindsCommittedStepsAndFailsTheSession() throws Exception {
         identifyMember();
         addHundredDollarItem();
@@ -1825,7 +2117,7 @@ class CheckoutSessionPaymentTest {
                     throw new NullPointerException("register bug");
                 })
                 .onError(error -> {
-                    seen.set(error);
+                    seen.set(error.getError());
                     return SettlementRecovery.abort();
                 });
 
@@ -1839,15 +2131,194 @@ class CheckoutSessionPaymentTest {
                 .getLoyaltyTransaction().getLoyaltyTransactionType().toValue(),
                 "the committed rebate must be unwound");
 
-        // and the register can retry once the bug is out of the way —
-        // retryWithoutLoyalty disables rebates and points but not the
-        // award, which still runs for the identified member
+        // and the register can retry once the bug is out of the way. It
+        // disables the optional redemption steps but keeps award enabled.
         server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
         server.enqueue(new MockResponse().setBody(AWARD_OK));
         assertTrue(session.settle(SettlementOptions.builder()
                 .disableRebates(true)
                 .disablePoints(true)
                 .build()).get().isSuccess());
+    }
+
+    @Test
+    void throwingAwardHandlerConsultsOnErrorBeforeUnwinding() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        server.enqueue(new MockResponse().setBody(AWARD_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+
+        AtomicReference<SettlementFailure> seen = new AtomicReference<>();
+        SettlementFlow flow = session.settle(SettlementOptions.builder()
+                        .disableRebates(true)
+                        .disablePoints(true)
+                        .build())
+                .onAwarded(movement -> {
+                    throw new IllegalStateException("register award bug");
+                })
+                .onError(failure -> {
+                    seen.set(failure);
+                    return SettlementRecovery.abort();
+                });
+
+        assertNull(flow.getOrNull());
+        assertEquals(SettlementStep.AWARD, seen.get().getStep());
+        assertEquals(SessionErrorCode.UNKNOWN, seen.get().getError().getCode());
+        assertTrue(seen.get().getError().getCause() instanceof IllegalStateException);
+        assertEquals(2, seen.get().getCommittedMovements().size(),
+                "onError must see the card and award before abort unwinds them");
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(4, requests.size());
+        assertEquals("AwardRefund", requests.get(2).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+        assertEquals("POI-PAY-1", requests.get(3).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
+    void throwingAwardBeforeStepConsultsOnErrorAndUnwindsTender() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+
+        AtomicReference<SettlementFailure> seen = new AtomicReference<>();
+        SettlementFlow flow = session.settle(SettlementOptions.builder()
+                        .disableRebates(true)
+                        .disablePoints(true)
+                        .build())
+                .beforeStep(context -> {
+                    if (context.getStep() == SettlementStep.AWARD) {
+                        throw new IllegalStateException("register before-award bug");
+                    }
+                    return context.getDefaultTransactionId();
+                })
+                .onError(failure -> {
+                    seen.set(failure);
+                    return SettlementRecovery.abort();
+                });
+
+        assertNull(flow.getOrNull());
+        assertEquals(SettlementStep.AWARD, seen.get().getStep());
+        assertTrue(seen.get().getError().getCause() instanceof IllegalStateException);
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size(), "award must fail before reaching the terminal");
+        assertNotNull(requests.get(0).getPaymentRequest());
+        assertEquals("POI-PAY-1", requests.get(1).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
+    }
+
+    @Test
+    void throwingExternalPaymentHandlerConsultsOnErrorAndUnwindsEarlierTender()
+            throws Exception {
+        addHundredDollarItem();
+        session.setStoredValueCard("GC-1234-5678");
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-GC-1", 35.00)));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+
+        List<SettlementFailure> failures = new ArrayList<>();
+        SettlementFlow flow = session.settle()
+                .onExternallyPaid(movement -> {
+                    throw new IllegalStateException("register cash bug");
+                })
+                .onError(failure -> {
+                    failures.add(failure);
+                    if (failure.getStep() == SettlementStep.CARD_CHARGE) {
+                        return SettlementRecovery.external(ExternalPayment.cash(
+                                failure.getAmountDue(), "DRAWER-42"));
+                    }
+                    return SettlementRecovery.abort();
+                });
+
+        assertNull(flow.getOrNull());
+        assertEquals(2, failures.size());
+        assertEquals(SettlementStep.CARD_CHARGE, failures.get(0).getStep());
+        assertEquals(SettlementStep.EXTERNAL_PAYMENT, failures.get(1).getStep());
+        assertTrue(failures.get(1).getError().getCause() instanceof IllegalStateException);
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(3, requests.size(), "external payment itself sends no terminal request");
+        assertEquals("POI-GC-1", requests.get(2).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID(),
+                "abort must unwind the earlier stored-value tender");
+    }
+
+    @Test
+    void throwingExternalPaymentHandlerCanRetryWithoutDuplicatingTheMovement()
+            throws Exception {
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+
+        AtomicInteger deliveries = new AtomicInteger();
+        List<SettlementStep> failedSteps = new ArrayList<>();
+        SettlementResult result = session.settle()
+                .onExternallyPaid(movement -> {
+                    if (deliveries.incrementAndGet() == 1) {
+                        throw new IllegalStateException("register cash bug");
+                    }
+                })
+                .onError(failure -> {
+                    failedSteps.add(failure.getStep());
+                    if (failure.getStep() == SettlementStep.CARD_CHARGE) {
+                        return SettlementRecovery.external(ExternalPayment.cash(
+                                failure.getAmountDue(), "DRAWER-42"));
+                    }
+                    return SettlementRecovery.retry();
+                })
+                .get();
+
+        assertEquals(List.of(SettlementStep.CARD_CHARGE,
+                SettlementStep.EXTERNAL_PAYMENT), failedSteps);
+        assertEquals(2, deliveries.get());
+        assertEquals(1, result.getMovements().size(),
+                "retry must discard the failed external movement checkpoint");
+        assertEquals(SettlementStep.EXTERNAL_PAYMENT,
+                result.getMovements().get(0).getStep());
+        assertEquals(0, new BigDecimal("100.00").compareTo(
+                result.getExternalPaymentAmount()));
+        assertEquals(1, drainRequests().size(),
+                "retrying register-managed payment sends no terminal request");
+    }
+
+    @Test
+    void throwingExternalPaymentBeforeStepConsultsOnErrorAndUnwindsEarlierTender()
+            throws Exception {
+        addHundredDollarItem();
+        session.setStoredValueCard("GC-1234-5678");
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-GC-1", 35.00)));
+        server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+        server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+
+        List<SettlementStep> failedSteps = new ArrayList<>();
+        SettlementFlow flow = session.settle()
+                .beforeStep(context -> {
+                    if (context.getStep() == SettlementStep.EXTERNAL_PAYMENT) {
+                        throw new IllegalStateException("register before-cash bug");
+                    }
+                    return context.getDefaultTransactionId();
+                })
+                .onError(failure -> {
+                    failedSteps.add(failure.getStep());
+                    if (failure.getStep() == SettlementStep.CARD_CHARGE) {
+                        return SettlementRecovery.external(ExternalPayment.cash(
+                                failure.getAmountDue(), "DRAWER-42"));
+                    }
+                    return SettlementRecovery.abort();
+                });
+
+        assertNull(flow.getOrNull());
+        assertEquals(List.of(SettlementStep.CARD_CHARGE,
+                SettlementStep.EXTERNAL_PAYMENT), failedSteps);
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(3, requests.size());
+        assertEquals("POI-GC-1", requests.get(2).getReversalRequest()
+                .getOriginalPOITransaction().getPoiTransactionID().getTransactionID());
     }
 
     // ─── Award failure is non-fatal ───
@@ -2078,7 +2549,7 @@ class CheckoutSessionPaymentTest {
 
         AtomicReference<SessionError> seen = new AtomicReference<>();
         session.settle().onError(error -> {
-            seen.set(error);
+            seen.set(error.getError());
             return SettlementRecovery.abort();
         }).getOrNull();
 

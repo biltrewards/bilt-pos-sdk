@@ -33,7 +33,10 @@ public enum SessionErrorCode {
     /** The operation was aborted (by {@code abort()} or the terminal). */
     ABORTED,
 
-    /** The loyalty host is unavailable; payment-only retry may succeed. */
+    /** Settlement recovery was explicitly transferred to the register. */
+    ABANDONED,
+
+    /** The loyalty host is unavailable; the failed optional step may be skipped. */
     LOYALTY_UNAVAILABLE,
 
     /** The stored value card balance does not cover the requested amount. */

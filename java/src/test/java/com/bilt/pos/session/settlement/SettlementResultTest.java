@@ -52,6 +52,7 @@ class SettlementResultTest {
                 .authorizedAmount(new BigDecimal("100.00"))
                 .storedValueAmountUsed(new BigDecimal("5.00"))
                 .cardAmountCharged(new BigDecimal("95.00"))
+                .externalPaymentAmount(new BigDecimal("20.00"))
                 .approvalCode("approval")
                 .acquirerTransactionId("acquirer")
                 .paymentBrand("visa")
@@ -95,6 +96,7 @@ class SettlementResultTest {
         assertEquals(new BigDecimal("100.00"), copy.getAuthorizedAmount());
         assertEquals(new BigDecimal("5.00"), copy.getStoredValueAmountUsed());
         assertEquals(new BigDecimal("95.00"), copy.getCardAmountCharged());
+        assertEquals(new BigDecimal("20.00"), copy.getExternalPaymentAmount());
         assertEquals("approval", copy.getApprovalCode());
         assertEquals("acquirer", copy.getAcquirerTransactionId());
         assertEquals("visa", copy.getPaymentBrand());

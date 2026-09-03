@@ -619,8 +619,8 @@ class CheckoutSessionRefundTest {
                                 "POI-ORIG-CARD", ORIGINAL_TIMESTAMP))
                         .build())
                         .onError(error -> {
-                            errors.add(error);
-                            return SettlementRecovery.retryWithoutLoyalty();
+                            errors.add(error.getError());
+                            return SettlementRecovery.skip();
                         })
                         .get());
 

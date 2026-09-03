@@ -805,7 +805,7 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
  recorded, and the register retries
  by calling <code>settle()</code> again with the same committed allocation
  prefix. Charge-side failures after refund allocations use
- <a href="SettlementFlow.html#onError(java.util.function.Function)"><code>SettlementFlow.onError(java.util.function.Function&lt;com.bilt.pos.session.SessionError, com.bilt.pos.session.settlement.SettlementRecovery&gt;)</code></a> recovery decisions.</p>
+ <a href="SettlementFlow.html#onError(java.util.function.Function)"><code>SettlementFlow.onError(java.util.function.Function&lt;com.bilt.pos.session.settlement.SettlementFailure, com.bilt.pos.session.settlement.SettlementRecovery&gt;)</code></a> recovery decisions.</p>
 
  <p>A same-session void that already reversed one or more movements
  must be retried to completion before another settlement can replace

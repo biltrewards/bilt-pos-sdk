@@ -22,9 +22,12 @@ import com.bilt.pos.nexo.model.MessageClassType;
 import com.bilt.pos.nexo.model.MessageReference;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.Response;
+import com.bilt.pos.nexo.model.RepeatedResponseMessageBody;
 import com.bilt.pos.nexo.model.ResultType;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
+import com.bilt.pos.nexo.model.TransactionStatusRequest;
+import com.bilt.pos.nexo.model.TransactionStatusResponse;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
@@ -196,6 +199,62 @@ public final class NexoExchange {
                     "terminal returned an empty response to " + category.toValue() + " request"));
         }
         return response;
+    }
+
+    /**
+     * Resolves an earlier request by ServiceID. Returns the repeated original
+     * response, or {@code null} when the terminal authoritatively reports that
+     * it was not found. A status exchange failure remains a SessionException.
+     */
+    public SaleToPOIResponse recoverByTransactionStatus(String serviceId,
+                                                        MessageCategoryType originalCategory) {
+        SaleToPOIRequest request = SaleToPOIRequest.builder()
+                .messageHeader(factory.header(MessageClassType.SERVICE,
+                        MessageCategoryType.TRANSACTION_STATUS))
+                .transactionStatusRequest(TransactionStatusRequest.builder()
+                        .messageReference(MessageReference.builder()
+                                .messageCategory(originalCategory)
+                                .serviceID(serviceId)
+                                .saleID(factory.getSaleId())
+                                .build())
+                        .build())
+                .build();
+        SaleToPOIResponse response = sendExpectingBody(
+                MessageCategoryType.TRANSACTION_STATUS, request);
+        TransactionStatusResponse body = response.getTransactionStatusResponse();
+        if (body == null) {
+            throw Wire.missing("TransactionStatusResponse");
+        }
+        if (body.getResponse() != null
+                && body.getResponse().getResult() == ResultType.FAILURE
+                && body.getResponse().getErrorCondition() == ErrorConditionType.NOT_FOUND) {
+            return null;
+        }
+        requireSuccess(MessageCategoryType.TRANSACTION_STATUS, body.getResponse());
+        RepeatedResponseMessageBody repeated = body.getRepeatedMessageResponse() == null
+                ? null : body.getRepeatedMessageResponse().getRepeatedResponseMessageBody();
+        if (repeated == null) {
+            throw Wire.missing(
+                    "TransactionStatusResponse.RepeatedMessageResponse");
+        }
+        boolean expectedBodyPresent = (originalCategory == MessageCategoryType.PAYMENT
+                && repeated.getPaymentResponse() != null)
+                || (originalCategory == MessageCategoryType.LOYALTY
+                && repeated.getLoyaltyResponse() != null)
+                || (originalCategory == MessageCategoryType.STORED_VALUE
+                && repeated.getStoredValueResponse() != null)
+                || (originalCategory == MessageCategoryType.REVERSAL
+                && repeated.getReversalResponse() != null);
+        if (!expectedBodyPresent) {
+            throw Wire.missing("TransactionStatusResponse repeated "
+                    + originalCategory.toValue() + " response");
+        }
+        return SaleToPOIResponse.builder()
+                .loyaltyResponse(repeated.getLoyaltyResponse())
+                .paymentResponse(repeated.getPaymentResponse())
+                .storedValueResponse(repeated.getStoredValueResponse())
+                .reversalResponse(repeated.getReversalResponse())
+                .build();
     }
 
     /**

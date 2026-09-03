@@ -9,53 +9,84 @@
  */
 package com.bilt.pos.session.settlement;
 
-/** Resolution returned from {@code SettlementFlow.onError}. */
+/** Resolution returned from {@code SettlementFlow.onError} before recovery begins. */
 public final class SettlementRecovery {
 
-    private final boolean abort;
-    private final Boolean disableRebates;
-    private final Boolean disablePoints;
-    private final Boolean disableAward;
+    /** The action the settlement orchestrator takes after a failed step. */
+    public enum Action {
+        /** Retry only the failed step, preserving earlier committed steps. */
+        RETRY,
+        /** Skip an optional failed step and continue. */
+        SKIP,
+        /** Satisfy the outstanding tender through the register. */
+        EXTERNAL,
+        /** Reverse committed reversible steps and fail the settlement. */
+        ABORT,
+        /** Stop immediately and transfer the partial settlement to the register. */
+        ABANDON
+    }
 
-    private SettlementRecovery(boolean abort, Boolean disableRebates,
-                               Boolean disablePoints, Boolean disableAward) {
-        this.abort = abort;
-        this.disableRebates = disableRebates;
-        this.disablePoints = disablePoints;
-        this.disableAward = disableAward;
+    private final Action action;
+    private final ExternalPayment externalPayment;
+
+    private SettlementRecovery(Action action, ExternalPayment externalPayment) {
+        this.action = action;
+        this.externalPayment = externalPayment;
     }
 
     /** Unwind committed charge-side steps and fail the settlement. */
     public static SettlementRecovery abort() {
-        return new SettlementRecovery(true, null, null, null);
+        return new SettlementRecovery(Action.ABORT, null);
     }
 
-    /** Unwind committed charge-side steps and retry with the same settlement options. */
+    /**
+     * Retry only the failed step, preserving every earlier committed step.
+     * Indeterminate terminal requests are resolved through TransactionStatus
+     * before a new request is sent.
+     */
     public static SettlementRecovery retry() {
-        return new SettlementRecovery(false, null, null, null);
+        return new SettlementRecovery(Action.RETRY, null);
     }
 
-    /** Retry with the same settlement options but all loyalty steps disabled. */
-    public static SettlementRecovery retryWithoutLoyalty() {
-        return new SettlementRecovery(false, true, true, true);
+    /**
+     * Skip the failed step. Valid only when all basket obligations remain
+     * satisfiable; the final card tender and stored-value fulfillment cannot skip.
+     */
+    public static SettlementRecovery skip() {
+        return new SettlementRecovery(Action.SKIP, null);
+    }
+
+    /**
+     * Records a register-managed tender and continues after the failed card step.
+     * The payment amount must exactly equal the outstanding amount.
+     */
+    public static SettlementRecovery external(ExternalPayment payment) {
+        if (payment == null) {
+            throw new NullPointerException("payment");
+        }
+        return new SettlementRecovery(Action.EXTERNAL, payment);
+    }
+
+    /**
+     * Stop immediately without status recovery, retry, or unwind and transfer
+     * responsibility for all committed movements to the register. The basket
+     * remains usable and SDK recovery guards are released, so a later settlement
+     * can duplicate those movements unless the register reconciles them.
+     */
+    public static SettlementRecovery abandon() {
+        return new SettlementRecovery(Action.ABANDON, null);
+    }
+
+    public Action getAction() {
+        return action;
+    }
+
+    /** Register-managed tender; non-null only for {@link Action#EXTERNAL}. */
+    public ExternalPayment getExternalPayment() {
+        return externalPayment;
     }
 
     public boolean isAbort() {
-        return abort;
-    }
-
-    /** Nullable override; {@code null} preserves the current attempt setting. */
-    public Boolean getDisableRebates() {
-        return disableRebates;
-    }
-
-    /** Nullable override; {@code null} preserves the current attempt setting. */
-    public Boolean getDisablePoints() {
-        return disablePoints;
-    }
-
-    /** Nullable override; {@code null} preserves the current attempt setting. */
-    public Boolean getDisableAward() {
-        return disableAward;
+        return action == Action.ABORT;
     }
 }

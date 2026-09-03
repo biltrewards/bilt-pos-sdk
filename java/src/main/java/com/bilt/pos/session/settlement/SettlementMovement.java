@@ -24,6 +24,8 @@ public final class SettlementMovement {
     private final String memberId;
     private final Integer points;
     private final Integer pointBalance;
+    private final String externalTenderType;
+    private final String externalReference;
 
     private SettlementMovement(Builder builder) {
         this.step = builder.step;
@@ -35,6 +37,8 @@ public final class SettlementMovement {
         this.memberId = builder.memberId;
         this.points = builder.points;
         this.pointBalance = builder.pointBalance;
+        this.externalTenderType = builder.externalTenderType;
+        this.externalReference = builder.externalReference;
     }
 
     public static Builder builder() {
@@ -78,6 +82,16 @@ public final class SettlementMovement {
         return pointBalance;
     }
 
+    /** Register-managed tender name, populated for {@code EXTERNAL_PAYMENT}. */
+    public String getExternalTenderType() {
+        return externalTenderType;
+    }
+
+    /** Register transaction reference, populated when supplied for external payment. */
+    public String getExternalReference() {
+        return externalReference;
+    }
+
     /** Builder for {@link SettlementMovement}. */
     public static final class Builder {
 
@@ -90,6 +104,8 @@ public final class SettlementMovement {
         private String memberId;
         private Integer points;
         private Integer pointBalance;
+        private String externalTenderType;
+        private String externalReference;
 
         private Builder() {
         }
@@ -136,6 +152,16 @@ public final class SettlementMovement {
 
         public Builder pointBalance(Integer pointBalance) {
             this.pointBalance = pointBalance;
+            return this;
+        }
+
+        public Builder externalTenderType(String externalTenderType) {
+            this.externalTenderType = externalTenderType;
+            return this;
+        }
+
+        public Builder externalReference(String externalReference) {
+            this.externalReference = externalReference;
             return this;
         }
 

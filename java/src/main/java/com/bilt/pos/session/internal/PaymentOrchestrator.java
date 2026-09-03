@@ -44,12 +44,16 @@ import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.identity.IdentifyResult;
+import com.bilt.pos.session.payment.EarnedReward;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
 import com.bilt.pos.session.payment.PointRedemptionResult;
 import com.bilt.pos.session.payment.RebateRedemptionResult;
 import com.bilt.pos.session.payment.RedeemedRebate;
+import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
 import com.bilt.pos.session.settlement.CommittedStep;
+import com.bilt.pos.session.settlement.ExternalPayment;
 import com.bilt.pos.session.settlement.SettlementContext;
+import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementRecovery;
@@ -65,6 +69,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -80,8 +85,6 @@ import java.util.stream.Collectors;
 public final class PaymentOrchestrator {
 
     private static final Logger LOGGER = Logger.getLogger(PaymentOrchestrator.class.getName());
-    private static final int MAX_ERROR_RESOLUTIONS = 3;
-
     /** Handlers captured from the payment flow. All may be {@code null}. */
     public static final class Handlers {
         public Function<SettlementContext, String> beforeStep;
@@ -89,20 +92,27 @@ public final class PaymentOrchestrator {
         public Function<PointRedemptionResult, BigDecimal> onPointsRedeemed;
         public Function<GiftCardPaymentResult, BigDecimal> onGiftCardPayment;
         public Consumer<SettlementMovement> onMovement;
-        public Function<SessionError, SettlementRecovery> onError;
+        public Function<SettlementFailure, SettlementRecovery> onError;
     }
 
     /** Inputs to a payment run. */
     public static final class Request {
         public Basket basket;
+        public Basket fullBasket;
         public IdentifyResult member;
         public com.bilt.pos.session.storedvalue.StoredValueCard storedValueCard;
         public SettlementOptions options;
         public Handlers handlers = new Handlers();
         public List<CommittedStep> priorSteps = List.of();
+        public List<SettlementMovement> priorMovements = List.of();
+        public String settlementId = UUID.randomUUID().toString();
+        SettlementResult.Builder partialResult;
+        List<SettlementMovement> activeMovements = List.of();
         public BooleanSupplier abortRequested = () -> false;
         /** Receives the movements an incomplete unwind left standing. */
         public Consumer<List<StandingMovement>> onUnreversed = movements -> { };
+        /** Transfers the partial ledger out of the session on abandon. */
+        public Consumer<AbandonedSettlementRecord> onAbandoned = record -> { };
     }
 
     /**
@@ -136,11 +146,26 @@ public final class PaymentOrchestrator {
         private static final long serialVersionUID = 1L;
         final transient SessionError error;
         final boolean aborted;
+        final SettlementStep step;
+        final MessageCategoryType category;
+        final String serviceId;
+        final SettlementFailure.OutcomeCertainty certainty;
 
         StepFailure(SessionError error, boolean aborted) {
+            this(error, aborted, null, null, null,
+                    SettlementFailure.OutcomeCertainty.DEFINITIVE);
+        }
+
+        StepFailure(SessionError error, boolean aborted, SettlementStep step,
+                    MessageCategoryType category, String serviceId,
+                    SettlementFailure.OutcomeCertainty certainty) {
             super(error.toString());
             this.error = error;
             this.aborted = aborted;
+            this.step = step;
+            this.category = category;
+            this.serviceId = serviceId;
+            this.certainty = certainty;
         }
     }
 
@@ -159,9 +184,9 @@ public final class PaymentOrchestrator {
     private static final class AttemptOptions {
         final BigDecimal cashback;
         final DisplayPayload paymentProcessingDisplay;
-        boolean disableRebates;
-        boolean disablePoints;
-        boolean disableAward;
+        final boolean disableRebates;
+        final boolean disablePoints;
+        final boolean disableAward;
 
         AttemptOptions(SettlementOptions request) {
             this.cashback = request.getCashback();
@@ -171,16 +196,34 @@ public final class PaymentOrchestrator {
             this.disableAward = request.isDisableAward();
         }
 
-        void apply(SettlementRecovery recovery) {
-            if (recovery.getDisableRebates() != null) {
-                disableRebates = recovery.getDisableRebates();
-            }
-            if (recovery.getDisablePoints() != null) {
-                disablePoints = recovery.getDisablePoints();
-            }
-            if (recovery.getDisableAward() != null) {
-                disableAward = recovery.getDisableAward();
-            }
+    }
+
+    @FunctionalInterface
+    private interface StepAttempt<T> {
+        T run(String saleTransactionId, SaleToPOIResponse recoveredResponse);
+    }
+
+    private static final class StepOutcome<T> {
+        final T value;
+        final boolean skipped;
+        final ExternalPayment externalPayment;
+
+        private StepOutcome(T value, boolean skipped, ExternalPayment externalPayment) {
+            this.value = value;
+            this.skipped = skipped;
+            this.externalPayment = externalPayment;
+        }
+
+        static <T> StepOutcome<T> completed(T value) {
+            return new StepOutcome<>(value, false, null);
+        }
+
+        static <T> StepOutcome<T> skipped() {
+            return new StepOutcome<>(null, true, null);
+        }
+
+        static <T> StepOutcome<T> external(ExternalPayment payment) {
+            return new StepOutcome<>(null, false, payment);
         }
     }
 
@@ -196,102 +239,54 @@ public final class PaymentOrchestrator {
                 storedValueManager, "storedValueManager");
     }
 
-    /**
-     * Runs the payment. On unrecoverable failure the committed steps are
-     * reversed and a {@link SessionException} is thrown — with
-     * {@link SessionErrorCode#ABORTED} when the run was aborted.
-     */
+    /** Runs the checkpointed charge-side settlement sequence. */
     public SettlementResult run(Request request) {
         AttemptOptions options = new AttemptOptions(request.options);
-        int resolutions = 0;
-        while (true) {
-            List<Commit> committed = new ArrayList<>();
-            try {
-                return runSequence(request, options, committed);
-            } catch (RuntimeException e) {
-                // a register handler (or other bug) throwing must not leave
-                // committed tender/loyalty steps standing: treat it like a
-                // step failure — unwind, then let onError decide
-                StepFailure failure = e instanceof StepFailure
-                        ? (StepFailure) e
-                        : new StepFailure(new SessionError(SessionErrorCode.UNKNOWN,
-                                "unexpected error during payment: " + e, null, e), false);
-                List<StandingMovement> unreversed = unwind(committed);
-                if (!unreversed.isEmpty()) {
-                    request.onUnreversed.accept(unreversed);
-                }
-                SessionError error = withRollbackFailures(failure.error, unreversed);
-                // the abort path bypasses onError. It is taken when checkAbort
-                // trips between steps, and also when our own abort() killed
-                // the in-flight step (the terminal replies Aborted) — an
-                // intentional abort must not surface as a recoverable failure.
-                // A terminal-initiated abort without our flag still reaches
-                // onError, since the register may want to retry it.
-                if (failure.aborted
-                        || (request.abortRequested.getAsBoolean()
-                                && error.getCode() == SessionErrorCode.ABORTED)) {
-                    throw new SessionException(error);
-                }
-                resolutions++;
-                SettlementRecovery resolution = request.handlers.onError == null
-                        ? SettlementRecovery.abort()
-                        : request.handlers.onError.apply(error);
-                boolean wantsRetry = resolution != null && !resolution.isAbort();
-                if (!wantsRetry) {
-                    throw new SessionException(error);
-                }
-                // a retry on top of an incomplete unwind would run the
-                // sequence again while a previous movement still stands —
-                // double-charging the tender or double-redeeming loyalty.
-                // Whatever onError asked for, only a clean unwind may retry.
-                if (!unreversed.isEmpty()) {
-                    LOGGER.warning("onError requested a retry, but the rollback was "
-                            + "incomplete; failing the payment instead");
-                    throw new SessionException(Wire.annotated(error, error.getMessage()
-                            + "; the requested retry was refused — only a clean unwind "
-                            + "may retry", error.getCause()));
-                }
-                if (resolutions >= MAX_ERROR_RESOLUTIONS) {
-                    LOGGER.warning("payment retry limit reached; failing the payment");
-                    throw new SessionException(Wire.annotated(error, error.getMessage()
-                            + "; the retry limit was reached and the payment failed",
-                            error.getCause()));
-                }
-                options.apply(resolution);
-            }
-        }
+        List<Commit> committed = new ArrayList<>();
+        List<SettlementMovement> movements = new ArrayList<>(request.priorMovements);
+        request.activeMovements = movements;
+        return runSequence(request, options, committed, movements);
     }
 
     // ─── The sequence ───
 
     private SettlementResult runSequence(Request request, AttemptOptions options,
-                                       List<Commit> committed) {
+                                         List<Commit> committed,
+                                         List<SettlementMovement> movements) {
         Basket workingBasket = request.basket;
         BigDecimal currentTotal = workingBasket.getGrandTotal();
         boolean loyalty = request.member != null;
         boolean chargeDue = currentTotal.signum() > 0;
 
         SettlementResult.Builder result = SettlementResult.builder().success(true);
+        request.partialResult = result;
         List<RedeemedRebate> redeemedRebates = new ArrayList<>();
         BigDecimal rebateTotal = BigDecimal.ZERO;
         int pointsRedeemed = 0;
         BigDecimal pointsValue = BigDecimal.ZERO;
         BigDecimal storedValueCharged = BigDecimal.ZERO;
         BigDecimal cardCharged = BigDecimal.ZERO;
+        BigDecimal externalPaid = BigDecimal.ZERO;
         BigDecimal storedValueLoaded = BigDecimal.ZERO;
 
         // 1. Rebate redemption
         if (chargeDue && loyalty && !options.disableRebates) {
-            checkAbort(request);
-            String saleTxnId = beforeStep(request, SettlementStep.REBATE_REDEMPTION,
-                    workingBasket, currentTotal, committed);
-            RebateOutcome outcome = rebateStep(request, workingBasket, currentTotal,
-                    saleTxnId, committed, result);
-            redeemedRebates = outcome.rebates;
-            rebateTotal = outcome.totalRebate;
-            workingBasket = outcome.updatedBasket;
-            currentTotal = applyHandlerTotal(request.handlers.onRebatesRedeemed,
-                    outcome.result, outcome.result.getSuggestedTotal());
+            Basket stepBasket = workingBasket;
+            BigDecimal stepTotal = currentTotal;
+            StepOutcome<RebateOutcome> recovered = runStep(request, committed, movements,
+                    SettlementStep.REBATE_REDEMPTION, stepBasket, stepTotal,
+                    true, false, (saleTxnId, response) -> rebateStep(request, stepBasket,
+                            stepTotal, saleTxnId, committed, movements, result, response));
+            if (!recovered.skipped) {
+                RebateOutcome outcome = recovered.value;
+                redeemedRebates = outcome.rebates;
+                rebateTotal = outcome.totalRebate;
+                workingBasket = outcome.updatedBasket;
+                currentTotal = applyHandlerTotal(request, committed, movements,
+                        SettlementStep.REBATE_REDEMPTION, workingBasket,
+                        request.handlers.onRebatesRedeemed, outcome.result,
+                        outcome.result.getSuggestedTotal());
+            }
         }
 
         // 2. Point / reward redemption — like the stored value and card
@@ -300,91 +295,393 @@ public final class PaymentOrchestrator {
         // so redeeming would take the member's points for no discount
         if (loyalty && !options.disablePoints && !request.member.getRewards().isEmpty()
                 && currentTotal.signum() > 0) {
-            checkAbort(request);
-            String saleTxnId = beforeStep(request, SettlementStep.POINT_REDEMPTION,
-                    workingBasket, currentTotal, committed);
-            PointRedemptionResult points = pointsStep(request, workingBasket, currentTotal,
-                    saleTxnId, committed, result);
-            pointsRedeemed = points.getPointsUsed();
-            pointsValue = points.getMonetaryValue();
-            result.pointsBalance(points.getRemainingPointBalance());
-            currentTotal = applyHandlerTotal(request.handlers.onPointsRedeemed,
-                    points, points.getSuggestedTotal());
+            Basket stepBasket = workingBasket;
+            BigDecimal stepTotal = currentTotal;
+            StepOutcome<PointRedemptionResult> recovered = runStep(request, committed, movements,
+                    SettlementStep.POINT_REDEMPTION, stepBasket, stepTotal,
+                    true, false, (saleTxnId, response) -> pointsStep(request, stepBasket,
+                            stepTotal, saleTxnId, committed, movements, result, response));
+            if (!recovered.skipped) {
+                PointRedemptionResult points = recovered.value;
+                pointsRedeemed = points.getPointsUsed();
+                pointsValue = points.getMonetaryValue();
+                result.pointsBalance(points.getRemainingPointBalance());
+                currentTotal = applyHandlerTotal(request, committed, movements,
+                        SettlementStep.POINT_REDEMPTION, workingBasket,
+                        request.handlers.onPointsRedeemed, points,
+                        points.getSuggestedTotal());
+            }
         }
 
         // 3. Stored value
         if (request.storedValueCard != null && currentTotal.signum() > 0) {
-            checkAbort(request);
-            String saleTxnId = beforeStep(request, SettlementStep.STORED_VALUE_CHARGE,
-                    workingBasket, currentTotal, committed);
-            GiftCardPaymentResult giftCard = storedValueStep(request, currentTotal,
-                    saleTxnId, committed, result);
-            storedValueCharged = giftCard.getAmountCharged();
-            currentTotal = applyHandlerTotal(request.handlers.onGiftCardPayment,
-                    giftCard, giftCard.getSuggestedTotal());
+            BigDecimal stepTotal = currentTotal;
+            StepOutcome<GiftCardPaymentResult> recovered = runStep(request, committed, movements,
+                    SettlementStep.STORED_VALUE_CHARGE, workingBasket, stepTotal,
+                    true, false, (saleTxnId, response) -> storedValueStep(request, stepTotal,
+                            saleTxnId, committed, movements, result, response));
+            if (!recovered.skipped) {
+                GiftCardPaymentResult giftCard = recovered.value;
+                storedValueCharged = giftCard.getAmountCharged();
+                currentTotal = applyHandlerTotal(request, committed, movements,
+                        SettlementStep.STORED_VALUE_CHARGE, workingBasket,
+                        request.handlers.onGiftCardPayment, giftCard,
+                        giftCard.getSuggestedTotal());
+            }
         }
 
         // 4. Card payment
         if (currentTotal.signum() > 0) {
-            checkAbort(request);
             if (options.paymentProcessingDisplay != null) {
                 showProcessingDisplay(options.paymentProcessingDisplay);
             }
-            String saleTxnId = beforeStep(request, SettlementStep.CARD_CHARGE,
-                    workingBasket, currentTotal, committed);
-            cardCharged = cardStep(request, workingBasket, currentTotal, options,
-                    saleTxnId, committed, result);
+            Basket stepBasket = workingBasket;
+            BigDecimal stepTotal = currentTotal;
+            StepOutcome<BigDecimal> recovered = runStep(request, committed, movements,
+                    SettlementStep.CARD_CHARGE, stepBasket, stepTotal,
+                    false, options.cashback == null,
+                    (saleTxnId, response) -> cardStep(request, stepBasket, stepTotal,
+                            options, saleTxnId, committed, movements, result, response));
+            if (recovered.externalPayment != null) {
+                externalPaid = recovered.externalPayment.getAmount();
+            } else {
+                cardCharged = recovered.value;
+            }
         }
 
-        // 5. Fulfill each stored value line after its funding commits. A
-        // failure reverses earlier loads and the charge-side movements.
+        // 5. Fulfill each stored value line after its funding commits. The
+        // register can retry a failed load or abort the whole charge side.
         for (StoredValueLoad fulfillment : request.options.getFulfillments()) {
-            checkAbort(request);
             BasketLineItem line = Objects.requireNonNull(
                     request.basket.getItemByReference(fulfillment.getBasketReference()),
                     () -> "fulfillment references basket line "
                             + fulfillment.getBasketReference()
                             + " which is absent from the charge basket");
             BigDecimal amount = line.getOriginalTotal();
-            String saleTxnId = beforeStep(request, SettlementStep.STORED_VALUE_LOAD,
-                    workingBasket, amount, committed);
-            storedValueLoaded = storedValueLoaded.add(storedValueLoadStep(request,
-                    fulfillment, amount, saleTxnId, committed, result));
+            StepOutcome<BigDecimal> recovered = runStep(request, committed, movements,
+                    SettlementStep.STORED_VALUE_LOAD, workingBasket, amount,
+                    false, false, (saleTxnId, response) -> storedValueLoadStep(request,
+                            fulfillment, amount, saleTxnId, committed, movements, result,
+                            response));
+            storedValueLoaded = storedValueLoaded.add(recovered.value);
         }
 
-        // 6. Award (best-effort — never fails the checkout; terminal SAFs)
+        // 6. Award wire failures are best-effort; register callback failures
+        // use the same checkpoint recovery as every other step.
         if (chargeDue && loyalty && !options.disableAward) {
-            checkAbort(request);
-            String saleTxnId = beforeStep(request, SettlementStep.AWARD,
-                    workingBasket, storedValueCharged.add(cardCharged), committed);
-            awardStep(request, workingBasket, saleTxnId, committed, result);
+            Basket awardBasket = workingBasket;
+            BigDecimal awardTotal = storedValueCharged.add(cardCharged).add(externalPaid);
+            runStep(request, committed, movements, SettlementStep.AWARD,
+                    awardBasket, awardTotal, false, false,
+                    (saleTxnId, response) -> {
+                        awardStep(request, awardBasket, saleTxnId,
+                                committed, movements, result);
+                        return Boolean.TRUE;
+                    });
         }
 
         // An abort that landed during the award must still unwind the money
         // movements — the award's own failures are non-fatal, but an abort is
         // a rollback request, not an award failure.
-        checkAbort(request);
+        checkAbort(request, committed);
 
         Basket finalBasket = chargeDue
                 ? withPaymentTotals(workingBasket, rebateTotal, pointsValue,
-                        storedValueCharged, cardCharged, options.cashback)
+                        storedValueCharged, cardCharged, externalPaid, options.cashback)
                 : workingBasket;
 
         // last look before success is declared; later aborts are too late
         // and the completed payment stands (void it explicitly instead)
-        checkAbort(request);
+        checkAbort(request, committed);
 
         return result
                 .finalBasket(finalBasket)
                 .authorizedAmount(storedValueCharged.add(cardCharged))
                 .storedValueAmountUsed(storedValueCharged)
                 .cardAmountCharged(cardCharged)
+                .externalPaymentAmount(externalPaid)
                 .storedValueLoadedAmount(storedValueLoaded)
                 .redeemedRebates(redeemedRebates)
                 .totalRebateAmount(rebateTotal)
                 .pointsRedeemed(pointsRedeemed)
                 .pointsMonetaryValue(pointsValue)
                 .build();
+    }
+
+    /**
+     * Executes one checkpointed step. Earlier commits remain standing while
+     * the register decides whether to retry, skip, pay externally, abort, or
+     * abandon. Only abort performs the full unwind.
+     */
+    private <T> StepOutcome<T> runStep(Request request, List<Commit> committed,
+                                       List<SettlementMovement> movements,
+                                       SettlementStep step, Basket basket,
+                                       BigDecimal amountDue, boolean maySkip,
+                                       boolean mayPayExternally,
+                                       StepAttempt<T> attempt) {
+        while (true) {
+            if (request.abortRequested.getAsBoolean()) {
+                throw abort(request, committed, new SessionError(SessionErrorCode.ABORTED,
+                        "the payment was aborted"));
+            }
+            String saleTxnId;
+            int commitCheckpoint = committed.size();
+            int movementCheckpoint = movements.size();
+            try {
+                saleTxnId = beforeStep(request, step, basket, amountDue, committed);
+            } catch (RuntimeException e) {
+                StepFailure failure = normalizeFailure(e, step);
+                StepOutcome<T> outcome = resolveFailure(request, committed, movements,
+                        step, basket, amountDue, maySkip, mayPayExternally, attempt,
+                        null, failure, commitCheckpoint, movementCheckpoint);
+                if (outcome != null) {
+                    return outcome;
+                }
+                continue;
+            }
+            try {
+                return StepOutcome.completed(attempt.run(saleTxnId, null));
+            } catch (RuntimeException e) {
+                StepFailure failure = normalizeFailure(e, step);
+                if (failure.aborted
+                        || (request.abortRequested.getAsBoolean()
+                                && failure.error.getCode() == SessionErrorCode.ABORTED)) {
+                    throw abort(request, committed, failure.error);
+                }
+                StepOutcome<T> outcome = resolveFailure(request, committed, movements,
+                        step, basket, amountDue, maySkip, mayPayExternally, attempt,
+                        saleTxnId, failure, commitCheckpoint, movementCheckpoint);
+                if (outcome != null) {
+                    return outcome;
+                }
+            }
+        }
+    }
+
+    /** Null means retry the step with a fresh wire request. */
+    private <T> StepOutcome<T> resolveFailure(Request request, List<Commit> committed,
+            List<SettlementMovement> movements, SettlementStep step, Basket basket,
+            BigDecimal amountDue, boolean maySkip, boolean mayPayExternally,
+            StepAttempt<T> attempt, String saleTxnId, StepFailure failure,
+            int commitCheckpoint, int movementCheckpoint) {
+        SettlementFailure context = settlementFailure(step, failure, amountDue, movements);
+        SettlementRecovery recovery = consultRecovery(request, committed, context);
+        if (recovery.getAction() == SettlementRecovery.Action.ABANDON) {
+            throw abandon(request, context, movements, amountDue);
+        }
+
+        if (failure.certainty == SettlementFailure.OutcomeCertainty.INDETERMINATE
+                && failure.serviceId != null && failure.category != null) {
+            SaleToPOIResponse recovered;
+            try {
+                recovered = exchange.recoverByTransactionStatus(
+                        failure.serviceId, failure.category);
+            } catch (SessionException statusFailure) {
+                SessionError unresolved = Wire.annotated(statusFailure.getError(),
+                        "could not resolve " + step + " request " + failure.serviceId
+                                + " before " + recovery.getAction().name().toLowerCase()
+                                + ": " + statusFailure.getError().getMessage(),
+                        statusFailure);
+                if (recovery.getAction() == SettlementRecovery.Action.ABORT) {
+                    throw abort(request, committed, unresolved);
+                }
+                preserveStanding(request, committed);
+                throw new SessionException(unresolved);
+            }
+            if (recovered != null) {
+                T recoveredValue;
+                try {
+                    // The original request committed: consume its repeated
+                    // response instead of resending or applying the decision.
+                    recoveredValue = attempt.run(saleTxnId, recovered);
+                } catch (RuntimeException e) {
+                    StepFailure resolved = normalizeFailure(e, step);
+                    if (resolved.certainty == SettlementFailure.OutcomeCertainty.INDETERMINATE) {
+                        preserveStanding(request, committed);
+                        throw new SessionException(resolved.error);
+                    }
+                    // A repeated failure is definitive. Apply the register's
+                    // original decision without a second callback.
+                    failure = resolved;
+                    recoveredValue = null;
+                }
+                if (recoveredValue != null) {
+                    if (recovery.getAction() == SettlementRecovery.Action.ABORT) {
+                        throw abort(request, committed, failure.error);
+                    }
+                    return StepOutcome.completed(recoveredValue);
+                }
+            }
+        }
+
+        switch (recovery.getAction()) {
+            case RETRY:
+                resetFailedStep(request, committed, movements,
+                        commitCheckpoint, movementCheckpoint, step);
+                return null;
+            case SKIP:
+                if (!maySkip) {
+                    throw invalidRecovery(request, committed, step,
+                            "skip would leave a required basket obligation unresolved");
+                }
+                resetFailedStep(request, committed, movements,
+                        commitCheckpoint, movementCheckpoint, step);
+                return StepOutcome.skipped();
+            case EXTERNAL:
+                if (!mayPayExternally || step != SettlementStep.CARD_CHARGE) {
+                    throw invalidRecovery(request, committed, step,
+                            "external payment is valid only for the final card tender");
+                }
+                ExternalPayment payment = recovery.getExternalPayment();
+                if (payment.getAmount().compareTo(amountDue) != 0) {
+                    throw invalidRecovery(request, committed, step,
+                            "external payment " + payment.getAmount()
+                                    + " must equal the outstanding " + amountDue);
+                }
+                resetFailedStep(request, committed, movements,
+                        commitCheckpoint, movementCheckpoint, step);
+                StepOutcome<ExternalPayment> external = runStep(request, committed,
+                        movements, SettlementStep.EXTERNAL_PAYMENT, basket, amountDue,
+                        false, false, (externalTxnId, response) ->
+                                externalPaymentStep(request, payment, externalTxnId,
+                                        movements));
+                return StepOutcome.external(external.value);
+            case ABORT:
+                throw abort(request, committed, failure.error);
+            case ABANDON:
+                throw new AssertionError("abandon handled before status recovery");
+            default:
+                throw new AssertionError("unknown settlement recovery "
+                        + recovery.getAction());
+        }
+    }
+
+    private static StepFailure normalizeFailure(RuntimeException failure,
+                                                 SettlementStep step) {
+        if (failure instanceof StepFailure) {
+            StepFailure existing = (StepFailure) failure;
+            if (existing.step != null) {
+                return existing;
+            }
+            return new StepFailure(existing.error, existing.aborted, step,
+                    existing.category, existing.serviceId, existing.certainty);
+        }
+        if (failure instanceof SessionException) {
+            return new StepFailure(((SessionException) failure).getError(), false, step,
+                    null, null, SettlementFailure.OutcomeCertainty.DEFINITIVE);
+        }
+        return new StepFailure(new SessionError(SessionErrorCode.UNKNOWN,
+                "unexpected error during " + step + ": " + failure, null, failure),
+                false, step, null, null, SettlementFailure.OutcomeCertainty.DEFINITIVE);
+    }
+
+    private static SettlementFailure settlementFailure(SettlementStep step,
+            StepFailure failure, BigDecimal amountDue,
+            List<SettlementMovement> movements) {
+        return new SettlementFailure(step, failure.error, amountDue, movements,
+                failure.certainty,
+                failure.category == null ? null : failure.category.toValue(),
+                failure.serviceId);
+    }
+
+    private SettlementRecovery consultRecovery(Request request, List<Commit> committed,
+                                                SettlementFailure failure) {
+        if (request.handlers.onError == null) {
+            return SettlementRecovery.abort();
+        }
+        try {
+            SettlementRecovery recovery = request.handlers.onError.apply(failure);
+            return recovery == null ? SettlementRecovery.abort() : recovery;
+        } catch (RuntimeException handlerFailure) {
+            throw abort(request, committed, new SessionError(SessionErrorCode.UNKNOWN,
+                    "settlement onError handler threw: " + handlerFailure,
+                    null, handlerFailure));
+        }
+    }
+
+    private SessionException abort(Request request, List<Commit> committed,
+                                   SessionError failure) {
+        List<StandingMovement> unreversed = unwind(committed);
+        request.onUnreversed.accept(unreversed);
+        SessionError error = withRollbackFailures(failure, unreversed);
+        BigDecimal externalStanding = BigDecimal.ZERO;
+        for (SettlementMovement movement : request.activeMovements) {
+            if (movement.getStep() == SettlementStep.EXTERNAL_PAYMENT
+                    && movement.getAmount() != null) {
+                externalStanding = externalStanding.add(movement.getAmount());
+            }
+        }
+        if (externalStanding.signum() > 0) {
+            error = Wire.annotated(error, error.getMessage()
+                    + "; register-managed external payment " + externalStanding
+                    + " remains standing", error.getCause());
+        }
+        return new SessionException(error);
+    }
+
+    private SessionException abandon(Request request, SettlementFailure failure,
+                                     List<SettlementMovement> movements,
+                                     BigDecimal amountDue) {
+        AbandonedSettlementRecord record = new AbandonedSettlementRecord(
+                request.settlementId, Instant.now(),
+                request.fullBasket == null ? request.basket : request.fullBasket,
+                request.options,
+                request.member == null ? null : request.member.getMemberId(),
+                failure, amountDue, movements);
+        request.onAbandoned.accept(record);
+        return new SessionException(new SessionError(SessionErrorCode.ABANDONED,
+                "settlement recovery was abandoned to the register"), record);
+    }
+
+    private static SessionException invalidRecovery(Request request, List<Commit> committed,
+                                                     SettlementStep step, String reason) {
+        preserveStanding(request, committed);
+        return new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
+                "invalid recovery for " + step + ": " + reason));
+    }
+
+    private static void preserveStanding(Request request, List<Commit> committed) {
+        List<StandingMovement> standing = new ArrayList<>();
+        for (Commit commit : committed) {
+            if (commit.rollback != null) {
+                standing.add(new StandingMovement(commit.info, commit.rollback));
+            }
+        }
+        request.onUnreversed.accept(standing);
+    }
+
+    /** Reverses only a partially committed failed step before retry/skip/substitution. */
+    private void resetFailedStep(Request request, List<Commit> committed,
+            List<SettlementMovement> movements, int commitCheckpoint,
+            int movementCheckpoint, SettlementStep step) {
+        List<StandingMovement> unreversed = new ArrayList<>();
+        for (int i = committed.size() - 1; i >= commitCheckpoint; i--) {
+            Commit commit = committed.get(i);
+            if (commit.rollback != null) {
+                try {
+                    commit.rollback.run();
+                } catch (RuntimeException e) {
+                    LOGGER.log(Level.WARNING, "rollback of partially committed "
+                            + step + " failed", e);
+                    unreversed.add(new StandingMovement(commit.info, commit.rollback));
+                    continue;
+                }
+            }
+            committed.remove(i);
+        }
+        if (!unreversed.isEmpty()) {
+            preserveStanding(request, committed);
+            throw new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
+                    "could not reset the partially committed " + step
+                            + " before continuing; manual reconciliation is required"));
+        }
+        int removedMovements = movements.size() - movementCheckpoint;
+        if (removedMovements > 0) {
+            movements.subList(movementCheckpoint, movements.size()).clear();
+            if (request.partialResult != null) {
+                request.partialResult.removeLastMovements(removedMovements);
+            }
+        }
     }
 
     // ─── Steps ───
@@ -398,9 +695,12 @@ public final class PaymentOrchestrator {
 
     private RebateOutcome rebateStep(Request request, Basket basket, BigDecimal currentTotal,
                                      String saleTxnId, List<Commit> committed,
-                                     SettlementResult.Builder result) {
-        LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.REBATE, request, basket,
-                saleTxnId, null);
+                                     List<SettlementMovement> movements,
+                                     SettlementResult.Builder result,
+                                     SaleToPOIResponse recoveredResponse) {
+        LoyaltyResponse body = sendLoyalty(SettlementStep.REBATE_REDEMPTION,
+                LoyaltyTransactionTypeEnum.REBATE, request, basket,
+                saleTxnId, null, recoveredResponse);
 
         List<RedeemedRebate> rebates = new ArrayList<>();
         BigDecimal totalRebate = BigDecimal.ZERO;
@@ -439,7 +739,7 @@ public final class PaymentOrchestrator {
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REBATE_REFUND,
                                 Wire.poiRef(body.getPoiData()), request.member.getMemberId())
                         : null);
-        publishMovement(request, result, movement(SettlementStep.REBATE_REDEMPTION,
+        publishMovement(request, movements, result, movement(SettlementStep.REBATE_REDEMPTION,
                 totalRebate, saleTxnId, body.getPoiData(), request.member.getMemberId(),
                 null, null));
         // kept on the result so a checkout with no payment legs (rewards
@@ -462,11 +762,14 @@ public final class PaymentOrchestrator {
     private PointRedemptionResult pointsStep(Request request, Basket basket,
                                              BigDecimal currentTotal, String saleTxnId,
                                              List<Commit> committed,
-                                             SettlementResult.Builder result) {
+                                             List<SettlementMovement> movements,
+                                             SettlementResult.Builder result,
+                                             SaleToPOIResponse recoveredResponse) {
         String rewardRefsPayload = LoyaltyPayloadCodec.memberRewardRefs(
                 request.member.getRewards());
-        LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.REDEMPTION, request, basket,
-                saleTxnId, rewardRefsPayload);
+        LoyaltyResponse body = sendLoyalty(SettlementStep.POINT_REDEMPTION,
+                LoyaltyTransactionTypeEnum.REDEMPTION, request, basket,
+                saleTxnId, rewardRefsPayload, recoveredResponse);
 
         LoyaltyResult first = Wire.firstLoyaltyResult(body);
         BigDecimal monetaryValue = BigDecimal.ZERO;
@@ -499,7 +802,7 @@ public final class PaymentOrchestrator {
                         ? loyaltyRollback(LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
                                 Wire.poiRef(body.getPoiData()), request.member.getMemberId())
                         : null);
-        publishMovement(request, result, movement(SettlementStep.POINT_REDEMPTION,
+        publishMovement(request, movements, result, movement(SettlementStep.POINT_REDEMPTION,
                 monetaryValue, saleTxnId, body.getPoiData(), request.member.getMemberId(),
                 pointsUsed, balance));
         // kept on the result so a checkout with no payment legs (rewards
@@ -517,7 +820,9 @@ public final class PaymentOrchestrator {
 
     private GiftCardPaymentResult storedValueStep(Request request, BigDecimal currentTotal,
                                                   String saleTxnId, List<Commit> committed,
-                                                  SettlementResult.Builder result) {
+                                                  List<SettlementMovement> movements,
+                                                  SettlementResult.Builder result,
+                                                  SaleToPOIResponse recoveredResponse) {
         SaleToPOIRequest wireRequest = SaleToPOIRequest.builder()
                 .messageHeader(exchange.factory().header(
                         MessageClassType.SERVICE, MessageCategoryType.PAYMENT))
@@ -540,7 +845,7 @@ public final class PaymentOrchestrator {
                 .build();
 
         PaymentResponse body = sendPayment(SettlementStep.STORED_VALUE_CHARGE, wireRequest,
-                currentTotal);
+                currentTotal, recoveredResponse);
         BigDecimal charged = body.getPaymentResult() != null
                 && body.getPaymentResult().getAmountsResp() != null
                 ? Wire.money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
@@ -550,7 +855,7 @@ public final class PaymentOrchestrator {
 
         commit(committed, SettlementStep.STORED_VALUE_CHARGE, saleTxnId, body.getPoiData(),
                 reversalRollback(Wire.poiRef(body.getPoiData())));
-        publishMovement(request, result, movement(SettlementStep.STORED_VALUE_CHARGE,
+        publishMovement(request, movements, result, movement(SettlementStep.STORED_VALUE_CHARGE,
                 charged, saleTxnId, body.getPoiData(), null, null, null));
 
         // a gift-card-only checkout has no card step: this payment's
@@ -572,15 +877,28 @@ public final class PaymentOrchestrator {
 
     private BigDecimal storedValueLoadStep(Request request, StoredValueLoad fulfillment,
             BigDecimal amount, String saleTxnId, List<Commit> committed,
-            SettlementResult.Builder result) {
+            List<SettlementMovement> movements, SettlementResult.Builder result,
+            SaleToPOIResponse recoveredResponse) {
         StoredValueTransactionTypeEnum type = fulfillment.getType() == StoredValueLoad.Type.ACTIVATE
                 ? StoredValueTransactionTypeEnum.ACTIVATE : StoredValueTransactionTypeEnum.LOAD;
+        SaleToPOIRequest wireRequest = storedValueManager.operationRequest(type,
+                fulfillment.getCard(), amount, null, null, saleTxnId);
         StoredValueOperationResult loaded;
+        boolean responseReceived = recoveredResponse != null;
         try {
-            loaded = storedValueManager.operation(type, fulfillment.getCard(), amount,
-                    null, null, saleTxnId);
+            SaleToPOIResponse response;
+            if (recoveredResponse != null) {
+                response = recoveredResponse;
+            } else {
+                response = exchange.sendExpectingBody(
+                        MessageCategoryType.STORED_VALUE, wireRequest);
+                responseReceived = true;
+            }
+            loaded = storedValueManager.operationResult(type, amount, response);
         } catch (SessionException e) {
-            throw new StepFailure(e.getError(), false);
+            throw wireFailure(SettlementStep.STORED_VALUE_LOAD,
+                    MessageCategoryType.STORED_VALUE, wireRequest, e.getError(),
+                    responseReceived);
         }
         BigDecimal actualAmount = loaded.getAmount() == null ? amount : loaded.getAmount();
         Runnable rollback = loaded.getPoiTransactionId() == null ? null : () ->
@@ -589,7 +907,7 @@ public final class PaymentOrchestrator {
                         loaded.getPoiTransactionTimestamp());
         commit(committed, SettlementStep.STORED_VALUE_LOAD, saleTxnId,
                 loaded.getPoiTransactionId(), loaded.getPoiTransactionTimestamp(), rollback);
-        publishMovement(request, result, movement(SettlementStep.STORED_VALUE_LOAD,
+        publishMovement(request, movements, result, movement(SettlementStep.STORED_VALUE_LOAD,
                 fulfillment.getTarget(), actualAmount, saleTxnId,
                 loaded.getPoiTransactionId(), loaded.getPoiTransactionTimestamp(),
                 null, null, null));
@@ -604,7 +922,9 @@ public final class PaymentOrchestrator {
 
     private BigDecimal cardStep(Request request, Basket basket, BigDecimal currentTotal,
                                 AttemptOptions options, String saleTxnId,
-                                List<Commit> committed, SettlementResult.Builder result) {
+                                List<Commit> committed, List<SettlementMovement> movements,
+                                SettlementResult.Builder result,
+                                SaleToPOIResponse recoveredResponse) {
         // nexo contract: RequestedAmount is the TOTAL requested for payment
         // INCLUDING cashback — the terminal authorizes sale + cashback as
         // one amount, with CashBackAmount identifying the cash portion
@@ -630,7 +950,7 @@ public final class PaymentOrchestrator {
                 .build();
 
         PaymentResponse body = sendPayment(SettlementStep.CARD_CHARGE, wireRequest,
-                grossTotal);
+                grossTotal, recoveredResponse);
         BigDecimal charged = body.getPaymentResult() != null
                 && body.getPaymentResult().getAmountsResp() != null
                 ? Wire.money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
@@ -640,7 +960,7 @@ public final class PaymentOrchestrator {
         // reversed by the unwind like any other committed step
         commit(committed, SettlementStep.CARD_CHARGE, saleTxnId, body.getPoiData(),
                 reversalRollback(Wire.poiRef(body.getPoiData())));
-        publishMovement(request, result, movement(SettlementStep.CARD_CHARGE,
+        publishMovement(request, movements, result, movement(SettlementStep.CARD_CHARGE,
                 charged, saleTxnId, body.getPoiData(), null, null, null));
 
         // a partial authorization on the stored value step is the split
@@ -702,61 +1022,84 @@ public final class PaymentOrchestrator {
 
     private void awardStep(Request request, Basket basket,
                            String saleTxnId, List<Commit> committed,
+                           List<SettlementMovement> movements,
                            SettlementResult.Builder result) {
+        LoyaltyResponse body;
         try {
-            LoyaltyResponse body = sendLoyalty(LoyaltyTransactionTypeEnum.AWARD, request, basket,
-                    saleTxnId, null);
-            // an abort observed after this point unwinds the tender — the
-            // credited points must be reversed with it, like void does
-            TransactionIdentificationType awardPoiTxn = Wire.poiRef(body.getPoiData());
-            commit(committed, SettlementStep.AWARD, saleTxnId, body.getPoiData(),
-                    awardPoiTxn != null
-                            ? loyaltyRollback(LoyaltyTransactionTypeEnum.AWARD_REFUND,
-                                    awardPoiTxn, request.member.getMemberId())
-                            : null);
-            if (awardPoiTxn != null) {
-                // kept on the result so a later void/refund can reverse the
-                // award by its own reference, per the reverse-award contract
-                result.awardPoiTransactionId(awardPoiTxn.getTransactionID());
-                result.awardPoiTransactionTimestamp(Wire.instant(awardPoiTxn.getTimeStamp()));
-            }
-            LoyaltyResult first = Wire.firstLoyaltyResult(body);
-            if (first != null && first.getLoyaltyAmount() != null) {
-                result.totalPointsEarned((int) Math.round(
-                        first.getLoyaltyAmount().getAmountValue()));
-            }
-            if (first != null && first.getCurrentBalance() != null) {
-                result.pointsBalance((int) Math.round(first.getCurrentBalance()));
-            }
-            publishMovement(request, result, movement(SettlementStep.AWARD,
-                    BigDecimal.ZERO, saleTxnId, body.getPoiData(), request.member.getMemberId(),
-                    first != null && first.getLoyaltyAmount() != null
-                            ? (int) Math.round(first.getLoyaltyAmount().getAmountValue()) : null,
-                    first != null && first.getCurrentBalance() != null
-                            ? (int) Math.round(first.getCurrentBalance()) : null));
-            result.promotionMessages(parsePromotionMessages(
-                    body.getResponse().getAdditionalResponse()));
-            result.earnedRewards(LoyaltyPayloadCodec.parseEarnedRewards(
-                    body.getResponse().getAdditionalResponse()));
+            body = sendLoyalty(SettlementStep.AWARD,
+                    LoyaltyTransactionTypeEnum.AWARD, request, basket,
+                    saleTxnId, null, null);
         } catch (SessionException | StepFailure e) {
             // decision: a failed award never reverses a completed payment.
-            // Only the award's own wire failure is swallowed here — a
-            // cross-thread abort() (which may be what killed the award) is
-            // observed by the checkAbort() right after this step and unwinds
-            // the committed payment/stored-value/loyalty steps.
+            // Only the wire exchange is inside this catch. Register handlers
+            // run below and escape to runStep recovery if they throw.
             String detail = e instanceof SessionException
                     ? ((SessionException) e).getError().toString() : e.getMessage();
             LOGGER.log(Level.WARNING, "loyalty award failed (terminal may retry via SAF): "
                     + detail, e);
             result.warning("loyalty award failed; points may be credited later: " + detail);
+            return;
         }
+
+        // an abort observed after this point unwinds the tender — the
+        // credited points must be reversed with it, like void does
+        TransactionIdentificationType awardPoiTxn = Wire.poiRef(body.getPoiData());
+        commit(committed, SettlementStep.AWARD, saleTxnId, body.getPoiData(),
+                awardPoiTxn != null
+                        ? loyaltyRollback(LoyaltyTransactionTypeEnum.AWARD_REFUND,
+                                awardPoiTxn, request.member.getMemberId())
+                        : null);
+        LoyaltyResult first = Wire.firstLoyaltyResult(body);
+        Integer pointsEarned = first != null && first.getLoyaltyAmount() != null
+                ? (int) Math.round(first.getLoyaltyAmount().getAmountValue()) : null;
+        Integer pointsBalance = first != null && first.getCurrentBalance() != null
+                ? (int) Math.round(first.getCurrentBalance()) : null;
+        List<String> promotionMessages = parsePromotionMessages(
+                body.getResponse().getAdditionalResponse());
+        List<EarnedReward> earnedRewards = LoyaltyPayloadCodec.parseEarnedRewards(
+                body.getResponse().getAdditionalResponse());
+        publishMovement(request, movements, result, movement(SettlementStep.AWARD,
+                BigDecimal.ZERO, saleTxnId, body.getPoiData(), request.member.getMemberId(),
+                pointsEarned, pointsBalance));
+
+        // Apply result fields only after register movement handlers return.
+        // A handler failure can then reset and retry this step without stale
+        // artifacts from the reversed attempt surviving in the result.
+        if (awardPoiTxn != null) {
+            result.awardPoiTransactionId(awardPoiTxn.getTransactionID());
+            result.awardPoiTransactionTimestamp(Wire.instant(awardPoiTxn.getTimeStamp()));
+        }
+        if (pointsEarned != null) {
+            result.totalPointsEarned(pointsEarned);
+        }
+        if (pointsBalance != null) {
+            result.pointsBalance(pointsBalance);
+        }
+        result.promotionMessages(promotionMessages);
+        result.earnedRewards(earnedRewards);
+    }
+
+    private ExternalPayment externalPaymentStep(Request request, ExternalPayment payment,
+            String saleTransactionId, List<SettlementMovement> movements) {
+        SettlementMovement movement = SettlementMovement.builder()
+                .step(SettlementStep.EXTERNAL_PAYMENT)
+                .target(SettlementTarget.sales())
+                .amount(payment.getAmount())
+                .saleTransactionId(saleTransactionId)
+                .externalTenderType(payment.getTenderType())
+                .externalReference(payment.getReference())
+                .build();
+        publishMovement(request, movements, request.partialResult, movement);
+        return payment;
     }
 
     // ─── Wire plumbing ───
 
-    private LoyaltyResponse sendLoyalty(LoyaltyTransactionTypeEnum type, Request request,
+    private LoyaltyResponse sendLoyalty(SettlementStep step,
+                                        LoyaltyTransactionTypeEnum type, Request request,
                                         Basket basket, String saleTxnId,
-                                        String saleToPoiData) {
+                                        String saleToPoiData,
+                                        SaleToPOIResponse recoveredResponse) {
         SaleData saleData = exchange.factory().saleData(saleTxnId);
         if (saleToPoiData != null) {
             saleData.setSaleToPOIData(saleToPoiData);
@@ -796,9 +1139,16 @@ public final class PaymentOrchestrator {
                         MessageClassType.SERVICE, MessageCategoryType.LOYALTY))
                 .loyaltyRequest(loyaltyRequest.build())
                 .build();
+        boolean responseReceived = recoveredResponse != null;
         try {
-            SaleToPOIResponse response = exchange.sendExpectingBody(
-                    MessageCategoryType.LOYALTY, wireRequest);
+            SaleToPOIResponse response;
+            if (recoveredResponse != null) {
+                response = recoveredResponse;
+            } else {
+                response = exchange.sendExpectingBody(
+                        MessageCategoryType.LOYALTY, wireRequest);
+                responseReceived = true;
+            }
             LoyaltyResponse body = response.getLoyaltyResponse();
             if (body == null) {
                 throw Wire.missing("LoyaltyResponse");
@@ -806,22 +1156,32 @@ public final class PaymentOrchestrator {
             exchange.requireSuccess(MessageCategoryType.LOYALTY, body.getResponse());
             return body;
         } catch (SessionException e) {
-            throw new StepFailure(e.getError(), false);
+            throw wireFailure(step, MessageCategoryType.LOYALTY, wireRequest,
+                    e.getError(), responseReceived);
         }
     }
 
     private PaymentResponse sendPayment(SettlementStep step, SaleToPOIRequest wireRequest,
-                                        BigDecimal requestedAmount) {
+                                        BigDecimal requestedAmount,
+                                        SaleToPOIResponse recoveredResponse) {
         PaymentResponse body;
+        boolean responseReceived = recoveredResponse != null;
         try {
-            SaleToPOIResponse response = exchange.sendExpectingBody(
-                    MessageCategoryType.PAYMENT, wireRequest);
+            SaleToPOIResponse response;
+            if (recoveredResponse != null) {
+                response = recoveredResponse;
+            } else {
+                response = exchange.sendExpectingBody(
+                        MessageCategoryType.PAYMENT, wireRequest);
+                responseReceived = true;
+            }
             body = response.getPaymentResponse();
             if (body == null) {
                 throw Wire.missing("PaymentResponse");
             }
         } catch (SessionException e) {
-            throw new StepFailure(e.getError(), false);
+            throw wireFailure(step, MessageCategoryType.PAYMENT, wireRequest,
+                    e.getError(), responseReceived);
         }
         try {
             exchange.requireSuccess(MessageCategoryType.PAYMENT, body.getResponse());
@@ -844,8 +1204,23 @@ public final class PaymentOrchestrator {
                             error.getNexoErrorCondition(), error.getCause());
                 }
             }
-            throw new StepFailure(error, false);
+            throw wireFailure(step, MessageCategoryType.PAYMENT, wireRequest,
+                    error, true);
         }
+    }
+
+    private static StepFailure wireFailure(SettlementStep step,
+            MessageCategoryType category, SaleToPOIRequest request,
+            SessionError error, boolean responseReceived) {
+        boolean indeterminate = !responseReceived
+                && (error.getCode() == SessionErrorCode.NETWORK
+                        || error.getCode() == SessionErrorCode.TIMEOUT
+                        || error.getCode() == SessionErrorCode.TERMINAL_ERROR);
+        String serviceId = request.getMessageHeader() == null
+                ? null : request.getMessageHeader().getServiceID();
+        return new StepFailure(error, false, step, category, serviceId,
+                indeterminate ? SettlementFailure.OutcomeCertainty.INDETERMINATE
+                        : SettlementFailure.OutcomeCertainty.DEFINITIVE);
     }
 
     private String beforeStep(Request request, SettlementStep step, Basket basket,
@@ -859,20 +1234,46 @@ public final class PaymentOrchestrator {
                 prior, request.handlers.beforeStep);
     }
 
-    private <R> BigDecimal applyHandlerTotal(Function<R, BigDecimal> handler, R stepResult,
-                                             BigDecimal suggested) {
-        BigDecimal total = handler == null ? suggested : handler.apply(stepResult);
-        if (total == null || total.signum() < 0) {
-            throw new StepFailure(new SessionError(SessionErrorCode.UNKNOWN,
-                    "a payment step handler returned an invalid total: " + total), false);
+    private <R> BigDecimal applyHandlerTotal(Request request, List<Commit> committed,
+            List<SettlementMovement> movements, SettlementStep step, Basket basket,
+            Function<R, BigDecimal> handler, R stepResult, BigDecimal suggested) {
+        if (handler == null) {
+            return suggested;
         }
-        return total;
+        while (true) {
+            try {
+                BigDecimal total = handler.apply(stepResult);
+                if (total == null || total.signum() < 0) {
+                    throw new IllegalArgumentException(
+                            "payment step handler returned an invalid total: " + total);
+                }
+                return total;
+            } catch (RuntimeException callbackFailure) {
+                SessionError error = new SessionError(SessionErrorCode.UNKNOWN,
+                        "unexpected error in " + step + " handler: " + callbackFailure,
+                        null, callbackFailure);
+                SettlementFailure context = new SettlementFailure(step, error, suggested,
+                        movements, SettlementFailure.OutcomeCertainty.DEFINITIVE, null, null);
+                SettlementRecovery recovery = consultRecovery(request, committed, context);
+                if (recovery == null || recovery.getAction() == SettlementRecovery.Action.ABORT) {
+                    throw abort(request, committed, error);
+                }
+                if (recovery.getAction() == SettlementRecovery.Action.ABANDON) {
+                    throw abandon(request, context, movements, suggested);
+                }
+                if (recovery.getAction() == SettlementRecovery.Action.RETRY) {
+                    continue;
+                }
+                throw invalidRecovery(request, committed, step,
+                        "a committed step handler can only be retried, aborted, or abandoned");
+            }
+        }
     }
 
-    private void checkAbort(Request request) {
+    private void checkAbort(Request request, List<Commit> committed) {
         if (request.abortRequested.getAsBoolean()) {
-            throw new StepFailure(new SessionError(SessionErrorCode.ABORTED,
-                    "the payment was aborted"), true);
+            throw abort(request, committed, new SessionError(SessionErrorCode.ABORTED,
+                    "the payment was aborted"));
         }
     }
 
@@ -923,9 +1324,14 @@ public final class PaymentOrchestrator {
                 .build();
     }
 
-    private static void publishMovement(Request request, SettlementResult.Builder result,
+    private static void publishMovement(Request request,
+                                        List<SettlementMovement> movements,
+                                        SettlementResult.Builder result,
                                         SettlementMovement movement) {
-        result.movement(movement);
+        movements.add(movement);
+        if (result != null) {
+            result.movement(movement);
+        }
         if (request.handlers.onMovement != null) {
             request.handlers.onMovement.accept(movement);
         }
@@ -1141,7 +1547,8 @@ public final class PaymentOrchestrator {
 
     private static Basket withPaymentTotals(Basket basket, BigDecimal rebateTotal,
                                             BigDecimal pointsValue, BigDecimal storedValue,
-                                            BigDecimal cardPayment, BigDecimal cashback) {
+                                            BigDecimal cardPayment, BigDecimal externalPayment,
+                                            BigDecimal cashback) {
         // step handlers may recompute tax on discounted amounts, and that
         // recalculated total is what the tenders actually charged. The final
         // basket must reconcile with the money moved, so the effective tax is
@@ -1149,7 +1556,7 @@ public final class PaymentOrchestrator {
         // points. With no handler adjustments this is exactly the original
         // taxTotal. Cashback rides on the card authorization but is not part
         // of the sale.
-        BigDecimal netCharged = storedValue.add(cardPayment);
+        BigDecimal netCharged = storedValue.add(cardPayment).add(externalPayment);
         if (cashback != null) {
             netCharged = netCharged.subtract(cashback);
         }
@@ -1168,6 +1575,7 @@ public final class PaymentOrchestrator {
                 .pointDiscountTotal(pointsValue)
                 .storedValueTotal(storedValue)
                 .cardPaymentTotal(cardPayment)
+                .externalPaymentTotal(externalPayment)
                 .build();
     }
 

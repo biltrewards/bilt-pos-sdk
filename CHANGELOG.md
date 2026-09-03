@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `execute()` is now **asynchronous** on `SessionResult`, `SettlementFlow`, and `ReversalFlow`: it submits the operation to the session's operation executor — a single lazily-created thread per session, so operations run one at a time in submission order — and returns immediately, delivering the outcome through the registered handlers. The previous blocking behavior is now spelled **`executeSync()`**; `get()`/`getOrNull()`/`isSuccess()` are unchanged.
 - Callback delivery for asynchronous operations is configurable: `callbackExecutor(Executor)` on the `CheckoutSession` builder sets the session-wide default (e.g. Android's main-thread executor), `callbackOn(executor)` overrides per call/flow. For `SettlementFlow`/`ReversalFlow`, every handler — step handlers included — is delivered on the callback executor with the flow thread awaiting the answer.
 - New `onComplete(Runnable)` on all three lazy types: a cleanup hook guaranteed to run exactly once on every completion path — success, failure, unexpected exception, a throwing outcome handler, and an operation rejected because the session had already ended (its executor shuts down at `end()`).
+- Settlement recovery is now checkpointed. `SettlementFlow.onError` receives `SettlementFailure` before recovery begins; `retry()` retries only the failed step, `skip()` continues past an optional step, and only `abort()` unwinds the full charge-side flow. Indeterminate terminal outcomes are resolved with TransactionStatus before non-abandon recovery. `retryWithoutLoyalty()` is removed.
 
 ### Added
 
@@ -33,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `OriginalSaleRecord` — persisted references from a completed sale that `CheckoutSession.voidTransaction(originalSaleRecord)` can use for a whole prior-sale void. The record carries card, stored value, rebate, redemption, award, and member references.
 - `SettlementFlow.onMovement(...)` plus per-movement callbacks for card charge, award, card refund, stored value refund, point refund, rebate refund, and award refund.
 - `ReversalFlow`, returned by `voidTransaction()`, `refund()`/`refund(amount)`, and `refundUnlinked(amount)`: per-step failure control. `onError((step, error) -> ...)` returns a `ReversalDecision` — `RETRY` re-sends the failed step, `SKIP` leaves the movement standing and continues, `ABORT` stops with reversed legs standing and the session restored.
+- External and manual settlement recovery: `external(ExternalPayment)` replaces a failed final card tender with register-managed payment, while `abandon()` stops with no status check or unwind and hands an `AbandonedSettlementRecord` to `onAbandoned`/`SessionException`. Abandonment deliberately leaves the basket reusable and removes SDK recovery guardrails.
 
 - `identifyMember()` remains available after a failed settlement, so a declined guest payment can attach a member and retry with loyalty enabled.
 - `SettlementOptions.disableAward` — skips the loyalty award step of the settlement sequence, mirroring `disableRebates`/`disablePoints`.

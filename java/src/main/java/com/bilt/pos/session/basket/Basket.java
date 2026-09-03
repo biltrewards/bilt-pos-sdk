@@ -29,8 +29,9 @@ import java.util.Set;
  *
  * <p>The payment breakdown fields ({@code rebateTotal},
  * {@code pointDiscountTotal}, {@code storedValueTotal},
- * {@code cardPaymentTotal}) are zero during cart-building and populated on
- * the snapshots produced during and after payment orchestration.</p>
+ * {@code cardPaymentTotal}, {@code externalPaymentTotal}) are zero during
+ * cart-building and populated on the snapshots produced during and after
+ * payment orchestration.</p>
  */
 public final class Basket {
 
@@ -47,6 +48,7 @@ public final class Basket {
     private final BigDecimal pointDiscountTotal;
     private final BigDecimal storedValueTotal;
     private final BigDecimal cardPaymentTotal;
+    private final BigDecimal externalPaymentTotal;
     private final Instant updatedAt;
 
     private Basket(Builder builder) {
@@ -62,6 +64,7 @@ public final class Basket {
         this.pointDiscountTotal = builder.pointDiscountTotal;
         this.storedValueTotal = builder.storedValueTotal;
         this.cardPaymentTotal = builder.cardPaymentTotal;
+        this.externalPaymentTotal = builder.externalPaymentTotal;
         this.updatedAt = builder.updatedAt;
     }
 
@@ -123,6 +126,11 @@ public final class Basket {
     /** Amount charged to the payment card; populated during payment. */
     public BigDecimal getCardPaymentTotal() {
         return cardPaymentTotal;
+    }
+
+    /** Amount collected through register-managed tenders; populated during payment. */
+    public BigDecimal getExternalPaymentTotal() {
+        return externalPaymentTotal;
     }
 
     /** When this snapshot was produced. */
@@ -307,6 +315,7 @@ public final class Basket {
                 .pointDiscountTotal(settledChargePortion.getPointDiscountTotal())
                 .storedValueTotal(settledChargePortion.getStoredValueTotal())
                 .cardPaymentTotal(settledChargePortion.getCardPaymentTotal())
+                .externalPaymentTotal(settledChargePortion.getExternalPaymentTotal())
                 .build();
     }
 
@@ -417,6 +426,7 @@ public final class Basket {
         private BigDecimal pointDiscountTotal = BigDecimal.ZERO;
         private BigDecimal storedValueTotal = BigDecimal.ZERO;
         private BigDecimal cardPaymentTotal = BigDecimal.ZERO;
+        private BigDecimal externalPaymentTotal = BigDecimal.ZERO;
         private Instant updatedAt = Instant.now();
 
         private Builder() {
@@ -474,6 +484,11 @@ public final class Basket {
 
         public Builder cardPaymentTotal(BigDecimal cardPaymentTotal) {
             this.cardPaymentTotal = cardPaymentTotal;
+            return this;
+        }
+
+        public Builder externalPaymentTotal(BigDecimal externalPaymentTotal) {
+            this.externalPaymentTotal = externalPaymentTotal;
             return this;
         }
 

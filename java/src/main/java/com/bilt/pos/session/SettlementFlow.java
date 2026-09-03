@@ -12,7 +12,9 @@ package com.bilt.pos.session;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
 import com.bilt.pos.session.payment.PointRedemptionResult;
 import com.bilt.pos.session.payment.RebateRedemptionResult;
+import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
 import com.bilt.pos.session.settlement.SettlementContext;
+import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementRecovery;
 import com.bilt.pos.session.settlement.SettlementResult;
@@ -60,20 +62,23 @@ import java.util.function.Function;
  * it waits on the flow. Without a callback executor, handlers run directly
  * on the thread executing the sequence.</p>
  *
- * <p>If a charge-side step fails after refund allocations, the {@code onError}
- * handler decides how to recover via the {@link SettlementRecovery} it returns;
- * committed charge-side steps are reversed before a retry or failure. Refund
- * allocation failures are different: they are not retried in the same run, and
- * committed refund allocations are not unwound. Retry by calling
- * {@code settle()} again with the same committed allocation prefix. The
- * default charge-side policy (no handler) is
- * {@link SettlementRecovery#abort()}.</p>
+ * <p>If a charge-side step fails after refund allocations, {@code onError} is
+ * called before recovery begins. Its {@link SettlementRecovery} retries only
+ * the failed step, skips an optional step, records an external final tender,
+ * aborts and unwinds, or abandons the partial flow to the register. Earlier
+ * successful steps remain committed unless the register returns
+ * {@link SettlementRecovery#abort()}. Refund allocation failures are different:
+ * they are not retried in the same run, and committed refund allocations are
+ * not unwound. Retry by calling {@code settle()} again with the same committed
+ * allocation prefix. The default charge-side policy (no handler) is
+ * {@code abort()}.</p>
  *
  * <p>Movement callbacks are immediate observations, not the authoritative
- * final ledger. Charge-side movements may be reversed by a later same-run
- * unwind before the settlement retries or fails, and that unwind does not
- * emit compensating movement callbacks. Refund allocation movements are
- * durable because settlement never unwinds them. Treat
+ * final ledger. An abort may reverse charge-side movements, and retrying,
+ * skipping, or replacing a partially committed failed step first reverses
+ * only that step's partial movements. Those reversals do not emit compensating
+ * movement callbacks. Refund allocation movements are durable because
+ * settlement never unwinds them. Treat
  * {@link SettlementResult#getMovements()} from a successful result as the
  * final movement ledger.</p>
  */
@@ -86,6 +91,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     private Function<PointRedemptionResult, BigDecimal> pointsHandler;
     private Function<GiftCardPaymentResult, BigDecimal> giftCardHandler;
     private Consumer<SettlementMovement> cardChargeHandler;
+    private Consumer<SettlementMovement> externalPaymentHandler;
     private Consumer<SettlementMovement> awardHandler;
     private Consumer<SettlementMovement> storedValueLoadedHandler;
     private Consumer<SettlementMovement> cardRefundHandler;
@@ -95,10 +101,11 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     private Consumer<SettlementMovement> rebateRefundHandler;
     private Consumer<SettlementMovement> awardRefundHandler;
     private Consumer<SettlementMovement> movementHandler;
-    private Function<SessionError, SettlementRecovery> errorHandler;
+    private Function<SettlementFailure, SettlementRecovery> errorHandler;
+    private Consumer<AbandonedSettlementRecord> abandonedHandler;
 
     private boolean errorHandlerConsulted;
-    private boolean retryRequested;
+    private boolean recoveryRequested;
 
     SettlementFlow(Function<SettlementFlow, SettlementResult> executor) {
         super("the settlement");
@@ -162,6 +169,11 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         return register(() -> this.cardChargeHandler = requireHandler(handler));
     }
 
+    /** Called when a register-managed payment such as cash is recorded. */
+    public SettlementFlow onExternallyPaid(Consumer<SettlementMovement> handler) {
+        return register(() -> this.externalPaymentHandler = requireHandler(handler));
+    }
+
     /**
      * Called when the loyalty award leg commits. See {@link #onMovement} for
      * the provisional charge-side callback contract.
@@ -208,9 +220,10 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     /**
      * Called after any externally visible money or loyalty movement commits.
      *
-     * <p>Charge-side movement callbacks are provisional: a later failure,
-     * abort, or {@code onError} retry can unwind them in the same settlement
-     * run without emitting a compensating callback. Refund allocation
+     * <p>Charge-side movement callbacks are provisional: an abort can unwind
+     * them, and retrying, skipping, or replacing a partially committed failed
+     * step can reverse that step's movements without emitting a compensating
+     * callback. Earlier successful steps remain committed. Refund allocation
      * movements are not unwound. Use
      * {@link SettlementResult#getMovements()} from the successful result as
      * the authoritative final ledger.</p>
@@ -225,17 +238,24 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     }
 
     /**
-     * Called when settlement fails. For charge-side failures after refund
-     * allocations, the returned {@link SettlementRecovery} controls recovery —
-     * retry (e.g. {@code retryWithoutLoyalty()}) or {@code abort()}.
+     * Called before any charge-side recovery or unwind begins. The returned
+     * {@link SettlementRecovery} retries or skips the failed step, records an
+     * external tender, aborts with unwind, or abandons recovery to the register.
+     * An indeterminate terminal request is checked with TransactionStatus before
+     * retry, skip, external replacement, or abort; abandon performs no such I/O.
      * For refund allocation failures, the handler is a terminal failure
      * notification: the returned recovery decision is ignored, committed refund
      * allocations stay recorded, and the register retries with the same
      * committed allocation prefix. Default charge-side policy:
      * {@code abort()}.
      */
-    public SettlementFlow onError(Function<SessionError, SettlementRecovery> handler) {
+    public SettlementFlow onError(Function<SettlementFailure, SettlementRecovery> handler) {
         return register(() -> this.errorHandler = requireHandler(handler));
+    }
+
+    /** Called when {@link SettlementRecovery#abandon()} transfers recovery ownership. */
+    public SettlementFlow onAbandoned(Consumer<AbandonedSettlementRecord> handler) {
+        return register(() -> this.abandonedHandler = requireHandler(handler));
     }
 
     /**
@@ -258,27 +278,36 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
 
     @Override
     void deliverFailure(SessionException failure) {
+        if (failure.getAbandonedSettlement() != null) {
+            if (abandonedHandler != null) {
+                awaitHandlerRun(() -> abandonedHandler.accept(
+                        failure.getAbandonedSettlement()));
+            }
+            return;
+        }
         // orchestration consults onError with the failure it throws, but
         // two outcomes would otherwise end in silence for execute()-style
         // registers: failures before the sequence starts (a state
         // rejection, a failed standing-movement drain) never reach the
-        // handler at all, and a consultation whose RETRY resolution was
-        // refused (incomplete unwind, retry cap) leaves the register
-        // believing a retry is underway. Both are delivered here; the
+        // handler at all, and a consultation whose recovery resolution was
+        // refused (for example, an invalid skip or incomplete step reset)
+        // leaves the register
+        // believing recovery is underway. Both are delivered here; the
         // returned recovery decision is ignored — there is nothing left to resolve.
         // ABORTED outcomes stay bypassed by design: the register initiated
         // the abort, and it must not surface as a failure to resolve.
         if (errorHandler != null
-                && (!errorHandlerConsulted || retryRequested)
+                && (!errorHandlerConsulted || recoveryRequested)
                 && failure.getError().getCode() != SessionErrorCode.ABORTED) {
-            awaitHandlerCall(() -> errorHandler.apply(failure.getError()));
+            SettlementFailure context = terminalFailure(failure.getError());
+            awaitHandlerCall(() -> errorHandler.apply(context));
         }
     }
 
     @Override
     void notifyRejection(SessionError error) {
         if (errorHandler != null) {
-            errorHandler.apply(error);
+            errorHandler.apply(terminalFailure(error));
         }
     }
 
@@ -316,6 +345,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     Consumer<SettlementMovement> movementHandler() {
         if (movementHandler == null
                 && cardChargeHandler == null
+                && externalPaymentHandler == null
                 && awardHandler == null
                 && storedValueLoadedHandler == null
                 && cardRefundHandler == null
@@ -337,26 +367,35 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         });
     }
 
-    Function<SessionError, SettlementRecovery> errorHandler() {
+    Function<SettlementFailure, SettlementRecovery> errorHandler() {
         if (errorHandler == null) {
             return null;
         }
         // the flag mutations ride inside the marshalled call, so the
         // awaited hand-off publishes them back to the operation thread
-        return marshalled(error -> {
+        return marshalled(failure -> {
             errorHandlerConsulted = true;
-            SettlementRecovery resolution = errorHandler.apply(error);
-            // a retry answer obliges us to tell the register if settlement
+            SettlementRecovery resolution = errorHandler.apply(failure);
+            // a nonterminal answer obliges us to tell the register if settlement
             // ends in failure anyway (see deliverFailure)
-            retryRequested = resolution != null && !resolution.isAbort();
+            recoveryRequested = resolution != null
+                    && resolution.getAction() != SettlementRecovery.Action.ABORT
+                    && resolution.getAction() != SettlementRecovery.Action.ABANDON;
             return resolution;
         });
+    }
+
+    private static SettlementFailure terminalFailure(SessionError error) {
+        return new SettlementFailure(null, error, BigDecimal.ZERO, java.util.List.of(),
+                SettlementFailure.OutcomeCertainty.DEFINITIVE, null, null);
     }
 
     private Consumer<SettlementMovement> specificMovementHandler(SettlementStep step) {
         switch (step) {
             case CARD_CHARGE:
                 return cardChargeHandler;
+            case EXTERNAL_PAYMENT:
+                return externalPaymentHandler;
             case AWARD:
                 return awardHandler;
             case STORED_VALUE_LOAD:
