@@ -72,12 +72,16 @@ public final class ExternalPayment {
         }
         ExternalPayment that = (ExternalPayment) other;
         return Objects.equals(tenderType, that.tenderType)
-                && Objects.equals(amount, that.amount)
+                && amount.compareTo(that.amount) == 0
                 && Objects.equals(reference, that.reference);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(tenderType, amount, reference);
+        return Objects.hash(tenderType, normalizedAmount(amount), reference);
+    }
+
+    private static BigDecimal normalizedAmount(BigDecimal value) {
+        return value.stripTrailingZeros();
     }
 }
