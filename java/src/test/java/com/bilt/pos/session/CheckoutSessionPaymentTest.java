@@ -1715,6 +1715,42 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
+    void skippedCommittedRebateDoesNotLeaveAReversedReference() throws Exception {
+        identifyMember();
+        addHundredDollarItem();
+        server.enqueue(new MockResponse().setBody(REBATE_OK));
+        server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+
+        SettlementResult result = session.settle(SettlementOptions.builder()
+                        .disablePoints(true)
+                        .disableAward(true)
+                        .build())
+                .onMovement(movement -> {
+                    if (movement.getStep() == SettlementStep.REBATE_REDEMPTION) {
+                        throw new IllegalStateException("register rejected rebate");
+                    }
+                })
+                .onError(failure -> {
+                    assertEquals(SettlementStep.REBATE_REDEMPTION, failure.getStep());
+                    return SettlementRecovery.skip();
+                })
+                .get();
+
+        assertNull(result.getRebatePoiTransactionId());
+        assertNull(result.getRebatePoiTransactionTimestamp());
+        assertNull(result.toOriginalSaleRecord("98234").getRebatePoiTransactionId(),
+                "the completed sale must not reference the reversed rebate");
+        assertEquals(1, result.getMovements().size());
+        assertEquals(SettlementStep.CARD_CHARGE, result.getMovements().get(0).getStep());
+
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(3, requests.size());
+        assertEquals("RebateRefund", requests.get(1).getLoyaltyRequest()
+                .getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    }
+
+    @Test
     void retryResendsOnlyTheFailedCardStepAndPreservesLoyalty() throws Exception {
         identifyMember();
         addHundredDollarItem();

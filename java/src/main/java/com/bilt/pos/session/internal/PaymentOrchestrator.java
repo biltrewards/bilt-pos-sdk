@@ -282,6 +282,10 @@ public final class PaymentOrchestrator {
                 redeemedRebates = outcome.rebates;
                 rebateTotal = outcome.totalRebate;
                 workingBasket = outcome.updatedBasket;
+                if (outcome.poiTransactionId != null) {
+                    result.rebatePoiTransactionId(outcome.poiTransactionId);
+                    result.rebatePoiTransactionTimestamp(outcome.poiTransactionTimestamp);
+                }
                 currentTotal = applyHandlerTotal(request, committed, movements,
                         SettlementStep.REBATE_REDEMPTION, workingBasket,
                         request.handlers.onRebatesRedeemed, outcome.result,
@@ -691,6 +695,8 @@ public final class PaymentOrchestrator {
         BigDecimal totalRebate;
         Basket updatedBasket;
         RebateRedemptionResult result;
+        String poiTransactionId;
+        Instant poiTransactionTimestamp;
     }
 
     private RebateOutcome rebateStep(Request request, Basket basket, BigDecimal currentTotal,
@@ -742,20 +748,20 @@ public final class PaymentOrchestrator {
         publishMovement(request, movements, result, movement(SettlementStep.REBATE_REDEMPTION,
                 totalRebate, saleTxnId, body.getPoiData(), request.member.getMemberId(),
                 null, null));
-        // kept on the result so a checkout with no payment legs (rewards
-        // covered everything) can still be voided by reversing this movement
-        TransactionIdentificationType rebatePoiTxn = Wire.poiRef(body.getPoiData());
-        if (totalRebate.signum() > 0 && rebatePoiTxn != null) {
-            result.rebatePoiTransactionId(rebatePoiTxn.getTransactionID());
-            result.rebatePoiTransactionTimestamp(Wire.instant(rebatePoiTxn.getTimeStamp()));
-        }
-
         RebateOutcome outcome = new RebateOutcome();
         outcome.rebates = rebates;
         outcome.totalRebate = totalRebate;
         outcome.updatedBasket = applyRebates(request.basket, rebates, totalRebate);
         outcome.result = new RebateRedemptionResult(rebates, totalRebate, currentTotal,
                 currentTotal.subtract(totalRebate), outcome.updatedBasket);
+        // Return references only after every failure-prone part of the step
+        // has completed. runSequence publishes them only for an accepted
+        // outcome; a retry or skip can reverse this attempt.
+        TransactionIdentificationType rebatePoiTxn = Wire.poiRef(body.getPoiData());
+        if (totalRebate.signum() > 0 && rebatePoiTxn != null) {
+            outcome.poiTransactionId = rebatePoiTxn.getTransactionID();
+            outcome.poiTransactionTimestamp = Wire.instant(rebatePoiTxn.getTimeStamp());
+        }
         return outcome;
     }
 
