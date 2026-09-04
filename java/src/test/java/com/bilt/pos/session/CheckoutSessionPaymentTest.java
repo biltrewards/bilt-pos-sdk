@@ -2152,6 +2152,10 @@ class CheckoutSessionPaymentTest {
                 "the external tender must not send another terminal payment request");
         assertNotNull(requests.get(0).getPaymentRequest());
         assertNotNull(requests.get(1).getTransactionStatusRequest());
+        String originalServiceId = requests.get(0).getMessageHeader().getServiceID();
+        assertEquals(originalServiceId, reported.get().getServiceId());
+        assertEquals(originalServiceId, requests.get(1).getTransactionStatusRequest()
+                .getMessageReference().getServiceID());
     }
 
     @Test

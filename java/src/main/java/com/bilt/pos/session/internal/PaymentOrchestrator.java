@@ -531,7 +531,11 @@ public final class PaymentOrchestrator {
                     // consulted only if processing the repeated response fails.
                     return StepOutcome.completed(attempt.run(saleTxnId, recovered));
                 } catch (RuntimeException e) {
-                    failure = normalizeFailure(e, step);
+                    // The attempt builds a fresh request object for parsing, but
+                    // that request is never sent. Keep the repeated response tied
+                    // to the original terminal request that TransactionStatus found.
+                    failure = withRequestReference(
+                            normalizeFailure(e, step), originalFailure);
                     if (failure.aborted
                             || (request.abortRequested.getAsBoolean()
                                     && failure.error.getCode()
@@ -605,6 +609,13 @@ public final class PaymentOrchestrator {
             SettlementFailure.OutcomeCertainty certainty) {
         return new StepFailure(failure.error, failure.aborted, failure.step,
                 failure.category, failure.serviceId, certainty);
+    }
+
+    private static StepFailure withRequestReference(StepFailure failure,
+            StepFailure originalRequest) {
+        return new StepFailure(failure.error, failure.aborted, failure.step,
+                originalRequest.category, originalRequest.serviceId,
+                failure.certainty);
     }
 
     private static StepFailure normalizeFailure(RuntimeException failure,

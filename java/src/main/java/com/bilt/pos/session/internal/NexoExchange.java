@@ -34,6 +34,7 @@ import com.bilt.pos.session.SessionException;
 
 import java.io.InterruptedIOException;
 import java.net.SocketTimeoutException;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -49,7 +50,8 @@ public final class NexoExchange {
 
     private static final Logger LOGGER = Logger.getLogger(NexoExchange.class.getName());
     private static final int TRANSACTION_STATUS_MAX_ATTEMPTS = 5;
-    private static final long TRANSACTION_STATUS_POLL_INTERVAL_MILLIS = 250L;
+    private static final long TRANSACTION_STATUS_POLL_INTERVAL_MILLIS = 1_000L;
+    private static final long TRANSACTION_STATUS_POLL_JITTER_MILLIS = 200L;
 
     /** The operation currently awaiting a terminal response, if any. */
     public static final class InFlight {
@@ -286,8 +288,13 @@ public final class NexoExchange {
     }
 
     private static void waitBeforeStatusRetry() {
+        long delayMillis = ThreadLocalRandom.current().nextLong(
+                TRANSACTION_STATUS_POLL_INTERVAL_MILLIS
+                        - TRANSACTION_STATUS_POLL_JITTER_MILLIS,
+                TRANSACTION_STATUS_POLL_INTERVAL_MILLIS
+                        + TRANSACTION_STATUS_POLL_JITTER_MILLIS + 1L);
         try {
-            Thread.sleep(TRANSACTION_STATUS_POLL_INTERVAL_MILLIS);
+            Thread.sleep(delayMillis);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
