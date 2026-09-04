@@ -18,12 +18,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-/** Context supplied to {@code SettlementFlow.onError} before recovery begins. */
+/** Context supplied when {@code SettlementFlow.onError} must direct recovery. */
 public final class SettlementFailure {
 
-    /** Whether the failed request is known not to have committed. */
+    /** Whether the failed request's terminal outcome is known. */
     public enum OutcomeCertainty {
+        /** The terminal outcome is known, including an authoritative not-found result. */
         DEFINITIVE,
+        /** TransactionStatus could not establish the terminal outcome. */
         INDETERMINATE
     }
 
@@ -74,6 +76,7 @@ public final class SettlementFailure {
         return committedMovements;
     }
 
+    /** Certainty established before the register is asked to direct recovery. */
     public OutcomeCertainty getOutcomeCertainty() {
         return outcomeCertainty;
     }

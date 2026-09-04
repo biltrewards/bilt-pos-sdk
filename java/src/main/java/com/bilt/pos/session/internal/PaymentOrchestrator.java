@@ -471,54 +471,87 @@ public final class PaymentOrchestrator {
             BigDecimal amountDue, boolean maySkip, boolean mayPayExternally,
             StepAttempt<T> attempt, String saleTxnId, StepFailure failure,
             int commitCheckpoint, int movementCheckpoint) {
+        if (failure.certainty == SettlementFailure.OutcomeCertainty.INDETERMINATE
+                && failure.serviceId != null && failure.category != null) {
+            StepFailure originalFailure = failure;
+            while (true) {
+                SaleToPOIResponse recovered;
+                try {
+                    recovered = exchange.recoverByTransactionStatus(
+                            originalFailure.serviceId, originalFailure.category);
+                } catch (SessionException statusFailure) {
+                    if (request.abortRequested.getAsBoolean()
+                            && statusFailure.getError().getCode()
+                                    == SessionErrorCode.ABORTED) {
+                        throw abort(request, committed, statusFailure.getError());
+                    }
+                    SessionError unresolved = Wire.annotated(statusFailure.getError(),
+                            "could not resolve " + step + " request "
+                                    + originalFailure.serviceId + ": "
+                                    + statusFailure.getError().getMessage(),
+                            statusFailure);
+                    StepFailure unresolvedFailure = new StepFailure(unresolved, false,
+                            step, originalFailure.category, originalFailure.serviceId,
+                            SettlementFailure.OutcomeCertainty.INDETERMINATE);
+                    SettlementFailure context = settlementFailure(step,
+                            unresolvedFailure, amountDue, movements);
+                    SettlementRecovery recovery = consultRecovery(
+                            request, committed, context);
+                    switch (recovery.getAction()) {
+                        case RETRY:
+                            // The original request is still indeterminate. Retry
+                            // status recovery, never the money-moving request.
+                            continue;
+                        case ABORT:
+                            throw abort(request, committed, unresolved);
+                        case ABANDON:
+                            throw abandon(request, context, movements, amountDue);
+                        case SKIP:
+                        case EXTERNAL:
+                            throw invalidRecovery(request, committed, step,
+                                    recovery.getAction().name().toLowerCase()
+                                            + " cannot proceed while TransactionStatus "
+                                            + "has not resolved the original request");
+                        default:
+                            throw new AssertionError("unknown settlement recovery "
+                                    + recovery.getAction());
+                    }
+                }
+
+                if (recovered == null) {
+                    // NOT_FOUND authoritatively establishes that the request
+                    // did not commit. The register may now choose a money action.
+                    failure = withCertainty(originalFailure,
+                            SettlementFailure.OutcomeCertainty.DEFINITIVE);
+                    break;
+                }
+
+                try {
+                    // A recovered success is the step result. The register is
+                    // consulted only if processing the repeated response fails.
+                    return StepOutcome.completed(attempt.run(saleTxnId, recovered));
+                } catch (RuntimeException e) {
+                    failure = normalizeFailure(e, step);
+                    if (failure.aborted
+                            || (request.abortRequested.getAsBoolean()
+                                    && failure.error.getCode()
+                                            == SessionErrorCode.ABORTED)) {
+                        throw abort(request, committed, failure.error);
+                    }
+                    if (failure.certainty
+                            == SettlementFailure.OutcomeCertainty.INDETERMINATE) {
+                        preserveStanding(request, committed);
+                        throw new SessionException(failure.error);
+                    }
+                    break;
+                }
+            }
+        }
+
         SettlementFailure context = settlementFailure(step, failure, amountDue, movements);
         SettlementRecovery recovery = consultRecovery(request, committed, context);
         if (recovery.getAction() == SettlementRecovery.Action.ABANDON) {
             throw abandon(request, context, movements, amountDue);
-        }
-
-        if (failure.certainty == SettlementFailure.OutcomeCertainty.INDETERMINATE
-                && failure.serviceId != null && failure.category != null) {
-            SaleToPOIResponse recovered;
-            try {
-                recovered = exchange.recoverByTransactionStatus(
-                        failure.serviceId, failure.category);
-            } catch (SessionException statusFailure) {
-                SessionError unresolved = Wire.annotated(statusFailure.getError(),
-                        "could not resolve " + step + " request " + failure.serviceId
-                                + " before " + recovery.getAction().name().toLowerCase()
-                                + ": " + statusFailure.getError().getMessage(),
-                        statusFailure);
-                if (recovery.getAction() == SettlementRecovery.Action.ABORT) {
-                    throw abort(request, committed, unresolved);
-                }
-                preserveStanding(request, committed);
-                throw new SessionException(unresolved);
-            }
-            if (recovered != null) {
-                T recoveredValue;
-                try {
-                    // The original request committed: consume its repeated
-                    // response instead of resending or applying the decision.
-                    recoveredValue = attempt.run(saleTxnId, recovered);
-                } catch (RuntimeException e) {
-                    StepFailure resolved = normalizeFailure(e, step);
-                    if (resolved.certainty == SettlementFailure.OutcomeCertainty.INDETERMINATE) {
-                        preserveStanding(request, committed);
-                        throw new SessionException(resolved.error);
-                    }
-                    // A repeated failure is definitive. Apply the register's
-                    // original decision without a second callback.
-                    failure = resolved;
-                    recoveredValue = null;
-                }
-                if (recoveredValue != null) {
-                    if (recovery.getAction() == SettlementRecovery.Action.ABORT) {
-                        throw abort(request, committed, failure.error);
-                    }
-                    return StepOutcome.completed(recoveredValue);
-                }
-            }
         }
 
         switch (recovery.getAction()) {
@@ -561,11 +594,17 @@ public final class PaymentOrchestrator {
             case ABORT:
                 throw abort(request, committed, failure.error);
             case ABANDON:
-                throw new AssertionError("abandon handled before status recovery");
+                throw new AssertionError("abandon handled before recovery action switch");
             default:
                 throw new AssertionError("unknown settlement recovery "
                         + recovery.getAction());
         }
+    }
+
+    private static StepFailure withCertainty(StepFailure failure,
+            SettlementFailure.OutcomeCertainty certainty) {
+        return new StepFailure(failure.error, failure.aborted, failure.step,
+                failure.category, failure.serviceId, certainty);
     }
 
     private static StepFailure normalizeFailure(RuntimeException failure,

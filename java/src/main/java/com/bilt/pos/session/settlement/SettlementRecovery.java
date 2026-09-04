@@ -9,7 +9,7 @@
  */
 package com.bilt.pos.session.settlement;
 
-/** Resolution returned from {@code SettlementFlow.onError} before recovery begins. */
+/** Resolution returned from {@code SettlementFlow.onError} to direct recovery. */
 public final class SettlementRecovery {
 
     /** The action the settlement orchestrator takes after a failed step. */
@@ -22,7 +22,7 @@ public final class SettlementRecovery {
         EXTERNAL,
         /** Reverse committed reversible steps and fail the settlement. */
         ABORT,
-        /** Stop immediately and transfer the partial settlement to the register. */
+        /** Stop recovery and transfer the partial settlement to the register. */
         ABANDON
     }
 
@@ -41,8 +41,8 @@ public final class SettlementRecovery {
 
     /**
      * Retry only the failed step, preserving every earlier committed step.
-     * Indeterminate terminal requests are resolved through TransactionStatus
-     * before a new request is sent.
+     * When TransactionStatus could not resolve an indeterminate terminal request,
+     * retry checks its status again and never resends the original request.
      */
     public static SettlementRecovery retry() {
         return new SettlementRecovery(Action.RETRY, null);
@@ -58,16 +58,11 @@ public final class SettlementRecovery {
 
     /**
      * Records a register-managed tender and continues after the failed card step.
-     * The payment amount must exactly equal the outstanding amount.
-     *
-     * <p>For an {@link SettlementFailure.OutcomeCertainty#INDETERMINATE}
-     * failure, the SDK checks TransactionStatus before recording this tender.
-     * If the original card request committed, its {@code CARD_CHARGE} movement
-     * is delivered through {@code onCardCharged} and {@code onMovement}, this
-     * external tender is not recorded, and {@code onExternallyPaid} does not
-     * run. Collect the register-managed tender only for a definitive failure,
-     * or be prepared to return it if the external-payment callback does not
-     * run.</p>
+     * The payment amount must exactly equal the outstanding amount, and the
+     * failure outcome must be definitive. The SDK attempts to resolve an
+     * indeterminate original request before asking the register for a recovery
+     * decision; external replacement remains invalid unless resolution is
+     * definitive, preventing it from replacing a committed card payment.
      */
     public static SettlementRecovery external(ExternalPayment payment) {
         if (payment == null) {
@@ -77,10 +72,11 @@ public final class SettlementRecovery {
     }
 
     /**
-     * Stop immediately without status recovery, retry, or unwind and transfer
-     * responsibility for all committed movements to the register. The basket
-     * remains usable and SDK recovery guards are released, so a later settlement
-     * can duplicate those movements unless the register reconciles them.
+     * Stop without further status recovery, retry, or unwind and transfer
+     * responsibility for all committed movements to the register. Automatic
+     * TransactionStatus recovery may already have occurred before {@code onError}.
+     * The basket remains usable and SDK recovery guards are released, so a later
+     * settlement can duplicate those movements unless the register reconciles them.
      */
     public static SettlementRecovery abandon() {
         return new SettlementRecovery(Action.ABANDON, null);

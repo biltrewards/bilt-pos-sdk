@@ -63,12 +63,16 @@ import java.util.function.Function;
  * it waits on the flow. Without a callback executor, handlers run directly
  * on the thread executing the sequence.</p>
  *
- * <p>If a charge-side step fails after refund allocations, {@code onError} is
- * called before recovery begins. Its {@link SettlementRecovery} retries only
- * the failed step, skips an optional step, records an external final tender,
- * aborts and unwinds, or abandons the partial flow to the register. Earlier
- * successful steps remain committed unless the register returns
- * {@link SettlementRecovery#abort()}. Refund allocation failures are different:
+ * <p>If a charge-side terminal request has an indeterminate outcome, the SDK
+ * first resolves it through TransactionStatus. A recovered success continues
+ * without calling {@code onError}; a recovered failure or authoritative
+ * not-found result is reported as definitive. {@code onError} also receives an
+ * indeterminate failure when TransactionStatus itself cannot resolve the request.
+ * Its {@link SettlementRecovery} retries only the failed step, skips an optional
+ * step, records an external final tender, aborts and unwinds, or abandons the
+ * partial flow to the register. Earlier successful steps remain committed unless
+ * the register returns {@link SettlementRecovery#abort()}. Refund allocation
+ * failures are different:
  * they are not retried in the same run, and committed refund allocations are
  * not unwound. Retry by calling {@code settle()} again with the same committed
  * allocation prefix. The default charge-side policy (no handler) is
@@ -170,11 +174,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         return register(() -> this.cardChargeHandler = requireHandler(handler));
     }
 
-    /**
-     * Called when a register-managed payment such as cash is recorded.
-     * This does not run when TransactionStatus recovers the original card
-     * charge and supersedes an external-payment recovery decision.
-     */
+    /** Called when a register-managed payment such as cash is recorded. */
     public SettlementFlow onExternallyPaid(Consumer<SettlementMovement> handler) {
         return register(() -> this.externalPaymentHandler = requireHandler(handler));
     }
@@ -243,11 +243,14 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     }
 
     /**
-     * Called before any charge-side recovery or unwind begins. The returned
-     * {@link SettlementRecovery} retries or skips the failed step, records an
-     * external tender, aborts with unwind, or abandons recovery to the register.
-     * An indeterminate terminal request is checked with TransactionStatus before
-     * retry, skip, external replacement, or abort; abandon performs no such I/O.
+     * Called when a charge-side step definitively fails, or when automatic
+     * TransactionStatus recovery cannot resolve an indeterminate terminal request.
+     * A recovered successful request continues without invoking this handler.
+     * The returned {@link SettlementRecovery} retries recovery, skips the failed
+     * step, records an external tender, aborts with unwind, or abandons recovery
+     * to the register. For an indeterminate failure delivered here, retry checks
+     * TransactionStatus again; skip and external replacement are invalid until
+     * the original request is resolved.
      * For refund allocation failures, the handler is a terminal failure
      * notification: the returned recovery decision is ignored, committed refund
      * allocations stay recorded, and the register retries with the same

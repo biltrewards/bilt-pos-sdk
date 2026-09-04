@@ -127,12 +127,16 @@ loadScripts(document, 'script');</script>
  it waits on the flow. Without a callback executor, handlers run directly
  on the thread executing the sequence.</p>
 
- <p>If a charge-side step fails after refund allocations, <code>onError</code> is
- called before recovery begins. Its <a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement"><code>SettlementRecovery</code></a> retries only
- the failed step, skips an optional step, records an external final tender,
- aborts and unwinds, or abandons the partial flow to the register. Earlier
- successful steps remain committed unless the register returns
- <a href="settlement/SettlementRecovery.html#abort()"><code>SettlementRecovery.abort()</code></a>. Refund allocation failures are different:
+ <p>If a charge-side terminal request has an indeterminate outcome, the SDK
+ first resolves it through TransactionStatus. A recovered success continues
+ without calling <code>onError</code>; a recovered failure or authoritative
+ not-found result is reported as definitive. <code>onError</code> also receives an
+ indeterminate failure when TransactionStatus itself cannot resolve the request.
+ Its <a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement"><code>SettlementRecovery</code></a> retries only the failed step, skips an optional
+ step, records an external final tender, aborts and unwinds, or abandons the
+ partial flow to the register. Earlier successful steps remain committed unless
+ the register returns <a href="settlement/SettlementRecovery.html#abort()"><code>SettlementRecovery.abort()</code></a>. Refund allocation
+ failures are different:
  they are not retried in the same run, and committed refund allocations are
  not unwound. Retry by calling <code>settle()</code> again with the same committed
  allocation prefix. The default charge-side policy (no handler) is
@@ -230,7 +234,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onError(java.util.function.Function)" class="member-name-link">onError</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a>,<wbr><a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a>&gt;&nbsp;handler)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Called before any charge-side recovery or unwind begins.</div>
+<div class="block">Called when a charge-side step definitively fails, or when automatic
+ TransactionStatus recovery cannot resolve an indeterminate terminal request.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onExternallyPaid(java.util.function.Consumer)" class="member-name-link">onExternallyPaid</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</code></div>
@@ -357,9 +362,7 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="onExternallyPaid(java.util.function.Consumer)">
 <h3>onExternallyPaid</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onExternallyPaid</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when a register-managed payment such as cash is recorded.
- This does not run when TransactionStatus recovers the original card
- charge and supersedes an external-payment recovery decision.</div>
+<div class="block">Called when a register-managed payment such as cash is recorded.</div>
 </section>
 </li>
 <li>
@@ -445,11 +448,14 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="onError(java.util.function.Function)">
 <h3>onError</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onError</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a>,<wbr><a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called before any charge-side recovery or unwind begins. The returned
- <a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement"><code>SettlementRecovery</code></a> retries or skips the failed step, records an
- external tender, aborts with unwind, or abandons recovery to the register.
- An indeterminate terminal request is checked with TransactionStatus before
- retry, skip, external replacement, or abort; abandon performs no such I/O.
+<div class="block">Called when a charge-side step definitively fails, or when automatic
+ TransactionStatus recovery cannot resolve an indeterminate terminal request.
+ A recovered successful request continues without invoking this handler.
+ The returned <a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement"><code>SettlementRecovery</code></a> retries recovery, skips the failed
+ step, records an external tender, aborts with unwind, or abandons recovery
+ to the register. For an indeterminate failure delivered here, retry checks
+ TransactionStatus again; skip and external replacement are invalid until
+ the original request is resolved.
  For refund allocation failures, the handler is a terminal failure
  notification: the returned recovery decision is ignored, committed refund
  allocations stay recorded, and the register retries with the same

@@ -110,6 +110,15 @@ class CheckoutSessionPaymentTest {
                 + "}}}}}}}";
     }
 
+    private static final String TRANSACTION_STATUS_PAYMENT_DECLINED =
+            "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{"
+                    + "\"Response\":{\"Result\":\"Success\"},"
+                    + "\"RepeatedMessageResponse\":{"
+                    + "\"MessageHeader\":{\"MessageCategory\":\"Payment\"},"
+                    + "\"RepeatedResponseMessageBody\":{\"PaymentResponse\":{"
+                    + "\"Response\":{\"Result\":\"Failure\","
+                    + "\"ErrorCondition\":\"Refusal\"}}}}}}}}";
+
     private static final String PAYMENT_DECLINED =
             "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
                     + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}";
@@ -118,6 +127,15 @@ class CheckoutSessionPaymentTest {
             "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{"
                     + "\"Response\":{\"Result\":\"Failure\","
                     + "\"ErrorCondition\":\"InProgress\"}}}}";
+
+    private static final String TRANSACTION_STATUS_NOT_FOUND =
+            "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{"
+                    + "\"Response\":{\"Result\":\"Failure\","
+                    + "\"ErrorCondition\":\"NotFound\"}}}}";
+
+    private static final String TRANSACTION_STATUS_WITHOUT_REPEATED_RESPONSE =
+            "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{"
+                    + "\"Response\":{\"Result\":\"Success\"}}}}";
 
     private static final String REVERSAL_OK = CheckoutSessionTest.REVERSAL_OK;
     private static final String REVERSAL_UNREACHABLE =
@@ -2004,7 +2022,7 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
-    void indeterminateCardCanBeAbandonedWithoutTransactionStatus() throws Exception {
+    void indeterminateCardCanBeAbandonedAfterAutomaticStatusRecovery() throws Exception {
         session = start(sessionBuilder().client(BiltNexoTerminalClient.builder()
                 .endpoint(server.url("/nexo").toString())
                 .readTimeout(Duration.ofMillis(100))
@@ -2014,19 +2032,30 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse()
                 .setBodyDelay(500, TimeUnit.MILLISECONDS)
                 .setBody(paymentOk("POI-PAY-UNKNOWN", 100.00)));
+        server.enqueue(new MockResponse().setBody(
+                TRANSACTION_STATUS_WITHOUT_REPEATED_RESPONSE));
+        AtomicInteger errorCalls = new AtomicInteger();
 
         SessionException failure = assertThrows(SessionException.class, () ->
-                session.settle().onError(ignored -> SettlementRecovery.abandon()).get());
+                session.settle().onError(context -> {
+                    errorCalls.incrementAndGet();
+                    assertTrue(context.isIndeterminate());
+                    assertTrue(context.getMessage().contains(
+                            "could not resolve CARD_CHARGE request"));
+                    return SettlementRecovery.abandon();
+                }).get());
 
         assertTrue(failure.getAbandonedSettlement().getFailure().isIndeterminate());
+        assertEquals(1, errorCalls.get());
         List<SaleToPOIRequest> requests = drainRequests();
-        assertEquals(1, requests.size(),
-                "abandon must not perform status recovery or any other terminal I/O");
+        assertEquals(2, requests.size(),
+                "automatic status recovery must precede the abandon decision");
         assertNotNull(requests.get(0).getPaymentRequest());
+        assertNotNull(requests.get(1).getTransactionStatusRequest());
     }
 
     @Test
-    void indeterminateCardRetryUsesTransactionStatusBeforeResending() throws Exception {
+    void indeterminateCardSuccessIsRecoveredBeforeOnError() throws Exception {
         session = start(sessionBuilder().client(BiltNexoTerminalClient.builder()
                 .endpoint(server.url("/nexo").toString())
                 .readTimeout(Duration.ofMillis(100))
@@ -2038,26 +2067,165 @@ class CheckoutSessionPaymentTest {
                 .setBody(paymentOk("POI-PAY-STATUS", 100.00)));
         server.enqueue(new MockResponse().setBody(
                 transactionStatusPaymentOk("POI-PAY-STATUS", 100.00)));
-        AtomicReference<String> failedServiceId = new AtomicReference<>();
+        AtomicInteger errorCalls = new AtomicInteger();
 
         SettlementResult result = session.settle().onError(failure -> {
-            assertEquals(SessionErrorCode.TIMEOUT, failure.getCode());
-            assertTrue(failure.isIndeterminate());
-            failedServiceId.set(failure.getServiceId());
-            return SettlementRecovery.retry();
+            errorCalls.incrementAndGet();
+            return SettlementRecovery.abort();
         }).get();
 
         assertEquals("POI-PAY-STATUS", result.getPoiTransactionId());
+        assertEquals(0, errorCalls.get(),
+                "a recovered successful request must not be reported as a failure");
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(2, requests.size(), "status recovery must avoid a second payment request");
         assertNotNull(requests.get(0).getPaymentRequest());
         assertNotNull(requests.get(1).getTransactionStatusRequest());
-        assertEquals(failedServiceId.get(), requests.get(1).getTransactionStatusRequest()
-                .getMessageReference().getServiceID());
+        assertEquals(requests.get(0).getMessageHeader().getServiceID(),
+                requests.get(1).getTransactionStatusRequest()
+                        .getMessageReference().getServiceID());
     }
 
     @Test
-    void recoveredCardChargeSupersedesExternalPaymentAndNotifiesRegister()
+    void transactionStatusNotFoundReportsADefinitiveFailureBeforeRetry()
+            throws Exception {
+        session = start(sessionBuilder().client(BiltNexoTerminalClient.builder()
+                .endpoint(server.url("/nexo").toString())
+                .readTimeout(Duration.ofMillis(100))
+                .disableRecoveryOnNetworkError()
+                .build()));
+        addHundredDollarItem();
+        server.enqueue(new MockResponse()
+                .setBodyDelay(500, TimeUnit.MILLISECONDS)
+                .setBody(paymentOk("POI-PAY-UNKNOWN", 100.00)));
+        server.enqueue(new MockResponse().setBody(TRANSACTION_STATUS_NOT_FOUND));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
+        AtomicReference<SettlementFailure> reported = new AtomicReference<>();
+
+        SettlementResult result = session.settle().onError(failure -> {
+            reported.set(failure);
+            return SettlementRecovery.retry();
+        }).get();
+
+        assertNotNull(reported.get());
+        assertFalse(reported.get().isIndeterminate(),
+                "NOT_FOUND establishes that the original request did not commit");
+        assertEquals(SessionErrorCode.TIMEOUT, reported.get().getCode());
+        assertEquals("POI-PAY-2", result.getPoiTransactionId());
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(3, requests.size());
+        assertNotNull(requests.get(0).getPaymentRequest());
+        assertNotNull(requests.get(1).getTransactionStatusRequest());
+        assertNotNull(requests.get(2).getPaymentRequest());
+    }
+
+    @Test
+    void recoveredCardFailureIsReportedAsDefinitiveBeforeExternalPayment()
+            throws Exception {
+        session = start(sessionBuilder().client(BiltNexoTerminalClient.builder()
+                .endpoint(server.url("/nexo").toString())
+                .readTimeout(Duration.ofMillis(100))
+                .disableRecoveryOnNetworkError()
+                .build()));
+        addHundredDollarItem();
+        server.enqueue(new MockResponse()
+                .setBodyDelay(500, TimeUnit.MILLISECONDS)
+                .setBody(paymentOk("POI-PAY-UNKNOWN", 100.00)));
+        server.enqueue(new MockResponse().setBody(
+                TRANSACTION_STATUS_PAYMENT_DECLINED));
+        AtomicReference<SettlementFailure> reported = new AtomicReference<>();
+
+        SettlementResult result = session.settle().onError(failure -> {
+            reported.set(failure);
+            return SettlementRecovery.external(ExternalPayment.cash(
+                    failure.getAmountDue(), "DRAWER-42"));
+        }).get();
+
+        assertNotNull(reported.get());
+        assertFalse(reported.get().isIndeterminate());
+        assertEquals(SessionErrorCode.DECLINED, reported.get().getCode());
+        assertEquals(0,
+                new BigDecimal("100.00").compareTo(result.getExternalPaymentAmount()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.getCardAmountCharged()));
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size(),
+                "the external tender must not send another terminal payment request");
+        assertNotNull(requests.get(0).getPaymentRequest());
+        assertNotNull(requests.get(1).getTransactionStatusRequest());
+    }
+
+    @Test
+    void retryAfterUnresolvedStatusChecksStatusAgainWithoutResendingPayment()
+            throws Exception {
+        session = start(sessionBuilder().client(BiltNexoTerminalClient.builder()
+                .endpoint(server.url("/nexo").toString())
+                .readTimeout(Duration.ofMillis(100))
+                .disableRecoveryOnNetworkError()
+                .build()));
+        addHundredDollarItem();
+        server.enqueue(new MockResponse()
+                .setBodyDelay(500, TimeUnit.MILLISECONDS)
+                .setBody(paymentOk("POI-PAY-UNKNOWN", 100.00)));
+        server.enqueue(new MockResponse().setBody(
+                TRANSACTION_STATUS_WITHOUT_REPEATED_RESPONSE));
+        server.enqueue(new MockResponse().setBody(TRANSACTION_STATUS_NOT_FOUND));
+        List<SettlementFailure> failures = new ArrayList<>();
+
+        SettlementResult result = session.settle().onError(failure -> {
+            failures.add(failure);
+            return failure.isIndeterminate()
+                    ? SettlementRecovery.retry()
+                    : SettlementRecovery.external(ExternalPayment.cash(
+                            failure.getAmountDue(), "DRAWER-42"));
+        }).get();
+
+        assertEquals(2, failures.size());
+        assertTrue(failures.get(0).isIndeterminate());
+        assertFalse(failures.get(1).isIndeterminate());
+        assertEquals(0,
+                new BigDecimal("100.00").compareTo(result.getExternalPaymentAmount()));
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(3, requests.size());
+        assertNotNull(requests.get(0).getPaymentRequest());
+        assertNotNull(requests.get(1).getTransactionStatusRequest());
+        assertNotNull(requests.get(2).getTransactionStatusRequest());
+    }
+
+    @Test
+    void externalPaymentCannotReplaceAnUnresolvedCardRequest() throws Exception {
+        session = start(sessionBuilder().client(BiltNexoTerminalClient.builder()
+                .endpoint(server.url("/nexo").toString())
+                .readTimeout(Duration.ofMillis(100))
+                .disableRecoveryOnNetworkError()
+                .build()));
+        addHundredDollarItem();
+        server.enqueue(new MockResponse()
+                .setBodyDelay(500, TimeUnit.MILLISECONDS)
+                .setBody(paymentOk("POI-PAY-UNKNOWN", 100.00)));
+        server.enqueue(new MockResponse().setBody(
+                TRANSACTION_STATUS_WITHOUT_REPEATED_RESPONSE));
+
+        SessionException failure = assertThrows(SessionException.class, () ->
+                session.settle().onError(context -> {
+                    if (context.getStep() == null) {
+                        return SettlementRecovery.abort();
+                    }
+                    assertTrue(context.isIndeterminate());
+                    return SettlementRecovery.external(ExternalPayment.cash(
+                            context.getAmountDue(), "DRAWER-42"));
+                }).get());
+
+        assertEquals(SessionErrorCode.INVALID_STATE, failure.getError().getCode());
+        assertTrue(failure.getError().getMessage().contains(
+                "cannot proceed while TransactionStatus has not resolved"));
+        List<SaleToPOIRequest> requests = drainRequests();
+        assertEquals(2, requests.size());
+        assertNotNull(requests.get(0).getPaymentRequest());
+        assertNotNull(requests.get(1).getTransactionStatusRequest());
+    }
+
+    @Test
+    void recoveredCardChargeCompletesBeforeRequestingExternalPayment()
             throws Exception {
         session = start(sessionBuilder().client(BiltNexoTerminalClient.builder()
                 .endpoint(server.url("/nexo").toString())
@@ -2072,12 +2240,13 @@ class CheckoutSessionPaymentTest {
                 transactionStatusPaymentOk("POI-PAY-STATUS", 100.00)));
         AtomicReference<SettlementMovement> card = new AtomicReference<>();
         AtomicInteger externalCalls = new AtomicInteger();
+        AtomicInteger errorCalls = new AtomicInteger();
 
         SettlementResult result = session.settle()
                 .onCardCharged(card::set)
                 .onExternallyPaid(ignored -> externalCalls.incrementAndGet())
                 .onError(failure -> {
-                    assertTrue(failure.isIndeterminate());
+                    errorCalls.incrementAndGet();
                     return SettlementRecovery.external(ExternalPayment.cash(
                             failure.getAmountDue(), "DRAWER-42"));
                 })
@@ -2086,8 +2255,10 @@ class CheckoutSessionPaymentTest {
         assertNotNull(card.get(), "the recovered card charge must be delivered");
         assertEquals(SettlementStep.CARD_CHARGE, card.get().getStep());
         assertEquals("POI-PAY-STATUS", card.get().getPoiTransactionId());
+        assertEquals(0, errorCalls.get(),
+                "the register must not be asked to collect an external tender");
         assertEquals(0, externalCalls.get(),
-                "the superseded external tender must not be reported as recorded");
+                "no external tender must be recorded");
         assertEquals(0,
                 new BigDecimal("100.00").compareTo(result.getCardAmountCharged()));
         assertEquals(0, BigDecimal.ZERO.compareTo(result.getExternalPaymentAmount()));
@@ -2116,14 +2287,15 @@ class CheckoutSessionPaymentTest {
         server.enqueue(new MockResponse().setBody(TRANSACTION_STATUS_IN_PROGRESS));
         server.enqueue(new MockResponse().setBody(
                 transactionStatusPaymentOk("POI-PAY-STATUS", 100.00)));
-        AtomicReference<String> originalServiceId = new AtomicReference<>();
+        AtomicInteger errorCalls = new AtomicInteger();
 
         SettlementResult result = session.settle().onError(failure -> {
-            originalServiceId.set(failure.getServiceId());
-            return SettlementRecovery.retry();
+            errorCalls.incrementAndGet();
+            return SettlementRecovery.abort();
         }).get();
 
         assertEquals("POI-PAY-STATUS", result.getPoiTransactionId());
+        assertEquals(0, errorCalls.get());
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(4, requests.size(),
                 "the payment and three bounded status checks must be sent");
@@ -2132,8 +2304,9 @@ class CheckoutSessionPaymentTest {
         for (int i = 1; i < requests.size(); i++) {
             SaleToPOIRequest status = requests.get(i);
             assertNotNull(status.getTransactionStatusRequest());
-            assertEquals(originalServiceId.get(), status.getTransactionStatusRequest()
-                    .getMessageReference().getServiceID());
+            assertEquals(requests.get(0).getMessageHeader().getServiceID(),
+                    status.getTransactionStatusRequest()
+                            .getMessageReference().getServiceID());
             statusServiceIds.add(status.getMessageHeader().getServiceID());
         }
         assertEquals(3, statusServiceIds.size(),
@@ -2155,10 +2328,16 @@ class CheckoutSessionPaymentTest {
         for (int i = 0; i < 5; i++) {
             server.enqueue(new MockResponse().setBody(TRANSACTION_STATUS_IN_PROGRESS));
         }
+        AtomicReference<SettlementFailure> reported = new AtomicReference<>();
 
         SessionException failure = assertThrows(SessionException.class, () ->
-                session.settle().onError(ignored -> SettlementRecovery.retry()).get());
+                session.settle().onError(context -> {
+                    reported.set(context);
+                    return SettlementRecovery.abort();
+                }).get());
 
+        assertNotNull(reported.get());
+        assertTrue(reported.get().isIndeterminate());
         assertEquals(SessionErrorCode.TIMEOUT, failure.getError().getCode());
         assertEquals("InProgress", failure.getError().getNexoErrorCondition());
         assertTrue(failure.getError().getMessage().contains(
@@ -2170,7 +2349,7 @@ class CheckoutSessionPaymentTest {
     }
 
     @Test
-    void indeterminateCardRetryDoesNotResendWithoutARepeatedStatusBody() throws Exception {
+    void indeterminateCardDoesNotResendWhenStatusCannotResolve() throws Exception {
         session = start(sessionBuilder().client(BiltNexoTerminalClient.builder()
                 .endpoint(server.url("/nexo").toString())
                 .readTimeout(Duration.ofMillis(100))
@@ -2181,16 +2360,19 @@ class CheckoutSessionPaymentTest {
                 .setBodyDelay(500, TimeUnit.MILLISECONDS)
                 .setBody(paymentOk("POI-PAY-STATUS", 100.00)));
         server.enqueue(new MockResponse().setBody(
-                "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{"
-                        + "\"Response\":{\"Result\":\"Success\"}}}}"));
+                TRANSACTION_STATUS_WITHOUT_REPEATED_RESPONSE));
         AtomicInteger failures = new AtomicInteger();
 
         SessionException failure = assertThrows(SessionException.class, () ->
-                session.settle().onError(ignored -> failures.incrementAndGet() == 1
-                        ? SettlementRecovery.retry() : SettlementRecovery.abort()).get());
+                session.settle().onError(context -> {
+                    failures.incrementAndGet();
+                    assertTrue(context.isIndeterminate());
+                    return SettlementRecovery.abort();
+                }).get());
 
         assertEquals(SessionErrorCode.TERMINAL_ERROR, failure.getError().getCode());
         assertTrue(failure.getError().getMessage().contains("RepeatedMessageResponse"));
+        assertEquals(1, failures.get());
         List<SaleToPOIRequest> requests = drainRequests();
         assertEquals(2, requests.size(),
                 "an inconclusive status response must never cause a duplicate payment");

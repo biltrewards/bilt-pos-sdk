@@ -55,12 +55,12 @@ loadScripts(document, 'script');</script>
 <dl class="index">
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#abandon()" class="member-name-link">abandon()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
 <dd>
-<div class="block">Stop immediately without status recovery, retry, or unwind and transfer
+<div class="block">Stop without further status recovery, retry, or unwind and transfer
  responsibility for all committed movements to the register.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html#ABANDON" class="member-name-link">ABANDON</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></dt>
 <dd>
-<div class="block">Stop immediately and transfer the partial settlement to the register.</div>
+<div class="block">Stop recovery and transfer the partial settlement to the register.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SessionErrorCode.html#ABANDONED" class="member-name-link">ABANDONED</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></dt>
 <dd>
@@ -842,7 +842,9 @@ loadScripts(document, 'script');</script>
 <div class="block">Payment original, no receipt reprint.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html#DEFINITIVE" class="member-name-link">DEFINITIVE</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a></dt>
-<dd>&nbsp;</dd>
+<dd>
+<div class="block">The terminal outcome is known, including an authoritative not-found result.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/LabeledAmountType.html#description" class="member-name-link">description</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LabeledAmountType.html" title="class in com.bilt.pos.display">LabeledAmountType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#description" class="member-name-link">description</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
@@ -1848,7 +1850,9 @@ loadScripts(document, 'script');</script>
 <div class="block">The member's loyalty account ID, or <code>null</code> unless <code>FOUND</code>.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html#getMemberId()" class="member-name-link">getMemberId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></dt>
-<dd>&nbsp;</dd>
+<dd>
+<div class="block">Identified member ID, or <code>null</code> when no member was identified.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html#getMemberId()" class="member-name-link">getMemberId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#getMemberId()" class="member-name-link">getMemberId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
@@ -1900,7 +1904,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getMessage()" class="member-name-link">getMessage()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getMessageCategory()" class="member-name-link">getMessageCategory()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
-<dd>&nbsp;</dd>
+<dd>
+<div class="block">Original request's Nexo message category, or <code>null</code> when no request
+ category is available.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/TransactionStatusResult.html#getMessageCategory()" class="member-name-link">getMessageCategory()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TransactionStatusResult.html" title="class in com.bilt.pos.session">TransactionStatusResult</a></dt>
 <dd>
 <div class="block">Message category of the original transaction — <code>"Payment"</code>,
@@ -1981,7 +1988,9 @@ loadScripts(document, 'script');</script>
  <code>null</code> if it failed.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getOutcomeCertainty()" class="member-name-link">getOutcomeCertainty()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
-<dd>&nbsp;</dd>
+<dd>
+<div class="block">Certainty established before the register is asked to direct recovery.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html#getOutstandingAmount()" class="member-name-link">getOutstandingAmount()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/nexo/security/SecurityKey.html#getPassphrase()" class="member-name-link">getPassphrase()</a> - Method in class com.bilt.pos.nexo.security.<a href="com/bilt/pos/nexo/security/SecurityKey.html" title="class in com.bilt.pos.nexo.security">SecurityKey</a></dt>
@@ -2331,7 +2340,10 @@ loadScripts(document, 'script');</script>
 <div class="block">The step about to run.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getStep()" class="member-name-link">getStep()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
-<dd>&nbsp;</dd>
+<dd>
+<div class="block">The failed step, or <code>null</code> when the failure did not occur inside a
+ specific settlement step, such as a pre-sequence rejection or refused recovery.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#getStep()" class="member-name-link">getStep()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getStoredValueAmountUsed()" class="member-name-link">getStoredValueAmountUsed()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
@@ -2800,7 +2812,9 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/display/ImageType.html#%3Cinit%3E()" class="member-name-link">ImageType()</a> - Constructor for class com.bilt.pos.display.<a href="com/bilt/pos/display/ImageType.html" title="class in com.bilt.pos.display">ImageType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html#INDETERMINATE" class="member-name-link">INDETERMINATE</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a></dt>
-<dd>&nbsp;</dd>
+<dd>
+<div class="block">TransactionStatus could not establish the terminal outcome.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayloadHelper.html#inputFromBase64(java.lang.String)" class="member-name-link">inputFromBase64(String)</a> - Static method in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayloadHelper.html" title="class in com.bilt.pos.display">DisplayPayloadHelper</a></dt>
 <dd>
 <div class="block">Deserializes an <a href="com/bilt/pos/display/InputPayload.html" title="class in com.bilt.pos.display"><code>InputPayload</code></a> from a Base64-encoded XML string.</div>
@@ -3237,7 +3251,8 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#onError(java.util.function.Function)" class="member-name-link">onError(Function&lt;SettlementFailure, SettlementRecovery&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
-<div class="block">Called before any charge-side recovery or unwind begins.</div>
+<div class="block">Called when a charge-side step definitively fails, or when automatic
+ TransactionStatus recovery cannot resolve an indeterminate terminal request.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#onExternallyPaid(java.util.function.Consumer)" class="member-name-link">onExternallyPaid(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
@@ -4409,7 +4424,7 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementFailure</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
-<div class="block">Context supplied to <code>SettlementFlow.onError</code> before recovery begins.</div>
+<div class="block">Context supplied when <code>SettlementFlow.onError</code> must direct recovery.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
@@ -4417,7 +4432,7 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html" class="type-name-link" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a> - Enum Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
-<div class="block">Whether the failed request is known not to have committed.</div>
+<div class="block">Whether the failed request's terminal outcome is known.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html" class="type-name-link" title="class in com.bilt.pos.session">SettlementFlow</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
@@ -4443,7 +4458,7 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
-<div class="block">Resolution returned from <code>SettlementFlow.onError</code> before recovery begins.</div>
+<div class="block">Resolution returned from <code>SettlementFlow.onError</code> to direct recovery.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html" class="type-name-link" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a> - Enum Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>

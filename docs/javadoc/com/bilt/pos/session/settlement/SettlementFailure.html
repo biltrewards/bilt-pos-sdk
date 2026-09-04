@@ -92,7 +92,7 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">SettlementFailure</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">Context supplied to <code>SettlementFlow.onError</code> before recovery begins.</div>
+<div class="block">Context supplied when <code>SettlementFlow.onError</code> must direct recovery.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -113,7 +113,7 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color"><code>static enum&nbsp;</code></div>
 <div class="col-second odd-row-color"><code><a href="SettlementFailure.OutcomeCertainty.html" class="type-name-link" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a></code></div>
 <div class="col-last odd-row-color">
-<div class="block">Whether the failed request is known not to have committed.</div>
+<div class="block">Whether the failed request's terminal outcome is known.</div>
 </div>
 </div>
 </section>
@@ -167,7 +167,9 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFailure.OutcomeCertainty.html" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getOutcomeCertainty()" class="member-name-link">getOutcomeCertainty</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Certainty established before the register is asked to direct recovery.</div>
+</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getServiceId()" class="member-name-link">getServiceId</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
@@ -238,6 +240,7 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getOutcomeCertainty()">
 <h3>getOutcomeCertainty</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFailure.OutcomeCertainty.html" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a></span>&nbsp;<span class="element-name">getOutcomeCertainty</span>()</div>
+<div class="block">Certainty established before the register is asked to direct recovery.</div>
 </section>
 </li>
 <li>
