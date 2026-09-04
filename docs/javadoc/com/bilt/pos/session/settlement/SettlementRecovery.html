@@ -207,7 +207,16 @@ loadScripts(document, 'script');</script>
 <h3>external</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></span>&nbsp;<span class="element-name">external</span><wbr><span class="parameters">(<a href="ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a>&nbsp;payment)</span></div>
 <div class="block">Records a register-managed tender and continues after the failed card step.
- The payment amount must exactly equal the outstanding amount.</div>
+ The payment amount must exactly equal the outstanding amount.
+
+ <p>For an <a href="SettlementFailure.OutcomeCertainty.html#INDETERMINATE"><code>SettlementFailure.OutcomeCertainty.INDETERMINATE</code></a>
+ failure, the SDK checks TransactionStatus before recording this tender.
+ If the original card request committed, its <code>CARD_CHARGE</code> movement
+ is delivered through <code>onCardCharged</code> and <code>onMovement</code>, this
+ external tender is not recorded, and <code>onExternallyPaid</code> does not
+ run. Collect the register-managed tender only for a definitive failure,
+ or be prepared to return it if the external-payment callback does not
+ run.</p></div>
 </section>
 </li>
 <li>

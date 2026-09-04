@@ -357,7 +357,9 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="onExternallyPaid(java.util.function.Consumer)">
 <h3>onExternallyPaid</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onExternallyPaid</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when a register-managed payment such as cash is recorded.</div>
+<div class="block">Called when a register-managed payment such as cash is recorded.
+ This does not run when TransactionStatus recovers the original card
+ charge and supersedes an external-payment recovery decision.</div>
 </section>
 </li>
 <li>

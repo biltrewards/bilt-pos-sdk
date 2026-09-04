@@ -59,6 +59,15 @@ public final class SettlementRecovery {
     /**
      * Records a register-managed tender and continues after the failed card step.
      * The payment amount must exactly equal the outstanding amount.
+     *
+     * <p>For an {@link SettlementFailure.OutcomeCertainty#INDETERMINATE}
+     * failure, the SDK checks TransactionStatus before recording this tender.
+     * If the original card request committed, its {@code CARD_CHARGE} movement
+     * is delivered through {@code onCardCharged} and {@code onMovement}, this
+     * external tender is not recorded, and {@code onExternallyPaid} does not
+     * run. Collect the register-managed tender only for a definitive failure,
+     * or be prepared to return it if the external-payment callback does not
+     * run.</p>
      */
     public static SettlementRecovery external(ExternalPayment payment) {
         if (payment == null) {

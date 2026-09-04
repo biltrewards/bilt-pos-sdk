@@ -35,21 +35,26 @@ public final class SettlementFailure {
     private final String messageCategory;
     private final String serviceId;
 
-    public SettlementFailure(SettlementStep step, SessionError error, BigDecimal amountDue,
-                             List<SettlementMovement> committedMovements,
-                             OutcomeCertainty outcomeCertainty, String messageCategory,
-                             String serviceId) {
-        this.step = step;
-        this.error = Objects.requireNonNull(error, "error");
-        this.amountDue = amountDue == null ? BigDecimal.ZERO : amountDue;
+    private SettlementFailure(Builder builder) {
+        this.step = builder.step;
+        this.error = Objects.requireNonNull(builder.error, "error");
+        this.amountDue = Objects.requireNonNull(builder.amountDue, "amountDue");
         this.committedMovements = Collections.unmodifiableList(new ArrayList<>(
-                committedMovements == null ? List.of() : committedMovements));
-        this.outcomeCertainty = outcomeCertainty == null
-                ? OutcomeCertainty.DEFINITIVE : outcomeCertainty;
-        this.messageCategory = messageCategory;
-        this.serviceId = serviceId;
+                Objects.requireNonNull(builder.committedMovements, "committedMovements")));
+        this.outcomeCertainty = Objects.requireNonNull(
+                builder.outcomeCertainty, "outcomeCertainty");
+        this.messageCategory = builder.messageCategory;
+        this.serviceId = builder.serviceId;
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
+     * The failed step, or {@code null} when the failure did not occur inside a
+     * specific settlement step, such as a pre-sequence rejection or refused recovery.
+     */
     public SettlementStep getStep() {
         return step;
     }
@@ -77,6 +82,10 @@ public final class SettlementFailure {
         return outcomeCertainty == OutcomeCertainty.INDETERMINATE;
     }
 
+    /**
+     * Original request's Nexo message category, or {@code null} when no request
+     * category is available.
+     */
     public String getMessageCategory() {
         return messageCategory;
     }
@@ -101,5 +110,59 @@ public final class SettlementFailure {
 
     public Throwable getCause() {
         return error.getCause();
+    }
+
+    /** Builder for {@link SettlementFailure}. */
+    public static final class Builder {
+
+        private SettlementStep step;
+        private SessionError error;
+        private BigDecimal amountDue;
+        private List<SettlementMovement> committedMovements;
+        private OutcomeCertainty outcomeCertainty;
+        private String messageCategory;
+        private String serviceId;
+
+        private Builder() {
+        }
+
+        public Builder step(SettlementStep step) {
+            this.step = step;
+            return this;
+        }
+
+        public Builder error(SessionError error) {
+            this.error = error;
+            return this;
+        }
+
+        public Builder amountDue(BigDecimal amountDue) {
+            this.amountDue = amountDue;
+            return this;
+        }
+
+        public Builder committedMovements(List<SettlementMovement> committedMovements) {
+            this.committedMovements = committedMovements;
+            return this;
+        }
+
+        public Builder outcomeCertainty(OutcomeCertainty outcomeCertainty) {
+            this.outcomeCertainty = outcomeCertainty;
+            return this;
+        }
+
+        public Builder messageCategory(String messageCategory) {
+            this.messageCategory = messageCategory;
+            return this;
+        }
+
+        public Builder serviceId(String serviceId) {
+            this.serviceId = serviceId;
+            return this;
+        }
+
+        public SettlementFailure build() {
+            return new SettlementFailure(this);
+        }
     }
 }

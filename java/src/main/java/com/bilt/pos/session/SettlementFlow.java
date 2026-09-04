@@ -21,6 +21,7 @@ import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -169,7 +170,11 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         return register(() -> this.cardChargeHandler = requireHandler(handler));
     }
 
-    /** Called when a register-managed payment such as cash is recorded. */
+    /**
+     * Called when a register-managed payment such as cash is recorded.
+     * This does not run when TransactionStatus recovers the original card
+     * charge and supersedes an external-payment recovery decision.
+     */
     public SettlementFlow onExternallyPaid(Consumer<SettlementMovement> handler) {
         return register(() -> this.externalPaymentHandler = requireHandler(handler));
     }
@@ -386,8 +391,12 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     }
 
     private static SettlementFailure terminalFailure(SessionError error) {
-        return new SettlementFailure(null, error, BigDecimal.ZERO, java.util.List.of(),
-                SettlementFailure.OutcomeCertainty.DEFINITIVE, null, null);
+        return SettlementFailure.builder()
+                .error(error)
+                .amountDue(BigDecimal.ZERO)
+                .committedMovements(List.of())
+                .outcomeCertainty(SettlementFailure.OutcomeCertainty.DEFINITIVE)
+                .build();
     }
 
     private Consumer<SettlementMovement> specificMovementHandler(SettlementStep step) {

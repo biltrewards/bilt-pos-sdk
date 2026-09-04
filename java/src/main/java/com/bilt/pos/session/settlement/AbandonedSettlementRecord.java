@@ -35,20 +35,21 @@ public final class AbandonedSettlementRecord {
     private final BigDecimal outstandingAmount;
     private final List<SettlementMovement> committedMovements;
 
-    public AbandonedSettlementRecord(String settlementId, Instant abandonedAt, Basket basket,
-                                     SettlementOptions options, String memberId,
-                                     SettlementFailure failure, BigDecimal outstandingAmount,
-                                     List<SettlementMovement> committedMovements) {
-        this.settlementId = Objects.requireNonNull(settlementId, "settlementId");
-        this.abandonedAt = Objects.requireNonNull(abandonedAt, "abandonedAt");
-        this.basket = Objects.requireNonNull(basket, "basket");
-        this.options = Objects.requireNonNull(options, "options");
-        this.memberId = memberId;
-        this.failure = Objects.requireNonNull(failure, "failure");
-        this.outstandingAmount = outstandingAmount == null
-                ? BigDecimal.ZERO : outstandingAmount;
+    private AbandonedSettlementRecord(Builder builder) {
+        this.settlementId = Objects.requireNonNull(builder.settlementId, "settlementId");
+        this.abandonedAt = Objects.requireNonNull(builder.abandonedAt, "abandonedAt");
+        this.basket = Objects.requireNonNull(builder.basket, "basket");
+        this.options = Objects.requireNonNull(builder.options, "options");
+        this.memberId = builder.memberId;
+        this.failure = Objects.requireNonNull(builder.failure, "failure");
+        this.outstandingAmount = Objects.requireNonNull(
+                builder.outstandingAmount, "outstandingAmount");
         this.committedMovements = Collections.unmodifiableList(new ArrayList<>(
-                committedMovements == null ? List.of() : committedMovements));
+                Objects.requireNonNull(builder.committedMovements, "committedMovements")));
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 
     public String getSettlementId() {
@@ -67,6 +68,7 @@ public final class AbandonedSettlementRecord {
         return options;
     }
 
+    /** Identified member ID, or {@code null} when no member was identified. */
     public String getMemberId() {
         return memberId;
     }
@@ -81,5 +83,65 @@ public final class AbandonedSettlementRecord {
 
     public List<SettlementMovement> getCommittedMovements() {
         return committedMovements;
+    }
+
+    /** Builder for {@link AbandonedSettlementRecord}. */
+    public static final class Builder {
+
+        private String settlementId;
+        private Instant abandonedAt;
+        private Basket basket;
+        private SettlementOptions options;
+        private String memberId;
+        private SettlementFailure failure;
+        private BigDecimal outstandingAmount;
+        private List<SettlementMovement> committedMovements;
+
+        private Builder() {
+        }
+
+        public Builder settlementId(String settlementId) {
+            this.settlementId = settlementId;
+            return this;
+        }
+
+        public Builder abandonedAt(Instant abandonedAt) {
+            this.abandonedAt = abandonedAt;
+            return this;
+        }
+
+        public Builder basket(Basket basket) {
+            this.basket = basket;
+            return this;
+        }
+
+        public Builder options(SettlementOptions options) {
+            this.options = options;
+            return this;
+        }
+
+        public Builder memberId(String memberId) {
+            this.memberId = memberId;
+            return this;
+        }
+
+        public Builder failure(SettlementFailure failure) {
+            this.failure = failure;
+            return this;
+        }
+
+        public Builder outstandingAmount(BigDecimal outstandingAmount) {
+            this.outstandingAmount = outstandingAmount;
+            return this;
+        }
+
+        public Builder committedMovements(List<SettlementMovement> committedMovements) {
+            this.committedMovements = committedMovements;
+            return this;
+        }
+
+        public AbandonedSettlementRecord build() {
+            return new AbandonedSettlementRecord(this);
+        }
     }
 }

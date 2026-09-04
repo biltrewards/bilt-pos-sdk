@@ -602,15 +602,6 @@ public final class SettlementResult {
             return this;
         }
 
-        /** Removes provisional tail movements after a failed step is reset. */
-        public Builder removeLastMovements(int count) {
-            if (count < 0 || count > movements.size()) {
-                throw new IllegalArgumentException("invalid movement count " + count);
-            }
-            movements.subList(movements.size() - count, movements.size()).clear();
-            return this;
-        }
-
         public Builder warning(String warning) {
             this.warnings.add(warning);
             return this;

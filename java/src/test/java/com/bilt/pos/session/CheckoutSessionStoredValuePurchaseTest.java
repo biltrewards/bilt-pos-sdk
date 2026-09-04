@@ -7,8 +7,10 @@ import com.bilt.pos.nexo.model.StoredValueData;
 import com.bilt.pos.session.basket.BasketDiscount;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
+import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
+import com.bilt.pos.session.settlement.SettlementRecovery;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
 import com.bilt.pos.session.settlement.SettlementTarget;
@@ -270,6 +272,35 @@ class CheckoutSessionStoredValuePurchaseTest {
         assertEquals("Reverse", requests.get(2).getStoredValueRequest()
                 .getStoredValueData()[0].getStoredValueTransactionType().toValue());
         assertNotNull(requests.get(3).getReversalRequest());
+    }
+
+    @Test
+    void abandoningPartialActivationReportsTheStandingLoadHonestly() throws Exception {
+        session.basket().addItem(giftCard(
+                "gift-card-1", "Gift card", new BigDecimal("25.00")));
+        server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 25.00)));
+        server.enqueue(new MockResponse().setBody(
+                storedValueOk("Activate", "POI-LOAD-1", 20.00, 20.00)));
+
+        SessionException abandoned = assertThrows(SessionException.class, () ->
+                session.settle(SettlementOptions.builder()
+                                .addFulfillment(StoredValueLoad.activate(
+                                        "gift-card-1", StoredValueCard.number("GC-1")))
+                                .build())
+                        .onError(ignored -> SettlementRecovery.abandon())
+                        .get());
+
+        SettlementFailure failure = abandoned.getAbandonedSettlement().getFailure();
+        assertEquals(SessionErrorCode.DECLINED, failure.getCode());
+        assertEquals("the stored value fulfillment loaded 20.00 instead of the basket line's 25.00",
+                failure.getMessage());
+        assertEquals(2, failure.getCommittedMovements().size());
+        assertEquals(SettlementStep.STORED_VALUE_LOAD,
+                failure.getCommittedMovements().get(1).getStep());
+        assertEquals("POI-LOAD-1",
+                failure.getCommittedMovements().get(1).getPoiTransactionId());
+        assertEquals(2, drainRequests().size(),
+                "abandon must leave the funding charge and partial load standing");
     }
 
     @Test
