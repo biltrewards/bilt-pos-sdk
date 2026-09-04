@@ -43,6 +43,7 @@ public final class SettlementResult {
     private final BigDecimal storedValueAmountUsed;
     private final BigDecimal storedValueLoadedAmount;
     private final BigDecimal cardAmountCharged;
+    private final BigDecimal externalPaymentAmount;
     private final String approvalCode;
     private final String acquirerTransactionId;
     private final String paymentBrand;
@@ -89,6 +90,7 @@ public final class SettlementResult {
         this.storedValueAmountUsed = builder.storedValueAmountUsed;
         this.storedValueLoadedAmount = builder.storedValueLoadedAmount;
         this.cardAmountCharged = builder.cardAmountCharged;
+        this.externalPaymentAmount = builder.externalPaymentAmount;
         this.approvalCode = builder.approvalCode;
         this.acquirerTransactionId = builder.acquirerTransactionId;
         this.paymentBrand = builder.paymentBrand;
@@ -138,7 +140,7 @@ public final class SettlementResult {
         return finalBasket;
     }
 
-    /** Total authorized across all tenders. */
+    /** Total authorized by terminal-managed stored-value and card tenders. */
     public BigDecimal getAuthorizedAmount() {
         return authorizedAmount;
     }
@@ -175,6 +177,11 @@ public final class SettlementResult {
     /** Amount charged to the payment card; zero if fully covered otherwise. */
     public BigDecimal getCardAmountCharged() {
         return cardAmountCharged;
+    }
+
+    /** Amount collected through register-managed tenders such as cash. */
+    public BigDecimal getExternalPaymentAmount() {
+        return externalPaymentAmount;
     }
 
     public String getApprovalCode() {
@@ -339,6 +346,7 @@ public final class SettlementResult {
         private BigDecimal storedValueAmountUsed = BigDecimal.ZERO;
         private BigDecimal storedValueLoadedAmount = BigDecimal.ZERO;
         private BigDecimal cardAmountCharged = BigDecimal.ZERO;
+        private BigDecimal externalPaymentAmount = BigDecimal.ZERO;
         private String approvalCode;
         private String acquirerTransactionId;
         private String paymentBrand;
@@ -379,6 +387,7 @@ public final class SettlementResult {
             this.storedValueAmountUsed = result.storedValueAmountUsed;
             this.storedValueLoadedAmount = result.storedValueLoadedAmount;
             this.cardAmountCharged = result.cardAmountCharged;
+            this.externalPaymentAmount = result.externalPaymentAmount;
             this.approvalCode = result.approvalCode;
             this.acquirerTransactionId = result.acquirerTransactionId;
             this.paymentBrand = result.paymentBrand;
@@ -437,6 +446,11 @@ public final class SettlementResult {
 
         public Builder cardAmountCharged(BigDecimal cardAmountCharged) {
             this.cardAmountCharged = cardAmountCharged;
+            return this;
+        }
+
+        public Builder externalPaymentAmount(BigDecimal externalPaymentAmount) {
+            this.externalPaymentAmount = externalPaymentAmount;
             return this;
         }
 

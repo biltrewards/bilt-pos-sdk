@@ -22,15 +22,19 @@ import com.bilt.pos.nexo.model.MessageClassType;
 import com.bilt.pos.nexo.model.MessageReference;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.Response;
+import com.bilt.pos.nexo.model.RepeatedResponseMessageBody;
 import com.bilt.pos.nexo.model.ResultType;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
+import com.bilt.pos.nexo.model.TransactionStatusRequest;
+import com.bilt.pos.nexo.model.TransactionStatusResponse;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
 
 import java.io.InterruptedIOException;
 import java.net.SocketTimeoutException;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -45,6 +49,9 @@ import java.util.logging.Logger;
 public final class NexoExchange {
 
     private static final Logger LOGGER = Logger.getLogger(NexoExchange.class.getName());
+    private static final int TRANSACTION_STATUS_MAX_ATTEMPTS = 5;
+    private static final long TRANSACTION_STATUS_POLL_INTERVAL_MILLIS = 1_000L;
+    private static final long TRANSACTION_STATUS_POLL_JITTER_MILLIS = 200L;
 
     /** The operation currently awaiting a terminal response, if any. */
     public static final class InFlight {
@@ -196,6 +203,103 @@ public final class NexoExchange {
                     "terminal returned an empty response to " + category.toValue() + " request"));
         }
         return response;
+    }
+
+    /**
+     * Resolves an earlier request by ServiceID. Returns the repeated original
+     * response, or {@code null} when the terminal authoritatively reports that
+     * it was not found. An in-progress response is polled for a bounded period;
+     * any other status exchange failure remains a SessionException.
+     */
+    public SaleToPOIResponse recoverByTransactionStatus(String serviceId,
+                                                        MessageCategoryType originalCategory) {
+        for (int attempt = 1; attempt <= TRANSACTION_STATUS_MAX_ATTEMPTS; attempt++) {
+            SaleToPOIResponse response = sendExpectingBody(
+                    MessageCategoryType.TRANSACTION_STATUS,
+                    transactionStatusRequest(serviceId, originalCategory));
+            TransactionStatusResponse body = response.getTransactionStatusResponse();
+            if (body == null) {
+                throw Wire.missing("TransactionStatusResponse");
+            }
+            Response status = body.getResponse();
+            if (isStatusFailure(status, ErrorConditionType.NOT_FOUND)) {
+                return null;
+            }
+            if (isStatusFailure(status, ErrorConditionType.IN_PROGRESS)) {
+                if (attempt == TRANSACTION_STATUS_MAX_ATTEMPTS) {
+                    throw new SessionException(new SessionError(
+                            SessionErrorCode.TIMEOUT,
+                            "terminal is still processing " + originalCategory.toValue()
+                                    + " request " + serviceId + " after " + attempt
+                                    + " TransactionStatus attempts",
+                            ErrorConditionType.IN_PROGRESS.toValue(), null));
+                }
+                waitBeforeStatusRetry();
+                continue;
+            }
+            requireSuccess(MessageCategoryType.TRANSACTION_STATUS, status);
+            RepeatedResponseMessageBody repeated = body.getRepeatedMessageResponse() == null
+                    ? null : body.getRepeatedMessageResponse().getRepeatedResponseMessageBody();
+            if (repeated == null) {
+                throw Wire.missing(
+                        "TransactionStatusResponse.RepeatedMessageResponse");
+            }
+            boolean expectedBodyPresent = (originalCategory == MessageCategoryType.PAYMENT
+                    && repeated.getPaymentResponse() != null)
+                    || (originalCategory == MessageCategoryType.LOYALTY
+                    && repeated.getLoyaltyResponse() != null)
+                    || (originalCategory == MessageCategoryType.STORED_VALUE
+                    && repeated.getStoredValueResponse() != null)
+                    || (originalCategory == MessageCategoryType.REVERSAL
+                    && repeated.getReversalResponse() != null);
+            if (!expectedBodyPresent) {
+                throw Wire.missing("TransactionStatusResponse repeated "
+                        + originalCategory.toValue() + " response");
+            }
+            return SaleToPOIResponse.builder()
+                    .loyaltyResponse(repeated.getLoyaltyResponse())
+                    .paymentResponse(repeated.getPaymentResponse())
+                    .storedValueResponse(repeated.getStoredValueResponse())
+                    .reversalResponse(repeated.getReversalResponse())
+                    .build();
+        }
+        throw new AssertionError("unreachable TransactionStatus recovery state");
+    }
+
+    private SaleToPOIRequest transactionStatusRequest(String serviceId,
+                                                      MessageCategoryType originalCategory) {
+        return SaleToPOIRequest.builder()
+                .messageHeader(factory.header(MessageClassType.SERVICE,
+                        MessageCategoryType.TRANSACTION_STATUS))
+                .transactionStatusRequest(TransactionStatusRequest.builder()
+                        .messageReference(MessageReference.builder()
+                                .messageCategory(originalCategory)
+                                .serviceID(serviceId)
+                                .saleID(factory.getSaleId())
+                                .build())
+                        .build())
+                .build();
+    }
+
+    private static boolean isStatusFailure(Response response, ErrorConditionType condition) {
+        return response != null
+                && response.getResult() == ResultType.FAILURE
+                && response.getErrorCondition() == condition;
+    }
+
+    private static void waitBeforeStatusRetry() {
+        long delayMillis = ThreadLocalRandom.current().nextLong(
+                TRANSACTION_STATUS_POLL_INTERVAL_MILLIS
+                        - TRANSACTION_STATUS_POLL_JITTER_MILLIS,
+                TRANSACTION_STATUS_POLL_INTERVAL_MILLIS
+                        + TRANSACTION_STATUS_POLL_JITTER_MILLIS + 1L);
+        try {
+            Thread.sleep(delayMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
+                    "TransactionStatus recovery was interrupted", null, e));
+        }
     }
 
     /**

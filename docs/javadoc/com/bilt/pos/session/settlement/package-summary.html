@@ -89,34 +89,58 @@ loadScripts(document, 'script');</script>
 <div class="summary-table two-column-summary">
 <div class="table-header col-first">Class</div>
 <div class="table-header col-last">Description</div>
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="block">Immutable manual-takeover record produced when the register abandons recovery.</div>
+</div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="block">Builder for <a href="AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement"><code>AbandonedSettlementRecord</code></a>.</div>
+</div>
 <div class="col-first even-row-color class-summary class-summary-tab2"><a href="CommittedStep.html" title="class in com.bilt.pos.session.settlement">CommittedStep</a></div>
 <div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">A settlement step that has been committed on the terminal.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a></div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></div>
 <div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="block">A payment collected and owned by the register rather than the terminal.</div>
+</div>
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">References from a completed sale that a later checkout session can use to
  void the whole original transaction or allocate return settlement.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="OriginalSaleRecord.Builder.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord.Builder</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="OriginalSaleRecord.Builder.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord.Builder</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement"><code>OriginalSaleRecord</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Register-selected refund/restoration movement for a settlement with returns.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="RefundAllocation.Builder.html" title="class in com.bilt.pos.session.settlement">RefundAllocation.Builder</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="RefundAllocation.Builder.html" title="class in com.bilt.pos.session.settlement">RefundAllocation.Builder</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement"><code>RefundAllocation</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab3">
+<div class="col-first even-row-color class-summary class-summary-tab3"><a href="RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab3">
 <div class="block">The destination/source being restored for a return item during settlement.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Context handed to the <code>beforeStep</code> handler before each payment step.</div>
+</div>
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="block">Context supplied when <code>SettlementFlow.onError</code> must direct recovery.</div>
+</div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="block">Builder for <a href="SettlementFailure.html" title="class in com.bilt.pos.session.settlement"><code>SettlementFailure</code></a>.</div>
+</div>
+<div class="col-first even-row-color class-summary class-summary-tab3"><a href="SettlementFailure.OutcomeCertainty.html" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab3">
+<div class="block">Whether the failed request's terminal outcome is known.</div>
 </div>
 <div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></div>
 <div class="col-last odd-row-color class-summary class-summary-tab2">
@@ -136,42 +160,46 @@ loadScripts(document, 'script');</script>
 </div>
 <div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></div>
 <div class="col-last odd-row-color class-summary class-summary-tab2">
-<div class="block">Resolution returned from <code>SettlementFlow.onError</code>.</div>
+<div class="block">Resolution returned from <code>SettlementFlow.onError</code> to direct recovery.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab3"><a href="SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab3">
+<div class="block">The action the settlement orchestrator takes after a failed step.</div>
+</div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Final outcome of a successful settlement orchestration.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="SettlementResult.html" title="class in com.bilt.pos.session.settlement"><code>SettlementResult</code></a>.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab3"><a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab3">
+<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab3">
 <div class="block">A step of the settlement sequence.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SettlementTarget.html" title="class in com.bilt.pos.session.settlement">SettlementTarget</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SettlementTarget.html" title="class in com.bilt.pos.session.settlement">SettlementTarget</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">The basket obligation resolved by a settlement instruction or movement.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab3"><a href="SettlementTarget.Type.html" title="enum class in com.bilt.pos.session.settlement">SettlementTarget.Type</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab3">&nbsp;</div>
-<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab3">
+<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="SettlementTarget.Type.html" title="enum class in com.bilt.pos.session.settlement">SettlementTarget.Type</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab3">&nbsp;</div>
+<div class="col-first even-row-color class-summary class-summary-tab3"><a href="SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab3">
 <div class="block">How a settlement containing sale, credit, and return lines moves money.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="StoredValueLoad.html" title="class in com.bilt.pos.session.settlement">StoredValueLoad</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="StoredValueLoad.html" title="class in com.bilt.pos.session.settlement">StoredValueLoad</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Settlement-time stored value fulfillment for a referenced sale line.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="StoredValueLoad.Type.html" title="enum class in com.bilt.pos.session.settlement">StoredValueLoad.Type</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab3">&nbsp;</div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="StoredValueLoadRecord.html" title="class in com.bilt.pos.session.settlement">StoredValueLoadRecord</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab3"><a href="StoredValueLoad.Type.html" title="enum class in com.bilt.pos.session.settlement">StoredValueLoad.Type</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab3">&nbsp;</div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="StoredValueLoadRecord.html" title="class in com.bilt.pos.session.settlement">StoredValueLoadRecord</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Persistable reference for reversing one fulfilled stored value basket line.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="StoredValueLoadRecord.Builder.html" title="class in com.bilt.pos.session.settlement">StoredValueLoadRecord.Builder</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">&nbsp;</div>
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="StoredValueLoadRecord.Builder.html" title="class in com.bilt.pos.session.settlement">StoredValueLoadRecord.Builder</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">&nbsp;</div>
 </div>
 </div>
 </div>

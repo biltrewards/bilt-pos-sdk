@@ -94,9 +94,10 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">Describes why a session operation failed.
 
- <p>Delivered to <code>onError</code> handlers and carried by
- <a href="SessionException.html" title="class in com.bilt.pos.session"><code>SessionException</code></a> when a failed result is unwrapped via
- <a href="SessionResult.html#get()"><code>SessionResult.get()</code></a>.</p></div>
+ <p>Delivered directly to ordinary <code>SessionResult.onError</code> handlers,
+ wrapped by <code>SettlementFailure</code> for <code>SettlementFlow.onError</code>,
+ and carried by <a href="SessionException.html" title="class in com.bilt.pos.session"><code>SessionException</code></a> when a failed result is unwrapped
+ via <a href="SessionResult.html#get()"><code>SessionResult.get()</code></a>.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">

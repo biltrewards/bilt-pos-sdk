@@ -123,44 +123,48 @@ loadScripts(document, 'script');</script>
 <div class="summary-table two-column-summary">
 <div class="table-header col-first">Enum Constant</div>
 <div class="table-header col-last">Description</div>
-<div class="col-first even-row-color"><code><a href="#ABORTED" class="member-name-link">ABORTED</a></code></div>
+<div class="col-first even-row-color"><code><a href="#ABANDONED" class="member-name-link">ABANDONED</a></code></div>
 <div class="col-last even-row-color">
+<div class="block">Settlement recovery was explicitly transferred to the register.</div>
+</div>
+<div class="col-first odd-row-color"><code><a href="#ABORTED" class="member-name-link">ABORTED</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">The operation was aborted (by <code>abort()</code> or the terminal).</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#CANCELLED" class="member-name-link">CANCELLED</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#CANCELLED" class="member-name-link">CANCELLED</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">The customer cancelled on the terminal.</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#DECLINED" class="member-name-link">DECLINED</a></code></div>
-<div class="col-last even-row-color">
+<div class="col-first odd-row-color"><code><a href="#DECLINED" class="member-name-link">DECLINED</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">The terminal or acquirer declined the operation.</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#INVALID_STATE" class="member-name-link">INVALID_STATE</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#INVALID_STATE" class="member-name-link">INVALID_STATE</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">The operation is not valid in the session's current state.</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#LOYALTY_UNAVAILABLE" class="member-name-link">LOYALTY_UNAVAILABLE</a></code></div>
-<div class="col-last even-row-color">
-<div class="block">The loyalty host is unavailable; payment-only retry may succeed.</div>
-</div>
-<div class="col-first odd-row-color"><code><a href="#NETWORK" class="member-name-link">NETWORK</a></code></div>
+<div class="col-first odd-row-color"><code><a href="#LOYALTY_UNAVAILABLE" class="member-name-link">LOYALTY_UNAVAILABLE</a></code></div>
 <div class="col-last odd-row-color">
+<div class="block">The loyalty host is unavailable; the failed optional step may be skipped.</div>
+</div>
+<div class="col-first even-row-color"><code><a href="#NETWORK" class="member-name-link">NETWORK</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">The terminal could not be reached or the connection failed mid-exchange.</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#STORED_VALUE_INSUFFICIENT" class="member-name-link">STORED_VALUE_INSUFFICIENT</a></code></div>
-<div class="col-last even-row-color">
+<div class="col-first odd-row-color"><code><a href="#STORED_VALUE_INSUFFICIENT" class="member-name-link">STORED_VALUE_INSUFFICIENT</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">The stored value card balance does not cover the requested amount.</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#TERMINAL_ERROR" class="member-name-link">TERMINAL_ERROR</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#TERMINAL_ERROR" class="member-name-link">TERMINAL_ERROR</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">The terminal reported a device or service error.</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#TIMEOUT" class="member-name-link">TIMEOUT</a></code></div>
-<div class="col-last even-row-color">
+<div class="col-first odd-row-color"><code><a href="#TIMEOUT" class="member-name-link">TIMEOUT</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">The operation did not complete within the configured timeout.</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#UNKNOWN" class="member-name-link">UNKNOWN</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#UNKNOWN" class="member-name-link">UNKNOWN</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">The failure could not be classified.</div>
 </div>
 </div>
@@ -244,10 +248,17 @@ the order they are declared.</div>
 </section>
 </li>
 <li>
+<section class="detail" id="ABANDONED">
+<h3>ABANDONED</h3>
+<div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></span>&nbsp;<span class="element-name">ABANDONED</span></div>
+<div class="block">Settlement recovery was explicitly transferred to the register.</div>
+</section>
+</li>
+<li>
 <section class="detail" id="LOYALTY_UNAVAILABLE">
 <h3>LOYALTY_UNAVAILABLE</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></span>&nbsp;<span class="element-name">LOYALTY_UNAVAILABLE</span></div>
-<div class="block">The loyalty host is unavailable; payment-only retry may succeed.</div>
+<div class="block">The loyalty host is unavailable; the failed optional step may be skipped.</div>
 </section>
 </li>
 <li>

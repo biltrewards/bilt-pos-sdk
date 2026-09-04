@@ -53,6 +53,29 @@ loadScripts(document, 'script');</script>
 <a href="#I:A">A</a>&nbsp;<a href="#I:B">B</a>&nbsp;<a href="#I:C">C</a>&nbsp;<a href="#I:D">D</a>&nbsp;<a href="#I:E">E</a>&nbsp;<a href="#I:F">F</a>&nbsp;<a href="#I:G">G</a>&nbsp;<a href="#I:H">H</a>&nbsp;<a href="#I:I">I</a>&nbsp;<a href="#I:K">K</a>&nbsp;<a href="#I:L">L</a>&nbsp;<a href="#I:M">M</a>&nbsp;<a href="#I:N">N</a>&nbsp;<a href="#I:O">O</a>&nbsp;<a href="#I:P">P</a>&nbsp;<a href="#I:Q">Q</a>&nbsp;<a href="#I:R">R</a>&nbsp;<a href="#I:S">S</a>&nbsp;<a href="#I:T">T</a>&nbsp;<a href="#I:U">U</a>&nbsp;<a href="#I:V">V</a>&nbsp;<a href="#I:W">W</a>&nbsp;<a href="#I:X">X</a>&nbsp;<br><a href="allclasses-index.html">All&nbsp;Classes&nbsp;and&nbsp;Interfaces</a><span class="vertical-separator">|</span><a href="allpackages-index.html">All&nbsp;Packages</a><span class="vertical-separator">|</span><a href="serialized-form.html">Serialized&nbsp;Form</a>
 <h2 class="title" id="I:A">A</h2>
 <dl class="index">
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#abandon()" class="member-name-link">abandon()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
+<dd>
+<div class="block">Stop without further status recovery, retry, or unwind and transfer
+ responsibility for all committed movements to the register.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html#ABANDON" class="member-name-link">ABANDON</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></dt>
+<dd>
+<div class="block">Stop recovery and transfer the partial settlement to the register.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/SessionErrorCode.html#ABANDONED" class="member-name-link">ABANDONED</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></dt>
+<dd>
+<div class="block">Settlement recovery was explicitly transferred to the register.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#abandonedAt(java.time.Instant)" class="member-name-link">abandonedAt(Instant)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
+<dd>
+<div class="block">Immutable manual-takeover record produced when the register abandons recovery.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
+<dd>
+<div class="block">Builder for <a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement"><code>AbandonedSettlementRecord</code></a>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.html#abort()" class="member-name-link">abort()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a></dt>
 <dd>
 <div class="block">Aborts the in-flight operation.</div>
@@ -64,6 +87,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/ReversalDecision.html#ABORT" class="member-name-link">ABORT</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></dt>
 <dd>
 <div class="block">Stop the flow.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html#ABORT" class="member-name-link">ABORT</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></dt>
+<dd>
+<div class="block">Reverse committed reversible steps and fail the settlement.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SessionErrorCode.html#ABORTED" class="member-name-link">ABORTED</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></dt>
 <dd>
@@ -167,6 +194,8 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueOperationResult.Builder.html#amount(java.math.BigDecimal)" class="member-name-link">amount(BigDecimal)</a> - Method in class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueOperationResult.Builder.html" title="class in com.bilt.pos.session.storedvalue">StoredValueOperationResult.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#amountDue(java.math.BigDecimal)" class="member-name-link">amountDue(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#apmName" class="member-name-link">apmName</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/RefundResult.Builder.html#approvalCode(java.lang.String)" class="member-name-link">approvalCode(String)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></dt>
@@ -229,6 +258,8 @@ loadScripts(document, 'script');</script>
 <div class="block">The session's basket: item and tax mutations, batch edits, and
  snapshots.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#basket(com.bilt.pos.session.basket.Basket)" class="member-name-link">basket(Basket)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/Basket.html" class="type-name-link" title="class in com.bilt.pos.session.basket">Basket</a> - Class in <a href="com/bilt/pos/session/basket/package-summary.html">com.bilt.pos.session.basket</a></dt>
 <dd>
 <div class="block">An immutable snapshot of the session's basket.</div>
@@ -322,9 +353,13 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/RefundResult.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html" title="class in com.bilt.pos.session.settlement">RefundAllocation.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></dt>
 <dd>&nbsp;</dd>
@@ -376,9 +411,13 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/RefundResult.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.session.<a href="com/bilt/pos/session/RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
 <dd>&nbsp;</dd>
@@ -502,6 +541,14 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/basket/Basket.Builder.html#cartId(java.lang.String)" class="member-name-link">cartId(String)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.Builder.html" title="class in com.bilt.pos.session.basket">Basket.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html#cash(java.math.BigDecimal)" class="member-name-link">cash(BigDecimal)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></dt>
+<dd>
+<div class="block">Register-managed cash payment.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html#cash(java.math.BigDecimal,java.lang.String)" class="member-name-link">cash(BigDecimal, String)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></dt>
+<dd>
+<div class="block">Register-managed cash payment with a register transaction reference.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html#cashback(java.math.BigDecimal)" class="member-name-link">cashback(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></dt>
 <dd>
 <div class="block">Requests positive cashback in addition to the card charge.</div>
@@ -573,6 +620,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a> - package com.bilt.pos.session.settlement</dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/storedvalue/package-summary.html">com.bilt.pos.session.storedvalue</a> - package com.bilt.pos.session.storedvalue</dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#committedMovements(java.util.List)" class="member-name-link">committedMovements(List&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#committedMovements(java.util.List)" class="member-name-link">committedMovements(List&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/CommittedStep.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">CommittedStep</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
@@ -790,6 +841,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Payment original, no receipt reprint.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html#DEFINITIVE" class="member-name-link">DEFINITIVE</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a></dt>
+<dd>
+<div class="block">The terminal outcome is known, including an authoritative not-found result.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/LabeledAmountType.html#description" class="member-name-link">description</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LabeledAmountType.html" title="class in com.bilt.pos.display">LabeledAmountType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#description" class="member-name-link">description</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
@@ -939,6 +994,8 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/basket/BasketDiscount.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
@@ -950,6 +1007,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/StoredValueLoadRecord.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/StoredValueLoadRecord.html" title="class in com.bilt.pos.session.settlement">StoredValueLoadRecord</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#error(com.bilt.pos.session.SessionError)" class="member-name-link">error(SessionError)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/IdentifyStatus.html#ERROR" class="member-name-link">ERROR</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyStatus.html" title="enum class in com.bilt.pos.session.identity">IdentifyStatus</a></dt>
 <dd>
@@ -1001,6 +1060,10 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/CardAcquisitionResult.Builder.html#expiryDate(java.lang.String)" class="member-name-link">expiryDate(String)</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionResult.Builder.html" title="class in com.bilt.pos.session.identity">CardAcquisitionResult.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#external(com.bilt.pos.session.settlement.ExternalPayment)" class="member-name-link">external(ExternalPayment)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
+<dd>
+<div class="block">Records a register-managed tender and continues after the failed card step.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#external(java.math.BigDecimal)" class="member-name-link">external(BigDecimal)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
 <dd>
 <div class="block">Register-managed refund/restoration outside the terminal, such as
@@ -1014,6 +1077,14 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Refund value outside the terminal, such as cash from the register drawer.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html#EXTERNAL" class="member-name-link">EXTERNAL</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></dt>
+<dd>
+<div class="block">Satisfy the outstanding tender through the register.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementStep.html#EXTERNAL_PAYMENT" class="member-name-link">EXTERNAL_PAYMENT</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a></dt>
+<dd>
+<div class="block">Register records payment collected outside the terminal.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementStep.html#EXTERNAL_REFUND" class="member-name-link">EXTERNAL_REFUND</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a></dt>
 <dd>
 <div class="block">Register records a refund fulfilled outside the terminal.</div>
@@ -1022,11 +1093,25 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">A second client for an external customer display device.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">ExternalPayment</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
+<dd>
+<div class="block">A payment collected and owned by the register rather than the terminal.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#externalPaymentAmount(java.math.BigDecimal)" class="member-name-link">externalPaymentAmount(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/basket/Basket.Builder.html#externalPaymentTotal(java.math.BigDecimal)" class="member-name-link">externalPaymentTotal(BigDecimal)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.Builder.html" title="class in com.bilt.pos.session.basket">Basket.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html#externalReference(java.lang.String)" class="member-name-link">externalReference(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#externalRefundedAmount(java.math.BigDecimal)" class="member-name-link">externalRefundedAmount(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html#externalTenderType(java.lang.String)" class="member-name-link">externalTenderType(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></dt>
 <dd>&nbsp;</dd>
 </dl>
 <h2 class="title" id="I:F">F</h2>
 <dl class="index">
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#failure(com.bilt.pos.session.settlement.SettlementFailure)" class="member-name-link">failure(SettlementFailure)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/EntryMode.html#FILE" class="member-name-link">FILE</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/EntryMode.html" title="enum class in com.bilt.pos.session.identity">EntryMode</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/ForceEntryMode.html#FILE" class="member-name-link">FILE</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/ForceEntryMode.html" title="enum class in com.bilt.pos.session.identity">ForceEntryMode</a></dt>
@@ -1143,6 +1228,12 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Runs the operation if it has not run yet and returns its value.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html#getAbandonedAt()" class="member-name-link">getAbandonedAt()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/SessionException.html#getAbandonedSettlement()" class="member-name-link">getAbandonedSettlement()</a> - Method in exception class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionException.html" title="class in com.bilt.pos.session">SessionException</a></dt>
+<dd>
+<div class="block">Manual-takeover record, or <code>null</code> when this is not an abandonment.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html#getAccountType()" class="member-name-link">getAccountType()</a> - Method in class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getAcquirerID()" class="member-name-link">getAcquirerID()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
@@ -1154,6 +1245,8 @@ loadScripts(document, 'script');</script>
 <div class="block">Gets the value of the acquirerName property.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getAcquirerTransactionId()" class="member-name-link">getAcquirerTransactionId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#getAction()" class="member-name-link">getAction()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getAcType()" class="member-name-link">getAcType()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
@@ -1223,6 +1316,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Dollar amount subtracted from the line (or cart).</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html#getAmount()" class="member-name-link">getAmount()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#getAmount()" class="member-name-link">getAmount()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
 <dd>
 <div class="block">Monetary value this movement contributes to the merchandise return
@@ -1238,6 +1333,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/payment/GiftCardPaymentResult.html#getAmountCharged()" class="member-name-link">getAmountCharged()</a> - Method in class com.bilt.pos.session.payment.<a href="com/bilt/pos/session/payment/GiftCardPaymentResult.html" title="class in com.bilt.pos.session.payment">GiftCardPaymentResult</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getAmountDue()" class="member-name-link">getAmountDue()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>
+<div class="block">Amount the failed step was responsible for resolving.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getApmName()" class="member-name-link">getApmName()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Gets the value of the apmName property.</div>
@@ -1260,7 +1359,7 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getAuthorizedAmount()" class="member-name-link">getAuthorizedAmount()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
 <dd>
-<div class="block">Total authorized across all tenders.</div>
+<div class="block">Total authorized by terminal-managed stored-value and card tenders.</div>
 </dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getAuthSource()" class="member-name-link">getAuthSource()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
@@ -1281,6 +1380,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Available balance on the card.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html#getBasket()" class="member-name-link">getBasket()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementTarget.html#getBasketReference()" class="member-name-link">getBasketReference()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementTarget.html" title="class in com.bilt.pos.session.settlement">SettlementTarget</a></dt>
 <dd>
 <div class="block">Register reference for <a href="com/bilt/pos/session/settlement/SettlementTarget.Type.html#BASKET_LINE"><code>SettlementTarget.Type.BASKET_LINE</code></a>, otherwise <code>null</code>.</div>
@@ -1353,6 +1454,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The underlying exception, or <code>null</code> if none.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getCause()" class="member-name-link">getCause()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.html#getClient()" class="member-name-link">getClient()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a></dt>
 <dd>
 <div class="block">The underlying terminal client, for raw Nexo access.</div>
@@ -1364,6 +1467,14 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/SessionError.html#getCode()" class="member-name-link">getCode()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionError.html" title="class in com.bilt.pos.session">SessionError</a></dt>
 <dd>
 <div class="block">High-level error category.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getCode()" class="member-name-link">getCode()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html#getCommittedMovements()" class="member-name-link">getCommittedMovements()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getCommittedMovements()" class="member-name-link">getCommittedMovements()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>
+<div class="block">Immutable ledger snapshot taken before the register's recovery decision.</div>
 </dd>
 <dt><a href="com/bilt/pos/display/InputPayload.html#getConfirmation()" class="member-name-link">getConfirmation()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/InputPayload.html" title="class in com.bilt.pos.display">InputPayload</a></dt>
 <dd>
@@ -1447,18 +1558,6 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/payment/EarnedReward.html#getDescription()" class="member-name-link">getDescription()</a> - Method in class com.bilt.pos.session.payment.<a href="com/bilt/pos/session/payment/EarnedReward.html" title="class in com.bilt.pos.session.payment">EarnedReward</a></dt>
 <dd>&nbsp;</dd>
-<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#getDisableAward()" class="member-name-link">getDisableAward()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
-<dd>
-<div class="block">Nullable override; <code>null</code> preserves the current attempt setting.</div>
-</dd>
-<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#getDisablePoints()" class="member-name-link">getDisablePoints()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
-<dd>
-<div class="block">Nullable override; <code>null</code> preserves the current attempt setting.</div>
-</dd>
-<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#getDisableRebates()" class="member-name-link">getDisableRebates()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
-<dd>
-<div class="block">Nullable override; <code>null</code> preserves the current attempt setting.</div>
-</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.html#getDiscounts()" class="member-name-link">getDiscounts()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
 <dd>
 <div class="block">Register-applied discounts, in application order.</div>
@@ -1516,6 +1615,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The error that caused the operation to fail.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getError()" class="member-name-link">getError()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>
+<div class="block">Underlying operation error.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/identity/Reward.html#getExpirationDate()" class="member-name-link">getExpirationDate()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/Reward.html" title="class in com.bilt.pos.session.identity">Reward</a></dt>
 <dd>
 <div class="block">Expiry, or <code>null</code> if the reward does not expire.</div>
@@ -1532,10 +1635,32 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block"><code>"MMYY"</code>, or <code>null</code>.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#getExternalPayment()" class="member-name-link">getExternalPayment()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
+<dd>
+<div class="block">Register-managed tender; non-null only for <a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html#EXTERNAL"><code>SettlementRecovery.Action.EXTERNAL</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getExternalPaymentAmount()" class="member-name-link">getExternalPaymentAmount()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
+<dd>
+<div class="block">Amount collected through register-managed tenders such as cash.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/basket/Basket.html#getExternalPaymentTotal()" class="member-name-link">getExternalPaymentTotal()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></dt>
+<dd>
+<div class="block">Amount collected through register-managed tenders; populated during payment.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#getExternalReference()" class="member-name-link">getExternalReference()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
+<dd>
+<div class="block">Register transaction reference, populated when supplied for external payment.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getExternalRefundedAmount()" class="member-name-link">getExternalRefundedAmount()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
 <dd>
 <div class="block">Total refunded or restored outside the terminal during this settlement.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#getExternalTenderType()" class="member-name-link">getExternalTenderType()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
+<dd>
+<div class="block">Register-managed tender name, populated for <code>EXTERNAL_PAYMENT</code>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html#getFailure()" class="member-name-link">getFailure()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getFinalBasket()" class="member-name-link">getFinalBasket()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
 <dd>
 <div class="block">Basket with settlement breakdown totals populated.</div>
@@ -1724,6 +1849,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The member's loyalty account ID, or <code>null</code> unless <code>FOUND</code>.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html#getMemberId()" class="member-name-link">getMemberId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></dt>
+<dd>
+<div class="block">Identified member ID, or <code>null</code> when no member was identified.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html#getMemberId()" class="member-name-link">getMemberId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#getMemberId()" class="member-name-link">getMemberId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
@@ -1772,6 +1901,13 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Human-readable description of the failure.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getMessage()" class="member-name-link">getMessage()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getMessageCategory()" class="member-name-link">getMessageCategory()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>
+<div class="block">Original request's Nexo message category, or <code>null</code> when no request
+ category is available.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/TransactionStatusResult.html#getMessageCategory()" class="member-name-link">getMessageCategory()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TransactionStatusResult.html" title="class in com.bilt.pos.session">TransactionStatusResult</a></dt>
 <dd>
 <div class="block">Message category of the original transaction — <code>"Payment"</code>,
@@ -1806,6 +1942,8 @@ loadScripts(document, 'script');</script>
 <div class="block">The raw Nexo <code>ErrorCondition</code> string from the terminal response,
  or <code>null</code> if the failure did not originate from a terminal reply.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getNexoErrorCondition()" class="member-name-link">getNexoErrorCondition()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getOfflineDeletedReceipt()" class="member-name-link">getOfflineDeletedReceipt()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Gets the value of the offlineDeletedReceipt property.</div>
@@ -1814,6 +1952,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Gets the value of the offlineDeletedTimeStamp property.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html#getOptions()" class="member-name-link">getOptions()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#getOriginalAmount()" class="member-name-link">getOriginalAmount()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
 <dd>
 <div class="block">Gets the value of the originalAmount property.</div>
@@ -1847,6 +1987,12 @@ loadScripts(document, 'script');</script>
 <div class="block">Runs the operation if it has not run yet and returns its value, or
  <code>null</code> if it failed.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getOutcomeCertainty()" class="member-name-link">getOutcomeCertainty()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>
+<div class="block">Certainty established before the register is asked to direct recovery.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html#getOutstandingAmount()" class="member-name-link">getOutstandingAmount()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/nexo/security/SecurityKey.html#getPassphrase()" class="member-name-link">getPassphrase()</a> - Method in class com.bilt.pos.nexo.security.<a href="com/bilt/pos/nexo/security/SecurityKey.html" title="class in com.bilt.pos.nexo.security">SecurityKey</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/CardAcquisitionResult.html#getPaymentBrand()" class="member-name-link">getPaymentBrand()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionResult.html" title="class in com.bilt.pos.session.identity">CardAcquisitionResult</a></dt>
@@ -2084,6 +2230,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Register-stable reference for settlement-time fulfillment, or <code>null</code>.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html#getReference()" class="member-name-link">getReference()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getRefNumber()" class="member-name-link">getRefNumber()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Gets the value of the refNumber property.</div>
@@ -2151,10 +2299,16 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/nexo/security/SaleToPOISecuredMessage.html#getSecurityTrailer()" class="member-name-link">getSecurityTrailer()</a> - Method in class com.bilt.pos.nexo.security.<a href="com/bilt/pos/nexo/security/SaleToPOISecuredMessage.html" title="class in com.bilt.pos.nexo.security">SaleToPOISecuredMessage</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getServiceId()" class="member-name-link">getServiceId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>
+<div class="block">Original request's Nexo <code>ServiceID</code>, when a request was sent.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.html#getSessionId()" class="member-name-link">getSessionId()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a></dt>
 <dd>
 <div class="block">Unique identifier of this session instance.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html#getSettlementId()" class="member-name-link">getSettlementId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementOptions.html#getSettlementType()" class="member-name-link">getSettlementType()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></dt>
 <dd>
 <div class="block">How a mixed sale/return basket moves money.</div>
@@ -2184,6 +2338,11 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#getStep()" class="member-name-link">getStep()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
 <dd>
 <div class="block">The step about to run.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getStep()" class="member-name-link">getStep()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>
+<div class="block">The failed step, or <code>null</code> when the failure did not occur inside a
+ specific settlement step, such as a pre-sequence rejection or refused recovery.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#getStep()" class="member-name-link">getStep()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
 <dd>&nbsp;</dd>
@@ -2318,6 +2477,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Total tax across the basket.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html#getTenderType()" class="member-name-link">getTenderType()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getTerminalID()" class="member-name-link">getTerminalID()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Gets the value of the terminalID property.</div>
@@ -2544,6 +2705,8 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/basket/BasketDiscount.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
@@ -2648,6 +2811,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/display/ImageType.html#%3Cinit%3E()" class="member-name-link">ImageType()</a> - Constructor for class com.bilt.pos.display.<a href="com/bilt/pos/display/ImageType.html" title="class in com.bilt.pos.display">ImageType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html#INDETERMINATE" class="member-name-link">INDETERMINATE</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a></dt>
+<dd>
+<div class="block">TransactionStatus could not establish the terminal outcome.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayloadHelper.html#inputFromBase64(java.lang.String)" class="member-name-link">inputFromBase64(String)</a> - Static method in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayloadHelper.html" title="class in com.bilt.pos.display">DisplayPayloadHelper</a></dt>
 <dd>
 <div class="block">Deserializes an <a href="com/bilt/pos/display/InputPayload.html" title="class in com.bilt.pos.display"><code>InputPayload</code></a> from a Base64-encoded XML string.</div>
@@ -2702,6 +2869,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Whether the terminal found the referenced transaction.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#isIndeterminate()" class="member-name-link">isIndeterminate()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/MemberIdentifier.html#isKeyedByCashier()" class="member-name-link">isKeyedByCashier()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/MemberIdentifier.html" title="class in com.bilt.pos.session.identity">MemberIdentifier</a></dt>
 <dd>
 <div class="block"><code>true</code> when the cashier typed the identifier (<code>EntryMode=Keyed</code>).</div>
@@ -2821,7 +2990,7 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SessionErrorCode.html#LOYALTY_UNAVAILABLE" class="member-name-link">LOYALTY_UNAVAILABLE</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></dt>
 <dd>
-<div class="block">The loyalty host is unavailable; payment-only retry may succeed.</div>
+<div class="block">The loyalty host is unavailable; the failed optional step may be skipped.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#loyaltyRefundedAmount(java.math.BigDecimal)" class="member-name-link">loyaltyRefundedAmount(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
 <dd>&nbsp;</dd>
@@ -2851,6 +3020,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/input/InputOptions.Builder.html#maxLength(java.lang.Integer)" class="member-name-link">maxLength(Integer)</a> - Method in class com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/InputOptions.Builder.html" title="class in com.bilt.pos.session.input">InputOptions.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/ImageType.html#mediaType" class="member-name-link">mediaType</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/ImageType.html" title="class in com.bilt.pos.display">ImageType</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#memberId(java.lang.String)" class="member-name-link">memberId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html#memberId(java.lang.String)" class="member-name-link">memberId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord.Builder</a></dt>
 <dd>&nbsp;</dd>
@@ -2908,6 +3079,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/VoidResult.Builder.html#merchantReceipt(com.bilt.pos.session.Receipt)" class="member-name-link">merchantReceipt(Receipt)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/VoidResult.Builder.html" title="class in com.bilt.pos.session">VoidResult.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#merchantRegNumber" class="member-name-link">merchantRegNumber</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#messageCategory(java.lang.String)" class="member-name-link">messageCategory(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/nexo/security/MessageEncryptor.html" class="type-name-link" title="class in com.bilt.pos.nexo.security">MessageEncryptor</a> - Class in <a href="com/bilt/pos/nexo/security/package-summary.html">com.bilt.pos.nexo.security</a></dt>
 <dd>
@@ -3000,6 +3173,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Provide a custom <code>ObjectMapper</code>.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html#of(java.lang.String,java.math.BigDecimal,java.lang.String)" class="member-name-link">of(String, BigDecimal, String)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></dt>
+<dd>
+<div class="block">Register-managed payment using an integrator-defined tender name.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketDiscount.html#offer(java.lang.String,java.lang.String,java.lang.String)" class="member-name-link">offer(String, String, String)</a> - Static method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a></dt>
 <dd>
 <div class="block">A discount produced by a register-known offer.</div>
@@ -3012,6 +3189,10 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#offlineDeletedTimeStamp" class="member-name-link">offlineDeletedTimeStamp</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/SettlementFlow.html#onAbandoned(java.util.function.Consumer)" class="member-name-link">onAbandoned(Consumer&lt;AbandonedSettlementRecord&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
+<dd>
+<div class="block">Called when <a href="com/bilt/pos/session/settlement/SettlementRecovery.html#abandon()"><code>SettlementRecovery.abandon()</code></a> transfers recovery ownership.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#onAwarded(java.util.function.Consumer)" class="member-name-link">onAwarded(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
 <div class="block">Called when the loyalty award leg commits.</div>
@@ -3068,9 +3249,14 @@ loadScripts(document, 'script');</script>
 <div class="block">Registers a handler invoked with the <a href="com/bilt/pos/session/SessionError.html" title="class in com.bilt.pos.session"><code>SessionError</code></a> when the
  operation fails.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/SettlementFlow.html#onError(java.util.function.Function)" class="member-name-link">onError(Function&lt;SessionError, SettlementRecovery&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
+<dt><a href="com/bilt/pos/session/SettlementFlow.html#onError(java.util.function.Function)" class="member-name-link">onError(Function&lt;SettlementFailure, SettlementRecovery&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
-<div class="block">Called when settlement fails.</div>
+<div class="block">Called when a charge-side step definitively fails, or when automatic
+ TransactionStatus recovery cannot resolve an indeterminate terminal request.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/SettlementFlow.html#onExternallyPaid(java.util.function.Consumer)" class="member-name-link">onExternallyPaid(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
+<dd>
+<div class="block">Called when a register-managed payment such as cash is recorded.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#onExternalRefunded(java.util.function.Consumer)" class="member-name-link">onExternalRefunded(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
@@ -3120,6 +3306,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Registers a handler invoked with the result when the operation succeeds.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#options(com.bilt.pos.session.settlement.SettlementOptions)" class="member-name-link">options(SettlementOptions)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#originalAmount" class="member-name-link">originalAmount</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/TransactionStatusOptions.Builder.html#originalCategory(com.bilt.pos.nexo.model.MessageCategoryType)" class="member-name-link">originalCategory(MessageCategoryType)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TransactionStatusOptions.Builder.html" title="class in com.bilt.pos.session">TransactionStatusOptions.Builder</a></dt>
@@ -3140,6 +3328,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/basket/Basket.Builder.html#originalTotal(java.math.BigDecimal)" class="member-name-link">originalTotal(BigDecimal)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.Builder.html" title="class in com.bilt.pos.session.basket">Basket.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html#originalTotal(java.math.BigDecimal)" class="member-name-link">originalTotal(BigDecimal)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#outcomeCertainty(com.bilt.pos.session.settlement.SettlementFailure.OutcomeCertainty)" class="member-name-link">outcomeCertainty(SettlementFailure.OutcomeCertainty)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#outstandingAmount(java.math.BigDecimal)" class="member-name-link">outstandingAmount(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
 <dd>&nbsp;</dd>
 </dl>
 <h2 class="title" id="I:P">P</h2>
@@ -3630,15 +3822,15 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#retry()" class="member-name-link">retry()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
 <dd>
-<div class="block">Unwind committed charge-side steps and retry with the same settlement options.</div>
+<div class="block">Retry only the failed step, preserving every earlier committed step.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/ReversalDecision.html#RETRY" class="member-name-link">RETRY</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></dt>
 <dd>
 <div class="block">Re-send the failed step's request and continue from its outcome.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#retryWithoutLoyalty()" class="member-name-link">retryWithoutLoyalty()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html#RETRY" class="member-name-link">RETRY</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></dt>
 <dd>
-<div class="block">Retry with the same settlement options but all loyalty steps disabled.</div>
+<div class="block">Retry only the failed step, preserving earlier committed steps.</div>
 </dd>
 <dt><a href="com/bilt/pos/display/LineItemKindType.html#RETURN" class="member-name-link">RETURN</a> - Enum constant in enum class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemKindType.html" title="enum class in com.bilt.pos.display">LineItemKindType</a></dt>
 <dd>&nbsp;</dd>
@@ -3771,6 +3963,8 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemKindType.html#SEPARATOR" class="member-name-link">SEPARATOR</a> - Enum constant in enum class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemKindType.html" title="enum class in com.bilt.pos.display">LineItemKindType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#serviceId(java.lang.String)" class="member-name-link">serviceId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SessionBasket.html" class="type-name-link" title="class in com.bilt.pos.session">SessionBasket</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">The basket surface of a checkout session: item and tax mutations, batch
@@ -3795,6 +3989,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/SessionException.html#%3Cinit%3E(com.bilt.pos.session.SessionError)" class="member-name-link">SessionException(SessionError)</a> - Constructor for exception class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionException.html" title="class in com.bilt.pos.session">SessionException</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/SessionException.html#%3Cinit%3E(com.bilt.pos.session.SessionError,com.bilt.pos.session.settlement.AbandonedSettlementRecord)" class="member-name-link">SessionException(SessionError, AbandonedSettlementRecord)</a> - Constructor for exception class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionException.html" title="class in com.bilt.pos.session">SessionException</a></dt>
+<dd>
+<div class="block">Creates a settlement-abandonment failure carrying its manual-takeover record.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/SessionResult.html" class="type-name-link" title="class in com.bilt.pos.session">SessionResult&lt;T&gt;</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">A lazy, single-shot session operation.</div>
@@ -4224,10 +4422,24 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#%3Cinit%3E(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.lang.String,java.util.List)" class="member-name-link">SettlementContext(SettlementStep, Basket, BigDecimal, String, List&lt;CommittedStep&gt;)</a> - Constructor for class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementFailure</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
+<dd>
+<div class="block">Context supplied when <code>SettlementFlow.onError</code> must direct recovery.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
+<dd>
+<div class="block">Builder for <a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement"><code>SettlementFailure</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html" class="type-name-link" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a> - Enum Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
+<dd>
+<div class="block">Whether the failed request's terminal outcome is known.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html" class="type-name-link" title="class in com.bilt.pos.session">SettlementFlow</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">The settlement orchestration chain returned by <code>CheckoutSession.settle()</code>.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#settlementId(java.lang.String)" class="member-name-link">settlementId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementMovement</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
 <div class="block">One money or loyalty movement committed as part of a settlement.</div>
@@ -4246,7 +4458,11 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
-<div class="block">Resolution returned from <code>SettlementFlow.onError</code>.</div>
+<div class="block">Resolution returned from <code>SettlementFlow.onError</code> to direct recovery.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html" class="type-name-link" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a> - Enum Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
+<dd>
+<div class="block">The action the settlement orchestrator takes after a failed step.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementResult</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
@@ -4380,11 +4596,19 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/display/SignatureType.html#%3Cinit%3E()" class="member-name-link">SignatureType()</a> - Constructor for class com.bilt.pos.display.<a href="com/bilt/pos/display/SignatureType.html" title="class in com.bilt.pos.display">SignatureType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#skip()" class="member-name-link">skip()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
+<dd>
+<div class="block">Skip the failed step.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/ReversalDecision.html#SKIP" class="member-name-link">SKIP</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></dt>
 <dd>
 <div class="block">Leave this movement standing (the terminal may retry loyalty
  movements via store-and-forward) and continue with the remaining
  steps.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html#SKIP" class="member-name-link">SKIP</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></dt>
+<dd>
+<div class="block">Skip an optional failed step and continue.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.Builder.html#sku(java.lang.String)" class="member-name-link">sku(String)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></dt>
 <dd>&nbsp;</dd>
@@ -4424,6 +4648,8 @@ loadScripts(document, 'script');</script>
  unstarted session never exists, so no operation can reach the
  terminal before the start.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#step(com.bilt.pos.session.settlement.SettlementStep)" class="member-name-link">step(SettlementStep)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html#step(com.bilt.pos.session.settlement.SettlementStep)" class="member-name-link">step(SettlementStep)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/Terminal.html#stopSound()" class="member-name-link">stopSound()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/Terminal.html" title="class in com.bilt.pos.session">Terminal</a></dt>
@@ -4948,6 +5174,14 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a></dt>
+<dd>
+<div class="block">Returns the enum constant of this class with the specified name.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></dt>
+<dd>
+<div class="block">Returns the enum constant of this class with the specified name.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementStep.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a></dt>
 <dd>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
@@ -5040,6 +5274,16 @@ the order they are declared.</div>
 the order they are declared.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocationType.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></dt>
+<dd>
+<div class="block">Returns an array containing the constants of this enum class, in
+the order they are declared.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.OutcomeCertainty.html" title="enum class in com.bilt.pos.session.settlement">SettlementFailure.OutcomeCertainty</a></dt>
+<dd>
+<div class="block">Returns an array containing the constants of this enum class, in
+the order they are declared.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></dt>
 <dd>
 <div class="block">Returns an array containing the constants of this enum class, in
 the order they are declared.</div>

@@ -38,7 +38,7 @@ loadScripts(document, 'script');</script>
 <li>
 <p>Summary:</p>
 <ul>
-<li>Nested</li>
+<li><a href="#nested-class-summary">Nested</a></li>
 <li>Field</li>
 <li>Constr</li>
 <li><a href="#method-summary">Method</a></li>
@@ -58,7 +58,7 @@ loadScripts(document, 'script');</script>
 <div id="navbar-sub-list">
 <ul class="sub-nav-list">
 <li>Summary:&nbsp;</li>
-<li>Nested&nbsp;|&nbsp;</li>
+<li><a href="#nested-class-summary">Nested</a>&nbsp;|&nbsp;</li>
 <li>Field&nbsp;|&nbsp;</li>
 <li>Constr&nbsp;|&nbsp;</li>
 <li><a href="#method-summary">Method</a></li>
@@ -92,10 +92,27 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">SettlementRecovery</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">Resolution returned from <code>SettlementFlow.onError</code>.</div>
+<div class="block">Resolution returned from <code>SettlementFlow.onError</code> to direct recovery.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
+<!-- ======== NESTED CLASS SUMMARY ======== -->
+<li>
+<section class="nested-class-summary" id="nested-class-summary">
+<h2>Nested Class Summary</h2>
+<div class="caption"><span>Nested Classes</span></div>
+<div class="summary-table three-column-summary">
+<div class="table-header col-first">Modifier and Type</div>
+<div class="table-header col-second">Class</div>
+<div class="table-header col-last">Description</div>
+<div class="col-first even-row-color"><code>static enum&nbsp;</code></div>
+<div class="col-second even-row-color"><code><a href="SettlementRecovery.Action.html" class="type-name-link" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></code></div>
+<div class="col-last even-row-color">
+<div class="block">The action the settlement orchestrator takes after a failed step.</div>
+</div>
+</div>
+</section>
+</li>
 <!-- ========== METHOD SUMMARY =========== -->
 <li>
 <section class="method-summary" id="method-summary">
@@ -108,37 +125,41 @@ loadScripts(document, 'script');</script>
 <div class="table-header col-second">Method</div>
 <div class="table-header col-last">Description</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#abort()" class="member-name-link">abort</a>()</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#abandon()" class="member-name-link">abandon</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="block">Stop without further status recovery, retry, or unwind and transfer
+ responsibility for all committed movements to the register.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#abort()" class="member-name-link">abort</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
 <div class="block">Unwind committed charge-side steps and fail the settlement.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getDisableAward()" class="member-name-link">getDisableAward</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Nullable override; <code>null</code> preserves the current attempt setting.</div>
-</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getDisablePoints()" class="member-name-link">getDisablePoints</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Nullable override; <code>null</code> preserves the current attempt setting.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getDisableRebates()" class="member-name-link">getDisableRebates</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Nullable override; <code>null</code> preserves the current attempt setting.</div>
-</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isAbort()" class="member-name-link">isAbort</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#retry()" class="member-name-link">retry</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">Unwind committed charge-side steps and retry with the same settlement options.</div>
-</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#retryWithoutLoyalty()" class="member-name-link">retryWithoutLoyalty</a>()</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#external(com.bilt.pos.session.settlement.ExternalPayment)" class="member-name-link">external</a><wbr>(<a href="ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a>&nbsp;payment)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">Retry with the same settlement options but all loyalty steps disabled.</div>
+<div class="block">Records a register-managed tender and continues after the failed card step.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getAction()" class="member-name-link">getAction</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getExternalPayment()" class="member-name-link">getExternalPayment</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Register-managed tender; non-null only for <a href="SettlementRecovery.Action.html#EXTERNAL"><code>SettlementRecovery.Action.EXTERNAL</code></a>.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isAbort()" class="member-name-link">isAbort</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#retry()" class="member-name-link">retry</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="block">Retry only the failed step, preserving every earlier committed step.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#skip()" class="member-name-link">skip</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="block">Skip the failed step.</div>
 </div>
 </div>
 </div>
@@ -168,41 +189,59 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="retry()">
 <h3>retry</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></span>&nbsp;<span class="element-name">retry</span>()</div>
-<div class="block">Unwind committed charge-side steps and retry with the same settlement options.</div>
+<div class="block">Retry only the failed step, preserving every earlier committed step.
+ When TransactionStatus could not resolve an indeterminate terminal request,
+ retry checks its status again and never resends the original request.</div>
 </section>
 </li>
 <li>
-<section class="detail" id="retryWithoutLoyalty()">
-<h3>retryWithoutLoyalty</h3>
-<div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></span>&nbsp;<span class="element-name">retryWithoutLoyalty</span>()</div>
-<div class="block">Retry with the same settlement options but all loyalty steps disabled.</div>
+<section class="detail" id="skip()">
+<h3>skip</h3>
+<div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></span>&nbsp;<span class="element-name">skip</span>()</div>
+<div class="block">Skip the failed step. Valid only when all basket obligations remain
+ satisfiable; the final card tender and stored-value fulfillment cannot skip.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="external(com.bilt.pos.session.settlement.ExternalPayment)">
+<h3>external</h3>
+<div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></span>&nbsp;<span class="element-name">external</span><wbr><span class="parameters">(<a href="ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a>&nbsp;payment)</span></div>
+<div class="block">Records a register-managed tender and continues after the failed card step.
+ The payment amount must exactly equal the outstanding amount, and the
+ failure outcome must be definitive. The SDK attempts to resolve an
+ indeterminate original request before asking the register for a recovery
+ decision; external replacement remains invalid unless resolution is
+ definitive, preventing it from replacing a committed card payment.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="abandon()">
+<h3>abandon</h3>
+<div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></span>&nbsp;<span class="element-name">abandon</span>()</div>
+<div class="block">Stop without further status recovery, retry, or unwind and transfer
+ responsibility for all committed movements to the register. Automatic
+ TransactionStatus recovery may already have occurred before <code>onError</code>.
+ The basket remains usable and SDK recovery guards are released, so a later
+ settlement can duplicate those movements unless the register reconciles them.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getAction()">
+<h3>getAction</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></span>&nbsp;<span class="element-name">getAction</span>()</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getExternalPayment()">
+<h3>getExternalPayment</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></span>&nbsp;<span class="element-name">getExternalPayment</span>()</div>
+<div class="block">Register-managed tender; non-null only for <a href="SettlementRecovery.Action.html#EXTERNAL"><code>SettlementRecovery.Action.EXTERNAL</code></a>.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="isAbort()">
 <h3>isAbort</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">isAbort</span>()</div>
-</section>
-</li>
-<li>
-<section class="detail" id="getDisableRebates()">
-<h3>getDisableRebates</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a></span>&nbsp;<span class="element-name">getDisableRebates</span>()</div>
-<div class="block">Nullable override; <code>null</code> preserves the current attempt setting.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="getDisablePoints()">
-<h3>getDisablePoints</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a></span>&nbsp;<span class="element-name">getDisablePoints</span>()</div>
-<div class="block">Nullable override; <code>null</code> preserves the current attempt setting.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="getDisableAward()">
-<h3>getDisableAward</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Boolean.html" title="class or interface in java.lang" class="external-link">Boolean</a></span>&nbsp;<span class="element-name">getDisableAward</span>()</div>
-<div class="block">Nullable override; <code>null</code> preserves the current attempt setting.</div>
 </section>
 </li>
 </ul>

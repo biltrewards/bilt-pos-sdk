@@ -873,10 +873,20 @@ public final class CheckoutSession implements AutoCloseable {
         request.storedValueCard = storedValueCard;
         request.options = options;
         request.basket = netSettlement ? fullBasket : chargePortion;
+        request.fullBasket = fullBasket;
         request.abortRequested = () -> abortRequested;
         // movements an incomplete unwind left standing are kept so that
         // voidTransaction() on the failed session can finish the reversal
         request.onUnreversed = movements -> standingMovements = List.copyOf(movements);
+        request.onAbandoned = record -> {
+            lock.lock();
+            try {
+                standingMovements = List.of();
+                clearCommittedRefundAllocations();
+            } finally {
+                lock.unlock();
+            }
+        };
         request.handlers.beforeStep = flow.beforeStepHandler();
         request.handlers.onRebatesRedeemed = flow.rebatesHandler();
         request.handlers.onPointsRedeemed = flow.pointsHandler();
@@ -911,6 +921,7 @@ public final class CheckoutSession implements AutoCloseable {
                             refunds.subList(0, committedRefundCount)),
                     netSettlement && refundAmount.signum() > 0));
             request.priorSteps = committedRefundSteps;
+            request.priorMovements = List.copyOf(refundMovements);
             boolean chargeSideWork = request.basket.getGrandTotal().signum() > 0
                     || !options.getFulfillments().isEmpty();
             SettlementResult purchaseResult = chargeSideWork
