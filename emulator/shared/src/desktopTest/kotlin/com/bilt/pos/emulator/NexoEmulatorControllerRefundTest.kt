@@ -134,6 +134,10 @@ class NexoEmulatorControllerRefundTest {
                     "ItemAmount":25.00,"Currency":"USD",
                     "StoredValueAccountStatus":{"CurrentBalance":0.00}}]}}}"""
 
+        const val STORED_VALUE_REVERSE_FAIL =
+            """{"SaleToPOIResponse":{"StoredValueResponse":{
+                "Response":{"Result":"Failure","ErrorCondition":"UnavailableService"}}}}"""
+
         const val REVERSAL_FAIL =
             """{"SaleToPOIResponse":{"ReversalResponse":{
                 "Response":{"Result":"Failure","ErrorCondition":"UnavailableService"}}}}"""
@@ -855,6 +859,78 @@ class NexoEmulatorControllerRefundTest {
                 "expected the failed SV reversal plus its retry",
             )
             assertTrue(assertNotNull(store.findSale("sale-2")).fullyRefunded)
+        }
+    }
+
+    @Test
+    fun partialVoidMatchesReversedGiftCardLoadIdsAsWholeTokens() {
+        val store = JsonlSaleStore(
+            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
+        )
+        store.recordSale(
+            SaleRecord(
+                id = "sale-with-prefix-loads",
+                sessionId = "session-prefix-loads",
+                saleId = "bilt-emulator",
+                poiId = "EMULATOR",
+                currency = "USD",
+                completedAt = "2026-08-06T11:00:00Z",
+                authorizedAmount = "25.00",
+                giftCardLoads = listOf(
+                    GiftCardLoad("gift-card-10", "10.00", "poi-load-10"),
+                    GiftCardLoad("gift-card-1", "15.00", "poi-load-1"),
+                ),
+            )
+        )
+        var shortIdFailures = 1
+        server.dispatcher = respondingWith { body ->
+            if (
+                "\"StoredValueRequest\"" in body &&
+                "\"Reverse\"" in body &&
+                "\"TransactionID\":\"poi-load-1\"" in body &&
+                shortIdFailures > 0
+            ) {
+                shortIdFailures--
+                STORED_VALUE_REVERSE_FAIL
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+
+            controller.refundSale("sale-with-prefix-loads")
+            val failure = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(!failure.success, "the first attempt must fail on the shorter load ID")
+            assertEquals(
+                setOf("poi-load-10"),
+                assertNotNull(store.findSale("sale-with-prefix-loads"))
+                    .reversedGiftCardLoadIds,
+                "the shorter ID must not match the reversed longer ID by prefix",
+            )
+
+            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+            controller.refundSale("sale-with-prefix-loads")
+            withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome?.title == "Refund complete" }
+            }
+            assertEquals(
+                1,
+                requests.count { "\"TransactionID\":\"poi-load-10\"" in it },
+                "the successfully reversed load was sent again",
+            )
+            assertEquals(
+                2,
+                requests.count { "\"TransactionID\":\"poi-load-1\"" in it },
+                "the failed shorter load was not retried",
+            )
+            assertTrue(assertNotNull(store.findSale("sale-with-prefix-loads")).fullyRefunded)
         }
     }
 

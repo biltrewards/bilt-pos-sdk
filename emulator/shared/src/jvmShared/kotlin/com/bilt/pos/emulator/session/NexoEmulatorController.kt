@@ -1791,8 +1791,9 @@ class NexoEmulatorController(
             .firstOrNull { it in failureMessage }
             ?.let { marker -> failureMessage.substringBefore(marker) }
             .orEmpty()
+        val reversedMovements = reversedPrefix.split(" and ").toSet()
         val reversedLoads = sale.giftCardLoads.filter {
-            it.poiTransactionId in reversedPrefix &&
+            "the stored value load ${it.poiTransactionId}" in reversedMovements &&
                 it.poiTransactionId !in stored.reversedGiftCardLoadIds
         }.map { it.poiTransactionId }
         val committedCard = if (failedMoneyStep == ReversalStep.STORED_VALUE) {

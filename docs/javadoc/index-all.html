@@ -3134,6 +3134,16 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The terminal could not be reached or the connection failed mid-exchange.</div>
 </dd>
+<dt><a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html#nexoMessageListener(com.bilt.pos.nexo.client.NexoMessageListener)" class="member-name-link">nexoMessageListener(NexoMessageListener)</a> - Method in class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient.Builder</a></dt>
+<dd>
+<div class="block">Observe plaintext Nexo request and response JSON for diagnostics.</div>
+</dd>
+<dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.html" class="type-name-link" title="interface in com.bilt.pos.nexo.client">NexoMessageListener</a> - Interface in <a href="com/bilt/pos/nexo/client/package-summary.html">com.bilt.pos.nexo.client</a></dt>
+<dd>
+<div class="block">Observes the plaintext Nexo messages exchanged with a terminal.</div>
+</dd>
+<dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html" class="type-name-link" title="enum class in com.bilt.pos.nexo.client">NexoMessageListener.Direction</a> - Enum Class in <a href="com/bilt/pos/nexo/client/package-summary.html">com.bilt.pos.nexo.client</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/IdentifyStatus.html#NOT_FOUND" class="member-name-link">NOT_FOUND</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyStatus.html" title="enum class in com.bilt.pos.session.identity">IdentifyStatus</a></dt>
 <dd>
 <div class="block">No member matched the captured identifier.</div>
@@ -3270,6 +3280,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Called when a stored value refund allocation commits.</div>
 </dd>
+<dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.html#onMessage(com.bilt.pos.nexo.client.NexoMessageListener.Direction,java.lang.String)" class="member-name-link">onMessage(NexoMessageListener.Direction, String)</a> - Method in interface com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/NexoMessageListener.html" title="interface in com.bilt.pos.nexo.client">NexoMessageListener</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#onMovement(java.util.function.Consumer)" class="member-name-link">onMovement(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
 <div class="block">Called after any externally visible money or loyalty movement commits.</div>
@@ -3761,6 +3773,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Send a Sale to POI request with a per-request timeout override.</div>
 </dd>
+<dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html#REQUEST" class="member-name-link">REQUEST</a> - Enum constant in enum class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html" title="enum class in com.bilt.pos.nexo.client">NexoMessageListener.Direction</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/CheckoutSession.html#requestAmountConfirmation(java.math.BigDecimal,java.lang.String)" class="member-name-link">requestAmountConfirmation(BigDecimal, String)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a></dt>
 <dd>
 <div class="block">Asks the customer to confirm an amount.</div>
@@ -3820,6 +3834,8 @@ loadScripts(document, 'script');</script>
  default ID, call the handler when one is registered, and fall back to
  the default when the handler returns <code>null</code> or an empty string.</div>
 </dd>
+<dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html#RESPONSE" class="member-name-link">RESPONSE</a> - Enum constant in enum class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html" title="enum class in com.bilt.pos.nexo.client">NexoMessageListener.Direction</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#retry()" class="member-name-link">retry()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
 <dd>
 <div class="block">Retry only the failed step, preserving every earlier committed step.</div>
@@ -5118,6 +5134,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
 </dd>
+<dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html" title="enum class in com.bilt.pos.nexo.client">NexoMessageListener.Direction</a></dt>
+<dd>
+<div class="block">Returns the enum constant of this class with the specified name.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptCopyEnum.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptCopyEnum.html" title="enum class in com.bilt.pos.receipt">ReceiptCopyEnum</a></dt>
 <dd>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
@@ -5204,6 +5224,11 @@ loadScripts(document, 'script');</script>
 the order they are declared.</div>
 </dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltTerminalEnvironment.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/BiltTerminalEnvironment.html" title="enum class in com.bilt.pos.nexo.client">BiltTerminalEnvironment</a></dt>
+<dd>
+<div class="block">Returns an array containing the constants of this enum class, in
+the order they are declared.</div>
+</dd>
+<dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html" title="enum class in com.bilt.pos.nexo.client">NexoMessageListener.Direction</a></dt>
 <dd>
 <div class="block">Returns an array containing the constants of this enum class, in
 the order they are declared.</div>
