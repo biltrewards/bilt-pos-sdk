@@ -15,6 +15,7 @@ import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
 import com.bilt.pos.session.settlement.SettlementTarget;
 import com.bilt.pos.session.settlement.StoredValueLoad;
+import com.bilt.pos.session.settlement.StoredValueLoadRecord;
 import com.bilt.pos.session.storedvalue.StoredValueCard;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -368,6 +369,39 @@ class CheckoutSessionStoredValuePurchaseTest {
         assertEquals("POI-LOAD-1", originalStoredValueTransaction(voidRequests.get(0)));
         assertEquals("POI-LOAD-2", originalStoredValueTransaction(voidRequests.get(1)));
         assertNotNull(voidRequests.get(2).getReversalRequest());
+    }
+
+    @Test
+    void abortedVoidReportsCompletedMovementsStructurally() throws Exception {
+        OriginalSaleRecord original = OriginalSaleRecord.builder()
+                .addStoredValueLoad(StoredValueLoadRecord.builder()
+                        .basketReference("gift-card-10")
+                        .amount(new BigDecimal("10.00"))
+                        .poiTransactionId("POI-LOAD-10")
+                        .build())
+                .addStoredValueLoad(StoredValueLoadRecord.builder()
+                        .basketReference("gift-card-1")
+                        .amount(new BigDecimal("15.00"))
+                        .poiTransactionId("POI-LOAD-1")
+                        .build())
+                .build();
+        server.enqueue(new MockResponse().setBody(
+                storedValueOk("Reverse", "POI-REVERSE-10", 10.00, 0.00)));
+        server.enqueue(new MockResponse().setBody(STORED_VALUE_FAILED));
+
+        List<ReversedMovement> reportedToHandler = new ArrayList<>();
+        SessionException failure = assertThrows(SessionException.class,
+                () -> session.voidTransaction(original)
+                        .onError((step, error) -> {
+                            reportedToHandler.addAll(error.getReversedMovements());
+                            return ReversalDecision.ABORT;
+                        })
+                        .get());
+
+        List<ReversedMovement> expected = List.of(new ReversedMovement(
+                ReversalStep.STORED_VALUE_LOAD, "POI-LOAD-10"));
+        assertEquals(expected, reportedToHandler);
+        assertEquals(expected, failure.getError().getReversedMovements());
     }
 
     private static String originalStoredValueTransaction(SaleToPOIRequest request) {

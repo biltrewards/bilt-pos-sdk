@@ -19,6 +19,7 @@ import com.bilt.pos.session.CheckoutSession
 import com.bilt.pos.session.Receipt
 import com.bilt.pos.session.ReversalDecision
 import com.bilt.pos.session.ReversalStep
+import com.bilt.pos.session.ReversedMovement
 import com.bilt.pos.session.SessionError
 import com.bilt.pos.session.SessionErrorCode
 import com.bilt.pos.session.SessionException
@@ -1418,7 +1419,7 @@ class NexoEmulatorController(
             // back, so it is refused then. Per-leg FULL records are
             // different: they are the residue of a void that failed midway,
             // and the retry omits those references — see executeFullRefund.
-            if (stored.refunds.any { !it.full && !it.reversalProgress }) {
+            if (stored.refunds.any { it.isPartialRefund }) {
                 log("The sale was already partially refunded — refund the remaining items instead")
                 return@launch
             }
@@ -1701,7 +1702,6 @@ class NexoEmulatorController(
             // the store. Gift-card loads reverse first, then CARD,
             // STORED_VALUE, and loyalty; everything ahead of the failed
             // money step must be omitted from the next session's retry.
-            var failedMoneyStep: ReversalStep? = null
             val result = try {
                 session.voidTransaction(originalSaleRecord(sale, stored))
                     .onError { step, error ->
@@ -1713,7 +1713,6 @@ class NexoEmulatorController(
                         if (step == ReversalStep.STORED_VALUE_LOAD ||
                             step == ReversalStep.CARD || step == ReversalStep.STORED_VALUE
                         ) {
-                            failedMoneyStep = step
                             ReversalDecision.ABORT
                         } else {
                             ReversalDecision.SKIP
@@ -1721,7 +1720,7 @@ class NexoEmulatorController(
                     }
                     .get()
             } catch (e: SessionException) {
-                if (!recordPartialVoid(stored, failedMoneyStep, e.error.message)) {
+                if (!recordPartialVoid(stored, e.error.reversedMovements)) {
                     // the reversed movement has no record: the failure popup must
                     // carry the double-reversal warning, not just the error
                     throw SessionException(SessionError(
@@ -1881,35 +1880,31 @@ class NexoEmulatorController(
     }
 
     /**
-     * Persists a failed void's progress: gift-card loads and the card leg
-     * reversed before [failedMoneyStep]. The retry's [originalSaleRecord]
-     * then omits those movements; loyalty never ran because it follows all
-     * money movements.
+     * Persists a failed void's progress exposed structurally on the SDK
+     * error. The retry's [originalSaleRecord] then omits those movements;
+     * loyalty never ran because it follows all money movements.
      */
     private fun recordPartialVoid(
         stored: StoredSale,
-        failedMoneyStep: ReversalStep?,
-        failureMessage: String,
+        reversedMovements: List<ReversedMovement>,
     ): Boolean {
         val sale = stored.sale
-        // The SDK annotates a mid-void error with every POI transaction it
-        // reversed before the failing step. This is needed when the second
-        // of several gift-card loads fails: the step enum alone cannot say
-        // which earlier loads committed.
-        val reversedPrefix = listOf(" was reversed but ", " were reversed but ")
-            .firstOrNull { it in failureMessage }
-            ?.let { marker -> failureMessage.substringBefore(marker) }
-            .orEmpty()
-        val reversedMovements = reversedPrefix.split(" and ").toSet()
+        val reversedLoadIds = reversedMovements.asSequence()
+            .filter { it.step == ReversalStep.STORED_VALUE_LOAD }
+            .map { it.poiTransactionId }
+            .toSet()
         val reversedLoads = sale.giftCardLoads.filter {
-            "the stored value load ${it.poiTransactionId}" in reversedMovements &&
+            it.poiTransactionId in reversedLoadIds &&
                 it.poiTransactionId !in stored.reversedGiftCardLoadIds
         }.map { it.poiTransactionId }
-        val committedCard = if (failedMoneyStep == ReversalStep.STORED_VALUE) {
-            sale.leg(LegType.CARD)?.takeUnless { stored.legRefunded(LegType.CARD) }
-        } else {
-            null
-        }
+        val committedCard = sale.leg(LegType.CARD)
+            ?.takeUnless { stored.legRefunded(LegType.CARD) }
+            ?.takeIf { card ->
+                reversedMovements.any {
+                    it.step == ReversalStep.CARD &&
+                        it.poiTransactionId == card.poiTransactionId
+                }
+            }
         if (reversedLoads.isEmpty() && committedCard == null) {
             return true
         }
@@ -2213,7 +2208,7 @@ class NexoEmulatorController(
         hasGiftCardPurchase = sale.giftCardLoads.isNotEmpty(),
         refunded = refunds.isNotEmpty(),
         fullyRefunded = fullyRefunded,
-        fullRefundAvailable = refundable && refunds.all { it.full || it.reversalProgress },
+        fullRefundAvailable = refundable && refunds.none { it.isPartialRefund },
         voided = voided != null,
     )
 
@@ -2378,7 +2373,6 @@ class NexoEmulatorController(
                         description = line.description,
                         quantity = line.quantity,
                         lineTotal = line.adjustedTotal.toPlainString(),
-                        credit = line.isReturn || line.isCredit,
                         // a RETURN of a custom item carries the same SKU;
                         // re-pricing it would rebuild it as a sale line, so
                         // only the sale direction is offered to the keypad

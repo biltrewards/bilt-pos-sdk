@@ -125,9 +125,13 @@ data class RefundRecord(
     /** Gift-card loads already reversed by a whole-sale refund attempt that
      * later failed. They are omitted when that refund is retried. */
     val reversedGiftCardLoadIds: List<String> = emptyList(),
-    /** This is cross-session reversal progress, not an item refund. */
+    /** This is cross-session reversal progress, never an item refund. Kept
+     *  as a flag so existing append-only JSONL records remain decodable. */
     val reversalProgress: Boolean = false,
-)
+) {
+    /** An ordinary partial refund that prevents a later whole-sale void. */
+    val isPartialRefund: Boolean get() = !full && !reversalProgress
+}
 
 /** A void issued against a stored sale. */
 @Serializable

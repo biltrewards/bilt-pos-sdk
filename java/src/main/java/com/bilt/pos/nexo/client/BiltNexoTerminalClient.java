@@ -236,9 +236,9 @@ public final class BiltNexoTerminalClient {
                 return null;
             }
 
-            NexoTerminalAPI responseApi;
+            ParsedResponse parsedResponse;
             try {
-                responseApi = parseResponse(responseJson);
+                parsedResponse = parseResponse(responseJson);
             } catch (EncryptionException e) {
                 notifyMessage(NexoMessageListener.Direction.RESPONSE, responseJson);
                 throw e;
@@ -248,8 +248,8 @@ public final class BiltNexoTerminalClient {
                         "Failed to parse terminal response: " + responseJson, e);
             }
 
-            notifyMessage(NexoMessageListener.Direction.RESPONSE, responseApi);
-            return responseApi;
+            notifyMessage(NexoMessageListener.Direction.RESPONSE, parsedResponse.plaintext);
+            return parsedResponse.api;
         } catch (BiltNexoClientException e) {
             throw e;
         } catch (EncryptionException e) {
@@ -275,18 +275,6 @@ public final class BiltNexoTerminalClient {
             messageListener.onMessage(direction, json);
         } catch (RuntimeException e) {
             LOG.log(Level.WARNING, "Nexo message listener failed", e);
-        }
-    }
-
-    private void notifyMessage(NexoMessageListener.Direction direction,
-                               NexoTerminalAPI message) {
-        if (messageListener == null) {
-            return;
-        }
-        try {
-            notifyMessage(direction, objectMapper.writeValueAsString(message));
-        } catch (IOException e) {
-            LOG.log(Level.WARNING, "Could not serialize Nexo message for listener", e);
         }
     }
 
@@ -324,7 +312,8 @@ public final class BiltNexoTerminalClient {
         return objectMapper.writeValueAsString(envelope);
     }
 
-    private NexoTerminalAPI parseResponse(String responseJson) throws IOException, EncryptionException {
+    private ParsedResponse parseResponse(String responseJson)
+            throws IOException, EncryptionException {
         SecuredResponseEnvelope envelope =
                 objectMapper.readValue(responseJson, SecuredResponseEnvelope.class);
         SaleToPOISecuredMessage secured = envelope.saleToPOIResponse;
@@ -349,11 +338,26 @@ public final class BiltNexoTerminalClient {
             String plainJson = encryptor.decrypt(secured, rawHeaderBytes);
             SaleToPOIResponse saleToPOIResponse =
                     objectMapper.readValue(plainJson, SaleToPOIResponse.class);
-            return NexoTerminalAPI.builder()
-                    .saleToPOIResponse(saleToPOIResponse)
-                    .build();
+            return new ParsedResponse(
+                    NexoTerminalAPI.builder()
+                            .saleToPOIResponse(saleToPOIResponse)
+                            .build(),
+                    plainJson);
         } else {
-            return objectMapper.readValue(responseJson, NexoTerminalAPI.class);
+            return new ParsedResponse(
+                    objectMapper.readValue(responseJson, NexoTerminalAPI.class),
+                    responseJson);
+        }
+    }
+
+    /** Parsed response paired with the exact plaintext supplied by the terminal. */
+    private static final class ParsedResponse {
+        private final NexoTerminalAPI api;
+        private final String plaintext;
+
+        private ParsedResponse(NexoTerminalAPI api, String plaintext) {
+            this.api = api;
+            this.plaintext = plaintext;
         }
     }
 
@@ -486,8 +490,13 @@ public final class BiltNexoTerminalClient {
          * Observe plaintext Nexo request and response JSON for diagnostics.
          * Requests are delivered before encryption and valid Nexo responses
          * after decryption. Malformed or unsuccessful HTTP response bodies are
-         * delivered as received. Listener failures do not fail the terminal
-         * operation.
+         * delivered as received. Successful responses retain the terminal's
+         * exact plaintext, including unknown fields and formatting. Listener
+         * failures do not fail the terminal operation. Payloads may contain
+         * cardholder data, including full PANs; do not persist or log them in
+         * production builds. The listener runs synchronously on the requesting
+         * thread, so callbacks should hand off UI or long-running work and
+         * return quickly.
          */
         public Builder nexoMessageListener(NexoMessageListener messageListener) {
             this.messageListener = Objects.requireNonNull(messageListener, "messageListener");

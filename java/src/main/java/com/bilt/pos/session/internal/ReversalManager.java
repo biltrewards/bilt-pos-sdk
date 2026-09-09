@@ -32,6 +32,7 @@ import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
 import com.bilt.pos.session.RefundResult;
 import com.bilt.pos.session.ReversalDecision;
 import com.bilt.pos.session.ReversalStep;
+import com.bilt.pos.session.ReversedMovement;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.VoidResult;
@@ -334,9 +335,11 @@ public final class ReversalManager {
         List<ReversalMovement> skippedMoneyLegs = new ArrayList<>();
         SessionException[] lastFailure = new SessionException[1];
         SessionException[] moneyFailure = new SessionException[1];
+        StepDecider progressAware = (step, error) -> effective.decide(step,
+                Wire.withReversedMovements(error, reversedMovements(reversed)));
 
         for (ReversalMovement movement : remaining) {
-            Boolean sent = runStep(movement.getStep(), effective,
+            Boolean sent = runStep(movement.getStep(), progressAware,
                     () -> {
                         execute(movement, memberId, money, loyalty, storedValueLoads);
                         return true;
@@ -365,7 +368,7 @@ public final class ReversalManager {
             // standing money leg has no store-and-forward retry, and a
             // completed void would strand the charge, so the void stays
             // incomplete and retryable
-            throw standingMoneyError(skippedMoneyLegs, moneyFailure[0]);
+            throw standingMoneyError(skippedMoneyLegs, reversed, moneyFailure[0]);
         }
         if (reversed.isEmpty()) {
             if (!priorProgress) {
@@ -389,6 +392,7 @@ public final class ReversalManager {
      * is still standing.
      */
     private static SessionException standingMoneyError(List<ReversalMovement> skipped,
+                                                       List<ReversalMovement> reversed,
                                                        SessionException cause) {
         String legs = skipped.stream()
                 .map(movement -> label(movement.getStep()) + " " + movement.poiTransactionId)
@@ -397,7 +401,8 @@ public final class ReversalManager {
                 legs + (skipped.size() == 1 ? " was skipped and remains" : " were skipped and remain")
                         + " charged — the void is incomplete; retry voidTransaction() to "
                         + "reverse " + (skipped.size() == 1 ? "it" : "them") + ": "
-                        + cause.getError().getMessage(), cause));
+                        + cause.getError().getMessage(), cause,
+                reversedMovements(reversed)));
     }
 
     private void execute(ReversalMovement movement, String memberId,
@@ -548,7 +553,17 @@ public final class ReversalManager {
         return new SessionException(Wire.annotated(cause.getError(),
                 done + (reversed.size() == 1 ? " was" : " were") + " reversed but "
                         + label(failed.getStep()) + " " + failed.poiTransactionId
-                        + " was not: " + cause.getError().getMessage(), cause));
+                        + " was not: " + cause.getError().getMessage(), cause,
+                reversedMovements(reversed)));
+    }
+
+    /** Public, persistence-safe view of internal reversal progress. */
+    private static List<ReversedMovement> reversedMovements(
+            List<ReversalMovement> movements) {
+        return movements.stream()
+                .map(movement -> new ReversedMovement(
+                        movement.getStep(), movement.poiTransactionId))
+                .collect(Collectors.toList());
     }
 
     private static String label(ReversalStep step) {
