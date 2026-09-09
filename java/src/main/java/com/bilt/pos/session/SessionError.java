@@ -9,6 +9,11 @@
  */
 package com.bilt.pos.session;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+
 /**
  * Describes why a session operation failed.
  *
@@ -23,17 +28,30 @@ public final class SessionError {
     private final String message;
     private final String nexoErrorCondition;
     private final Exception cause;
+    private final List<ReversedMovement> reversedMovements;
 
     public SessionError(SessionErrorCode code, String message) {
-        this(code, message, null, null);
+        this(code, message, null, null, Collections.emptyList());
     }
 
     public SessionError(SessionErrorCode code, String message,
                         String nexoErrorCondition, Exception cause) {
+        this(code, message, nexoErrorCondition, cause, Collections.emptyList());
+    }
+
+    /**
+     * Creates an error with structured progress from a stopped reversal.
+     * Ordinary operation failures should use one of the shorter constructors.
+     */
+    public SessionError(SessionErrorCode code, String message,
+                        String nexoErrorCondition, Exception cause,
+                        List<ReversedMovement> reversedMovements) {
         this.code = code;
         this.message = message;
         this.nexoErrorCondition = nexoErrorCondition;
         this.cause = cause;
+        this.reversedMovements = Collections.unmodifiableList(new ArrayList<>(
+                Objects.requireNonNull(reversedMovements, "reversedMovements")));
     }
 
     /** High-level error category. */
@@ -57,6 +75,16 @@ public final class SessionError {
     /** The underlying exception, or {@code null} if none. */
     public Exception getCause() {
         return cause;
+    }
+
+    /**
+     * Immutable movements that completed before this void failure. Available
+     * both to the failing step's {@link ReversalFlow#onError} handler and on
+     * the final error when that handler aborts. Empty for ordinary failures
+     * and when the failed void made no progress.
+     */
+    public List<ReversedMovement> getReversedMovements() {
+        return reversedMovements;
     }
 
     @Override

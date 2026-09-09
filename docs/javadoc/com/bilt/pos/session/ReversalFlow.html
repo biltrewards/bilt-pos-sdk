@@ -236,6 +236,11 @@ loadScripts(document, 'script');</script>
  nothing — is delivered with a <code>null</code> step; the returned
  decision is then ignored, there is nothing left to resolve.</p>
 
+ <p>For a whole-sale void, <a href="SessionError.html#getReversedMovements()"><code>SessionError.getReversedMovements()</code></a>
+ is the structured prefix that completed before the failed step. Persist
+ it before returning <a href="ReversalDecision.html#ABORT"><code>ReversalDecision.ABORT</code></a> when a later session
+ will resume the void.</p>
+
  <p>Because of that <code>null</code>-step delivery, a handler that
  <code>switch</code>es on the step must guard for <code>null</code> first — an
  exception thrown from the handler would mask the very failure being

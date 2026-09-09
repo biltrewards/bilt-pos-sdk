@@ -38,7 +38,9 @@ public enum ReversalDecision {
 
     /**
      * Stop the flow. The failure is thrown, already-reversed steps stand,
-     * so the operation can be retried.
+     * so the operation can be retried. The resulting error's
+     * {@link SessionError#getReversedMovements()} identifies the progress
+     * that must be persisted before resuming in another session.
      */
     ABORT
 }
