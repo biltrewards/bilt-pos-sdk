@@ -863,7 +863,7 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
-    fun partialVoidMatchesReversedGiftCardLoadIdsAsWholeTokens() {
+    fun partialVoidPersistsStructuredGiftCardLoadProgress() {
         val store = JsonlSaleStore(
             Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
         )

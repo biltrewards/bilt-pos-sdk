@@ -211,7 +211,9 @@ the order they are declared.</div>
 <h3>ABORT</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></span>&nbsp;<span class="element-name">ABORT</span></div>
 <div class="block">Stop the flow. The failure is thrown, already-reversed steps stand,
- so the operation can be retried.</div>
+ so the operation can be retried. The resulting error's
+ <a href="SessionError.html#getReversedMovements()"><code>SessionError.getReversedMovements()</code></a> identifies the progress
+ that must be persisted before resuming in another session.</div>
 </section>
 </li>
 </ul>

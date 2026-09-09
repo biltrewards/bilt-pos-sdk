@@ -20,6 +20,7 @@ import com.bilt.pos.nexo.model.OriginalPOITransaction;
 import com.bilt.pos.nexo.model.POIData;
 import com.bilt.pos.nexo.model.PaymentResponse;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
+import com.bilt.pos.session.ReversedMovement;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
@@ -29,6 +30,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 
 /**
  * Conversions between wire values and session types, shared by the internal
@@ -75,8 +77,21 @@ public final class Wire {
      * error fields — this is the one place that knows which ones exist.
      */
     public static SessionError annotated(SessionError base, String message, Exception cause) {
+        return annotated(base, message, cause, base.getReversedMovements());
+    }
+
+    /** The same error with replacement structured reversal progress. */
+    public static SessionError annotated(SessionError base, String message, Exception cause,
+                                         List<ReversedMovement> reversedMovements) {
         return new SessionError(base.getCode(), message,
-                base.getNexoErrorCondition(), cause);
+                base.getNexoErrorCondition(), cause, reversedMovements);
+    }
+
+    /** The same error with structured progress from its current void attempt. */
+    public static SessionError withReversedMovements(SessionError base,
+                                                     List<ReversedMovement> movements) {
+        return new SessionError(base.getCode(), base.getMessage(),
+                base.getNexoErrorCondition(), base.getCause(), movements);
     }
 
     /** The POI transaction reference of a response, or {@code null}. */

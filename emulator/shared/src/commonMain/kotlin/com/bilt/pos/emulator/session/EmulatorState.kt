@@ -43,21 +43,21 @@ data class BasketLine(
     val description: String,
     val quantity: Int,
     val lineTotal: String,
-    /** Compatibility flag for subtractive lines (returns and register
-     *  credits). [type] distinguishes their settlement behavior. */
-    val credit: Boolean = false,
     /** Session-assigned id used for mutations that must target one exact
      *  line (notably discounts when several referenced gift-card lines use
      *  the same SKU). */
     val itemId: String = sku,
-    val type: BasketLineType = if (credit) BasketLineType.RETURN else BasketLineType.SALE,
+    val type: BasketLineType = BasketLineType.SALE,
     /** Signed pre-discount value and register discount total. */
     val originalTotal: String = lineTotal,
     val discountTotal: String = "0.00",
     val discountLabels: List<String> = emptyList(),
     /** True when this sale line has a settlement-time stored-value load. */
     val giftCard: Boolean = false,
-)
+) {
+    /** Subtractive line (return or register credit). */
+    val credit: Boolean get() = type != BasketLineType.SALE
+}
 
 enum class BasketLineType { SALE, RETURN, CREDIT }
 

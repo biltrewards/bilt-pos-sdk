@@ -97,6 +97,11 @@ public final class ReversalFlow<T> extends SessionFlow<T> {
      * nothing — is delivered with a {@code null} step; the returned
      * decision is then ignored, there is nothing left to resolve.</p>
      *
+     * <p>For a whole-sale void, {@link SessionError#getReversedMovements()}
+     * is the structured prefix that completed before the failed step. Persist
+     * it before returning {@link ReversalDecision#ABORT} when a later session
+     * will resume the void.</p>
+     *
      * <p>Because of that {@code null}-step delivery, a handler that
      * {@code switch}es on the step must guard for {@code null} first — an
      * exception thrown from the handler would mask the very failure being

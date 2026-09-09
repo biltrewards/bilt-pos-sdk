@@ -1211,7 +1211,7 @@ private fun nonNegativeMoneyMinor(raw: String): Long? {
     val pieces = value.split('.', limit = 2)
     val whole = pieces[0].toLongOrNull() ?: return null
     if (whole > Long.MAX_VALUE / 100) return null
-    val fraction = pieces.getOrNull(1).orEmpty().padEnd(2, '0').ifEmpty { "00" }
+    val fraction = pieces.getOrNull(1).orEmpty().padEnd(2, '0')
     val minor = whole * 100 + (fraction.toLongOrNull() ?: return null)
     return minor.takeIf { it >= 0 }
 }
@@ -1361,12 +1361,16 @@ private fun LoyaltyCheckbox(
 @Composable
 private fun EventsCard(state: EmulatorState, modifier: Modifier = Modifier) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
-    val tabs = listOf("Events", "Detailed", "Nexo")
+    val tabs = listOf(
+        "Events" to state.events,
+        "Detailed" to state.detailedEvents,
+        "Nexo" to state.nexoMessages,
+    )
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             TabRow(selectedTabIndex = selectedTab) {
-                tabs.forEachIndexed { index, label ->
+                tabs.forEachIndexed { index, (label, _) ->
                     Tab(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
@@ -1375,11 +1379,7 @@ private fun EventsCard(state: EmulatorState, modifier: Modifier = Modifier) {
                 }
             }
             HorizontalDivider(modifier = Modifier.padding(bottom = 8.dp))
-            val lines = when (selectedTab) {
-                0 -> state.events
-                1 -> state.detailedEvents
-                else -> state.nexoMessages
-            }
+            val lines = tabs[selectedTab].second
             SelectionContainer(modifier = Modifier.weight(1f)) {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(lines.asReversed()) { event ->

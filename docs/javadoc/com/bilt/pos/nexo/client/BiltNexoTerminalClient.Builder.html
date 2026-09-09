@@ -324,8 +324,13 @@ loadScripts(document, 'script');</script>
 <div class="block">Observe plaintext Nexo request and response JSON for diagnostics.
  Requests are delivered before encryption and valid Nexo responses
  after decryption. Malformed or unsuccessful HTTP response bodies are
- delivered as received. Listener failures do not fail the terminal
- operation.</div>
+ delivered as received. Successful responses retain the terminal's
+ exact plaintext, including unknown fields and formatting. Listener
+ failures do not fail the terminal operation. Payloads may contain
+ cardholder data, including full PANs; do not persist or log them in
+ production builds. The listener runs synchronously on the requesting
+ thread, so callbacks should hand off UI or long-running work and
+ return quickly.</div>
 </section>
 </li>
 <li>
