@@ -224,6 +224,8 @@ data class EmulatorState(
     val events: List<String> = emptyList(),
     /** Raw logger output (SDK java.util.logging records, stack traces) for the Detailed tab. */
     val detailedEvents: List<String> = emptyList(),
+    /** Plaintext Nexo request and response envelopes, newest last. */
+    val nexoMessages: List<String> = emptyList(),
 )
 
 /**

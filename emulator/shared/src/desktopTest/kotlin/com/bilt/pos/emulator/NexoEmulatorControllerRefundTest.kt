@@ -1259,6 +1259,11 @@ class NexoEmulatorControllerRefundTest {
             assertTrue("Activate" in loadRequest)
             assertTrue("GC-123" in loadRequest)
             assertTrue("25.0" in loadRequest)
+            val nexoLog = controller.state.value.nexoMessages.joinToString("\n")
+            assertTrue("→ REQUEST" in nexoLog)
+            assertTrue("← RESPONSE" in nexoLog)
+            assertTrue("\"PaymentRequest\"" in nexoLog)
+            assertTrue("\"StoredValueResponse\"" in nexoLog)
 
             withTimeout(10_000) { controller.state.first { it.sales.isNotEmpty() } }
             val sale = assertNotNull(store.listSales().singleOrNull()).sale

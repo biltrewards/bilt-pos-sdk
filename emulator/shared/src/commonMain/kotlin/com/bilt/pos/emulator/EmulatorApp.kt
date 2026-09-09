@@ -1360,25 +1360,26 @@ private fun LoyaltyCheckbox(
 
 @Composable
 private fun EventsCard(state: EmulatorState, modifier: Modifier = Modifier) {
-    // 0 = curated events, 1 = raw logger output (SDK JUL records, stack traces)
     var selectedTab by rememberSaveable { mutableStateOf(0) }
+    val tabs = listOf("Events", "Detailed", "Nexo")
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             TabRow(selectedTabIndex = selectedTab) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Events") },
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Detailed") },
-                )
+                tabs.forEachIndexed { index, label ->
+                    Tab(
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index },
+                        text = { Text(label) },
+                    )
+                }
             }
             HorizontalDivider(modifier = Modifier.padding(bottom = 8.dp))
-            val lines = if (selectedTab == 0) state.events else state.detailedEvents
+            val lines = when (selectedTab) {
+                0 -> state.events
+                1 -> state.detailedEvents
+                else -> state.nexoMessages
+            }
             SelectionContainer(modifier = Modifier.weight(1f)) {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(lines.asReversed()) { event ->

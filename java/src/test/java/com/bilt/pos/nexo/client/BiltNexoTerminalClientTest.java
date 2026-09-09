@@ -16,6 +16,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -225,10 +227,16 @@ class BiltNexoTerminalClientTest {
                 .keyIdentifier("testTerminal")
                 .keyVersion(0)
                 .build();
+        List<NexoMessageListener.Direction> directions = new ArrayList<>();
+        List<String> messages = new ArrayList<>();
 
         BiltNexoTerminalClient encryptedClient = BiltNexoTerminalClient.builder()
                 .endpoint(server.url("/nexo").toString())
                 .securityKey(key)
+                .nexoMessageListener((direction, json) -> {
+                    directions.add(direction);
+                    messages.add(json);
+                })
                 .build();
         assertTrue(encryptedClient.isEncrypted());
 
@@ -277,6 +285,37 @@ class BiltNexoTerminalClientTest {
         String sentJson = recorded.getBody().readUtf8();
         assertTrue(sentJson.contains("EnvelopedData"));
         assertFalse(sentJson.contains("RequestedAmount"));
+        assertEquals(List.of(
+                NexoMessageListener.Direction.REQUEST,
+                NexoMessageListener.Direction.RESPONSE), directions);
+        assertTrue(messages.get(0).contains("RequestedAmount"),
+                "the observer receives the request before encryption");
+        assertTrue(messages.get(1).contains("PaymentResponse"),
+                "the observer receives the response after decryption");
+        assertFalse(messages.get(1).contains("EnvelopedData"));
+    }
+
+    @Test
+    void messageListenerFailureDoesNotFailTheRequest() throws Exception {
+        BiltNexoTerminalClient observedClient = BiltNexoTerminalClient.builder()
+                .endpoint(server.url("/nexo").toString())
+                .nexoMessageListener((direction, json) -> {
+                    throw new IllegalStateException("diagnostic sink failed");
+                })
+                .build();
+        server.enqueue(new MockResponse().setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                        + "\"Response\":{\"Result\":\"Success\"}}}}"));
+
+        NexoTerminalAPI response = observedClient.request(
+                NexoTerminalAPI.builder()
+                        .saleToPOIRequest(SaleToPOIRequest.builder()
+                                .messageHeader(MessageHeader.builder().build())
+                                .build())
+                        .build());
+
+        assertEquals(ResultType.SUCCESS,
+                response.getSaleToPOIResponse().getPaymentResponse().getResponse().getResult());
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.bilt.pos.emulator.store.StoredSale
 import com.bilt.pos.emulator.store.TransactionLeg
 import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient
+import com.bilt.pos.nexo.client.NexoMessageListener
 import com.bilt.pos.nexo.security.SecurityKey
 import com.bilt.pos.session.CheckoutSession
 import com.bilt.pos.session.Receipt
@@ -39,6 +40,7 @@ import com.bilt.pos.session.settlement.SettlementType
 import com.bilt.pos.session.settlement.StoredValueLoad
 import com.bilt.pos.session.settlement.StoredValueLoadRecord
 import com.bilt.pos.session.storedvalue.StoredValueCard
+import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -221,6 +223,8 @@ class NexoEmulatorController(
         )
     )
     override val state: StateFlow<EmulatorState> = _state.asStateFlow()
+
+    private val nexoLogMapper = ObjectMapper()
 
     @Volatile
     private var connection: Connection? = null
@@ -441,6 +445,7 @@ class NexoEmulatorController(
             val clientBuilder = BiltNexoTerminalClient.builder()
                 .endpoint(endpoint)
                 .trustAllCertificates()
+                .nexoMessageListener(::nexoLog)
             if (encrypt) {
                 clientBuilder.securityKey(
                     SecurityKey.builder()
@@ -2270,6 +2275,19 @@ class NexoEmulatorController(
     private fun detailedLog(message: String) {
         val stamped = "${timestamp()} $message"
         _state.update { it.copy(detailedEvents = (it.detailedEvents + stamped).takeLast(500)) }
+    }
+
+    private fun nexoLog(direction: NexoMessageListener.Direction, json: String) {
+        val payload = if (json.isBlank()) {
+            "<empty response>"
+        } else {
+            runCatching { nexoLogMapper.readTree(json).toPrettyString() }.getOrDefault(json)
+        }
+        val arrow = if (direction == NexoMessageListener.Direction.REQUEST) "→" else "←"
+        val stamped = "${timestamp()} $arrow ${direction.name}\n$payload"
+        _state.update {
+            it.copy(nexoMessages = (it.nexoMessages + stamped).takeLast(200))
+        }
     }
 
     private fun timestamp(): String =
