@@ -2,6 +2,7 @@ package com.bilt.pos.emulator
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -33,6 +34,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -53,6 +55,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,6 +65,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -77,6 +81,61 @@ import com.bilt.pos.emulator.session.StoredValueOptions
 
 /** Top-level screens of the emulator. */
 internal enum class EmulatorTab(val label: String) { SALE("Sale"), REFUND("Refund") }
+
+/** The two ways the Sale tab rings an item up: off the catalog grid, or by
+ *  keying an amount. */
+internal enum class SaleTabPane(val label: String) { PRODUCTS("Products"), KEYPAD("Keypad") }
+
+/** Largest amount the keypad accepts: $999,999.99. Further digits are
+ *  ignored rather than silently wrapping the accumulator. */
+private const val MAX_KEYPAD_MINOR = 99_999_999L
+
+/**
+ * The keypad's entry state: the amount typed so far and, once the operator
+ * taps a custom line in the basket, the SKU that amount live-edits.
+ *
+ * Hoisted above both the basket card and the Sale tab so a tap on a line
+ * can seed it, and so it survives switching tabs.
+ */
+internal class KeypadEntry(minor: Long = 0L, editingSku: String? = null) {
+
+    /** Amount typed so far, in minor currency units (cents). */
+    var minor by mutableStateOf(minor)
+        private set
+
+    /** The basket line this entry re-prices on every keystroke; null while
+     *  composing a new custom item. */
+    var editingSku by mutableStateOf(editingSku)
+        private set
+
+    fun append(digit: Int) {
+        val next = minor * 10 + digit
+        if (next <= MAX_KEYPAD_MINOR) minor = next
+    }
+
+    fun backspace() {
+        minor /= 10
+    }
+
+    /** Adopt the custom line [sku], currently priced [priceMinor]. */
+    fun edit(sku: String, priceMinor: Long) {
+        editingSku = sku
+        minor = priceMinor
+    }
+
+    /** Back to composing a new custom item from zero. */
+    fun reset() {
+        editingSku = null
+        minor = 0L
+    }
+
+    companion object {
+        val Saver = listSaver<KeypadEntry, Any?>(
+            save = { listOf(it.minor, it.editingSku) },
+            restore = { KeypadEntry(it[0] as Long, it[1] as String?) },
+        )
+    }
+}
 
 /** Width at which tab content switches from stacked to side-by-side panes. */
 private val WIDE_LAYOUT_BREAKPOINT = 700.dp
@@ -97,10 +156,11 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
 }
 
 /**
- * [initialTab] seeds the tab selection — the screenshot generator renders
- * the Refund tab through it, since tab state is local and a headless test
- * cannot switch it after composition. Internal so the production entry
- * point above stays free of test-shaped surface.
+ * [initialTab] and [initialSalePane] seed the tab selections — the
+ * screenshot generator renders the Refund tab and the keypad through them,
+ * since tab state is local and a headless test cannot switch it after
+ * composition. Internal so the production entry point above stays free of
+ * test-shaped surface.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,6 +168,7 @@ internal fun EmulatorApp(
     controller: EmulatorController,
     products: List<Product>,
     initialTab: EmulatorTab,
+    initialSalePane: SaleTabPane = SaleTabPane.PRODUCTS,
 ) {
     val state by controller.state.collectAsState()
 
@@ -119,6 +180,21 @@ internal fun EmulatorApp(
         // no custom Saver
         var selectedTabIndex by rememberSaveable { mutableStateOf(initialTab.ordinal) }
         val selectedTab = EmulatorTab.entries[selectedTabIndex]
+        var salePaneIndex by rememberSaveable { mutableStateOf(initialSalePane.ordinal) }
+        val keypad = rememberSaveable(saver = KeypadEntry.Saver) { KeypadEntry() }
+        // Release the edit when the line it adopted is gone — a settled or
+        // ended checkout takes it — or is no longer something the keypad
+        // may re-price. Matching the capability, not the SKU: a SKU alone
+        // does not identify a line, since a return carries the sale's.
+        LaunchedEffect(state.basket) {
+            val sku = keypad.editingSku
+            if (sku != null && state.basket.none {
+                    it.sku == sku && it.editablePriceMinor != null
+                }
+            ) {
+                keypad.reset()
+            }
+        }
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -155,10 +231,30 @@ internal fun EmulatorApp(
                 // fillMaxSize(): a non-weighted child measures against the
                 // full height and would overflow by its siblings' heights.
                 val basketAndTab: @Composable ColumnScope.() -> Unit = {
-                    BasketCard(state, controller, Modifier.fillMaxWidth().weight(1f))
+                    BasketCard(
+                        state = state,
+                        controller = controller,
+                        editingSku = keypad.editingSku,
+                        // a tapped custom line hands its price to the
+                        // keypad, which is brought into view for the edit
+                        onEditCustomLine = { sku, priceMinor ->
+                            keypad.edit(sku, priceMinor)
+                            salePaneIndex = SaleTabPane.KEYPAD.ordinal
+                            selectedTabIndex = EmulatorTab.SALE.ordinal
+                        },
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                    )
                     when (selectedTab) {
                         EmulatorTab.SALE ->
-                            ProductGrid(products, controller, Modifier.fillMaxWidth().weight(1.1f))
+                            SaleTab(
+                                products = products,
+                                checkoutActive = state.sessionId != null,
+                                controller = controller,
+                                keypad = keypad,
+                                selectedPane = SaleTabPane.entries[salePaneIndex],
+                                onSelectPane = { salePaneIndex = it.ordinal },
+                                modifier = Modifier.fillMaxWidth().weight(1.1f),
+                            )
                         EmulatorTab.REFUND ->
                             RefundTab(state, controller, Modifier.fillMaxWidth().weight(1.1f))
                     }
@@ -802,51 +898,226 @@ private fun StatusIndicators(state: EmulatorState) {
     }
 }
 
+/**
+ * The Sale tab's two ways of ringing an item up, behind a pane selector:
+ * the catalog grid, and the keypad for an amount the catalog does not
+ * carry. [keypad] is hoisted so a tap on a custom basket line can seed it.
+ */
 @Composable
-private fun ProductGrid(
+private fun SaleTab(
     products: List<Product>,
+    checkoutActive: Boolean,
     controller: EmulatorController,
+    keypad: KeypadEntry,
+    selectedPane: SaleTabPane,
+    onSelectPane: (SaleTabPane) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text("Products", style = MaterialTheme.typography.titleMedium)
-            // weight(1f) so the grid measures against the space under the
-            // header instead of the card's full height (clips the last rows).
-            // Adaptive columns: as many compact bubbles per row as fit.
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 150.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(top = 8.dp).weight(1f),
+            // transparent so the selector reads as part of the card rather
+            // than a second bar stacked on it
+            TabRow(
+                selectedTabIndex = selectedPane.ordinal,
+                containerColor = Color.Transparent,
             ) {
-                items(products, key = { it.sku }) { product ->
-                    Button(
-                        onClick = { controller.addProduct(product) },
-                        // fixed height so rows stay even when names differ
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                product.name,
-                                style = MaterialTheme.typography.labelMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(product.priceLabel, style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
+                SaleTabPane.entries.forEach { pane ->
+                    Tab(
+                        selected = pane == selectedPane,
+                        onClick = { onSelectPane(pane) },
+                        text = { Text(pane.label) },
+                    )
                 }
+            }
+            // weight(1f) so the pane measures against the space under the
+            // selector instead of the card's full height (which clips it)
+            when (selectedPane) {
+                SaleTabPane.PRODUCTS -> ProductGrid(products, controller, Modifier.weight(1f))
+                SaleTabPane.KEYPAD ->
+                    KeypadPane(checkoutActive, controller, keypad, Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
+private fun ProductGrid(
+    products: List<Product>,
+    controller: EmulatorController,
+    modifier: Modifier = Modifier,
+) {
+    // Adaptive columns: as many compact bubbles per row as fit.
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 150.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier.padding(top = 8.dp),
+    ) {
+        items(products, key = { it.sku }) { product ->
+            Button(
+                onClick = { controller.addProduct(product) },
+                // fixed height so rows stay even when names differ
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        product.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(product.priceLabel, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+    }
+}
+
+/** Digit rows of the number pad; the fourth row is backspace, zero, submit. */
+private val KEYPAD_ROWS = listOf(listOf(1, 2, 3), listOf(4, 5, 6), listOf(7, 8, 9))
+
+/**
+ * Number pad for keying an amount the catalog does not carry. The typed
+ * amount rings up as a custom item on submit (✓); with a custom line
+ * adopted from the basket, every keystroke re-prices that line instead and
+ * ✓ just ends the edit — the next keystroke starts a new item. Releasing
+ * a line backspaced to zero drops it from the basket rather than settling
+ * a $0.00 line.
+ */
+@Composable
+private fun KeypadPane(
+    checkoutActive: Boolean,
+    controller: EmulatorController,
+    keypad: KeypadEntry,
+    modifier: Modifier = Modifier,
+) {
+    // What the pad renders. The handlers below deliberately do NOT use
+    // this: two taps can land in the same frame, and the second must see
+    // what the first did — a released line, a cleared amount — rather
+    // than the entry as composition captured it.
+    val editingSku = keypad.editingSku
+    // An adopted line is re-priced as the operator types; a new amount is
+    // only rung up on submit. A re-price the basket refused (a settlement
+    // sealed it, the line went away) releases the line rather than let the
+    // pad go on displaying an amount the basket does not have.
+    fun onKey(edit: () -> Unit) {
+        edit()
+        val sku = keypad.editingSku ?: return
+        if (!controller.updateCustomItemPrice(sku, keypad.minor)) keypad.reset()
+    }
+    // While editing, ✓ always has something to do — release the line, or
+    // drop it when it was backspaced to zero.
+    val canSubmit = editingSku != null || (checkoutActive && keypad.minor > 0L)
+
+    // The pad divides whatever height the card leaves it between its four
+    // rows rather than scrolling — a number pad the operator has to scroll
+    // to reach ✓ on would be worse than smaller keys.
+    Column(
+        modifier = modifier.padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    shape = RoundedCornerShape(8.dp),
+                )
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                "$" + minorUnitsToDecimal(keypad.minor),
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(
+                when {
+                    editingSku != null && keypad.minor == 0L ->
+                        "Editing the marked line — ✓ now drops it from the basket"
+                    editingSku != null ->
+                        "Editing the marked line — the basket updates as you type"
+                    !checkoutActive -> "Start a checkout to ring a custom amount up"
+                    else -> "Tap ✓ to add this amount, or tap a custom basket line to edit it"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+            )
+        }
+        val keyRow = Modifier.fillMaxWidth().weight(1f)
+        val key = Modifier.weight(1f).fillMaxHeight()
+        KEYPAD_ROWS.forEach { row ->
+            Row(modifier = keyRow, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { digit ->
+                    KeypadKey(digit.toString(), key) { onKey { keypad.append(digit) } }
+                }
+            }
+        }
+        Row(modifier = keyRow, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KeypadKey(
+                label = "⌫",
+                modifier = key,
+                colors = ButtonDefaults.filledTonalButtonColors(),
+            ) { onKey { keypad.backspace() } }
+            KeypadKey("0", key) { onKey { keypad.append(0) } }
+            KeypadKey(
+                label = "✓",
+                modifier = key,
+                enabled = canSubmit,
+            ) {
+                val sku = keypad.editingSku
+                val amount = keypad.minor
+                // a refused request keeps the pad as it is, so the
+                // operator can see what did not happen and retry
+                val done = when {
+                    // an edit is already applied line by line, so ✓ only
+                    // releases the line — except at zero, which is the
+                    // operator saying they did not mean to ring it up
+                    sku != null && amount == 0L -> controller.removeCustomItem(sku)
+                    sku != null -> true
+                    amount > 0L -> controller.addCustomItem(amount)
+                    // nothing typed and nothing adopted: a tap that beat
+                    // recomposition to the disabled state, with nothing
+                    // left to submit
+                    else -> false
+                }
+                if (done) keypad.reset()
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeypadKey(
+    label: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: ButtonColors = ButtonDefaults.buttonColors(),
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        colors = colors,
+        shape = RoundedCornerShape(8.dp),
+        modifier = modifier.heightIn(min = 40.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+/**
+ * The shared basket. Custom (keypad-entered) lines are tappable —
+ * [onEditCustomLine] hands the line's SKU and price to the keypad, and
+ * [editingSku] marks the one it is currently re-pricing.
+ */
+@Composable
 private fun BasketCard(
     state: EmulatorState,
     controller: EmulatorController,
+    editingSku: String?,
+    onEditCustomLine: (sku: String, priceMinor: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
@@ -869,11 +1140,39 @@ private fun BasketCard(
                     // keyed on sku AND direction: a mixed basket may hold a
                     // sale line and a return of the same sku side by side
                     items(state.basket, key = { "${it.sku}:${it.credit}" }) { line ->
+                        // a line the keypad may re-price carries its price,
+                        // which is what makes it tappable: the pad adopts it
+                        val editablePrice = line.editablePriceMinor
+                        val editing = editablePrice != null && line.sku == editingSku
                         LineItemRow(
                             line.quantity,
-                            if (line.credit) "${line.description} (return)" else line.description,
+                            when {
+                                line.credit -> "${line.description} (return)"
+                                editing -> "${line.description} — editing"
+                                else -> line.description
+                            },
                             "$${line.lineTotal}",
-                            Modifier.padding(vertical = 2.dp),
+                            Modifier
+                                .then(
+                                    if (editablePrice == null) {
+                                        Modifier
+                                    } else {
+                                        Modifier.clickable {
+                                            onEditCustomLine(line.sku, editablePrice)
+                                        }
+                                    },
+                                )
+                                .then(
+                                    if (editing) {
+                                        Modifier.background(
+                                            MaterialTheme.colorScheme.secondaryContainer,
+                                            RoundedCornerShape(4.dp),
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .padding(vertical = 2.dp, horizontal = 4.dp),
                         )
                     }
                 }
