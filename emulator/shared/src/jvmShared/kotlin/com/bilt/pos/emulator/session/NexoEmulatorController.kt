@@ -1,6 +1,8 @@
 package com.bilt.pos.emulator.session
 
+import com.bilt.pos.emulator.catalog.CustomItem
 import com.bilt.pos.emulator.catalog.Product
+import com.bilt.pos.emulator.catalog.minorUnitsToDecimal
 import com.bilt.pos.emulator.store.LegType
 import com.bilt.pos.emulator.store.RefundRecord
 import com.bilt.pos.emulator.store.RefundedItem
@@ -665,6 +667,113 @@ class NexoEmulatorController(
             detailedLog(e.stackTraceToString())
         }
     }
+
+    override fun addCustomItem(priceMinor: Long): Boolean {
+        require(priceMinor > 0) { "a custom amount must be positive, was $priceMinor" }
+        val session = connection?.session
+        if (session == null) {
+            log("No active checkout session — press Start Checkout first")
+            return false
+        }
+        return try {
+            val snapshot = session.basket().snapshot()
+            val sku = CustomItem.nextSku(snapshot.cartId, snapshot.items.map { it.sku })
+            publishBasket(session.basket().addItem(customBasketItem(sku, priceMinor)))
+            log("Added custom amount $${minorUnitsToDecimal(priceMinor)} ($sku)")
+            true
+        } catch (e: Exception) {
+            log("Failed to add the custom amount: ${e.message}")
+            detailedLog(e.stackTraceToString())
+            false
+        }
+    }
+
+    override fun updateCustomItemPrice(sku: String, priceMinor: Long): Boolean {
+        require(priceMinor >= 0) { "a custom amount must not be negative, was $priceMinor" }
+        val session = connection?.session
+        if (session == null) {
+            log("No active checkout session — the custom amount was not applied")
+            return false
+        }
+        val existing = session.basket().snapshot().getItemBySku(sku)
+        if (existing == null) {
+            detailedLog("Custom line $sku is no longer in the basket — re-price ignored")
+            return false
+        }
+        // Only a sale line may be rebuilt this way: the replacement is a
+        // SALE item, so re-pricing a return would silently turn a credit
+        // into a charge. publishBasket never offers a return line to the
+        // keypad, so reaching this is a bug, not an operator mistake.
+        check(existing.isSale) {
+            "refusing to re-price non-sale line $sku — the rebuild would drop its return type"
+        }
+        return try {
+            // SessionBasket has no re-price mutator, so the line is
+            // replaced within one atomic batch: same SKU and quantity, new
+            // unit price, one display push. The replacement lands at the
+            // end of the basket, which is where it stays for the rest of
+            // the edit.
+            val basket = session.basket().mutate { mutation ->
+                mutation
+                    .removeItemBySku(sku)
+                    .addItem(customBasketItem(sku, priceMinor, existing.quantity))
+            }
+            publishBasket(basket)
+            // per keystroke while the keypad is open — the basket card,
+            // not the event feed, is the operator's feedback here
+            detailedLog("Custom line $sku re-priced to $${minorUnitsToDecimal(priceMinor)}")
+            true
+        } catch (e: Exception) {
+            // e.g. an in-flight settlement sealed the basket; one line, not
+            // one per keystroke — the keypad releases the line on false
+            log("Failed to re-price $sku: ${e.message}")
+            detailedLog(e.stackTraceToString())
+            false
+        }
+    }
+
+    override fun removeCustomItem(sku: String): Boolean {
+        val session = connection?.session
+        if (session == null) {
+            log("No active checkout session — nothing was removed")
+            return false
+        }
+        val existing = session.basket().snapshot().getItemBySku(sku)
+        if (existing == null) {
+            detailedLog("Custom line $sku is already gone — removal ignored")
+            return true
+        }
+        // Same reason the re-price checks it, and it matters more here:
+        // removing a return line would leave pendingReturns holding a
+        // return the basket no longer contains, and settlement matches
+        // its credit lines against exactly that list.
+        check(existing.isSale) {
+            "refusing to remove non-sale line $sku — pendingReturns still expects it"
+        }
+        return try {
+            publishBasket(session.basket().removeItemBySku(sku))
+            log("Removed custom line $sku")
+            true
+        } catch (e: Exception) {
+            log("Failed to remove $sku: ${e.message}")
+            detailedLog(e.stackTraceToString())
+            false
+        }
+    }
+
+    /**
+     * A keypad line as the SDK takes it: its own category, priced exactly
+     * as typed, and deliberately untaxed — a keyed amount is what the
+     * operator means to charge, not a shelf price to tax on top of.
+     */
+    private fun customBasketItem(sku: String, priceMinor: Long, quantity: Int = 1): BasketItem =
+        BasketItem.builder()
+            .sku(sku)
+            .description(CustomItem.DESCRIPTION)
+            .category(CustomItem.CATEGORY)
+            .quantity(quantity)
+            .unitPrice(minorToAmount(priceMinor))
+            .build()
 
     /**
      * The post-start member-identification prompt (its own operation, not
@@ -1874,6 +1983,32 @@ class NexoEmulatorController(
         lastPayment = lastPayment,
     )
 
+    /** A minor-unit amount as the two-decimal [BigDecimal] the basket
+     *  APIs expect. */
+    private fun minorToAmount(minor: Long): BigDecimal = BigDecimal.valueOf(minor, 2)
+
+    /**
+     * A keypad line's unit price in cents, or null when it is not a whole
+     * number of them. Every CUSTOM- line is minted by [customBasketItem]
+     * at scale 2, so a fractional value can only mean a bug upstream —
+     * and it must not convert silently: the keypad would adopt the
+     * truncated amount and write it back into the basket on the first
+     * keystroke, quietly re-pricing the line.
+     *
+     * Withheld rather than thrown, because [publishBasket] also reports
+     * the final basket of a settlement that has already moved money
+     * ([publishPaymentResult]); a corrupt line costs the operator the
+     * ability to edit it, which beats losing the outcome of a completed
+     * payment.
+     */
+    private fun editableMinor(unitPrice: BigDecimal): Long? = try {
+        unitPrice.movePointRight(2).longValueExact()
+    } catch (e: ArithmeticException) {
+        log("Custom line priced $unitPrice is not a whole number of cents — not editable")
+        detailedLog(e.stackTraceToString())
+        null
+    }
+
     private fun publishBasket(basket: Basket) {
         _state.update { state ->
             state.copy(
@@ -1884,10 +2019,23 @@ class NexoEmulatorController(
                         quantity = line.quantity,
                         lineTotal = line.adjustedTotal.toPlainString(),
                         credit = line.isReturn || line.isCredit,
+                        // a RETURN of a custom item carries the same SKU;
+                        // re-pricing it would rebuild it as a sale line, so
+                        // only the sale direction is offered to the keypad
+                        editablePriceMinor = line.unitPrice
+                            .takeIf { CustomItem.isCustomSku(line.sku) && line.isSale }
+                            ?.let(::editableMinor),
                     )
                 },
-                basketTotal = basket.grandTotal.toPlainString(),
-                basketTax = basket.taxTotal.toPlainString(),
+                // scaled: an emptied basket's totals come back as "0",
+                // which reads as "$0" in the header and slips past the
+                // "0.00" test that hides the tax line
+                // exact: the engine scales every addend to cents before
+                // summing, so this only ever fills in an empty basket's
+                // unscaled zero — a total that needed rounding would mean
+                // the engine changed under us, which must not pass quietly
+                basketTotal = basket.grandTotal.setScale(2).toPlainString(),
+                basketTax = basket.taxTotal.setScale(2).toPlainString(),
             )
         }
     }

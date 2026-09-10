@@ -1,5 +1,6 @@
 package com.bilt.pos.emulator
 
+import com.bilt.pos.emulator.catalog.CustomItem
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorConfig
@@ -36,6 +37,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -194,6 +197,78 @@ class NexoEmulatorControllerRefundTest {
                 ),
             )
         )
+        return store
+    }
+
+    /** A prior sale whose only line was rung on the keypad, so the return
+     *  it produces carries a CUSTOM- SKU. */
+    private fun storeWithOneCustomSale(): JsonlSaleStore {
+        val store = JsonlSaleStore(
+            Files.createTempDirectory("refund-custom").resolve("sales.jsonl").toFile()
+        )
+        store.recordSale(
+            SaleRecord(
+                id = "sale-c",
+                sessionId = "session-c",
+                saleId = "bilt-emulator",
+                poiId = "EMULATOR",
+                currency = "USD",
+                completedAt = "2026-08-06T10:15:30Z",
+                items = listOf(
+                    SaleItem(
+                        sku = "${CustomItem.SKU_PREFIX}1",
+                        description = CustomItem.DESCRIPTION,
+                        quantity = 1,
+                        unitPrice = "24.00",
+                        lineTotal = "24.00",
+                    )
+                ),
+                authorizedAmount = "24.00",
+                legs = listOf(
+                    TransactionLeg(LegType.CARD, "poi-card-c", "2026-08-06T10:15:29Z"),
+                ),
+            )
+        )
+        return store
+    }
+
+    /**
+     * Two prior sales, each with one keypad line, rung in different
+     * baskets and at different prices — the pair that collided while
+     * keypad SKUs were a bare per-basket counter.
+     */
+    private fun storeWithTwoCustomSales(): JsonlSaleStore {
+        val store = JsonlSaleStore(
+            Files.createTempDirectory("refund-custom2").resolve("sales.jsonl").toFile()
+        )
+        listOf(
+            Triple("sale-c1", CustomItem.nextSku("3f9c2a7e-5d41-4b8a", emptyList()), "24.00"),
+            Triple("sale-c2", CustomItem.nextSku("9d1f4c2b-7a53-4e08", emptyList()), "30.00"),
+        ).forEach { (id, sku, price) ->
+            store.recordSale(
+                SaleRecord(
+                    id = id,
+                    sessionId = "session-$id",
+                    saleId = "bilt-emulator",
+                    poiId = "EMULATOR",
+                    currency = "USD",
+                    completedAt = "2026-08-06T10:15:30Z",
+                    items = listOf(
+                        SaleItem(
+                            sku = sku,
+                            description = CustomItem.DESCRIPTION,
+                            quantity = 1,
+                            unitPrice = price,
+                            lineTotal = price,
+                        )
+                    ),
+                    authorizedAmount = price,
+                    legs = listOf(
+                        TransactionLeg(LegType.CARD, "poi-card-$id", "2026-08-06T10:15:29Z"),
+                    ),
+                )
+            )
+        }
         return store
     }
 
@@ -925,6 +1000,160 @@ class NexoEmulatorControllerRefundTest {
             val refund = assertNotNull(store.findSale("sale-1")).refunds.single()
             assertEquals(LegType.CARD, refund.leg)
             assertEquals("2.24", refund.amount)
+        }
+    }
+
+    @Test
+    fun keypadItemsRingUpUntaxedAndRePriceInPlace() {
+        val controller = controller(storeWithOneSale())
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.addCustomItem(2400)
+            val added = withTimeout(10_000) {
+                controller.state.first { it.basket.isNotEmpty() }
+            }
+            val line = added.basket.single()
+            assertTrue(CustomItem.isCustomSku(line.sku), "not a keypad SKU: ${line.sku}")
+            assertEquals(2400L, line.editablePriceMinor, "the keypad must be able to adopt the line")
+            // keyed amounts are charged as typed — no tax on top
+            assertEquals("24.00", added.basketTotal)
+            assertEquals("0.00", added.basketTax)
+
+            // a re-price replaces the line rather than adding a second one
+            controller.updateCustomItemPrice(line.sku, 3550)
+            val repriced = withTimeout(10_000) {
+                controller.state.first { it.basketTotal == "35.50" }
+            }
+            assertEquals(1, repriced.basket.size)
+            assertEquals(3550L, repriced.basket.single().editablePriceMinor)
+
+            // a submitted line is left alone: the next amount is its own item
+            controller.addCustomItem(125)
+            val two = withTimeout(10_000) { controller.state.first { it.basket.size == 2 } }
+            assertEquals(2, two.basket.map { it.sku }.toSet().size, "keypad SKUs must be distinct")
+            assertTrue(two.basket.all { CustomItem.isCustomSku(it.sku) })
+            assertEquals("36.75", two.basketTotal)
+        }
+    }
+
+    /**
+     * A RETURN of a keypad item carries the same CUSTOM- SKU as the sale
+     * it reverses. It must not be offered to the keypad: the re-price
+     * rebuilds the line as a SALE item, which would silently turn the
+     * credit into a charge while the pending return still expects to
+     * restore money to the original tender.
+     */
+    @Test
+    fun returnedCustomLinesAreNotOfferedToTheKeypad() {
+        val controller = controller(storeWithOneCustomSale())
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.addReturnToBasket("sale-c", setOf("${CustomItem.SKU_PREFIX}1"))
+            val returned = withTimeout(10_000) {
+                controller.state.first { s -> s.basket.any { it.credit } }
+            }
+            val credit = returned.basket.single { it.credit }
+            assertEquals("${CustomItem.SKU_PREFIX}1", credit.sku)
+            assertEquals(
+                null,
+                credit.editablePriceMinor,
+                "a return line must not be re-priceable — the rebuild would drop its RETURN type",
+            )
+
+            // and a new keypad item alongside it still is
+            controller.addCustomItem(1000)
+            val mixed = withTimeout(10_000) {
+                controller.state.first { s -> s.basket.size == 2 }
+            }
+            val sale = mixed.basket.single { !it.credit }
+            assertEquals(1000L, sale.editablePriceMinor)
+        }
+    }
+
+    @Test
+    fun aReleasedZeroCustomLineLeavesTheBasket() {
+        val controller = controller(storeWithOneSale())
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.addCustomItem(2400)
+            val sku = withTimeout(10_000) {
+                controller.state.first { it.basket.isNotEmpty() }
+            }.basket.single().sku
+            // backspaced through to nothing, then released
+            assertTrue(controller.updateCustomItemPrice(sku, 0))
+            assertTrue(controller.removeCustomItem(sku))
+            // a line already gone counts as removed — the basket reflects it
+            assertTrue(controller.removeCustomItem(sku))
+            val empty = withTimeout(10_000) { controller.state.first { it.basket.isEmpty() } }
+            assertEquals("0.00", empty.basketTotal)
+        }
+    }
+
+    /** With no checkout there is nothing to mirror, and the keypad must be
+     *  told so rather than going on displaying an amount. */
+    @Test
+    fun keypadOperationsWithoutACheckoutReportFailure() {
+        val controller = controller(storeWithOneSale())
+        assertFalse(controller.updateCustomItemPrice("${CustomItem.SKU_PREFIX}1", 500))
+        assertFalse(controller.addCustomItem(500))
+        assertFalse(controller.removeCustomItem("${CustomItem.SKU_PREFIX}1"))
+    }
+
+    /**
+     * Returns are keyed by SKU in the basket, so two sales whose keypad
+     * lines shared one would collide here: the engine refuses a same-SKU
+     * upsert at a different price, and merges the lines when the prices
+     * match. Basket-scoped SKUs keep the two returns apart.
+     */
+    @Test
+    fun twoSalesWorthOfKeypadReturnsRingSideBySide() {
+        val store = storeWithTwoCustomSales()
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            val first = assertNotNull(store.findSale("sale-c1")).sale.items.single().sku
+            val second = assertNotNull(store.findSale("sale-c2")).sale.items.single().sku
+            assertNotEquals(second, first, "fixture must mint distinct SKUs")
+
+            // one return at a time: the second is refused while the first
+            // still holds the operation claim
+            controller.addReturnToBasket("sale-c1", setOf(first))
+            withTimeout(10_000) { controller.state.first { it.basket.size == 1 } }
+            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+            controller.addReturnToBasket("sale-c2", setOf(second))
+            val both = withTimeout(10_000) { controller.state.first { it.basket.size == 2 } }
+            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+
+            assertTrue(both.basket.all { it.credit }, "both lines must be returns")
+            assertEquals(setOf(first, second), both.basket.map { it.sku }.toSet())
+            // -24.00 + -30.00, each returned at its own price
+            assertEquals("-54.00", both.basketTotal)
+            // and neither is offered to the keypad
+            assertTrue(both.basket.all { it.editablePriceMinor == null })
         }
     }
 }
