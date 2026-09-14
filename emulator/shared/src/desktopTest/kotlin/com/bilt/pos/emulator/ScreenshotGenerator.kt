@@ -3,6 +3,7 @@ package com.bilt.pos.emulator
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.unit.Density
+import com.bilt.pos.emulator.catalog.CustomItem
 import com.bilt.pos.emulator.catalog.MockProductProvider
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.session.BasketLine
@@ -44,6 +45,9 @@ class ScreenshotGenerator {
         override fun startSession(identifyOnStart: Boolean) = Unit
         override fun endSession() = Unit
         override fun addProduct(product: Product) = Unit
+        override fun addCustomItem(priceMinor: Long) = true
+        override fun updateCustomItemPrice(sku: String, priceMinor: Long) = true
+        override fun removeCustomItem(sku: String) = true
         override fun settle(
             loyalty: LoyaltyOptions,
             storedValue: StoredValueOptions?,
@@ -57,11 +61,21 @@ class ScreenshotGenerator {
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun render(state: EmulatorState, file: File, initialTab: EmulatorTab = EmulatorTab.SALE) {
+    private fun render(
+        state: EmulatorState,
+        file: File,
+        initialTab: EmulatorTab = EmulatorTab.SALE,
+        initialSalePane: SaleTabPane = SaleTabPane.PRODUCTS,
+    ) {
         // 1500x1000 dp at 2x density — the desktop window's default size,
         // above the side-log breakpoint so the log column renders
         val scene = ImageComposeScene(width = 3000, height = 2000, density = Density(2f)) {
-            EmulatorApp(FakeController(state), MockProductProvider.products(), initialTab)
+            EmulatorApp(
+                FakeController(state),
+                MockProductProvider.products(),
+                initialTab,
+                initialSalePane,
+            )
         }
         val png = scene.render().encodeToData(EncodedImageFormat.PNG)!!.bytes
         scene.close()
@@ -102,6 +116,20 @@ class ScreenshotGenerator {
             ),
         )
         render(midCheckout, File(dir, "emulator-mid-checkout.png"))
+
+        val keypad = midCheckout.copy(
+            basket = midCheckout.basket + BasketLine(
+                sku = "${CustomItem.SKU_PREFIX}1",
+                description = CustomItem.DESCRIPTION,
+                quantity = 1,
+                lineTotal = "24.00",
+                editablePriceMinor = 2400,
+            ),
+            basketTotal = "213.89",
+            events = midCheckout.events +
+                "10:41:35 Added custom amount $24.00 (${CustomItem.SKU_PREFIX}1)",
+        )
+        render(keypad, File(dir, "emulator-keypad.png"), initialSalePane = SaleTabPane.KEYPAD)
 
         val paid = midCheckout.copy(
             // a fully collected payment ends the checkout automatically,

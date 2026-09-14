@@ -46,6 +46,10 @@ data class BasketLine(
     /** True for a return rung into the basket — the line subtracts, and
      *  settlement restores its value to the original sale's tender. */
     val credit: Boolean = false,
+    /** Unit price in minor currency units (cents) when the keypad may
+     *  re-price this line, else null. Only [publishBasket] derives it, so
+     *  the rule for which lines qualify lives in exactly one place. */
+    val editablePriceMinor: Long? = null,
 )
 
 /** Outcome of the last payment or refund attempt, shown as a popup until
@@ -254,6 +258,43 @@ interface EmulatorController {
 
     /** Ring up one unit of [product] on the active session. */
     fun addProduct(product: Product)
+
+    /*
+     * The three keypad operations share one contract: they answer true
+     * when the basket now reflects the request, and false when it does
+     * not — no checkout, the line is gone, an in-flight settlement has
+     * the basket sealed — with the reason in the log. A false answer is
+     * the keypad's cue to stop mirroring a line it no longer owns; it
+     * must never go on displaying an amount the basket does not have.
+     */
+
+    /**
+     * Ring a keypad-entered custom-amount line of [priceMinor] cents into
+     * the active session's basket — a sale line with a generated
+     * [com.bilt.pos.emulator.catalog.CustomItem] SKU, quantity 1 and no
+     * tax, so the basket moves exactly the amount that was typed.
+     *
+     * @param priceMinor the amount to charge; must be positive
+     */
+    fun addCustomItem(priceMinor: Long): Boolean
+
+    /**
+     * Re-price the custom sale line [sku] to [priceMinor] cents, keeping
+     * its quantity. Called per keystroke while the keypad edits a line, so
+     * a successful re-price reports to the detailed log only rather than
+     * flooding the event feed — the basket card is the operator's feedback.
+     *
+     * @param priceMinor the new amount; must not be negative. Zero is
+     *   allowed: it is what backspacing through an adopted line passes.
+     */
+    fun updateCustomItemPrice(sku: String, priceMinor: Long): Boolean
+
+    /**
+     * Drop the custom sale line [sku] from the basket — how the keypad
+     * releases a line it has backspaced to zero, since a zero-priced line
+     * is not something to settle. A line already gone counts as removed.
+     */
+    fun removeCustomItem(sku: String): Boolean
 
     /**
      * Run settlement on the active session. [loyalty] picks which loyalty
