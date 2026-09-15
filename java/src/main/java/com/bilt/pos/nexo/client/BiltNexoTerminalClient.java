@@ -61,6 +61,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -138,6 +139,7 @@ public final class BiltNexoTerminalClient {
     private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final MessageEncryptor encryptor;
+    private final NexoMessageListener messageListener;
 
     private BiltNexoTerminalClient(Builder builder) {
         this.endpoint = builder.endpoint;
@@ -155,6 +157,7 @@ public final class BiltNexoTerminalClient {
         this.encryptor = builder.securityKey != null
                 ? new MessageEncryptor(builder.securityKey)
                 : null;
+        this.messageListener = builder.messageListener;
     }
 
     /**
@@ -190,13 +193,18 @@ public final class BiltNexoTerminalClient {
         }
 
         try {
+            String plainRequest = encryptor == null || messageListener != null
+                    ? objectMapper.writeValueAsString(request) : null;
+            if (plainRequest != null) {
+                notifyMessage(NexoMessageListener.Direction.REQUEST, plainRequest);
+            }
             String jsonBody;
 
             if (encryptor != null) {
                 LOG.fine("Encrypting Sale to POI request payload");
                 jsonBody = encryptRequest(saleToPOIRequest);
             } else {
-                jsonBody = objectMapper.writeValueAsString(request);
+                jsonBody = plainRequest;
             }
 
             Request httpRequest = new Request.Builder()
@@ -217,26 +225,31 @@ public final class BiltNexoTerminalClient {
                 responseJson = body != null ? body.string() : "";
 
                 if (!httpResponse.isSuccessful()) {
+                    notifyMessage(NexoMessageListener.Direction.RESPONSE, responseJson);
                     throw new BiltNexoClientException(
                             "Terminal returned HTTP " + httpResponse.code() + ": " + responseJson);
                 }
             }
 
             if (responseJson.isEmpty()) {
+                notifyMessage(NexoMessageListener.Direction.RESPONSE, responseJson);
                 return null;
             }
 
-            NexoTerminalAPI responseApi;
+            ParsedResponse parsedResponse;
             try {
-                responseApi = parseResponse(responseJson);
+                parsedResponse = parseResponse(responseJson);
             } catch (EncryptionException e) {
+                notifyMessage(NexoMessageListener.Direction.RESPONSE, responseJson);
                 throw e;
             } catch (Exception e) {
+                notifyMessage(NexoMessageListener.Direction.RESPONSE, responseJson);
                 throw new BiltNexoClientException(
                         "Failed to parse terminal response: " + responseJson, e);
             }
 
-            return responseApi;
+            notifyMessage(NexoMessageListener.Direction.RESPONSE, parsedResponse.plaintext);
+            return parsedResponse.api;
         } catch (BiltNexoClientException e) {
             throw e;
         } catch (EncryptionException e) {
@@ -252,6 +265,17 @@ public final class BiltNexoTerminalClient {
      */
     public boolean isEncrypted() {
         return encryptor != null;
+    }
+
+    private void notifyMessage(NexoMessageListener.Direction direction, String json) {
+        if (messageListener == null) {
+            return;
+        }
+        try {
+            messageListener.onMessage(direction, json);
+        } catch (RuntimeException e) {
+            LOG.log(Level.WARNING, "Nexo message listener failed", e);
+        }
     }
 
     /**
@@ -288,7 +312,8 @@ public final class BiltNexoTerminalClient {
         return objectMapper.writeValueAsString(envelope);
     }
 
-    private NexoTerminalAPI parseResponse(String responseJson) throws IOException, EncryptionException {
+    private ParsedResponse parseResponse(String responseJson)
+            throws IOException, EncryptionException {
         SecuredResponseEnvelope envelope =
                 objectMapper.readValue(responseJson, SecuredResponseEnvelope.class);
         SaleToPOISecuredMessage secured = envelope.saleToPOIResponse;
@@ -313,11 +338,26 @@ public final class BiltNexoTerminalClient {
             String plainJson = encryptor.decrypt(secured, rawHeaderBytes);
             SaleToPOIResponse saleToPOIResponse =
                     objectMapper.readValue(plainJson, SaleToPOIResponse.class);
-            return NexoTerminalAPI.builder()
-                    .saleToPOIResponse(saleToPOIResponse)
-                    .build();
+            return new ParsedResponse(
+                    NexoTerminalAPI.builder()
+                            .saleToPOIResponse(saleToPOIResponse)
+                            .build(),
+                    plainJson);
         } else {
-            return objectMapper.readValue(responseJson, NexoTerminalAPI.class);
+            return new ParsedResponse(
+                    objectMapper.readValue(responseJson, NexoTerminalAPI.class),
+                    responseJson);
+        }
+    }
+
+    /** Parsed response paired with the exact plaintext supplied by the terminal. */
+    private static final class ParsedResponse {
+        private final NexoTerminalAPI api;
+        private final String plaintext;
+
+        private ParsedResponse(NexoTerminalAPI api, String plaintext) {
+            this.api = api;
+            this.plaintext = plaintext;
         }
     }
 
@@ -351,6 +391,7 @@ public final class BiltNexoTerminalClient {
         private final List<X509Certificate> trustedCertificates = new ArrayList<>();
         private String hostnamePattern;
         private SecurityKey securityKey;
+        private NexoMessageListener messageListener;
 
         private Builder() {}
 
@@ -442,6 +483,23 @@ public final class BiltNexoTerminalClient {
          */
         public Builder securityKey(SecurityKey securityKey) {
             this.securityKey = securityKey;
+            return this;
+        }
+
+        /**
+         * Observe plaintext Nexo request and response JSON for diagnostics.
+         * Requests are delivered before encryption and valid Nexo responses
+         * after decryption. Malformed or unsuccessful HTTP response bodies are
+         * delivered as received. Successful responses retain the terminal's
+         * exact plaintext, including unknown fields and formatting. Listener
+         * failures do not fail the terminal operation. Payloads may contain
+         * cardholder data, including full PANs; do not persist or log them in
+         * production builds. The listener runs synchronously on the requesting
+         * thread, so callbacks should hand off UI or long-running work and
+         * return quickly.
+         */
+        public Builder nexoMessageListener(NexoMessageListener messageListener) {
+            this.messageListener = Objects.requireNonNull(messageListener, "messageListener");
             return this;
         }
 

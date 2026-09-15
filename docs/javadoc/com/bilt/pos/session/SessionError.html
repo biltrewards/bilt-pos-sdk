@@ -117,6 +117,14 @@ loadScripts(document, 'script');</script>
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;nexoErrorCondition,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Exception.html" title="class or interface in java.lang" class="external-link">Exception</a>&nbsp;cause)</code></div>
 <div class="col-last odd-row-color">&nbsp;</div>
+<div class="col-constructor-name even-row-color"><code><a href="#%3Cinit%3E(com.bilt.pos.session.SessionErrorCode,java.lang.String,java.lang.String,java.lang.Exception,java.util.List)" class="member-name-link">SessionError</a><wbr>(<a href="SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a>&nbsp;code,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;message,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;nexoErrorCondition,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Exception.html" title="class or interface in java.lang" class="external-link">Exception</a>&nbsp;cause,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="ReversedMovement.html" title="class in com.bilt.pos.session">ReversedMovement</a>&gt;&nbsp;reversedMovements)</code></div>
+<div class="col-last even-row-color">
+<div class="block">Creates an error with structured progress from a stopped reversal.</div>
+</div>
 </div>
 </section>
 </li>
@@ -152,9 +160,14 @@ loadScripts(document, 'script');</script>
 <div class="block">The raw Nexo <code>ErrorCondition</code> string from the terminal response,
  or <code>null</code> if the failure did not originate from a terminal reply.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#toString()" class="member-name-link">toString</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="ReversedMovement.html" title="class in com.bilt.pos.session">ReversedMovement</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getReversedMovements()" class="member-name-link">getReversedMovements</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Immutable movements that completed before this void failure.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#toString()" class="member-name-link">toString</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 </div>
 </div>
 </div>
@@ -186,6 +199,18 @@ loadScripts(document, 'script');</script>
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;message,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;nexoErrorCondition,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Exception.html" title="class or interface in java.lang" class="external-link">Exception</a>&nbsp;cause)</span></div>
+</section>
+</li>
+<li>
+<section class="detail" id="&lt;init&gt;(com.bilt.pos.session.SessionErrorCode,java.lang.String,java.lang.String,java.lang.Exception,java.util.List)">
+<h3>SessionError</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="element-name">SessionError</span><wbr><span class="parameters">(<a href="SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a>&nbsp;code,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;message,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;nexoErrorCondition,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Exception.html" title="class or interface in java.lang" class="external-link">Exception</a>&nbsp;cause,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="ReversedMovement.html" title="class in com.bilt.pos.session">ReversedMovement</a>&gt;&nbsp;reversedMovements)</span></div>
+<div class="block">Creates an error with structured progress from a stopped reversal.
+ Ordinary operation failures should use one of the shorter constructors.</div>
 </section>
 </li>
 </ul>
@@ -223,6 +248,16 @@ loadScripts(document, 'script');</script>
 <h3>getCause</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Exception.html" title="class or interface in java.lang" class="external-link">Exception</a></span>&nbsp;<span class="element-name">getCause</span>()</div>
 <div class="block">The underlying exception, or <code>null</code> if none.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getReversedMovements()">
+<h3>getReversedMovements</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="ReversedMovement.html" title="class in com.bilt.pos.session">ReversedMovement</a>&gt;</span>&nbsp;<span class="element-name">getReversedMovements</span>()</div>
+<div class="block">Immutable movements that completed before this void failure. Available
+ both to the failing step's <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a> handler and on
+ the final error when that handler aborts. Empty for ordinary failures
+ and when the failed void made no progress.</div>
 </section>
 </li>
 <li>

@@ -48,6 +48,11 @@ class ScreenshotGenerator {
         override fun addCustomItem(priceMinor: Long) = true
         override fun updateCustomItemPrice(sku: String, priceMinor: Long) = true
         override fun removeCustomItem(sku: String) = true
+        override fun addGiftCardPurchase(amount: String, cardNumber: String) = Unit
+        override fun inquireStoredValueBalance(cardNumber: String) = Unit
+        override fun activateStoredValue(cardNumber: String) = Unit
+        override fun applyCredit(itemId: String, amount: String, label: String) = Unit
+        override fun applyDiscount(itemId: String, amount: String, label: String) = Unit
         override fun settle(
             loyalty: LoyaltyOptions,
             storedValue: StoredValueOptions?,
@@ -56,6 +61,7 @@ class ScreenshotGenerator {
         override fun acquireCard() = Unit
         override fun refundSale(saleId: String) = Unit
         override fun addReturnToBasket(saleId: String, skus: Set<String>) = Unit
+        override fun clearBasket() = Unit
         override fun abort() = Unit
         override fun dismissPaymentOutcome() = Unit
     }

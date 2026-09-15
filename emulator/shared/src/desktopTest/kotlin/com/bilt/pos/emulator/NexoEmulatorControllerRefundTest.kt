@@ -2,10 +2,12 @@ package com.bilt.pos.emulator
 
 import com.bilt.pos.emulator.catalog.CustomItem
 import com.bilt.pos.emulator.catalog.Product
+import com.bilt.pos.emulator.session.BasketLineType
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorConfig
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.NexoEmulatorController
+import com.bilt.pos.emulator.store.GiftCardLoad
 import com.bilt.pos.emulator.store.JsonlSaleStore
 import com.bilt.pos.emulator.store.LegType
 import com.bilt.pos.emulator.store.RefundRecord
@@ -89,7 +91,55 @@ class NexoEmulatorControllerRefundTest {
                 "POIData":{"POITransactionID":{"TransactionID":"POI-NET-1",
                     "TimeStamp":"2026-03-02T16:20:00+00:00"}},
                 "PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":32.75},
-                    "PaymentAcquirerData":{"ApprovalCode":"APPR03"}}}}}"""
+                "PaymentAcquirerData":{"ApprovalCode":"APPR03"}}}}}"""
+
+        const val PAYMENT_OK_25 =
+            """{"SaleToPOIResponse":{"PaymentResponse":{
+                "Response":{"Result":"Success"},
+                "POIData":{"POITransactionID":{"TransactionID":"POI-GIFT-FUND",
+                    "TimeStamp":"2026-03-02T16:30:00+00:00"}},
+                "PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":25.00},
+                    "PaymentAcquirerData":{"ApprovalCode":"APPR-GIFT"}}}}}"""
+
+        const val STORED_VALUE_LOAD_OK =
+            """{"SaleToPOIResponse":{"StoredValueResponse":{
+                "Response":{"Result":"Success"},
+                "POIData":{"POITransactionID":{"TransactionID":"POI-GIFT-LOAD",
+                    "TimeStamp":"2026-03-02T16:30:01+00:00"}},
+                "StoredValueResult":[{"StoredValueTransactionType":"Load",
+                    "ItemAmount":25.00,"Currency":"USD",
+                    "StoredValueAccountStatus":{"CurrentBalance":25.00}}]}}}"""
+
+        const val STORED_VALUE_ACTIVATE_OK =
+            """{"SaleToPOIResponse":{"StoredValueResponse":{
+                "Response":{"Result":"Success"},
+                "POIData":{"POITransactionID":{"TransactionID":"POI-GIFT-ACTIVATE",
+                    "TimeStamp":"2026-03-02T16:29:01+00:00"}},
+                "StoredValueResult":[{"StoredValueTransactionType":"Activate",
+                    "ItemAmount":0.00,"Currency":"USD",
+                    "StoredValueAccountStatus":{"CurrentBalance":0.00}}]}}}"""
+
+        const val STORED_VALUE_BALANCE_OK =
+            """{"SaleToPOIResponse":{"BalanceInquiryResponse":{
+                "Response":{"Result":"Success"},
+                "PaymentAccountStatus":{"CurrentBalance":65.00,"Currency":"USD"}}}}"""
+
+        const val STORED_VALUE_BALANCE_ABORTED =
+            """{"SaleToPOIResponse":{"BalanceInquiryResponse":{
+                "Response":{"Result":"Failure","ErrorCondition":"Aborted"}}}}"""
+
+        const val STORED_VALUE_REVERSE_OK =
+            """{"SaleToPOIResponse":{"StoredValueResponse":{
+                "Response":{"Result":"Success"},
+                "POIData":{"POITransactionID":{"TransactionID":"POI-GIFT-LOAD-REVERSE",
+                    "TimeStamp":"2026-03-02T16:31:00+00:00"}},
+                "StoredValueResult":[{"StoredValueTransactionType":"Reverse",
+                    "ItemAmount":25.00,"Currency":"USD",
+                    "StoredValueAccountStatus":{"CurrentBalance":0.00}}]}}}"""
+
+        const val STORED_VALUE_REVERSE_FAIL =
+            """{"SaleToPOIResponse":{"StoredValueResponse":{
+                "Response":{"Result":"Failure","ErrorCondition":"UnavailableService"}}}}"""
 
         const val REVERSAL_FAIL =
             """{"SaleToPOIResponse":{"ReversalResponse":{
@@ -152,6 +202,9 @@ class NexoEmulatorControllerRefundTest {
         "\"AdminRequest\"" in body -> ADMIN_OK
         "\"DisplayRequest\"" in body -> DISPLAY_OK
         "\"LoyaltyRequest\"" in body -> LOYALTY_OK
+        "\"StoredValueRequest\"" in body && "\"Reverse\"" in body ->
+            STORED_VALUE_REVERSE_OK
+        "\"StoredValueRequest\"" in body -> STORED_VALUE_LOAD_OK
         "\"ReversalRequest\"" in body -> REVERSAL_OK
         // the refund leg of a settlement carries the Refund payment type;
         // a charge does not
@@ -463,6 +516,48 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
+    fun mixedGiftCardSaleRejectsItemReturnsAndPreservesFullRefund() {
+        val store = storeWithOneSale()
+        val original = assertNotNull(store.findSale("sale-1")).sale
+        val mixedSale = original.copy(
+            id = "sale-with-gift-card",
+            authorizedAmount = "27.10",
+            giftCardLoads = listOf(GiftCardLoad(
+                basketReference = "gift-card-1",
+                amount = "25.00",
+                poiTransactionId = "poi-load-1",
+            )),
+        )
+        store.recordSale(mixedSale)
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.addReturnToBasket(mixedSale.id, setOf("SKU-1"))
+
+            withTimeout(10_000) {
+                controller.state.first { state ->
+                    !state.refundInProgress && state.events.any {
+                        "use the full refund to reverse its load and funding together" in it
+                    }
+                }
+            }
+            assertTrue(controller.state.value.basket.isEmpty())
+            assertTrue(assertNotNull(store.findSale(mixedSale.id)).refunds.isEmpty())
+            val sale = assertNotNull(
+                controller.state.value.sales.firstOrNull { it.id == mixedSale.id }
+            )
+            assertTrue(sale.hasGiftCardPurchase)
+            assertTrue(sale.fullRefundAvailable)
+        }
+    }
+
+    @Test
     fun failedRefundRecordWarnsOnTheOutcome() {
         val store = storeWithOneSale()
         val controller = controller(RefundWriteFailingStore(store))
@@ -760,6 +855,91 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
+    fun abortingLoyaltyAfterStoredValueReversalDoesNotRepeatTheTender() {
+        val loyaltyOnWire = java.util.concurrent.CountDownLatch(1)
+        val abortSeen = java.util.concurrent.CountDownLatch(1)
+        server.dispatcher = respondingWith { body ->
+            when {
+                "\"LoyaltyRequest\"" in body -> {
+                    loyaltyOnWire.countDown()
+                    abortSeen.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                    """{"SaleToPOIResponse":{"LoyaltyResponse":{
+                        "Response":{"Result":"Failure","ErrorCondition":"Aborted"}}}}"""
+                }
+                "\"AbortRequest\"" in body -> {
+                    abortSeen.countDown()
+                    ADMIN_OK
+                }
+                else -> defaultResponse(body)
+            }
+        }
+        val store = JsonlSaleStore(
+            Files.createTempDirectory("refund-loyalty-abort").resolve("sales.jsonl").toFile()
+        )
+        store.recordSale(SaleRecord(
+            id = "sale-loyalty-abort",
+            sessionId = "session-loyalty-abort",
+            saleId = "bilt-emulator",
+            poiId = "EMULATOR",
+            currency = "USD",
+            completedAt = "2026-08-06T11:00:00Z",
+            memberId = "member-42",
+            authorizedAmount = "30.00",
+            legs = listOf(
+                TransactionLeg(LegType.CARD, "poi-card-loyalty", amount = "20.00"),
+                TransactionLeg(LegType.STORED_VALUE, "poi-sv-loyalty", amount = "10.00"),
+                TransactionLeg(LegType.AWARD, "poi-award-loyalty"),
+            ),
+        ))
+        val controller = controller(store)
+        try {
+            runBlocking {
+                controller.connect("127.0.0.1", encryptionEnabled = false)
+                withTimeout(10_000) {
+                    controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+                }
+                controller.refundSale("sale-loyalty-abort")
+                assertTrue(loyaltyOnWire.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                assertEquals(2, requests.count { "\"ReversalRequest\"" in it })
+
+                controller.abort()
+                assertTrue(abortSeen.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                val completed = withTimeout(10_000) {
+                    controller.state.first {
+                        !it.refundInProgress && it.sales.singleOrNull()?.fullyRefunded == true
+                    }
+                }
+                assertTrue(assertNotNull(completed.paymentOutcome).success)
+                assertFalse(completed.sales.single().fullRefundAvailable)
+                val stored = assertNotNull(store.findSale("sale-loyalty-abort"))
+                val record = stored.refunds.single()
+                assertTrue(record.full)
+                assertEquals(null, record.leg)
+                assertFalse(record.reversalProgress)
+                assertFalse(stored.refundable)
+                assertTrue(completed.events.any { "Refund step AWARD failed" in it })
+
+                controller.refundSale("sale-loyalty-abort")
+                withTimeout(10_000) {
+                    controller.state.first { state ->
+                        !state.refundInProgress &&
+                            state.events.any { "already refunded in full" in it }
+                    }
+                }
+                assertEquals(1, requests.count {
+                    "\"ReversalRequest\"" in it && "poi-card-loyalty" in it
+                })
+                assertEquals(1, requests.count {
+                    "\"ReversalRequest\"" in it && "poi-sv-loyalty" in it
+                })
+                assertEquals(1, assertNotNull(store.findSale("sale-loyalty-abort")).refunds.size)
+            }
+        } finally {
+            abortSeen.countDown()
+        }
+    }
+
+    @Test
     fun partialVoidRecordsProgressAndTheRetryCoversOnlyTheOutstandingLeg() {
         val store = JsonlSaleStore(
             Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
@@ -839,6 +1019,78 @@ class NexoEmulatorControllerRefundTest {
                 "expected the failed SV reversal plus its retry",
             )
             assertTrue(assertNotNull(store.findSale("sale-2")).fullyRefunded)
+        }
+    }
+
+    @Test
+    fun partialVoidPersistsStructuredGiftCardLoadProgress() {
+        val store = JsonlSaleStore(
+            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
+        )
+        store.recordSale(
+            SaleRecord(
+                id = "sale-with-prefix-loads",
+                sessionId = "session-prefix-loads",
+                saleId = "bilt-emulator",
+                poiId = "EMULATOR",
+                currency = "USD",
+                completedAt = "2026-08-06T11:00:00Z",
+                authorizedAmount = "25.00",
+                giftCardLoads = listOf(
+                    GiftCardLoad("gift-card-10", "10.00", "poi-load-10"),
+                    GiftCardLoad("gift-card-1", "15.00", "poi-load-1"),
+                ),
+            )
+        )
+        var shortIdFailures = 1
+        server.dispatcher = respondingWith { body ->
+            if (
+                "\"StoredValueRequest\"" in body &&
+                "\"Reverse\"" in body &&
+                "\"TransactionID\":\"poi-load-1\"" in body &&
+                shortIdFailures > 0
+            ) {
+                shortIdFailures--
+                STORED_VALUE_REVERSE_FAIL
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+
+            controller.refundSale("sale-with-prefix-loads")
+            val failure = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(!failure.success, "the first attempt must fail on the shorter load ID")
+            assertEquals(
+                setOf("poi-load-10"),
+                assertNotNull(store.findSale("sale-with-prefix-loads"))
+                    .reversedGiftCardLoadIds,
+                "the shorter ID must not match the reversed longer ID by prefix",
+            )
+
+            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+            controller.refundSale("sale-with-prefix-loads")
+            withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome?.title == "Refund complete" }
+            }
+            assertEquals(
+                1,
+                requests.count { "\"TransactionID\":\"poi-load-10\"" in it },
+                "the successfully reversed load was sent again",
+            )
+            assertEquals(
+                2,
+                requests.count { "\"TransactionID\":\"poi-load-1\"" in it },
+                "the failed shorter load was not retried",
+            )
+            assertTrue(assertNotNull(store.findSale("sale-with-prefix-loads")).fullyRefunded)
         }
     }
 
@@ -1083,6 +1335,46 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
+    fun basketLineDiscountAndCreditReduceTheCharge() {
+        val controller = controller(storeWithOneSale())
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.addProduct(Product("SKU-ADJUST", "Adjustment item", 2_000, "Grocery"))
+            val itemId = controller.state.value.basket.single().itemId
+            controller.applyDiscount(itemId, "5.00", "Member price")
+
+            val discounted = controller.state.value
+            assertEquals("15.00", discounted.basketTotal)
+            assertEquals("5.00", discounted.basket.single().discountTotal)
+            assertEquals(listOf("Member price"), discounted.basket.single().discountLabels)
+
+            controller.applyCredit(itemId, "5.00", "Service recovery")
+
+            val credited = controller.state.value
+            assertEquals("10.00", credited.basketTotal)
+            assertEquals(2, credited.basket.size)
+            assertTrue(credited.basket.any { it.type == BasketLineType.CREDIT })
+            assertTrue(credited.basket.any { it.description == "Service recovery" })
+
+            val eventCount = credited.events.size
+            controller.applyCredit(itemId, "11.00", "Excess credit")
+
+            val rejected = controller.state.value
+            assertEquals("10.00", rejected.basketTotal)
+            assertEquals(2, rejected.basket.size)
+            assertTrue(rejected.events.drop(eventCount).any {
+                "credit amount cannot exceed the basket's remaining sale value 10.00" in it
+            })
+        }
+    }
+
+    @Test
     fun aReleasedZeroCustomLineLeavesTheBasket() {
         val controller = controller(storeWithOneSale())
         runBlocking {
@@ -1154,6 +1446,344 @@ class NexoEmulatorControllerRefundTest {
             assertEquals("-54.00", both.basketTotal)
             // and neither is offered to the keypad
             assertTrue(both.basket.all { it.editablePriceMinor == null })
+        }
+    }
+
+    @Test
+    fun clearBasketDiscardsPendingReturnsAndGiftCardLoads() {
+        val store = storeWithOneSale()
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.addReturnToBasket("sale-1", setOf("SKU-1"))
+            withTimeout(10_000) {
+                controller.state.first { state ->
+                    !state.refundInProgress && state.basket.any {
+                        it.type == BasketLineType.RETURN
+                    }
+                }
+            }
+            controller.addGiftCardPurchase("25.00", "GC-123")
+            assertEquals(2, controller.state.value.basket.size)
+
+            controller.clearBasket()
+
+            val cleared = controller.state.value
+            assertTrue(cleared.basket.isEmpty())
+            assertEquals("0.00", cleared.basketTotal)
+            assertEquals("0.00", cleared.basketTax)
+            assertTrue(cleared.events.any { "Basket cleared" in it })
+            withTimeout(10_000) {
+                controller.state.first { state ->
+                    state.sales.single().items.single().remainingQuantity == 2
+                }
+            }
+            assertTrue(assertNotNull(store.findSale("sale-1")).refunds.isEmpty())
+
+            controller.addProduct(Product("SKU-NEW", "Desk Lamp", 3_499, "Grocery"))
+            requests.clear()
+            controller.settle(
+                LoyaltyOptions(rebates = false, redemption = false, award = false)
+            )
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(outcome.success, outcome.message)
+            assertTrue(
+                requests.none { "\"StoredValueRequest\"" in it },
+                "cleared gift card was still fulfilled",
+            )
+        }
+    }
+
+    @Test
+    fun storedValueBalanceAndActivationRunWithoutBasketLines() {
+        server.dispatcher = respondingWith { body ->
+            when {
+                "\"BalanceInquiryRequest\"" in body -> STORED_VALUE_BALANCE_OK
+                "\"StoredValueRequest\"" in body && "\"Activate\"" in body ->
+                    STORED_VALUE_ACTIVATE_OK
+                else -> defaultResponse(body)
+            }
+        }
+        val controller = controller(storeWithOneSale())
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.inquireStoredValueBalance("GC-123")
+
+            val balance = withTimeout(10_000) {
+                controller.state.first {
+                    it.paymentOutcome?.title == "Balance inquiry complete"
+                }.paymentOutcome!!
+            }
+            assertTrue(balance.success)
+            assertTrue("Available balance: $65.00 USD" in balance.message, balance.message)
+            withTimeout(10_000) {
+                controller.state.first { !it.storedValueInProgress }
+            }
+            val inquiry = assertNotNull(
+                requests.firstOrNull { "\"BalanceInquiryRequest\"" in it }
+            )
+            assertTrue("GC-123" in inquiry)
+
+            controller.dismissPaymentOutcome()
+            controller.activateStoredValue("GC-123")
+
+            val activation = withTimeout(10_000) {
+                controller.state.first {
+                    it.paymentOutcome?.title == "Activation complete"
+                }.paymentOutcome!!
+            }
+            assertTrue(activation.success)
+            assertTrue("Stored value card activated" in activation.message)
+            withTimeout(10_000) {
+                controller.state.first { !it.storedValueInProgress }
+            }
+            val activate = assertNotNull(
+                requests.firstOrNull {
+                    "\"StoredValueRequest\"" in it && "\"Activate\"" in it
+                }
+            )
+            assertTrue("GC-123" in activate)
+            assertTrue(
+                Regex("\"ItemAmount\"\\s*:\\s*0(?:\\.0)?").containsMatchIn(activate),
+                "activation should not load unfunded value: $activate",
+            )
+            assertTrue(controller.state.value.basket.isEmpty())
+        }
+    }
+
+    @Test
+    fun abortingStoredValueInquiryDoesNotShowFailureOutcome() {
+        val inquiryOnWire = java.util.concurrent.CountDownLatch(1)
+        val abortSeen = java.util.concurrent.CountDownLatch(1)
+        server.dispatcher = respondingWith { body ->
+            when {
+                "\"BalanceInquiryRequest\"" in body -> {
+                    inquiryOnWire.countDown()
+                    abortSeen.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                    STORED_VALUE_BALANCE_ABORTED
+                }
+                "\"AbortRequest\"" in body -> {
+                    abortSeen.countDown()
+                    ADMIN_OK
+                }
+                else -> defaultResponse(body)
+            }
+        }
+        val controller = controller(storeWithOneSale())
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.inquireStoredValueBalance("GC-123")
+            assertTrue(inquiryOnWire.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            controller.abort()
+
+            withTimeout(10_000) {
+                controller.state.first { state ->
+                    !state.storedValueInProgress &&
+                        state.events.any { "Balance inquiry aborted" in it }
+                }
+            }
+            assertTrue(abortSeen.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(null, controller.state.value.paymentOutcome)
+            assertTrue(requests.any { "\"AbortRequest\"" in it })
+        }
+    }
+
+    @Test
+    fun giftCardPurchaseCannotSlipIntoQueuedSettlement() {
+        val displayOnWire = java.util.concurrent.CountDownLatch(1)
+        val releaseDisplay = java.util.concurrent.CountDownLatch(1)
+        val blockNextDisplay = java.util.concurrent.atomic.AtomicBoolean(false)
+        server.dispatcher = respondingWith { body ->
+            when {
+                "\"DisplayRequest\"" in body && blockNextDisplay.compareAndSet(true, false) -> {
+                    displayOnWire.countDown()
+                    releaseDisplay.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                    DISPLAY_OK
+                }
+                "\"PaymentRequest\"" in body -> {
+                    val amount = Regex("\"RequestedAmount\":([0-9.]+)")
+                        .find(body)!!.groupValues[1]
+                    PAYMENT_OK_25.replace("\"AuthorizedAmount\":25.00", "\"AuthorizedAmount\":$amount")
+                }
+                else -> defaultResponse(body)
+            }
+        }
+        val store = JsonlSaleStore(
+            Files.createTempDirectory("gift-purchase-race").resolve("sales.jsonl").toFile()
+        )
+        val controller = controller(store)
+        try {
+            runBlocking {
+                controller.connect("127.0.0.1", encryptionEnabled = false)
+                withTimeout(10_000) {
+                    controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+                }
+                controller.startSession()
+                withTimeout(10_000) {
+                    controller.state.first { state ->
+                        state.sessionId != null &&
+                            state.events.any { "Customer display cleared (empty basket)" in it }
+                    }
+                }
+
+                blockNextDisplay.set(true)
+                controller.addProduct(Product("SKU-RACE", "Original item", 2_500, "Grocery"))
+                assertTrue(displayOnWire.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                val basketBefore = controller.state.value.basket
+                controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
+                assertTrue(controller.state.value.paymentInProgress)
+                assertTrue(requests.none { "\"PaymentRequest\"" in it })
+
+                controller.addGiftCardPurchase("25.00", "GC-LATE")
+                val afterAdd = controller.state.value
+                releaseDisplay.countDown()
+
+                val completed = withTimeout(10_000) {
+                    controller.state.first {
+                        !it.paymentInProgress && it.sessionId == null && it.sales.isNotEmpty()
+                    }
+                }
+                val payment = requests.single { "\"PaymentRequest\"" in it }
+                assertTrue("\"RequestedAmount\":25.0" in payment,
+                    "the late gift-card line must not increase the charge: $payment")
+                assertEquals(basketBefore, afterAdd.basket)
+                assertEquals("25.00", afterAdd.basketTotal)
+                assertTrue(afterAdd.events.any { "Another operation is already in progress" in it })
+                assertTrue(assertNotNull(completed.paymentOutcome).success)
+                assertTrue(requests.none { "\"StoredValueRequest\"" in it })
+                val sale = store.listSales().single().sale
+                assertEquals("25.00", sale.authorizedAmount)
+                assertEquals(listOf("SKU-RACE"), sale.items.map { it.sku })
+                assertTrue(sale.giftCardLoads.isEmpty())
+            }
+        } finally {
+            releaseDisplay.countDown()
+        }
+    }
+
+    @Test
+    fun invalidGiftCardPurchaseReleasesOperationClaim() {
+        val controller = controller(storeWithOneSale())
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.addGiftCardPurchase("invalid", "GC-123")
+            assertTrue(controller.state.value.basket.isEmpty())
+            assertTrue(controller.state.value.events.any { "Failed to add gift card purchase" in it })
+
+            controller.addGiftCardPurchase("25.00", "GC-123")
+            assertTrue(controller.state.value.basket.single().giftCard)
+            controller.clearBasket()
+            assertTrue(controller.state.value.basket.isEmpty())
+            assertTrue(controller.state.value.events.any { "Basket cleared" in it })
+        }
+    }
+
+    @Test
+    fun giftCardPurchaseLoadsThenFundsAndPersistsTheLoad() {
+        val store = JsonlSaleStore(
+            Files.createTempDirectory("gift-purchase-e2e").resolve("sales.jsonl").toFile()
+        )
+        server.dispatcher = respondingWith { body ->
+            when {
+                "\"PaymentRequest\"" in body -> PAYMENT_OK_25
+                else -> defaultResponse(body)
+            }
+        }
+        val controller = controller(store)
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession()
+            withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+
+            controller.addGiftCardPurchase("25.00", "GC-123")
+            val line = controller.state.value.basket.single()
+            assertTrue(line.giftCard)
+            assertEquals("25.00", controller.state.value.basketTotal)
+
+            controller.settle(
+                LoyaltyOptions(rebates = false, redemption = false, award = false)
+            )
+            val outcome = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(outcome.success, outcome.message)
+            assertTrue("gift card loaded $25.00" in outcome.message, outcome.message)
+
+            val purchaseRequests = requests.toList()
+            val fundingIndex = purchaseRequests.indexOfFirst { "\"PaymentRequest\"" in it }
+            val loadIndex = purchaseRequests.indexOfFirst { "\"StoredValueRequest\"" in it }
+            val loadRequest = assertNotNull(
+                purchaseRequests.getOrNull(loadIndex),
+                "gift card load did not reach the terminal",
+            )
+            assertTrue("\"StoredValueTransactionType\":\"Load\"" in loadRequest)
+            assertTrue(purchaseRequests.none { "\"Activate\"" in it },
+                "funded purchases must load without activation")
+            assertTrue(loadIndex >= 0 && fundingIndex > loadIndex,
+                "funding charged before the gift card loaded")
+            assertTrue("GC-123" in loadRequest)
+            assertTrue("25.0" in loadRequest)
+            val nexoLog = controller.state.value.nexoMessages.joinToString("\n")
+            assertTrue("→ REQUEST" in nexoLog)
+            assertTrue("← RESPONSE" in nexoLog)
+            assertTrue("\"PaymentRequest\"" in nexoLog)
+            assertTrue("\"StoredValueResponse\"" in nexoLog)
+
+            withTimeout(10_000) { controller.state.first { it.sales.isNotEmpty() } }
+            val sale = assertNotNull(store.listSales().singleOrNull()).sale
+            assertEquals(emptyList(), sale.items, "gift cards are full-refund only")
+            val load = sale.giftCardLoads.single()
+            assertEquals("25.00", load.amount)
+            assertEquals("POI-GIFT-LOAD", load.poiTransactionId)
+
+            // The persisted load participates in a later whole-sale refund:
+            // it is reversed before the card funding leg.
+            controller.dismissPaymentOutcome()
+            withTimeout(10_000) { controller.state.first { it.sessionId == null } }
+            requests.clear()
+            controller.refundSale(sale.id)
+            val refund = withTimeout(10_000) {
+                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+            }
+            assertTrue(refund.success, refund.message)
+            val refundRequests = requests.toList()
+            val loadReverseIndex = refundRequests.indexOfFirst {
+                "\"StoredValueRequest\"" in it && "POI-GIFT-LOAD" in it
+            }
+            val fundingReverseIndex = refundRequests.indexOfFirst {
+                "\"ReversalRequest\"" in it && "POI-GIFT-FUND" in it
+            }
+            assertTrue(loadReverseIndex >= 0, "gift card load was not reversed")
+            assertTrue(fundingReverseIndex > loadReverseIndex, "funding reversed before the load")
         }
     }
 }
