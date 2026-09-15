@@ -813,6 +813,11 @@ class NexoEmulatorController(
             log("No active checkout session — press Start Checkout first")
             return
         }
+        // Keep the basket line and its fulfillment atomic with settlement's snapshot.
+        if (!conn.operationClaimed.compareAndSet(false, true)) {
+            log("Another operation is already in progress")
+            return
+        }
         try {
             val faceValue = requireMoney(amount, "gift card amount", allowZero = false)
             val reference = "gift-card-${UUID.randomUUID()}"
@@ -834,6 +839,8 @@ class NexoEmulatorController(
         } catch (e: Exception) {
             log("Failed to add gift card purchase: ${e.message}")
             detailedLog(e.stackTraceToString())
+        } finally {
+            conn.operationClaimed.set(false)
         }
     }
 
@@ -1881,8 +1888,11 @@ class NexoEmulatorController(
 
     /**
      * Persists a failed void's progress exposed structurally on the SDK
-     * error. The retry's [originalSaleRecord] then omits those movements;
-     * loyalty never ran because it follows all money movements.
+     * error. The retry's [originalSaleRecord] then omits those movements.
+     * This controller aborts money failures but skips loyalty failures, so
+     * only loads and CARD can precede an ABORT here. STORED_VALUE is the
+     * final money leg; once it succeeds, [executeFullRefund] records a
+     * legless full refund after best-effort loyalty instead.
      */
     private fun recordPartialVoid(
         stored: StoredSale,
