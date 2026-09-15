@@ -78,8 +78,8 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /**
- * Runs the charge-side sequence — rebate, points, tender, stored value line
- * fulfillment, award — with commit tracking, best-effort rollback, and
+ * Runs the charge-side sequence — rebate, points, stored value line
+ * fulfillment, tender, award — with commit tracking, best-effort rollback, and
  * {@code onError}-driven retry. All steps and handlers run on the calling thread.
  */
 public final class PaymentOrchestrator {
@@ -315,7 +315,23 @@ public final class PaymentOrchestrator {
             }
         }
 
-        // 3. Stored value
+        // 3. Fulfill each stored value line before collecting its funding. The
+        // register can retry a failed load or abort the whole charge side.
+        for (StoredValueLoad fulfillment : request.options.getFulfillments()) {
+            BasketLineItem line = Objects.requireNonNull(
+                    request.basket.getItemByReference(fulfillment.getBasketReference()),
+                    () -> "fulfillment references basket line "
+                            + fulfillment.getBasketReference()
+                            + " which is absent from the charge basket");
+            BigDecimal amount = line.getOriginalTotal();
+            StepOutcome<BigDecimal> recovered = runStep(request, committed, movements,
+                    SettlementStep.STORED_VALUE_LOAD, workingBasket, amount,
+                    false, false, (saleTxnId, response) -> storedValueLoadStep(request,
+                            fulfillment, amount, saleTxnId, committed, movements, response));
+            storedValueLoaded = storedValueLoaded.add(recovered.value);
+        }
+
+        // 4. Stored value
         if (request.storedValueCard != null && currentTotal.signum() > 0) {
             BigDecimal stepTotal = currentTotal;
             StepOutcome<GiftCardPaymentResult> recovered = runStep(request, committed, movements,
@@ -332,7 +348,7 @@ public final class PaymentOrchestrator {
             }
         }
 
-        // 4. Card payment
+        // 5. Card payment
         if (currentTotal.signum() > 0) {
             if (options.paymentProcessingDisplay != null) {
                 showProcessingDisplay(options.paymentProcessingDisplay);
@@ -349,22 +365,6 @@ public final class PaymentOrchestrator {
             } else {
                 cardCharged = recovered.value;
             }
-        }
-
-        // 5. Fulfill each stored value line after its funding commits. The
-        // register can retry a failed load or abort the whole charge side.
-        for (StoredValueLoad fulfillment : request.options.getFulfillments()) {
-            BasketLineItem line = Objects.requireNonNull(
-                    request.basket.getItemByReference(fulfillment.getBasketReference()),
-                    () -> "fulfillment references basket line "
-                            + fulfillment.getBasketReference()
-                            + " which is absent from the charge basket");
-            BigDecimal amount = line.getOriginalTotal();
-            StepOutcome<BigDecimal> recovered = runStep(request, committed, movements,
-                    SettlementStep.STORED_VALUE_LOAD, workingBasket, amount,
-                    false, false, (saleTxnId, response) -> storedValueLoadStep(request,
-                            fulfillment, amount, saleTxnId, committed, movements, response));
-            storedValueLoaded = storedValueLoaded.add(recovered.value);
         }
 
         // 6. Award wire failures are best-effort; register callback failures

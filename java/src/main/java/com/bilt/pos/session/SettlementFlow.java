@@ -32,8 +32,8 @@ import java.util.function.Function;
  *
  * <p>Registering handlers sends nothing. With the default settlement option,
  * the sequence is refund allocations (including external register-managed
- * refunds), rebate redemption, point redemption, stored value tender, card charge,
- * stored value line fulfillment, and award. With net settlement, only the signed basket difference is charged or
+ * refunds), rebate redemption, point redemption, stored value line fulfillment,
+ * stored value tender, card charge, and award. With net settlement, only the signed basket difference is charged or
  * refunded. The sequence runs when
  * {@link #execute()} (asynchronously, on the session's operation thread),
  * {@link #executeSync()} (blocking), {@link #get()}, or {@link #getOrNull()}

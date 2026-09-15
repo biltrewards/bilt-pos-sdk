@@ -1224,7 +1224,7 @@ private fun StoredValuePanel(
                 StoredValueAction.ACTIVATION ->
                     "Activate a new card with a zero starting balance."
                 StoredValueAction.PURCHASE ->
-                    "Add a funded card purchase to the basket; activation runs after payment."
+                    "Add a card purchase to the basket; loading runs before payment."
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

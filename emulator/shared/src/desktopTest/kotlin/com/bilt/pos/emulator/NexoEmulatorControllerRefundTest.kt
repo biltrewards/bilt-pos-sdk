@@ -106,7 +106,7 @@ class NexoEmulatorControllerRefundTest {
                 "Response":{"Result":"Success"},
                 "POIData":{"POITransactionID":{"TransactionID":"POI-GIFT-LOAD",
                     "TimeStamp":"2026-03-02T16:30:01+00:00"}},
-                "StoredValueResult":[{"StoredValueTransactionType":"Activate",
+                "StoredValueResult":[{"StoredValueTransactionType":"Load",
                     "ItemAmount":25.00,"Currency":"USD",
                     "StoredValueAccountStatus":{"CurrentBalance":25.00}}]}}}"""
 
@@ -1524,7 +1524,7 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
-    fun giftCardPurchaseFundsThenActivatesAndPersistsTheLoad() {
+    fun giftCardPurchaseLoadsThenFundsAndPersistsTheLoad() {
         val store = JsonlSaleStore(
             Files.createTempDirectory("gift-purchase-e2e").resolve("sales.jsonl").toFile()
         )
@@ -1557,11 +1557,18 @@ class NexoEmulatorControllerRefundTest {
             assertTrue(outcome.success, outcome.message)
             assertTrue("gift card loaded $25.00" in outcome.message, outcome.message)
 
+            val purchaseRequests = requests.toList()
+            val fundingIndex = purchaseRequests.indexOfFirst { "\"PaymentRequest\"" in it }
+            val loadIndex = purchaseRequests.indexOfFirst { "\"StoredValueRequest\"" in it }
             val loadRequest = assertNotNull(
-                requests.firstOrNull { "\"StoredValueRequest\"" in it },
-                "gift card activation did not reach the terminal",
+                purchaseRequests.getOrNull(loadIndex),
+                "gift card load did not reach the terminal",
             )
-            assertTrue("Activate" in loadRequest)
+            assertTrue("\"StoredValueTransactionType\":\"Load\"" in loadRequest)
+            assertTrue(purchaseRequests.none { "\"Activate\"" in it },
+                "funded purchases must load without activation")
+            assertTrue(loadIndex >= 0 && fundingIndex > loadIndex,
+                "funding charged before the gift card loaded")
             assertTrue("GC-123" in loadRequest)
             assertTrue("25.0" in loadRequest)
             val nexoLog = controller.state.value.nexoMessages.joinToString("\n")

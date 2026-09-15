@@ -317,9 +317,9 @@ interface EmulatorController {
     fun removeCustomItem(sku: String): Boolean
 
     /**
-     * Ring a gift-card sale line and arrange for the terminal to activate
-     * and load that card after the basket has been funded. [amount] is the
-     * face value. A blank [cardNumber] asks the terminal to read the card.
+     * Ring a gift-card sale line and arrange for the terminal to load
+     * that card before collecting payment. [amount] is the face
+     * value. A blank [cardNumber] asks the terminal to read the card.
      */
     fun addGiftCardPurchase(amount: String, cardNumber: String = "")
 

@@ -154,7 +154,7 @@ class NexoEmulatorController(
         val external: BigDecimal,
     )
 
-    /** A gift-card sale line waiting to be activated and loaded when this
+    /** A gift-card sale line waiting to be loaded when this
      * checkout settles. The basket reference joins the commercial line to
      * the card-specific terminal instruction. */
     private class PendingGiftCard(
@@ -1169,7 +1169,7 @@ class NexoEmulatorController(
         }
         giftCards.forEach { pending ->
             optionsBuilder.addFulfillment(
-                StoredValueLoad.activate(pending.basketReference, pending.card)
+                StoredValueLoad.reload(pending.basketReference, pending.card)
             )
         }
         val options = optionsBuilder.build()
@@ -1178,7 +1178,7 @@ class NexoEmulatorController(
                 "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}" +
                 (card?.let { ", gift card ${it.storedValueId ?: "(swipe on terminal)"}" } ?: "") +
                 (if (giftCards.isEmpty()) "" else
-                    ", ${giftCards.size} gift card purchase(s) to activate") +
+                    ", ${giftCards.size} gift card purchase(s) to load") +
                 (if (returns.isEmpty()) "" else
                     ", ${returns.size} prior sale(s) returned" +
                         " ($${required.toPlainString()} to refund after netting)")
@@ -1215,7 +1215,7 @@ class NexoEmulatorController(
             }
             .onStoredValueLoaded { movement ->
                 log(
-                    "Gift card activated and loaded: $${movement.amount?.toPlainString()}" +
+                    "Gift card loaded: $${movement.amount?.toPlainString()}" +
                         " (txn ${movement.poiTransactionId})"
                 )
             }
