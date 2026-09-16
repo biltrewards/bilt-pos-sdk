@@ -104,7 +104,7 @@ BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
 
 ## Formatting
 
-Java is formatted with [google-java-format](https://github.com/google/google-java-format) and Kotlin (including the Gradle scripts) with [ktfmt](https://github.com/facebook/ktfmt), driven by [Spotless](https://github.com/diffplug/spotless). Both formatters are non-configurable, so never format by hand:
+Java is formatted with [google-java-format](https://github.com/google/google-java-format) and Kotlin (including the Gradle scripts) with [ktfmt](https://github.com/facebook/ktfmt), driven by [Spotless](https://github.com/diffplug/spotless). Both formatters are non-configurable, so never format by hand. Running them needs Gradle on JDK 21 or newer (google-java-format is compiled for 21), which is what CI uses:
 
 ```bash
 ./gradlew spotlessApply   # rewrite everything
