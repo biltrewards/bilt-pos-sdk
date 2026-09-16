@@ -113,6 +113,12 @@ Java is formatted with [google-java-format](https://github.com/google/google-jav
 
 Generated sources (the `auto-generated` header) are excluded. For the IDE, install the google-java-format and ktfmt IntelliJ plugins so on-save output matches the build.
 
+The initial reformat commit is listed in `.git-blame-ignore-revs`, so blame keeps pointing at the real author. GitHub and IntelliJ honor the file automatically; for the command line, run once per clone:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 ## Generate API Reference
 
 Regenerate the schema reference docs (requires Node.js):
