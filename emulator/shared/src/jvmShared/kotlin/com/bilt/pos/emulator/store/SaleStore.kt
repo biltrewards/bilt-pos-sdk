@@ -1,13 +1,12 @@
 package com.bilt.pos.emulator.store
 
 /**
- * Persistence for completed sales, so referenced refunds and voids can run
- * after the originating checkout session (or the whole process) is gone.
+ * Persistence for completed sales, so referenced refunds and voids can run after the originating
+ * checkout session (or the whole process) is gone.
  *
- * Implementations may block on I/O — call from a background dispatcher, the
- * way the emulator controller runs all its work. Persistence is best-effort
- * from the caller's point of view: a store failure must never fail the
- * checkout that produced the sale.
+ * Implementations may block on I/O — call from a background dispatcher, the way the emulator
+ * controller runs all its work. Persistence is best-effort from the caller's point of view: a store
+ * failure must never fail the checkout that produced the sale.
  */
 interface SaleStore {
 

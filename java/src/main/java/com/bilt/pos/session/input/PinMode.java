@@ -12,12 +12,12 @@ package com.bilt.pos.session.input;
 /** Kind of PIN operation. Maps to the Nexo {@code PINRequestType}. */
 public enum PinMode {
 
-    /** Capture and encrypt a PIN. */
-    PIN_ENTER,
+  /** Capture and encrypt a PIN. */
+  PIN_ENTER,
 
-    /** Capture a PIN and verify it, returning the encrypted block. */
-    PIN_VERIFY,
+  /** Capture a PIN and verify it, returning the encrypted block. */
+  PIN_VERIFY,
 
-    /** Verify a PIN without returning the block. */
-    PIN_VERIFY_ONLY
+  /** Verify a PIN without returning the block. */
+  PIN_VERIFY_ONLY
 }

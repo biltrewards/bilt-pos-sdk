@@ -9,10 +9,11 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,7 +21,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -65,9 +65,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.catalog.minorUnitsToDecimal
@@ -83,23 +83,29 @@ import com.bilt.pos.emulator.session.StoredValueOptions
 
 /** Top-level screens of the emulator. */
 internal enum class EmulatorTab(val label: String) {
-    SALE("Sale"), STORED_VALUE("Stored Value"), REFUND("Refund")
+    SALE("Sale"),
+    STORED_VALUE("Stored Value"),
+    REFUND("Refund"),
 }
 
-/** The two ways the Sale tab rings an item up: off the catalog grid, or by
- *  keying an amount. */
-internal enum class SaleTabPane(val label: String) { PRODUCTS("Products"), KEYPAD("Keypad") }
+/** The two ways the Sale tab rings an item up: off the catalog grid, or by keying an amount. */
+internal enum class SaleTabPane(val label: String) {
+    PRODUCTS("Products"),
+    KEYPAD("Keypad"),
+}
 
-/** Largest amount the keypad accepts: $999,999.99. Further digits are
- *  ignored rather than silently wrapping the accumulator. */
+/**
+ * Largest amount the keypad accepts: $999,999.99. Further digits are ignored rather than silently
+ * wrapping the accumulator.
+ */
 private const val MAX_KEYPAD_MINOR = 99_999_999L
 
 /**
- * The keypad's entry state: the amount typed so far and, once the operator
- * taps a custom line in the basket, the SKU that amount live-edits.
+ * The keypad's entry state: the amount typed so far and, once the operator taps a custom line in
+ * the basket, the SKU that amount live-edits.
  *
- * Hoisted above both the basket card and the Sale tab so a tap on a line
- * can seed it, and so it survives switching tabs.
+ * Hoisted above both the basket card and the Sale tab so a tap on a line can seed it, and so it
+ * survives switching tabs.
  */
 internal class KeypadEntry(minor: Long = 0L, editingSku: String? = null) {
 
@@ -107,8 +113,10 @@ internal class KeypadEntry(minor: Long = 0L, editingSku: String? = null) {
     var minor by mutableStateOf(minor)
         private set
 
-    /** The basket line this entry re-prices on every keystroke; null while
-     *  composing a new custom item. */
+    /**
+     * The basket line this entry re-prices on every keystroke; null while composing a new custom
+     * item.
+     */
     var editingSku by mutableStateOf(editingSku)
         private set
 
@@ -134,25 +142,27 @@ internal class KeypadEntry(minor: Long = 0L, editingSku: String? = null) {
     }
 
     companion object {
-        val Saver = listSaver<KeypadEntry, Any?>(
-            save = { listOf(it.minor, it.editingSku) },
-            restore = { KeypadEntry(it[0] as Long, it[1] as String?) },
-        )
+        val Saver =
+            listSaver<KeypadEntry, Any?>(
+                save = { listOf(it.minor, it.editingSku) },
+                restore = { KeypadEntry(it[0] as Long, it[1] as String?) },
+            )
     }
 }
 
 /** Width at which tab content switches from stacked to side-by-side panes. */
 private val WIDE_LAYOUT_BREAKPOINT = 700.dp
 
-/** Width from which the event log moves into its own right-hand column;
- *  below it the log stacks under the tab content instead of starving it. */
+/**
+ * Width from which the event log moves into its own right-hand column; below it the log stacks
+ * under the tab content instead of starving it.
+ */
 private val SIDE_LOG_BREAKPOINT = 1000.dp
 
 /**
- * Root composable of the terminal emulator, shared by the Android and
- * desktop targets. All interaction is driven through [controller], whose
- * [EmulatorController.state] this UI observes; [products] populates the
- * Sale tab's quick-buy grid.
+ * Root composable of the terminal emulator, shared by the Android and desktop targets. All
+ * interaction is driven through [controller], whose [EmulatorController.state] this UI observes;
+ * [products] populates the Sale tab's quick-buy grid.
  */
 @Composable
 fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
@@ -160,10 +170,9 @@ fun EmulatorApp(controller: EmulatorController, products: List<Product>) {
 }
 
 /**
- * [initialTab] and [initialSalePane] seed the tab selections — the
- * screenshot generator renders the Refund tab and the keypad through them,
- * since tab state is local and a headless test cannot switch it after
- * composition. Internal so the production entry point above stays free of
+ * [initialTab] and [initialSalePane] seed the tab selections — the screenshot generator renders the
+ * Refund tab and the keypad through them, since tab state is local and a headless test cannot
+ * switch it after composition. Internal so the production entry point above stays free of
  * test-shaped surface.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -192,9 +201,11 @@ internal fun EmulatorApp(
         // does not identify a line, since a return carries the sale's.
         LaunchedEffect(state.basket) {
             val sku = keypad.editingSku
-            if (sku != null && state.basket.none {
-                    it.sku == sku && it.editablePriceMinor != null
-                }
+            if (
+                sku != null &&
+                    state.basket.none {
+                        it.sku == sku && it.editablePriceMinor != null
+                    }
             ) {
                 keypad.reset()
             }
@@ -223,9 +234,7 @@ internal fun EmulatorApp(
                 }
             },
         ) { padding ->
-            BoxWithConstraints(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
                 val sideLog = maxWidth >= SIDE_LOG_BREAKPOINT
                 // The basket sits above the tab content and is shared by
                 // every tab: a settlement may mix new items (Sale or Stored
@@ -262,7 +271,8 @@ internal fun EmulatorApp(
                             )
                         EmulatorTab.STORED_VALUE ->
                             StoredValueTab(
-                                state, controller,
+                                state,
+                                controller,
                                 Modifier.fillMaxWidth().weight(1.1f),
                             )
                         EmulatorTab.REFUND ->
@@ -357,11 +367,12 @@ private fun SalesListCard(
                         val isSelected = sale.id == selectedId
                         Button(
                             onClick = { onSelect(sale.id) },
-                            colors = if (isSelected) {
-                                ButtonDefaults.buttonColors()
-                            } else {
-                                ButtonDefaults.filledTonalButtonColors()
-                            },
+                            colors =
+                                if (isSelected) {
+                                    ButtonDefaults.buttonColors()
+                                } else {
+                                    ButtonDefaults.filledTonalButtonColors()
+                                },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Column(modifier = Modifier.fillMaxWidth()) {
@@ -387,7 +398,10 @@ private fun SalesListCard(
 }
 
 /** What the Refund button returns: everything, or the checked items. */
-private enum class RefundMode { FULL, ITEMS }
+private enum class RefundMode {
+    FULL,
+    ITEMS,
+}
 
 @Composable
 private fun RefundDetailsCard(
@@ -402,9 +416,10 @@ private fun RefundDetailsCard(
     // it available: retrying is how the outstanding tender gets finished.
     val fullAvailable = sale.fullRefundAvailable
     // keyed on the sale so picking another sale resets the selections
-    var mode by remember(sale.id) {
-        mutableStateOf(if (fullAvailable) RefundMode.FULL else RefundMode.ITEMS)
-    }
+    var mode by
+        remember(sale.id) {
+            mutableStateOf(if (fullAvailable) RefundMode.FULL else RefundMode.ITEMS)
+        }
     var selectedSkus by remember(sale.id) { mutableStateOf(emptySet<String>()) }
     // Gift-card loads and their funding must stay atomic: the controller
     // only unwinds them via a full refund, so mixed sales cannot offer their
@@ -420,29 +435,36 @@ private fun RefundDetailsCard(
                 style = MaterialTheme.typography.bodyMedium,
             )
             when {
-                sale.voided -> Text(
-                    "Voided — nothing left to refund",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                sale.fullyRefunded -> Text(
-                    "Refunded in full — nothing left to refund",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                sale.refunded && fullAvailable -> Text(
-                    "Partially refunded — Full amount reverses what is outstanding",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                sale.refunded -> Text(
-                    "Already partially refunded",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                sale.voided ->
+                    Text(
+                        "Voided — nothing left to refund",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                sale.fullyRefunded ->
+                    Text(
+                        "Refunded in full — nothing left to refund",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                sale.refunded && fullAvailable ->
+                    Text(
+                        "Partially refunded — Full amount reverses what is outstanding",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                sale.refunded ->
+                    Text(
+                        "Already partially refunded",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                LabeledRadio("Full amount", mode == RefundMode.FULL,
-                    sale.refundable && fullAvailable) {
+                LabeledRadio(
+                    "Full amount",
+                    mode == RefundMode.FULL,
+                    sale.refundable && fullAvailable,
+                ) {
                     mode = RefundMode.FULL
                 }
                 LabeledRadio(
@@ -467,12 +489,13 @@ private fun RefundDetailsCard(
                         // rows show what a refund can still return: the
                         // remaining quantity and its value, with the already
                         // returned part called out
-                        val description = if (item.refundedQuantity > 0) {
-                            "${item.description} (${item.refundedQuantity} of " +
-                                "${item.quantity} refunded)"
-                        } else {
-                            item.description
-                        }
+                        val description =
+                            if (item.refundedQuantity > 0) {
+                                "${item.description} (${item.refundedQuantity} of " +
+                                    "${item.quantity} refunded)"
+                            } else {
+                                item.description
+                            }
                         LineItemRow(item.remainingQuantity, description, item.refundLabel) {
                             Checkbox(
                                 checked = item.sku in selectedSkus,
@@ -484,8 +507,11 @@ private fun RefundDetailsCard(
                                 // the refundable guard is not redundant with the
                                 // radio's: a refresh can void the sale while the
                                 // mode is already ITEMS
-                                enabled = itemsAvailable && mode == RefundMode.ITEMS &&
-                                    sale.refundable && item.remainingQuantity > 0,
+                                enabled =
+                                    itemsAvailable &&
+                                        mode == RefundMode.ITEMS &&
+                                        sale.refundable &&
+                                        item.remainingQuantity > 0,
                             )
                         }
                     }
@@ -508,10 +534,11 @@ private fun RefundDetailsCard(
             // exhausted lines contribute zero (their refundMinor already is),
             // so a selection that outlived a refresh can't inflate the amount
             val itemsMinor = sale.items.filter { it.sku in selectedSkus }.sumOf { it.refundMinor }
-            val amount = when (mode) {
-                RefundMode.FULL -> sale.totalAmount
-                RefundMode.ITEMS -> minorUnitsToDecimal(itemsMinor)
-            }
+            val amount =
+                when (mode) {
+                    RefundMode.FULL -> sale.totalAmount
+                    RefundMode.ITEMS -> minorUnitsToDecimal(itemsMinor)
+                }
             // The two modes need opposite session states: the full refund
             // voids the prior sale on its own session (no active checkout),
             // while item returns ring into the ACTIVE checkout's basket and
@@ -521,18 +548,21 @@ private fun RefundDetailsCard(
             val connected = state.connection.phase != ConnectionPhase.DISCONNECTED
             val sessionActive = state.sessionId != null
             when {
-                !connected -> Text(
-                    "Connect to the terminal to run a refund",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                mode == RefundMode.FULL && sessionActive -> Text(
-                    "End the active checkout to run a full refund",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                mode == RefundMode.ITEMS && !sessionActive -> Text(
-                    "Start a checkout to ring returns into its basket",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                !connected ->
+                    Text(
+                        "Connect to the terminal to run a refund",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                mode == RefundMode.FULL && sessionActive ->
+                    Text(
+                        "End the active checkout to run a full refund",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                mode == RefundMode.ITEMS && !sessionActive ->
+                    Text(
+                        "Start a checkout to ring returns into its basket",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
             }
             Button(
                 onClick = {
@@ -546,11 +576,14 @@ private fun RefundDetailsCard(
                         }
                     }
                 },
-                enabled = sale.refundable && connected && when (mode) {
-                    RefundMode.FULL ->
-                        fullAvailable && !sessionActive && !state.refundInProgress
-                    RefundMode.ITEMS -> sessionActive && itemsMinor > 0
-                },
+                enabled =
+                    sale.refundable &&
+                        connected &&
+                        when (mode) {
+                            RefundMode.FULL ->
+                                fullAvailable && !sessionActive && !state.refundInProgress
+                            RefundMode.ITEMS -> sessionActive && itemsMinor > 0
+                        },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
@@ -626,9 +659,9 @@ private fun PaymentOutcomeDialog(outcome: PaymentOutcome, onDismiss: () -> Unit)
                             receipt,
                             style = MaterialTheme.typography.bodySmall,
                             fontFamily = FontFamily.Monospace,
-                            modifier = Modifier
-                                .heightIn(max = 240.dp)
-                                .verticalScroll(rememberScrollState()),
+                            modifier =
+                                Modifier.heightIn(max = 240.dp)
+                                    .verticalScroll(rememberScrollState()),
                         )
                     }
                 }
@@ -663,14 +696,15 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
     val passphraseAvailable = state.hasConfiguredPassphrase || passphrase.isNotBlank()
     // The adb tunnel needs no address — a USB-only terminal has none; the
     // field then only narrows the device pick (by serial or wifi-adb ip)
-    val canConnect = (terminalIp.isNotBlank() || adbTunnel) &&
-        (!encryptionOn || passphraseAvailable)
+    val canConnect =
+        (terminalIp.isNotBlank() || adbTunnel) && (!encryptionOn || passphraseAvailable)
 
-    val passphrasePlaceholder = if (state.hasConfiguredPassphrase) {
-        "passphrase (NEXO_PASSPHRASE)"
-    } else {
-        "passphrase (required)"
-    }
+    val passphrasePlaceholder =
+        if (state.hasConfiguredPassphrase) {
+            "passphrase (NEXO_PASSPHRASE)"
+        } else {
+            "passphrase (required)"
+        }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -732,7 +766,10 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                                 controller.disconnect()
                             } else {
                                 controller.connect(
-                                    terminalIp.trim(), encryptionOn, passphrase, adbTunnel,
+                                    terminalIp.trim(),
+                                    encryptionOn,
+                                    passphrase,
+                                    adbTunnel,
                                 )
                             }
                         },
@@ -780,10 +817,11 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                     Button(
                         onClick = { controller.abort() },
                         enabled = state.sessionOperationInProgress,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                        ),
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError,
+                            ),
                         modifier = modifier,
                     ) {
                         Text("Abort operation")
@@ -792,8 +830,10 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                 val clearBasketButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
                         onClick = { controller.clearBasket() },
-                        enabled = state.sessionId != null && state.basket.isNotEmpty() &&
-                            !state.sessionOperationInProgress,
+                        enabled =
+                            state.sessionId != null &&
+                                state.basket.isNotEmpty() &&
+                                !state.sessionOperationInProgress,
                         colors = ButtonDefaults.filledTonalButtonColors(),
                         modifier = modifier,
                     ) {
@@ -863,9 +903,8 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
 }
 
 /**
- * A single-line text field about two-thirds the height of Material's
- * [OutlinedTextField] (which has a fixed 56dp minimum) so the connection
- * controls stay one slim row.
+ * A single-line text field about two-thirds the height of Material's [OutlinedTextField] (which has
+ * a fixed 56dp minimum) so the connection controls stay one slim row.
  */
 @Composable
 private fun CompactTextField(
@@ -876,14 +915,16 @@ private fun CompactTextField(
     modifier: Modifier = Modifier,
     masked: Boolean = false,
 ) {
-    val contentColor = MaterialTheme.colorScheme.onSurface.let {
-        if (enabled) it else it.copy(alpha = 0.5f)
-    }
+    val contentColor =
+        MaterialTheme.colorScheme.onSurface.let {
+            if (enabled) it else it.copy(alpha = 0.5f)
+        }
     Box(
-        modifier = modifier
-            .height(38.dp)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
-            .padding(horizontal = 10.dp),
+        modifier =
+            modifier
+                .height(38.dp)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         BasicTextField(
@@ -893,7 +934,8 @@ private fun CompactTextField(
             enabled = enabled,
             textStyle = MaterialTheme.typography.bodyMedium.copy(color = contentColor),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
+            visualTransformation =
+                if (masked) PasswordVisualTransformation() else VisualTransformation.None,
             modifier = Modifier.fillMaxWidth(),
         )
         if (value.isEmpty()) {
@@ -917,12 +959,13 @@ private fun StatusIndicators(state: EmulatorState) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val (color, label) = when (state.connection.phase) {
-                ConnectionPhase.CONNECTED -> Color(0xFF2E7D32) to "Connected"
-                ConnectionPhase.CONNECTING -> Color(0xFFF9A825) to "Connecting…"
-                ConnectionPhase.ERROR -> Color(0xFFC62828) to "Unreachable"
-                ConnectionPhase.DISCONNECTED -> Color(0xFF9E9E9E) to "Disconnected"
-            }
+            val (color, label) =
+                when (state.connection.phase) {
+                    ConnectionPhase.CONNECTED -> Color(0xFF2E7D32) to "Connected"
+                    ConnectionPhase.CONNECTING -> Color(0xFFF9A825) to "Connecting…"
+                    ConnectionPhase.ERROR -> Color(0xFFC62828) to "Unreachable"
+                    ConnectionPhase.DISCONNECTED -> Color(0xFF9E9E9E) to "Disconnected"
+                }
             Box(modifier = Modifier.size(10.dp).background(color, CircleShape))
             Text(
                 text = listOfNotNull(label, state.connection.detail).joinToString(" — "),
@@ -930,16 +973,21 @@ private fun StatusIndicators(state: EmulatorState) {
             )
         }
         Text(
-            text = state.tls.label +
-                "   ·   Encryption: " + (if (state.encryptionEnabled) "on" else "off") +
-                "   ·   Session: " + (state.sessionId?.take(8) ?: "none"),
+            text =
+                state.tls.label +
+                    "   ·   Encryption: " +
+                    (if (state.encryptionEnabled) "on" else "off") +
+                    "   ·   Session: " +
+                    (state.sessionId?.take(8) ?: "none"),
             style = MaterialTheme.typography.bodySmall,
         )
     }
 }
 
 private enum class StoredValueAction(val label: String) {
-    BALANCE("Balance inquiry"), ACTIVATION("Activation"), PURCHASE("Purchase")
+    BALANCE("Balance inquiry"),
+    ACTIVATION("Activation"),
+    PURCHASE("Purchase"),
 }
 
 @Composable
@@ -961,9 +1009,9 @@ private fun StoredValueTab(
 }
 
 /**
- * The Sale tab's two ways of ringing an item up, behind a pane selector:
- * the catalog grid, and the keypad for an amount the catalog does not
- * carry. [keypad] is hoisted so a tap on a custom basket line can seed it.
+ * The Sale tab's two ways of ringing an item up, behind a pane selector: the catalog grid, and the
+ * keypad for an amount the catalog does not carry. [keypad] is hoisted so a tap on a custom basket
+ * line can seed it.
  */
 @Composable
 private fun SaleTab(
@@ -1002,7 +1050,8 @@ private fun SaleTab(
             // weight(1f) so the pane measures against the space under the
             // selector instead of the card's full height (which clips it)
             when (selectedPane) {
-                SaleTabPane.PRODUCTS -> ProductGrid(products, state, controller, Modifier.weight(1f))
+                SaleTabPane.PRODUCTS ->
+                    ProductGrid(products, state, controller, Modifier.weight(1f))
                 SaleTabPane.KEYPAD ->
                     KeypadPane(state.sessionId != null, controller, keypad, Modifier.weight(1f))
             }
@@ -1050,12 +1099,10 @@ private fun ProductGrid(
 private val KEYPAD_ROWS = listOf(listOf(1, 2, 3), listOf(4, 5, 6), listOf(7, 8, 9))
 
 /**
- * Number pad for keying an amount the catalog does not carry. The typed
- * amount rings up as a custom item on submit (✓); with a custom line
- * adopted from the basket, every keystroke re-prices that line instead and
- * ✓ just ends the edit — the next keystroke starts a new item. Releasing
- * a line backspaced to zero drops it from the basket rather than settling
- * a $0.00 line.
+ * Number pad for keying an amount the catalog does not carry. The typed amount rings up as a custom
+ * item on submit (✓); with a custom line adopted from the basket, every keystroke re-prices that
+ * line instead and ✓ just ends the edit — the next keystroke starts a new item. Releasing a line
+ * backspaced to zero drops it from the basket rather than settling a $0.00 line.
  */
 @Composable
 private fun KeypadPane(
@@ -1090,14 +1137,14 @@ private fun KeypadPane(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant,
-                    shape = RoundedCornerShape(8.dp),
-                )
-                .padding(8.dp),
+            modifier =
+                Modifier.fillMaxWidth()
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(8.dp),
+                    )
+                    .padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
@@ -1108,8 +1155,7 @@ private fun KeypadPane(
                 when {
                     editingSku != null && keypad.minor == 0L ->
                         "Editing the marked line — ✓ now drops it from the basket"
-                    editingSku != null ->
-                        "Editing the marked line — the basket updates as you type"
+                    editingSku != null -> "Editing the marked line — the basket updates as you type"
                     !checkoutActive -> "Start a checkout to ring a custom amount up"
                     else -> "Tap ✓ to add this amount, or tap a custom basket line to edit it"
                 },
@@ -1131,7 +1177,9 @@ private fun KeypadPane(
                 label = "⌫",
                 modifier = key,
                 colors = ButtonDefaults.filledTonalButtonColors(),
-            ) { onKey { keypad.backspace() } }
+            ) {
+                onKey { keypad.backspace() }
+            }
             KeypadKey("0", key) { onKey { keypad.append(0) } }
             KeypadKey(
                 label = "✓",
@@ -1142,18 +1190,19 @@ private fun KeypadPane(
                 val amount = keypad.minor
                 // a refused request keeps the pad as it is, so the
                 // operator can see what did not happen and retry
-                val done = when {
-                    // an edit is already applied line by line, so ✓ only
-                    // releases the line — except at zero, which is the
-                    // operator saying they did not mean to ring it up
-                    sku != null && amount == 0L -> controller.removeCustomItem(sku)
-                    sku != null -> true
-                    amount > 0L -> controller.addCustomItem(amount)
-                    // nothing typed and nothing adopted: a tap that beat
-                    // recomposition to the disabled state, with nothing
-                    // left to submit
-                    else -> false
-                }
+                val done =
+                    when {
+                        // an edit is already applied line by line, so ✓ only
+                        // releases the line — except at zero, which is the
+                        // operator saying they did not mean to ring it up
+                        sku != null && amount == 0L -> controller.removeCustomItem(sku)
+                        sku != null -> true
+                        amount > 0L -> controller.addCustomItem(amount)
+                        // nothing typed and nothing adopted: a tap that beat
+                        // recomposition to the disabled state, with nothing
+                        // left to submit
+                        else -> false
+                    }
                 if (done) keypad.reset()
             }
         }
@@ -1221,8 +1270,7 @@ private fun StoredValuePanel(
             when (action) {
                 StoredValueAction.BALANCE ->
                     "Query the available balance without changing the card."
-                StoredValueAction.ACTIVATION ->
-                    "Activate a new card with a zero starting balance."
+                StoredValueAction.ACTIVATION -> "Activate a new card with a zero starting balance."
                 StoredValueAction.PURCHASE ->
                     "Add a card purchase to the basket; loading runs before payment."
             },
@@ -1237,11 +1285,11 @@ private fun StoredValuePanel(
             CompactTextField(
                 value = cardNumber,
                 onValueChange = { cardNumber = it },
-                placeholder = when (action) {
-                    StoredValueAction.PURCHASE ->
-                        "Card number (blank = read at settlement)"
-                    else -> "Card number (blank = read on terminal)"
-                },
+                placeholder =
+                    when (action) {
+                        StoredValueAction.PURCHASE -> "Card number (blank = read at settlement)"
+                        else -> "Card number (blank = read on terminal)"
+                    },
                 enabled = !state.sessionOperationInProgress,
                 modifier = Modifier.weight(1f),
             )
@@ -1272,10 +1320,8 @@ private fun StoredValuePanel(
         Button(
             onClick = {
                 when (action) {
-                    StoredValueAction.BALANCE ->
-                        controller.inquireStoredValueBalance(cardNumber)
-                    StoredValueAction.ACTIVATION ->
-                        controller.activateStoredValue(cardNumber)
+                    StoredValueAction.BALANCE -> controller.inquireStoredValueBalance(cardNumber)
+                    StoredValueAction.ACTIVATION -> controller.activateStoredValue(cardNumber)
                     StoredValueAction.PURCHASE -> {
                         controller.addGiftCardPurchase(amount, cardNumber)
                         amount = ""
@@ -1283,11 +1329,12 @@ private fun StoredValuePanel(
                     }
                 }
             },
-            enabled = when (action) {
-                StoredValueAction.PURCHASE ->
-                    positiveMoneyMinor(amount) != null && state.canRingProducts
-                else -> canOperate
-            },
+            enabled =
+                when (action) {
+                    StoredValueAction.PURCHASE ->
+                        positiveMoneyMinor(amount) != null && state.canRingProducts
+                    else -> canOperate
+                },
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
@@ -1302,14 +1349,16 @@ private fun StoredValuePanel(
     }
 }
 
-private enum class AdjustmentKind { CREDIT, DISCOUNT }
+private enum class AdjustmentKind {
+    CREDIT,
+    DISCOUNT,
+}
 
 private data class BasketAdjustment(val line: BasketLine, val kind: AdjustmentKind)
 
 /**
- * The shared basket. Custom (keypad-entered) lines are tappable —
- * [onEditCustomLine] hands the line's SKU and price to the keypad, and
- * [editingSku] marks the one it is currently re-pricing.
+ * The shared basket. Custom (keypad-entered) lines are tappable — [onEditCustomLine] hands the
+ * line's SKU and price to the keypad, and [editingSku] marks the one it is currently re-pricing.
  */
 @Composable
 private fun BasketCard(
@@ -1337,7 +1386,11 @@ private fun BasketCard(
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             if (state.basket.isEmpty()) {
-                Text("Empty", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                Text(
+                    "Empty",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                )
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     // keyed on sku AND direction: a mixed basket may hold a
@@ -1352,9 +1405,10 @@ private fun BasketCard(
                             buildString {
                                 append(line.description)
                                 when (line.type) {
-                                    BasketLineType.SALE -> if (line.giftCard) {
-                                        append(" (stored value purchase)")
-                                    }
+                                    BasketLineType.SALE ->
+                                        if (line.giftCard) {
+                                            append(" (stored value purchase)")
+                                        }
                                     BasketLineType.RETURN -> append(" (return)")
                                     BasketLineType.CREDIT -> append(" (credit)")
                                 }
@@ -1367,15 +1421,14 @@ private fun BasketCard(
                                 }
                             },
                             "$${line.lineTotal}",
-                            Modifier
-                                .then(
+                            Modifier.then(
                                     if (editablePrice == null) {
                                         Modifier
                                     } else {
                                         Modifier.clickable {
                                             onEditCustomLine(line.sku, editablePrice)
                                         }
-                                    },
+                                    }
                                 )
                                 .then(
                                     if (editing) {
@@ -1385,31 +1438,35 @@ private fun BasketCard(
                                         )
                                     } else {
                                         Modifier
-                                    },
+                                    }
                                 )
                                 .padding(vertical = 2.dp, horizontal = 4.dp),
                             trailing = {
                                 if (line.type == BasketLineType.SALE) {
                                     TextButton(
                                         onClick = {
-                                            adjustment = BasketAdjustment(
-                                                line, AdjustmentKind.DISCOUNT,
-                                            )
+                                            adjustment =
+                                                BasketAdjustment(
+                                                    line,
+                                                    AdjustmentKind.DISCOUNT,
+                                                )
                                         },
-                                        enabled = state.sessionId != null &&
-                                            !state.paymentInProgress,
+                                        enabled =
+                                            state.sessionId != null && !state.paymentInProgress,
                                         contentPadding = PaddingValues(horizontal = 6.dp),
                                     ) {
                                         Text("Discount")
                                     }
                                     TextButton(
                                         onClick = {
-                                            adjustment = BasketAdjustment(
-                                                line, AdjustmentKind.CREDIT,
-                                            )
+                                            adjustment =
+                                                BasketAdjustment(
+                                                    line,
+                                                    AdjustmentKind.CREDIT,
+                                                )
                                         },
-                                        enabled = state.sessionId != null &&
-                                            !state.paymentInProgress,
+                                        enabled =
+                                            state.sessionId != null && !state.paymentInProgress,
                                         contentPadding = PaddingValues(horizontal = 6.dp),
                                     ) {
                                         Text("Credit")
@@ -1435,27 +1492,28 @@ private fun BasketAdjustmentDialog(
 ) {
     val line = adjustment.line
     val discount = adjustment.kind == AdjustmentKind.DISCOUNT
-    var amount by remember(adjustment) {
-        mutableStateOf(
-            if (discount && line.discountTotal != "0.00") {
-                line.discountTotal.removePrefix("-")
-            } else {
-                ""
-            }
-        )
-    }
-    var label by remember(adjustment) {
-        mutableStateOf(
-            if (discount) line.discountLabels.firstOrNull().orEmpty()
-            else "Credit for ${line.description}"
-        )
-    }
+    var amount by
+        remember(adjustment) {
+            mutableStateOf(
+                if (discount && line.discountTotal != "0.00") {
+                    line.discountTotal.removePrefix("-")
+                } else {
+                    ""
+                }
+            )
+        }
+    var label by
+        remember(adjustment) {
+            mutableStateOf(
+                if (discount) line.discountLabels.firstOrNull().orEmpty()
+                else "Credit for ${line.description}"
+            )
+        }
     val enteredMinor = nonNegativeMoneyMinor(amount)
-    val maximumMinor = nonNegativeMoneyMinor(
-        if (discount) line.originalTotal else line.lineTotal
-    ) ?: 0L
-    val valid = enteredMinor != null && enteredMinor <= maximumMinor &&
-        (discount || enteredMinor > 0L)
+    val maximumMinor =
+        nonNegativeMoneyMinor(if (discount) line.originalTotal else line.lineTotal) ?: 0L
+    val valid =
+        enteredMinor != null && enteredMinor <= maximumMinor && (discount || enteredMinor > 0L)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (discount) "Apply line discount" else "Apply item credit") },
@@ -1500,8 +1558,10 @@ private fun BasketAdjustmentDialog(
     )
 }
 
-/** Exact two-decimal parser for UI validation; controller parsing remains
- * authoritative and uses BigDecimal on JVM. */
+/**
+ * Exact two-decimal parser for UI validation; controller parsing remains authoritative and uses
+ * BigDecimal on JVM.
+ */
 private fun nonNegativeMoneyMinor(raw: String): Long? {
     val value = raw.trim()
     if (!Regex("\\d+(\\.\\d{0,2})?").matches(value)) return null
@@ -1513,12 +1573,15 @@ private fun nonNegativeMoneyMinor(raw: String): Long? {
     return minor.takeIf { it >= 0 }
 }
 
-private fun positiveMoneyMinor(raw: String): Long? =
-    nonNegativeMoneyMinor(raw)?.takeIf { it > 0 }
+private fun positiveMoneyMinor(raw: String): Long? = nonNegativeMoneyMinor(raw)?.takeIf { it > 0 }
 
 private val EmulatorState.sessionOperationInProgress: Boolean
-    get() = paymentInProgress || cardReadInProgress || storedValueInProgress ||
-        identifyInProgress || refundInProgress
+    get() =
+        paymentInProgress ||
+            cardReadInProgress ||
+            storedValueInProgress ||
+            identifyInProgress ||
+            refundInProgress
 
 private val EmulatorState.canRingProducts: Boolean
     get() = sessionId != null && !sessionOperationInProgress
@@ -1544,8 +1607,11 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
     val paid = state.lastPayment != null
     // no Pay during a card read or identify prompt: the shared operation
     // claim would refuse it
-    val canPay = state.sessionId != null && state.basket.isNotEmpty() &&
-        !state.sessionOperationInProgress && !paid
+    val canPay =
+        state.sessionId != null &&
+            state.basket.isNotEmpty() &&
+            !state.sessionOperationInProgress &&
+            !paid
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // FlowRow: five labeled checkboxes overflow a narrow card; wrap
@@ -1597,11 +1663,12 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
         if (paid) {
             // the checkout auto-ends on full payment; the hint covers the
             // fallback where that end failed and the session is still open
-            val next = if (state.sessionId == null) {
-                "Start Checkout for the next customer"
-            } else {
-                "End Checkout to start the next one"
-            }
+            val next =
+                if (state.sessionId == null) {
+                    "Start Checkout for the next customer"
+                } else {
+                    "End Checkout to start the next one"
+                }
             Text(
                 "${state.lastPayment} — $next",
                 style = MaterialTheme.typography.bodySmall,
@@ -1658,11 +1725,12 @@ private fun LoyaltyCheckbox(
 @Composable
 private fun EventsCard(state: EmulatorState, modifier: Modifier = Modifier) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
-    val tabs = listOf(
-        "Events" to state.events,
-        "Detailed" to state.detailedEvents,
-        "Nexo" to state.nexoMessages,
-    )
+    val tabs =
+        listOf(
+            "Events" to state.events,
+            "Detailed" to state.detailedEvents,
+            "Nexo" to state.nexoMessages,
+        )
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {

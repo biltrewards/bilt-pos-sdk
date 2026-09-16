@@ -11,12 +11,11 @@ import javax.net.ssl.SSLSocket
 import javax.net.ssl.TrustManagerFactory
 
 /**
- * Out-of-band TLS verification probe. The emulator's payload channel always
- * runs on a trust-all client so a bad certificate never blocks testing; this
- * probe performs one strict handshake — chain validated against the
- * configured CA, leaf identity matched against the environment's hostname
- * pattern (terminals present a synthetic SAN, never the IP we dial) — and
- * reports the outcome for display.
+ * Out-of-band TLS verification probe. The emulator's payload channel always runs on a trust-all
+ * client so a bad certificate never blocks testing; this probe performs one strict handshake —
+ * chain validated against the configured CA, leaf identity matched against the environment's
+ * hostname pattern (terminals present a synthetic SAN, never the IP we dial) — and reports the
+ * outcome for display.
  */
 object TlsVerifier {
 
@@ -33,9 +32,7 @@ object TlsVerifier {
             if (names.any { matchesPattern(it, hostnamePattern) }) {
                 TlsStatus.Verified
             } else {
-                TlsStatus.Failed(
-                    "certificate names $names do not match pattern $hostnamePattern"
-                )
+                TlsStatus.Failed("certificate names $names do not match pattern $hostnamePattern")
             }
         } catch (e: Exception) {
             TlsStatus.Failed(e.message ?: e.javaClass.simpleName)
@@ -47,14 +44,15 @@ object TlsVerifier {
         val anchors = factory.generateCertificates(ByteArrayInputStream(caPem.toByteArray()))
         require(anchors.isNotEmpty()) { "no X.509 certificate in NEXO_CA_CERT/NEXO_CA_BUNDLE" }
 
-        val keyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
-            load(null, null)
-            anchors.forEachIndexed { i, cert -> setCertificateEntry("ca-$i", cert) }
-        }
-        val trustManagers = TrustManagerFactory
-            .getInstance(TrustManagerFactory.getDefaultAlgorithm())
-            .apply { init(keyStore) }
-            .trustManagers
+        val keyStore =
+            KeyStore.getInstance(KeyStore.getDefaultType()).apply {
+                load(null, null)
+                anchors.forEachIndexed { i, cert -> setCertificateEntry("ca-$i", cert) }
+            }
+        val trustManagers =
+            TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+                .apply { init(keyStore) }
+                .trustManagers
         return SSLContext.getInstance("TLS").apply { init(null, trustManagers, null) }
     }
 
@@ -77,23 +75,26 @@ object TlsVerifier {
     /** DNS Subject Alternative Names, falling back to the Common Name. */
     private fun certificateNames(cert: X509Certificate): List<String> {
         val dnsType = 2
-        val sans = cert.subjectAlternativeNames
-            ?.filter { it.size >= 2 && it[0] == dnsType }
-            ?.mapNotNull { it[1] as? String }
-            .orEmpty()
+        val sans =
+            cert.subjectAlternativeNames
+                ?.filter { it.size >= 2 && it[0] == dnsType }
+                ?.mapNotNull { it[1] as? String }
+                .orEmpty()
         if (sans.isNotEmpty()) {
             return sans
         }
-        val cn = cert.subjectX500Principal.name
-            .split(',')
-            .firstOrNull { it.trim().startsWith("CN=") }
-            ?.trim()?.removePrefix("CN=")
+        val cn =
+            cert.subjectX500Principal.name
+                .split(',')
+                .firstOrNull { it.trim().startsWith("CN=") }
+                ?.trim()
+                ?.removePrefix("CN=")
         return listOfNotNull(cn)
     }
 
     /**
-     * Same semantics as the SDK client: a single leading `*.` wildcard matches
-     * exactly one label; otherwise exact match. Case-insensitive.
+     * Same semantics as the SDK client: a single leading `*.` wildcard matches exactly one label;
+     * otherwise exact match. Case-insensitive.
      */
     private fun matchesPattern(name: String, pattern: String): Boolean {
         if (!pattern.startsWith("*.")) {

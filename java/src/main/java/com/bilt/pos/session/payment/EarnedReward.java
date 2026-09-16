@@ -14,31 +14,31 @@ import com.bilt.pos.session.identity.RewardType;
 /** A reward earned by the completed purchase. */
 public final class EarnedReward {
 
-    private final RewardType type;
-    private final String description;
-    private final int quantity;
-    private final String rewardRef;
+  private final RewardType type;
+  private final String description;
+  private final int quantity;
+  private final String rewardRef;
 
-    public EarnedReward(RewardType type, String description, int quantity, String rewardRef) {
-        this.type = type;
-        this.description = description;
-        this.quantity = quantity;
-        this.rewardRef = rewardRef;
-    }
+  public EarnedReward(RewardType type, String description, int quantity, String rewardRef) {
+    this.type = type;
+    this.description = description;
+    this.quantity = quantity;
+    this.rewardRef = rewardRef;
+  }
 
-    public RewardType getType() {
-        return type;
-    }
+  public RewardType getType() {
+    return type;
+  }
 
-    public String getDescription() {
-        return description;
-    }
+  public String getDescription() {
+    return description;
+  }
 
-    public int getQuantity() {
-        return quantity;
-    }
+  public int getQuantity() {
+    return quantity;
+  }
 
-    public String getRewardRef() {
-        return rewardRef;
-    }
+  public String getRewardRef() {
+    return rewardRef;
+  }
 }

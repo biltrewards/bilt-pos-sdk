@@ -12,9 +12,9 @@ package com.bilt.pos.session.display;
 /** The device a display payload is rendered on. */
 public enum DisplayTarget {
 
-    /** The payment terminal's built-in customer display. */
-    TERMINAL,
+  /** The payment terminal's built-in customer display. */
+  TERMINAL,
 
-    /** A separate external display device driven by its own client. */
-    EXTERNAL
+  /** A separate external display device driven by its own client. */
+  EXTERNAL
 }

@@ -13,11 +13,23 @@ import com.bilt.pos.emulator.store.LegType
 import com.bilt.pos.emulator.store.RefundRecord
 import com.bilt.pos.emulator.store.RefundedItem
 import com.bilt.pos.emulator.store.SaleItem
+import com.bilt.pos.emulator.store.SaleRecord
 import com.bilt.pos.emulator.store.SaleStore
 import com.bilt.pos.emulator.store.StoredSale
-import com.bilt.pos.emulator.store.VoidRecord
-import com.bilt.pos.emulator.store.SaleRecord
 import com.bilt.pos.emulator.store.TransactionLeg
+import com.bilt.pos.emulator.store.VoidRecord
+import java.net.InetAddress
+import java.nio.file.Files
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executors
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,27 +43,14 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.tls.HandshakeCertificates
 import okhttp3.tls.HeldCertificate
-import java.net.InetAddress
-import java.nio.file.Files
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.Executors
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
- * End-to-end refund through the real controller against a scripted terminal:
- * a TLS MockWebServer bound to 127.0.0.1:8443 — the controller's fixed
- * endpoint — answering the diagnosis probe, the reversal session brackets,
- * and the refund verbs by request type. Covers the whole chain the Refund
- * button drives: stored-sale lookup, ReversalSession construction from the
- * persisted references, the refund itself, the store record, and the state
- * the UI renders (outcome popup, refunded badge, released busy flag).
+ * End-to-end refund through the real controller against a scripted terminal: a TLS MockWebServer
+ * bound to 127.0.0.1:8443 — the controller's fixed endpoint — answering the diagnosis probe, the
+ * reversal session brackets, and the refund verbs by request type. Covers the whole chain the
+ * Refund button drives: stored-sale lookup, ReversalSession construction from the persisted
+ * references, the refund itself, the store record, and the state the UI renders (outcome popup,
+ * refunded badge, released busy flag).
  */
 class NexoEmulatorControllerRefundTest {
 
@@ -62,8 +61,10 @@ class NexoEmulatorControllerRefundTest {
             """{"SaleToPOIResponse":{"DiagnosisResponse":{"Response":{"Result":"Success"}}}}"""
         const val LOYALTY_OK =
             """{"SaleToPOIResponse":{"LoyaltyResponse":{"Response":{"Result":"Success"}}}}"""
-        /** A raw (un-Base64ed) receipt payload — some terminals send the
-         *  receipt XML like this; it must parse without a warning. */
+        /**
+         * A raw (un-Base64ed) receipt payload — some terminals send the receipt XML like this; it
+         * must parse without a warning.
+         */
         const val RAW_RECEIPT_XML =
             "<receipt><plainTextReceipt>REFUND RECEIPT</plainTextReceipt></receipt>"
 
@@ -83,8 +84,10 @@ class NexoEmulatorControllerRefundTest {
                 "PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":34.99},
                     "PaymentAcquirerData":{"ApprovalCode":"APPR02"}}}}}"""
 
-        /** A charge reply echoing the netted amount, so the persisted card
-         *  leg records what the transaction actually collected. */
+        /**
+         * A charge reply echoing the netted amount, so the persisted card leg records what the
+         * transaction actually collected.
+         */
         const val PAYMENT_OK_NETTED =
             """{"SaleToPOIResponse":{"PaymentResponse":{
                 "Response":{"Result":"Success"},
@@ -149,8 +152,10 @@ class NexoEmulatorControllerRefundTest {
             """{"SaleToPOIResponse":{"DisplayResponse":{
                 "OutputResult":[{"Response":{"Result":"Success"}}]}}}"""
 
-        /** The void path's reply; carries a raw-XML customer receipt (must
-         *  parse silently) and a garbage cashier receipt (must warn). */
+        /**
+         * The void path's reply; carries a raw-XML customer receipt (must parse silently) and a
+         * garbage cashier receipt (must warn).
+         */
         const val REVERSAL_OK =
             """{"SaleToPOIResponse":{"ReversalResponse":{
                 "Response":{"Result":"Success"},
@@ -172,22 +177,21 @@ class NexoEmulatorControllerRefundTest {
 
     @BeforeTest
     fun startFakeTerminal() {
-        val certificate = HeldCertificate.Builder()
-            .addSubjectAlternativeName("127.0.0.1")
-            .build()
-        val tls = HandshakeCertificates.Builder()
-            .heldCertificate(certificate)
-            .build()
-        server = MockWebServer().apply {
-            useHttps(tls.sslSocketFactory(), false)
-            dispatcher = respondingWith(::defaultResponse)
-            // the controller's endpoint is fixed: https://<address>:8443/nexo
-            start(InetAddress.getByName("127.0.0.1"), 8443)
-        }
+        val certificate = HeldCertificate.Builder().addSubjectAlternativeName("127.0.0.1").build()
+        val tls = HandshakeCertificates.Builder().heldCertificate(certificate).build()
+        server =
+            MockWebServer().apply {
+                useHttps(tls.sslSocketFactory(), false)
+                dispatcher = respondingWith(::defaultResponse)
+                // the controller's endpoint is fixed: https://<address>:8443/nexo
+                start(InetAddress.getByName("127.0.0.1"), 8443)
+            }
     }
 
-    /** A dispatcher recording every request and answering via [respond];
-     *  tests swap in a wrapper to inject failures. */
+    /**
+     * A dispatcher recording every request and answering via [respond]; tests swap in a wrapper to
+     * inject failures.
+     */
     private fun respondingWith(respond: (String) -> String): Dispatcher =
         object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
@@ -197,21 +201,21 @@ class NexoEmulatorControllerRefundTest {
             }
         }
 
-    private fun defaultResponse(body: String): String = when {
-        "\"DiagnosisRequest\"" in body -> DIAGNOSIS_OK
-        "\"AdminRequest\"" in body -> ADMIN_OK
-        "\"DisplayRequest\"" in body -> DISPLAY_OK
-        "\"LoyaltyRequest\"" in body -> LOYALTY_OK
-        "\"StoredValueRequest\"" in body && "\"Reverse\"" in body ->
-            STORED_VALUE_REVERSE_OK
-        "\"StoredValueRequest\"" in body -> STORED_VALUE_LOAD_OK
-        "\"ReversalRequest\"" in body -> REVERSAL_OK
-        // the refund leg of a settlement carries the Refund payment type;
-        // a charge does not
-        "\"PaymentRequest\"" in body && "Refund" in body -> REFUND_OK
-        "\"PaymentRequest\"" in body -> PAYMENT_OK
-        else -> ADMIN_OK
-    }
+    private fun defaultResponse(body: String): String =
+        when {
+            "\"DiagnosisRequest\"" in body -> DIAGNOSIS_OK
+            "\"AdminRequest\"" in body -> ADMIN_OK
+            "\"DisplayRequest\"" in body -> DISPLAY_OK
+            "\"LoyaltyRequest\"" in body -> LOYALTY_OK
+            "\"StoredValueRequest\"" in body && "\"Reverse\"" in body -> STORED_VALUE_REVERSE_OK
+            "\"StoredValueRequest\"" in body -> STORED_VALUE_LOAD_OK
+            "\"ReversalRequest\"" in body -> REVERSAL_OK
+            // the refund leg of a settlement carries the Refund payment type;
+            // a charge does not
+            "\"PaymentRequest\"" in body && "Refund" in body -> REFUND_OK
+            "\"PaymentRequest\"" in body -> PAYMENT_OK
+            else -> ADMIN_OK
+        }
 
     @AfterTest
     fun tearDown() {
@@ -221,9 +225,8 @@ class NexoEmulatorControllerRefundTest {
     }
 
     private fun storeWithOneSale(): JsonlSaleStore {
-        val store = JsonlSaleStore(
-            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
-        )
+        val store =
+            JsonlSaleStore(Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile())
         store.recordSale(
             SaleRecord(
                 id = "sale-1",
@@ -233,32 +236,37 @@ class NexoEmulatorControllerRefundTest {
                 currency = "USD",
                 completedAt = "2026-08-06T10:15:30Z",
                 memberId = "member-42",
-                items = listOf(
-                    SaleItem(
-                        sku = "SKU-1",
-                        description = "Water",
-                        quantity = 2,
-                        unitPrice = "1.05",
-                        taxRate = "0.06625",
-                        lineTotal = "2.10",
-                    )
-                ),
+                items =
+                    listOf(
+                        SaleItem(
+                            sku = "SKU-1",
+                            description = "Water",
+                            quantity = 2,
+                            unitPrice = "1.05",
+                            taxRate = "0.06625",
+                            lineTotal = "2.10",
+                        )
+                    ),
                 authorizedAmount = "2.10",
-                legs = listOf(
-                    TransactionLeg(LegType.CARD, "poi-card-1", "2026-08-06T10:15:29Z"),
-                    TransactionLeg(LegType.AWARD, "poi-award-1"),
-                ),
+                legs =
+                    listOf(
+                        TransactionLeg(LegType.CARD, "poi-card-1", "2026-08-06T10:15:29Z"),
+                        TransactionLeg(LegType.AWARD, "poi-award-1"),
+                    ),
             )
         )
         return store
     }
 
-    /** A prior sale whose only line was rung on the keypad, so the return
-     *  it produces carries a CUSTOM- SKU. */
+    /**
+     * A prior sale whose only line was rung on the keypad, so the return it produces carries a
+     * CUSTOM- SKU.
+     */
     private fun storeWithOneCustomSale(): JsonlSaleStore {
-        val store = JsonlSaleStore(
-            Files.createTempDirectory("refund-custom").resolve("sales.jsonl").toFile()
-        )
+        val store =
+            JsonlSaleStore(
+                Files.createTempDirectory("refund-custom").resolve("sales.jsonl").toFile()
+            )
         store.recordSale(
             SaleRecord(
                 id = "sale-c",
@@ -267,106 +275,123 @@ class NexoEmulatorControllerRefundTest {
                 poiId = "EMULATOR",
                 currency = "USD",
                 completedAt = "2026-08-06T10:15:30Z",
-                items = listOf(
-                    SaleItem(
-                        sku = "${CustomItem.SKU_PREFIX}1",
-                        description = CustomItem.DESCRIPTION,
-                        quantity = 1,
-                        unitPrice = "24.00",
-                        lineTotal = "24.00",
-                    )
-                ),
+                items =
+                    listOf(
+                        SaleItem(
+                            sku = "${CustomItem.SKU_PREFIX}1",
+                            description = CustomItem.DESCRIPTION,
+                            quantity = 1,
+                            unitPrice = "24.00",
+                            lineTotal = "24.00",
+                        )
+                    ),
                 authorizedAmount = "24.00",
-                legs = listOf(
-                    TransactionLeg(LegType.CARD, "poi-card-c", "2026-08-06T10:15:29Z"),
-                ),
+                legs = listOf(TransactionLeg(LegType.CARD, "poi-card-c", "2026-08-06T10:15:29Z")),
             )
         )
         return store
     }
 
     /**
-     * Two prior sales, each with one keypad line, rung in different
-     * baskets and at different prices — the pair that collided while
-     * keypad SKUs were a bare per-basket counter.
+     * Two prior sales, each with one keypad line, rung in different baskets and at different prices
+     * — the pair that collided while keypad SKUs were a bare per-basket counter.
      */
     private fun storeWithTwoCustomSales(): JsonlSaleStore {
-        val store = JsonlSaleStore(
-            Files.createTempDirectory("refund-custom2").resolve("sales.jsonl").toFile()
-        )
-        listOf(
-            Triple("sale-c1", CustomItem.nextSku("3f9c2a7e-5d41-4b8a", emptyList()), "24.00"),
-            Triple("sale-c2", CustomItem.nextSku("9d1f4c2b-7a53-4e08", emptyList()), "30.00"),
-        ).forEach { (id, sku, price) ->
-            store.recordSale(
-                SaleRecord(
-                    id = id,
-                    sessionId = "session-$id",
-                    saleId = "bilt-emulator",
-                    poiId = "EMULATOR",
-                    currency = "USD",
-                    completedAt = "2026-08-06T10:15:30Z",
-                    items = listOf(
-                        SaleItem(
-                            sku = sku,
-                            description = CustomItem.DESCRIPTION,
-                            quantity = 1,
-                            unitPrice = price,
-                            lineTotal = price,
-                        )
-                    ),
-                    authorizedAmount = price,
-                    legs = listOf(
-                        TransactionLeg(LegType.CARD, "poi-card-$id", "2026-08-06T10:15:29Z"),
-                    ),
-                )
+        val store =
+            JsonlSaleStore(
+                Files.createTempDirectory("refund-custom2").resolve("sales.jsonl").toFile()
             )
-        }
+        listOf(
+                Triple("sale-c1", CustomItem.nextSku("3f9c2a7e-5d41-4b8a", emptyList()), "24.00"),
+                Triple("sale-c2", CustomItem.nextSku("9d1f4c2b-7a53-4e08", emptyList()), "30.00"),
+            )
+            .forEach { (id, sku, price) ->
+                store.recordSale(
+                    SaleRecord(
+                        id = id,
+                        sessionId = "session-$id",
+                        saleId = "bilt-emulator",
+                        poiId = "EMULATOR",
+                        currency = "USD",
+                        completedAt = "2026-08-06T10:15:30Z",
+                        items =
+                            listOf(
+                                SaleItem(
+                                    sku = sku,
+                                    description = CustomItem.DESCRIPTION,
+                                    quantity = 1,
+                                    unitPrice = price,
+                                    lineTotal = price,
+                                )
+                            ),
+                        authorizedAmount = price,
+                        legs =
+                            listOf(
+                                TransactionLeg(LegType.CARD, "poi-card-$id", "2026-08-06T10:15:29Z")
+                            ),
+                    )
+                )
+            }
         return store
     }
 
-    /** A store whose lookup blocks until released — pins an abort into the
-     *  window where the refund has nothing on the wire yet. */
+    /**
+     * A store whose lookup blocks until released — pins an abort into the window where the refund
+     * has nothing on the wire yet.
+     */
     private class LatchedLookupStore(private val delegate: SaleStore) : SaleStore {
         val lookupEntered = java.util.concurrent.CountDownLatch(1)
         val lookupRelease = java.util.concurrent.CountDownLatch(1)
+
         override fun recordSale(sale: SaleRecord) = delegate.recordSale(sale)
+
         override fun recordRefund(saleId: String, refund: RefundRecord) =
             delegate.recordRefund(saleId, refund)
+
         override fun recordVoid(saleId: String, voidRecord: VoidRecord) =
             delegate.recordVoid(saleId, voidRecord)
+
         override fun findSale(saleId: String): StoredSale? {
             lookupEntered.countDown()
             lookupRelease.await()
             return delegate.findSale(saleId)
         }
+
         override fun listSales(limit: Int): List<StoredSale> = delegate.listSales(limit)
     }
 
-    /** A store whose refund write always fails — the disk-full case the
-     *  outcome popup must not stay quiet about. */
+    /**
+     * A store whose refund write always fails — the disk-full case the outcome popup must not stay
+     * quiet about.
+     */
     private class RefundWriteFailingStore(private val delegate: SaleStore) : SaleStore {
         override fun recordSale(sale: SaleRecord) = delegate.recordSale(sale)
+
         override fun recordRefund(saleId: String, refund: RefundRecord): Unit =
             throw IllegalStateException("disk full")
+
         override fun recordVoid(saleId: String, voidRecord: VoidRecord) =
             delegate.recordVoid(saleId, voidRecord)
+
         override fun findSale(saleId: String): StoredSale? = delegate.findSale(saleId)
+
         override fun listSales(limit: Int): List<StoredSale> = delegate.listSales(limit)
     }
 
-    private fun controller(store: SaleStore) = NexoEmulatorController(
-        scope = scope,
-        config = EmulatorConfig(
-            passphrase = null,
-            keyId = "emulator",
-            keyVersion = 0,
-            caPem = null,
-            hostnamePattern = "*",
-        ),
-        saleStore = store,
-        callbackExecutor = callbackExecutor,
-    )
+    private fun controller(store: SaleStore) =
+        NexoEmulatorController(
+            scope = scope,
+            config =
+                EmulatorConfig(
+                    passphrase = null,
+                    keyId = "emulator",
+                    keyVersion = 0,
+                    caPem = null,
+                    hostnamePattern = "*",
+                ),
+            saleStore = store,
+            callbackExecutor = callbackExecutor,
+        )
 
     @Test
     fun fullRefundRunsAgainstTheTerminalAndRecordsIntoTheStore() {
@@ -379,9 +404,10 @@ class NexoEmulatorControllerRefundTest {
             }
 
             controller.refundSale("sale-1")
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
 
             assertTrue(outcome.success, "expected a successful refund, got: ${outcome.message}")
             assertEquals("Refund complete", outcome.title)
@@ -395,7 +421,8 @@ class NexoEmulatorControllerRefundTest {
             // Events feed (one line) with the full record on Detailed
             val state = controller.state.value
             assertEquals(
-                1, state.events.count { "unparsable receipt payload" in it },
+                1,
+                state.events.count { "unparsable receipt payload" in it },
                 "expected exactly the cashier-receipt warning on the events feed; " +
                     "events tail: ${state.events.takeLast(8)}",
             )
@@ -426,15 +453,17 @@ class NexoEmulatorControllerRefundTest {
 
             // the wire saw the void of the stored card leg, plus the award
             // reversal carrying its own reference
-            val reversal = assertNotNull(
-                requests.firstOrNull { "\"ReversalRequest\"" in it },
-                "no ReversalRequest reached the terminal",
-            )
+            val reversal =
+                assertNotNull(
+                    requests.firstOrNull { "\"ReversalRequest\"" in it },
+                    "no ReversalRequest reached the terminal",
+                )
             assertTrue("poi-card-1" in reversal, "original card reference missing: $reversal")
-            val loyalty = assertNotNull(
-                requests.firstOrNull { "\"LoyaltyRequest\"" in it },
-                "no award reversal reached the terminal",
-            )
+            val loyalty =
+                assertNotNull(
+                    requests.firstOrNull { "\"LoyaltyRequest\"" in it },
+                    "no award reversal reached the terminal",
+                )
             assertTrue("poi-award-1" in loyalty, "award reference missing: $loyalty")
 
             // a second attempt is refused before the wire — the sale was
@@ -470,9 +499,10 @@ class NexoEmulatorControllerRefundTest {
             controller.abort()
             store.lookupRelease.countDown()
 
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertEquals("Refund aborted", outcome.title)
             assertTrue("before any money moved" in outcome.message, outcome.message)
             // no refund reached the terminal and nothing was recorded
@@ -519,15 +549,19 @@ class NexoEmulatorControllerRefundTest {
     fun mixedGiftCardSaleRejectsItemReturnsAndPreservesFullRefund() {
         val store = storeWithOneSale()
         val original = assertNotNull(store.findSale("sale-1")).sale
-        val mixedSale = original.copy(
-            id = "sale-with-gift-card",
-            authorizedAmount = "27.10",
-            giftCardLoads = listOf(GiftCardLoad(
-                basketReference = "gift-card-1",
-                amount = "25.00",
-                poiTransactionId = "poi-load-1",
-            )),
-        )
+        val mixedSale =
+            original.copy(
+                id = "sale-with-gift-card",
+                authorizedAmount = "27.10",
+                giftCardLoads =
+                    listOf(
+                        GiftCardLoad(
+                            basketReference = "gift-card-1",
+                            amount = "25.00",
+                            poiTransactionId = "poi-load-1",
+                        )
+                    ),
+            )
         store.recordSale(mixedSale)
         val controller = controller(store)
         runBlocking {
@@ -542,16 +576,16 @@ class NexoEmulatorControllerRefundTest {
 
             withTimeout(10_000) {
                 controller.state.first { state ->
-                    !state.refundInProgress && state.events.any {
-                        "use the full refund to reverse its load and funding together" in it
-                    }
+                    !state.refundInProgress &&
+                        state.events.any {
+                            "use the full refund to reverse its load and funding together" in it
+                        }
                 }
             }
             assertTrue(controller.state.value.basket.isEmpty())
             assertTrue(assertNotNull(store.findSale(mixedSale.id)).refunds.isEmpty())
-            val sale = assertNotNull(
-                controller.state.value.sales.firstOrNull { it.id == mixedSale.id }
-            )
+            val sale =
+                assertNotNull(controller.state.value.sales.firstOrNull { it.id == mixedSale.id })
             assertTrue(sale.hasGiftCardPurchase)
             assertTrue(sale.fullRefundAvailable)
         }
@@ -568,9 +602,10 @@ class NexoEmulatorControllerRefundTest {
             }
 
             controller.refundSale("sale-1")
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
 
             // the money moved, so the outcome stays a success — but it must
             // warn that the unrecorded refund will be offered again
@@ -585,9 +620,8 @@ class NexoEmulatorControllerRefundTest {
 
     @Test
     fun itemRefundDrawsFromTheOutstandingLegWhenTheCardLegWasReturned() {
-        val store = JsonlSaleStore(
-            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
-        )
+        val store =
+            JsonlSaleStore(Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile())
         store.recordSale(
             SaleRecord(
                 id = "sale-3",
@@ -596,21 +630,23 @@ class NexoEmulatorControllerRefundTest {
                 poiId = "EMULATOR",
                 currency = "USD",
                 completedAt = "2026-08-06T12:00:00Z",
-                items = listOf(
-                    SaleItem(
-                        sku = "SKU-1",
-                        description = "Water",
-                        quantity = 2,
-                        unitPrice = "1.05",
-                        lineTotal = "2.10",
-                    )
-                ),
+                items =
+                    listOf(
+                        SaleItem(
+                            sku = "SKU-1",
+                            description = "Water",
+                            quantity = 2,
+                            unitPrice = "1.05",
+                            lineTotal = "2.10",
+                        )
+                    ),
                 authorizedAmount = "30.00",
-                legs = listOf(
-                    TransactionLeg(LegType.CARD, "poi-card-3", amount = "20.00"),
-                    TransactionLeg(LegType.STORED_VALUE, "poi-sv-3", amount = "10.00"),
-                    TransactionLeg(LegType.AWARD, "poi-award-3"),
-                ),
+                legs =
+                    listOf(
+                        TransactionLeg(LegType.CARD, "poi-card-3", amount = "20.00"),
+                        TransactionLeg(LegType.STORED_VALUE, "poi-sv-3", amount = "10.00"),
+                        TransactionLeg(LegType.AWARD, "poi-award-3"),
+                    ),
             )
         )
         // the state a split-tender full refund leaves behind when the card
@@ -638,17 +674,19 @@ class NexoEmulatorControllerRefundTest {
             withTimeout(10_000) { controller.state.first { s -> s.basket.any { it.credit } } }
             withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
             controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(outcome.success, "expected a successful refund, got: ${outcome.message}")
 
             // the return must not touch the already-returned card
             // transaction — it restores to the outstanding gift card leg
-            val payment = assertNotNull(
-                requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" in it },
-                "no refund PaymentRequest reached the terminal",
-            )
+            val payment =
+                assertNotNull(
+                    requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" in it },
+                    "no refund PaymentRequest reached the terminal",
+                )
             assertTrue("poi-sv-3" in payment, "expected the stored value reference: $payment")
             assertTrue("poi-card-3" !in payment, "the returned card leg was referenced: $payment")
             assertEquals(
@@ -666,9 +704,8 @@ class NexoEmulatorControllerRefundTest {
 
     @Test
     fun splitTenderFullRefundReturnsEveryTenderLeg() {
-        val store = JsonlSaleStore(
-            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
-        )
+        val store =
+            JsonlSaleStore(Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile())
         store.recordSale(
             SaleRecord(
                 id = "sale-2",
@@ -678,10 +715,11 @@ class NexoEmulatorControllerRefundTest {
                 currency = "USD",
                 completedAt = "2026-08-06T11:00:00Z",
                 authorizedAmount = "30.00",
-                legs = listOf(
-                    TransactionLeg(LegType.CARD, "poi-card-2", amount = "20.00"),
-                    TransactionLeg(LegType.STORED_VALUE, "poi-sv-2", amount = "10.00"),
-                ),
+                legs =
+                    listOf(
+                        TransactionLeg(LegType.CARD, "poi-card-2", amount = "20.00"),
+                        TransactionLeg(LegType.STORED_VALUE, "poi-sv-2", amount = "10.00"),
+                    ),
             )
         )
         val controller = controller(store)
@@ -692,9 +730,10 @@ class NexoEmulatorControllerRefundTest {
             }
 
             controller.refundSale("sale-2")
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(outcome.success, "expected a successful refund, got: ${outcome.message}")
 
             // the void reverses both tender legs in one flow, each with its
@@ -740,9 +779,10 @@ class NexoEmulatorControllerRefundTest {
             withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
 
             controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(outcome.success, "expected a successful settlement, got: ${outcome.message}")
             assertTrue(
                 "returned $2.24" in outcome.message,
@@ -752,10 +792,11 @@ class NexoEmulatorControllerRefundTest {
             // the settlement's refund leg references the card leg and
             // carries the returned item with the credit total: 2 × 1.05
             // plus 0.14 tax (matching the UI's refundMinor of 224 cents)
-            val payment = assertNotNull(
-                requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" in it },
-                "no refund PaymentRequest reached the terminal",
-            )
+            val payment =
+                assertNotNull(
+                    requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" in it },
+                    "no refund PaymentRequest reached the terminal",
+                )
             assertTrue("poi-card-1" in payment, "original card reference missing: $payment")
             assertTrue("SKU-1" in payment, "returned item missing from: $payment")
             assertTrue("2.24" in payment, "credit total missing from: $payment")
@@ -820,9 +861,10 @@ class NexoEmulatorControllerRefundTest {
             assertEquals("32.75", controller.state.value.basketTotal)
 
             controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(outcome.success, "expected a successful settlement, got: ${outcome.message}")
             assertTrue(
                 "netted $2.24 against the purchase" in outcome.message,
@@ -835,10 +877,11 @@ class NexoEmulatorControllerRefundTest {
                 requests.none { "\"PaymentRequest\"" in it && "\"Refund\"" in it },
                 "a netted settlement must not send a refund leg",
             )
-            val charge = assertNotNull(
-                requests.firstOrNull { "\"PaymentRequest\"" in it },
-                "no charge PaymentRequest reached the terminal",
-            )
+            val charge =
+                assertNotNull(
+                    requests.firstOrNull { "\"PaymentRequest\"" in it },
+                    "no charge PaymentRequest reached the terminal",
+                )
             assertTrue("32.75" in charge, "netted charge amount missing: $charge")
 
             // the return still lands on the ORIGINAL sale's history — full
@@ -873,24 +916,28 @@ class NexoEmulatorControllerRefundTest {
                 else -> defaultResponse(body)
             }
         }
-        val store = JsonlSaleStore(
-            Files.createTempDirectory("refund-loyalty-abort").resolve("sales.jsonl").toFile()
+        val store =
+            JsonlSaleStore(
+                Files.createTempDirectory("refund-loyalty-abort").resolve("sales.jsonl").toFile()
+            )
+        store.recordSale(
+            SaleRecord(
+                id = "sale-loyalty-abort",
+                sessionId = "session-loyalty-abort",
+                saleId = "bilt-emulator",
+                poiId = "EMULATOR",
+                currency = "USD",
+                completedAt = "2026-08-06T11:00:00Z",
+                memberId = "member-42",
+                authorizedAmount = "30.00",
+                legs =
+                    listOf(
+                        TransactionLeg(LegType.CARD, "poi-card-loyalty", amount = "20.00"),
+                        TransactionLeg(LegType.STORED_VALUE, "poi-sv-loyalty", amount = "10.00"),
+                        TransactionLeg(LegType.AWARD, "poi-award-loyalty"),
+                    ),
+            )
         )
-        store.recordSale(SaleRecord(
-            id = "sale-loyalty-abort",
-            sessionId = "session-loyalty-abort",
-            saleId = "bilt-emulator",
-            poiId = "EMULATOR",
-            currency = "USD",
-            completedAt = "2026-08-06T11:00:00Z",
-            memberId = "member-42",
-            authorizedAmount = "30.00",
-            legs = listOf(
-                TransactionLeg(LegType.CARD, "poi-card-loyalty", amount = "20.00"),
-                TransactionLeg(LegType.STORED_VALUE, "poi-sv-loyalty", amount = "10.00"),
-                TransactionLeg(LegType.AWARD, "poi-award-loyalty"),
-            ),
-        ))
         val controller = controller(store)
         try {
             runBlocking {
@@ -904,11 +951,12 @@ class NexoEmulatorControllerRefundTest {
 
                 controller.abort()
                 assertTrue(abortSeen.await(10, java.util.concurrent.TimeUnit.SECONDS))
-                val completed = withTimeout(10_000) {
-                    controller.state.first {
-                        !it.refundInProgress && it.sales.singleOrNull()?.fullyRefunded == true
+                val completed =
+                    withTimeout(10_000) {
+                        controller.state.first {
+                            !it.refundInProgress && it.sales.singleOrNull()?.fullyRefunded == true
+                        }
                     }
-                }
                 assertTrue(assertNotNull(completed.paymentOutcome).success)
                 assertFalse(completed.sales.single().fullRefundAvailable)
                 val stored = assertNotNull(store.findSale("sale-loyalty-abort"))
@@ -926,12 +974,18 @@ class NexoEmulatorControllerRefundTest {
                             state.events.any { "already refunded in full" in it }
                     }
                 }
-                assertEquals(1, requests.count {
-                    "\"ReversalRequest\"" in it && "poi-card-loyalty" in it
-                })
-                assertEquals(1, requests.count {
-                    "\"ReversalRequest\"" in it && "poi-sv-loyalty" in it
-                })
+                assertEquals(
+                    1,
+                    requests.count {
+                        "\"ReversalRequest\"" in it && "poi-card-loyalty" in it
+                    },
+                )
+                assertEquals(
+                    1,
+                    requests.count {
+                        "\"ReversalRequest\"" in it && "poi-sv-loyalty" in it
+                    },
+                )
                 assertEquals(1, assertNotNull(store.findSale("sale-loyalty-abort")).refunds.size)
             }
         } finally {
@@ -941,9 +995,8 @@ class NexoEmulatorControllerRefundTest {
 
     @Test
     fun partialVoidRecordsProgressAndTheRetryCoversOnlyTheOutstandingLeg() {
-        val store = JsonlSaleStore(
-            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
-        )
+        val store =
+            JsonlSaleStore(Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile())
         store.recordSale(
             SaleRecord(
                 id = "sale-2",
@@ -953,10 +1006,11 @@ class NexoEmulatorControllerRefundTest {
                 currency = "USD",
                 completedAt = "2026-08-06T11:00:00Z",
                 authorizedAmount = "30.00",
-                legs = listOf(
-                    TransactionLeg(LegType.CARD, "poi-card-2", amount = "20.00"),
-                    TransactionLeg(LegType.STORED_VALUE, "poi-sv-2", amount = "10.00"),
-                ),
+                legs =
+                    listOf(
+                        TransactionLeg(LegType.CARD, "poi-card-2", amount = "20.00"),
+                        TransactionLeg(LegType.STORED_VALUE, "poi-sv-2", amount = "10.00"),
+                    ),
             )
         )
         // the stored value reversal fails once: the card leg reverses,
@@ -978,9 +1032,10 @@ class NexoEmulatorControllerRefundTest {
             }
 
             controller.refundSale("sale-2")
-            val failure = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val failure =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(!failure.success, "the first attempt must fail on the SV leg")
 
             // the reversed card leg is recorded, so the sale is partially
@@ -1024,9 +1079,8 @@ class NexoEmulatorControllerRefundTest {
 
     @Test
     fun partialVoidPersistsStructuredGiftCardLoadProgress() {
-        val store = JsonlSaleStore(
-            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
-        )
+        val store =
+            JsonlSaleStore(Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile())
         store.recordSale(
             SaleRecord(
                 id = "sale-with-prefix-loads",
@@ -1036,19 +1090,20 @@ class NexoEmulatorControllerRefundTest {
                 currency = "USD",
                 completedAt = "2026-08-06T11:00:00Z",
                 authorizedAmount = "25.00",
-                giftCardLoads = listOf(
-                    GiftCardLoad("gift-card-10", "10.00", "poi-load-10"),
-                    GiftCardLoad("gift-card-1", "15.00", "poi-load-1"),
-                ),
+                giftCardLoads =
+                    listOf(
+                        GiftCardLoad("gift-card-10", "10.00", "poi-load-10"),
+                        GiftCardLoad("gift-card-1", "15.00", "poi-load-1"),
+                    ),
             )
         )
         var shortIdFailures = 1
         server.dispatcher = respondingWith { body ->
             if (
                 "\"StoredValueRequest\"" in body &&
-                "\"Reverse\"" in body &&
-                "\"TransactionID\":\"poi-load-1\"" in body &&
-                shortIdFailures > 0
+                    "\"Reverse\"" in body &&
+                    "\"TransactionID\":\"poi-load-1\"" in body &&
+                    shortIdFailures > 0
             ) {
                 shortIdFailures--
                 STORED_VALUE_REVERSE_FAIL
@@ -1064,14 +1119,14 @@ class NexoEmulatorControllerRefundTest {
             }
 
             controller.refundSale("sale-with-prefix-loads")
-            val failure = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val failure =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(!failure.success, "the first attempt must fail on the shorter load ID")
             assertEquals(
                 setOf("poi-load-10"),
-                assertNotNull(store.findSale("sale-with-prefix-loads"))
-                    .reversedGiftCardLoadIds,
+                assertNotNull(store.findSale("sale-with-prefix-loads")).reversedGiftCardLoadIds,
                 "the shorter ID must not match the reversed longer ID by prefix",
             )
 
@@ -1096,9 +1151,8 @@ class NexoEmulatorControllerRefundTest {
 
     @Test
     fun partialVoidWithAFailedRecordWarnsAboutTheDoubleReversal() {
-        val backing = JsonlSaleStore(
-            Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile()
-        )
+        val backing =
+            JsonlSaleStore(Files.createTempDirectory("refund-e2e").resolve("sales.jsonl").toFile())
         backing.recordSale(
             SaleRecord(
                 id = "sale-2",
@@ -1108,10 +1162,11 @@ class NexoEmulatorControllerRefundTest {
                 currency = "USD",
                 completedAt = "2026-08-06T11:00:00Z",
                 authorizedAmount = "30.00",
-                legs = listOf(
-                    TransactionLeg(LegType.CARD, "poi-card-2", amount = "20.00"),
-                    TransactionLeg(LegType.STORED_VALUE, "poi-sv-2", amount = "10.00"),
-                ),
+                legs =
+                    listOf(
+                        TransactionLeg(LegType.CARD, "poi-card-2", amount = "20.00"),
+                        TransactionLeg(LegType.STORED_VALUE, "poi-sv-2", amount = "10.00"),
+                    ),
             )
         )
         server.dispatcher = respondingWith { body ->
@@ -1127,9 +1182,10 @@ class NexoEmulatorControllerRefundTest {
                 controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
             }
             controller.refundSale("sale-2")
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(!outcome.success)
             assertTrue(
                 "could NOT be recorded" in outcome.message,
@@ -1180,19 +1236,21 @@ class NexoEmulatorControllerRefundTest {
             withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
             requests.clear()
             controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(outcome.success, "expected a successful settlement, got: ${outcome.message}")
             assertTrue(
                 "register-paid" in outcome.message,
                 "the overflow past the tender's cap must be called out: ${outcome.message}",
             )
 
-            val refundLeg = assertNotNull(
-                requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" in it },
-                "no refund PaymentRequest reached the terminal",
-            )
+            val refundLeg =
+                assertNotNull(
+                    requests.firstOrNull { "\"PaymentRequest\"" in it && "Refund" in it },
+                    "no refund PaymentRequest reached the terminal",
+                )
             assertTrue(
                 "\"RequestedAmount\":32.75" in refundLeg,
                 "the tender must be asked for what it collected, not shelf value: $refundLeg",
@@ -1231,23 +1289,26 @@ class NexoEmulatorControllerRefundTest {
                 LoyaltyOptions(rebates = false, redemption = false, award = false),
                 net = false,
             )
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(outcome.success, "expected a successful settlement, got: ${outcome.message}")
             assertTrue(
                 "returned $2.24 to the card" in outcome.message,
                 "return missing from: ${outcome.message}",
             )
-            val refundLeg = assertNotNull(
-                requests.firstOrNull { "\"PaymentRequest\"" in it && "\"Refund\"" in it },
-                "no refund PaymentRequest reached the terminal",
-            )
+            val refundLeg =
+                assertNotNull(
+                    requests.firstOrNull { "\"PaymentRequest\"" in it && "\"Refund\"" in it },
+                    "no refund PaymentRequest reached the terminal",
+                )
             assertTrue("poi-card-1" in refundLeg && "2.24" in refundLeg)
-            val charge = assertNotNull(
-                requests.firstOrNull { "\"PaymentRequest\"" in it && "\"Refund\"" !in it },
-                "no charge PaymentRequest reached the terminal",
-            )
+            val charge =
+                assertNotNull(
+                    requests.firstOrNull { "\"PaymentRequest\"" in it && "\"Refund\"" !in it },
+                    "no charge PaymentRequest reached the terminal",
+                )
             assertTrue("34.99" in charge, "charge amount missing: $charge")
             val refund = assertNotNull(store.findSale("sale-1")).refunds.single()
             assertEquals(LegType.CARD, refund.leg)
@@ -1267,21 +1328,27 @@ class NexoEmulatorControllerRefundTest {
             withTimeout(10_000) { controller.state.first { it.sessionId != null } }
 
             controller.addCustomItem(2400)
-            val added = withTimeout(10_000) {
-                controller.state.first { it.basket.isNotEmpty() }
-            }
+            val added =
+                withTimeout(10_000) {
+                    controller.state.first { it.basket.isNotEmpty() }
+                }
             val line = added.basket.single()
             assertTrue(CustomItem.isCustomSku(line.sku), "not a keypad SKU: ${line.sku}")
-            assertEquals(2400L, line.editablePriceMinor, "the keypad must be able to adopt the line")
+            assertEquals(
+                2400L,
+                line.editablePriceMinor,
+                "the keypad must be able to adopt the line",
+            )
             // keyed amounts are charged as typed — no tax on top
             assertEquals("24.00", added.basketTotal)
             assertEquals("0.00", added.basketTax)
 
             // a re-price replaces the line rather than adding a second one
             controller.updateCustomItemPrice(line.sku, 3550)
-            val repriced = withTimeout(10_000) {
-                controller.state.first { it.basketTotal == "35.50" }
-            }
+            val repriced =
+                withTimeout(10_000) {
+                    controller.state.first { it.basketTotal == "35.50" }
+                }
             assertEquals(1, repriced.basket.size)
             assertEquals(3550L, repriced.basket.single().editablePriceMinor)
 
@@ -1295,11 +1362,10 @@ class NexoEmulatorControllerRefundTest {
     }
 
     /**
-     * A RETURN of a keypad item carries the same CUSTOM- SKU as the sale
-     * it reverses. It must not be offered to the keypad: the re-price
-     * rebuilds the line as a SALE item, which would silently turn the
-     * credit into a charge while the pending return still expects to
-     * restore money to the original tender.
+     * A RETURN of a keypad item carries the same CUSTOM- SKU as the sale it reverses. It must not
+     * be offered to the keypad: the re-price rebuilds the line as a SALE item, which would silently
+     * turn the credit into a charge while the pending return still expects to restore money to the
+     * original tender.
      */
     @Test
     fun returnedCustomLinesAreNotOfferedToTheKeypad() {
@@ -1313,9 +1379,10 @@ class NexoEmulatorControllerRefundTest {
             withTimeout(10_000) { controller.state.first { it.sessionId != null } }
 
             controller.addReturnToBasket("sale-c", setOf("${CustomItem.SKU_PREFIX}1"))
-            val returned = withTimeout(10_000) {
-                controller.state.first { s -> s.basket.any { it.credit } }
-            }
+            val returned =
+                withTimeout(10_000) {
+                    controller.state.first { s -> s.basket.any { it.credit } }
+                }
             val credit = returned.basket.single { it.credit }
             assertEquals("${CustomItem.SKU_PREFIX}1", credit.sku)
             assertEquals(
@@ -1326,9 +1393,10 @@ class NexoEmulatorControllerRefundTest {
 
             // and a new keypad item alongside it still is
             controller.addCustomItem(1000)
-            val mixed = withTimeout(10_000) {
-                controller.state.first { s -> s.basket.size == 2 }
-            }
+            val mixed =
+                withTimeout(10_000) {
+                    controller.state.first { s -> s.basket.size == 2 }
+                }
             val sale = mixed.basket.single { !it.credit }
             assertEquals(1000L, sale.editablePriceMinor)
         }
@@ -1368,9 +1436,11 @@ class NexoEmulatorControllerRefundTest {
             val rejected = controller.state.value
             assertEquals("10.00", rejected.basketTotal)
             assertEquals(2, rejected.basket.size)
-            assertTrue(rejected.events.drop(eventCount).any {
-                "credit amount cannot exceed the basket's remaining sale value 10.00" in it
-            })
+            assertTrue(
+                rejected.events.drop(eventCount).any {
+                    "credit amount cannot exceed the basket's remaining sale value 10.00" in it
+                }
+            )
         }
     }
 
@@ -1386,9 +1456,13 @@ class NexoEmulatorControllerRefundTest {
             withTimeout(10_000) { controller.state.first { it.sessionId != null } }
 
             controller.addCustomItem(2400)
-            val sku = withTimeout(10_000) {
-                controller.state.first { it.basket.isNotEmpty() }
-            }.basket.single().sku
+            val sku =
+                withTimeout(10_000) {
+                        controller.state.first { it.basket.isNotEmpty() }
+                    }
+                    .basket
+                    .single()
+                    .sku
             // backspaced through to nothing, then released
             assertTrue(controller.updateCustomItemPrice(sku, 0))
             assertTrue(controller.removeCustomItem(sku))
@@ -1399,8 +1473,10 @@ class NexoEmulatorControllerRefundTest {
         }
     }
 
-    /** With no checkout there is nothing to mirror, and the keypad must be
-     *  told so rather than going on displaying an amount. */
+    /**
+     * With no checkout there is nothing to mirror, and the keypad must be told so rather than going
+     * on displaying an amount.
+     */
     @Test
     fun keypadOperationsWithoutACheckoutReportFailure() {
         val controller = controller(storeWithOneSale())
@@ -1410,10 +1486,9 @@ class NexoEmulatorControllerRefundTest {
     }
 
     /**
-     * Returns are keyed by SKU in the basket, so two sales whose keypad
-     * lines shared one would collide here: the engine refuses a same-SKU
-     * upsert at a different price, and merges the lines when the prices
-     * match. Basket-scoped SKUs keep the two returns apart.
+     * Returns are keyed by SKU in the basket, so two sales whose keypad lines shared one would
+     * collide here: the engine refuses a same-SKU upsert at a different price, and merges the lines
+     * when the prices match. Basket-scoped SKUs keep the two returns apart.
      */
     @Test
     fun twoSalesWorthOfKeypadReturnsRingSideBySide() {
@@ -1464,9 +1539,10 @@ class NexoEmulatorControllerRefundTest {
             controller.addReturnToBasket("sale-1", setOf("SKU-1"))
             withTimeout(10_000) {
                 controller.state.first { state ->
-                    !state.refundInProgress && state.basket.any {
-                        it.type == BasketLineType.RETURN
-                    }
+                    !state.refundInProgress &&
+                        state.basket.any {
+                            it.type == BasketLineType.RETURN
+                        }
                 }
             }
             controller.addGiftCardPurchase("25.00", "GC-123")
@@ -1488,12 +1564,11 @@ class NexoEmulatorControllerRefundTest {
 
             controller.addProduct(Product("SKU-NEW", "Desk Lamp", 3_499, "Grocery"))
             requests.clear()
-            controller.settle(
-                LoyaltyOptions(rebates = false, redemption = false, award = false)
-            )
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(outcome.success, outcome.message)
             assertTrue(
                 requests.none { "\"StoredValueRequest\"" in it },
@@ -1523,39 +1598,44 @@ class NexoEmulatorControllerRefundTest {
 
             controller.inquireStoredValueBalance("GC-123")
 
-            val balance = withTimeout(10_000) {
-                controller.state.first {
-                    it.paymentOutcome?.title == "Balance inquiry complete"
-                }.paymentOutcome!!
-            }
+            val balance =
+                withTimeout(10_000) {
+                    controller.state
+                        .first {
+                            it.paymentOutcome?.title == "Balance inquiry complete"
+                        }
+                        .paymentOutcome!!
+                }
             assertTrue(balance.success)
             assertTrue("Available balance: $65.00 USD" in balance.message, balance.message)
             withTimeout(10_000) {
                 controller.state.first { !it.storedValueInProgress }
             }
-            val inquiry = assertNotNull(
-                requests.firstOrNull { "\"BalanceInquiryRequest\"" in it }
-            )
+            val inquiry = assertNotNull(requests.firstOrNull { "\"BalanceInquiryRequest\"" in it })
             assertTrue("GC-123" in inquiry)
 
             controller.dismissPaymentOutcome()
             controller.activateStoredValue("GC-123")
 
-            val activation = withTimeout(10_000) {
-                controller.state.first {
-                    it.paymentOutcome?.title == "Activation complete"
-                }.paymentOutcome!!
-            }
+            val activation =
+                withTimeout(10_000) {
+                    controller.state
+                        .first {
+                            it.paymentOutcome?.title == "Activation complete"
+                        }
+                        .paymentOutcome!!
+                }
             assertTrue(activation.success)
             assertTrue("Stored value card activated" in activation.message)
             withTimeout(10_000) {
                 controller.state.first { !it.storedValueInProgress }
             }
-            val activate = assertNotNull(
-                requests.firstOrNull {
-                    "\"StoredValueRequest\"" in it && "\"Activate\"" in it
-                }
-            )
+            val activate =
+                assertNotNull(
+                    requests.firstOrNull {
+                        "\"StoredValueRequest\"" in it && "\"Activate\"" in it
+                    }
+                )
             assertTrue("GC-123" in activate)
             assertTrue(
                 Regex("\"ItemAmount\"\\s*:\\s*0(?:\\.0)?").containsMatchIn(activate),
@@ -1621,16 +1701,19 @@ class NexoEmulatorControllerRefundTest {
                     DISPLAY_OK
                 }
                 "\"PaymentRequest\"" in body -> {
-                    val amount = Regex("\"RequestedAmount\":([0-9.]+)")
-                        .find(body)!!.groupValues[1]
-                    PAYMENT_OK_25.replace("\"AuthorizedAmount\":25.00", "\"AuthorizedAmount\":$amount")
+                    val amount = Regex("\"RequestedAmount\":([0-9.]+)").find(body)!!.groupValues[1]
+                    PAYMENT_OK_25.replace(
+                        "\"AuthorizedAmount\":25.00",
+                        "\"AuthorizedAmount\":$amount",
+                    )
                 }
                 else -> defaultResponse(body)
             }
         }
-        val store = JsonlSaleStore(
-            Files.createTempDirectory("gift-purchase-race").resolve("sales.jsonl").toFile()
-        )
+        val store =
+            JsonlSaleStore(
+                Files.createTempDirectory("gift-purchase-race").resolve("sales.jsonl").toFile()
+            )
         val controller = controller(store)
         try {
             runBlocking {
@@ -1650,7 +1733,9 @@ class NexoEmulatorControllerRefundTest {
                 controller.addProduct(Product("SKU-RACE", "Original item", 2_500, "Grocery"))
                 assertTrue(displayOnWire.await(10, java.util.concurrent.TimeUnit.SECONDS))
                 val basketBefore = controller.state.value.basket
-                controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
+                controller.settle(
+                    LoyaltyOptions(rebates = false, redemption = false, award = false)
+                )
                 assertTrue(controller.state.value.paymentInProgress)
                 assertTrue(requests.none { "\"PaymentRequest\"" in it })
 
@@ -1658,14 +1743,17 @@ class NexoEmulatorControllerRefundTest {
                 val afterAdd = controller.state.value
                 releaseDisplay.countDown()
 
-                val completed = withTimeout(10_000) {
-                    controller.state.first {
-                        !it.paymentInProgress && it.sessionId == null && it.sales.isNotEmpty()
+                val completed =
+                    withTimeout(10_000) {
+                        controller.state.first {
+                            !it.paymentInProgress && it.sessionId == null && it.sales.isNotEmpty()
+                        }
                     }
-                }
                 val payment = requests.single { "\"PaymentRequest\"" in it }
-                assertTrue("\"RequestedAmount\":25.0" in payment,
-                    "the late gift-card line must not increase the charge: $payment")
+                assertTrue(
+                    "\"RequestedAmount\":25.0" in payment,
+                    "the late gift-card line must not increase the charge: $payment",
+                )
                 assertEquals(basketBefore, afterAdd.basket)
                 assertEquals("25.00", afterAdd.basketTotal)
                 assertTrue(afterAdd.events.any { "Another operation is already in progress" in it })
@@ -1694,7 +1782,9 @@ class NexoEmulatorControllerRefundTest {
 
             controller.addGiftCardPurchase("invalid", "GC-123")
             assertTrue(controller.state.value.basket.isEmpty())
-            assertTrue(controller.state.value.events.any { "Failed to add gift card purchase" in it })
+            assertTrue(
+                controller.state.value.events.any { "Failed to add gift card purchase" in it }
+            )
 
             controller.addGiftCardPurchase("25.00", "GC-123")
             assertTrue(controller.state.value.basket.single().giftCard)
@@ -1706,9 +1796,10 @@ class NexoEmulatorControllerRefundTest {
 
     @Test
     fun giftCardPurchaseLoadsThenFundsAndPersistsTheLoad() {
-        val store = JsonlSaleStore(
-            Files.createTempDirectory("gift-purchase-e2e").resolve("sales.jsonl").toFile()
-        )
+        val store =
+            JsonlSaleStore(
+                Files.createTempDirectory("gift-purchase-e2e").resolve("sales.jsonl").toFile()
+            )
         server.dispatcher = respondingWith { body ->
             when {
                 "\"PaymentRequest\"" in body -> PAYMENT_OK_25
@@ -1729,27 +1820,31 @@ class NexoEmulatorControllerRefundTest {
             assertTrue(line.giftCard)
             assertEquals("25.00", controller.state.value.basketTotal)
 
-            controller.settle(
-                LoyaltyOptions(rebates = false, redemption = false, award = false)
-            )
-            val outcome = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            controller.settle(LoyaltyOptions(rebates = false, redemption = false, award = false))
+            val outcome =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(outcome.success, outcome.message)
             assertTrue("gift card loaded $25.00" in outcome.message, outcome.message)
 
             val purchaseRequests = requests.toList()
             val fundingIndex = purchaseRequests.indexOfFirst { "\"PaymentRequest\"" in it }
             val loadIndex = purchaseRequests.indexOfFirst { "\"StoredValueRequest\"" in it }
-            val loadRequest = assertNotNull(
-                purchaseRequests.getOrNull(loadIndex),
-                "gift card load did not reach the terminal",
-            )
+            val loadRequest =
+                assertNotNull(
+                    purchaseRequests.getOrNull(loadIndex),
+                    "gift card load did not reach the terminal",
+                )
             assertTrue("\"StoredValueTransactionType\":\"Load\"" in loadRequest)
-            assertTrue(purchaseRequests.none { "\"Activate\"" in it },
-                "funded purchases must load without activation")
-            assertTrue(loadIndex >= 0 && fundingIndex > loadIndex,
-                "funding charged before the gift card loaded")
+            assertTrue(
+                purchaseRequests.none { "\"Activate\"" in it },
+                "funded purchases must load without activation",
+            )
+            assertTrue(
+                loadIndex >= 0 && fundingIndex > loadIndex,
+                "funding charged before the gift card loaded",
+            )
             assertTrue("GC-123" in loadRequest)
             assertTrue("25.0" in loadRequest)
             val nexoLog = controller.state.value.nexoMessages.joinToString("\n")
@@ -1771,9 +1866,10 @@ class NexoEmulatorControllerRefundTest {
             withTimeout(10_000) { controller.state.first { it.sessionId == null } }
             requests.clear()
             controller.refundSale(sale.id)
-            val refund = withTimeout(10_000) {
-                controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
-            }
+            val refund =
+                withTimeout(10_000) {
+                    controller.state.first { it.paymentOutcome != null }.paymentOutcome!!
+                }
             assertTrue(refund.success, refund.message)
             val refundRequests = requests.toList()
             val loadReverseIndex = refundRequests.indexOfFirst {

@@ -23,7 +23,7 @@ import javax.crypto.spec.PBEKeySpec
 internal class DerivedKey(
     val hmacKey: ByteArray,
     val cipherKey: ByteArray,
-    val iv: ByteArray
+    val iv: ByteArray,
 ) {
     companion object {
         const val HMAC_KEY_LENGTH = 32
@@ -41,7 +41,8 @@ internal class DerivedKey(
                 val raw = skf.generateSecret(spec).encoded
 
                 val hmacKey = raw.copyOfRange(0, HMAC_KEY_LENGTH)
-                val cipherKey = raw.copyOfRange(HMAC_KEY_LENGTH, HMAC_KEY_LENGTH + CIPHER_KEY_LENGTH)
+                val cipherKey =
+                    raw.copyOfRange(HMAC_KEY_LENGTH, HMAC_KEY_LENGTH + CIPHER_KEY_LENGTH)
                 val iv = raw.copyOfRange(HMAC_KEY_LENGTH + CIPHER_KEY_LENGTH, TOTAL_LENGTH)
 
                 return DerivedKey(hmacKey, cipherKey, iv)

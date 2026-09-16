@@ -8,22 +8,24 @@ import com.bilt.pos.emulator.EmulatorApp
 import com.bilt.pos.emulator.catalog.MockProductProvider
 import com.bilt.pos.emulator.session.NexoEmulatorController
 import com.bilt.pos.emulator.store.JsonlSaleStore
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import java.awt.EventQueue
 import java.io.File
 import java.util.concurrent.Executor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 fun main() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val controller = NexoEmulatorController(
-        scope = scope,
-        saleStore = JsonlSaleStore.inDirectory(
-            File(System.getProperty("user.home"), ".bilt-pos-emulator")
-        ),
-        callbackExecutor = Executor(EventQueue::invokeLater),
-    )
+    val controller =
+        NexoEmulatorController(
+            scope = scope,
+            saleStore =
+                JsonlSaleStore.inDirectory(
+                    File(System.getProperty("user.home"), ".bilt-pos-emulator")
+                ),
+            callbackExecutor = Executor(EventQueue::invokeLater),
+        )
     controller.autodetectAddress()
 
     application {

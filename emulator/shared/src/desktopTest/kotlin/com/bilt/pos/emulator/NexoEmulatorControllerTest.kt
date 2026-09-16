@@ -23,16 +23,15 @@ import kotlinx.coroutines.withTimeout
 class NexoEmulatorControllerTest {
 
     /**
-     * Constructs the REAL controller — the fakes used elsewhere skip its
-     * init block, which once read a property declared further down the class
-     * (initializers run in textual order) and crashed every app startup.
-     * Also covers the init-time sales load and the StoredSale→UI projection.
+     * Constructs the REAL controller — the fakes used elsewhere skip its init block, which once
+     * read a property declared further down the class (initializers run in textual order) and
+     * crashed every app startup. Also covers the init-time sales load and the StoredSale→UI
+     * projection.
      */
     @Test
     fun constructionLoadsStoredSalesIntoState() {
-        val store = JsonlSaleStore(
-            Files.createTempDirectory("ctrl-sales").resolve("sales.jsonl").toFile()
-        )
+        val store =
+            JsonlSaleStore(Files.createTempDirectory("ctrl-sales").resolve("sales.jsonl").toFile())
         store.recordSale(
             SaleRecord(
                 id = "sale-1",
@@ -42,16 +41,17 @@ class NexoEmulatorControllerTest {
                 currency = "USD",
                 completedAt = "2026-08-06T10:15:30Z",
                 memberId = "member-42",
-                items = listOf(
-                    SaleItem(
-                        sku = "SKU-1",
-                        description = "Water",
-                        quantity = 2,
-                        unitPrice = "1.05",
-                        taxRate = "0.06625",
-                        lineTotal = "2.10",
-                    )
-                ),
+                items =
+                    listOf(
+                        SaleItem(
+                            sku = "SKU-1",
+                            description = "Water",
+                            quantity = 2,
+                            unitPrice = "1.05",
+                            taxRate = "0.06625",
+                            lineTotal = "2.10",
+                        )
+                    ),
                 authorizedAmount = "2.10",
                 legs = listOf(TransactionLeg(LegType.CARD, "poi-1")),
             )
@@ -62,18 +62,20 @@ class NexoEmulatorControllerTest {
             Thread(task, "test-ui").apply { isDaemon = true }
         }
         try {
-            val controller = NexoEmulatorController(
-                scope = scope,
-                config = EmulatorConfig(
-                    passphrase = null,
-                    keyId = "emulator",
-                    keyVersion = 0,
-                    caPem = null,
-                    hostnamePattern = "*",
-                ),
-                saleStore = store,
-                callbackExecutor = callbackExecutor,
-            )
+            val controller =
+                NexoEmulatorController(
+                    scope = scope,
+                    config =
+                        EmulatorConfig(
+                            passphrase = null,
+                            keyId = "emulator",
+                            keyVersion = 0,
+                            caPem = null,
+                            hostnamePattern = "*",
+                        ),
+                    saleStore = store,
+                    callbackExecutor = callbackExecutor,
+                )
             // the init-time load runs on a background dispatcher
             val sales = runBlocking {
                 withTimeout(5_000) {

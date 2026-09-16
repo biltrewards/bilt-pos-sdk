@@ -10,7 +10,6 @@ import com.bilt.pos.emulator.store.SaleItem
 import com.bilt.pos.emulator.store.SaleRecord
 import com.bilt.pos.emulator.store.SaleStore
 import com.bilt.pos.emulator.store.StoredSale
-import com.bilt.pos.emulator.store.TransactionLeg
 import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient
 import com.bilt.pos.nexo.client.NexoMessageListener
@@ -44,6 +43,16 @@ import com.bilt.pos.session.settlement.StoredValueLoad
 import com.bilt.pos.session.settlement.StoredValueLoadRecord
 import com.bilt.pos.session.storedvalue.StoredValueCard
 import com.fasterxml.jackson.databind.ObjectMapper
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.UUID
+import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,40 +69,29 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
-import java.math.BigDecimal
-import java.math.RoundingMode
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.UUID
-import java.util.concurrent.Executor
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 
-/** Top-level, not an instance property: initialized on class load, before
- *  the constructor-launched sales refresh can format labels (instance
- *  initializers only run in textual order). */
+/**
+ * Top-level, not an instance property: initialized on class load, before the constructor-launched
+ * sales refresh can format labels (instance initializers only run in textual order).
+ */
 private val saleTimeFormat =
     DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(ZoneId.systemDefault())
 
 /**
- * The emulator session engine. A connection to the terminal and a checkout
- * session are separate lifecycles:
+ * The emulator session engine. A connection to the terminal and a checkout session are separate
+ * lifecycles:
  *
- * - **Connect** builds the client and a device-level [Terminal] handle, and
- *   runs the periodic diagnostics loop on it (pure connectivity — no
- *   session involved, and none required).
- * - **Start Checkout** opens a [CheckoutSession] (terminal Start bracket) on
- *   that connection: one session per customer checkout. **End Checkout**
- *   closes it (End bracket). Disconnect ends any active session best-effort.
+ * - **Connect** builds the client and a device-level [Terminal] handle, and runs the periodic
+ *   diagnostics loop on it (pure connectivity — no session involved, and none required).
+ * - **Start Checkout** opens a [CheckoutSession] (terminal Start bracket) on that connection: one
+ *   session per customer checkout. **End Checkout** closes it (End bracket). Disconnect ends any
+ *   active session best-effort.
  *
- * Session operations run through the SDK's asynchronous `execute()`:
- * outcomes arrive via `onSuccess`/`onError` on [callbackExecutor], and
- * `onComplete` releases claims and busy flags on every completion path. A
- * callback that lands after a disconnect recognizes it by
- * `connection !== conn` and skips the UI updates; facts that must survive
- * the disconnect (a charged sale, the claim release) stay ungated.
+ * Session operations run through the SDK's asynchronous `execute()`: outcomes arrive via
+ * `onSuccess`/`onError` on [callbackExecutor], and `onComplete` releases claims and busy flags on
+ * every completion path. A callback that lands after a disconnect recognizes it by `connection !==
+ * conn` and skips the UI updates; facts that must survive the disconnect (a charged sale, the claim
+ * release) stay ungated.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class NexoEmulatorController(
@@ -103,18 +101,23 @@ class NexoEmulatorController(
     /** Persists completed sales for later referenced refunds/voids. */
     private val saleStore: SaleStore,
     /**
-     * The UI-thread executor session handlers deliver on (Android main
-     * executor, AWT event dispatch on desktop; headless harnesses pass a
-     * serial stand-in). Handlers may touch UI directly; sale persistence
-     * is handed off to an IO coroutine. Must never be blocked on a session
-     * call outside a handler.
+     * The UI-thread executor session handlers deliver on (Android main executor, AWT event dispatch
+     * on desktop; headless harnesses pass a serial stand-in). Handlers may touch UI directly; sale
+     * persistence is handed off to an IO coroutine. Must never be blocked on a session call outside
+     * a handler.
      */
     private val callbackExecutor: Executor,
 ) : EmulatorController {
 
-    /** A payment attempt's settled outcome; [pay]'s onComplete reads
-     *  RUNNING as aborted (no outcome handler fired). */
-    private enum class PaymentAttempt { RUNNING, SUCCEEDED, FAILED }
+    /**
+     * A payment attempt's settled outcome; [pay]'s onComplete reads RUNNING as aborted (no outcome
+     * handler fired).
+     */
+    private enum class PaymentAttempt {
+        RUNNING,
+        SUCCEEDED,
+        FAILED,
+    }
 
     private data class StoredValueOutcome(
         val title: String,
@@ -122,28 +125,31 @@ class NexoEmulatorController(
         val event: String = message,
     )
 
-    /** One return rung into the basket: which sale it came from, the
-     *  references its refund allocation presents, the tender it restores
-     *  to, the returned quantities, and the allocation amount (shelf price
-     *  plus tax of the returned lines). */
+    /**
+     * One return rung into the basket: which sale it came from, the references its refund
+     * allocation presents, the tender it restores to, the returned quantities, and the allocation
+     * amount (shelf price plus tax of the returned lines).
+     */
     private class PendingReturn(
         val saleId: String,
         val original: OriginalSaleRecord,
         val legType: LegType,
         val items: List<SaleItem>,
         val amount: BigDecimal,
-        /** What the tender leg can still return (collected minus already
-         *  refunded), captured at ring time; null when unrecorded. A netted
-         *  sale collected less than its items' shelf value, and the
-         *  terminal must not be asked for more than the transaction took. */
+        /**
+         * What the tender leg can still return (collected minus already refunded), captured at ring
+         * time; null when unrecorded. A netted sale collected less than its items' shelf value, and
+         * the terminal must not be asked for more than the transaction took.
+         */
         val legCapacity: BigDecimal?,
     )
 
-    /** One returned sale's plan within a settlement: its [total] return
-     *  value, how much goes back to the tender as a refund allocation
-     *  ([allocated], capped by what the tender collected), how much the
-     *  register pays out itself ([external] — the overflow past that cap),
-     *  and the rest is netted against the charge. */
+    /**
+     * One returned sale's plan within a settlement: its [total] return value, how much goes back to
+     * the tender as a refund allocation ([allocated], capped by what the tender collected), how
+     * much the register pays out itself ([external] — the overflow past that cap), and the rest is
+     * netted against the charge.
+     */
     private class PlannedReturn(
         val saleId: String,
         val original: OriginalSaleRecord,
@@ -154,9 +160,10 @@ class NexoEmulatorController(
         val external: BigDecimal,
     )
 
-    /** A gift-card sale line waiting to be loaded when this
-     * checkout settles. The basket reference joins the commercial line to
-     * the card-specific terminal instruction. */
+    /**
+     * A gift-card sale line waiting to be loaded when this checkout settles. The basket reference
+     * joins the commercial line to the card-specific terminal instruction.
+     */
     private class PendingGiftCard(
         val basketReference: String,
         val card: StoredValueCard,
@@ -167,85 +174,97 @@ class NexoEmulatorController(
         val dispatcher: CoroutineDispatcher,
         val client: BiltNexoTerminalClient,
         val terminal: Terminal,
-        /** The adb forward this connection runs through; null for a direct
-         *  connection. Removed from the adb server on teardown. */
+        /**
+         * The adb forward this connection runs through; null for a direct connection. Removed from
+         * the adb server on teardown.
+         */
         val tunnel: AdbTunnel.Tunnel? = null,
         @Volatile var session: CheckoutSession? = null,
-        /** The fresh checkout session a referenced refund is running on, so
-         *  [abort] can reach a refund the way it reaches a payment; null
-         *  outside a refund. */
+        /**
+         * The fresh checkout session a referenced refund is running on, so [abort] can reach a
+         * refund the way it reaches a payment; null outside a refund.
+         */
         @Volatile var refundSession: CheckoutSession? = null,
     ) {
-        /** Returns rung into the active checkout's basket, awaiting the
-         *  settlement that restores their value to the original sales'
-         *  tenders. Copy-on-write: mutations happen under the operation
-         *  claim, reads (the sales projection) may race and need a
-         *  consistent snapshot. Cleared with the checkout. */
+        /**
+         * Returns rung into the active checkout's basket, awaiting the settlement that restores
+         * their value to the original sales' tenders. Copy-on-write: mutations happen under the
+         * operation claim, reads (the sales projection) may race and need a consistent snapshot.
+         * Cleared with the checkout.
+         */
         @Volatile var pendingReturns: List<PendingReturn> = emptyList()
 
-        /** Copy-on-write for the same reason as [pendingReturns]: settle
-         * takes one stable snapshot while UI basket mutations are local. */
+        /**
+         * Copy-on-write for the same reason as [pendingReturns]: settle takes one stable snapshot
+         * while UI basket mutations are local.
+         */
         @Volatile var pendingGiftCards: List<PendingGiftCard> = emptyList()
 
-        /** Set by [abort] for the current refund attempt. It covers the
-         *  windows the SDK's abort cannot: during the store lookup, the
-         *  reversal session's start roundtrip, and between the legs of a
-         *  split tender nothing abortable is on the wire — the refund job
-         *  checks this flag before every money movement. Cleared when the
-         *  next refund attempt is claimed. */
+        /**
+         * Set by [abort] for the current refund attempt. It covers the windows the SDK's abort
+         * cannot: during the store lookup, the reversal session's start roundtrip, and between the
+         * legs of a split tender nothing abortable is on the wire — the refund job checks this flag
+         * before every money movement. Cleared when the next refund attempt is claimed.
+         */
         val refundAbortRequested = AtomicBoolean(false)
 
-        /** The in-flight refund/return job, so [shutdown] can wait for its
-         *  store write — it runs on the job's own thread, and money that
-         *  moved on the terminal must not exit unrecorded. */
+        /**
+         * The in-flight refund/return job, so [shutdown] can wait for its store write — it runs on
+         * the job's own thread, and money that moved on the terminal must not exit unrecorded.
+         */
         @Volatile var refundJob: kotlinx.coroutines.Job? = null
 
-        /** Guards against a double-tap bracketing two terminal sessions:
-         *  [session] is only installed once the Start roundtrip acknowledges. */
+        /**
+         * Guards against a double-tap bracketing two terminal sessions: [session] is only installed
+         * once the Start roundtrip acknowledges.
+         */
         val startClaimed = AtomicBoolean(false)
 
-        /** One claim across payment, card reads, stored-value operations,
-         *  and refunds: UI disabled states publish only on recomposition,
-         *  so a quick second tap must not queue behind the active operation.
-         *  Released by each operation's `onComplete`. */
+        /**
+         * One claim across payment, card reads, stored-value operations, and refunds: UI disabled
+         * states publish only on recomposition, so a quick second tap must not queue behind the
+         * active operation. Released by each operation's `onComplete`.
+         */
         val operationClaimed = AtomicBoolean(false)
-
     }
 
     /**
-     * Sale writes happen here, off the UI callback thread — and NOT as a
-     * child of [scope]: teardown must not kill the record of a charged
-     * transaction. [shutdown] joins it before process exit.
+     * Sale writes happen here, off the UI callback thread — and NOT as a child of [scope]: teardown
+     * must not kill the record of a charged transaction. [shutdown] joins it before process exit.
      */
     private val persistenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val _state = MutableStateFlow(
-        EmulatorState(
-            encryptionEnabled = config.encryptionEnabled,
-            hasConfiguredPassphrase = config.encryptionEnabled,
+    private val _state =
+        MutableStateFlow(
+            EmulatorState(
+                encryptionEnabled = config.encryptionEnabled,
+                hasConfiguredPassphrase = config.encryptionEnabled,
+            )
         )
-    )
     override val state: StateFlow<EmulatorState> = _state.asStateFlow()
 
     private val nexoLogMapper = ObjectMapper()
 
-    @Volatile
-    private var connection: Connection? = null
+    @Volatile private var connection: Connection? = null
 
-    /** Bumped by every teardown, captured by connect(): the tunnel comes up
-     *  on an IO coroutine, and its continuation must not install a
-     *  connection the operator has since disconnected or replaced. Bumps
-     *  and installs happen under [connectionLock], so a teardown between an
-     *  epoch check and the install cannot slip through. */
+    /**
+     * Bumped by every teardown, captured by connect(): the tunnel comes up on an IO coroutine, and
+     * its continuation must not install a connection the operator has since disconnected or
+     * replaced. Bumps and installs happen under [connectionLock], so a teardown between an epoch
+     * check and the install cannot slip through.
+     */
     private val connectEpoch = java.util.concurrent.atomic.AtomicInteger()
 
-    /** Linearizes [connection] installs against teardowns — held only for
-     *  the field mutation and epoch check, never across I/O. */
+    /**
+     * Linearizes [connection] installs against teardowns — held only for the field mutation and
+     * epoch check, never across I/O.
+     */
     private val connectionLock = Any()
 
-    /** Serial, so overlapping refreshes publish in launch order and the
-     *  newest sale wins. Declared before the init block, which triggers
-     *  refreshSales(). */
+    /**
+     * Serial, so overlapping refreshes publish in launch order and the newest sale wins. Declared
+     * before the init block, which triggers refreshSales().
+     */
     private val salesRefreshDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     init {
@@ -312,7 +331,9 @@ class NexoEmulatorController(
         val passphrase = passphraseOverride?.takeIf { it.isNotBlank() } ?: config.passphrase
         val encrypt = encryptionEnabled && !passphrase.isNullOrBlank()
         if (encryptionEnabled && !encrypt) {
-            log("Encryption requested but no passphrase available (enter one or set NEXO_PASSPHRASE) — connecting unencrypted")
+            log(
+                "Encryption requested but no passphrase available (enter one or set NEXO_PASSPHRASE) — connecting unencrypted"
+            )
         }
 
         _state.update {
@@ -325,28 +346,40 @@ class NexoEmulatorController(
         }
 
         if (!adbTunnel) {
-            openConnection(host = address, port = 8443, tunnel = null,
-                encrypt = encrypt, passphrase = passphrase, epoch = epoch)
+            openConnection(
+                host = address,
+                port = 8443,
+                tunnel = null,
+                encrypt = encrypt,
+                passphrase = passphrase,
+                epoch = epoch,
+            )
             return
         }
         // The forward comes up on an IO coroutine — adb is a subprocess and
         // may first have to start its server; connect() runs on the UI thread
-        log("Opening adb tunnel to ${address.ifBlank { "the attached device" }} (device port 8443)…")
+        log(
+            "Opening adb tunnel to ${address.ifBlank { "the attached device" }} (device port 8443)…"
+        )
         scope.launch(Dispatchers.IO) {
-            val tunnel = try {
-                AdbTunnel.open(address)
-            } catch (e: Exception) {
-                if (connectEpoch.get() == epoch) {
-                    _state.update {
-                        it.copy(connection = ConnectionStatus(
-                            ConnectionPhase.ERROR,
-                            e.message ?: "adb tunnel failed",
-                        ))
+            val tunnel =
+                try {
+                    AdbTunnel.open(address)
+                } catch (e: Exception) {
+                    if (connectEpoch.get() == epoch) {
+                        _state.update {
+                            it.copy(
+                                connection =
+                                    ConnectionStatus(
+                                        ConnectionPhase.ERROR,
+                                        e.message ?: "adb tunnel failed",
+                                    )
+                            )
+                        }
+                        log("adb tunnel failed: ${e.message}")
                     }
-                    log("adb tunnel failed: ${e.message}")
+                    return@launch
                 }
-                return@launch
-            }
             // disconnected or reconnected while the forward was coming up —
             // this connect attempt is stale, remove its forward again. Just
             // an early exit; the authoritative check is the locked one at
@@ -356,16 +389,23 @@ class NexoEmulatorController(
                 return@launch
             }
             log("adb tunnel up — localhost:${tunnel.localPort} → ${tunnel.serial} port 8443")
-            openConnection(host = "127.0.0.1", port = tunnel.localPort, tunnel = tunnel,
-                encrypt = encrypt, passphrase = passphrase, epoch = epoch)
+            openConnection(
+                host = "127.0.0.1",
+                port = tunnel.localPort,
+                tunnel = tunnel,
+                encrypt = encrypt,
+                passphrase = passphrase,
+                epoch = epoch,
+            )
         }
     }
 
-    /** Builds the client and installs the connection against
-     *  `https://[host]:[port]/nexo` — the terminal itself, or the local end
-     *  of [tunnel]. The install is atomic with the [epoch] check: an
-     *  attempt a teardown has since invalidated dismantles what it built
-     *  instead of installing a connection the operator dismissed. */
+    /**
+     * Builds the client and installs the connection against `https://[host]:[port]/nexo` — the
+     * terminal itself, or the local end of [tunnel]. The install is atomic with the [epoch] check:
+     * an attempt a teardown has since invalidated dismantles what it built instead of installing a
+     * connection the operator dismissed.
+     */
     private fun openConnection(
         host: String,
         port: Int,
@@ -377,34 +417,40 @@ class NexoEmulatorController(
         val endpoint = "https://$host:$port/nexo"
         log("Connecting to $endpoint (encryption=$encrypt)")
 
-        val client = createNexoClient(endpoint, encrypt, passphrase, epoch) ?: run {
-            tunnel?.let { t -> scope.launch(Dispatchers.IO) { AdbTunnel.close(t) } }
-            return
-        }
+        val client =
+            createNexoClient(endpoint, encrypt, passphrase, epoch)
+                ?: run {
+                    tunnel?.let { t -> scope.launch(Dispatchers.IO) { AdbTunnel.close(t) } }
+                    return
+                }
         // The device-level handle: diagnose() is session-free, so the
         // connectivity loop needs no checkout session — just the terminal
-        val terminal = Terminal.builder()
-            .client(client)
-            .saleId(config.saleId)
-            .poiId(config.poiId)
-            .callbackExecutor(callbackExecutor)
-            .build()
-        val conn = Connection(
-            scope = CoroutineScope(
-                scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
-            ),
-            dispatcher = Dispatchers.IO.limitedParallelism(1),
-            client = client,
-            terminal = terminal,
-            tunnel = tunnel,
-        )
-        val installed = synchronized(connectionLock) {
-            (connectEpoch.get() == epoch).also { current ->
-                if (current) {
-                    connection = conn
+        val terminal =
+            Terminal.builder()
+                .client(client)
+                .saleId(config.saleId)
+                .poiId(config.poiId)
+                .callbackExecutor(callbackExecutor)
+                .build()
+        val conn =
+            Connection(
+                scope =
+                    CoroutineScope(
+                        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+                    ),
+                dispatcher = Dispatchers.IO.limitedParallelism(1),
+                client = client,
+                terminal = terminal,
+                tunnel = tunnel,
+            )
+        val installed =
+            synchronized(connectionLock) {
+                (connectEpoch.get() == epoch).also { current ->
+                    if (current) {
+                        connection = conn
+                    }
                 }
             }
-        }
         if (!installed) {
             // torn down (or replaced) while the client was being built:
             // nothing launched yet, just release what this attempt created
@@ -422,13 +468,15 @@ class NexoEmulatorController(
         verifyTls(conn, host, port)
     }
 
-    /** Strict TLS probe, independent of the always-permissive payload
-     *  channel. A CA that was configured but failed to load reports as a
-     *  TLS failure, not as "no CA configured". */
+    /**
+     * Strict TLS probe, independent of the always-permissive payload channel. A CA that was
+     * configured but failed to load reports as a TLS failure, not as "no CA configured".
+     */
     private fun verifyTls(conn: Connection, host: String, port: Int) {
         conn.scope.launch(Dispatchers.IO) {
-            val tls = config.caError?.let { TlsStatus.Failed(it) }
-                ?: TlsVerifier.verify(host, port, config.caPem, config.hostnamePattern)
+            val tls =
+                config.caError?.let { TlsStatus.Failed(it) }
+                    ?: TlsVerifier.verify(host, port, config.caPem, config.hostnamePattern)
             if (isActive) {
                 _state.update { it.copy(tls = tls) }
                 log(tls.label)
@@ -445,10 +493,11 @@ class NexoEmulatorController(
         return try {
             // Always permissive: a failing certificate is reported by the
             // TLS probe but never blocks terminal communication
-            val clientBuilder = BiltNexoTerminalClient.builder()
-                .endpoint(endpoint)
-                .trustAllCertificates()
-                .nexoMessageListener(::nexoLog)
+            val clientBuilder =
+                BiltNexoTerminalClient.builder()
+                    .endpoint(endpoint)
+                    .trustAllCertificates()
+                    .nexoMessageListener(::nexoLog)
             if (encrypt) {
                 clientBuilder.securityKey(
                     SecurityKey.builder()
@@ -466,10 +515,11 @@ class NexoEmulatorController(
             if (connectEpoch.get() == epoch) {
                 _state.update {
                     it.copy(
-                        connection = ConnectionStatus(
-                            ConnectionPhase.ERROR,
-                            e.message ?: "client setup failed",
-                        )
+                        connection =
+                            ConnectionStatus(
+                                ConnectionPhase.ERROR,
+                                e.message ?: "client setup failed",
+                            )
                     )
                 }
             }
@@ -483,11 +533,12 @@ class NexoEmulatorController(
         tryDisconnect()
     }
 
-    /** Tears the connection down; returns false when the disconnect was
-     *  refused because a payment is in flight — unlike end(), which queues
-     *  behind the payment on the session's operation thread, a disconnect
-     *  tears down immediately and would free the register while the charge
-     *  is still landing. */
+    /**
+     * Tears the connection down; returns false when the disconnect was refused because a payment is
+     * in flight — unlike end(), which queues behind the payment on the session's operation thread,
+     * a disconnect tears down immediately and would free the register while the charge is still
+     * landing.
+     */
     private fun tryDisconnect(): Boolean {
         if (_state.value.paymentInProgress) {
             log("A payment is in progress — abort it or wait for it to finish before disconnecting")
@@ -500,21 +551,26 @@ class NexoEmulatorController(
         // Bump and take under the lock, atomically with any concurrent
         // install — and bump even with nothing installed: a tunnel may be
         // coming up, and it must see this teardown
-        val conn = synchronized(connectionLock) {
-            connectEpoch.incrementAndGet()
-            connection.also { connection = null }
-        } ?: run {
-            updateDisconnectedState()
-            return true
-        }
+        val conn =
+            synchronized(connectionLock) {
+                connectEpoch.incrementAndGet()
+                connection.also { connection = null }
+            }
+                ?: run {
+                    updateDisconnectedState()
+                    return true
+                }
         val hadSession = conn.session != null
         conn.scope.cancel()
         conn.terminal.close()
         // End bracket, best-effort: the async end() queues behind anything
         // still in flight on the session's operation thread
-        conn.session?.end()?.onError { error ->
-            detailedLog("End bracket on disconnect failed: ${error.message}")
-        }?.execute()
+        conn.session
+            ?.end()
+            ?.onError { error ->
+                detailedLog("End bracket on disconnect failed: ${error.message}")
+            }
+            ?.execute()
         conn.tunnel?.let { tunnel ->
             scope.launch(Dispatchers.IO) {
                 // the End bracket above still crosses this forward — give it
@@ -532,16 +588,16 @@ class NexoEmulatorController(
     }
 
     /**
-     * Blocking teardown for process-exit paths (desktop window close): the
-     * session's operation threads are daemons, so an asynchronous end would
-     * race the exit. close() queues behind anything in flight, bounded by
-     * the client's timeouts.
+     * Blocking teardown for process-exit paths (desktop window close): the session's operation
+     * threads are daemons, so an asynchronous end would race the exit. close() queues behind
+     * anything in flight, bounded by the client's timeouts.
      */
     fun shutdown() {
-        val conn = synchronized(connectionLock) {
-            connectEpoch.incrementAndGet()
-            connection.also { connection = null }
-        }
+        val conn =
+            synchronized(connectionLock) {
+                connectEpoch.incrementAndGet()
+                connection.also { connection = null }
+            }
         if (conn != null) {
             // A refund may be mid-void with money already reversed on the
             // terminal; its store write runs on the refund job's own thread
@@ -569,10 +625,12 @@ class NexoEmulatorController(
     }
 
     override fun startSession(identifyOnStart: Boolean) {
-        val conn = connection ?: run {
-            log("Not connected — connect before starting a session")
-            return
-        }
+        val conn =
+            connection
+                ?: run {
+                    log("Not connected — connect before starting a session")
+                    return
+                }
         if (conn.session != null) {
             log("A checkout session is already active — end it first")
             return
@@ -606,9 +664,12 @@ class NexoEmulatorController(
                 if (connection !== conn) {
                     // disconnected while starting; end the orphan on its own
                     // operation thread rather than block the callback thread
-                    started.end()
+                    started
+                        .end()
                         .onError { error ->
-                            detailedLog("End bracket for the orphaned session failed: ${error.message}")
+                            detailedLog(
+                                "End bracket for the orphaned session failed: ${error.message}"
+                            )
                         }
                         .execute()
                     return@onSuccess
@@ -644,7 +705,8 @@ class NexoEmulatorController(
             return
         }
         log("Ending checkout session (End bracket)…")
-        active.end()
+        active
+            .end()
             .onSuccess {
                 // cleared only on success: a failed end keeps the session
                 // held and retryable instead of orphaning terminal state
@@ -661,7 +723,9 @@ class NexoEmulatorController(
             }
             .onError { error ->
                 if (connection === conn) {
-                    log("Failed to end the session: ${error.message} — still active, retry or disconnect")
+                    log(
+                        "Failed to end the session: ${error.message} — still active, retry or disconnect"
+                    )
                     error.cause?.let { detailedLog(it.stackTraceToString()) }
                 }
             }
@@ -678,19 +742,21 @@ class NexoEmulatorController(
         }
         try {
             val existing = session.basket().snapshot().getItemBySku(product.sku)
-            val basket = if (existing == null) {
-                val item = BasketItem.builder()
-                    .sku(product.sku)
-                    .description(product.name)
-                    .category(product.category)
-                    .quantity(1)
-                    .unitPrice(BigDecimal(product.priceDecimal))
-                    .apply { NjSalesTax.rateFor(product)?.let(::taxRate) }
-                    .build()
-                session.basket().addItem(item)
-            } else {
-                session.basket().updateItemQuantityBySku(product.sku, existing.quantity + 1)
-            }
+            val basket =
+                if (existing == null) {
+                    val item =
+                        BasketItem.builder()
+                            .sku(product.sku)
+                            .description(product.name)
+                            .category(product.category)
+                            .quantity(1)
+                            .unitPrice(BigDecimal(product.priceDecimal))
+                            .apply { NjSalesTax.rateFor(product)?.let(::taxRate) }
+                            .build()
+                    session.basket().addItem(item)
+                } else {
+                    session.basket().updateItemQuantityBySku(product.sku, existing.quantity + 1)
+                }
             publishBasket(basket)
             log("Added ${product.name} (${product.priceLabel})")
         } catch (e: Exception) {
@@ -744,11 +810,12 @@ class NexoEmulatorController(
             // unit price, one display push. The replacement lands at the
             // end of the basket, which is where it stays for the rest of
             // the edit.
-            val basket = session.basket().mutate { mutation ->
-                mutation
-                    .removeItemBySku(sku)
-                    .addItem(customBasketItem(sku, priceMinor, existing.quantity))
-            }
+            val basket =
+                session.basket().mutate { mutation ->
+                    mutation
+                        .removeItemBySku(sku)
+                        .addItem(customBasketItem(sku, priceMinor, existing.quantity))
+                }
             publishBasket(basket)
             // per keystroke while the keypad is open — the basket card,
             // not the event feed, is the operator's feedback here
@@ -793,9 +860,9 @@ class NexoEmulatorController(
     }
 
     /**
-     * A keypad line as the SDK takes it: its own category, priced exactly
-     * as typed, and deliberately untaxed — a keyed amount is what the
-     * operator means to charge, not a shelf price to tax on top of.
+     * A keypad line as the SDK takes it: its own category, priced exactly as typed, and
+     * deliberately untaxed — a keyed amount is what the operator means to charge, not a shelf price
+     * to tax on top of.
      */
     private fun customBasketItem(sku: String, priceMinor: Long, quantity: Int = 1): BasketItem =
         BasketItem.builder()
@@ -821,12 +888,14 @@ class NexoEmulatorController(
         try {
             val faceValue = requireMoney(amount, "gift card amount", allowZero = false)
             val reference = "gift-card-${UUID.randomUUID()}"
-            val item = BasketItem.sale(
-                "GIFT-CARD",
-                "Gift card",
-                1,
-                faceValue,
-            ).withReference(reference)
+            val item =
+                BasketItem.sale(
+                        "GIFT-CARD",
+                        "Gift card",
+                        1,
+                        faceValue,
+                    )
+                    .withReference(reference)
             val number = cardNumber.trim()
             val card = storedValueCard(number)
             val basket = session.basket().addItem(item)
@@ -873,7 +942,9 @@ class NexoEmulatorController(
             val details = buildList {
                 result.currentBalance?.let { balance ->
                     val currency = result.currency ?: "USD"
-                    add("balance $${balance.setScale(2, RoundingMode.HALF_UP).toPlainString()} $currency")
+                    add(
+                        "balance $${balance.setScale(2, RoundingMode.HALF_UP).toPlainString()} $currency"
+                    )
                 }
                 result.poiTransactionId?.let { add("txn $it") }
             }
@@ -913,11 +984,14 @@ class NexoEmulatorController(
                     val outcome = describe(result)
                     log(outcome.event)
                     _state.update {
-                        it.copy(paymentOutcome = PaymentOutcome(
-                            success = true,
-                            title = outcome.title,
-                            message = outcome.message,
-                        ))
+                        it.copy(
+                            paymentOutcome =
+                                PaymentOutcome(
+                                    success = true,
+                                    title = outcome.title,
+                                    message = outcome.message,
+                                )
+                        )
                     }
                 }
                 .onError { error ->
@@ -929,11 +1003,14 @@ class NexoEmulatorController(
                     log("$failureTitle failed: ${error.message}")
                     error.cause?.let { detailedLog(it.stackTraceToString()) }
                     _state.update {
-                        it.copy(paymentOutcome = PaymentOutcome(
-                            success = false,
-                            title = "$failureTitle failed",
-                            message = "${error.code}\n${error.message}",
-                        ))
+                        it.copy(
+                            paymentOutcome =
+                                PaymentOutcome(
+                                    success = false,
+                                    title = "$failureTitle failed",
+                                    message = "${error.code}\n${error.message}",
+                                )
+                        )
                     }
                 }
                 .onComplete {
@@ -962,27 +1039,34 @@ class NexoEmulatorController(
         try {
             val value = requireMoney(amount, "credit amount", allowZero = false)
             val snapshot = session.basket().snapshot()
-            val target = snapshot.getItem(itemId)
-                ?: throw IllegalArgumentException("no basket item with itemId $itemId")
+            val target =
+                snapshot.getItem(itemId)
+                    ?: throw IllegalArgumentException("no basket item with itemId $itemId")
             require(target.isSale) { "credits can only be applied to sale lines" }
             require(value <= target.adjustedTotal) {
                 "credit amount cannot exceed the line's remaining value ${target.adjustedTotal}"
             }
-            val saleSubtotal = snapshot.items.filter { it.isSale }
-                .fold(BigDecimal.ZERO) { total, line -> total.add(line.adjustedTotal) }
-            val existingCreditTotal = snapshot.items.filter { it.isCredit }
-                .fold(BigDecimal.ZERO) { total, line -> total.subtract(line.adjustedTotal) }
+            val saleSubtotal =
+                snapshot.items
+                    .filter { it.isSale }
+                    .fold(BigDecimal.ZERO) { total, line -> total.add(line.adjustedTotal) }
+            val existingCreditTotal =
+                snapshot.items
+                    .filter { it.isCredit }
+                    .fold(BigDecimal.ZERO) { total, line -> total.subtract(line.adjustedTotal) }
             val remainingSaleValue = saleSubtotal.subtract(existingCreditTotal)
             require(value <= remainingSaleValue) {
                 "credit amount cannot exceed the basket's remaining sale value $remainingSaleValue"
             }
             val description = label.trim().ifEmpty { "Credit for ${target.description}" }
-            val credit = BasketItem.credit(
-                "CREDIT-${target.sku}",
-                description,
-                1,
-                value,
-            ).withReference("credit-${UUID.randomUUID()}")
+            val credit =
+                BasketItem.credit(
+                        "CREDIT-${target.sku}",
+                        description,
+                        1,
+                        value,
+                    )
+                    .withReference("credit-${UUID.randomUUID()}")
             publishBasket(session.basket().addItem(credit))
             log("Applied $description (−$${value.toPlainString()})")
         } catch (e: Exception) {
@@ -1000,28 +1084,36 @@ class NexoEmulatorController(
         try {
             val value = requireMoney(amount, "discount amount", allowZero = true)
             val snapshot = session.basket().snapshot()
-            val target = snapshot.getItem(itemId)
-                ?: throw IllegalArgumentException("no basket item with itemId $itemId")
+            val target =
+                snapshot.getItem(itemId)
+                    ?: throw IllegalArgumentException("no basket item with itemId $itemId")
             require(target.isSale) { "discounts can only be applied to sale lines" }
-            val saleSubtotal = snapshot.items.filter { it.isSale && it.itemId != itemId }
-                .fold(target.originalTotal.subtract(value)) { total, line ->
-                    total.add(line.adjustedTotal)
-                }
-            val creditTotal = snapshot.items.filter { it.isCredit }
-                .fold(BigDecimal.ZERO) { total, line ->
-                    total.subtract(line.adjustedTotal)
-                }
+            val saleSubtotal =
+                snapshot.items
+                    .filter { it.isSale && it.itemId != itemId }
+                    .fold(target.originalTotal.subtract(value)) { total, line ->
+                        total.add(line.adjustedTotal)
+                    }
+            val creditTotal =
+                snapshot.items
+                    .filter { it.isCredit }
+                    .fold(BigDecimal.ZERO) { total, line ->
+                        total.subtract(line.adjustedTotal)
+                    }
             require(creditTotal <= saleSubtotal) {
                 "discount would make credits exceed the remaining sale value"
             }
-            val discounts = if (value.signum() == 0) {
-                emptyList()
-            } else {
-                listOf(BasketDiscount.manual(
-                    label.trim().ifEmpty { "Emulator discount" },
-                    value,
-                ))
-            }
+            val discounts =
+                if (value.signum() == 0) {
+                    emptyList()
+                } else {
+                    listOf(
+                        BasketDiscount.manual(
+                            label.trim().ifEmpty { "Emulator discount" },
+                            value,
+                        )
+                    )
+                }
             publishBasket(session.basket().setDiscounts(itemId, discounts))
             log(
                 if (value.signum() == 0) {
@@ -1037,9 +1129,8 @@ class NexoEmulatorController(
     }
 
     /**
-     * The post-start member-identification prompt (its own operation, not
-     * part of the Start bracket); a failed or declined prompt degrades to
-     * a guest checkout.
+     * The post-start member-identification prompt (its own operation, not part of the Start
+     * bracket); a failed or declined prompt degrades to a guest checkout.
      */
     private fun identifyMember(conn: Connection, session: CheckoutSession) {
         // Claimed like pay/acquireCard: without the claim, a Pay tapped
@@ -1056,11 +1147,8 @@ class NexoEmulatorController(
         // The terminal's keyed loyalty capture engages only with
         // ForceEntryMode=Keyed; without it the terminal waits on the card
         // reader instead of showing the input form
-        session.identifyMember(
-            IdentifyOptions.builder()
-                .forceEntryMode(ForceEntryMode.KEYED)
-                .build()
-        )
+        session
+            .identifyMember(IdentifyOptions.builder().forceEntryMode(ForceEntryMode.KEYED).build())
             .onSuccess { outcome ->
                 if (connection !== conn) return@onSuccess
                 if (outcome.status == IdentifyStatus.FOUND) {
@@ -1089,11 +1177,13 @@ class NexoEmulatorController(
             .execute()
     }
 
-    /** Blank the customer display — autoDisplay only fires on basket
-     *  mutations, so the previous checkout's receipt (or the identify
-     *  prompt's leftovers) would linger. */
+    /**
+     * Blank the customer display — autoDisplay only fires on basket mutations, so the previous
+     * checkout's receipt (or the identify prompt's leftovers) would linger.
+     */
     private fun clearCustomerDisplay(session: CheckoutSession) {
-        session.updateDisplay(session.basket().snapshot())
+        session
+            .updateDisplay(session.basket().snapshot())
             .onSuccess { log("Customer display cleared (empty basket)") }
             .onError { error -> log("Display clear failed: ${error.message}") }
             .execute()
@@ -1131,35 +1221,42 @@ class NexoEmulatorController(
         // in ring order until the required total is covered. Read under
         // the claim, so it matches exactly the credit lines in the basket.
         val giftCards = conn.pendingGiftCards
-        val settlementType =
-            if (net) SettlementType.NET else SettlementType.REFUND_THEN_CHARGE
+        val settlementType = if (net) SettlementType.NET else SettlementType.REFUND_THEN_CHARGE
         val required = session.basket().snapshot().getRefundAmount(settlementType)
         var unallocated = required
-        val returns = conn.pendingReturns.groupBy { it.saleId }.values.map { group ->
-            val total = group.fold(BigDecimal.ZERO) { acc, pending -> acc.add(pending.amount) }
-                .setScale(2, RoundingMode.HALF_UP)
-            val allocated = if (total <= unallocated) total else unallocated
-            unallocated = unallocated.subtract(allocated)
-            // the tender can only give back what it collected — a netted
-            // sale collected less than shelf value; the overflow is paid
-            // out by the register (an external allocation, no wire)
-            val capacity = group.first().legCapacity
-            val toTender = if (capacity != null && capacity < allocated) capacity else allocated
-            PlannedReturn(
-                saleId = group.first().saleId,
-                legType = group.first().legType,
-                original = group.first().original,
-                items = group.flatMap { it.items },
-                total = total,
-                allocated = toTender,
-                external = allocated.subtract(toTender),
-            )
-        }
-        val optionsBuilder = SettlementOptions.builder()
-            .settlementType(settlementType)
-            .disableRebates(!loyalty.rebates)
-            .disablePoints(!loyalty.redemption)
-            .disableAward(!loyalty.award)
+        val returns =
+            conn.pendingReturns
+                .groupBy { it.saleId }
+                .values
+                .map { group ->
+                    val total =
+                        group
+                            .fold(BigDecimal.ZERO) { acc, pending -> acc.add(pending.amount) }
+                            .setScale(2, RoundingMode.HALF_UP)
+                    val allocated = if (total <= unallocated) total else unallocated
+                    unallocated = unallocated.subtract(allocated)
+                    // the tender can only give back what it collected — a netted
+                    // sale collected less than shelf value; the overflow is paid
+                    // out by the register (an external allocation, no wire)
+                    val capacity = group.first().legCapacity
+                    val toTender =
+                        if (capacity != null && capacity < allocated) capacity else allocated
+                    PlannedReturn(
+                        saleId = group.first().saleId,
+                        legType = group.first().legType,
+                        original = group.first().original,
+                        items = group.flatMap { it.items },
+                        total = total,
+                        allocated = toTender,
+                        external = allocated.subtract(toTender),
+                    )
+                }
+        val optionsBuilder =
+            SettlementOptions.builder()
+                .settlementType(settlementType)
+                .disableRebates(!loyalty.rebates)
+                .disablePoints(!loyalty.redemption)
+                .disableAward(!loyalty.award)
         returns.forEach { planned ->
             if (planned.allocated.signum() > 0) {
                 optionsBuilder.addRefund(
@@ -1184,13 +1281,15 @@ class NexoEmulatorController(
             "Starting ${if (net) "net " else ""}settlement — rebates ${onOff(loyalty.rebates)}, " +
                 "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}" +
                 (card?.let { ", gift card ${it.storedValueId ?: "(swipe on terminal)"}" } ?: "") +
-                (if (giftCards.isEmpty()) "" else
-                    ", ${giftCards.size} gift card purchase(s) to load") +
-                (if (returns.isEmpty()) "" else
+                (if (giftCards.isEmpty()) ""
+                else ", ${giftCards.size} gift card purchase(s) to load") +
+                (if (returns.isEmpty()) ""
+                else
                     ", ${returns.size} prior sale(s) returned" +
                         " ($${required.toPlainString()} to refund after netting)")
         )
-        session.settle(options)
+        session
+            .settle(options)
             .onCardRefunded { movement ->
                 log(
                     "Card refund committed: $${movement.amount?.toPlainString()}" +
@@ -1204,16 +1303,21 @@ class NexoEmulatorController(
                 )
             }
             .onRebatesRedeemed { rebates ->
-                log("Rebates applied: −$${rebates.totalRebateAmount.toPlainString()} → total $${rebates.suggestedTotal.toPlainString()}")
+                log(
+                    "Rebates applied: −$${rebates.totalRebateAmount.toPlainString()} → total $${rebates.suggestedTotal.toPlainString()}"
+                )
                 rebates.suggestedTotal
             }
             .onPointsRedeemed { points ->
-                log("Points redeemed: ${points.pointsUsed} (−$${points.monetaryValue.toPlainString()}) → total $${points.suggestedTotal.toPlainString()}")
+                log(
+                    "Points redeemed: ${points.pointsUsed} (−$${points.monetaryValue.toPlainString()}) → total $${points.suggestedTotal.toPlainString()}"
+                )
                 points.suggestedTotal
             }
             .onGiftCardPayment { giftCard ->
-                val balance = giftCard.remainingCardBalance
-                    ?.let { " (card balance $${it.toPlainString()})" } ?: ""
+                val balance =
+                    giftCard.remainingCardBalance?.let { " (card balance $${it.toPlainString()})" }
+                        ?: ""
                 log(
                     "Gift card charged: $${giftCard.amountCharged.toPlainString()}$balance" +
                         " → total $${giftCard.suggestedTotal.toPlainString()}"
@@ -1231,11 +1335,14 @@ class NexoEmulatorController(
                 if (connection === conn) {
                     log("Settlement failed: ${error.code} — ${error.message}")
                     _state.update {
-                        it.copy(paymentOutcome = PaymentOutcome(
-                            success = false,
-                            title = "Settlement failed",
-                            message = "${error.code}\n${error.message}",
-                        ))
+                        it.copy(
+                            paymentOutcome =
+                                PaymentOutcome(
+                                    success = false,
+                                    title = "Settlement failed",
+                                    message = "${error.code}\n${error.message}",
+                                )
+                        )
                     }
                 }
                 SettlementRecovery.abort()
@@ -1265,8 +1372,11 @@ class NexoEmulatorController(
                         )
                     }
                     // reset the customer display to the intact basket
-                    session.updateDisplay(session.basket().snapshot())
-                        .onError { error -> detailedLog("Display restore failed: ${error.message}") }
+                    session
+                        .updateDisplay(session.basket().snapshot())
+                        .onError { error ->
+                            detailedLog("Display restore failed: ${error.message}")
+                        }
                         .execute()
                 }
                 finishPaymentAttempt(conn)
@@ -1275,13 +1385,13 @@ class NexoEmulatorController(
     }
 
     /**
-     * The auto-end after a completed payment. Submitted from the payment's
-     * `onSuccess`, it queues behind the settling payment on the session's
-     * operation thread; the payment summary stays visible until the next
-     * Start Checkout.
+     * The auto-end after a completed payment. Submitted from the payment's `onSuccess`, it queues
+     * behind the settling payment on the session's operation thread; the payment summary stays
+     * visible until the next Start Checkout.
      */
     private fun endCompletedCheckout(conn: Connection, session: CheckoutSession) {
-        session.end()
+        session
+            .end()
             .onSuccess {
                 conn.session = null
                 if (connection === conn) {
@@ -1291,7 +1401,9 @@ class NexoEmulatorController(
             }
             .onError { error ->
                 if (connection === conn) {
-                    log("Failed to end the checkout: ${error.message} — press End Checkout to retry")
+                    log(
+                        "Failed to end the checkout: ${error.message} — press End Checkout to retry"
+                    )
                     error.cause?.let { detailedLog(it.stackTraceToString()) }
                 }
             }
@@ -1299,10 +1411,9 @@ class NexoEmulatorController(
     }
 
     /**
-     * Releases the payment claim and busy flag. The claim always (it is
-     * per-connection); the shared UI flag only while this connection is
-     * still current — a late completion must not re-enable Pay while a NEW
-     * connection's payment is on the wire.
+     * Releases the payment claim and busy flag. The claim always (it is per-connection); the shared
+     * UI flag only while this connection is still current — a late completion must not re-enable
+     * Pay while a NEW connection's payment is on the wire.
      */
     private fun finishPaymentAttempt(conn: Connection) {
         conn.operationClaimed.set(false)
@@ -1327,19 +1438,23 @@ class NexoEmulatorController(
         // ForceEntryMode is sent explicitly: without it the terminal arms
         // only its default reader set, which may not include the stripe —
         // MagStripe + Scanned are the gift-card capture methods
-        session.acquireCard(
-            CardAcquisitionOptions.builder()
-                .forceEntryMode(ForceEntryMode.MAG_STRIPE)
-                .forceEntryMode(ForceEntryMode.SCANNED)
-                .build()
-        )
+        session
+            .acquireCard(
+                CardAcquisitionOptions.builder()
+                    .forceEntryMode(ForceEntryMode.MAG_STRIPE)
+                    .forceEntryMode(ForceEntryMode.SCANNED)
+                    .build()
+            )
             .onSuccess { acquired ->
                 if (connection !== conn) return@onSuccess
-                val label = listOfNotNull(
-                    acquired.paymentBrand,
-                    acquired.maskedPan ?: acquired.truncatedPan,
-                    acquired.entryMode?.let { "via $it" },
-                ).joinToString(" ").ifEmpty { "no card details returned" }
+                val label =
+                    listOfNotNull(
+                            acquired.paymentBrand,
+                            acquired.maskedPan ?: acquired.truncatedPan,
+                            acquired.entryMode?.let { "via $it" },
+                        )
+                        .joinToString(" ")
+                        .ifEmpty { "no card details returned" }
                 val number = acquired.rawPan
                 if (number.isNullOrBlank()) {
                     // only PLCC-range cards (gift cards among them) return
@@ -1347,10 +1462,13 @@ class NexoEmulatorController(
                     log("Card read: $label — no full card number returned, type it manually")
                 } else {
                     _state.update {
-                        it.copy(acquiredCard = AcquiredCard(
-                            number = number,
-                            sequence = (it.acquiredCard?.sequence ?: 0) + 1,
-                        ))
+                        it.copy(
+                            acquiredCard =
+                                AcquiredCard(
+                                    number = number,
+                                    sequence = (it.acquiredCard?.sequence ?: 0) + 1,
+                                )
+                        )
                     }
                     log("Card read: $label — filled into the stored value field")
                 }
@@ -1396,50 +1514,54 @@ class NexoEmulatorController(
         _state.update { it.copy(refundInProgress = true, paymentOutcome = null) }
         // An IO coroutine, not conn.dispatcher (that lane is the diagnostics
         // poller's): the store lookup and the reversal roundtrips all block
-        val job = conn.scope.launch(Dispatchers.IO) {
-            val stored = try {
-                saleStore.findSale(saleId)
-            } catch (e: Exception) {
-                log("Failed to load the stored sale: ${e.message}")
-                detailedLog(e.stackTraceToString())
-                return@launch
-            }
-            if (stored == null) {
-                log("Sale $saleId is not in the store")
-                return@launch
-            }
-            if (!stored.refundable) {
-                log(
-                    if (stored.voided != null) {
-                        "The sale was voided — nothing left to refund"
-                    } else {
-                        "The sale was already refunded in full — nothing left to refund"
+        val job =
+            conn.scope.launch(Dispatchers.IO) {
+                val stored =
+                    try {
+                        saleStore.findSale(saleId)
+                    } catch (e: Exception) {
+                        log("Failed to load the stored sale: ${e.message}")
+                        detailedLog(e.stackTraceToString())
+                        return@launch
                     }
-                )
-                return@launch
+                if (stored == null) {
+                    log("Sale $saleId is not in the store")
+                    return@launch
+                }
+                if (!stored.refundable) {
+                    log(
+                        if (stored.voided != null) {
+                            "The sale was voided — nothing left to refund"
+                        } else {
+                            "The sale was already refunded in full — nothing left to refund"
+                        }
+                    )
+                    return@launch
+                }
+                val sale = stored.sale
+                // A full refund is a void of the prior sale: one flow reverses
+                // every referenced movement — the tender legs, redemption,
+                // rebate, and the award. After an item-based partial refund it
+                // would return the full legs on top of what was already given
+                // back, so it is refused then. Per-leg FULL records are
+                // different: they are the residue of a void that failed midway,
+                // and the retry omits those references — see executeFullRefund.
+                if (stored.refunds.any { it.isPartialRefund }) {
+                    log(
+                        "The sale was already partially refunded — refund the remaining items instead"
+                    )
+                    return@launch
+                }
+                if (conn.pendingReturns.any { it.saleId == sale.id }) {
+                    log("The sale has returns in the basket — settle or end the checkout first")
+                    return@launch
+                }
+                if (sale.legs.isEmpty() && sale.giftCardLoads.isEmpty()) {
+                    log("The sale has no recorded movements — nothing to reverse")
+                    return@launch
+                }
+                executeFullRefund(conn, stored)
             }
-            val sale = stored.sale
-            // A full refund is a void of the prior sale: one flow reverses
-            // every referenced movement — the tender legs, redemption,
-            // rebate, and the award. After an item-based partial refund it
-            // would return the full legs on top of what was already given
-            // back, so it is refused then. Per-leg FULL records are
-            // different: they are the residue of a void that failed midway,
-            // and the retry omits those references — see executeFullRefund.
-            if (stored.refunds.any { it.isPartialRefund }) {
-                log("The sale was already partially refunded — refund the remaining items instead")
-                return@launch
-            }
-            if (conn.pendingReturns.any { it.saleId == sale.id }) {
-                log("The sale has returns in the basket — settle or end the checkout first")
-                return@launch
-            }
-            if (sale.legs.isEmpty() && sale.giftCardLoads.isEmpty()) {
-                log("The sale has no recorded movements — nothing to reverse")
-                return@launch
-            }
-            executeFullRefund(conn, stored)
-        }
         // Releases on every path, including a job cancelled before it ran
         // (disconnect racing this call). The claim always (per-connection);
         // the shared UI flag only while this connection is still current —
@@ -1474,122 +1596,140 @@ class NexoEmulatorController(
         conn.refundAbortRequested.set(false)
         _state.update { it.copy(refundInProgress = true) }
         // IO coroutine: the store lookup blocks
-        val job = conn.scope.launch(Dispatchers.IO) {
-            val stored = try {
-                saleStore.findSale(saleId)
-            } catch (e: Exception) {
-                log("Failed to load the stored sale: ${e.message}")
-                detailedLog(e.stackTraceToString())
-                return@launch
-            }
-            if (stored == null) {
-                log("Sale $saleId is not in the store")
-                return@launch
-            }
-            if (!stored.refundable) {
-                log(
-                    if (stored.voided != null) {
-                        "The sale was voided — nothing left to refund"
-                    } else {
-                        "The sale was already refunded in full — nothing left to refund"
+        val job =
+            conn.scope.launch(Dispatchers.IO) {
+                val stored =
+                    try {
+                        saleStore.findSale(saleId)
+                    } catch (e: Exception) {
+                        log("Failed to load the stored sale: ${e.message}")
+                        detailedLog(e.stackTraceToString())
+                        return@launch
                     }
-                )
-                return@launch
-            }
-            val sale = stored.sale
-            if (sale.giftCardLoads.isNotEmpty()) {
-                log(
-                    "The sale contains a gift card purchase — use the full refund " +
-                        "to reverse its load and funding together"
-                )
-                return@launch
-            }
-            if (stored.moneyLegs.isEmpty()) {
-                log("The sale has no tender leg (rewards covered everything) — use the full refund")
-                return@launch
-            }
-            // Returns restore to the primary OUTSTANDING tender: the card
-            // leg unless an earlier refund already returned it, else the
-            // stored value leg
-            val outstanding = stored.moneyLegs.filterNot { stored.legRefunded(it.type) }
-            val leg = outstanding.firstOrNull { it.type == LegType.CARD }
-                ?: outstanding.firstOrNull()
-            if (leg == null) {
-                // unreachable while refundable, kept against future drift
-                log("Every tender leg was already refunded in full — nothing left to draw from")
-                return@launch
-            }
-            // Ring only what earlier refunds AND returns already sitting in
-            // the basket have not consumed — both cap every line
-            val items = sale.items.filter { it.sku in skus }.mapNotNull { item ->
-                val remaining = item.quantity - stored.refundedQuantity(item.sku) -
-                    pendingReturnedQuantity(conn, sale.id, item.sku)
-                when {
-                    remaining >= item.quantity -> item
-                    remaining > 0 -> {
-                        log(
-                            "${item.description}: ${item.quantity - remaining} of " +
-                                "${item.quantity} already returned — ringing the remaining $remaining"
-                        )
-                        item.copy(quantity = remaining)
-                    }
-                    else -> {
-                        log("${item.description} is already fully returned — skipped")
-                        null
-                    }
+                if (stored == null) {
+                    log("Sale $saleId is not in the store")
+                    return@launch
                 }
-            }
-            if (items.isEmpty()) {
-                log("Nothing left to return among the selected items")
-                return@launch
-            }
-            // last stop before the basket mutation — an abort that landed
-            // during the lookup must keep the return out
-            if (conn.refundAbortRequested.get()) {
-                log("Return aborted — nothing was rung into the basket")
-                return@launch
-            }
-            try {
-                items.forEach { item ->
-                    // rung exactly as sold — shelf price and tax rate — so
-                    // the credit total is price plus tax of the returns
-                    session.basket().addItem(
-                        BasketItem.builder()
-                            .sku(item.sku)
-                            .description(item.description)
-                            .quantity(item.quantity)
-                            .unitPrice(BigDecimal(item.unitPrice))
-                            .type(BasketItemType.RETURN)
-                            .apply { item.category?.let(::category) }
-                            .apply { item.taxRate?.let { rate -> taxRate(BigDecimal(rate)) } }
-                            .build()
+                if (!stored.refundable) {
+                    log(
+                        if (stored.voided != null) {
+                            "The sale was voided — nothing left to refund"
+                        } else {
+                            "The sale was already refunded in full — nothing left to refund"
+                        }
                     )
+                    return@launch
                 }
-                conn.pendingReturns = conn.pendingReturns + PendingReturn(
-                    saleId = sale.id,
-                    original = originalSaleRecord(sale, stored),
-                    legType = leg.type,
-                    items = items,
-                    amount = items.fold(BigDecimal.ZERO) { acc, item ->
-                        acc.add(refundValue(item, item.quantity))
-                    }.setScale(2, RoundingMode.HALF_UP),
-                    legCapacity = stored.remainingLegAmount(leg.type),
-                )
-                publishBasket(session.basket().snapshot())
-                // the sales projection nets rung returns off the remaining
-                // quantities
-                refreshSales()
-                log(
-                    "Return rung in: " +
-                        items.joinToString { "${it.quantity}× ${it.description}" } +
-                        " — restores to the ${legLabel(leg.type)} on settlement"
-                )
-            } catch (e: Exception) {
-                // e.g. the basket sealed against mutation by session state
-                log("Failed to ring the return: ${e.message}")
-                detailedLog(e.stackTraceToString())
+                val sale = stored.sale
+                if (sale.giftCardLoads.isNotEmpty()) {
+                    log(
+                        "The sale contains a gift card purchase — use the full refund " +
+                            "to reverse its load and funding together"
+                    )
+                    return@launch
+                }
+                if (stored.moneyLegs.isEmpty()) {
+                    log(
+                        "The sale has no tender leg (rewards covered everything) — use the full refund"
+                    )
+                    return@launch
+                }
+                // Returns restore to the primary OUTSTANDING tender: the card
+                // leg unless an earlier refund already returned it, else the
+                // stored value leg
+                val outstanding = stored.moneyLegs.filterNot { stored.legRefunded(it.type) }
+                val leg =
+                    outstanding.firstOrNull { it.type == LegType.CARD } ?: outstanding.firstOrNull()
+                if (leg == null) {
+                    // unreachable while refundable, kept against future drift
+                    log("Every tender leg was already refunded in full — nothing left to draw from")
+                    return@launch
+                }
+                // Ring only what earlier refunds AND returns already sitting in
+                // the basket have not consumed — both cap every line
+                val items =
+                    sale.items
+                        .filter { it.sku in skus }
+                        .mapNotNull { item ->
+                            val remaining =
+                                item.quantity -
+                                    stored.refundedQuantity(item.sku) -
+                                    pendingReturnedQuantity(conn, sale.id, item.sku)
+                            when {
+                                remaining >= item.quantity -> item
+                                remaining > 0 -> {
+                                    log(
+                                        "${item.description}: ${item.quantity - remaining} of " +
+                                            "${item.quantity} already returned — ringing the remaining $remaining"
+                                    )
+                                    item.copy(quantity = remaining)
+                                }
+                                else -> {
+                                    log("${item.description} is already fully returned — skipped")
+                                    null
+                                }
+                            }
+                        }
+                if (items.isEmpty()) {
+                    log("Nothing left to return among the selected items")
+                    return@launch
+                }
+                // last stop before the basket mutation — an abort that landed
+                // during the lookup must keep the return out
+                if (conn.refundAbortRequested.get()) {
+                    log("Return aborted — nothing was rung into the basket")
+                    return@launch
+                }
+                try {
+                    items.forEach { item ->
+                        // rung exactly as sold — shelf price and tax rate — so
+                        // the credit total is price plus tax of the returns
+                        session
+                            .basket()
+                            .addItem(
+                                BasketItem.builder()
+                                    .sku(item.sku)
+                                    .description(item.description)
+                                    .quantity(item.quantity)
+                                    .unitPrice(BigDecimal(item.unitPrice))
+                                    .type(BasketItemType.RETURN)
+                                    .apply { item.category?.let(::category) }
+                                    .apply {
+                                        item.taxRate?.let { rate -> taxRate(BigDecimal(rate)) }
+                                    }
+                                    .build()
+                            )
+                    }
+                    conn.pendingReturns =
+                        conn.pendingReturns +
+                            PendingReturn(
+                                saleId = sale.id,
+                                original = originalSaleRecord(sale, stored),
+                                legType = leg.type,
+                                items = items,
+                                amount =
+                                    items
+                                        .fold(BigDecimal.ZERO) { acc, item ->
+                                            acc.add(refundValue(item, item.quantity))
+                                        }
+                                        .setScale(2, RoundingMode.HALF_UP),
+                                legCapacity = stored.remainingLegAmount(leg.type),
+                            )
+                    publishBasket(session.basket().snapshot())
+                    // the sales projection nets rung returns off the remaining
+                    // quantities
+                    refreshSales()
+                    log(
+                        "Return rung in: " +
+                            items.joinToString { "${it.quantity}× ${it.description}" } +
+                            " — restores to the ${legLabel(leg.type)} on settlement"
+                    )
+                } catch (e: Exception) {
+                    // e.g. the basket sealed against mutation by session state
+                    log("Failed to ring the return: ${e.message}")
+                    detailedLog(e.stackTraceToString())
+                }
             }
-        }
         conn.refundJob = job
         job.invokeOnCompletion {
             conn.operationClaimed.set(false)
@@ -1599,18 +1739,20 @@ class NexoEmulatorController(
         }
     }
 
-    /** Quantity of [sku] from sale [saleId] already rung into the active
-     *  basket as returns but not settled yet. */
+    /**
+     * Quantity of [sku] from sale [saleId] already rung into the active basket as returns but not
+     * settled yet.
+     */
     private fun pendingReturnedQuantity(conn: Connection, saleId: String, sku: String): Int =
-        conn.pendingReturns.filter { it.saleId == saleId }
+        conn.pendingReturns
+            .filter { it.saleId == saleId }
             .sumOf { pending -> pending.items.filter { it.sku == sku }.sumOf { it.quantity } }
 
     /**
-     * Records the settled returns against their original sales, matching
-     * each allocation's committed refund movement (they commit in
-     * allocation order) for the terminal reference, and releases the
-     * pending returns. Returns the popup lines describing what was
-     * restored — including the loud warning when a record write failed.
+     * Records the settled returns against their original sales, matching each allocation's
+     * committed refund movement (they commit in allocation order) for the terminal reference, and
+     * releases the pending returns. Returns the popup lines describing what was restored —
+     * including the loud warning when a record write failed.
      */
     private fun recordSettledReturns(
         conn: Connection,
@@ -1623,9 +1765,11 @@ class NexoEmulatorController(
         // refund movements commit in allocation order — one per planned
         // return with money actually flowing back; fully netted returns
         // have none
-        val movements = result.movements.filter {
-            it.step == SettlementStep.CARD_REFUND || it.step == SettlementStep.STORED_VALUE_REFUND
-        }
+        val movements =
+            result.movements.filter {
+                it.step == SettlementStep.CARD_REFUND ||
+                    it.step == SettlementStep.STORED_VALUE_REFUND
+            }
         var movementIndex = 0
         var recorded = true
         val parts = mutableListOf<String>()
@@ -1633,50 +1777,60 @@ class NexoEmulatorController(
             val refunded = planned.allocated.signum() > 0
             val movement = if (refunded) movements.getOrNull(movementIndex++) else null
             val netted = planned.total.subtract(planned.allocated).subtract(planned.external)
-            parts += if (planned.allocated == planned.total) {
-                "returned $${planned.total.toPlainString()} to the ${legLabel(planned.legType)}"
-            } else if (planned.total.signum() > 0 && planned.allocated.signum() == 0 &&
-                planned.external.signum() == 0
-            ) {
-                "netted $${planned.total.toPlainString()} against the purchase"
-            } else {
-                val details = buildList {
-                    if (refunded) {
-                        add("$${planned.allocated.toPlainString()} to the ${legLabel(planned.legType)}")
+            parts +=
+                if (planned.allocated == planned.total) {
+                    "returned $${planned.total.toPlainString()} to the ${legLabel(planned.legType)}"
+                } else if (
+                    planned.total.signum() > 0 &&
+                        planned.allocated.signum() == 0 &&
+                        planned.external.signum() == 0
+                ) {
+                    "netted $${planned.total.toPlainString()} against the purchase"
+                } else {
+                    val details = buildList {
+                        if (refunded) {
+                            add(
+                                "$${planned.allocated.toPlainString()} to the ${legLabel(planned.legType)}"
+                            )
+                        }
+                        if (planned.external.signum() > 0) {
+                            add(
+                                "$${planned.external.toPlainString()} register-paid — the " +
+                                    "${legLabel(planned.legType)} collected less than the shelf value"
+                            )
+                        }
+                        if (netted.signum() > 0) {
+                            add("$${netted.toPlainString()} netted")
+                        }
                     }
-                    if (planned.external.signum() > 0) {
-                        add(
-                            "$${planned.external.toPlainString()} register-paid — the " +
-                                "${legLabel(planned.legType)} collected less than the shelf value"
-                        )
-                    }
-                    if (netted.signum() > 0) {
-                        add("$${netted.toPlainString()} netted")
-                    }
+                    "returned $${planned.total.toPlainString()} (${details.joinToString(", ")})"
                 }
-                "returned $${planned.total.toPlainString()} (${details.joinToString(", ")})"
-            }
-            recorded = recordRefund(planned.saleId, RefundRecord(
-                // the full return value: the customer received it all, as
-                // tender refund and/or as offset against the charge
-                amount = planned.total.toPlainString(),
-                poiTransactionId = movement?.poiTransactionId,
-                poiTimestamp = movement?.poiTransactionTimestamp?.toString(),
-                recordedAt = Instant.now().toString(),
-                full = false,
-                // the leg names a tender money moved back to; a fully
-                // netted return touched none — and only the allocated
-                // portion drew on it, not the netted/register-paid shares
-                leg = planned.legType.takeIf { refunded },
-                tenderAmount = planned.allocated.toPlainString().takeIf { refunded },
-                items = planned.items.map { RefundedItem(it.sku, it.quantity) },
-            )) && recorded
+            recorded =
+                recordRefund(
+                    planned.saleId,
+                    RefundRecord(
+                        // the full return value: the customer received it all, as
+                        // tender refund and/or as offset against the charge
+                        amount = planned.total.toPlainString(),
+                        poiTransactionId = movement?.poiTransactionId,
+                        poiTimestamp = movement?.poiTransactionTimestamp?.toString(),
+                        recordedAt = Instant.now().toString(),
+                        full = false,
+                        // the leg names a tender money moved back to; a fully
+                        // netted return touched none — and only the allocated
+                        // portion drew on it, not the netted/register-paid shares
+                        leg = planned.legType.takeIf { refunded },
+                        tenderAmount = planned.allocated.toPlainString().takeIf { refunded },
+                        items = planned.items.map { RefundedItem(it.sku, it.quantity) },
+                    ),
+                ) && recorded
         }
         conn.pendingReturns = emptyList()
         if (!recorded) {
-            parts += "WARNING: a return could NOT be recorded — its sale " +
-                "will still offer what was just refunded; refunding it " +
-                "again would return the money twice"
+            parts +=
+                "WARNING: a return could NOT be recorded — its sale " +
+                    "will still offer what was just refunded; refunding it " +
+                    "again would return the money twice"
         }
         return parts
     }
@@ -1690,10 +1844,9 @@ class NexoEmulatorController(
     }
 
     /**
-     * Full refund of the prior sale, blocking the calling IO coroutine: a
-     * void of every referenced movement — the tender legs, redemption,
-     * rebate, and award — on a fresh [CheckoutSession], recorded as a
-     * legless full [RefundRecord] (the sale is exhausted for good).
+     * Full refund of the prior sale, blocking the calling IO coroutine: a void of every referenced
+     * movement — the tender legs, redemption, rebate, and award — on a fresh [CheckoutSession],
+     * recorded as a legless full [RefundRecord] (the sale is exhausted for good).
      */
     private fun executeFullRefund(conn: Connection, stored: StoredSale) {
         val sale = stored.sale
@@ -1709,58 +1862,76 @@ class NexoEmulatorController(
             // the store. Gift-card loads reverse first, then CARD,
             // STORED_VALUE, and loyalty; everything ahead of the failed
             // money step must be omitted from the next session's retry.
-            val result = try {
-                session.voidTransaction(originalSaleRecord(sale, stored))
-                    .onError { step, error ->
-                        log("Refund step ${step ?: "(none ran)"} failed: ${error.message}")
-                        // the default policy, replicated so logging doesn't
-                        // change behavior: a failed tender reversal aborts, a
-                        // loyalty movement riding along is skipped (the
-                        // terminal can retry it via store-and-forward)
-                        if (step == ReversalStep.STORED_VALUE_LOAD ||
-                            step == ReversalStep.CARD || step == ReversalStep.STORED_VALUE
-                        ) {
-                            ReversalDecision.ABORT
-                        } else {
-                            ReversalDecision.SKIP
+            val result =
+                try {
+                    session
+                        .voidTransaction(originalSaleRecord(sale, stored))
+                        .onError { step, error ->
+                            log("Refund step ${step ?: "(none ran)"} failed: ${error.message}")
+                            // the default policy, replicated so logging doesn't
+                            // change behavior: a failed tender reversal aborts, a
+                            // loyalty movement riding along is skipped (the
+                            // terminal can retry it via store-and-forward)
+                            if (
+                                step == ReversalStep.STORED_VALUE_LOAD ||
+                                    step == ReversalStep.CARD ||
+                                    step == ReversalStep.STORED_VALUE
+                            ) {
+                                ReversalDecision.ABORT
+                            } else {
+                                ReversalDecision.SKIP
+                            }
                         }
+                        .get()
+                } catch (e: SessionException) {
+                    if (!recordPartialVoid(stored, e.error.reversedMovements)) {
+                        // the reversed movement has no record: the failure popup must
+                        // carry the double-reversal warning, not just the error
+                        throw SessionException(
+                            SessionError(
+                                e.error.code,
+                                e.error.message +
+                                    "\nWARNING: a reversed movement could NOT " +
+                                    "be recorded — retrying the full refund would reverse it again",
+                            )
+                        )
                     }
-                    .get()
-            } catch (e: SessionException) {
-                if (!recordPartialVoid(stored, e.error.reversedMovements)) {
-                    // the reversed movement has no record: the failure popup must
-                    // carry the double-reversal warning, not just the error
-                    throw SessionException(SessionError(
-                        e.error.code,
-                        e.error.message + "\nWARNING: a reversed movement could NOT " +
-                            "be recorded — retrying the full refund would reverse it again",
-                    ))
+                    throw e
                 }
-                throw e
-            }
             if (result.isSuccess) {
                 // Money moved on the terminal, so the refund is recorded
                 // unconditionally; unlike sale writes this one runs on the
                 // refund job's own thread — shutdown() joins the job so a
                 // window close cannot exit before it reaches disk
-                val recorded = recordRefund(sale.id, RefundRecord(
-                    amount = result.reversedAmount?.toPlainString(),
-                    poiTransactionId = result.poiTransactionId,
-                    poiTimestamp = result.poiTransactionTimestamp?.toString(),
-                    recordedAt = Instant.now().toString(),
-                    // legless: the void exhausted the whole sale
-                    full = true,
-                    awardReversed = sale.leg(LegType.AWARD) != null,
-                ))
+                val recorded =
+                    recordRefund(
+                        sale.id,
+                        RefundRecord(
+                            amount = result.reversedAmount?.toPlainString(),
+                            poiTransactionId = result.poiTransactionId,
+                            poiTimestamp = result.poiTransactionTimestamp?.toString(),
+                            recordedAt = Instant.now().toString(),
+                            // legless: the void exhausted the whole sale
+                            full = true,
+                            awardReversed = sale.leg(LegType.AWARD) != null,
+                        ),
+                    )
                 val parts = buildList {
                     // the terminal does not always echo the reversed amount
-                    add("Refunded" + (result.reversedAmount?.let { " $${it.toPlainString()}" } ?: ""))
+                    add(
+                        "Refunded" +
+                            (result.reversedAmount?.let { " $${it.toPlainString()}" } ?: "")
+                    )
                     if (result.pointsReversed > 0) {
-                        add("reversed ${result.pointsReversed} pts (balance ${result.remainingPointBalance})")
+                        add(
+                            "reversed ${result.pointsReversed} pts (balance ${result.remainingPointBalance})"
+                        )
                     }
                 }
                 publishRefundResult(
-                    conn, parts, recorded,
+                    conn,
+                    parts,
+                    recorded,
                     receiptText(result.customerReceipt, result.merchantReceipt),
                 )
             }
@@ -1768,10 +1939,9 @@ class NexoEmulatorController(
     }
 
     /**
-     * Opens the fresh checkout session a referenced refund runs on, keeps
-     * it reachable for [abort] while [body] drives it, and funnels
-     * failures into the outcome popup. The session is bracketed around the
-     * body (close() sends the End signal on every path).
+     * Opens the fresh checkout session a referenced refund runs on, keeps it reachable for [abort]
+     * while [body] drives it, and funnels failures into the outcome popup. The session is bracketed
+     * around the body (close() sends the End signal on every path).
      */
     private fun runRefundSession(
         conn: Connection,
@@ -1779,18 +1949,19 @@ class NexoEmulatorController(
         body: (CheckoutSession) -> Unit,
     ) {
         try {
-            val session = CheckoutSession.builder()
-                .client(conn.client)
-                // the record persisted the original sale's identity exactly
-                // so a later referenced reversal can present it
-                .saleId(sale.saleId)
-                .poiId(sale.poiId)
-                .currency(sale.currency)
-                .onBackgroundError { error ->
-                    log("Customer display update failed: ${error.message}")
-                }
-                .start()
-                .get()
+            val session =
+                CheckoutSession.builder()
+                    .client(conn.client)
+                    // the record persisted the original sale's identity exactly
+                    // so a later referenced reversal can present it
+                    .saleId(sale.saleId)
+                    .poiId(sale.poiId)
+                    .currency(sale.currency)
+                    .onBackgroundError { error ->
+                        log("Customer display update failed: ${error.message}")
+                    }
+                    .start()
+                    .get()
             conn.refundSession = session
             try {
                 session.use {
@@ -1815,11 +1986,14 @@ class NexoEmulatorController(
                     log("Refund failed: ${e.error.code} — ${e.error.message}")
                 }
                 _state.update {
-                    it.copy(paymentOutcome = PaymentOutcome(
-                        success = false,
-                        title = "Refund failed",
-                        message = "${e.error.code}\n${e.error.message}",
-                    ))
+                    it.copy(
+                        paymentOutcome =
+                            PaymentOutcome(
+                                success = false,
+                                title = "Refund failed",
+                                message = "${e.error.code}\n${e.error.message}",
+                            )
+                    )
                 }
             }
         } catch (e: Exception) {
@@ -1827,11 +2001,14 @@ class NexoEmulatorController(
             if (connection === conn) {
                 log("Refund not completed: ${e.message}")
                 _state.update {
-                    it.copy(paymentOutcome = PaymentOutcome(
-                        success = false,
-                        title = "Refund failed",
-                        message = "Refund not completed\n${e.message}",
-                    ))
+                    it.copy(
+                        paymentOutcome =
+                            PaymentOutcome(
+                                success = false,
+                                title = "Refund failed",
+                                message = "Refund not completed\n${e.message}",
+                            )
+                    )
                 }
                 detailedLog(e.stackTraceToString())
             }
@@ -1839,37 +2016,43 @@ class NexoEmulatorController(
     }
 
     /**
-     * The prior sale's persisted terminal references, as the settlement
-     * API takes them — MINUS what earlier refunds already reversed: a
-     * gift-card load recorded as reversed, a tender leg with a full per-leg
-     * record, and the award once any record says it is gone. The SDK
-     * reverses only the references supplied, so a void retried after a
-     * partial failure sends just the outstanding movements.
+     * The prior sale's persisted terminal references, as the settlement API takes them — MINUS what
+     * earlier refunds already reversed: a gift-card load recorded as reversed, a tender leg with a
+     * full per-leg record, and the award once any record says it is gone. The SDK reverses only the
+     * references supplied, so a void retried after a partial failure sends just the outstanding
+     * movements.
      */
     private fun originalSaleRecord(sale: SaleRecord, stored: StoredSale): OriginalSaleRecord {
         val builder = OriginalSaleRecord.builder()
-        sale.leg(LegType.CARD)?.takeUnless { stored.legRefunded(LegType.CARD) }?.let {
-            builder.cardPoiTransactionId(it.poiTransactionId)
-            parseInstant(it.poiTimestamp)?.let(builder::cardPoiTransactionTimestamp)
-        }
-        sale.leg(LegType.STORED_VALUE)
-            ?.takeUnless { stored.legRefunded(LegType.STORED_VALUE) }?.let {
+        sale
+            .leg(LegType.CARD)
+            ?.takeUnless { stored.legRefunded(LegType.CARD) }
+            ?.let {
+                builder.cardPoiTransactionId(it.poiTransactionId)
+                parseInstant(it.poiTimestamp)?.let(builder::cardPoiTransactionTimestamp)
+            }
+        sale
+            .leg(LegType.STORED_VALUE)
+            ?.takeUnless { stored.legRefunded(LegType.STORED_VALUE) }
+            ?.let {
                 builder.storedValuePoiTransactionId(it.poiTransactionId)
                 parseInstant(it.poiTimestamp)?.let(builder::storedValuePoiTransactionTimestamp)
             }
         val reversedLoads = stored.reversedGiftCardLoadIds
-        sale.giftCardLoads.filterNot { it.poiTransactionId in reversedLoads }.forEach { load ->
-            builder.addStoredValueLoad(
-                StoredValueLoadRecord.builder()
-                    .basketReference(load.basketReference)
-                    .amount(BigDecimal(load.amount))
-                    .poiTransactionId(load.poiTransactionId)
-                    .apply {
-                        parseInstant(load.poiTimestamp)?.let(::poiTransactionTimestamp)
-                    }
-                    .build()
-            )
-        }
+        sale.giftCardLoads
+            .filterNot { it.poiTransactionId in reversedLoads }
+            .forEach { load ->
+                builder.addStoredValueLoad(
+                    StoredValueLoadRecord.builder()
+                        .basketReference(load.basketReference)
+                        .amount(BigDecimal(load.amount))
+                        .poiTransactionId(load.poiTransactionId)
+                        .apply {
+                            parseInstant(load.poiTimestamp)?.let(::poiTransactionTimestamp)
+                        }
+                        .build()
+                )
+            }
         sale.leg(LegType.REBATE)?.let {
             builder.rebatePoiTransactionId(it.poiTransactionId)
             parseInstant(it.poiTimestamp)?.let(builder::rebatePoiTransactionTimestamp)
@@ -1878,61 +2061,74 @@ class NexoEmulatorController(
             builder.redemptionPoiTransactionId(it.poiTransactionId)
             parseInstant(it.poiTimestamp)?.let(builder::redemptionPoiTransactionTimestamp)
         }
-        sale.leg(LegType.AWARD)?.takeUnless { stored.awardReversed }?.let {
-            builder.awardPoiTransactionId(it.poiTransactionId)
-            parseInstant(it.poiTimestamp)?.let(builder::awardPoiTransactionTimestamp)
-        }
+        sale
+            .leg(LegType.AWARD)
+            ?.takeUnless { stored.awardReversed }
+            ?.let {
+                builder.awardPoiTransactionId(it.poiTransactionId)
+                parseInstant(it.poiTimestamp)?.let(builder::awardPoiTransactionTimestamp)
+            }
         sale.memberId?.let(builder::memberId)
         return builder.build()
     }
 
     /**
-     * Persists a failed void's progress exposed structurally on the SDK
-     * error. The retry's [originalSaleRecord] then omits those movements.
-     * This controller aborts money failures but skips loyalty failures, so
-     * only loads and CARD can precede an ABORT here. STORED_VALUE is the
-     * final money leg; once it succeeds, [executeFullRefund] records a
-     * legless full refund after best-effort loyalty instead.
+     * Persists a failed void's progress exposed structurally on the SDK error. The retry's
+     * [originalSaleRecord] then omits those movements. This controller aborts money failures but
+     * skips loyalty failures, so only loads and CARD can precede an ABORT here. STORED_VALUE is the
+     * final money leg; once it succeeds, [executeFullRefund] records a legless full refund after
+     * best-effort loyalty instead.
      */
     private fun recordPartialVoid(
         stored: StoredSale,
         reversedMovements: List<ReversedMovement>,
     ): Boolean {
         val sale = stored.sale
-        val reversedLoadIds = reversedMovements.asSequence()
-            .filter { it.step == ReversalStep.STORED_VALUE_LOAD }
-            .map { it.poiTransactionId }
-            .toSet()
-        val reversedLoads = sale.giftCardLoads.filter {
-            it.poiTransactionId in reversedLoadIds &&
-                it.poiTransactionId !in stored.reversedGiftCardLoadIds
-        }.map { it.poiTransactionId }
-        val committedCard = sale.leg(LegType.CARD)
-            ?.takeUnless { stored.legRefunded(LegType.CARD) }
-            ?.takeIf { card ->
-                reversedMovements.any {
-                    it.step == ReversalStep.CARD &&
-                        it.poiTransactionId == card.poiTransactionId
+        val reversedLoadIds =
+            reversedMovements
+                .asSequence()
+                .filter { it.step == ReversalStep.STORED_VALUE_LOAD }
+                .map { it.poiTransactionId }
+                .toSet()
+        val reversedLoads =
+            sale.giftCardLoads
+                .filter {
+                    it.poiTransactionId in reversedLoadIds &&
+                        it.poiTransactionId !in stored.reversedGiftCardLoadIds
                 }
-            }
+                .map { it.poiTransactionId }
+        val committedCard =
+            sale
+                .leg(LegType.CARD)
+                ?.takeUnless { stored.legRefunded(LegType.CARD) }
+                ?.takeIf { card ->
+                    reversedMovements.any {
+                        it.step == ReversalStep.CARD && it.poiTransactionId == card.poiTransactionId
+                    }
+                }
         if (reversedLoads.isEmpty() && committedCard == null) {
             return true
         }
-        val recorded = recordRefund(sale.id, RefundRecord(
-            amount = committedCard?.amount,
-            recordedAt = Instant.now().toString(),
-            full = committedCard != null,
-            leg = committedCard?.type,
-            // a void reverses the leg itself: the tender returned exactly
-            // what it collected
-            tenderAmount = committedCard?.amount,
-            reversedGiftCardLoadIds = reversedLoads,
-            reversalProgress = true,
-        ))
+        val recorded =
+            recordRefund(
+                sale.id,
+                RefundRecord(
+                    amount = committedCard?.amount,
+                    recordedAt = Instant.now().toString(),
+                    full = committedCard != null,
+                    leg = committedCard?.type,
+                    // a void reverses the leg itself: the tender returned exactly
+                    // what it collected
+                    tenderAmount = committedCard?.amount,
+                    reversedGiftCardLoadIds = reversedLoads,
+                    reversalProgress = true,
+                ),
+            )
         val movements = buildList {
             if (reversedLoads.isNotEmpty()) add("${reversedLoads.size} gift card load(s)")
             if (committedCard != null) add("the ${legLabel(committedCard.type)} leg")
-        }.joinToString(" and ")
+        }
+            .joinToString(" and ")
         log(
             if (recorded) {
                 "$movements reversed before the failure — " +
@@ -1946,28 +2142,31 @@ class NexoEmulatorController(
         return recorded
     }
 
-    /** The outcome popup for a refund stopped by the abort flag before it
-     *  reached the wire. */
+    /** The outcome popup for a refund stopped by the abort flag before it reached the wire. */
     private fun publishRefundAborted(conn: Connection) {
         val message = "Refund aborted before any money moved"
         log(message)
         if (connection === conn) {
             _state.update {
-                it.copy(paymentOutcome = PaymentOutcome(
-                    success = false,
-                    title = "Refund aborted",
-                    message = message,
-                ))
+                it.copy(
+                    paymentOutcome =
+                        PaymentOutcome(
+                            success = false,
+                            title = "Refund aborted",
+                            message = message,
+                        )
+                )
             }
         }
     }
 
-    /** Stores the refund against its sale — including what it covered, so
-     *  a later refund can't return the same thing again. A storage failure
-     *  cannot fail the refund (the money already moved) but must not stay
-     *  quiet either — without the record the sale offers the same refund
-     *  again, and a terminal that accepts it would return the money twice.
-     *  False on failure, so the outcome popup carries the warning. */
+    /**
+     * Stores the refund against its sale — including what it covered, so a later refund can't
+     * return the same thing again. A storage failure cannot fail the refund (the money already
+     * moved) but must not stay quiet either — without the record the sale offers the same refund
+     * again, and a terminal that accepts it would return the money twice. False on failure, so the
+     * outcome popup carries the warning.
+     */
     private fun recordRefund(saleId: String, record: RefundRecord): Boolean {
         return try {
             saleStore.recordRefund(saleId, record)
@@ -1981,29 +2180,36 @@ class NexoEmulatorController(
         }
     }
 
-    /** Publishes a completed refund. [recorded] false means the refund
-     *  history write failed: the money moved, so the popup stays a
-     *  success, but it must warn that the sale will offer this refund
-     *  again. */
+    /**
+     * Publishes a completed refund. [recorded] false means the refund history write failed: the
+     * money moved, so the popup stays a success, but it must warn that the sale will offer this
+     * refund again.
+     */
     private fun publishRefundResult(
         conn: Connection,
         parts: List<String>,
         recorded: Boolean,
         receipt: String?,
     ) {
-        val all = if (recorded) parts else parts +
-            ("WARNING: the refund could NOT be recorded — the sale will " +
-                "still offer what was just refunded; refunding it again " +
-                "would return the money twice")
+        val all =
+            if (recorded) parts
+            else
+                parts +
+                    ("WARNING: the refund could NOT be recorded — the sale will " +
+                        "still offer what was just refunded; refunding it again " +
+                        "would return the money twice")
         log(all.joinToString(", "))
         if (connection === conn) {
             _state.update {
-                it.copy(paymentOutcome = PaymentOutcome(
-                    success = true,
-                    title = "Refund complete",
-                    message = all.joinToString("\n"),
-                    receipt = receipt,
-                ))
+                it.copy(
+                    paymentOutcome =
+                        PaymentOutcome(
+                            success = true,
+                            title = "Refund complete",
+                            message = all.joinToString("\n"),
+                            receipt = receipt,
+                        )
+                )
             }
         }
     }
@@ -2011,16 +2217,20 @@ class NexoEmulatorController(
     private fun legLabel(type: LegType): String =
         if (type == LegType.STORED_VALUE) "gift card" else "card"
 
-    /** The popup's receipt block: the customer copy when the terminal
-     *  returned one, else the merchant copy; the plain-text rendering
-     *  preferred over the HTML body. */
+    /**
+     * The popup's receipt block: the customer copy when the terminal returned one, else the
+     * merchant copy; the plain-text rendering preferred over the HTML body.
+     */
     private fun receiptText(customer: Receipt?, merchant: Receipt?): String? =
         (customer ?: merchant)?.let { it.plainText ?: it.html }
 
-    /** The stored ISO instant, or null for a malformed record — the refund
-     *  then runs on the transaction id alone rather than not at all. */
-    private fun parseInstant(iso: String?): Instant? =
-        iso?.let { runCatching { Instant.parse(it) }.getOrNull() }
+    /**
+     * The stored ISO instant, or null for a malformed record — the refund then runs on the
+     * transaction id alone rather than not at all.
+     */
+    private fun parseInstant(iso: String?): Instant? = iso?.let {
+        runCatching { Instant.parse(it) }.getOrNull()
+    }
 
     override fun clearBasket() {
         val conn = connection
@@ -2065,7 +2275,8 @@ class NexoEmulatorController(
         if (_state.value.refundInProgress || conn.refundSession != null) {
             conn.refundAbortRequested.set(true)
             log("Aborting the refund…")
-            conn.refundSession?.abort()
+            conn.refundSession
+                ?.abort()
                 ?.onError { error ->
                     log("Abort failed: ${error.message}")
                     error.cause?.let { detailedLog(it.stackTraceToString()) }
@@ -2079,7 +2290,8 @@ class NexoEmulatorController(
             return
         }
         log("Aborting…")
-        session.abort()
+        session
+            .abort()
             .onError { error ->
                 log("Abort failed: ${error.message}")
                 error.cause?.let { detailedLog(it.stackTraceToString()) }
@@ -2088,11 +2300,10 @@ class NexoEmulatorController(
     }
 
     /**
-     * Stores the completed sale with every transaction leg's POI reference,
-     * so referenced refunds/voids can run after the session is gone. The
-     * session facts arrive as arguments because the write runs later, on
-     * [persistenceScope]. Best-effort: a storage failure must never fail
-     * the checkout.
+     * Stores the completed sale with every transaction leg's POI reference, so referenced
+     * refunds/voids can run after the session is gone. The session facts arrive as arguments
+     * because the write runs later, on [persistenceScope]. Best-effort: a storage failure must
+     * never fail the checkout.
      */
     private fun persistSale(sessionId: String, memberId: String?, result: SettlementResult) {
         persistenceScope.launch {
@@ -2103,15 +2314,16 @@ class NexoEmulatorController(
                 if (result.finalBasket?.items.orEmpty().none { it.isSale }) {
                     return@launch
                 }
-                val record = result.toSaleRecord(
-                    sessionId = sessionId,
-                    saleId = config.saleId,
-                    poiId = config.poiId,
-                    currency = config.currency,
-                    memberId = memberId,
-                    recordId = UUID.randomUUID().toString(),
-                    completedAt = Instant.now(),
-                )
+                val record =
+                    result.toSaleRecord(
+                        sessionId = sessionId,
+                        saleId = config.saleId,
+                        poiId = config.poiId,
+                        currency = config.currency,
+                        memberId = memberId,
+                        recordId = UUID.randomUUID().toString(),
+                        completedAt = Instant.now(),
+                    )
                 saleStore.recordSale(record)
                 log("Sale stored (${record.legs.size} transaction leg(s), id ${record.id})")
                 refreshSales()
@@ -2151,8 +2363,9 @@ class NexoEmulatorController(
                 add("earned ${result.totalPointsEarned} pts (balance ${result.pointsBalance})")
             }
         }
-        val summary = "Settled $${result.authorizedAmount.toPlainString()}" +
-            (if (parts.isEmpty()) "" else " — " + parts.joinToString(", "))
+        val summary =
+            "Settled $${result.authorizedAmount.toPlainString()}" +
+                (if (parts.isEmpty()) "" else " — " + parts.joinToString(", "))
         // the popup carries the promo messages and warnings that otherwise
         // live only in the event log
         val popup = buildList {
@@ -2160,16 +2373,18 @@ class NexoEmulatorController(
             addAll(parts)
             result.promotionMessages.forEach { add(it) }
             result.warnings.forEach { add("Warning: $it") }
-        }.joinToString("\n")
+        }
+            .joinToString("\n")
         _state.update {
             it.copy(
                 lastPayment = summary,
-                paymentOutcome = PaymentOutcome(
-                    success = true,
-                    title = "Settlement complete",
-                    message = popup,
-                    receipt = receiptText(result.customerReceipt, result.merchantReceipt),
-                ),
+                paymentOutcome =
+                    PaymentOutcome(
+                        success = true,
+                        title = "Settlement complete",
+                        message = popup,
+                        receipt = receiptText(result.customerReceipt, result.merchantReceipt),
+                    ),
             )
         }
         log(summary)
@@ -2181,75 +2396,93 @@ class NexoEmulatorController(
         _state.update { it.copy(paymentOutcome = null) }
     }
 
-    /** Reload [EmulatorState.sales] from the store. App scope, not a
-     *  connection scope: browsing stored sales must work while disconnected. */
+    /**
+     * Reload [EmulatorState.sales] from the store. App scope, not a connection scope: browsing
+     * stored sales must work while disconnected.
+     */
     private fun refreshSales() {
         scope.launch(salesRefreshDispatcher) {
-            val sales = try {
-                saleStore.listSales()
-            } catch (e: Exception) {
-                log("Failed to load stored sales: ${e.message}")
-                detailedLog(e.stackTraceToString())
-                return@launch
-            }
+            val sales =
+                try {
+                    saleStore.listSales()
+                } catch (e: Exception) {
+                    log("Failed to load stored sales: ${e.message}")
+                    detailedLog(e.stackTraceToString())
+                    return@launch
+                }
             _state.update { state -> state.copy(sales = sales.map { it.toUi() }) }
         }
     }
 
-    private fun StoredSale.toUi() = StoredSaleUi(
-        id = sale.id,
-        completedAtLabel = formatCompletedAt(sale.completedAt),
-        totalAmount = sale.authorizedAmount,
-        memberId = sale.memberId,
-        items = sale.items.map { item ->
-            // rung-but-unsettled returns count too: what sits in the basket
-            // must not be returnable a second time
-            val pending = connection?.let { pendingReturnedQuantity(it, sale.id, item.sku) } ?: 0
-            val remaining = (item.quantity - refundedQuantity(item.sku) - pending)
-                .coerceIn(0, item.quantity)
-            SaleItemUi(
-                sku = item.sku,
-                description = item.description,
-                quantity = item.quantity,
-                refundMinor = refundMinor(item, remaining),
-                remainingQuantity = remaining,
-            )
-        },
-        hasGiftCardPurchase = sale.giftCardLoads.isNotEmpty(),
-        refunded = refunds.isNotEmpty(),
-        fullyRefunded = fullyRefunded,
-        fullRefundAvailable = refundable && refunds.none { it.isPartialRefund },
-        voided = voided != null,
-    )
+    private fun StoredSale.toUi() =
+        StoredSaleUi(
+            id = sale.id,
+            completedAtLabel = formatCompletedAt(sale.completedAt),
+            totalAmount = sale.authorizedAmount,
+            memberId = sale.memberId,
+            items =
+                sale.items.map { item ->
+                    // rung-but-unsettled returns count too: what sits in the basket
+                    // must not be returnable a second time
+                    val pending =
+                        connection?.let { pendingReturnedQuantity(it, sale.id, item.sku) } ?: 0
+                    val remaining =
+                        (item.quantity - refundedQuantity(item.sku) - pending).coerceIn(
+                            0,
+                            item.quantity,
+                        )
+                    SaleItemUi(
+                        sku = item.sku,
+                        description = item.description,
+                        quantity = item.quantity,
+                        refundMinor = refundMinor(item, remaining),
+                        remainingQuantity = remaining,
+                    )
+                },
+            hasGiftCardPurchase = sale.giftCardLoads.isNotEmpty(),
+            refunded = refunds.isNotEmpty(),
+            fullyRefunded = fullyRefunded,
+            fullRefundAvailable = refundable && refunds.none { it.isPartialRefund },
+            voided = voided != null,
+        )
 
-    /** What returning [quantity] units of this line restores: shelf price
-     *  plus tax, computed exactly like the basket engine's credit line
-     *  (gross × rate, HALF_UP at scale 2) — so the refund allocations sum
-     *  to precisely the credit-line total settlement checks against. */
+    /**
+     * What returning [quantity] units of this line restores: shelf price plus tax, computed exactly
+     * like the basket engine's credit line (gross × rate, HALF_UP at scale 2) — so the refund
+     * allocations sum to precisely the credit-line total settlement checks against.
+     */
     private fun refundValue(item: SaleItem, quantity: Int): BigDecimal {
         val gross = BigDecimal(item.unitPrice).multiply(BigDecimal(quantity))
-        val tax = item.taxRate
-            ?.let { gross.multiply(BigDecimal(it)).setScale(2, RoundingMode.HALF_UP) }
-            ?: BigDecimal.ZERO
+        val tax =
+            item.taxRate?.let { gross.multiply(BigDecimal(it)).setScale(2, RoundingMode.HALF_UP) }
+                ?: BigDecimal.ZERO
         return gross.add(tax)
     }
 
-    /** [refundValue] in cents for the UI, so selections sum as Longs. A
-     *  malformed amount degrades to zero rather than dropping the sale. */
-    private fun refundMinor(item: SaleItem, quantity: Int): Long = try {
-        refundValue(item, quantity)
-            .movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValueExact()
-    } catch (e: Exception) {
-        0L
-    }
+    /**
+     * [refundValue] in cents for the UI, so selections sum as Longs. A malformed amount degrades to
+     * zero rather than dropping the sale.
+     */
+    private fun refundMinor(item: SaleItem, quantity: Int): Long =
+        try {
+            refundValue(item, quantity)
+                .movePointRight(2)
+                .setScale(0, RoundingMode.HALF_UP)
+                .longValueExact()
+        } catch (e: Exception) {
+            0L
+        }
 
-    /** Local wall-clock label for the stored ISO instant; falls back to the
-     *  raw string rather than dropping the sale over a malformed record. */
-    private fun formatCompletedAt(iso: String): String = try {
-        saleTimeFormat.format(Instant.parse(iso))
-    } catch (e: Exception) {
-        iso
-    }
+    /**
+     * Local wall-clock label for the stored ISO instant; falls back to the raw string rather than
+     * dropping the sale over a malformed record.
+     */
+    private fun formatCompletedAt(iso: String): String =
+        try {
+            saleTimeFormat.format(Instant.parse(iso))
+        } catch (e: Exception) {
+            iso
+        }
 
     /** A typed number is keyed entry; blank hands entry to the terminal. */
     private fun storedValueCard(cardNumber: String): StoredValueCard {
@@ -2261,11 +2494,14 @@ class NexoEmulatorController(
 
     /** Parses a user-entered USD amount without silently rounding it. */
     private fun requireMoney(amount: String, field: String, allowZero: Boolean): BigDecimal {
-        val value = try {
-            BigDecimal(amount.trim()).setScale(2, RoundingMode.UNNECESSARY)
-        } catch (_: Exception) {
-            throw IllegalArgumentException("$field must be a decimal amount with at most 2 places")
-        }
+        val value =
+            try {
+                BigDecimal(amount.trim()).setScale(2, RoundingMode.UNNECESSARY)
+            } catch (_: Exception) {
+                throw IllegalArgumentException(
+                    "$field must be a decimal amount with at most 2 places"
+                )
+            }
         require(if (allowZero) value.signum() >= 0 else value.signum() > 0) {
             "$field must be ${if (allowZero) "zero or positive" else "positive"}"
         }
@@ -2275,21 +2511,23 @@ class NexoEmulatorController(
     private fun onOff(enabled: Boolean) = if (enabled) "on" else "off"
 
     /**
-     * The periodic connectivity loop on the device-level [Terminal] — no
-     * session involved. Each probe runs blocking (`executeSync()`): the
-     * loop owns its thread and its pacing, so a slow terminal never stacks
-     * probes, and cancellation (disconnect) lands at [delay].
+     * The periodic connectivity loop on the device-level [Terminal] — no session involved. Each
+     * probe runs blocking (`executeSync()`): the loop owns its thread and its pacing, so a slow
+     * terminal never stacks probes, and cancellation (disconnect) lands at [delay].
      */
     private fun runDiagnosisLoop(conn: Connection, terminal: Terminal) {
         conn.scope.launch(conn.dispatcher) {
             while (true) {
                 val previous = _state.value.connection.phase
-                terminal.diagnose()
+                terminal
+                    .diagnose()
                     .onSuccess { result ->
                         if (connection !== conn) return@onSuccess
                         val poi = result.poiStatus?.globalStatus?.toString() ?: "OK"
                         _state.update {
-                            it.copy(connection = ConnectionStatus(ConnectionPhase.CONNECTED, "POI $poi"))
+                            it.copy(
+                                connection = ConnectionStatus(ConnectionPhase.CONNECTED, "POI $poi")
+                            )
                         }
                         if (previous != ConnectionPhase.CONNECTED) {
                             log("Terminal connected (POI status: $poi)")
@@ -2299,13 +2537,17 @@ class NexoEmulatorController(
                         if (connection !== conn) return@onError
                         _state.update {
                             it.copy(
-                                connection = ConnectionStatus(
-                                    ConnectionPhase.ERROR,
-                                    error.message ?: "diagnosis failed",
-                                )
+                                connection =
+                                    ConnectionStatus(
+                                        ConnectionPhase.ERROR,
+                                        error.message ?: "diagnosis failed",
+                                    )
                             )
                         }
-                        if (previous == ConnectionPhase.CONNECTED || previous == ConnectionPhase.CONNECTING) {
+                        if (
+                            previous == ConnectionPhase.CONNECTED ||
+                                previous == ConnectionPhase.CONNECTING
+                        ) {
                             log("Terminal unreachable: ${error.message}")
                         }
                         error.cause?.let { detailedLog(it.stackTraceToString()) }
@@ -2318,89 +2560,90 @@ class NexoEmulatorController(
 
     private fun updateDisconnectedState() {
         _state.update {
-            it.withCheckoutCleared(lastPayment = null).copy(
-                connection = ConnectionStatus(ConnectionPhase.DISCONNECTED),
-                tls = TlsStatus.Unknown, // per-connection fact; stale FAILED would outlive it
-                paymentInProgress = false,
-                cardReadInProgress = false,
-                storedValueInProgress = false,
-                identifyInProgress = false,
-                refundInProgress = false,
-                paymentOutcome = null,
-            )
+            it.withCheckoutCleared(lastPayment = null)
+                .copy(
+                    connection = ConnectionStatus(ConnectionPhase.DISCONNECTED),
+                    tls = TlsStatus.Unknown, // per-connection fact; stale FAILED would outlive it
+                    paymentInProgress = false,
+                    cardReadInProgress = false,
+                    storedValueInProgress = false,
+                    identifyInProgress = false,
+                    refundInProgress = false,
+                    paymentOutcome = null,
+                )
         }
     }
 
-    /** The checkout-scoped fields, reset for a fresh or ended checkout.
-     *  [lastPayment] survives by default: the payment summary stays visible
-     *  until the next checkout starts. */
+    /**
+     * The checkout-scoped fields, reset for a fresh or ended checkout. [lastPayment] survives by
+     * default: the payment summary stays visible until the next checkout starts.
+     */
     private fun EmulatorState.withCheckoutCleared(
         sessionId: String? = null,
         lastPayment: String? = this.lastPayment,
-    ) = copy(
-        sessionId = sessionId,
-        basket = emptyList(),
-        basketTotal = "0.00",
-        basketTax = "0.00",
-        lastPayment = lastPayment,
-    )
+    ) =
+        copy(
+            sessionId = sessionId,
+            basket = emptyList(),
+            basketTotal = "0.00",
+            basketTax = "0.00",
+            lastPayment = lastPayment,
+        )
 
-    /** A minor-unit amount as the two-decimal [BigDecimal] the basket
-     *  APIs expect. */
+    /** A minor-unit amount as the two-decimal [BigDecimal] the basket APIs expect. */
     private fun minorToAmount(minor: Long): BigDecimal = BigDecimal.valueOf(minor, 2)
 
     /**
-     * A keypad line's unit price in cents, or null when it is not a whole
-     * number of them. Every CUSTOM- line is minted by [customBasketItem]
-     * at scale 2, so a fractional value can only mean a bug upstream —
-     * and it must not convert silently: the keypad would adopt the
-     * truncated amount and write it back into the basket on the first
-     * keystroke, quietly re-pricing the line.
+     * A keypad line's unit price in cents, or null when it is not a whole number of them. Every
+     * CUSTOM- line is minted by [customBasketItem] at scale 2, so a fractional value can only mean
+     * a bug upstream — and it must not convert silently: the keypad would adopt the truncated
+     * amount and write it back into the basket on the first keystroke, quietly re-pricing the line.
      *
-     * Withheld rather than thrown, because [publishBasket] also reports
-     * the final basket of a settlement that has already moved money
-     * ([publishPaymentResult]); a corrupt line costs the operator the
-     * ability to edit it, which beats losing the outcome of a completed
-     * payment.
+     * Withheld rather than thrown, because [publishBasket] also reports the final basket of a
+     * settlement that has already moved money ([publishPaymentResult]); a corrupt line costs the
+     * operator the ability to edit it, which beats losing the outcome of a completed payment.
      */
-    private fun editableMinor(unitPrice: BigDecimal): Long? = try {
-        unitPrice.movePointRight(2).longValueExact()
-    } catch (e: ArithmeticException) {
-        log("Custom line priced $unitPrice is not a whole number of cents — not editable")
-        detailedLog(e.stackTraceToString())
-        null
-    }
+    private fun editableMinor(unitPrice: BigDecimal): Long? =
+        try {
+            unitPrice.movePointRight(2).longValueExact()
+        } catch (e: ArithmeticException) {
+            log("Custom line priced $unitPrice is not a whole number of cents — not editable")
+            detailedLog(e.stackTraceToString())
+            null
+        }
 
     private fun publishBasket(basket: Basket) {
-        val giftCardReferences = connection?.pendingGiftCards
-            ?.mapTo(mutableSetOf()) { it.basketReference }
-            .orEmpty()
+        val giftCardReferences =
+            connection?.pendingGiftCards?.mapTo(mutableSetOf()) { it.basketReference }.orEmpty()
         _state.update { state ->
             state.copy(
-                basket = basket.items.map { line ->
-                    BasketLine(
-                        sku = line.sku,
-                        description = line.description,
-                        quantity = line.quantity,
-                        lineTotal = line.adjustedTotal.toPlainString(),
-                        // a RETURN of a custom item carries the same SKU;
-                        // re-pricing it would rebuild it as a sale line, so
-                        // only the sale direction is offered to the keypad
-                        editablePriceMinor = line.unitPrice
-                            .takeIf { CustomItem.isCustomSku(line.sku) && line.isSale }
-                            ?.let(::editableMinor),
-                        itemId = line.itemId,
-                        type = when (line.type) {
-                            BasketItemType.SALE -> BasketLineType.SALE
-                            BasketItemType.RETURN -> BasketLineType.RETURN
-                            BasketItemType.CREDIT -> BasketLineType.CREDIT
-                        },
-                        originalTotal = line.originalTotal.toPlainString(),
-                        discountTotal = line.discountTotal.toPlainString(),
-                        discountLabels = line.discounts.map { it.label },
-                        giftCard = line.reference in giftCardReferences,
-                    )
-                },
+                basket =
+                    basket.items.map { line ->
+                        BasketLine(
+                            sku = line.sku,
+                            description = line.description,
+                            quantity = line.quantity,
+                            lineTotal = line.adjustedTotal.toPlainString(),
+                            // a RETURN of a custom item carries the same SKU;
+                            // re-pricing it would rebuild it as a sale line, so
+                            // only the sale direction is offered to the keypad
+                            editablePriceMinor =
+                                line.unitPrice
+                                    .takeIf { CustomItem.isCustomSku(line.sku) && line.isSale }
+                                    ?.let(::editableMinor),
+                            itemId = line.itemId,
+                            type =
+                                when (line.type) {
+                                    BasketItemType.SALE -> BasketLineType.SALE
+                                    BasketItemType.RETURN -> BasketLineType.RETURN
+                                    BasketItemType.CREDIT -> BasketLineType.CREDIT
+                                },
+                            originalTotal = line.originalTotal.toPlainString(),
+                            discountTotal = line.discountTotal.toPlainString(),
+                            discountLabels = line.discounts.map { it.label },
+                            giftCard = line.reference in giftCardReferences,
+                        )
+                    },
                 // scaled: an emptied basket's totals come back as "0",
                 // which reads as "$0" in the header and slips past the
                 // "0.00" test that hides the tax line
@@ -2431,11 +2674,12 @@ class NexoEmulatorController(
     }
 
     private fun nexoLog(direction: NexoMessageListener.Direction, json: String) {
-        val payload = if (json.isBlank()) {
-            "<empty response>"
-        } else {
-            runCatching { nexoLogMapper.readTree(json).toPrettyString() }.getOrDefault(json)
-        }
+        val payload =
+            if (json.isBlank()) {
+                "<empty response>"
+            } else {
+                runCatching { nexoLogMapper.readTree(json).toPrettyString() }.getOrDefault(json)
+            }
         val arrow = if (direction == NexoMessageListener.Direction.REQUEST) "→" else "←"
         val stamped = "${timestamp()} $arrow ${direction.name}\n$payload"
         _state.update {

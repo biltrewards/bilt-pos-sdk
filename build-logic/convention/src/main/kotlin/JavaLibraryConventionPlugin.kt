@@ -6,23 +6,24 @@ import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.dependencies
 
 class JavaLibraryConventionPlugin : Plugin<Project> {
-    override fun apply(target: Project) = with(target) {
-        pluginManager.apply("java-library")
+    override fun apply(target: Project) =
+        with(target) {
+            pluginManager.apply("java-library")
 
-        extensions.configure<JavaPluginExtension> {
-            sourceCompatibility = JavaVersion.VERSION_11
-            targetCompatibility = JavaVersion.VERSION_11
+            extensions.configure<JavaPluginExtension> {
+                sourceCompatibility = JavaVersion.VERSION_11
+                targetCompatibility = JavaVersion.VERSION_11
+            }
+
+            val libs = versionCatalogs.named("libs")
+
+            dependencies {
+                add("testImplementation", libs.findLibrary("junit-jupiter").get())
+                add("testRuntimeOnly", libs.findLibrary("junit-platform-launcher").get())
+            }
+
+            configureTests()
         }
-
-        val libs = versionCatalogs.named("libs")
-
-        dependencies {
-            add("testImplementation", libs.findLibrary("junit-jupiter").get())
-            add("testRuntimeOnly", libs.findLibrary("junit-platform-launcher").get())
-        }
-
-        configureTests()
-    }
 }
 
 private val Project.versionCatalogs

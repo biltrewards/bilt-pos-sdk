@@ -4,9 +4,9 @@ import com.bilt.pos.emulator.catalog.Product
 import java.math.BigDecimal
 
 /**
- * The emulator's tax policy: New Jersey sales tax, 6.625%, with the two big
- * NJ exemptions that map onto the mock catalog's categories — unprepared food
- * (Grocery) and clothing (Apparel) are not taxed.
+ * The emulator's tax policy: New Jersey sales tax, 6.625%, with the two big NJ exemptions that map
+ * onto the mock catalog's categories — unprepared food (Grocery) and clothing (Apparel) are not
+ * taxed.
  */
 object NjSalesTax {
 

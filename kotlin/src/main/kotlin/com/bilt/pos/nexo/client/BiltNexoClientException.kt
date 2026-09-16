@@ -10,10 +10,10 @@
 package com.bilt.pos.nexo.client
 
 /**
- * Thrown when the terminal client encounters an error during
- * serialization, HTTP transport, or deserialization.
+ * Thrown when the terminal client encounters an error during serialization, HTTP transport, or
+ * deserialization.
  */
 class BiltNexoClientException(
     message: String,
-    cause: Throwable? = null
+    cause: Throwable? = null,
 ) : Exception(message, cause)

@@ -1,5 +1,7 @@
 package com.bilt.pos.session;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
@@ -14,6 +16,12 @@ import com.bilt.pos.session.identity.MemberIdentifier;
 import com.bilt.pos.session.identity.RewardType;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -22,379 +30,473 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.junit.jupiter.api.Assertions.*;
-
 class CheckoutSessionIdentityTest {
 
-    private static final String REWARDS_JSON = "{\"rewards\":["
-            + "{\"rewardRef\":\"rwd:RWD-44021\",\"type\":\"reward\",\"name\":\"$10 Off Purchase\","
-            + "\"expirationDate\":\"2026-05-15T23:59:59Z\"},"
-            + "{\"rewardRef\":\"cpn:CP-201:CT-15OFF\",\"type\":\"coupon\",\"name\":\"15% Off\"}"
-            + "],\"rewardCount\":2}";
-    private static final String REWARDS_B64 =
-            Base64.getEncoder().encodeToString(REWARDS_JSON.getBytes(StandardCharsets.UTF_8));
+  private static final String REWARDS_JSON =
+      "{\"rewards\":["
+          + "{\"rewardRef\":\"rwd:RWD-44021\",\"type\":\"reward\",\"name\":\"$10 Off Purchase\","
+          + "\"expirationDate\":\"2026-05-15T23:59:59Z\"},"
+          + "{\"rewardRef\":\"cpn:CP-201:CT-15OFF\",\"type\":\"coupon\",\"name\":\"15% Off\"}"
+          + "],\"rewardCount\":2}";
+  private static final String REWARDS_B64 =
+      Base64.getEncoder().encodeToString(REWARDS_JSON.getBytes(StandardCharsets.UTF_8));
 
-    private final ObjectMapper mapper = new ObjectMapper()
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+  private final ObjectMapper mapper =
+      new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    private MockWebServer server;
-    private CheckoutSession session;
+  private MockWebServer server;
+  private CheckoutSession session;
 
-    @BeforeEach
-    void setUp() throws Exception {
-        server = new MockWebServer();
-        server.start();
-        server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
-        session = CheckoutSession.builder()
-                .client(BiltNexoTerminalClient.builder()
-                        .endpoint(server.url("/nexo").toString())
-                        .disableRecoveryOnNetworkError()
-                        .build())
-                .saleId("POS-LANE-3")
-                .poiId("VictaLane-275839164")
-                .currency("USD")
-                .autoDisplay(false)
-                .start()
-                .get();
-        server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
-    }
+  @BeforeEach
+  void setUp() throws Exception {
+    server = new MockWebServer();
+    server.start();
+    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    session =
+        CheckoutSession.builder()
+            .client(
+                BiltNexoTerminalClient.builder()
+                    .endpoint(server.url("/nexo").toString())
+                    .disableRecoveryOnNetworkError()
+                    .build())
+            .saleId("POS-LANE-3")
+            .poiId("VictaLane-275839164")
+            .currency("USD")
+            .autoDisplay(false)
+            .start()
+            .get();
+    server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
+  }
 
-    @AfterEach
-    void tearDown() throws Exception {
-        server.shutdown();
-    }
+  @AfterEach
+  void tearDown() throws Exception {
+    server.shutdown();
+  }
 
-    private SaleToPOIRequest recordedRequest() throws Exception {
-        RecordedRequest recorded = server.takeRequest(5, TimeUnit.SECONDS);
-        assertNotNull(recorded);
-        return mapper.readValue(recorded.getBody().readUtf8(), NexoTerminalAPI.class)
-                .getSaleToPOIRequest();
-    }
+  private SaleToPOIRequest recordedRequest() throws Exception {
+    RecordedRequest recorded = server.takeRequest(5, TimeUnit.SECONDS);
+    assertNotNull(recorded);
+    return mapper
+        .readValue(recorded.getBody().readUtf8(), NexoTerminalAPI.class)
+        .getSaleToPOIRequest();
+  }
 
-    // ─── Terminal-prompted identification ───
+  // ─── Terminal-prompted identification ───
 
-    @Test
-    void identifyOutcomeArrivingAfterAbortIsStillDelivered() throws Exception {
-        String found =
-                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Success\"},"
-                        + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"},"
-                        + "\"LoyaltyBrand\":\"K-Club\"}]}}}";
-        CountDownLatch identifyOnTheWire = new CountDownLatch(1);
-        CountDownLatch aborted = new CountDownLatch(1);
-        server.setDispatcher(new Dispatcher() {
-            @Override
-            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
-                if (request.getBody().readUtf8().contains("CardAcquisitionRequest")) {
-                    identifyOnTheWire.countDown();
-                    // hold the FOUND response until abort() has fired
-                    aborted.await(5, TimeUnit.SECONDS);
-                    return new MockResponse().setBody(found);
-                }
-                return new MockResponse();   // the AbortRequest, best-effort
+  @Test
+  void identifyOutcomeArrivingAfterAbortIsStillDelivered() throws Exception {
+    String found =
+        "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+            + "\"Response\":{\"Result\":\"Success\"},"
+            + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"},"
+            + "\"LoyaltyBrand\":\"K-Club\"}]}}}";
+    CountDownLatch identifyOnTheWire = new CountDownLatch(1);
+    CountDownLatch aborted = new CountDownLatch(1);
+    server.setDispatcher(
+        new Dispatcher() {
+          @Override
+          public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+            if (request.getBody().readUtf8().contains("CardAcquisitionRequest")) {
+              identifyOnTheWire.countDown();
+              // hold the FOUND response until abort() has fired
+              aborted.await(5, TimeUnit.SECONDS);
+              return new MockResponse().setBody(found);
             }
+            return new MockResponse(); // the AbortRequest, best-effort
+          }
         });
 
-        AtomicReference<IdentifyResult> delivered = new AtomicReference<>();
-        AtomicReference<SessionException> failure = new AtomicReference<>();
-        Thread register = new Thread(() -> {
-            try {
+    AtomicReference<IdentifyResult> delivered = new AtomicReference<>();
+    AtomicReference<SessionException> failure = new AtomicReference<>();
+    Thread register =
+        new Thread(
+            () -> {
+              try {
                 delivered.set(session.identifyMember().get());
-            } catch (SessionException e) {
+              } catch (SessionException e) {
                 failure.set(e);
-            }
-        });
-        register.start();
-        assertTrue(identifyOnTheWire.await(5, TimeUnit.SECONDS));
+              }
+            });
+    register.start();
+    assertTrue(identifyOnTheWire.await(5, TimeUnit.SECONDS));
 
-        session.abort().executeSync();
-        aborted.countDown();
-        register.join(5_000);
-        assertFalse(register.isAlive());
+    session.abort().executeSync();
+    aborted.countDown();
+    register.join(5_000);
+    assertFalse(register.isAlive());
 
-        // abort is operation-scoped and the terminal answered FOUND before
-        // processing it: the outcome is real and is delivered — the
-        // checkout continues with the member attached
-        assertNull(failure.get());
-        assertNotNull(delivered.get());
-        assertEquals(IdentifyStatus.FOUND, delivered.get().getStatus());
-        assertNotNull(session.getMember());
-    }
+    // abort is operation-scoped and the terminal answered FOUND before
+    // processing it: the outcome is real and is delivered — the
+    // checkout continues with the member attached
+    assertNull(failure.get());
+    assertNotNull(delivered.get());
+    assertEquals(IdentifyStatus.FOUND, delivered.get().getStatus());
+    assertNotNull(session.getMember());
+  }
 
-    @Test
-    void identifyMemberFindsMemberAndTransitionsToIdentified() throws Exception {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void identifyMemberFindsMemberAndTransitionsToIdentified() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Success\",\"AdditionalResponse\":\"" + REWARDS_B64 + "\"},"
-                        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-LYL-701\"}},"
-                        + "\"LoyaltyAccount\":[{"
-                        + "\"LoyaltyAccountID\":{\"EntryMode\":[\"Keyed\"],\"IdentificationType\":\"PAN\","
-                        + "\"LoyaltyID\":\"98234\"},\"LoyaltyBrand\":\"K-Club\"}]}}}"));
+                    + "\"Response\":{\"Result\":\"Success\",\"AdditionalResponse\":\""
+                    + REWARDS_B64
+                    + "\"},"
+                    + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-LYL-701\"}},"
+                    + "\"LoyaltyAccount\":[{"
+                    + "\"LoyaltyAccountID\":{\"EntryMode\":[\"Keyed\"],\"IdentificationType\":\"PAN\","
+                    + "\"LoyaltyID\":\"98234\"},\"LoyaltyBrand\":\"K-Club\"}]}}}"));
 
-        IdentifyResult result = session.identifyMember().get();
+    IdentifyResult result = session.identifyMember().get();
 
-        assertEquals(IdentifyStatus.FOUND, result.getStatus());
-        assertEquals("98234", result.getMemberId());
-        assertEquals("K-Club", result.getLoyaltyBrand());
-        assertEquals(2, result.getRewards().size());
-        assertEquals("rwd:RWD-44021", result.getRewards().get(0).getRewardRef());
-        assertEquals(RewardType.REWARD, result.getRewards().get(0).getType());
-        assertNotNull(result.getRewards().get(0).getExpirationDate());
-        assertEquals(RewardType.COUPON, result.getRewards().get(1).getType());
+    assertEquals(IdentifyStatus.FOUND, result.getStatus());
+    assertEquals("98234", result.getMemberId());
+    assertEquals("K-Club", result.getLoyaltyBrand());
+    assertEquals(2, result.getRewards().size());
+    assertEquals("rwd:RWD-44021", result.getRewards().get(0).getRewardRef());
+    assertEquals(RewardType.REWARD, result.getRewards().get(0).getType());
+    assertNotNull(result.getRewards().get(0).getExpirationDate());
+    assertEquals(RewardType.COUPON, result.getRewards().get(1).getType());
 
-        assertSame(result, session.getMember());
+    assertSame(result, session.getMember());
 
-        SaleToPOIRequest sent = recordedRequest();
-        assertEquals("CardAcquisition", sent.getMessageHeader().getMessageCategory().toValue());
-        assertEquals("Required", sent.getCardAcquisitionRequest()
-                .getCardAcquisitionTransaction().getLoyaltyHandling().toValue());
-        assertNotNull(sent.getCardAcquisitionRequest().getSaleData()
-                .getSaleTransactionID().getTransactionID());
-    }
+    SaleToPOIRequest sent = recordedRequest();
+    assertEquals("CardAcquisition", sent.getMessageHeader().getMessageCategory().toValue());
+    assertEquals(
+        "Required",
+        sent.getCardAcquisitionRequest()
+            .getCardAcquisitionTransaction()
+            .getLoyaltyHandling()
+            .toValue());
+    assertNotNull(
+        sent.getCardAcquisitionRequest().getSaleData().getSaleTransactionID().getTransactionID());
+  }
 
-    @Test
-    void identifyMemberHonorsOptions() throws Exception {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void identifyMemberHonorsOptions() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
 
-        session.identifyMember(IdentifyOptions.builder()
+    session
+        .identifyMember(
+            IdentifyOptions.builder()
                 .forceEntryMode(ForceEntryMode.KEYED)
                 .allowedLoyaltyBrand("K-Club")
                 .requireMember(false)
-                .build()).executeSync();
+                .build())
+        .executeSync();
 
-        SaleToPOIRequest sent = recordedRequest();
-        assertEquals("Proposed", sent.getCardAcquisitionRequest()
-                .getCardAcquisitionTransaction().getLoyaltyHandling().toValue());
-        assertEquals("Keyed", sent.getCardAcquisitionRequest()
-                .getCardAcquisitionTransaction().getForceEntryMode()[0].toValue());
-        assertEquals("K-Club", sent.getCardAcquisitionRequest()
-                .getCardAcquisitionTransaction().getAllowedLoyaltyBrand()[0]);
-    }
+    SaleToPOIRequest sent = recordedRequest();
+    assertEquals(
+        "Proposed",
+        sent.getCardAcquisitionRequest()
+            .getCardAcquisitionTransaction()
+            .getLoyaltyHandling()
+            .toValue());
+    assertEquals(
+        "Keyed",
+        sent.getCardAcquisitionRequest()
+            .getCardAcquisitionTransaction()
+            .getForceEntryMode()[0]
+            .toValue());
+    assertEquals(
+        "K-Club",
+        sent.getCardAcquisitionRequest()
+            .getCardAcquisitionTransaction()
+            .getAllowedLoyaltyBrand()[0]);
+  }
 
-    @Test
-    void proposedIdentifyDeclinedByCustomerIsAGuestOutcome() {
-        // LoyaltyHandling=Proposed: Success with no LoyaltyAccount means the
-        // customer declined the loyalty prompt
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void proposedIdentifyDeclinedByCustomerIsAGuestOutcome() {
+    // LoyaltyHandling=Proposed: Success with no LoyaltyAccount means the
+    // customer declined the loyalty prompt
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Success\"}}}}"));
+                    + "\"Response\":{\"Result\":\"Success\"}}}}"));
 
-        IdentifyResult result = session.identifyMember(IdentifyOptions.builder()
-                .requireMember(false)
-                .build()).get();
+    IdentifyResult result =
+        session.identifyMember(IdentifyOptions.builder().requireMember(false).build()).get();
 
-        assertEquals(IdentifyStatus.CANCELLED, result.getStatus());
-        assertNull(session.getMember());
-    }
+    assertEquals(IdentifyStatus.CANCELLED, result.getStatus());
+    assertNull(session.getMember());
+  }
 
-    @Test
-    void requiredIdentifySuccessWithoutAccountIsATerminalError() {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void requiredIdentifySuccessWithoutAccountIsATerminalError() {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Success\"}}}}"));
+                    + "\"Response\":{\"Result\":\"Success\"}}}}"));
 
-        SessionException e = assertThrows(SessionException.class,
-                () -> session.identifyMember().get());
-        assertEquals(SessionErrorCode.TERMINAL_ERROR, e.getError().getCode());
-    }
+    SessionException e = assertThrows(SessionException.class, () -> session.identifyMember().get());
+    assertEquals(SessionErrorCode.TERMINAL_ERROR, e.getError().getCode());
+  }
 
-    @Test
-    void identifyMemberNotFoundIsSuccessWithoutMember() {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void identifyMemberNotFoundIsSuccessWithoutMember() {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
 
-        IdentifyResult result = session.identifyMember().get();
+    IdentifyResult result = session.identifyMember().get();
 
-        assertEquals(IdentifyStatus.NOT_FOUND, result.getStatus());
-        assertNull(result.getMemberId());
-        assertNull(session.getMember());
-    }
+    assertEquals(IdentifyStatus.NOT_FOUND, result.getStatus());
+    assertNull(result.getMemberId());
+    assertNull(session.getMember());
+  }
 
-    @Test
-    void identifyMemberCancelAndSuspendedMapToStatuses() {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void identifyMemberCancelAndSuspendedMapToStatuses() {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Cancel\"}}}}"));
-        assertEquals(IdentifyStatus.CANCELLED, session.identifyMember().get().getStatus());
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Cancel\"}}}}"));
+    assertEquals(IdentifyStatus.CANCELLED, session.identifyMember().get().getStatus());
 
-        server.enqueue(new MockResponse().setBody(
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotAllowed\"}}}}"));
-        assertEquals(IdentifyStatus.SUSPENDED, session.identifyMember().get().getStatus());
-    }
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotAllowed\"}}}}"));
+    assertEquals(IdentifyStatus.SUSPENDED, session.identifyMember().get().getStatus());
+  }
 
-    @Test
-    void reIdentifyWithoutMemberClearsThePreviousMember() {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void reIdentifyWithoutMemberClearsThePreviousMember() {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Success\"},"
-                        + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
-        session.identifyMember().executeSync();
-        assertNotNull(session.getMember());
+                    + "\"Response\":{\"Result\":\"Success\"},"
+                    + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
+    session.identifyMember().executeSync();
+    assertNotNull(session.getMember());
 
-        server.enqueue(new MockResponse().setBody(
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
-        session.identifyMember().executeSync();
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
+    session.identifyMember().executeSync();
 
-        assertNull(session.getMember(), "a NOT_FOUND re-identify must detach the old member");
-    }
+    assertNull(session.getMember(), "a NOT_FOUND re-identify must detach the old member");
+  }
 
-    @Test
-    void reIdentifySuspendedClearsMemberButKeepsActiveBasket() {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void reIdentifySuspendedClearsMemberButKeepsActiveBasket() {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Success\"},"
-                        + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
-        session.identifyMember().executeSync();
-        session.basket().addItem(com.bilt.pos.session.basket.BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
+                    + "\"Response\":{\"Result\":\"Success\"},"
+                    + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
+    session.identifyMember().executeSync();
+    session
+        .basket()
+        .addItem(
+            com.bilt.pos.session.basket.BasketItem.sale(
+                "SKU-1", "Item", 1, new BigDecimal("10.00")));
 
-        server.enqueue(new MockResponse().setBody(
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotAllowed\"}}}}"));
-        session.identifyMember().executeSync();
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotAllowed\"}}}}"));
+    session.identifyMember().executeSync();
 
-        assertNull(session.getMember());
+    assertNull(session.getMember());
 
-        session.basket().removeItemBySku("SKU-1");
-        assertTrue(session.basket().snapshot().isEmpty());
-    }
+    session.basket().removeItemBySku("SKU-1");
+    assertTrue(session.basket().snapshot().isEmpty());
+  }
 
-    @Test
-    void cancelledReIdentifyKeepsThePreviousMember() {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void cancelledReIdentifyKeepsThePreviousMember() {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Success\"},"
-                        + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
-        session.identifyMember().executeSync();
+                    + "\"Response\":{\"Result\":\"Success\"},"
+                    + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}"));
+    session.identifyMember().executeSync();
 
-        server.enqueue(new MockResponse().setBody(
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Cancel\"}}}}"));
-        session.identifyMember().executeSync();
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Cancel\"}}}}"));
+    session.identifyMember().executeSync();
 
-        assertNotNull(session.getMember(), "a dismissed prompt must not drop the identified member");
-        assertEquals("98234", session.getMember().getMemberId());
-    }
+    assertNotNull(session.getMember(), "a dismissed prompt must not drop the identified member");
+    assertEquals("98234", session.getMember().getMemberId());
+  }
 
-    @Test
-    void identifyMemberRealFailureGoesToErrorChannel() {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void identifyMemberRealFailureGoesToErrorChannel() {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnavailableService\"}}}}"));
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnavailableService\"}}}}"));
 
-        SessionException e = assertThrows(SessionException.class,
-                () -> session.identifyMember().get());
-        assertEquals(SessionErrorCode.TERMINAL_ERROR, e.getError().getCode());
-    }
+    SessionException e = assertThrows(SessionException.class, () -> session.identifyMember().get());
+    assertEquals(SessionErrorCode.TERMINAL_ERROR, e.getError().getCode());
+  }
 
-    @Test
-    void posDrivenLookupFailuresAreLabelledAsBalanceInquiry() {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void posDrivenLookupFailuresAreLabelledAsBalanceInquiry() {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{"
-                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnavailableService\"}}}}"));
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnavailableService\"}}}}"));
 
-        SessionException e = assertThrows(SessionException.class,
-                () -> session.identifyMember(MemberIdentifier.phoneNumber("555-867-5309")).get());
-        assertTrue(e.getError().getMessage().startsWith("BalanceInquiry"),
-                "the error must name the operation that failed: " + e.getError().getMessage());
-    }
+    SessionException e =
+        assertThrows(
+            SessionException.class,
+            () -> session.identifyMember(MemberIdentifier.phoneNumber("555-867-5309")).get());
+    assertTrue(
+        e.getError().getMessage().startsWith("BalanceInquiry"),
+        "the error must name the operation that failed: " + e.getError().getMessage());
+  }
 
-    // ─── POS-driven identification ───
+  // ─── POS-driven identification ───
 
-    @Test
-    void identifyByPhoneNumberSendsBalanceInquiryAndResolvesMember() throws Exception {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void identifyByPhoneNumberSendsBalanceInquiryAndResolvesMember() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{"
-                        + "\"Response\":{\"Result\":\"Success\",\"AdditionalResponse\":\"" + REWARDS_B64 + "\"},"
-                        + "\"LoyaltyAccountStatus\":{\"LoyaltyAccount\":{"
-                        + "\"LoyaltyAccountID\":{\"IdentificationType\":\"PAN\",\"LoyaltyID\":\"98234\"},"
-                        + "\"LoyaltyBrand\":\"K-Club\"},\"CurrentBalance\":1240}}}}"));
+                    + "\"Response\":{\"Result\":\"Success\",\"AdditionalResponse\":\""
+                    + REWARDS_B64
+                    + "\"},"
+                    + "\"LoyaltyAccountStatus\":{\"LoyaltyAccount\":{"
+                    + "\"LoyaltyAccountID\":{\"IdentificationType\":\"PAN\",\"LoyaltyID\":\"98234\"},"
+                    + "\"LoyaltyBrand\":\"K-Club\"},\"CurrentBalance\":1240}}}}"));
 
-        IdentifyResult result = session.identifyMember(
-                MemberIdentifier.phoneNumber("555-867-5309")).get();
+    IdentifyResult result =
+        session.identifyMember(MemberIdentifier.phoneNumber("555-867-5309")).get();
 
-        assertEquals(IdentifyStatus.FOUND, result.getStatus());
-        assertEquals("98234", result.getMemberId());
-        assertEquals(1240, result.getPointBalance());
-        assertEquals(2, result.getRewards().size());
+    assertEquals(IdentifyStatus.FOUND, result.getStatus());
+    assertEquals("98234", result.getMemberId());
+    assertEquals(1240, result.getPointBalance());
+    assertEquals(2, result.getRewards().size());
 
-        SaleToPOIRequest sent = recordedRequest();
-        assertEquals("BalanceInquiry", sent.getMessageHeader().getMessageCategory().toValue());
-        assertEquals("555-867-5309", sent.getBalanceInquiryRequest()
-                .getLoyaltyAccountReq().getLoyaltyAccountID().getLoyaltyID());
-        assertEquals("PhoneNumber", sent.getBalanceInquiryRequest()
-                .getLoyaltyAccountReq().getLoyaltyAccountID().getIdentificationType().toValue());
-        assertEquals("File", sent.getBalanceInquiryRequest()
-                .getLoyaltyAccountReq().getLoyaltyAccountID().getEntryMode()[0].toValue());
-    }
+    SaleToPOIRequest sent = recordedRequest();
+    assertEquals("BalanceInquiry", sent.getMessageHeader().getMessageCategory().toValue());
+    assertEquals(
+        "555-867-5309",
+        sent.getBalanceInquiryRequest()
+            .getLoyaltyAccountReq()
+            .getLoyaltyAccountID()
+            .getLoyaltyID());
+    assertEquals(
+        "PhoneNumber",
+        sent.getBalanceInquiryRequest()
+            .getLoyaltyAccountReq()
+            .getLoyaltyAccountID()
+            .getIdentificationType()
+            .toValue());
+    assertEquals(
+        "File",
+        sent.getBalanceInquiryRequest()
+            .getLoyaltyAccountReq()
+            .getLoyaltyAccountID()
+            .getEntryMode()[0]
+            .toValue());
+  }
 
-    @Test
-    void keyedByCashierSetsKeyedEntryMode() throws Exception {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void keyedByCashierSetsKeyedEntryMode() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{"
-                        + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
 
-        session.identifyMember(MemberIdentifier.accountNumber("98234").keyedByCashier()).executeSync();
+    session.identifyMember(MemberIdentifier.accountNumber("98234").keyedByCashier()).executeSync();
 
-        SaleToPOIRequest sent = recordedRequest();
-        assertEquals("AccountNumber", sent.getBalanceInquiryRequest()
-                .getLoyaltyAccountReq().getLoyaltyAccountID().getIdentificationType().toValue());
-        assertEquals("Keyed", sent.getBalanceInquiryRequest()
-                .getLoyaltyAccountReq().getLoyaltyAccountID().getEntryMode()[0].toValue());
-    }
+    SaleToPOIRequest sent = recordedRequest();
+    assertEquals(
+        "AccountNumber",
+        sent.getBalanceInquiryRequest()
+            .getLoyaltyAccountReq()
+            .getLoyaltyAccountID()
+            .getIdentificationType()
+            .toValue());
+    assertEquals(
+        "Keyed",
+        sent.getBalanceInquiryRequest()
+            .getLoyaltyAccountReq()
+            .getLoyaltyAccountID()
+            .getEntryMode()[0]
+            .toValue());
+  }
 
-    // ─── Card acquisition ───
+  // ─── Card acquisition ───
 
-    @Test
-    void acquireCardMapsCardData() throws Exception {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void acquireCardMapsCardData() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Success\"},"
-                        + "\"PaymentInstrumentData\":{\"PaymentInstrumentType\":\"Card\","
-                        + "\"CardData\":{\"MaskedPAN\":\"************1234\",\"PaymentBrand\":\"Visa\","
-                        + "\"EntryMode\":[\"Contactless\"],"
-                        + "\"SensitiveCardData\":{\"PAN\":\"4111111111111234\",\"ExpiryDate\":\"1227\"},"
-                        + "\"PaymentToken\":{\"TokenValue\":\"tok_abc123\"}}}}}}"));
+                    + "\"Response\":{\"Result\":\"Success\"},"
+                    + "\"PaymentInstrumentData\":{\"PaymentInstrumentType\":\"Card\","
+                    + "\"CardData\":{\"MaskedPAN\":\"************1234\",\"PaymentBrand\":\"Visa\","
+                    + "\"EntryMode\":[\"Contactless\"],"
+                    + "\"SensitiveCardData\":{\"PAN\":\"4111111111111234\",\"ExpiryDate\":\"1227\"},"
+                    + "\"PaymentToken\":{\"TokenValue\":\"tok_abc123\"}}}}}}"));
 
-        CardAcquisitionResult result = session.acquireCard().get();
+    CardAcquisitionResult result = session.acquireCard().get();
 
-        assertEquals("************1234", result.getMaskedPan());
-        assertEquals("1234", result.getTruncatedPan());
-        assertEquals("4111111111111234", result.getRawPan());
-        assertEquals("Visa", result.getPaymentBrand());
-        assertEquals(EntryMode.CONTACTLESS, result.getEntryMode());
-        assertEquals("tok_abc123", result.getCardToken());
-        assertEquals("1227", result.getExpiryDate());
+    assertEquals("************1234", result.getMaskedPan());
+    assertEquals("1234", result.getTruncatedPan());
+    assertEquals("4111111111111234", result.getRawPan());
+    assertEquals("Visa", result.getPaymentBrand());
+    assertEquals(EntryMode.CONTACTLESS, result.getEntryMode());
+    assertEquals("tok_abc123", result.getCardToken());
+    assertEquals("1227", result.getExpiryDate());
 
-        SaleToPOIRequest sent = recordedRequest();
-        assertEquals("Forbidden", sent.getCardAcquisitionRequest()
-                .getCardAcquisitionTransaction().getLoyaltyHandling().toValue());
-    }
+    SaleToPOIRequest sent = recordedRequest();
+    assertEquals(
+        "Forbidden",
+        sent.getCardAcquisitionRequest()
+            .getCardAcquisitionTransaction()
+            .getLoyaltyHandling()
+            .toValue());
+  }
 
-    @Test
-    void acquireCardHonorsForceEntryModes() throws Exception {
-        server.enqueue(new MockResponse().setBody(
+  @Test
+  void acquireCardHonorsForceEntryModes() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
                 "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
-                        + "\"Response\":{\"Result\":\"Success\"},"
-                        + "\"PaymentInstrumentData\":{\"CardData\":{\"MaskedPAN\":\"****1234\"}}}}}"));
+                    + "\"Response\":{\"Result\":\"Success\"},"
+                    + "\"PaymentInstrumentData\":{\"CardData\":{\"MaskedPAN\":\"****1234\"}}}}}"));
 
-        session.acquireCard(CardAcquisitionOptions.builder()
-                .forceEntryMode(ForceEntryMode.KEYED)
-                .build()).executeSync();
+    session
+        .acquireCard(CardAcquisitionOptions.builder().forceEntryMode(ForceEntryMode.KEYED).build())
+        .executeSync();
 
-        SaleToPOIRequest sent = recordedRequest();
-        assertEquals("Keyed", sent.getCardAcquisitionRequest()
-                .getCardAcquisitionTransaction().getForceEntryMode()[0].toValue());
-    }
+    SaleToPOIRequest sent = recordedRequest();
+    assertEquals(
+        "Keyed",
+        sent.getCardAcquisitionRequest()
+            .getCardAcquisitionTransaction()
+            .getForceEntryMode()[0]
+            .toValue());
+  }
 }

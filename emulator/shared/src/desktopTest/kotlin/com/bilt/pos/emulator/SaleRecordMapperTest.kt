@@ -4,8 +4,8 @@ import com.bilt.pos.emulator.store.LegType
 import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketLineItem
-import com.bilt.pos.session.settlement.SettlementResult
 import com.bilt.pos.session.settlement.SettlementMovement
+import com.bilt.pos.session.settlement.SettlementResult
 import com.bilt.pos.session.settlement.SettlementStep
 import com.bilt.pos.session.settlement.SettlementTarget
 import java.math.BigDecimal
@@ -19,48 +19,57 @@ class SaleRecordMapperTest {
     private val cardTime = Instant.parse("2026-08-04T10:00:00Z")
     private val recordTime = Instant.parse("2026-08-04T10:00:05Z")
 
-    private fun record(result: SettlementResult) = result.toSaleRecord(
-        sessionId = "sess-1",
-        saleId = "bilt-emulator",
-        poiId = "EMULATOR",
-        currency = "USD",
-        memberId = "member-42",
-        recordId = "rec-1",
-        completedAt = recordTime,
-    )
+    private fun record(result: SettlementResult) =
+        result.toSaleRecord(
+            sessionId = "sess-1",
+            saleId = "bilt-emulator",
+            poiId = "EMULATOR",
+            currency = "USD",
+            memberId = "member-42",
+            recordId = "rec-1",
+            completedAt = recordTime,
+        )
 
     @Test
     fun mapsEveryCommittedLegWithItsReference() {
-        val result = SettlementResult.builder()
-            .success(true)
-            .authorizedAmount(BigDecimal("20.00"))
-            .cardAmountCharged(BigDecimal("12.75"))
-            .storedValueAmountUsed(BigDecimal("5.00"))
-            .approvalCode("APPR")
-            .acquirerTransactionId("acq-9")
-            .paymentBrand("VISA")
-            .totalRebateAmount(BigDecimal("1.50"))
-            .pointsRedeemed(75)
-            .pointsMonetaryValue(BigDecimal("0.75"))
-            .totalPointsEarned(20)
-            .poiTransactionId("poi-card").poiTransactionTimestamp(cardTime)
-            .storedValuePoiTransactionId("poi-sv")
-            .awardPoiTransactionId("poi-award")
-            .rebatePoiTransactionId("poi-rebate")
-            .redemptionPoiTransactionId("poi-redeem")
-            .finalBasket(Basket.builder()
-                .items(listOf(BasketLineItem.builder()
-                    .itemId("i1")
-                    .sku("SKU-1")
-                    .description("Desk Lamp")
-                    .category("Home")
-                    .quantity(1)
-                    .unitPrice(BigDecimal("34.99"))
-                    .adjustedTotal(BigDecimal("33.49"))
-                    .taxRate(BigDecimal("0.06625"))
-                    .build()))
-                .build())
-            .build()
+        val result =
+            SettlementResult.builder()
+                .success(true)
+                .authorizedAmount(BigDecimal("20.00"))
+                .cardAmountCharged(BigDecimal("12.75"))
+                .storedValueAmountUsed(BigDecimal("5.00"))
+                .approvalCode("APPR")
+                .acquirerTransactionId("acq-9")
+                .paymentBrand("VISA")
+                .totalRebateAmount(BigDecimal("1.50"))
+                .pointsRedeemed(75)
+                .pointsMonetaryValue(BigDecimal("0.75"))
+                .totalPointsEarned(20)
+                .poiTransactionId("poi-card")
+                .poiTransactionTimestamp(cardTime)
+                .storedValuePoiTransactionId("poi-sv")
+                .awardPoiTransactionId("poi-award")
+                .rebatePoiTransactionId("poi-rebate")
+                .redemptionPoiTransactionId("poi-redeem")
+                .finalBasket(
+                    Basket.builder()
+                        .items(
+                            listOf(
+                                BasketLineItem.builder()
+                                    .itemId("i1")
+                                    .sku("SKU-1")
+                                    .description("Desk Lamp")
+                                    .category("Home")
+                                    .quantity(1)
+                                    .unitPrice(BigDecimal("34.99"))
+                                    .adjustedTotal(BigDecimal("33.49"))
+                                    .taxRate(BigDecimal("0.06625"))
+                                    .build()
+                            )
+                        )
+                        .build()
+                )
+                .build()
 
         val sale = record(result)
 
@@ -73,8 +82,13 @@ class SaleRecordMapperTest {
         assertEquals(20, sale.totalPointsEarned)
 
         assertEquals(
-            listOf(LegType.CARD, LegType.STORED_VALUE, LegType.AWARD,
-                LegType.REBATE, LegType.REDEMPTION),
+            listOf(
+                LegType.CARD,
+                LegType.STORED_VALUE,
+                LegType.AWARD,
+                LegType.REBATE,
+                LegType.REDEMPTION,
+            ),
             sale.legs.map { it.type },
         )
         val card = sale.leg(LegType.CARD)!!
@@ -98,12 +112,14 @@ class SaleRecordMapperTest {
 
     @Test
     fun onlyCommittedLegsAreRecorded() {
-        val result = SettlementResult.builder()
-            .success(true)
-            .authorizedAmount(BigDecimal("5.00"))
-            .cardAmountCharged(BigDecimal("5.00"))
-            .poiTransactionId("poi-card").poiTransactionTimestamp(cardTime)
-            .build()
+        val result =
+            SettlementResult.builder()
+                .success(true)
+                .authorizedAmount(BigDecimal("5.00"))
+                .cardAmountCharged(BigDecimal("5.00"))
+                .poiTransactionId("poi-card")
+                .poiTransactionTimestamp(cardTime)
+                .build()
 
         val sale = record(result)
 
@@ -117,16 +133,18 @@ class SaleRecordMapperTest {
         // gift-card-only: the SDK copies the stored value payment's reference
         // into poiTransactionId (no card step ran) — the mapper must not
         // record that copy as a CARD leg on top of the STORED_VALUE leg
-        val result = SettlementResult.builder()
-            .success(true)
-            .authorizedAmount(BigDecimal("8.00"))
-            .storedValueAmountUsed(BigDecimal("8.00"))
-            .approvalCode("SV-APPR")
-            .acquirerTransactionId("acq-sv")
-            .poiTransactionId("poi-sv").poiTransactionTimestamp(cardTime)
-            .storedValuePoiTransactionId("poi-sv")
-            .storedValuePoiTransactionTimestamp(cardTime)
-            .build()
+        val result =
+            SettlementResult.builder()
+                .success(true)
+                .authorizedAmount(BigDecimal("8.00"))
+                .storedValueAmountUsed(BigDecimal("8.00"))
+                .approvalCode("SV-APPR")
+                .acquirerTransactionId("acq-sv")
+                .poiTransactionId("poi-sv")
+                .poiTransactionTimestamp(cardTime)
+                .storedValuePoiTransactionId("poi-sv")
+                .storedValuePoiTransactionTimestamp(cardTime)
+                .build()
 
         val sale = record(result)
 
@@ -141,16 +159,18 @@ class SaleRecordMapperTest {
 
     @Test
     fun splitTenderKeepsPaymentArtifactsOnTheCardLeg() {
-        val result = SettlementResult.builder()
-            .success(true)
-            .authorizedAmount(BigDecimal("10.00"))
-            .cardAmountCharged(BigDecimal("6.00"))
-            .storedValueAmountUsed(BigDecimal("4.00"))
-            .approvalCode("CARD-APPR")
-            .acquirerTransactionId("acq-card")
-            .poiTransactionId("poi-card").poiTransactionTimestamp(cardTime)
-            .storedValuePoiTransactionId("poi-sv")
-            .build()
+        val result =
+            SettlementResult.builder()
+                .success(true)
+                .authorizedAmount(BigDecimal("10.00"))
+                .cardAmountCharged(BigDecimal("6.00"))
+                .storedValueAmountUsed(BigDecimal("4.00"))
+                .approvalCode("CARD-APPR")
+                .acquirerTransactionId("acq-card")
+                .poiTransactionId("poi-card")
+                .poiTransactionTimestamp(cardTime)
+                .storedValuePoiTransactionId("poi-sv")
+                .build()
 
         val sale = record(result)
 
@@ -164,15 +184,16 @@ class SaleRecordMapperTest {
 
     @Test
     fun loyaltyOnlyCheckoutHasNoTenderLegs() {
-        val result = SettlementResult.builder()
-            .success(true)
-            .authorizedAmount(BigDecimal.ZERO)
-            .totalRebateAmount(BigDecimal("3.00"))
-            .rebatePoiTransactionId("poi-rebate")
-            .redemptionPoiTransactionId("poi-redeem")
-            .pointsRedeemed(200)
-            .pointsMonetaryValue(BigDecimal("2.00"))
-            .build()
+        val result =
+            SettlementResult.builder()
+                .success(true)
+                .authorizedAmount(BigDecimal.ZERO)
+                .totalRebateAmount(BigDecimal("3.00"))
+                .rebatePoiTransactionId("poi-rebate")
+                .redemptionPoiTransactionId("poi-redeem")
+                .pointsRedeemed(200)
+                .pointsMonetaryValue(BigDecimal("2.00"))
+                .build()
 
         val sale = record(result)
 
@@ -181,32 +202,43 @@ class SaleRecordMapperTest {
 
     @Test
     fun giftCardPurchasePersistsItsLoadAndIsNotItemRefundable() {
-        val result = SettlementResult.builder()
-            .success(true)
-            .authorizedAmount(BigDecimal("25.00"))
-            .cardAmountCharged(BigDecimal("25.00"))
-            .storedValueLoadedAmount(BigDecimal("25.00"))
-            .poiTransactionId("poi-card")
-            .finalBasket(Basket.builder()
-                .items(listOf(BasketLineItem.builder()
-                    .itemId("1")
-                    .reference("gift-card-1")
-                    .sku("GIFT-CARD")
-                    .description("Gift card")
-                    .quantity(1)
-                    .unitPrice(BigDecimal("25.00"))
-                    .originalTotal(BigDecimal("25.00"))
-                    .adjustedTotal(BigDecimal("25.00"))
-                    .build()))
-                .build())
-            .movements(listOf(SettlementMovement.builder()
-                .step(SettlementStep.STORED_VALUE_LOAD)
-                .target(SettlementTarget.basketLine("gift-card-1"))
-                .amount(BigDecimal("25.00"))
-                .poiTransactionId("poi-load")
-                .poiTransactionTimestamp(cardTime)
-                .build()))
-            .build()
+        val result =
+            SettlementResult.builder()
+                .success(true)
+                .authorizedAmount(BigDecimal("25.00"))
+                .cardAmountCharged(BigDecimal("25.00"))
+                .storedValueLoadedAmount(BigDecimal("25.00"))
+                .poiTransactionId("poi-card")
+                .finalBasket(
+                    Basket.builder()
+                        .items(
+                            listOf(
+                                BasketLineItem.builder()
+                                    .itemId("1")
+                                    .reference("gift-card-1")
+                                    .sku("GIFT-CARD")
+                                    .description("Gift card")
+                                    .quantity(1)
+                                    .unitPrice(BigDecimal("25.00"))
+                                    .originalTotal(BigDecimal("25.00"))
+                                    .adjustedTotal(BigDecimal("25.00"))
+                                    .build()
+                            )
+                        )
+                        .build()
+                )
+                .movements(
+                    listOf(
+                        SettlementMovement.builder()
+                            .step(SettlementStep.STORED_VALUE_LOAD)
+                            .target(SettlementTarget.basketLine("gift-card-1"))
+                            .amount(BigDecimal("25.00"))
+                            .poiTransactionId("poi-load")
+                            .poiTransactionTimestamp(cardTime)
+                            .build()
+                    )
+                )
+                .build()
 
         val sale = record(result)
 

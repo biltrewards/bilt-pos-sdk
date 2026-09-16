@@ -18,17 +18,13 @@ import kotlinx.serialization.Serializable
 /**
  * An encrypted Nexo Sale to POI message using CMS structures.
  *
- * The original JSON payload is AES-encrypted into the [EnvelopedData]
- * (with a per-message session key wrapped by the KEK), the unencrypted
- * [MessageHeader] is preserved for routing, and a [ContentInformationType]
- * security trailer carries the HMAC for integrity verification.
+ * The original JSON payload is AES-encrypted into the [EnvelopedData] (with a per-message session
+ * key wrapped by the KEK), the unencrypted [MessageHeader] is preserved for routing, and a
+ * [ContentInformationType] security trailer carries the HMAC for integrity verification.
  */
 @Serializable
 data class SaleToPOISecuredMessage(
-    @SerialName("MessageHeader")
-    val messageHeader: MessageHeader,
-    @SerialName("EnvelopedData")
-    val envelopedData: EnvelopedData? = null,
-    @SerialName("SecurityTrailer")
-    val securityTrailer: ContentInformationType? = null
+    @SerialName("MessageHeader") val messageHeader: MessageHeader,
+    @SerialName("EnvelopedData") val envelopedData: EnvelopedData? = null,
+    @SerialName("SecurityTrailer") val securityTrailer: ContentInformationType? = null,
 )

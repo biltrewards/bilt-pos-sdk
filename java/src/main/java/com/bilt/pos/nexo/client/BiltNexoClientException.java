@@ -12,16 +12,16 @@ package com.bilt.pos.nexo.client;
 /**
  * Exception thrown when communication with the Nexo terminal fails.
  *
- * <p>Wraps serialization errors, HTTP transport failures, non-2xx responses,
- * and deserialization errors into a single checked exception.</p>
+ * <p>Wraps serialization errors, HTTP transport failures, non-2xx responses, and deserialization
+ * errors into a single checked exception.
  */
 public class BiltNexoClientException extends Exception {
 
-    public BiltNexoClientException(String message) {
-        super(message);
-    }
+  public BiltNexoClientException(String message) {
+    super(message);
+  }
 
-    public BiltNexoClientException(String message, Throwable cause) {
-        super(message, cause);
-    }
+  public BiltNexoClientException(String message, Throwable cause) {
+    super(message, cause);
+  }
 }

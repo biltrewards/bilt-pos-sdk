@@ -16,17 +16,6 @@ import com.bilt.pos.nexo.security.EncryptionException
 import com.bilt.pos.nexo.security.MessageEncryptor
 import com.bilt.pos.nexo.security.SaleToPOISecuredMessage
 import com.bilt.pos.nexo.security.SecurityKey
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import okhttp3.Call
-import okhttp3.Connection
-import okhttp3.EventListener
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.io.InputStream
 import java.nio.file.Files
@@ -47,17 +36,28 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLPeerUnverifiedException
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import okhttp3.Call
+import okhttp3.Connection
+import okhttp3.EventListener
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
 /**
- * Client for communicating with a Bilt payment terminal over the local Nexo
- * Sale to POI protocol (v3.0).
+ * Client for communicating with a Bilt payment terminal over the local Nexo Sale to POI protocol
+ * (v3.0).
  *
- * The terminal exposes a single HTTPS endpoint at
- * `https://<device_ip>:8443/nexo`. Each call sends a [NexoTerminalAPI]
- * containing a `SaleToPOIRequest` and receives a [NexoTerminalAPI]
- * containing a `SaleToPOIResponse`.
+ * The terminal exposes a single HTTPS endpoint at `https://<device_ip>:8443/nexo`. Each call sends
+ * a [NexoTerminalAPI] containing a `SaleToPOIRequest` and receives a [NexoTerminalAPI] containing a
+ * `SaleToPOIResponse`.
  *
  * **Unencrypted (development/testing):**
+ *
  * ```kotlin
  * val client = BiltNexoTerminalClient(
  *     endpoint = "https://192.168.1.100:8443/nexo",
@@ -67,6 +67,7 @@ import javax.net.ssl.X509TrustManager
  * ```
  *
  * **Encrypted (production):**
+ *
  * ```kotlin
  * val key = SecurityKey(
  *     passphrase = "sharedSecret",
@@ -80,10 +81,10 @@ import javax.net.ssl.X509TrustManager
  * val response = client.request(request)
  * ```
  *
- * **Verified TLS (recommended):** trust the merchant (or small-merchant-pool)
- * CA certificate so any device leaf issued under it is accepted, and verify
- * the device identity against the certificate's synthetic hostname instead of
- * the connection IP.
+ * **Verified TLS (recommended):** trust the merchant (or small-merchant-pool) CA certificate so any
+ * device leaf issued under it is accepted, and verify the device identity against the certificate's
+ * synthetic hostname instead of the connection IP.
+ *
  * ```kotlin
  * val client = BiltNexoTerminalClient(
  *     endpoint = "https://192.168.1.50:8443/nexo",
@@ -105,7 +106,7 @@ class BiltNexoTerminalClient(
     trustedCertificates: List<X509Certificate> = emptyList(),
     expectedHostnamePattern: String? = null,
     environment: BiltTerminalEnvironment? = null,
-    httpClient: OkHttpClient? = null
+    httpClient: OkHttpClient? = null,
 ) {
     private val hostnamePattern: String? = expectedHostnamePattern ?: environment?.hostnamePattern
 
@@ -114,7 +115,9 @@ class BiltNexoTerminalClient(
         // Contradictory intent: trustAllCertificates disables all verification,
         // which would silently override the configured CA anchor and hostname
         // pattern. Fail rather than downgrade security.
-        require(!(trustAllCertificates && (trustedCertificates.isNotEmpty() || hostnamePattern != null))) {
+        require(
+            !(trustAllCertificates && (trustedCertificates.isNotEmpty() || hostnamePattern != null))
+        ) {
             "trustAllCertificates cannot be combined with trustedCertificates or " +
                 "expectedHostnamePattern/environment. trustAllCertificates disables all TLS " +
                 "verification; remove it to verify against the trust anchor, or remove the trust " +
@@ -137,7 +140,9 @@ class BiltNexoTerminalClient(
         // Without a trust anchor the chain is validated against the JVM default
         // trust store, which does not contain the private Bilt CA — so the
         // CA-anchored model is bypassed. Require the anchor.
-        require(!(hostnamePattern != null && trustedCertificates.isEmpty() && !trustAllCertificates)) {
+        require(
+            !(hostnamePattern != null && trustedCertificates.isEmpty() && !trustAllCertificates)
+        ) {
             "expectedHostnamePattern or environment was set without a trust anchor. Hostname " +
                 "verification alone does not validate the certificate chain, and the terminal's " +
                 "private CA is not in the JVM default trust store. Set trustedCertificates, or use " +
@@ -161,77 +166,88 @@ class BiltNexoTerminalClient(
         // explicit value is always honored — including Duration.ZERO to disable
         // pinging while recovery is on. A false-positive disconnect is harmless:
         // the re-sent request is deduped by the terminal.
-        val effectivePingInterval = pingInterval
-            ?: if (recoverOnNetworkError) DEFAULT_RECOVERY_PING_INTERVAL else DEFAULT_PING_INTERVAL
-        val base = httpClient ?: buildDefaultHttpClient(
-            connectTimeout, readTimeout, effectivePingInterval, trustAllCertificates, trustedCertificates, hostnamePattern
-        )
+        val effectivePingInterval =
+            pingInterval
+                ?: if (recoverOnNetworkError) DEFAULT_RECOVERY_PING_INTERVAL
+                else DEFAULT_PING_INTERVAL
+        val base =
+            httpClient
+                ?: buildDefaultHttpClient(
+                    connectTimeout,
+                    readTimeout,
+                    effectivePingInterval,
+                    trustAllCertificates,
+                    trustedCertificates,
+                    hostnamePattern,
+                )
         if (recoverOnNetworkError) {
-            base.newBuilder()
-                .addInterceptor(NetworkErrorRecoveryInterceptor())
-                .build()
+            base.newBuilder().addInterceptor(NetworkErrorRecoveryInterceptor()).build()
         } else {
             base
         }
     }
 
-    /**
-     * Returns `true` if this client encrypts requests.
-     */
-    val isEncrypted: Boolean get() = encryptor != null
+    /** Returns `true` if this client encrypts requests. */
+    val isEncrypted: Boolean
+        get() = encryptor != null
 
     /**
      * Send a Sale to POI request to the terminal and return the response.
      *
-     * If a [SecurityKey] was provided at construction, the request is
-     * automatically encrypted and the response is decrypted.
+     * If a [SecurityKey] was provided at construction, the request is automatically encrypted and
+     * the response is decrypted.
      *
      * @param request the request envelope; must have `saleToPOIRequest` set
      * @param timeout per-request timeout override, or `null` to use the client default
-     * @return the terminal's response envelope, or `null` if the terminal
-     *         returns an empty body (e.g. abort requests)
+     * @return the terminal's response envelope, or `null` if the terminal returns an empty body
+     *   (e.g. abort requests)
      * @throws BiltNexoClientException if any step in the request/response pipeline fails
      */
     fun request(request: NexoTerminalAPI, timeout: Duration? = null): NexoTerminalAPI? {
-        val saleToPOIRequest = request.saleToPOIRequest
-            ?: throw BiltNexoClientException("request must have saleToPOIRequest set")
+        val saleToPOIRequest =
+            request.saleToPOIRequest
+                ?: throw BiltNexoClientException("request must have saleToPOIRequest set")
 
         try {
-            val jsonBody = if (encryptor != null) {
-                logger.fine("Encrypting Sale to POI request payload")
-                val requestContent = json.encodeToString(
-                    SaleToPOIRequest.serializer(), saleToPOIRequest
-                )
-                val secured = encryptor.encrypt(requestContent, saleToPOIRequest.messageHeader)
-                json.encodeToString(
-                    SecuredRequestEnvelope.serializer(),
-                    SecuredRequestEnvelope(secured)
-                )
-            } else {
-                json.encodeToString(NexoTerminalAPI.serializer(), request)
-            }
+            val jsonBody =
+                if (encryptor != null) {
+                    logger.fine("Encrypting Sale to POI request payload")
+                    val requestContent =
+                        json.encodeToString(
+                            SaleToPOIRequest.serializer(),
+                            saleToPOIRequest,
+                        )
+                    val secured = encryptor.encrypt(requestContent, saleToPOIRequest.messageHeader)
+                    json.encodeToString(
+                        SecuredRequestEnvelope.serializer(),
+                        SecuredRequestEnvelope(secured),
+                    )
+                } else {
+                    json.encodeToString(NexoTerminalAPI.serializer(), request)
+                }
 
-            val httpRequest = Request.Builder()
-                .url(endpoint)
-                .post(jsonBody.toRequestBody(JSON_MEDIA_TYPE))
-                .build()
-
-            val client = if (timeout != null) {
-                this.httpClient.newBuilder()
-                    .readTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
+            val httpRequest =
+                Request.Builder()
+                    .url(endpoint)
+                    .post(jsonBody.toRequestBody(JSON_MEDIA_TYPE))
                     .build()
-            } else {
-                this.httpClient
-            }
+
+            val client =
+                if (timeout != null) {
+                    this.httpClient
+                        .newBuilder()
+                        .readTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
+                        .build()
+                } else {
+                    this.httpClient
+                }
 
             val responseJson: String
             client.newCall(httpRequest).execute().use { response ->
                 val body = response.body?.string() ?: ""
 
                 if (!response.isSuccessful) {
-                    throw BiltNexoClientException(
-                        "Terminal returned HTTP ${response.code}: $body"
-                    )
+                    throw BiltNexoClientException("Terminal returned HTTP ${response.code}: $body")
                 }
 
                 responseJson = body
@@ -245,7 +261,8 @@ class BiltNexoTerminalClient(
                 throw e
             } catch (e: Exception) {
                 throw BiltNexoClientException(
-                    "Failed to parse terminal response: $responseJson", e
+                    "Failed to parse terminal response: $responseJson",
+                    e,
                 )
             }
         } catch (e: BiltNexoClientException) {
@@ -254,7 +271,8 @@ class BiltNexoTerminalClient(
             throw BiltNexoClientException("Encryption/decryption failed", e)
         } catch (e: IOException) {
             throw BiltNexoClientException(
-                "Failed to communicate with terminal at $endpoint", e
+                "Failed to communicate with terminal at $endpoint",
+                e,
             )
         }
     }
@@ -264,9 +282,11 @@ class BiltNexoTerminalClient(
     // -----------------------------------------------------------------------
 
     private fun parseResponse(responseJson: String): NexoTerminalAPI {
-        val envelope = json.decodeFromString(
-            SecuredResponseEnvelope.serializer(), responseJson
-        )
+        val envelope =
+            json.decodeFromString(
+                SecuredResponseEnvelope.serializer(),
+                responseJson,
+            )
         val secured = envelope.saleToPOIResponse
 
         if (secured.envelopedData != null) {
@@ -280,15 +300,19 @@ class BiltNexoTerminalClient(
             // wire field ordering for HMAC verification. Re-serializing the
             // deserialized MessageHeader could produce different byte output
             // if the terminal's JSON library uses a different field ordering.
-            val responseNode = json.parseToJsonElement(responseJson)
-                .jsonObject["SaleToPOIResponse"]!!.jsonObject
-            val rawHeaderBytes = (responseNode["MessageHeader"]
-                ?: throw EncryptionException("Missing MessageHeader in encrypted response"))
-                .toString().toByteArray(Charsets.UTF_8)
+            val responseNode =
+                json.parseToJsonElement(responseJson).jsonObject["SaleToPOIResponse"]!!.jsonObject
+            val rawHeaderBytes =
+                (responseNode["MessageHeader"]
+                        ?: throw EncryptionException("Missing MessageHeader in encrypted response"))
+                    .toString()
+                    .toByteArray(Charsets.UTF_8)
             val plainJson = encryptor.decrypt(secured, rawHeaderBytes)
-            val saleToPOIResponse = json.decodeFromString(
-                SaleToPOIResponse.serializer(), plainJson
-            )
+            val saleToPOIResponse =
+                json.decodeFromString(
+                    SaleToPOIResponse.serializer(),
+                    plainJson,
+                )
             return NexoTerminalAPI(saleToPOIResponse = saleToPOIResponse)
         } else {
             return json.decodeFromString(NexoTerminalAPI.serializer(), responseJson)
@@ -301,14 +325,12 @@ class BiltNexoTerminalClient(
 
     @Serializable
     private data class SecuredRequestEnvelope(
-        @SerialName("SaleToPOIRequest")
-        val saleToPOIRequest: SaleToPOISecuredMessage
+        @SerialName("SaleToPOIRequest") val saleToPOIRequest: SaleToPOISecuredMessage
     )
 
     @Serializable
     private data class SecuredResponseEnvelope(
-        @SerialName("SaleToPOIResponse")
-        val saleToPOIResponse: SaleToPOISecuredMessage
+        @SerialName("SaleToPOIResponse") val saleToPOIResponse: SaleToPOISecuredMessage
     )
 
     companion object {
@@ -325,30 +347,24 @@ class BiltNexoTerminalClient(
         /**
          * Default keep-alive ping interval: [Duration.ZERO] disables pinging.
          *
-         * When set to a positive value, the client sends HTTP/2 PING frames at
-         * that interval while a connection is held open, to detect a dead
-         * terminal during long waits (e.g. cardholder interaction) instead of
-         * blocking until the read timeout elapses. Pings only take effect on an
-         * HTTP/2 connection (negotiated via ALPN); on HTTP/1.1 the interval is
-         * ignored. If a ping is not acknowledged within the interval, the
-         * in-flight request fails with a [BiltNexoClientException].
+         * When set to a positive value, the client sends HTTP/2 PING frames at that interval while
+         * a connection is held open, to detect a dead terminal during long waits (e.g. cardholder
+         * interaction) instead of blocking until the read timeout elapses. Pings only take effect
+         * on an HTTP/2 connection (negotiated via ALPN); on HTTP/1.1 the interval is ignored. If a
+         * ping is not acknowledged within the interval, the in-flight request fails with a
+         * [BiltNexoClientException].
          */
         private val DEFAULT_PING_INTERVAL: Duration = Duration.ZERO
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
 
-        /**
-         * Convenience factory for an unencrypted client pointing at
-         * `https://<host>:8443/nexo`.
-         */
+        /** Convenience factory for an unencrypted client pointing at `https://<host>:8443/nexo`. */
         fun create(host: String): BiltNexoTerminalClient =
-            BiltNexoTerminalClient(
-                endpoint = "https://$host:$DEFAULT_PORT$DEFAULT_PATH"
-            )
+            BiltNexoTerminalClient(endpoint = "https://$host:$DEFAULT_PORT$DEFAULT_PATH")
 
         /**
-         * Load X.509 certificate(s) (PEM or DER) from a filesystem path, for use
-         * as `trustedCertificates`. In production this is the merchant or
-         * small-merchant-pool CA certificate.
+         * Load X.509 certificate(s) (PEM or DER) from a filesystem path, for use as
+         * `trustedCertificates`. In production this is the merchant or small-merchant-pool CA
+         * certificate.
          *
          * @throws IllegalArgumentException if the file cannot be read or parsed
          */
@@ -360,17 +376,17 @@ class BiltNexoTerminalClient(
             }
 
         /**
-         * Load X.509 certificate(s) from a classpath resource (e.g. one bundled
-         * in `src/main/resources`). See [certificatesFromPath].
+         * Load X.509 certificate(s) from a classpath resource (e.g. one bundled in
+         * `src/main/resources`). See [certificatesFromPath].
          *
          * @throws IllegalArgumentException if the resource is missing or unparseable
          */
         fun certificatesFromResource(resource: String): List<X509Certificate> {
-            val stream = BiltNexoTerminalClient::class.java.classLoader
-                .getResourceAsStream(resource)
-                ?: throw IllegalArgumentException(
-                    "Certificate resource not found on classpath: $resource"
-                )
+            val stream =
+                BiltNexoTerminalClient::class.java.classLoader.getResourceAsStream(resource)
+                    ?: throw IllegalArgumentException(
+                        "Certificate resource not found on classpath: $resource"
+                    )
             return try {
                 stream.use { certificatesFromStream(it) }
             } catch (e: IOException) {
@@ -383,17 +399,18 @@ class BiltNexoTerminalClient(
             certificatesFromStream(pem.byteInputStream())
 
         /**
-         * Load X.509 certificate(s) from a stream. The stream is consumed but
-         * not closed; the caller owns its lifecycle. See [certificatesFromPath].
+         * Load X.509 certificate(s) from a stream. The stream is consumed but not closed; the
+         * caller owns its lifecycle. See [certificatesFromPath].
          *
          * @throws IllegalArgumentException if no certificate can be parsed
          */
         fun certificatesFromStream(inputStream: InputStream): List<X509Certificate> {
-            val certificates = try {
-                CertificateFactory.getInstance("X.509").generateCertificates(inputStream)
-            } catch (e: java.security.cert.CertificateException) {
-                throw IllegalArgumentException("Failed to parse X.509 certificate", e)
-            }
+            val certificates =
+                try {
+                    CertificateFactory.getInstance("X.509").generateCertificates(inputStream)
+                } catch (e: java.security.cert.CertificateException) {
+                    throw IllegalArgumentException("Failed to parse X.509 certificate", e)
+                }
             require(certificates.isNotEmpty()) {
                 "No X.509 certificate found in the supplied stream"
             }
@@ -406,20 +423,30 @@ class BiltNexoTerminalClient(
             pingInterval: Duration,
             trustAllCertificates: Boolean,
             trustedCertificates: List<X509Certificate>,
-            hostnamePattern: String?
+            hostnamePattern: String?,
         ): OkHttpClient {
-            val builder = OkHttpClient.Builder()
-                .connectTimeout(connectTimeout.toMillis(), TimeUnit.MILLISECONDS)
-                .readTimeout(readTimeout.toMillis(), TimeUnit.MILLISECONDS)
-                .pingInterval(pingInterval.toMillis(), TimeUnit.MILLISECONDS)
-                .eventListener(protocolLoggingEventListener())
+            val builder =
+                OkHttpClient.Builder()
+                    .connectTimeout(connectTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                    .readTimeout(readTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                    .pingInterval(pingInterval.toMillis(), TimeUnit.MILLISECONDS)
+                    .eventListener(protocolLoggingEventListener())
 
             if (trustAllCertificates) {
-                val trustManager = object : X509TrustManager {
-                    override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-                    override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-                    override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-                }
+                val trustManager =
+                    object : X509TrustManager {
+                        override fun checkClientTrusted(
+                            chain: Array<X509Certificate>,
+                            authType: String,
+                        ) {}
+
+                        override fun checkServerTrusted(
+                            chain: Array<X509Certificate>,
+                            authType: String,
+                        ) {}
+
+                        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+                    }
                 builder
                     .sslSocketFactory(socketFactory(trustManager), trustManager)
                     .hostnameVerifier { _, _ -> true }
@@ -437,60 +464,67 @@ class BiltNexoTerminalClient(
         }
 
         /**
-         * An [EventListener] that logs the negotiated application protocol
-         * (HTTP/2 vs HTTP/1.1) once a connection is acquired. The protocol is
-         * chosen by the terminal via ALPN during the TLS handshake; this makes
-         * the outcome visible at `FINE` (e.g. under the CLI's `--verbose` flag)
-         * without changing the request/response API.
+         * An [EventListener] that logs the negotiated application protocol (HTTP/2 vs HTTP/1.1)
+         * once a connection is acquired. The protocol is chosen by the terminal via ALPN during the
+         * TLS handshake; this makes the outcome visible at `FINE` (e.g. under the CLI's `--verbose`
+         * flag) without changing the request/response API.
          */
-        private fun protocolLoggingEventListener(): EventListener = object : EventListener() {
-            override fun connectionAcquired(call: Call, connection: Connection) {
-                if (LOG.isLoggable(Level.FINE)) {
-                    LOG.fine(
-                        "Terminal connection negotiated ${connection.protocol()} " +
-                            "with ${connection.socket().inetAddress}"
-                    )
+        private fun protocolLoggingEventListener(): EventListener =
+            object : EventListener() {
+                override fun connectionAcquired(call: Call, connection: Connection) {
+                    if (LOG.isLoggable(Level.FINE)) {
+                        LOG.fine(
+                            "Terminal connection negotiated ${connection.protocol()} " +
+                                "with ${connection.socket().inetAddress}"
+                        )
+                    }
                 }
             }
-        }
 
         /**
-         * Build a trust manager that accepts only certificates chaining to one
-         * of the supplied trust anchors, loaded into an in-memory key store.
+         * Build a trust manager that accepts only certificates chaining to one of the supplied
+         * trust anchors, loaded into an in-memory key store.
          */
         private fun trustManagerFor(certificates: List<X509Certificate>): X509TrustManager {
-            val keyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
-                load(null, null)
-                certificates.forEachIndexed { i, cert -> setCertificateEntry("anchor-$i", cert) }
-            }
-            val factory = TrustManagerFactory.getInstance(
-                TrustManagerFactory.getDefaultAlgorithm()
-            ).apply { init(keyStore) }
+            val keyStore =
+                KeyStore.getInstance(KeyStore.getDefaultType()).apply {
+                    load(null, null)
+                    certificates.forEachIndexed { i, cert ->
+                        setCertificateEntry("anchor-$i", cert)
+                    }
+                }
+            val factory =
+                TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply {
+                    init(keyStore)
+                }
             return factory.trustManagers.filterIsInstance<X509TrustManager>().firstOrNull()
                 ?: throw IllegalStateException("No X509TrustManager produced for trust anchors")
         }
 
-        private fun socketFactory(trustManager: X509TrustManager) = try {
-            SSLContext.getInstance("TLS")
-                .apply { init(null, arrayOf(trustManager), null) }
-                .socketFactory
-        } catch (e: Exception) {
-            when (e) {
-                is NoSuchAlgorithmException, is KeyManagementException ->
-                    throw RuntimeException("Failed to create SSLContext", e)
-                else -> throw e
+        private fun socketFactory(trustManager: X509TrustManager) =
+            try {
+                SSLContext.getInstance("TLS")
+                    .apply { init(null, arrayOf(trustManager), null) }
+                    .socketFactory
+            } catch (e: Exception) {
+                when (e) {
+                    is NoSuchAlgorithmException,
+                    is KeyManagementException ->
+                        throw RuntimeException("Failed to create SSLContext", e)
+                    else -> throw e
+                }
             }
-        }
 
         /**
-         * A hostname verifier that ignores the connection address and matches
-         * the peer leaf certificate's DNS SANs (CN fallback) against [pattern].
-         * The chain is validated separately by the trust manager.
+         * A hostname verifier that ignores the connection address and matches the peer leaf
+         * certificate's DNS SANs (CN fallback) against [pattern]. The chain is validated separately
+         * by the trust manager.
          */
         private fun patternHostnameVerifier(pattern: String) = HostnameVerifier { _, session ->
             try {
-                val leaf = session.peerCertificates.firstOrNull() as? X509Certificate
-                    ?: return@HostnameVerifier false
+                val leaf =
+                    session.peerCertificates.firstOrNull() as? X509Certificate
+                        ?: return@HostnameVerifier false
                 certificateNames(leaf).any { hostnameMatchesPattern(it, pattern) }
             } catch (e: SSLPeerUnverifiedException) {
                 false
@@ -511,18 +545,21 @@ class BiltNexoTerminalClient(
                 // Malformed SAN extension: fall through to the CN.
             }
             runCatching {
-                LdapName(certificate.subjectX500Principal.name).rdns
+                LdapName(certificate.subjectX500Principal.name)
+                    .rdns
                     .firstOrNull { it.type.equals("CN", ignoreCase = true) }
-                    ?.value?.toString()
-            }.getOrNull()?.let { names.add(it) }
+                    ?.value
+                    ?.toString()
+            }
+                .getOrNull()
+                ?.let { names.add(it) }
             return names
         }
 
         /**
-         * Match a certificate name against a pattern that supports a single
-         * leading wildcard label (e.g. `*.live.pos.bilt.com` matches one label
-         * before the suffix). Patterns without a wildcard are matched exactly.
-         * Matching is case-insensitive.
+         * Match a certificate name against a pattern that supports a single leading wildcard label
+         * (e.g. `*.live.pos.bilt.com` matches one label before the suffix). Patterns without a
+         * wildcard are matched exactly. Matching is case-insensitive.
          */
         private fun hostnameMatchesPattern(name: String, pattern: String): Boolean {
             val host = name.lowercase(Locale.ROOT)

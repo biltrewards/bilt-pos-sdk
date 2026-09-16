@@ -40,9 +40,15 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 rootProject.name = "bilt-pos-sdk"
 
 include(":java")
+
 include(":kotlin")
+
 include(":schema")
+
 include(":cli")
+
 include(":emulator:shared")
+
 include(":emulator:android")
+
 include(":emulator:desktop")

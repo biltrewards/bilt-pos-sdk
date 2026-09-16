@@ -7,9 +7,11 @@ import com.bilt.pos.nexo.model.MessageTypeType
 import com.bilt.pos.nexo.model.NexoTerminalAPI
 import com.bilt.pos.nexo.model.SaleToPOIRequest
 import io.kotest.assertions.throwables.shouldThrow
-import io.kotest.matchers.shouldBe
 import io.kotest.matchers.nulls.shouldNotBeNull
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import java.nio.file.Files
+import java.nio.file.Path
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.tls.HandshakeCertificates
@@ -17,16 +19,14 @@ import okhttp3.tls.HeldCertificate
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import java.nio.file.Files
-import java.nio.file.Path
 
 /**
- * Verifies CA-anchored TLS verification with synthetic-hostname matching
- * against a real HTTPS handshake served by [MockWebServer].
+ * Verifies CA-anchored TLS verification with synthetic-hostname matching against a real HTTPS
+ * handshake served by [MockWebServer].
  *
- * The server mirrors a Bilt terminal: it presents a device *leaf* certificate
- * (SAN `{Model}-{Serial}.live.pos.bilt.com`) signed by a merchant CA, while
- * the client connects by IP/loopback and trusts the CA.
+ * The server mirrors a Bilt terminal: it presents a device *leaf* certificate (SAN
+ * `{Model}-{Serial}.live.pos.bilt.com`) signed by a merchant CA, while the client connects by
+ * IP/loopback and trusts the CA.
  */
 class BiltNexoTerminalClientTlsTest {
 
@@ -44,22 +44,19 @@ class BiltNexoTerminalClientTlsTest {
     }
 
     private fun merchantCa(): HeldCertificate =
-        HeldCertificate.Builder()
-            .certificateAuthority(0)
-            .commonName("test-merchant-ca")
-            .build()
+        HeldCertificate.Builder().certificateAuthority(0).commonName("test-merchant-ca").build()
 
     /** Start an HTTPS server presenting [leafSan] on a leaf certificate signed by [ca]. */
     private fun startServerWithLeaf(ca: HeldCertificate, leafSan: String): MockWebServer {
-        val leaf = HeldCertificate.Builder()
-            .commonName(leafSan)
-            .addSubjectAlternativeName(leafSan)
-            .signedBy(ca)
-            .build()
+        val leaf =
+            HeldCertificate.Builder()
+                .commonName(leafSan)
+                .addSubjectAlternativeName(leafSan)
+                .signedBy(ca)
+                .build()
 
-        val serverCertificates = HandshakeCertificates.Builder()
-            .heldCertificate(leaf, ca.certificate)
-            .build()
+        val serverCertificates =
+            HandshakeCertificates.Builder().heldCertificate(leaf, ca.certificate).build()
 
         return MockWebServer().also {
             it.useHttps(serverCertificates.sslSocketFactory(), false)
@@ -68,19 +65,22 @@ class BiltNexoTerminalClientTlsTest {
         }
     }
 
-    private fun sampleRequest() = NexoTerminalAPI(
-        saleToPOIRequest = SaleToPOIRequest(
-            messageHeader = MessageHeader(
-                protocolVersion = "3.0",
-                messageClass = MessageClassType.Service,
-                messageCategory = MessageCategoryType.Payment,
-                messageType = MessageTypeType.Request,
-                serviceID = "txn-001",
-                saleID = "POS-1",
-                poiid = "TERM-1"
-            )
+    private fun sampleRequest() =
+        NexoTerminalAPI(
+            saleToPOIRequest =
+                SaleToPOIRequest(
+                    messageHeader =
+                        MessageHeader(
+                            protocolVersion = "3.0",
+                            messageClass = MessageClassType.Service,
+                            messageCategory = MessageCategoryType.Payment,
+                            messageType = MessageTypeType.Request,
+                            serviceID = "txn-001",
+                            saleID = "POS-1",
+                            poiid = "TERM-1",
+                        )
+                )
         )
-    )
 
     @Test
     fun `accepts device leaf chaining to trusted CA when SAN matches pattern`() {
@@ -88,11 +88,13 @@ class BiltNexoTerminalClientTlsTest {
         val srv = startServerWithLeaf(ca, "V240m-ABC123.live.pos.bilt.com")
         srv.enqueue(MockResponse().setBody(OK_RESPONSE))
 
-        val client = BiltNexoTerminalClient(
-            endpoint = srv.url("/nexo").toString(),
-            trustedCertificates = BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem()),
-            expectedHostnamePattern = PROD_PATTERN
-        )
+        val client =
+            BiltNexoTerminalClient(
+                endpoint = srv.url("/nexo").toString(),
+                trustedCertificates =
+                    BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem()),
+                expectedHostnamePattern = PROD_PATTERN,
+            )
 
         val response = client.request(sampleRequest())
 
@@ -109,11 +111,12 @@ class BiltNexoTerminalClientTlsTest {
         val caFile = tempDir.resolve("merchant-ca.pem")
         Files.write(caFile, ca.certificatePem().toByteArray())
 
-        val client = BiltNexoTerminalClient(
-            endpoint = srv.url("/nexo").toString(),
-            trustedCertificates = BiltNexoTerminalClient.certificatesFromPath(caFile),
-            environment = BiltTerminalEnvironment.PRODUCTION
-        )
+        val client =
+            BiltNexoTerminalClient(
+                endpoint = srv.url("/nexo").toString(),
+                trustedCertificates = BiltNexoTerminalClient.certificatesFromPath(caFile),
+                environment = BiltTerminalEnvironment.PRODUCTION,
+            )
 
         client.request(sampleRequest()).shouldNotBeNull()
     }
@@ -123,11 +126,13 @@ class BiltNexoTerminalClientTlsTest {
         val ca = merchantCa()
         val srv = startServerWithLeaf(ca, "V240m-ABC123.evil.example.com")
 
-        val client = BiltNexoTerminalClient(
-            endpoint = srv.url("/nexo").toString(),
-            trustedCertificates = BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem()),
-            expectedHostnamePattern = PROD_PATTERN
-        )
+        val client =
+            BiltNexoTerminalClient(
+                endpoint = srv.url("/nexo").toString(),
+                trustedCertificates =
+                    BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem()),
+                expectedHostnamePattern = PROD_PATTERN,
+            )
 
         shouldThrow<BiltNexoClientException> { client.request(sampleRequest()) }
     }
@@ -137,11 +142,13 @@ class BiltNexoTerminalClientTlsTest {
         val ca = merchantCa()
         val srv = startServerWithLeaf(ca, "a.b.live.pos.bilt.com")
 
-        val client = BiltNexoTerminalClient(
-            endpoint = srv.url("/nexo").toString(),
-            trustedCertificates = BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem()),
-            expectedHostnamePattern = PROD_PATTERN
-        )
+        val client =
+            BiltNexoTerminalClient(
+                endpoint = srv.url("/nexo").toString(),
+                trustedCertificates =
+                    BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem()),
+                expectedHostnamePattern = PROD_PATTERN,
+            )
 
         shouldThrow<BiltNexoClientException> { client.request(sampleRequest()) }
     }
@@ -151,16 +158,16 @@ class BiltNexoTerminalClientTlsTest {
         val serverCa = merchantCa()
         val srv = startServerWithLeaf(serverCa, "V240m-ABC123.live.pos.bilt.com")
 
-        val otherCa = HeldCertificate.Builder()
-            .certificateAuthority(0)
-            .commonName("other-test-ca")
-            .build()
+        val otherCa =
+            HeldCertificate.Builder().certificateAuthority(0).commonName("other-test-ca").build()
 
-        val client = BiltNexoTerminalClient(
-            endpoint = srv.url("/nexo").toString(),
-            trustedCertificates = BiltNexoTerminalClient.certificatesFromPem(otherCa.certificatePem()),
-            expectedHostnamePattern = PROD_PATTERN
-        )
+        val client =
+            BiltNexoTerminalClient(
+                endpoint = srv.url("/nexo").toString(),
+                trustedCertificates =
+                    BiltNexoTerminalClient.certificatesFromPem(otherCa.certificatePem()),
+                expectedHostnamePattern = PROD_PATTERN,
+            )
 
         shouldThrow<BiltNexoClientException> { client.request(sampleRequest()) }
     }
@@ -170,11 +177,13 @@ class BiltNexoTerminalClientTlsTest {
         val ca = merchantCa()
         val srv = startServerWithLeaf(ca, "V240m-ABC123.live.pos.bilt.com")
 
-        val client = BiltNexoTerminalClient(
-            endpoint = srv.url("/nexo").toString(),
-            trustedCertificates = BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem()),
-            environment = BiltTerminalEnvironment.STAGING
-        )
+        val client =
+            BiltNexoTerminalClient(
+                endpoint = srv.url("/nexo").toString(),
+                trustedCertificates =
+                    BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem()),
+                environment = BiltTerminalEnvironment.STAGING,
+            )
 
         shouldThrow<BiltNexoClientException> { client.request(sampleRequest()) }
     }
@@ -183,23 +192,26 @@ class BiltNexoTerminalClientTlsTest {
     fun `construction fails when trust anchor set without hostname pattern`() {
         val ca = merchantCa()
 
-        val ex = shouldThrow<IllegalArgumentException> {
-            BiltNexoTerminalClient(
-                endpoint = "https://192.168.1.50:8443/nexo",
-                trustedCertificates = BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem())
-            )
-        }
+        val ex =
+            shouldThrow<IllegalArgumentException> {
+                BiltNexoTerminalClient(
+                    endpoint = "https://192.168.1.50:8443/nexo",
+                    trustedCertificates =
+                        BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem()),
+                )
+            }
         ex.message.shouldNotBeNull() shouldContain "expectedHostnamePattern"
     }
 
     @Test
     fun `construction fails when hostname pattern set without trust anchor`() {
-        val ex = shouldThrow<IllegalArgumentException> {
-            BiltNexoTerminalClient(
-                endpoint = "https://192.168.1.50:8443/nexo",
-                expectedHostnamePattern = PROD_PATTERN
-            )
-        }
+        val ex =
+            shouldThrow<IllegalArgumentException> {
+                BiltNexoTerminalClient(
+                    endpoint = "https://192.168.1.50:8443/nexo",
+                    expectedHostnamePattern = PROD_PATTERN,
+                )
+            }
         ex.message.shouldNotBeNull() shouldContain "trust"
     }
 
@@ -207,14 +219,16 @@ class BiltNexoTerminalClientTlsTest {
     fun `construction fails when trustAll combined with trust anchor`() {
         val ca = merchantCa()
 
-        val ex = shouldThrow<IllegalArgumentException> {
-            BiltNexoTerminalClient(
-                endpoint = "https://192.168.1.50:8443/nexo",
-                trustAllCertificates = true,
-                trustedCertificates = BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem()),
-                expectedHostnamePattern = PROD_PATTERN
-            )
-        }
+        val ex =
+            shouldThrow<IllegalArgumentException> {
+                BiltNexoTerminalClient(
+                    endpoint = "https://192.168.1.50:8443/nexo",
+                    trustAllCertificates = true,
+                    trustedCertificates =
+                        BiltNexoTerminalClient.certificatesFromPem(ca.certificatePem()),
+                    expectedHostnamePattern = PROD_PATTERN,
+                )
+            }
         ex.message.shouldNotBeNull() shouldContain "trustAllCertificates"
     }
 

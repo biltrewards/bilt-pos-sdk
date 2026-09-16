@@ -10,104 +10,108 @@
 package com.bilt.pos.session;
 
 import com.bilt.pos.session.internal.ReversalMovement;
-
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The mutual-exclusion guards between refunds and voids of the session's
- * most recent successful sale. Money decides both directions:
+ * The mutual-exclusion guards between refunds and voids of the session's most recent successful
+ * sale. Money decides both directions:
  *
  * <ul>
- *   <li>once a refund has returned money ({@link #markRefunded}, raised
- *       the moment the tender refund completes, even if a later step
- *       aborts the flow), a void is refused — it would return the full
- *       amount on top of the refund;</li>
- *   <li>once a void has reversed a money leg, refunds are refused until
- *       the void is finished — a refund against the reversed leg would be
- *       a double return. A reversed loyalty movement alone (e.g. the
- *       award, after a refund whose tender was skipped by decision)
- *       blocks nothing: the tender stays refundable, and the recorded
- *       progress keeps a void or a retried refund from re-crediting the
- *       award.</li>
+ *   <li>once a refund has returned money ({@link #markRefunded}, raised the moment the tender
+ *       refund completes, even if a later step aborts the flow), a void is refused — it would
+ *       return the full amount on top of the refund;
+ *   <li>once a void has reversed a money leg, refunds are refused until the void is finished — a
+ *       refund against the reversed leg would be a double return. A reversed loyalty movement alone
+ *       (e.g. the award, after a refund whose tender was skipped by decision) blocks nothing: the
+ *       tender stays refundable, and the recorded progress keeps a void or a retried refund from
+ *       re-crediting the award.
  * </ul>
  *
- * <p>{@link #reversedMovements()} is the current void attempt's resume state —
- * the sale's movements already reversed, fed to and updated by
- * {@code ReversalManager.voidMovements}. It is cleared when the void completes;
- * the terminal, not the SDK, decides whether a later void is a duplicate.</p>
+ * <p>{@link #reversedMovements()} is the current void attempt's resume state — the sale's movements
+ * already reversed, fed to and updated by {@code ReversalManager.voidMovements}. It is cleared when
+ * the void completes; the terminal, not the SDK, decides whether a later void is a duplicate.
  */
 final class ReversalGuards {
 
-    private final Set<ReversalMovement.Key> reversedMovements =
-            ConcurrentHashMap.newKeySet();
-    private volatile boolean refundIssued;
-    private final String subject;
+  private final Set<ReversalMovement.Key> reversedMovements = ConcurrentHashMap.newKeySet();
+  private volatile boolean refundIssued;
+  private final String subject;
 
-    /** @param subject the sale as the session names it in errors */
-    ReversalGuards(String subject) {
-        this.subject = subject;
-    }
+  /**
+   * @param subject the sale as the session names it in errors
+   */
+  ReversalGuards(String subject) {
+    this.subject = subject;
+  }
 
-    /** The sale's movements already reversed, by a void or a refund's award reversal. */
-    Set<ReversalMovement.Key> reversedMovements() {
-        return reversedMovements;
-    }
+  /** The sale's movements already reversed, by a void or a refund's award reversal. */
+  Set<ReversalMovement.Key> reversedMovements() {
+    return reversedMovements;
+  }
 
-    /** Guards {@code voidTransaction()}: refused once a refund returned money. */
-    void requireNotRefunded() {
-        if (refundIssued) {
-            throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
-                    "the " + subject + " was already refunded from this session; a void "
-                            + "would return the full amount on top of the refund — use "
-                            + "refund(amount) for further returns"));
-        }
+  /** Guards {@code voidTransaction()}: refused once a refund returned money. */
+  void requireNotRefunded() {
+    if (refundIssued) {
+      throw new SessionException(
+          new SessionError(
+              SessionErrorCode.INVALID_STATE,
+              "the "
+                  + subject
+                  + " was already refunded from this session; a void "
+                  + "would return the full amount on top of the refund — use "
+                  + "refund(amount) for further returns"));
     }
+  }
 
-    /** Guards {@code refund()}: refused while a void has a money leg reversed. */
-    void requireNoReversedMoneyLeg() {
-        if (hasReversed(ReversalStep.STORED_VALUE_LOAD)
-                || hasReversed(ReversalStep.CARD)
-                || hasReversed(ReversalStep.STORED_VALUE)) {
-            throw new SessionException(new SessionError(SessionErrorCode.INVALID_STATE,
-                    "a void of this " + subject + " is partially complete; finish it "
-                            + "with voidTransaction() — a refund cannot mix with a "
-                            + "half-reversed sale"));
-        }
+  /** Guards {@code refund()}: refused while a void has a money leg reversed. */
+  void requireNoReversedMoneyLeg() {
+    if (hasReversed(ReversalStep.STORED_VALUE_LOAD)
+        || hasReversed(ReversalStep.CARD)
+        || hasReversed(ReversalStep.STORED_VALUE)) {
+      throw new SessionException(
+          new SessionError(
+              SessionErrorCode.INVALID_STATE,
+              "a void of this "
+                  + subject
+                  + " is partially complete; finish it "
+                  + "with voidTransaction() — a refund cannot mix with a "
+                  + "half-reversed sale"));
     }
+  }
 
-    /** A refund moved money; the sale can no longer be voided. */
-    void markRefunded() {
-        refundIssued = true;
-    }
+  /** A refund moved money; the sale can no longer be voided. */
+  void markRefunded() {
+    refundIssued = true;
+  }
 
-    /** A new payment replaced the guarded sale and all of its reversal progress. */
-    void reset() {
-        refundIssued = false;
-        reversedMovements.clear();
-    }
+  /** A new payment replaced the guarded sale and all of its reversal progress. */
+  void reset() {
+    refundIssued = false;
+    reversedMovements.clear();
+  }
 
-    /** A completed void no longer needs in-memory resume progress. */
-    void completeVoid() {
-        reversedMovements.clear();
-    }
+  /** A completed void no longer needs in-memory resume progress. */
+  void completeVoid() {
+    reversedMovements.clear();
+  }
 
-    /** Whether a refund flow already reversed the award. */
-    boolean awardReversed() {
-        return hasReversed(ReversalStep.AWARD);
-    }
+  /** Whether a refund flow already reversed the award. */
+  boolean awardReversed() {
+    return hasReversed(ReversalStep.AWARD);
+  }
 
-    /** A refund flow reversed the award; nothing may re-credit it. */
-    void markAwardReversed(String poiTransactionId) {
-        reversedMovements.add(ReversalMovement.key(ReversalStep.AWARD, poiTransactionId));
-    }
+  /** A refund flow reversed the award; nothing may re-credit it. */
+  void markAwardReversed(String poiTransactionId) {
+    reversedMovements.add(ReversalMovement.key(ReversalStep.AWARD, poiTransactionId));
+  }
 
-    private boolean hasReversed(ReversalStep step) {
-        for (ReversalMovement.Key movement : reversedMovements) {
-            if (movement.getStep() == step) {
-                return true;
-            }
-        }
-        return false;
+  private boolean hasReversed(ReversalStep step) {
+    for (ReversalMovement.Key movement : reversedMovements) {
+      if (movement.getStep() == step) {
+        return true;
+      }
     }
+    return false;
+  }
 }

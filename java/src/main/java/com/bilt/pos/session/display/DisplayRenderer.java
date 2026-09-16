@@ -15,14 +15,13 @@ import com.bilt.pos.session.basket.Basket;
 /**
  * Renders a basket into the display payload shown on the customer display.
  *
- * <p>The session ships with a default renderer that produces the standard
- * itemised virtual receipt; supply a custom implementation via
- * {@code CheckoutSession.Builder#displayRenderer} to override it. Rarely
- * necessary.</p>
+ * <p>The session ships with a default renderer that produces the standard itemised virtual receipt;
+ * supply a custom implementation via {@code CheckoutSession.Builder#displayRenderer} to override
+ * it. Rarely necessary.
  */
 @FunctionalInterface
 public interface DisplayRenderer {
 
-    /** Produces the payload to display for the given basket state. */
-    DisplayPayload render(Basket basket, DisplayContext context);
+  /** Produces the payload to display for the given basket state. */
+  DisplayPayload render(Basket basket, DisplayContext context);
 }

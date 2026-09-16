@@ -15,7 +15,6 @@ import com.bilt.pos.nexo.model.SaleItem;
 import com.bilt.pos.nexo.model.UnitOfMeasureEnum;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketLineItem;
-
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,87 +22,83 @@ import java.util.List;
 /**
  * Maps {@link Basket} snapshots to the Nexo {@link SaleItem} wire model.
  *
- * <p>Session item IDs are numeric strings ({@code SaleItem.ItemID} is a
- * number on the wire); amounts are converted from {@code BigDecimal} to the
- * wire's floating-point representation at the last possible moment.</p>
+ * <p>Session item IDs are numeric strings ({@code SaleItem.ItemID} is a number on the wire);
+ * amounts are converted from {@code BigDecimal} to the wire's floating-point representation at the
+ * last possible moment.
  *
- * <p>Return and credit lines carry their sign onto the wire in a normal (sale)
- * request: negative {@code Quantity} and {@code ItemAmount}, positive
- * {@code UnitPrice} — the mixed-basket return-line convention. In an
- * itemized refund request, {@code PaymentType=Refund} already carries the
- * direction, so {@link #toRefundSaleItems} emits magnitudes only; signed
- * items there would risk double negation on the terminal.</p>
+ * <p>Return and credit lines carry their sign onto the wire in a normal (sale) request: negative
+ * {@code Quantity} and {@code ItemAmount}, positive {@code UnitPrice} — the mixed-basket
+ * return-line convention. In an itemized refund request, {@code PaymentType=Refund} already carries
+ * the direction, so {@link #toRefundSaleItems} emits magnitudes only; signed items there would risk
+ * double negation on the terminal.
  */
 public final class SaleItemMapper {
 
-    private SaleItemMapper() {
-    }
+  private SaleItemMapper() {}
 
-    /** Maps the basket at original (pre-rebate) amounts. */
-    public static List<SaleItem> toSaleItems(Basket basket) {
-        return map(basket, false, false);
-    }
+  /** Maps the basket at original (pre-rebate) amounts. */
+  public static List<SaleItem> toSaleItems(Basket basket) {
+    return map(basket, false, false);
+  }
 
-    /** Maps the basket at adjusted (post-rebate) amounts. */
-    public static List<SaleItem> toAdjustedSaleItems(Basket basket) {
-        return map(basket, true, false);
-    }
+  /** Maps the basket at adjusted (post-rebate) amounts. */
+  public static List<SaleItem> toAdjustedSaleItems(Basket basket) {
+    return map(basket, true, false);
+  }
 
-    /**
-     * Maps item lines for a {@code PaymentRequest(Refund)}: all magnitudes
-     * positive, the payment type carrying the direction.
-     */
-    public static List<SaleItem> toRefundSaleItems(Basket basket) {
-        return map(basket, true, true);
-    }
+  /**
+   * Maps item lines for a {@code PaymentRequest(Refund)}: all magnitudes positive, the payment type
+   * carrying the direction.
+   */
+  public static List<SaleItem> toRefundSaleItems(Basket basket) {
+    return map(basket, true, true);
+  }
 
-    /**
-     * Maps a refund-dominant mixed basket for a net refund request. Return
-     * lines and charge-side credits are positive because the request's direction
-     * is Refund; sale lines are negative offsets, so the item amounts sum to the
-     * net refund.
-     */
-    public static List<SaleItem> toNetRefundSaleItems(Basket basket) {
-        List<SaleItem> items = new ArrayList<>(basket.getItemCount());
-        for (BasketLineItem line : basket.getItems()) {
-            boolean refundDirection = !line.isSale();
-            BigDecimal amount = line.getAdjustedTotal().abs();
-            double quantity = line.getQuantity();
-            if (!refundDirection) {
-                amount = amount.negate();
-                quantity = -quantity;
-            }
-            items.add(saleItem(line, amount, quantity));
-        }
-        return items;
+  /**
+   * Maps a refund-dominant mixed basket for a net refund request. Return lines and charge-side
+   * credits are positive because the request's direction is Refund; sale lines are negative
+   * offsets, so the item amounts sum to the net refund.
+   */
+  public static List<SaleItem> toNetRefundSaleItems(Basket basket) {
+    List<SaleItem> items = new ArrayList<>(basket.getItemCount());
+    for (BasketLineItem line : basket.getItems()) {
+      boolean refundDirection = !line.isSale();
+      BigDecimal amount = line.getAdjustedTotal().abs();
+      double quantity = line.getQuantity();
+      if (!refundDirection) {
+        amount = amount.negate();
+        quantity = -quantity;
+      }
+      items.add(saleItem(line, amount, quantity));
     }
+    return items;
+  }
 
-    private static List<SaleItem> map(Basket basket, boolean adjusted, boolean magnitudes) {
-        List<SaleItem> items = new ArrayList<>(basket.getItemCount());
-        for (BasketLineItem line : basket.getItems()) {
-            BigDecimal amount = adjusted ? line.getAdjustedTotal() : line.getSubtotal();
-            double quantity = line.getQuantity();
-            if (magnitudes) {
-                amount = amount.abs();
-            } else if (!line.isSale()) {
-                quantity = -quantity;
-            }
-            items.add(saleItem(line, amount, quantity));
-        }
-        return items;
+  private static List<SaleItem> map(Basket basket, boolean adjusted, boolean magnitudes) {
+    List<SaleItem> items = new ArrayList<>(basket.getItemCount());
+    for (BasketLineItem line : basket.getItems()) {
+      BigDecimal amount = adjusted ? line.getAdjustedTotal() : line.getSubtotal();
+      double quantity = line.getQuantity();
+      if (magnitudes) {
+        amount = amount.abs();
+      } else if (!line.isSale()) {
+        quantity = -quantity;
+      }
+      items.add(saleItem(line, amount, quantity));
     }
+    return items;
+  }
 
-    private static SaleItem saleItem(BasketLineItem line, BigDecimal amount,
-                                     double quantity) {
-        return SaleItem.builder()
-                .itemID(Long.parseLong(line.getItemId()))
-                .productCode(line.getSku())
-                .productLabel(line.getDescription())
-                .additionalProductInfo(line.getCategory())
-                .quantity(quantity)
-                .unitPrice(line.getUnitPrice().doubleValue())
-                .itemAmount(amount.doubleValue())
-                .unitOfMeasure(UnitOfMeasureEnum.OTHER)
-                .build();
-    }
+  private static SaleItem saleItem(BasketLineItem line, BigDecimal amount, double quantity) {
+    return SaleItem.builder()
+        .itemID(Long.parseLong(line.getItemId()))
+        .productCode(line.getSku())
+        .productLabel(line.getDescription())
+        .additionalProductInfo(line.getCategory())
+        .quantity(quantity)
+        .unitPrice(line.getUnitPrice().doubleValue())
+        .itemAmount(amount.doubleValue())
+        .unitOfMeasure(UnitOfMeasureEnum.OTHER)
+        .build();
+  }
 }
