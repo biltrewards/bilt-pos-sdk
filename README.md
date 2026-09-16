@@ -102,6 +102,17 @@ BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
 ./gradlew build
 ```
 
+## Formatting
+
+Java is formatted with [google-java-format](https://github.com/google/google-java-format) and Kotlin (including the Gradle scripts) with [ktfmt](https://github.com/facebook/ktfmt), driven by [Spotless](https://github.com/diffplug/spotless). Both formatters are non-configurable, so never format by hand:
+
+```bash
+./gradlew spotlessApply   # rewrite everything
+./gradlew spotlessCheck   # verify only
+```
+
+Generated sources (the `auto-generated` header) are excluded. For the IDE, install the google-java-format and ktfmt IntelliJ plugins so on-save output matches the build.
+
 ## Generate API Reference
 
 Regenerate the schema reference docs (requires Node.js):
