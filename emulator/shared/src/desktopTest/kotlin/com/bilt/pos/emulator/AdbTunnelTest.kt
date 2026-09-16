@@ -7,22 +7,23 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * The tunnel's pure logic: `adb devices` parsing, the device pick for an
- * address, and the forwarded-port parse. The subprocess plumbing itself
- * needs a live adb and stays untested.
+ * The tunnel's pure logic: `adb devices` parsing, the device pick for an address, and the
+ * forwarded-port parse. The subprocess plumbing itself needs a live adb and stays untested.
  */
 class AdbTunnelTest {
 
     @Test
     fun parseSerialsSkipsHeaderOfflineAndUnauthorized() {
-        val output = """
+        val output =
+            """
             List of devices attached
             192.168.1.57:5555	device
             R58M123ABC	device
             emulator-5554	offline
             0A1B2C3D	unauthorized
 
-        """.trimIndent()
+            """
+                .trimIndent()
         assertEquals(
             listOf("192.168.1.57:5555", "R58M123ABC"),
             Adb.parseSerials(output),
@@ -32,23 +33,27 @@ class AdbTunnelTest {
     @Test
     fun parseSerialsToleratesSpacesBetweenSerialAndState() {
         // seen in the wild: some adb builds pad with spaces, not a tab
-        val output = """
+        val output =
+            """
             List of devices attached
             910-001-044     device
 
-        """.trimIndent()
+            """
+                .trimIndent()
         assertEquals(listOf("910-001-044"), Adb.parseSerials(output))
     }
 
     @Test
     fun parseSerialsSkipsTheDaemonStartBanner() {
-        val output = """
+        val output =
+            """
             * daemon not running; starting now at tcp:5037
             * daemon started successfully
             List of devices attached
             910-001-044	device
 
-        """.trimIndent()
+            """
+                .trimIndent()
         assertEquals(listOf("910-001-044"), Adb.parseSerials(output))
     }
 

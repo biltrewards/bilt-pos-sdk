@@ -9,7 +9,5 @@
  */
 package com.bilt.pos.nexo.security
 
-/**
- * Thrown when message encryption or decryption fails.
- */
+/** Thrown when message encryption or decryption fails. */
 class EncryptionException(message: String, cause: Throwable? = null) : Exception(message, cause)

@@ -14,20 +14,20 @@ import java.math.BigDecimal;
 /** Outcome of a stored value balance inquiry. */
 public final class StoredValueBalance {
 
-    private final BigDecimal balance;
-    private final String currency;
+  private final BigDecimal balance;
+  private final String currency;
 
-    public StoredValueBalance(BigDecimal balance, String currency) {
-        this.balance = balance;
-        this.currency = currency;
-    }
+  public StoredValueBalance(BigDecimal balance, String currency) {
+    this.balance = balance;
+    this.currency = currency;
+  }
 
-    /** Available balance on the card. */
-    public BigDecimal getBalance() {
-        return balance;
-    }
+  /** Available balance on the card. */
+  public BigDecimal getBalance() {
+    return balance;
+  }
 
-    public String getCurrency() {
-        return currency;
-    }
+  public String getCurrency() {
+    return currency;
+  }
 }

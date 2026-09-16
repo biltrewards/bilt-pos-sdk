@@ -1,10 +1,10 @@
 package com.bilt.pos.nexo.model
 
-import io.kotest.matchers.shouldBe
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
-import kotlinx.serialization.json.Json
+import io.kotest.matchers.shouldBe
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
@@ -19,46 +19,52 @@ class NexoTerminalAPITest {
         category: MessageCategoryType = MessageCategoryType.Payment,
         classType: MessageClassType = MessageClassType.Service,
         type: MessageTypeType = MessageTypeType.Request,
-    ) = MessageHeader(
-        messageCategory = category,
-        messageClass = classType,
-        messageType = type,
-        poiid = "POI-1",
-        saleID = "SALE-1",
-        protocolVersion = "3.0",
-        serviceID = "SVC-001",
-    )
+    ) =
+        MessageHeader(
+            messageCategory = category,
+            messageClass = classType,
+            messageType = type,
+            poiid = "POI-1",
+            saleID = "SALE-1",
+            protocolVersion = "3.0",
+            serviceID = "SVC-001",
+        )
 
     @Nested
     inner class PaymentRequestSerialization {
 
-        private val paymentRequest = NexoTerminalAPI(
-            saleToPOIRequest = SaleToPOIRequest(
-                messageHeader = header(),
-                paymentRequest = PaymentRequest(
-                    paymentTransaction = PaymentTransaction(
-                        amountsReq = AmountsReq(
-                            currency = "USD",
-                            requestedAmount = 42.50,
-                        ),
-                    ),
-                    saleData = SaleData(
-                        saleTransactionID = TransactionIdentificationType(
-                            timeStamp = "2025-01-15T10:30:00Z",
-                            transactionID = "TXN-12345",
-                        ),
-                    ),
-                ),
-            ),
-        )
+        private val paymentRequest =
+            NexoTerminalAPI(
+                saleToPOIRequest =
+                    SaleToPOIRequest(
+                        messageHeader = header(),
+                        paymentRequest =
+                            PaymentRequest(
+                                paymentTransaction =
+                                    PaymentTransaction(
+                                        amountsReq =
+                                            AmountsReq(
+                                                currency = "USD",
+                                                requestedAmount = 42.50,
+                                            )
+                                    ),
+                                saleData =
+                                    SaleData(
+                                        saleTransactionID =
+                                            TransactionIdentificationType(
+                                                timeStamp = "2025-01-15T10:30:00Z",
+                                                transactionID = "TXN-12345",
+                                            )
+                                    ),
+                            ),
+                    )
+            )
 
         @Test
         fun `serialize payment request to JSON`() {
             val encoded = json.encodeToString(paymentRequest)
 
-            encoded shouldBe json.encodeToString(
-                json.decodeFromString<NexoTerminalAPI>(encoded)
-            )
+            encoded shouldBe json.encodeToString(json.decodeFromString<NexoTerminalAPI>(encoded))
         }
 
         @Test
@@ -97,7 +103,8 @@ class NexoTerminalAPITest {
     @Nested
     inner class PaymentResponseDeserialization {
 
-        private val responseJson = """
+        private val responseJson =
+            """
             {
               "SaleToPOIResponse": {
                 "MessageHeader": {
@@ -127,7 +134,8 @@ class NexoTerminalAPITest {
                 }
               }
             }
-        """.trimIndent()
+            """
+                .trimIndent()
 
         @Test
         fun `deserialize successful payment response`() {
@@ -160,7 +168,8 @@ class NexoTerminalAPITest {
     @Nested
     inner class FailureResponse {
 
-        private val failureJson = """
+        private val failureJson =
+            """
             {
               "SaleToPOIResponse": {
                 "MessageHeader": {
@@ -191,7 +200,8 @@ class NexoTerminalAPITest {
                 }
               }
             }
-        """.trimIndent()
+            """
+                .trimIndent()
 
         @Test
         fun `deserialize failure with error condition`() {
@@ -222,9 +232,13 @@ class NexoTerminalAPITest {
             val successJson = json.encodeToString(Response(result = ResultType.Success))
             successJson.contains("\"Success\"") shouldBe true
 
-            val failureJson = json.encodeToString(
-                Response(result = ResultType.Failure, errorCondition = ErrorConditionType.Cancel)
-            )
+            val failureJson =
+                json.encodeToString(
+                    Response(
+                        result = ResultType.Failure,
+                        errorCondition = ErrorConditionType.Cancel,
+                    )
+                )
             failureJson.contains("\"Failure\"") shouldBe true
             failureJson.contains("\"Cancel\"") shouldBe true
         }
@@ -243,15 +257,17 @@ class NexoTerminalAPITest {
 
         @Test
         fun `request with only required fields serializes correctly`() {
-            val request = SaleToPOIRequest(
-                messageHeader = MessageHeader(
-                    messageCategory = MessageCategoryType.Login,
-                    messageClass = MessageClassType.Service,
-                    messageType = MessageTypeType.Request,
-                    poiid = "T1",
-                    saleID = "S1",
-                ),
-            )
+            val request =
+                SaleToPOIRequest(
+                    messageHeader =
+                        MessageHeader(
+                            messageCategory = MessageCategoryType.Login,
+                            messageClass = MessageClassType.Service,
+                            messageType = MessageTypeType.Request,
+                            poiid = "T1",
+                            saleID = "S1",
+                        )
+                )
             val encoded = json.encodeToString(request)
             val decoded = json.decodeFromString<SaleToPOIRequest>(encoded)
 
@@ -267,7 +283,8 @@ class NexoTerminalAPITest {
 
         @Test
         fun `extra JSON fields are ignored during deserialization`() {
-            val jsonWithExtra = """
+            val jsonWithExtra =
+                """
                 {
                   "SaleToPOIResponse": {
                     "MessageHeader": {
@@ -285,7 +302,8 @@ class NexoTerminalAPITest {
                     }
                   }
                 }
-            """.trimIndent()
+                """
+                    .trimIndent()
 
             val api = json.decodeFromString<NexoTerminalAPI>(jsonWithExtra)
             api.saleToPOIResponse!!.adminResponse!!.response.result shouldBe ResultType.Success

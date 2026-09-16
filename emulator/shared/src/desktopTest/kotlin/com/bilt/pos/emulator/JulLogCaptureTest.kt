@@ -30,14 +30,17 @@ class JulLogCaptureTest {
         val received = CopyOnWriteArrayList<String>()
         JulLogCapture.install(received::add)
 
-        Logger.getLogger("com.bilt.pos.test.capture").log(
-            java.util.logging.Level.WARNING,
-            "request failed",
-            IllegalStateException("boom"),
-        )
+        Logger.getLogger("com.bilt.pos.test.capture")
+            .log(
+                java.util.logging.Level.WARNING,
+                "request failed",
+                IllegalStateException("boom"),
+            )
 
         assertTrue(
-            received.any { "request failed" in it && "IllegalStateException" in it && "boom" in it },
+            received.any {
+                "request failed" in it && "IllegalStateException" in it && "boom" in it
+            },
             "throwable should be expanded to a stack trace, got: $received",
         )
     }

@@ -12,8 +12,8 @@ package com.bilt.pos.nexo.security
 /**
  * Holds the shared secret and metadata required for Nexo message encryption.
  *
- * The terminal and the Sale System must be provisioned with the same
- * passphrase. The passphrase is used to derive AES and HMAC keys via PBKDF2.
+ * The terminal and the Sale System must be provisioned with the same passphrase. The passphrase is
+ * used to derive AES and HMAC keys via PBKDF2.
  *
  * ```kotlin
  * val key = SecurityKey(
@@ -26,7 +26,7 @@ package com.bilt.pos.nexo.security
 class SecurityKey(
     val passphrase: String,
     val keyIdentifier: String,
-    val keyVersion: Int = 0
+    val keyVersion: Int = 0,
 ) {
     init {
         require(passphrase.isNotBlank()) { "passphrase is required" }

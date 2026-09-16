@@ -4,9 +4,9 @@ import com.bilt.pos.nexo.model.MessageCategoryType
 import com.bilt.pos.nexo.model.MessageClassType
 import com.bilt.pos.nexo.model.MessageHeader
 import com.bilt.pos.nexo.model.MessageTypeType
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.string.shouldNotBeEmpty
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.BeforeEach
@@ -23,24 +23,26 @@ class MessageEncryptorTest {
 
     @BeforeEach
     fun setUp() {
-        val key = SecurityKey(
-            passphrase = "testPassphrase123",
-            keyIdentifier = "testTerminal",
-            keyVersion = 0
-        )
+        val key =
+            SecurityKey(
+                passphrase = "testPassphrase123",
+                keyIdentifier = "testTerminal",
+                keyVersion = 0,
+            )
         encryptor = MessageEncryptor(key)
 
-        header = MessageHeader(
-            protocolVersion = "3.0",
-            messageClass = MessageClassType.Service,
-            messageCategory = MessageCategoryType.Payment,
-            messageType = MessageTypeType.Request,
-            serviceID = "txn-001",
-            saleID = "POS-1",
-            poiid = "TERM-1"
-        )
-        headerBytes = json.encodeToString(MessageHeader.serializer(), header)
-            .toByteArray(Charsets.UTF_8)
+        header =
+            MessageHeader(
+                protocolVersion = "3.0",
+                messageClass = MessageClassType.Service,
+                messageCategory = MessageCategoryType.Payment,
+                messageType = MessageTypeType.Request,
+                serviceID = "txn-001",
+                saleID = "POS-1",
+                poiid = "TERM-1",
+            )
+        headerBytes =
+            json.encodeToString(MessageHeader.serializer(), header).toByteArray(Charsets.UTF_8)
     }
 
     @Test
@@ -69,14 +71,15 @@ class MessageEncryptorTest {
         // Algorithm identifiers
         enveloped.encryptedContent.contentEncryptionAlgorithm.algorithm shouldBe
             MessageEncryptor.ALG_AES256_CBC
-        enveloped.encryptedContent.contentEncryptionAlgorithm.parameter.shouldNotBeNull()
-            .initialisationVector.shouldNotBeNull()
+        enveloped.encryptedContent.contentEncryptionAlgorithm.parameter
+            .shouldNotBeNull()
+            .initialisationVector
+            .shouldNotBeNull()
 
         // KEK with wrapped session key
         enveloped.kek.kekIdentifier.keyIdentifier shouldBe "testTerminal"
         enveloped.kek.kekIdentifier.keyVersion shouldBe "0"
-        enveloped.kek.keyEncryptionAlgorithm.algorithm shouldBe
-            MessageEncryptor.ALG_AES256_KEY_WRAP
+        enveloped.kek.keyEncryptionAlgorithm.algorithm shouldBe MessageEncryptor.ALG_AES256_KEY_WRAP
         enveloped.kek.encryptedKey.shouldNotBeEmpty()
 
         // SecurityTrailer with AuthenticatedData
@@ -101,16 +104,23 @@ class MessageEncryptorTest {
         val payload = """{"test":"data"}"""
         val message = encryptor.encrypt(payload, header)
 
-        val ciphertext = java.util.Base64.getDecoder()
-            .decode(message.envelopedData!!.encryptedContent.encryptedData)
+        val ciphertext =
+            java.util.Base64.getDecoder()
+                .decode(message.envelopedData!!.encryptedContent.encryptedData)
         ciphertext[0] = (ciphertext[0].toInt() xor 0xFF).toByte()
-        val tampered = message.copy(
-            envelopedData = message.envelopedData!!.copy(
-                encryptedContent = message.envelopedData!!.encryptedContent.copy(
-                    encryptedData = java.util.Base64.getEncoder().encodeToString(ciphertext)
-                )
+        val tampered =
+            message.copy(
+                envelopedData =
+                    message.envelopedData!!.copy(
+                        encryptedContent =
+                            message.envelopedData!!
+                                .encryptedContent
+                                .copy(
+                                    encryptedData =
+                                        java.util.Base64.getEncoder().encodeToString(ciphertext)
+                                )
+                    )
             )
-        )
 
         assertThrows<EncryptionException> { encryptor.decrypt(tampered, headerBytes) }
     }
@@ -123,13 +133,14 @@ class MessageEncryptorTest {
         val authData = message.securityTrailer!!.authenticatedData!!
         val hmac = java.util.Base64.getDecoder().decode(authData.mac)
         hmac[0] = (hmac[0].toInt() xor 0xFF).toByte()
-        val tampered = message.copy(
-            securityTrailer = message.securityTrailer!!.copy(
-                authenticatedData = authData.copy(
-                    mac = java.util.Base64.getEncoder().encodeToString(hmac)
-                )
+        val tampered =
+            message.copy(
+                securityTrailer =
+                    message.securityTrailer!!.copy(
+                        authenticatedData =
+                            authData.copy(mac = java.util.Base64.getEncoder().encodeToString(hmac))
+                    )
             )
-        )
 
         assertThrows<EncryptionException> { encryptor.decrypt(tampered, headerBytes) }
     }
@@ -140,8 +151,10 @@ class MessageEncryptorTest {
         val message = encryptor.encrypt(payload, header)
 
         val tamperedHeader = header.copy(serviceID = "tampered")
-        val tamperedHeaderBytes = json.encodeToString(MessageHeader.serializer(), tamperedHeader)
-            .toByteArray(Charsets.UTF_8)
+        val tamperedHeaderBytes =
+            json
+                .encodeToString(MessageHeader.serializer(), tamperedHeader)
+                .toByteArray(Charsets.UTF_8)
 
         assertThrows<EncryptionException> { encryptor.decrypt(message, tamperedHeaderBytes) }
     }
@@ -151,13 +164,14 @@ class MessageEncryptorTest {
         val payload = """{"test":"data"}"""
         val message = encryptor.encrypt(payload, header)
 
-        val otherEncryptor = MessageEncryptor(
-            SecurityKey(
-                passphrase = "differentPassphrase",
-                keyIdentifier = "other",
-                keyVersion = 0
+        val otherEncryptor =
+            MessageEncryptor(
+                SecurityKey(
+                    passphrase = "differentPassphrase",
+                    keyIdentifier = "other",
+                    keyVersion = 0,
+                )
             )
-        )
 
         assertThrows<EncryptionException> { otherEncryptor.decrypt(message, headerBytes) }
     }

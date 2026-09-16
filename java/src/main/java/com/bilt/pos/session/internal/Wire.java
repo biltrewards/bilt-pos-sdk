@@ -24,7 +24,6 @@ import com.bilt.pos.session.ReversedMovement;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -32,123 +31,127 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 
-/**
- * Conversions between wire values and session types, shared by the internal
- * managers.
- */
+/** Conversions between wire values and session types, shared by the internal managers. */
 public final class Wire {
 
-    private Wire() {
-    }
+  private Wire() {}
 
-    /** Wire {@code double} amount → money at scale 2, {@code HALF_UP}. */
-    public static BigDecimal money(double value) {
-        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
-    }
+  /** Wire {@code double} amount → money at scale 2, {@code HALF_UP}. */
+  public static BigDecimal money(double value) {
+    return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
+  }
 
-    /**
-     * Lenient wire timestamp parser: accepts offset ({@code +00:00}) and
-     * {@code Z} forms; {@code null} for {@code null} or unparsable input.
-     */
-    public static Instant instant(String value) {
-        if (value == null) {
-            return null;
-        }
-        try {
-            return OffsetDateTime.parse(value).toInstant();
-        } catch (DateTimeParseException e) {
-            try {
-                return Instant.parse(value);
-            } catch (DateTimeParseException ignored) {
-                return null;
-            }
-        }
+  /**
+   * Lenient wire timestamp parser: accepts offset ({@code +00:00}) and {@code Z} forms; {@code
+   * null} for {@code null} or unparsable input.
+   */
+  public static Instant instant(String value) {
+    if (value == null) {
+      return null;
     }
+    try {
+      return OffsetDateTime.parse(value).toInstant();
+    } catch (DateTimeParseException e) {
+      try {
+        return Instant.parse(value);
+      } catch (DateTimeParseException ignored) {
+        return null;
+      }
+    }
+  }
 
-    /** A terminal reply lacks a structure the operation needs. */
-    public static SessionException missing(String what) {
-        return new SessionException(new SessionError(SessionErrorCode.TERMINAL_ERROR,
-                "terminal response is missing " + what));
-    }
+  /** A terminal reply lacks a structure the operation needs. */
+  public static SessionException missing(String what) {
+    return new SessionException(
+        new SessionError(SessionErrorCode.TERMINAL_ERROR, "terminal response is missing " + what));
+  }
 
-    /**
-     * The same error with more context: code and nexo condition are kept,
-     * only the message is replaced. Every annotation site must carry all
-     * error fields — this is the one place that knows which ones exist.
-     */
-    public static SessionError annotated(SessionError base, String message, Exception cause) {
-        return annotated(base, message, cause, base.getReversedMovements());
-    }
+  /**
+   * The same error with more context: code and nexo condition are kept, only the message is
+   * replaced. Every annotation site must carry all error fields — this is the one place that knows
+   * which ones exist.
+   */
+  public static SessionError annotated(SessionError base, String message, Exception cause) {
+    return annotated(base, message, cause, base.getReversedMovements());
+  }
 
-    /** The same error with replacement structured reversal progress. */
-    public static SessionError annotated(SessionError base, String message, Exception cause,
-                                         List<ReversedMovement> reversedMovements) {
-        return new SessionError(base.getCode(), message,
-                base.getNexoErrorCondition(), cause, reversedMovements);
-    }
+  /** The same error with replacement structured reversal progress. */
+  public static SessionError annotated(
+      SessionError base,
+      String message,
+      Exception cause,
+      List<ReversedMovement> reversedMovements) {
+    return new SessionError(
+        base.getCode(), message, base.getNexoErrorCondition(), cause, reversedMovements);
+  }
 
-    /** The same error with structured progress from its current void attempt. */
-    public static SessionError withReversedMovements(SessionError base,
-                                                     List<ReversedMovement> movements) {
-        return new SessionError(base.getCode(), base.getMessage(),
-                base.getNexoErrorCondition(), base.getCause(), movements);
-    }
+  /** The same error with structured progress from its current void attempt. */
+  public static SessionError withReversedMovements(
+      SessionError base, List<ReversedMovement> movements) {
+    return new SessionError(
+        base.getCode(),
+        base.getMessage(),
+        base.getNexoErrorCondition(),
+        base.getCause(),
+        movements);
+  }
 
-    /** The POI transaction reference of a response, or {@code null}. */
-    public static TransactionIdentificationType poiRef(POIData poiData) {
-        return poiData == null ? null : poiData.getPoiTransactionID();
-    }
+  /** The POI transaction reference of a response, or {@code null}. */
+  public static TransactionIdentificationType poiRef(POIData poiData) {
+    return poiData == null ? null : poiData.getPoiTransactionID();
+  }
 
-    /** The transaction ID of a response's POI reference, or {@code null}. */
-    public static String txnId(POIData poiData) {
-        TransactionIdentificationType ref = poiRef(poiData);
-        return ref == null ? null : ref.getTransactionID();
-    }
+  /** The transaction ID of a response's POI reference, or {@code null}. */
+  public static String txnId(POIData poiData) {
+    TransactionIdentificationType ref = poiRef(poiData);
+    return ref == null ? null : ref.getTransactionID();
+  }
 
-    /** The parsed timestamp of a response's POI reference, or {@code null}. */
-    public static Instant txnTimestamp(POIData poiData) {
-        TransactionIdentificationType ref = poiRef(poiData);
-        return ref == null ? null : instant(ref.getTimeStamp());
-    }
+  /** The parsed timestamp of a response's POI reference, or {@code null}. */
+  public static Instant txnTimestamp(POIData poiData) {
+    TransactionIdentificationType ref = poiRef(poiData);
+    return ref == null ? null : instant(ref.getTimeStamp());
+  }
 
-    /** An {@code OriginalPOITransaction} referencing a prior transaction. */
-    public static OriginalPOITransaction originalTransaction(String poiTxnId, Instant timestamp) {
-        return originalTransaction(TransactionIdentificationType.builder()
-                .transactionID(poiTxnId)
-                .timeStamp(timestamp == null ? null : timestamp.toString())
-                .build());
-    }
+  /** An {@code OriginalPOITransaction} referencing a prior transaction. */
+  public static OriginalPOITransaction originalTransaction(String poiTxnId, Instant timestamp) {
+    return originalTransaction(
+        TransactionIdentificationType.builder()
+            .transactionID(poiTxnId)
+            .timeStamp(timestamp == null ? null : timestamp.toString())
+            .build());
+  }
 
-    /** An {@code OriginalPOITransaction} referencing a prior transaction. */
-    public static OriginalPOITransaction originalTransaction(
-            TransactionIdentificationType poiTxn) {
-        return OriginalPOITransaction.builder().poiTransactionID(poiTxn).build();
-    }
+  /** An {@code OriginalPOITransaction} referencing a prior transaction. */
+  public static OriginalPOITransaction originalTransaction(TransactionIdentificationType poiTxn) {
+    return OriginalPOITransaction.builder().poiTransactionID(poiTxn).build();
+  }
 
-    /** The first (on this wire, only) result of a loyalty response, or {@code null}. */
-    public static LoyaltyResult firstLoyaltyResult(LoyaltyResponse body) {
-        return body.getLoyaltyResult() != null && body.getLoyaltyResult().length > 0
-                ? body.getLoyaltyResult()[0] : null;
-    }
+  /** The first (on this wire, only) result of a loyalty response, or {@code null}. */
+  public static LoyaltyResult firstLoyaltyResult(LoyaltyResponse body) {
+    return body.getLoyaltyResult() != null && body.getLoyaltyResult().length > 0
+        ? body.getLoyaltyResult()[0]
+        : null;
+  }
 
-    /** The acquirer approval code of a payment response, or {@code null}. */
-    public static String approvalCode(PaymentResponse body) {
-        if (body.getPaymentResult() == null
-                || body.getPaymentResult().getPaymentAcquirerData() == null) {
-            return null;
-        }
-        return body.getPaymentResult().getPaymentAcquirerData().getApprovalCode();
+  /** The acquirer approval code of a payment response, or {@code null}. */
+  public static String approvalCode(PaymentResponse body) {
+    if (body.getPaymentResult() == null
+        || body.getPaymentResult().getPaymentAcquirerData() == null) {
+      return null;
     }
+    return body.getPaymentResult().getPaymentAcquirerData().getApprovalCode();
+  }
 
-    /**
-     * The loyalty account identification for a member id — the PAN/keyed
-     * convention every loyalty request and reversal uses on this wire.
-     */
-    public static LoyaltyAccountID memberAccount(String memberId) {
-        return LoyaltyAccountID.builder()
-                .loyaltyID(memberId)
-                .identificationType(IdentificationTypeEnum.PAN)
-                .entryMode(new EntryModeType[] {EntryModeType.KEYED})
-                .build();
-    }
+  /**
+   * The loyalty account identification for a member id — the PAN/keyed convention every loyalty
+   * request and reversal uses on this wire.
+   */
+  public static LoyaltyAccountID memberAccount(String memberId) {
+    return LoyaltyAccountID.builder()
+        .loyaltyID(memberId)
+        .identificationType(IdentificationTypeEnum.PAN)
+        .entryMode(new EntryModeType[] {EntryModeType.KEYED})
+        .build();
+  }
 }

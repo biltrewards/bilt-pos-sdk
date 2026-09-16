@@ -5,13 +5,12 @@ import java.math.BigDecimal
 import java.time.Instant
 
 /**
- * Flattens a completed payment into a [SaleRecord]: only the legs the
- * terminal actually committed are recorded (a rewards-only checkout may have
- * no CARD leg at all), each with the POI reference a later referenced
- * refund/void of that movement must present.
+ * Flattens a completed payment into a [SaleRecord]: only the legs the terminal actually committed
+ * are recorded (a rewards-only checkout may have no CARD leg at all), each with the POI reference a
+ * later referenced refund/void of that movement must present.
  *
- * A pure projection — [recordId] and [completedAt] belong to the act of
- * persisting, so the caller supplies them.
+ * A pure projection — [recordId] and [completedAt] belong to the act of persisting, so the caller
+ * supplies them.
  */
 fun SettlementResult.toSaleRecord(
     sessionId: String,
@@ -27,8 +26,8 @@ fun SettlementResult.toSaleRecord(
     // void/refund can target the one committed transaction. Only a reference
     // distinct from the stored value leg's is a real card payment — mapping
     // the copy as a CARD leg would record the same transaction twice.
-    val storedValueIsPrimary = poiTransactionId != null
-        && poiTransactionId == storedValuePoiTransactionId
+    val storedValueIsPrimary =
+        poiTransactionId != null && poiTransactionId == storedValuePoiTransactionId
     val legs = buildList {
         fun loyaltyLeg(type: LegType, id: String?, timestamp: Instant?, amount: BigDecimal?) {
             if (id != null) {
@@ -37,37 +36,50 @@ fun SettlementResult.toSaleRecord(
         }
         if (!storedValueIsPrimary) {
             poiTransactionId?.let {
-                add(TransactionLeg(
-                    type = LegType.CARD,
-                    poiTransactionId = it,
-                    poiTimestamp = poiTransactionTimestamp?.toString(),
-                    amount = cardAmountCharged.toPlainString(),
-                    approvalCode = approvalCode,
-                    acquirerTransactionId = acquirerTransactionId,
-                    brand = paymentBrand,
-                ))
+                add(
+                    TransactionLeg(
+                        type = LegType.CARD,
+                        poiTransactionId = it,
+                        poiTimestamp = poiTransactionTimestamp?.toString(),
+                        amount = cardAmountCharged.toPlainString(),
+                        approvalCode = approvalCode,
+                        acquirerTransactionId = acquirerTransactionId,
+                        brand = paymentBrand,
+                    )
+                )
             }
         }
         storedValuePoiTransactionId?.let {
             // as the sole tender, the result's payment artifacts (approval
             // code, acquirer id) describe the gift card payment itself; in a
             // split tender the card step overwrote them, so they stay off
-            add(TransactionLeg(
-                type = LegType.STORED_VALUE,
-                poiTransactionId = it,
-                poiTimestamp = storedValuePoiTransactionTimestamp?.toString(),
-                amount = storedValueAmountUsed.toPlainString(),
-                approvalCode = if (storedValueIsPrimary) approvalCode else null,
-                acquirerTransactionId = if (storedValueIsPrimary) acquirerTransactionId else null,
-            ))
+            add(
+                TransactionLeg(
+                    type = LegType.STORED_VALUE,
+                    poiTransactionId = it,
+                    poiTimestamp = storedValuePoiTransactionTimestamp?.toString(),
+                    amount = storedValueAmountUsed.toPlainString(),
+                    approvalCode = if (storedValueIsPrimary) approvalCode else null,
+                    acquirerTransactionId =
+                        if (storedValueIsPrimary) acquirerTransactionId else null,
+                )
+            )
         }
         loyaltyLeg(LegType.AWARD, awardPoiTransactionId, awardPoiTransactionTimestamp, null)
-        loyaltyLeg(LegType.REBATE, rebatePoiTransactionId, rebatePoiTransactionTimestamp,
-            totalRebateAmount)
+        loyaltyLeg(
+            LegType.REBATE,
+            rebatePoiTransactionId,
+            rebatePoiTransactionTimestamp,
+            totalRebateAmount,
+        )
         // rewardRefs stay unset until SettlementResult exposes the refs the
         // redemption sent (SDK referenced-reversal work)
-        loyaltyLeg(LegType.REDEMPTION, redemptionPoiTransactionId,
-            redemptionPoiTransactionTimestamp, pointsMonetaryValue)
+        loyaltyLeg(
+            LegType.REDEMPTION,
+            redemptionPoiTransactionId,
+            redemptionPoiTransactionTimestamp,
+            pointsMonetaryValue,
+        )
     }
     val giftCardLoads = storedValueLoads.map { load ->
         GiftCardLoad(
@@ -84,19 +96,24 @@ fun SettlementResult.toSaleRecord(
     // a full refund rather than as merchandise returns. A sale containing a
     // fulfilled gift-card purchase is therefore full-refund-only, keeping
     // the load and its original funding reversal atomic.
-    val items = finalBasket?.items.orEmpty().filter {
-        it.isSale && it.reference !in fulfilledReferences
-    }.map { line ->
-        SaleItem(
-            sku = line.sku,
-            description = line.description,
-            category = line.category,
-            quantity = line.quantity,
-            unitPrice = line.unitPrice?.toPlainString() ?: "0.00",
-            taxRate = line.taxRate?.toPlainString(),
-            lineTotal = line.adjustedTotal?.toPlainString() ?: "0.00",
-        )
-    }
+    val items =
+        finalBasket
+            ?.items
+            .orEmpty()
+            .filter {
+                it.isSale && it.reference !in fulfilledReferences
+            }
+            .map { line ->
+                SaleItem(
+                    sku = line.sku,
+                    description = line.description,
+                    category = line.category,
+                    quantity = line.quantity,
+                    unitPrice = line.unitPrice?.toPlainString() ?: "0.00",
+                    taxRate = line.taxRate?.toPlainString(),
+                    lineTotal = line.adjustedTotal?.toPlainString() ?: "0.00",
+                )
+            }
     return SaleRecord(
         id = recordId,
         sessionId = sessionId,

@@ -1,5 +1,7 @@
 package com.bilt.pos.session;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketItemType;
@@ -7,138 +9,168 @@ import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.display.DisplayContext;
 import com.bilt.pos.session.display.DisplayTarget;
 import com.bilt.pos.session.internal.BasketDisplayRenderer;
-import org.junit.jupiter.api.Test;
-
 import java.math.BigDecimal;
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
 
 class BasketDisplayRendererTest {
 
-    private static final DisplayContext CONTEXT =
-            new DisplayContext(DisplayTarget.TERMINAL, "USD");
+  private static final DisplayContext CONTEXT = new DisplayContext(DisplayTarget.TERMINAL, "USD");
 
-    private static BasketLineItem line(String id, BigDecimal original, BigDecimal rebate) {
-        return BasketLineItem.builder()
-                .itemId(id).sku("SKU-" + id).description("Item " + id)
-                .quantity(1).unitPrice(original)
-                .originalTotal(original)
-                .rebateAmount(rebate)
-                .adjustedTotal(original.subtract(rebate))
-                .taxAmount(BigDecimal.ZERO)
-                .build();
-    }
+  private static BasketLineItem line(String id, BigDecimal original, BigDecimal rebate) {
+    return BasketLineItem.builder()
+        .itemId(id)
+        .sku("SKU-" + id)
+        .description("Item " + id)
+        .quantity(1)
+        .unitPrice(original)
+        .originalTotal(original)
+        .rebateAmount(rebate)
+        .adjustedTotal(original.subtract(rebate))
+        .taxAmount(BigDecimal.ZERO)
+        .build();
+  }
 
-    @Test
-    void cartBuildingReceiptUsesRawTotals() {
-        Basket basket = Basket.builder()
-                .items(List.of(line("1", new BigDecimal("50.00"), BigDecimal.ZERO)))
-                .originalTotal(new BigDecimal("50.00"))
-                .taxTotal(new BigDecimal("4.00"))
-                .grandTotal(new BigDecimal("54.00"))
-                .build();
+  @Test
+  void cartBuildingReceiptUsesRawTotals() {
+    Basket basket =
+        Basket.builder()
+            .items(List.of(line("1", new BigDecimal("50.00"), BigDecimal.ZERO)))
+            .originalTotal(new BigDecimal("50.00"))
+            .taxTotal(new BigDecimal("4.00"))
+            .grandTotal(new BigDecimal("54.00"))
+            .build();
 
-        DisplayPayload payload = new BasketDisplayRenderer().render(basket, CONTEXT);
+    DisplayPayload payload = new BasketDisplayRenderer().render(basket, CONTEXT);
 
-        assertEquals(0, new BigDecimal("50.00").compareTo(
-                payload.getReceipt().getSubtotal().getAmount().getValue()));
-        assertEquals(0, new BigDecimal("54.00").compareTo(
-                payload.getReceipt().getTotal().getAmount().getValue()));
-        assertNull(payload.getReceipt().getAdjustments());
-    }
+    assertEquals(
+        0,
+        new BigDecimal("50.00")
+            .compareTo(payload.getReceipt().getSubtotal().getAmount().getValue()));
+    assertEquals(
+        0,
+        new BigDecimal("54.00").compareTo(payload.getReceipt().getTotal().getAmount().getValue()));
+    assertNull(payload.getReceipt().getAdjustments());
+  }
 
-    @Test
-    void discountedReceiptTotalsMatchTheDiscountedLines() {
-        // 100 gross, 10 rebate (in the lines), 4 tax, 5 in points
-        Basket basket = Basket.builder()
-                .items(List.of(line("1", new BigDecimal("100.00"), new BigDecimal("10.00"))))
-                .originalTotal(new BigDecimal("100.00"))
-                .taxTotal(new BigDecimal("4.00"))
-                .grandTotal(new BigDecimal("104.00"))
-                .rebateTotal(new BigDecimal("10.00"))
-                .pointDiscountTotal(new BigDecimal("5.00"))
-                .build();
+  @Test
+  void discountedReceiptTotalsMatchTheDiscountedLines() {
+    // 100 gross, 10 rebate (in the lines), 4 tax, 5 in points
+    Basket basket =
+        Basket.builder()
+            .items(List.of(line("1", new BigDecimal("100.00"), new BigDecimal("10.00"))))
+            .originalTotal(new BigDecimal("100.00"))
+            .taxTotal(new BigDecimal("4.00"))
+            .grandTotal(new BigDecimal("104.00"))
+            .rebateTotal(new BigDecimal("10.00"))
+            .pointDiscountTotal(new BigDecimal("5.00"))
+            .build();
 
-        DisplayPayload payload = new BasketDisplayRenderer().render(basket, CONTEXT);
+    DisplayPayload payload = new BasketDisplayRenderer().render(basket, CONTEXT);
 
-        // line renders at 90.00; subtotal must match the line sum
-        assertEquals(0, new BigDecimal("90.00").compareTo(
-                payload.getReceipt().getLineItems().getLineItem().get(0)
-                        .getAmount().getValue()));
-        assertEquals(0, new BigDecimal("90.00").compareTo(
-                payload.getReceipt().getSubtotal().getAmount().getValue()));
-        // points shown as a negative order-level adjustment
-        assertEquals(0, new BigDecimal("-5.00").compareTo(
-                payload.getReceipt().getAdjustments().getAdjustmentItem().get(0)
-                        .getAmount().getValue()));
-        // total = 90 + 4 tax - 5 points
-        assertEquals(0, new BigDecimal("89.00").compareTo(
-                payload.getReceipt().getTotal().getAmount().getValue()));
-    }
+    // line renders at 90.00; subtotal must match the line sum
+    assertEquals(
+        0,
+        new BigDecimal("90.00")
+            .compareTo(
+                payload.getReceipt().getLineItems().getLineItem().get(0).getAmount().getValue()));
+    assertEquals(
+        0,
+        new BigDecimal("90.00")
+            .compareTo(payload.getReceipt().getSubtotal().getAmount().getValue()));
+    // points shown as a negative order-level adjustment
+    assertEquals(
+        0,
+        new BigDecimal("-5.00")
+            .compareTo(
+                payload
+                    .getReceipt()
+                    .getAdjustments()
+                    .getAdjustmentItem()
+                    .get(0)
+                    .getAmount()
+                    .getValue()));
+    // total = 90 + 4 tax - 5 points
+    assertEquals(
+        0,
+        new BigDecimal("89.00").compareTo(payload.getReceipt().getTotal().getAmount().getValue()));
+  }
 
-    @Test
-    void receiptAmountsUseTheCurrencySymbolNotTheIsoCode() {
-        Basket basket = Basket.builder()
-                .items(List.of(line("1", new BigDecimal("50.00"), BigDecimal.ZERO)))
-                .originalTotal(new BigDecimal("50.00"))
-                .taxTotal(new BigDecimal("4.00"))
-                .grandTotal(new BigDecimal("54.00"))
-                .build();
+  @Test
+  void receiptAmountsUseTheCurrencySymbolNotTheIsoCode() {
+    Basket basket =
+        Basket.builder()
+            .items(List.of(line("1", new BigDecimal("50.00"), BigDecimal.ZERO)))
+            .originalTotal(new BigDecimal("50.00"))
+            .taxTotal(new BigDecimal("4.00"))
+            .grandTotal(new BigDecimal("54.00"))
+            .build();
 
-        DisplayPayload payload = new BasketDisplayRenderer().render(basket, CONTEXT);
+    DisplayPayload payload = new BasketDisplayRenderer().render(basket, CONTEXT);
 
-        assertEquals("$", payload.getReceipt().getTotal().getAmount().getCurrency());
-        assertEquals("$", payload.getReceipt().getSubtotal().getAmount().getCurrency());
-        assertEquals("$", payload.getReceipt().getLineItems().getLineItem().get(0)
-                .getAmount().getCurrency());
-        assertEquals("$", payload.getReceipt().getTax().getTaxTotal()
-                .getAmount().getCurrency());
-    }
+    assertEquals("$", payload.getReceipt().getTotal().getAmount().getCurrency());
+    assertEquals("$", payload.getReceipt().getSubtotal().getAmount().getCurrency());
+    assertEquals(
+        "$", payload.getReceipt().getLineItems().getLineItem().get(0).getAmount().getCurrency());
+    assertEquals("$", payload.getReceipt().getTax().getTaxTotal().getAmount().getCurrency());
+  }
 
-    @Test
-    void unknownCurrencyCodeFallsBackToTheCodeItself() {
-        Basket basket = Basket.builder()
-                .items(List.of(line("1", new BigDecimal("10.00"), BigDecimal.ZERO)))
-                .originalTotal(new BigDecimal("10.00"))
-                .grandTotal(new BigDecimal("10.00"))
-                .build();
-        DisplayContext context =
-                new DisplayContext(DisplayTarget.TERMINAL, "ZZZ");
+  @Test
+  void unknownCurrencyCodeFallsBackToTheCodeItself() {
+    Basket basket =
+        Basket.builder()
+            .items(List.of(line("1", new BigDecimal("10.00"), BigDecimal.ZERO)))
+            .originalTotal(new BigDecimal("10.00"))
+            .grandTotal(new BigDecimal("10.00"))
+            .build();
+    DisplayContext context = new DisplayContext(DisplayTarget.TERMINAL, "ZZZ");
 
-        DisplayPayload payload = new BasketDisplayRenderer().render(basket, context);
+    DisplayPayload payload = new BasketDisplayRenderer().render(basket, context);
 
-        assertEquals("ZZZ", payload.getReceipt().getTotal().getAmount().getCurrency());
-    }
+    assertEquals("ZZZ", payload.getReceipt().getTotal().getAmount().getCurrency());
+  }
 
-    @Test
-    void returnLinesRenderNegativeAmounts() {
-        // a sale's return line: the line totals are negative in the
-        // snapshot and flow to the receipt unchanged
-        BasketLineItem returnLine = BasketLineItem.builder()
-                .itemId("1").sku("SKU-1").description("Return Item")
-                .quantity(1).unitPrice(new BigDecimal("24.99"))
-                .type(BasketItemType.RETURN)
-                .originalTotal(new BigDecimal("-24.99"))
-                .adjustedTotal(new BigDecimal("-24.99"))
-                .taxAmount(new BigDecimal("-2.22"))
-                .build();
-        Basket basket = Basket.builder()
-                .items(List.of(returnLine))
-                .originalTotal(new BigDecimal("-24.99"))
-                .taxTotal(new BigDecimal("-2.22"))
-                .grandTotal(new BigDecimal("-27.21"))
-                .build();
+  @Test
+  void returnLinesRenderNegativeAmounts() {
+    // a sale's return line: the line totals are negative in the
+    // snapshot and flow to the receipt unchanged
+    BasketLineItem returnLine =
+        BasketLineItem.builder()
+            .itemId("1")
+            .sku("SKU-1")
+            .description("Return Item")
+            .quantity(1)
+            .unitPrice(new BigDecimal("24.99"))
+            .type(BasketItemType.RETURN)
+            .originalTotal(new BigDecimal("-24.99"))
+            .adjustedTotal(new BigDecimal("-24.99"))
+            .taxAmount(new BigDecimal("-2.22"))
+            .build();
+    Basket basket =
+        Basket.builder()
+            .items(List.of(returnLine))
+            .originalTotal(new BigDecimal("-24.99"))
+            .taxTotal(new BigDecimal("-2.22"))
+            .grandTotal(new BigDecimal("-27.21"))
+            .build();
 
-        DisplayPayload payload = new BasketDisplayRenderer().render(basket, CONTEXT);
+    DisplayPayload payload = new BasketDisplayRenderer().render(basket, CONTEXT);
 
-        assertEquals(0, new BigDecimal("-24.99").compareTo(payload.getReceipt()
-                .getLineItems().getLineItem().get(0).getAmount().getValue()));
-        assertEquals(0, new BigDecimal("-24.99").compareTo(
-                payload.getReceipt().getSubtotal().getAmount().getValue()));
-        assertEquals(0, new BigDecimal("-2.22").compareTo(
-                payload.getReceipt().getTax().getTaxTotal().getAmount().getValue()));
-        assertEquals(0, new BigDecimal("-27.21").compareTo(
-                payload.getReceipt().getTotal().getAmount().getValue()));
-    }
+    assertEquals(
+        0,
+        new BigDecimal("-24.99")
+            .compareTo(
+                payload.getReceipt().getLineItems().getLineItem().get(0).getAmount().getValue()));
+    assertEquals(
+        0,
+        new BigDecimal("-24.99")
+            .compareTo(payload.getReceipt().getSubtotal().getAmount().getValue()));
+    assertEquals(
+        0,
+        new BigDecimal("-2.22")
+            .compareTo(payload.getReceipt().getTax().getTaxTotal().getAmount().getValue()));
+    assertEquals(
+        0,
+        new BigDecimal("-27.21").compareTo(payload.getReceipt().getTotal().getAmount().getValue()));
+  }
 }

@@ -22,11 +22,6 @@ val generatedSourceMarker = "This file is auto-generated"
 val nonSourceDirs = listOf("**/build/**", "**/node_modules/**", ".foliage/**", ".kotlin/**")
 
 spotless {
-    // The codebase has not been reformatted yet, so spotlessCheck is kept out
-    // of `check`/`build`. Drop this line in the same PR as the initial
-    // spotlessApply to make CI enforce formatting.
-    isEnforceCheck = false
-
     java {
         target("**/*.java")
         targetExclude(nonSourceDirs)

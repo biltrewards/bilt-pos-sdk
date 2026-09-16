@@ -4,7 +4,6 @@ import com.bilt.pos.emulator.catalog.CustomItem
 import com.bilt.pos.emulator.catalog.MockProductProvider
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.session.NjSalesTax
-import com.bilt.pos.emulator.session.TlsVerifier
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -65,11 +64,10 @@ class EmulatorLogicTest {
     }
 
     /**
-     * A keypad SKU outlives its basket: a return is rung under the SKU its
-     * sale was recorded with, and the basket keys return lines by SKU. Two
-     * baskets must therefore never mint the same one, or returning both
-     * sales into one basket refuses the second (same SKU, different price)
-     * or merges two sales into one credit line (same SKU, same price).
+     * A keypad SKU outlives its basket: a return is rung under the SKU its sale was recorded with,
+     * and the basket keys return lines by SKU. Two baskets must therefore never mint the same one,
+     * or returning both sales into one basket refuses the second (same SKU, different price) or
+     * merges two sales into one credit line (same SKU, same price).
      */
     @Test
     fun customSkusDifferBetweenBaskets() {

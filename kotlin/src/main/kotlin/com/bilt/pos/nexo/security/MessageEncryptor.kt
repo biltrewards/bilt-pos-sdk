@@ -23,7 +23,6 @@ import com.bilt.pos.nexo.model.Kek
 import com.bilt.pos.nexo.model.MessageHeader
 import com.bilt.pos.nexo.model.Parameter
 import com.bilt.pos.nexo.model.SecurityTrailerContentType
-import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.Cipher
@@ -31,19 +30,18 @@ import javax.crypto.Mac
 import javax.crypto.SecretKey
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import kotlinx.serialization.json.Json
 
 /**
- * Encrypts and decrypts Nexo Sale to POI messages using CMS structures
- * with AES-256-CBC encryption and HMAC-SHA256 authentication.
+ * Encrypts and decrypts Nexo Sale to POI messages using CMS structures with AES-256-CBC encryption
+ * and HMAC-SHA256 authentication.
  *
- * Key material is derived from the [SecurityKey] passphrase via PBKDF2.
- * The derived cipher key acts as the KEK (Key Encryption Key) for wrapping
- * per-message session keys. The derived HMAC key is used directly for
- * message authentication.
+ * Key material is derived from the [SecurityKey] passphrase via PBKDF2. The derived cipher key acts
+ * as the KEK (Key Encryption Key) for wrapping per-message session keys. The derived HMAC key is
+ * used directly for message authentication.
  *
- * Each message uses a fresh random AES-256 session key, wrapped by the
- * KEK using AES Key Wrap (RFC 3394). The HMAC covers both the serialized
- * message header and the plaintext body.
+ * Each message uses a fresh random AES-256 session key, wrapped by the KEK using AES Key Wrap (RFC
+ * 3394). The HMAC covers both the serialized message header and the plaintext body.
  *
  * Instances are thread-safe and should be reused across requests.
  *
@@ -63,8 +61,7 @@ class MessageEncryptor(private val securityKey: SecurityKey) {
 
     private val json = Json { encodeDefaults = false }
 
-    @Volatile
-    private var derivedKey: DerivedKey? = null
+    @Volatile private var derivedKey: DerivedKey? = null
 
     /**
      * Encrypt a JSON payload into a secured Nexo message using CMS structures.
@@ -91,47 +88,57 @@ class MessageEncryptor(private val securityKey: SecurityKey) {
             val wrappedSessionKey = wrapKey(sessionKeyBytes, dk.cipherKey)
 
             // Compute HMAC over header + body
-            val headerBytes = json.encodeToString(MessageHeader.serializer(), messageHeader)
-                .toByteArray(Charsets.UTF_8)
+            val headerBytes =
+                json
+                    .encodeToString(MessageHeader.serializer(), messageHeader)
+                    .toByteArray(Charsets.UTF_8)
             val hmacValue = hmac(headerBytes, plaintext, dk.hmacKey)
 
             // Build CMS structures
-            val kekId = KEKIdentifier(
-                keyIdentifier = securityKey.keyIdentifier,
-                keyVersion = securityKey.keyVersion.toString()
-            )
+            val kekId =
+                KEKIdentifier(
+                    keyIdentifier = securityKey.keyIdentifier,
+                    keyVersion = securityKey.keyVersion.toString(),
+                )
             val keyWrapAlg = AlgorithmIdentifier(algorithm = ALG_AES256_KEY_WRAP)
 
-            val envelopedData = EnvelopedData(
-                version = AuthenticatedDataVersion.V0,
-                kek = buildKek(kekId, keyWrapAlg, encode64(wrappedSessionKey)),
-                encryptedContent = EncryptedContent(
-                    contentType = EncapsulatedContentContentType.IDData,
-                    contentEncryptionAlgorithm = AlgorithmIdentifier(
-                        algorithm = ALG_AES256_CBC,
-                        parameter = Parameter(initialisationVector = encode64(actualIV))
-                    ),
-                    encryptedData = encode64(ciphertext)
-                )
-            )
-
-            val securityTrailer = ContentInformationType(
-                contentType = SecurityTrailerContentType.IDCTAuthData,
-                authenticatedData = AuthenticatedData(
+            val envelopedData =
+                EnvelopedData(
                     version = AuthenticatedDataVersion.V0,
-                    kek = buildKek(kekId, keyWrapAlg, ""),
-                    macAlgorithm = AlgorithmIdentifier(algorithm = ALG_HMAC_SHA256),
-                    encapsulatedContent = EncapsulatedContent(
-                        contentType = EncapsulatedContentContentType.IDData
-                    ),
-                    mac = encode64(hmacValue)
+                    kek = buildKek(kekId, keyWrapAlg, encode64(wrappedSessionKey)),
+                    encryptedContent =
+                        EncryptedContent(
+                            contentType = EncapsulatedContentContentType.IDData,
+                            contentEncryptionAlgorithm =
+                                AlgorithmIdentifier(
+                                    algorithm = ALG_AES256_CBC,
+                                    parameter =
+                                        Parameter(initialisationVector = encode64(actualIV)),
+                                ),
+                            encryptedData = encode64(ciphertext),
+                        ),
                 )
-            )
+
+            val securityTrailer =
+                ContentInformationType(
+                    contentType = SecurityTrailerContentType.IDCTAuthData,
+                    authenticatedData =
+                        AuthenticatedData(
+                            version = AuthenticatedDataVersion.V0,
+                            kek = buildKek(kekId, keyWrapAlg, ""),
+                            macAlgorithm = AlgorithmIdentifier(algorithm = ALG_HMAC_SHA256),
+                            encapsulatedContent =
+                                EncapsulatedContent(
+                                    contentType = EncapsulatedContentContentType.IDData
+                                ),
+                            mac = encode64(hmacValue),
+                        ),
+                )
 
             return SaleToPOISecuredMessage(
                 messageHeader = messageHeader,
                 envelopedData = envelopedData,
-                securityTrailer = securityTrailer
+                securityTrailer = securityTrailer,
             )
         } catch (e: EncryptionException) {
             throw e
@@ -143,12 +150,11 @@ class MessageEncryptor(private val securityKey: SecurityKey) {
     /**
      * Decrypt a secured Nexo message back to its JSON payload.
      *
-     * The [rawHeaderBytes] must be the exact bytes of the `MessageHeader` JSON
-     * as received on the wire (before deserialization), since the HMAC is computed
-     * over the raw header bytes concatenated with the plaintext body. Re-serializing
-     * the deserialized object could produce different byte output if the sender's
-     * JSON library uses a different field ordering, which would cause HMAC
-     * verification to fail.
+     * The [rawHeaderBytes] must be the exact bytes of the `MessageHeader` JSON as received on the
+     * wire (before deserialization), since the HMAC is computed over the raw header bytes
+     * concatenated with the plaintext body. Re-serializing the deserialized object could produce
+     * different byte output if the sender's JSON library uses a different field ordering, which
+     * would cause HMAC verification to fail.
      *
      * @param message the encrypted message
      * @param rawHeaderBytes the raw MessageHeader JSON bytes from the wire
@@ -158,18 +164,19 @@ class MessageEncryptor(private val securityKey: SecurityKey) {
     fun decrypt(message: SaleToPOISecuredMessage, rawHeaderBytes: ByteArray): String {
         try {
             val dk = getDerivedKey()
-            val envelopedData = message.envelopedData
-                ?: throw EncryptionException("Message has no EnvelopedData")
+            val envelopedData =
+                message.envelopedData ?: throw EncryptionException("Message has no EnvelopedData")
 
             // Unwrap session key
             val wrappedSessionKey = decode64(envelopedData.kek.encryptedKey)
             val sessionKeyBytes = unwrapKey(wrappedSessionKey, dk.cipherKey)
 
             // Extract IV and ciphertext
-            val iv = decode64(
-                envelopedData.encryptedContent
-                    .contentEncryptionAlgorithm.parameter!!.initialisationVector!!
-            )
+            val iv =
+                decode64(
+                    envelopedData.encryptedContent.contentEncryptionAlgorithm.parameter!!
+                        .initialisationVector!!
+                )
             val ciphertext = decode64(envelopedData.encryptedContent.encryptedData)
 
             // Decrypt
@@ -177,8 +184,9 @@ class MessageEncryptor(private val securityKey: SecurityKey) {
 
             // Verify HMAC over raw header bytes + decrypted body
             val computedHmac = hmac(rawHeaderBytes, plaintext, dk.hmacKey)
-            val securityTrailer = message.securityTrailer
-                ?: throw EncryptionException("Message has no SecurityTrailer")
+            val securityTrailer =
+                message.securityTrailer
+                    ?: throw EncryptionException("Message has no SecurityTrailer")
             val receivedHmac = decode64(securityTrailer.authenticatedData!!.mac)
 
             if (!MessageDigest.isEqual(computedHmac, receivedHmac)) {
@@ -200,13 +208,14 @@ class MessageEncryptor(private val securityKey: SecurityKey) {
     private fun buildKek(
         kekId: KEKIdentifier,
         keyWrapAlg: AlgorithmIdentifier,
-        encryptedKey: String
-    ) = Kek(
-        version = KEKVersion.V4,
-        kekIdentifier = kekId,
-        keyEncryptionAlgorithm = keyWrapAlg,
-        encryptedKey = encryptedKey
-    )
+        encryptedKey: String,
+    ) =
+        Kek(
+            version = KEKVersion.V4,
+            kekIdentifier = kekId,
+            keyEncryptionAlgorithm = keyWrapAlg,
+            encryptedKey = encryptedKey,
+        )
 
     // -----------------------------------------------------------------------
     // Crypto primitives
@@ -245,9 +254,13 @@ class MessageEncryptor(private val securityKey: SecurityKey) {
     }
 
     private fun getDerivedKey(): DerivedKey {
-        derivedKey?.let { return it }
+        derivedKey?.let {
+            return it
+        }
         synchronized(this) {
-            derivedKey?.let { return it }
+            derivedKey?.let {
+                return it
+            }
             return DerivedKey.derive(securityKey.passphrase).also { derivedKey = it }
         }
     }
@@ -263,11 +276,12 @@ class MessageEncryptor(private val securityKey: SecurityKey) {
         internal const val ALG_AES256_KEY_WRAP = "aes256-key-wrap"
         internal const val ALG_HMAC_SHA256 = "id-hmac-sha256"
 
-        private val secureRandom: SecureRandom = try {
-            SecureRandom.getInstance("NativePRNGNonBlocking")
-        } catch (_: Exception) {
-            SecureRandom()
-        }
+        private val secureRandom: SecureRandom =
+            try {
+                SecureRandom.getInstance("NativePRNGNonBlocking")
+            } catch (_: Exception) {
+                SecureRandom()
+            }
 
         private fun generateRandom(length: Int): ByteArray =
             ByteArray(length).also { secureRandom.nextBytes(it) }
@@ -278,7 +292,6 @@ class MessageEncryptor(private val securityKey: SecurityKey) {
         private fun encode64(data: ByteArray): String =
             java.util.Base64.getEncoder().encodeToString(data)
 
-        private fun decode64(data: String): ByteArray =
-            java.util.Base64.getDecoder().decode(data)
+        private fun decode64(data: String): ByteArray = java.util.Base64.getDecoder().decode(data)
     }
 }

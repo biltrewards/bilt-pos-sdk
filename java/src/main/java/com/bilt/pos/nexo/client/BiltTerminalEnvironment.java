@@ -12,34 +12,32 @@ package com.bilt.pos.nexo.client;
 /**
  * A Bilt POS terminal deployment environment.
  *
- * <p>Production and staging terminals are issued certificates from
- * <strong>fully separate CA hierarchies</strong> and use distinct synthetic
- * hostname domains, so a certificate from one environment can never be trusted
- * in the other. Selecting an environment here pins
- * {@link BiltNexoTerminalClient.Builder#expectedHostnamePattern(String) the
- * expected hostname pattern} to that environment's domain; the caller still
- * supplies the matching CA trust anchor via
- * {@link BiltNexoTerminalClient.Builder#trustCertificate(java.nio.file.Path)}.</p>
+ * <p>Production and staging terminals are issued certificates from <strong>fully separate CA
+ * hierarchies</strong> and use distinct synthetic hostname domains, so a certificate from one
+ * environment can never be trusted in the other. Selecting an environment here pins {@link
+ * BiltNexoTerminalClient.Builder#expectedHostnamePattern(String) the expected hostname pattern} to
+ * that environment's domain; the caller still supplies the matching CA trust anchor via {@link
+ * BiltNexoTerminalClient.Builder#trustCertificate(java.nio.file.Path)}.
  */
 public enum BiltTerminalEnvironment {
 
-    /** Production terminals: {@code {Model}-{Serial}.live.pos.bilt.com}. */
-    PRODUCTION("*.live.pos.bilt.com"),
+  /** Production terminals: {@code {Model}-{Serial}.live.pos.bilt.com}. */
+  PRODUCTION("*.live.pos.bilt.com"),
 
-    /** Staging terminals: {@code {Model}-{Serial}.pos.staging.bilt.dev}. */
-    STAGING("*.pos.staging.bilt.dev");
+  /** Staging terminals: {@code {Model}-{Serial}.pos.staging.bilt.dev}. */
+  STAGING("*.pos.staging.bilt.dev");
 
-    private final String hostnamePattern;
+  private final String hostnamePattern;
 
-    BiltTerminalEnvironment(String hostnamePattern) {
-        this.hostnamePattern = hostnamePattern;
-    }
+  BiltTerminalEnvironment(String hostnamePattern) {
+    this.hostnamePattern = hostnamePattern;
+  }
 
-    /**
-     * The expected certificate hostname pattern for this environment, e.g.
-     * {@code "*.live.pos.bilt.com"}.
-     */
-    public String hostnamePattern() {
-        return hostnamePattern;
-    }
+  /**
+   * The expected certificate hostname pattern for this environment, e.g. {@code
+   * "*.live.pos.bilt.com"}.
+   */
+  public String hostnamePattern() {
+    return hostnamePattern;
+  }
 }

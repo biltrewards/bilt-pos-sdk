@@ -7,32 +7,33 @@ import org.gradle.kotlin.dsl.dependencies
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 
 class KotlinLibraryConventionPlugin : Plugin<Project> {
-    override fun apply(target: Project) = with(target) {
-        pluginManager.apply("org.jetbrains.kotlin.jvm")
-        pluginManager.apply("java-library")
+    override fun apply(target: Project) =
+        with(target) {
+            pluginManager.apply("org.jetbrains.kotlin.jvm")
+            pluginManager.apply("java-library")
 
-        extensions.configure<JavaPluginExtension> {
-            sourceCompatibility = JavaVersion.VERSION_11
-            targetCompatibility = JavaVersion.VERSION_11
-        }
-
-        extensions.configure<KotlinJvmProjectExtension> {
-            compilerOptions {
-                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+            extensions.configure<JavaPluginExtension> {
+                sourceCompatibility = JavaVersion.VERSION_11
+                targetCompatibility = JavaVersion.VERSION_11
             }
+
+            extensions.configure<KotlinJvmProjectExtension> {
+                compilerOptions {
+                    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+                }
+            }
+
+            val libs = versionCatalogs.named("libs")
+
+            dependencies {
+                add("testImplementation", libs.findLibrary("junit-jupiter").get())
+                add("testRuntimeOnly", libs.findLibrary("junit-platform-launcher").get())
+                add("testImplementation", libs.findLibrary("mockk").get())
+                add("testImplementation", libs.findLibrary("kotest-assertions-core").get())
+            }
+
+            configureTests()
         }
-
-        val libs = versionCatalogs.named("libs")
-
-        dependencies {
-            add("testImplementation", libs.findLibrary("junit-jupiter").get())
-            add("testRuntimeOnly", libs.findLibrary("junit-platform-launcher").get())
-            add("testImplementation", libs.findLibrary("mockk").get())
-            add("testImplementation", libs.findLibrary("kotest-assertions-core").get())
-        }
-
-        configureTests()
-    }
 }
 
 private val Project.versionCatalogs

@@ -14,20 +14,20 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import java.io.File
 
 /**
- * Retains the controller across configuration changes — a rotation must not
- * drop an active terminal session, basket, or diagnostics loop.
- * AndroidViewModel because the sale store persists into [Application.getFilesDir].
+ * Retains the controller across configuration changes — a rotation must not drop an active terminal
+ * session, basket, or diagnostics loop. AndroidViewModel because the sale store persists into
+ * [Application.getFilesDir].
  */
 class EmulatorViewModel(application: Application) : AndroidViewModel(application) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val controller = NexoEmulatorController(
-        scope = scope,
-        saleStore = JsonlSaleStore.inDirectory(application.filesDir),
-        callbackExecutor = ContextCompat.getMainExecutor(application),
-    )
+    val controller =
+        NexoEmulatorController(
+            scope = scope,
+            saleStore = JsonlSaleStore.inDirectory(application.filesDir),
+            callbackExecutor = ContextCompat.getMainExecutor(application),
+        )
 
     override fun onCleared() {
         // Teardown, not a user action: disconnect()'s mid-payment refusal
@@ -35,9 +35,7 @@ class EmulatorViewModel(application: Application) : AndroidViewModel(application
         // bracket behind any in-flight payment — off the main thread, since
         // it blocks for the client's timeouts; best-effort, bounded by
         // process death like the desktop exit path.
-        Thread(controller::shutdown, "emulator-shutdown")
-            .apply { isDaemon = true }
-            .start()
+        Thread(controller::shutdown, "emulator-shutdown").apply { isDaemon = true }.start()
         scope.cancel()
     }
 }

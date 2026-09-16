@@ -55,8 +55,8 @@ import com.bilt.pos.session.internal.IdentityManager;
 import com.bilt.pos.session.internal.InputManager;
 import com.bilt.pos.session.internal.NexoExchange;
 import com.bilt.pos.session.internal.NexoMessageFactory;
-import com.bilt.pos.session.internal.PoiRef;
 import com.bilt.pos.session.internal.PaymentOrchestrator;
+import com.bilt.pos.session.internal.PoiRef;
 import com.bilt.pos.session.internal.ReversalManager;
 import com.bilt.pos.session.internal.ReversalMovement;
 import com.bilt.pos.session.internal.SaleItemMapper;
@@ -67,19 +67,17 @@ import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.RefundAllocationType;
-import com.bilt.pos.session.settlement.SettlementType;
-import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
+import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
+import com.bilt.pos.session.settlement.SettlementType;
 import com.bilt.pos.session.settlement.StoredValueLoad;
 import com.bilt.pos.session.storedvalue.StoredValueBalance;
 import com.bilt.pos.session.storedvalue.StoredValueCard;
 import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
-
 import jakarta.xml.bind.JAXBException;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -100,32 +98,28 @@ import java.util.logging.Logger;
 /**
  * A loyalty-enabled terminal session on top of {@link BiltNexoTerminalClient}.
  *
- * <p>The session owns the basket, drives the terminal (or an external
- * customer display), and orchestrates settlement — return allocations,
- * rebate redemption, point redemption, stored value/card charge, and reward
- * award — as a single flow. Every operation maps to standard Nexo Sale to POI 3.0
- * messages; the raw client remains available via {@link #getClient()}, and
- * the session-less device and admin operations (diagnostics, totals,
- * printing, sound) via {@link #terminal()}.</p>
+ * <p>The session owns the basket, drives the terminal (or an external customer display), and
+ * orchestrates settlement — return allocations, rebate redemption, point redemption, stored
+ * value/card charge, and reward award — as a single flow. Every operation maps to standard Nexo
+ * Sale to POI 3.0 messages; the raw client remains available via {@link #getClient()}, and the
+ * session-less device and admin operations (diagnostics, totals, printing, sound) via {@link
+ * #terminal()}.
  *
- * <p>Terminal operations are lazy: methods returning {@link SessionResult}
- * (or {@link SettlementFlow}) send nothing until {@code execute()} (asynchronous,
- * outcome through the registered handlers), {@code executeSync()},
- * {@code get()}, or {@code getOrNull()} (blocking) is invoked. Basket
- * mutations are pure local compute — the automatic display refresh they
- * trigger is asynchronous and conflated.</p>
+ * <p>Terminal operations are lazy: methods returning {@link SessionResult} (or {@link
+ * SettlementFlow}) send nothing until {@code execute()} (asynchronous, outcome through the
+ * registered handlers), {@code executeSync()}, {@code get()}, or {@code getOrNull()} (blocking) is
+ * invoked. Basket mutations are pure local compute — the automatic display refresh they trigger is
+ * asynchronous and conflated.
  *
- * <p>A session is bracketed on the terminal: the builder's
- * {@link Builder#start() start()} announces it (Nexo {@code Admin} session
- * start signal) and only hands out the session once the terminal
- * acknowledged, and {@link #end()} tells the terminal to discard the
- * session-scoped data it accumulated. An ended session cannot be used or
- * restarted. The register may run multiple sequential settlements and other
- * operations before ending the bracket; {@link SessionBasket#clear()} starts
- * a fresh basket after a successful settlement. {@link #forceEnd(String)} is
- * the explicit escape hatch when financial recovery cannot be completed.
- * Sessions are {@link AutoCloseable}, so try-with-resources sends the normal,
- * guarded end signal even on exception paths.</p>
+ * <p>A session is bracketed on the terminal: the builder's {@link Builder#start() start()}
+ * announces it (Nexo {@code Admin} session start signal) and only hands out the session once the
+ * terminal acknowledged, and {@link #end()} tells the terminal to discard the session-scoped data
+ * it accumulated. An ended session cannot be used or restarted. The register may run multiple
+ * sequential settlements and other operations before ending the bracket; {@link
+ * SessionBasket#clear()} starts a fresh basket after a successful settlement. {@link
+ * #forceEnd(String)} is the explicit escape hatch when financial recovery cannot be completed.
+ * Sessions are {@link AutoCloseable}, so try-with-resources sends the normal, guarded end signal
+ * even on exception paths.
  *
  * <pre>{@code
  * try (CheckoutSession session = CheckoutSession.builder()
@@ -139,1615 +133,1687 @@ import java.util.logging.Logger;
  * }
  * }</pre>
  *
- * <p>Sessions are intended for use from a single register thread.
- * {@link #abort()} and {@link #updateInputDisplay(DisplayPayload)} are the
- * only methods that are safe to call from another thread.</p>
+ * <p>Sessions are intended for use from a single register thread. {@link #abort()} and {@link
+ * #updateInputDisplay(DisplayPayload)} are the only methods that are safe to call from another
+ * thread.
  */
 public final class CheckoutSession implements AutoCloseable {
 
-    private static final Logger LOGGER = Logger.getLogger(CheckoutSession.class.getName());
-    private static final OriginalSaleRecord NO_SETTLEMENT =
-            OriginalSaleRecord.builder().build();
+  private static final Logger LOGGER = Logger.getLogger(CheckoutSession.class.getName());
+  private static final OriginalSaleRecord NO_SETTLEMENT = OriginalSaleRecord.builder().build();
 
-    /** Mutually exclusive runtime activity; recovery and basket state live separately. */
-    private enum SessionPhase {
-        OPEN,
-        SETTLING,
-        VOIDING,
-        ENDING,
-        ENDED
-    }
+  /** Mutually exclusive runtime activity; recovery and basket state live separately. */
+  private enum SessionPhase {
+    OPEN,
+    SETTLING,
+    VOIDING,
+    ENDING,
+    ENDED
+  }
 
-    private final String sessionId = UUID.randomUUID().toString();
-    private final ReentrantLock lock = new ReentrantLock();
-    private final SessionOperations operations;
+  private final String sessionId = UUID.randomUUID().toString();
+  private final ReentrantLock lock = new ReentrantLock();
+  private final SessionOperations operations;
 
-    private final BiltNexoTerminalClient client;
-    private final NexoMessageFactory factory;
-    private final NexoExchange exchange;
-    private final DisplayRouter router;
-    private BasketEngine basketEngine = new BasketEngine();
-    private final SessionBasket basket;
-    private final BasketDisplay display;
-    private final AutoDisplayPush autoDisplayPush;
-    private final DisplayRenderer displayRenderer;
-    private final Consumer<Basket> onBasketUpdated;
-    private final String currency;
-    private final String storeLocation;
-    private final boolean autoDisplay;
+  private final BiltNexoTerminalClient client;
+  private final NexoMessageFactory factory;
+  private final NexoExchange exchange;
+  private final DisplayRouter router;
+  private BasketEngine basketEngine = new BasketEngine();
+  private final SessionBasket basket;
+  private final BasketDisplay display;
+  private final AutoDisplayPush autoDisplayPush;
+  private final DisplayRenderer displayRenderer;
+  private final Consumer<Basket> onBasketUpdated;
+  private final String currency;
+  private final String storeLocation;
+  private final boolean autoDisplay;
 
-    private final IdentityManager identityManager;
-    private final InputManager inputManager;
-    private final ReversalManager reversalManager;
-    private final PaymentOrchestrator paymentOrchestrator;
-    private final StoredValueManager storedValueManager;
+  private final IdentityManager identityManager;
+  private final InputManager inputManager;
+  private final ReversalManager reversalManager;
+  private final PaymentOrchestrator paymentOrchestrator;
+  private final StoredValueManager storedValueManager;
 
-    private volatile boolean abortRequested;
-    private volatile SessionPhase phase = SessionPhase.OPEN;
-    private volatile boolean basketConsumed;
-    private volatile IdentifyResult member;
-    private volatile StoredValueCard storedValueCard;
-    // Compact reversal/refund metadata for the latest settlement. Keeping
-    // the public result itself would retain its basket, receipts, and ledger.
-    private volatile OriginalSaleRecord lastSettlementRecord = NO_SETTLEMENT;
-    private volatile boolean lastSettlementIncludesRefunds;
-    // Raised only when a same-session void reverses at least one movement
-    // before failing. Replacing or ending the session would discard the
-    // in-memory progress that makes the next void retry idempotent.
-    private volatile boolean lastPaymentVoidIncomplete;
-    // Refund/void mutual exclusion and void-resume progress for the most
-    // recent successful settlement (see ReversalGuards). A later settlement
-    // replaces this target and resets the guard.
-    private final ReversalGuards guards = new ReversalGuards("payment");
-    // A failed settlement may leave movements standing when its rollback
-    // itself fails. The concrete recovery state is retained directly rather
-    // than encoded in a broad session lifecycle state.
-    private volatile List<PaymentOrchestrator.StandingMovement> standingMovements = List.of();
-    // set while a drain has claimed the list and is reversing on the wire:
-    // an empty standingMovements alone is ambiguous between "nothing
-    // standing" and "claimed by an in-flight drain", and sealing the session
-    // on the latter would strand the movements if the drain then fails
-    private volatile boolean drainInFlight;
-    // Refund allocations are real outward movements; once one commits in a
-    // settlement that later fails, a retry must not send it again. The retry
-    // may continue only with the same allocation prefix.
-    private volatile List<RefundAllocation> committedRefundAllocations = List.of();
-    private volatile List<SettlementMovement> committedRefundMovements = List.of();
-    // Prior-sale voids do not use this session's latest settlement record or
-    // guards, but they still need resume state when one movement reversed and
-    // a later one failed. The target record prevents applying that progress
-    // to a different prior sale.
-    private volatile OriginalSaleRecord priorSaleVoidTarget;
-    private volatile Set<ReversalMovement.Key> priorSaleVoidReversedMovements =
-            ConcurrentHashMap.newKeySet();
+  private volatile boolean abortRequested;
+  private volatile SessionPhase phase = SessionPhase.OPEN;
+  private volatile boolean basketConsumed;
+  private volatile IdentifyResult member;
+  private volatile StoredValueCard storedValueCard;
+  // Compact reversal/refund metadata for the latest settlement. Keeping
+  // the public result itself would retain its basket, receipts, and ledger.
+  private volatile OriginalSaleRecord lastSettlementRecord = NO_SETTLEMENT;
+  private volatile boolean lastSettlementIncludesRefunds;
+  // Raised only when a same-session void reverses at least one movement
+  // before failing. Replacing or ending the session would discard the
+  // in-memory progress that makes the next void retry idempotent.
+  private volatile boolean lastPaymentVoidIncomplete;
+  // Refund/void mutual exclusion and void-resume progress for the most
+  // recent successful settlement (see ReversalGuards). A later settlement
+  // replaces this target and resets the guard.
+  private final ReversalGuards guards = new ReversalGuards("payment");
+  // A failed settlement may leave movements standing when its rollback
+  // itself fails. The concrete recovery state is retained directly rather
+  // than encoded in a broad session lifecycle state.
+  private volatile List<PaymentOrchestrator.StandingMovement> standingMovements = List.of();
+  // set while a drain has claimed the list and is reversing on the wire:
+  // an empty standingMovements alone is ambiguous between "nothing
+  // standing" and "claimed by an in-flight drain", and sealing the session
+  // on the latter would strand the movements if the drain then fails
+  private volatile boolean drainInFlight;
+  // Refund allocations are real outward movements; once one commits in a
+  // settlement that later fails, a retry must not send it again. The retry
+  // may continue only with the same allocation prefix.
+  private volatile List<RefundAllocation> committedRefundAllocations = List.of();
+  private volatile List<SettlementMovement> committedRefundMovements = List.of();
+  // Prior-sale voids do not use this session's latest settlement record or
+  // guards, but they still need resume state when one movement reversed and
+  // a later one failed. The target record prevents applying that progress
+  // to a different prior sale.
+  private volatile OriginalSaleRecord priorSaleVoidTarget;
+  private volatile Set<ReversalMovement.Key> priorSaleVoidReversedMovements =
+      ConcurrentHashMap.newKeySet();
 
-    // the session's Terminal facade, created lazily by terminal(); it has
-    // its own executor and exchange, so the session's lifecycle never
-    // constrains it (and vice versa)
-    private volatile Terminal terminal;
+  // the session's Terminal facade, created lazily by terminal(); it has
+  // its own executor and exchange, so the session's lifecycle never
+  // constrains it (and vice versa)
+  private volatile Terminal terminal;
 
-    private CheckoutSession(Builder builder) {
-        this.operations = new SessionOperations(builder.callbackExecutor,
-                builder.onBackgroundError);
-        this.client = builder.client;
-        this.currency = builder.currency;
-        this.storeLocation = builder.storeLocation;
-        this.autoDisplay = builder.autoDisplay;
-        this.displayRenderer = builder.displayRenderer != null
-                ? builder.displayRenderer : new BasketDisplayRenderer();
-        this.onBasketUpdated = builder.onBasketUpdated;
-        this.factory = new NexoMessageFactory(builder.saleId, builder.poiId,
-                builder.storeLocation);
-        this.router = new DisplayRouter(builder.client, builder.externalDisplayClient);
-        this.exchange = new NexoExchange(router, factory);
-        this.identityManager = new IdentityManager(exchange);
-        this.inputManager = new InputManager(exchange);
-        this.storedValueManager = new StoredValueManager(exchange, builder.currency);
-        this.reversalManager = new ReversalManager(
-                exchange, builder.currency, storedValueManager);
-        this.paymentOrchestrator = new PaymentOrchestrator(
-                exchange, builder.currency, storedValueManager);
-        this.display = new BasketDisplay(exchange, displayRenderer, builder.currency);
-        this.autoDisplayPush = new AutoDisplayPush(operations, display,
-                this::basketDisplayIsCurrent);
-        this.basket = new SessionBasket(new SessionBasket.Host() {
-            @Override
-            public Basket mutate(Consumer<BasketMutation> mutation) {
+  private CheckoutSession(Builder builder) {
+    this.operations = new SessionOperations(builder.callbackExecutor, builder.onBackgroundError);
+    this.client = builder.client;
+    this.currency = builder.currency;
+    this.storeLocation = builder.storeLocation;
+    this.autoDisplay = builder.autoDisplay;
+    this.displayRenderer =
+        builder.displayRenderer != null ? builder.displayRenderer : new BasketDisplayRenderer();
+    this.onBasketUpdated = builder.onBasketUpdated;
+    this.factory = new NexoMessageFactory(builder.saleId, builder.poiId, builder.storeLocation);
+    this.router = new DisplayRouter(builder.client, builder.externalDisplayClient);
+    this.exchange = new NexoExchange(router, factory);
+    this.identityManager = new IdentityManager(exchange);
+    this.inputManager = new InputManager(exchange);
+    this.storedValueManager = new StoredValueManager(exchange, builder.currency);
+    this.reversalManager = new ReversalManager(exchange, builder.currency, storedValueManager);
+    this.paymentOrchestrator =
+        new PaymentOrchestrator(exchange, builder.currency, storedValueManager);
+    this.display = new BasketDisplay(exchange, displayRenderer, builder.currency);
+    this.autoDisplayPush = new AutoDisplayPush(operations, display, this::basketDisplayIsCurrent);
+    this.basket =
+        new SessionBasket(
+            new SessionBasket.Host() {
+              @Override
+              public Basket mutate(Consumer<BasketMutation> mutation) {
                 return mutateBasket(mutation);
-            }
+              }
 
-            @Override
-            public Basket snapshot() {
+              @Override
+              public Basket snapshot() {
                 lock.lock();
                 try {
-                    return basketEngine.snapshot();
+                  return basketEngine.snapshot();
                 } finally {
-                    lock.unlock();
+                  lock.unlock();
                 }
-            }
+              }
 
-            @Override
-            public Basket clear() {
+              @Override
+              public Basket clear() {
                 return clearBasket();
-            }
+              }
+            });
+  }
+
+  public static Builder builder() {
+    return new Builder();
+  }
+
+  /** Unique identifier of this session instance. */
+  public String getSessionId() {
+    return sessionId;
+  }
+
+  /** ISO 4217 currency code used by this session. */
+  public String getCurrency() {
+    return currency;
+  }
+
+  /** Store location identifier, or {@code null} if not configured. */
+  public String getStoreLocation() {
+    return storeLocation;
+  }
+
+  // ─── Basket ───
+
+  /**
+   * The session's basket: item and tax mutations, batch edits, and snapshots. Mutations are
+   * rejected while a settlement or void is in flight, after the current basket has settled, or
+   * after the session has ended. Call {@link SessionBasket#clear()} after a successful settlement
+   * to begin another basket in the same session. Each mutation returns the updated snapshot without
+   * touching the wire; with {@link Builder#autoDisplay(boolean) autoDisplay} enabled it also
+   * enqueues an asynchronous, conflated customer-display refresh (a failed refresh reports through
+   * {@link Builder#onBackgroundError(Consumer) onBackgroundError}).
+   */
+  public SessionBasket basket() {
+    return basket;
+  }
+
+  private Basket mutateBasket(Consumer<BasketMutation> mutation) {
+    Basket snapshot;
+    lock.lock();
+    try {
+      if (closingOrEnded()) {
+        throw new IllegalStateException("the basket cannot be modified after end()");
+      }
+      if (moneyMovementInFlight()) {
+        throw new IllegalStateException(
+            "the basket cannot be modified while money movement is in flight");
+      }
+      if (basketConsumed) {
+        throw new IllegalStateException(
+            "the basket has already settled; call clear() " + "before starting another basket");
+      }
+      if (hasCommittedRefundAllocations()) {
+        throw new IllegalStateException(
+            "the basket cannot be modified after "
+                + "refund allocations have committed; retry settle() with the "
+                + "same refund allocations");
+      }
+      // Atomic: a mutation (or batch) that throws restores the basket.
+      basketEngine.mutateAtomically(mutation);
+      snapshot = basketEngine.snapshot();
+      if (autoDisplay) {
+        // under the lock so concurrent mutations cannot enter the
+        // conflated push out of snapshot order
+        autoDisplayPush.push(snapshot);
+      }
+    } finally {
+      lock.unlock();
+    }
+    return snapshot;
+  }
+
+  private Basket clearBasket() {
+    lock.lock();
+    try {
+      if (closingOrEnded()) {
+        throw new IllegalStateException("the basket cannot be cleared after end()");
+      }
+      if (moneyMovementInFlight()) {
+        throw new IllegalStateException(
+            "the basket cannot be cleared while money movement is in flight");
+      }
+      if (rollbackIncomplete()) {
+        throw new IllegalStateException(
+            "the basket cannot be cleared while a failed "
+                + "settlement rollback is incomplete; finish the unwind first");
+      }
+      if (lastPaymentVoidIncomplete) {
+        throw new IllegalStateException(
+            "the basket cannot be cleared while a void "
+                + "of the most recent payment is partially complete; retry "
+                + "voidTransaction() first");
+      }
+      if (hasCommittedRefundAllocations()) {
+        throw new IllegalStateException(
+            "the basket cannot be cleared after refund "
+                + "allocations have committed; retry settle() with the same allocations");
+      }
+      basketEngine = new BasketEngine();
+      basketConsumed = false;
+      storedValueCard = null;
+      Basket snapshot = basketEngine.snapshot();
+      if (autoDisplay) {
+        autoDisplayPush.push(snapshot);
+      }
+      return snapshot;
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private boolean basketDisplayIsCurrent() {
+    return phase == SessionPhase.OPEN && !basketConsumed;
+  }
+
+  // ─── Member Identification ───
+
+  /**
+   * The identified member, or {@code null} for a guest checkout. The terminal-side identification
+   * never forces the customer — if they opted out, this stays {@code null}.
+   */
+  public IdentifyResult getMember() {
+    IdentifyResult current = member;
+    return current != null && current.getStatus() == IdentifyStatus.FOUND ? current : null;
+  }
+
+  /** Prompts the customer on the terminal to identify themselves. */
+  public SessionResult<IdentifyResult> identifyMember() {
+    return identifyMember(IdentifyOptions.defaults());
+  }
+
+  /**
+   * Prompts the customer on the terminal to identify themselves (Nexo {@code CardAcquisition} with
+   * loyalty handling).
+   *
+   * <p>Lookup outcomes that simply leave the checkout without a member — not found, suspended,
+   * customer cancelled — are delivered to {@code onSuccess} with the corresponding {@link
+   * IdentifyStatus}; {@code onError} fires only for real failures.
+   *
+   * <p>Identification remains available after a failed settlement, so a declined guest checkout can
+   * attach a member and retry with loyalty enabled.
+   */
+  public SessionResult<IdentifyResult> identifyMember(IdentifyOptions options) {
+    Objects.requireNonNull(options, "options");
+    return operation(
+        "identifyMember",
+        () ->
+            completeIdentify(
+                identifyStateChecked(() -> identityManager.identifyPrompted(options))));
+  }
+
+  /** POS-driven member lookup by an identifier on file; no terminal prompt. */
+  public SessionResult<IdentifyResult> identifyMember(MemberIdentifier identifier) {
+    Objects.requireNonNull(identifier, "identifier");
+    return operation(
+        "identifyMember",
+        () ->
+            completeIdentify(
+                identifyStateChecked(() -> identityManager.identifyByIdentifier(identifier))));
+  }
+
+  private IdentifyResult identifyStateChecked(Supplier<IdentifyResult> lookup) {
+    requireOpen("identifyMember");
+    return lookup.get();
+  }
+
+  /**
+   * Applies an identification outcome to the session. The latest completed attempt wins: {@code
+   * FOUND} attaches the member; {@code NOT_FOUND} and {@code SUSPENDED} are affirmative "no usable
+   * member" outcomes and detach any previously identified member (so a re-identify cannot leave
+   * loyalty running against a stale account). {@code CANCELLED} only means the customer dismissed
+   * this prompt — a prior identification stands.
+   */
+  private IdentifyResult completeIdentify(IdentifyResult result) {
+    lock.lock();
+    try {
+      if (phase == SessionPhase.ENDED) {
+        throw discardedAfterEnd("identifyMember");
+      }
+      if (result.getStatus() == IdentifyStatus.FOUND) {
+        this.member = result;
+      } else if (result.getStatus() != IdentifyStatus.CANCELLED) {
+        this.member = null;
+      }
+    } finally {
+      lock.unlock();
+    }
+    return result;
+  }
+
+  // ─── Card acquisition ───
+
+  /** Reads card data from the terminal without initiating a payment. */
+  public SessionResult<CardAcquisitionResult> acquireCard() {
+    return acquireCard(CardAcquisitionOptions.defaults());
+  }
+
+  /** Reads card data from the terminal without initiating a payment. */
+  public SessionResult<CardAcquisitionResult> acquireCard(CardAcquisitionOptions options) {
+    Objects.requireNonNull(options, "options");
+    return operation(
+        "acquireCard",
+        () -> {
+          requireOpen("acquireCard");
+          CardAcquisitionResult acquired = identityManager.acquireCard(options);
+          discardIfEndedMidFlight("acquireCard");
+          return acquired;
         });
+  }
+
+  // ─── Input (nexo native) ───
+
+  /** Prompts the customer for a digit string (e.g. a ZIP code). */
+  public SessionResult<String> requestDigitString(String prompt) {
+    return requestDigitString(prompt, InputOptions.defaults());
+  }
+
+  public SessionResult<String> requestDigitString(String prompt, InputOptions options) {
+    Objects.requireNonNull(prompt, "prompt");
+    Objects.requireNonNull(options, "options");
+    return inputOperation("requestDigitString", () -> inputManager.digitString(prompt, options));
+  }
+
+  /** Prompts the customer for a decimal amount (e.g. a tip). */
+  public SessionResult<BigDecimal> requestDecimalString(String prompt) {
+    return requestDecimalString(prompt, InputOptions.defaults());
+  }
+
+  public SessionResult<BigDecimal> requestDecimalString(String prompt, InputOptions options) {
+    Objects.requireNonNull(prompt, "prompt");
+    Objects.requireNonNull(options, "options");
+    return inputOperation(
+        "requestDecimalString", () -> inputManager.decimalString(prompt, options));
+  }
+
+  /** Prompts the customer for free text (e.g. an email address). */
+  public SessionResult<String> requestTextString(String prompt) {
+    return requestTextString(prompt, InputOptions.defaults());
+  }
+
+  public SessionResult<String> requestTextString(String prompt, InputOptions options) {
+    Objects.requireNonNull(prompt, "prompt");
+    Objects.requireNonNull(options, "options");
+    return inputOperation("requestTextString", () -> inputManager.textString(prompt, options));
+  }
+
+  /** Prompts the customer for a yes/no confirmation. */
+  public SessionResult<Boolean> requestConfirmation(String prompt) {
+    return requestConfirmation(prompt, ConfirmationOptions.defaults());
+  }
+
+  public SessionResult<Boolean> requestConfirmation(String prompt, ConfirmationOptions options) {
+    Objects.requireNonNull(prompt, "prompt");
+    Objects.requireNonNull(options, "options");
+    return inputOperation("requestConfirmation", () -> inputManager.confirmation(prompt, options));
+  }
+
+  /** Prompts the customer to pick from a menu of entries. */
+  public SessionResult<MenuSelection> requestMenuEntry(String prompt, List<String> entries) {
+    return requestMenuEntry(prompt, entries, MenuOptions.defaults());
+  }
+
+  public SessionResult<MenuSelection> requestMenuEntry(
+      String prompt, List<String> entries, MenuOptions options) {
+    Objects.requireNonNull(prompt, "prompt");
+    Objects.requireNonNull(options, "options");
+    if (entries == null || entries.isEmpty()) {
+      throw new IllegalArgumentException("entries must not be empty");
     }
+    List<String> entriesCopy = List.copyOf(entries);
+    return inputOperation(
+        "requestMenuEntry", () -> inputManager.menuEntry(prompt, entriesCopy, options));
+  }
 
-    public static Builder builder() {
-        return new Builder();
-    }
+  // ─── Input (XSD-based) ───
 
-    /** Unique identifier of this session instance. */
-    public String getSessionId() {
-        return sessionId;
-    }
+  /** Captures a handwritten signature on the terminal. */
+  public SessionResult<Signature> requestSignature(String prompt) {
+    Objects.requireNonNull(prompt, "prompt");
+    return inputOperation("requestSignature", () -> inputManager.signature(prompt));
+  }
 
-    /** ISO 4217 currency code used by this session. */
-    public String getCurrency() {
-        return currency;
-    }
+  /** Asks the customer to confirm an amount. */
+  public SessionResult<Boolean> requestAmountConfirmation(BigDecimal amount, String prompt) {
+    Objects.requireNonNull(amount, "amount");
+    Objects.requireNonNull(prompt, "prompt");
+    return inputOperation(
+        "requestAmountConfirmation",
+        () -> inputManager.amountConfirmation(amount, prompt, currency));
+  }
 
-    /** Store location identifier, or {@code null} if not configured. */
-    public String getStoreLocation() {
-        return storeLocation;
-    }
+  // ─── PIN ───
 
-    // ─── Basket ───
+  /** Captures and encrypts a PIN on the secure PIN pad. */
+  public SessionResult<PinResult> requestPinEntry(PinOptions options) {
+    Objects.requireNonNull(options, "options");
+    return inputOperation("requestPinEntry", () -> inputManager.pin(PinMode.PIN_ENTER, options));
+  }
 
-    /**
-     * The session's basket: item and tax mutations, batch edits, and
-     * snapshots. Mutations are rejected while a settlement or void is in
-     * flight, after the current basket has settled, or after the session has
-     * ended. Call {@link SessionBasket#clear()} after a successful settlement
-     * to begin another basket in the same session. Each mutation
-     * returns the updated snapshot without touching the wire; with
-     * {@link Builder#autoDisplay(boolean) autoDisplay} enabled it also
-     * enqueues an asynchronous, conflated customer-display refresh (a
-     * failed refresh reports through
-     * {@link Builder#onBackgroundError(Consumer) onBackgroundError}).
-     */
-    public SessionBasket basket() {
-        return basket;
-    }
+  /** Captures a PIN and verifies it, returning the encrypted block. */
+  public SessionResult<PinResult> requestPinVerify(PinOptions options) {
+    Objects.requireNonNull(options, "options");
+    return inputOperation("requestPinVerify", () -> inputManager.pin(PinMode.PIN_VERIFY, options));
+  }
 
-    private Basket mutateBasket(Consumer<BasketMutation> mutation) {
-        Basket snapshot;
-        lock.lock();
-        try {
-            if (closingOrEnded()) {
-                throw new IllegalStateException("the basket cannot be modified after end()");
-            }
-            if (moneyMovementInFlight()) {
-                throw new IllegalStateException(
-                        "the basket cannot be modified while money movement is in flight");
-            }
-            if (basketConsumed) {
-                throw new IllegalStateException("the basket has already settled; call clear() "
-                        + "before starting another basket");
-            }
-            if (hasCommittedRefundAllocations()) {
-                throw new IllegalStateException("the basket cannot be modified after "
-                        + "refund allocations have committed; retry settle() with the "
-                        + "same refund allocations");
-            }
-            // Atomic: a mutation (or batch) that throws restores the basket.
-            basketEngine.mutateAtomically(mutation);
-            snapshot = basketEngine.snapshot();
-            if (autoDisplay) {
-                // under the lock so concurrent mutations cannot enter the
-                // conflated push out of snapshot order
-                autoDisplayPush.push(snapshot);
-            }
-        } finally {
-            lock.unlock();
-        }
-        return snapshot;
-    }
+  /** Verifies a PIN without returning the block. */
+  public SessionResult<PinResult> requestPinVerifyOnly(PinOptions options) {
+    Objects.requireNonNull(options, "options");
+    return inputOperation(
+        "requestPinVerifyOnly", () -> inputManager.pin(PinMode.PIN_VERIFY_ONLY, options));
+  }
 
-    private Basket clearBasket() {
-        lock.lock();
-        try {
-            if (closingOrEnded()) {
-                throw new IllegalStateException("the basket cannot be cleared after end()");
-            }
-            if (moneyMovementInFlight()) {
-                throw new IllegalStateException(
-                        "the basket cannot be cleared while money movement is in flight");
-            }
-            if (rollbackIncomplete()) {
-                throw new IllegalStateException("the basket cannot be cleared while a failed "
-                        + "settlement rollback is incomplete; finish the unwind first");
-            }
-            if (lastPaymentVoidIncomplete) {
-                throw new IllegalStateException("the basket cannot be cleared while a void "
-                        + "of the most recent payment is partially complete; retry "
-                        + "voidTransaction() first");
-            }
-            if (hasCommittedRefundAllocations()) {
-                throw new IllegalStateException("the basket cannot be cleared after refund "
-                        + "allocations have committed; retry settle() with the same allocations");
-            }
-            basketEngine = new BasketEngine();
-            basketConsumed = false;
-            storedValueCard = null;
-            Basket snapshot = basketEngine.snapshot();
-            if (autoDisplay) {
-                autoDisplayPush.push(snapshot);
-            }
-            return snapshot;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private boolean basketDisplayIsCurrent() {
-        return phase == SessionPhase.OPEN && !basketConsumed;
-    }
-
-    // ─── Member Identification ───
-
-    /**
-     * The identified member, or {@code null} for a guest checkout. The
-     * terminal-side identification never forces the customer — if they opted
-     * out, this stays {@code null}.
-     */
-    public IdentifyResult getMember() {
-        IdentifyResult current = member;
-        return current != null && current.getStatus() == IdentifyStatus.FOUND ? current : null;
-    }
-
-    /** Prompts the customer on the terminal to identify themselves. */
-    public SessionResult<IdentifyResult> identifyMember() {
-        return identifyMember(IdentifyOptions.defaults());
-    }
-
-    /**
-     * Prompts the customer on the terminal to identify themselves
-     * (Nexo {@code CardAcquisition} with loyalty handling).
-     *
-     * <p>Lookup outcomes that simply leave the checkout without a member —
-     * not found, suspended, customer cancelled — are delivered to
-     * {@code onSuccess} with the corresponding {@link IdentifyStatus};
-     * {@code onError} fires only for real failures.</p>
-     *
-     * <p>Identification remains available after a failed settlement, so a
-     * declined guest checkout can attach a member and retry with loyalty
-     * enabled.</p>
-     */
-    public SessionResult<IdentifyResult> identifyMember(IdentifyOptions options) {
-        Objects.requireNonNull(options, "options");
-        return operation("identifyMember",
-                () -> completeIdentify(identifyStateChecked(
-                        () -> identityManager.identifyPrompted(options))));
-    }
-
-    /** POS-driven member lookup by an identifier on file; no terminal prompt. */
-    public SessionResult<IdentifyResult> identifyMember(MemberIdentifier identifier) {
-        Objects.requireNonNull(identifier, "identifier");
-        return operation("identifyMember",
-                () -> completeIdentify(identifyStateChecked(
-                        () -> identityManager.identifyByIdentifier(identifier))));
-    }
-
-    private IdentifyResult identifyStateChecked(Supplier<IdentifyResult> lookup) {
-        requireOpen("identifyMember");
-        return lookup.get();
-    }
-
-    /**
-     * Applies an identification outcome to the session. The latest completed
-     * attempt wins: {@code FOUND} attaches the member; {@code NOT_FOUND} and
-     * {@code SUSPENDED} are affirmative "no usable member" outcomes and
-     * detach any previously identified member (so a re-identify cannot leave
-     * loyalty running against a stale account). {@code CANCELLED} only means
-     * the customer dismissed this prompt — a prior identification stands.
-     */
-    private IdentifyResult completeIdentify(IdentifyResult result) {
-        lock.lock();
-        try {
-            if (phase == SessionPhase.ENDED) {
-                throw discardedAfterEnd("identifyMember");
-            }
-            if (result.getStatus() == IdentifyStatus.FOUND) {
-                this.member = result;
-            } else if (result.getStatus() != IdentifyStatus.CANCELLED) {
-                this.member = null;
-            }
-        } finally {
-            lock.unlock();
-        }
-        return result;
-    }
-
-    // ─── Card acquisition ───
-
-    /** Reads card data from the terminal without initiating a payment. */
-    public SessionResult<CardAcquisitionResult> acquireCard() {
-        return acquireCard(CardAcquisitionOptions.defaults());
-    }
-
-    /** Reads card data from the terminal without initiating a payment. */
-    public SessionResult<CardAcquisitionResult> acquireCard(CardAcquisitionOptions options) {
-        Objects.requireNonNull(options, "options");
-        return operation("acquireCard", () -> {
-            requireOpen("acquireCard");
-            CardAcquisitionResult acquired = identityManager.acquireCard(options);
-            discardIfEndedMidFlight("acquireCard");
-            return acquired;
+  private <T> SessionResult<T> inputOperation(String name, Supplier<T> body) {
+    return operation(
+        name,
+        () -> {
+          requireOpen(name);
+          T value = body.get();
+          discardIfEndedMidFlight(name);
+          return value;
         });
+  }
+
+  /**
+   * Post-completion guard for read-only prompts: {@code abort()} — safe from any thread — can end
+   * the session while the request is on the wire. An outcome arriving after that is discarded
+   * rather than delivered: the register aborted, so stale customer input, PIN, or card data must
+   * not reach {@code onSuccess}.
+   */
+  private void discardIfEndedMidFlight(String operationName) {
+    lock.lock();
+    try {
+      if (phase == SessionPhase.ENDED) {
+        throw discardedAfterEnd(operationName);
+      }
+    } finally {
+      lock.unlock();
     }
+  }
 
-    // ─── Input (nexo native) ───
+  /** The discard error for an outcome that arrived after the session moved on. */
+  private static SessionException discardedAfterEnd(String operationName) {
+    return new SessionException(
+        new SessionError(
+            SessionErrorCode.INVALID_STATE,
+            operationName + " completed after the session ended; the result was discarded"));
+  }
 
-    /** Prompts the customer for a digit string (e.g. a ZIP code). */
-    public SessionResult<String> requestDigitString(String prompt) {
-        return requestDigitString(prompt, InputOptions.defaults());
+  private void requireOpen(String operationName) {
+    if (closingOrEnded()) {
+      throw invalidState(operationName + " is not allowed after end(); create a new session");
     }
+  }
 
-    public SessionResult<String> requestDigitString(String prompt, InputOptions options) {
-        Objects.requireNonNull(prompt, "prompt");
-        Objects.requireNonNull(options, "options");
-        return inputOperation("requestDigitString",
-                () -> inputManager.digitString(prompt, options));
+  private boolean closingOrEnded() {
+    return phase == SessionPhase.ENDING || phase == SessionPhase.ENDED;
+  }
+
+  private boolean moneyMovementInFlight() {
+    return phase == SessionPhase.SETTLING || phase == SessionPhase.VOIDING;
+  }
+
+  // ─── Stored Value ───
+
+  /**
+   * Registers a stored value (gift) card charged as part of a split tender during {@code settle()}.
+   * The card number is treated as keyed ({@code PAN}); use {@link
+   * #setStoredValueCard(StoredValueCard)} for scanned or swiped cards or to set a provider.
+   */
+  public void setStoredValueCard(String cardNumber) {
+    setStoredValueTender(cardNumber == null ? null : StoredValueCard.number(cardNumber));
+  }
+
+  /**
+   * Registers a stored value (gift) card charged as part of a split tender during {@code settle()}.
+   * Pass {@code null} to clear.
+   */
+  public void setStoredValueCard(StoredValueCard card) {
+    setStoredValueTender(card);
+  }
+
+  private void setStoredValueTender(StoredValueCard card) {
+    lock.lock();
+    try {
+      if (closingOrEnded()) {
+        throw new IllegalStateException("the stored-value tender cannot be changed after end()");
+      }
+      if (moneyMovementInFlight()) {
+        throw new IllegalStateException(
+            "the stored-value tender cannot be changed " + "while money movement is in flight");
+      }
+      if (basketConsumed) {
+        throw new IllegalStateException(
+            "the basket has already settled; call "
+                + "basket().clear() before selecting another tender");
+      }
+      this.storedValueCard = card;
+    } finally {
+      lock.unlock();
     }
+  }
 
-    /** Prompts the customer for a decimal amount (e.g. a tip). */
-    public SessionResult<BigDecimal> requestDecimalString(String prompt) {
-        return requestDecimalString(prompt, InputOptions.defaults());
-    }
-
-    public SessionResult<BigDecimal> requestDecimalString(String prompt, InputOptions options) {
-        Objects.requireNonNull(prompt, "prompt");
-        Objects.requireNonNull(options, "options");
-        return inputOperation("requestDecimalString",
-                () -> inputManager.decimalString(prompt, options));
-    }
-
-    /** Prompts the customer for free text (e.g. an email address). */
-    public SessionResult<String> requestTextString(String prompt) {
-        return requestTextString(prompt, InputOptions.defaults());
-    }
-
-    public SessionResult<String> requestTextString(String prompt, InputOptions options) {
-        Objects.requireNonNull(prompt, "prompt");
-        Objects.requireNonNull(options, "options");
-        return inputOperation("requestTextString",
-                () -> inputManager.textString(prompt, options));
-    }
-
-    /** Prompts the customer for a yes/no confirmation. */
-    public SessionResult<Boolean> requestConfirmation(String prompt) {
-        return requestConfirmation(prompt, ConfirmationOptions.defaults());
-    }
-
-    public SessionResult<Boolean> requestConfirmation(String prompt, ConfirmationOptions options) {
-        Objects.requireNonNull(prompt, "prompt");
-        Objects.requireNonNull(options, "options");
-        return inputOperation("requestConfirmation",
-                () -> inputManager.confirmation(prompt, options));
-    }
-
-    /** Prompts the customer to pick from a menu of entries. */
-    public SessionResult<MenuSelection> requestMenuEntry(String prompt, List<String> entries) {
-        return requestMenuEntry(prompt, entries, MenuOptions.defaults());
-    }
-
-    public SessionResult<MenuSelection> requestMenuEntry(String prompt, List<String> entries,
-                                                         MenuOptions options) {
-        Objects.requireNonNull(prompt, "prompt");
-        Objects.requireNonNull(options, "options");
-        if (entries == null || entries.isEmpty()) {
-            throw new IllegalArgumentException("entries must not be empty");
-        }
-        List<String> entriesCopy = List.copyOf(entries);
-        return inputOperation("requestMenuEntry",
-                () -> inputManager.menuEntry(prompt, entriesCopy, options));
-    }
-
-    // ─── Input (XSD-based) ───
-
-    /** Captures a handwritten signature on the terminal. */
-    public SessionResult<Signature> requestSignature(String prompt) {
-        Objects.requireNonNull(prompt, "prompt");
-        return inputOperation("requestSignature", () -> inputManager.signature(prompt));
-    }
-
-    /** Asks the customer to confirm an amount. */
-    public SessionResult<Boolean> requestAmountConfirmation(BigDecimal amount, String prompt) {
-        Objects.requireNonNull(amount, "amount");
-        Objects.requireNonNull(prompt, "prompt");
-        return inputOperation("requestAmountConfirmation",
-                () -> inputManager.amountConfirmation(amount, prompt, currency));
-    }
-
-    // ─── PIN ───
-
-    /** Captures and encrypts a PIN on the secure PIN pad. */
-    public SessionResult<PinResult> requestPinEntry(PinOptions options) {
-        Objects.requireNonNull(options, "options");
-        return inputOperation("requestPinEntry",
-                () -> inputManager.pin(PinMode.PIN_ENTER, options));
-    }
-
-    /** Captures a PIN and verifies it, returning the encrypted block. */
-    public SessionResult<PinResult> requestPinVerify(PinOptions options) {
-        Objects.requireNonNull(options, "options");
-        return inputOperation("requestPinVerify",
-                () -> inputManager.pin(PinMode.PIN_VERIFY, options));
-    }
-
-    /** Verifies a PIN without returning the block. */
-    public SessionResult<PinResult> requestPinVerifyOnly(PinOptions options) {
-        Objects.requireNonNull(options, "options");
-        return inputOperation("requestPinVerifyOnly",
-                () -> inputManager.pin(PinMode.PIN_VERIFY_ONLY, options));
-    }
-
-    private <T> SessionResult<T> inputOperation(String name, Supplier<T> body) {
-        return operation(name, () -> {
-            requireOpen(name);
-            T value = body.get();
-            discardIfEndedMidFlight(name);
-            return value;
+  /** Queries the available balance on a stored value card. */
+  public SessionResult<StoredValueBalance> storedValueBalance(StoredValueCard card) {
+    Objects.requireNonNull(card, "card");
+    return operation(
+        "storedValueBalance",
+        () -> {
+          requireOpen("storedValueBalance");
+          return storedValueManager.balance(card);
         });
-    }
+  }
 
-    /**
-     * Post-completion guard for read-only prompts: {@code abort()} — safe
-     * from any thread — can end the session while the request is on the
-     * wire. An outcome arriving after that is discarded rather than
-     * delivered: the register aborted, so stale customer input, PIN, or
-     * card data must not reach {@code onSuccess}.
-     */
-    private void discardIfEndedMidFlight(String operationName) {
-        lock.lock();
-        try {
-            if (phase == SessionPhase.ENDED) {
-                throw discardedAfterEnd(operationName);
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
+  /**
+   * Activates a stored value card, optionally loading an initial balance. Use {@code
+   * BigDecimal.ZERO} to activate without funds.
+   */
+  public SessionResult<StoredValueOperationResult> storedValueActivate(
+      StoredValueCard card, BigDecimal initialAmount) {
+    Objects.requireNonNull(initialAmount, "initialAmount");
+    requireNonNegative(initialAmount);
+    return storedValueOperation(
+        "storedValueActivate", StoredValueTransactionTypeEnum.ACTIVATE, card, initialAmount);
+  }
 
-    /** The discard error for an outcome that arrived after the session moved on. */
-    private static SessionException discardedAfterEnd(String operationName) {
-        return new SessionException(new SessionError(
-                SessionErrorCode.INVALID_STATE,
-                operationName + " completed after the session ended; the result was discarded"));
-    }
+  /** Loads funds onto a stored value card. */
+  public SessionResult<StoredValueOperationResult> storedValueLoad(
+      StoredValueCard card, BigDecimal amount) {
+    requirePositiveAmount(amount);
+    return storedValueOperation(
+        "storedValueLoad", StoredValueTransactionTypeEnum.LOAD, card, amount);
+  }
 
-    private void requireOpen(String operationName) {
-        if (closingOrEnded()) {
-            throw invalidState(operationName + " is not allowed after end(); create a new session");
-        }
-    }
+  /** Unloads (cashes out) funds from a stored value card. */
+  public SessionResult<StoredValueOperationResult> storedValueUnload(
+      StoredValueCard card, BigDecimal amount) {
+    requirePositiveAmount(amount);
+    return storedValueOperation(
+        "storedValueUnload", StoredValueTransactionTypeEnum.UNLOAD, card, amount);
+  }
 
-    private boolean closingOrEnded() {
-        return phase == SessionPhase.ENDING || phase == SessionPhase.ENDED;
-    }
+  /**
+   * Permanently deactivates a stored value card (an {@code Unload} with a zero amount). Not all
+   * stored value providers support deactivation.
+   */
+  public SessionResult<StoredValueOperationResult> storedValueDeactivate(StoredValueCard card) {
+    return storedValueOperation(
+        "storedValueDeactivate", StoredValueTransactionTypeEnum.UNLOAD, card, BigDecimal.ZERO);
+  }
 
-    private boolean moneyMovementInFlight() {
-        return phase == SessionPhase.SETTLING || phase == SessionPhase.VOIDING;
-    }
+  /**
+   * Reserves an amount on a stored value card. Provider support varies — confirm with your stored
+   * value provider before relying on this.
+   */
+  public SessionResult<StoredValueOperationResult> storedValueReserve(
+      StoredValueCard card, BigDecimal amount) {
+    requirePositiveAmount(amount);
+    return storedValueOperation(
+        "storedValueReserve", StoredValueTransactionTypeEnum.RESERVE, card, amount);
+  }
 
-    // ─── Stored Value ───
-
-    /**
-     * Registers a stored value (gift) card charged as part of a split tender
-     * during {@code settle()}. The card number is treated as keyed
-     * ({@code PAN}); use {@link #setStoredValueCard(StoredValueCard)} for
-     * scanned or swiped cards or to set a provider.
-     */
-    public void setStoredValueCard(String cardNumber) {
-        setStoredValueTender(cardNumber == null ? null : StoredValueCard.number(cardNumber));
-    }
-
-    /**
-     * Registers a stored value (gift) card charged as part of a split tender
-     * during {@code settle()}. Pass {@code null} to clear.
-     */
-    public void setStoredValueCard(StoredValueCard card) {
-        setStoredValueTender(card);
-    }
-
-    private void setStoredValueTender(StoredValueCard card) {
-        lock.lock();
-        try {
-            if (closingOrEnded()) {
-                throw new IllegalStateException(
-                        "the stored-value tender cannot be changed after end()");
-            }
-            if (moneyMovementInFlight()) {
-                throw new IllegalStateException("the stored-value tender cannot be changed "
-                        + "while money movement is in flight");
-            }
-            if (basketConsumed) {
-                throw new IllegalStateException("the basket has already settled; call "
-                        + "basket().clear() before selecting another tender");
-            }
-            this.storedValueCard = card;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /** Queries the available balance on a stored value card. */
-    public SessionResult<StoredValueBalance> storedValueBalance(StoredValueCard card) {
-        Objects.requireNonNull(card, "card");
-        return operation("storedValueBalance", () -> {
-            requireOpen("storedValueBalance");
-            return storedValueManager.balance(card);
+  /**
+   * Reverses a prior stored value operation by its terminal reference (from {@link
+   * StoredValueOperationResult#getPoiTransactionId()}).
+   */
+  public SessionResult<StoredValueOperationResult> storedValueReverse(
+      String originalPoiTransactionId, Instant originalPoiTransactionTimestamp) {
+    Objects.requireNonNull(originalPoiTransactionId, "originalPoiTransactionId");
+    return operation(
+        "storedValueReverse",
+        () -> {
+          requireOpen("storedValueReverse");
+          return storedValueManager.operation(
+              StoredValueTransactionTypeEnum.REVERSE,
+              null,
+              null,
+              originalPoiTransactionId,
+              originalPoiTransactionTimestamp);
         });
-    }
+  }
 
-    /**
-     * Activates a stored value card, optionally loading an initial balance.
-     * Use {@code BigDecimal.ZERO} to activate without funds.
-     */
-    public SessionResult<StoredValueOperationResult> storedValueActivate(StoredValueCard card,
-                                                                         BigDecimal initialAmount) {
-        Objects.requireNonNull(initialAmount, "initialAmount");
-        requireNonNegative(initialAmount);
-        return storedValueOperation("storedValueActivate",
-                StoredValueTransactionTypeEnum.ACTIVATE, card, initialAmount);
-    }
+  /**
+   * Requests a duplicate (replacement) for a stored value card. Provider support varies — confirm
+   * with your stored value provider before relying on this.
+   */
+  public SessionResult<StoredValueOperationResult> storedValueDuplicate(StoredValueCard card) {
+    return storedValueOperation(
+        "storedValueDuplicate", StoredValueTransactionTypeEnum.DUPLICATE, card, null);
+  }
 
-    /** Loads funds onto a stored value card. */
-    public SessionResult<StoredValueOperationResult> storedValueLoad(StoredValueCard card,
-                                                                     BigDecimal amount) {
-        requirePositiveAmount(amount);
-        return storedValueOperation("storedValueLoad",
-                StoredValueTransactionTypeEnum.LOAD, card, amount);
-    }
-
-    /** Unloads (cashes out) funds from a stored value card. */
-    public SessionResult<StoredValueOperationResult> storedValueUnload(StoredValueCard card,
-                                                                       BigDecimal amount) {
-        requirePositiveAmount(amount);
-        return storedValueOperation("storedValueUnload",
-                StoredValueTransactionTypeEnum.UNLOAD, card, amount);
-    }
-
-    /**
-     * Permanently deactivates a stored value card (an {@code Unload} with a
-     * zero amount). Not all stored value providers support deactivation.
-     */
-    public SessionResult<StoredValueOperationResult> storedValueDeactivate(StoredValueCard card) {
-        return storedValueOperation("storedValueDeactivate",
-                StoredValueTransactionTypeEnum.UNLOAD, card, BigDecimal.ZERO);
-    }
-
-    /**
-     * Reserves an amount on a stored value card. Provider support varies —
-     * confirm with your stored value provider before relying on this.
-     */
-    public SessionResult<StoredValueOperationResult> storedValueReserve(StoredValueCard card,
-                                                                        BigDecimal amount) {
-        requirePositiveAmount(amount);
-        return storedValueOperation("storedValueReserve",
-                StoredValueTransactionTypeEnum.RESERVE, card, amount);
-    }
-
-    /**
-     * Reverses a prior stored value operation by its terminal reference
-     * (from {@link StoredValueOperationResult#getPoiTransactionId()}).
-     */
-    public SessionResult<StoredValueOperationResult> storedValueReverse(
-            String originalPoiTransactionId, Instant originalPoiTransactionTimestamp) {
-        Objects.requireNonNull(originalPoiTransactionId, "originalPoiTransactionId");
-        return operation("storedValueReverse", () -> {
-            requireOpen("storedValueReverse");
-            return storedValueManager.operation(StoredValueTransactionTypeEnum.REVERSE,
-                    null, null, originalPoiTransactionId, originalPoiTransactionTimestamp);
+  private SessionResult<StoredValueOperationResult> storedValueOperation(
+      String name, StoredValueTransactionTypeEnum type, StoredValueCard card, BigDecimal amount) {
+    Objects.requireNonNull(card, "card");
+    return operation(
+        name,
+        () -> {
+          requireOpen(name);
+          return storedValueManager.operation(type, card, amount, null, null);
         });
+  }
+
+  private static void requirePositiveAmount(BigDecimal amount) {
+    Objects.requireNonNull(amount, "amount");
+    if (amount.signum() <= 0) {
+      throw new IllegalArgumentException("amount must be positive");
     }
+  }
 
-    /**
-     * Requests a duplicate (replacement) for a stored value card. Provider
-     * support varies — confirm with your stored value provider before
-     * relying on this.
-     */
-    public SessionResult<StoredValueOperationResult> storedValueDuplicate(StoredValueCard card) {
-        return storedValueOperation("storedValueDuplicate",
-                StoredValueTransactionTypeEnum.DUPLICATE, card, null);
+  private static void requireNonNegative(BigDecimal amount) {
+    if (amount.signum() < 0) {
+      throw new IllegalArgumentException("amount must not be negative");
     }
+  }
 
-    private SessionResult<StoredValueOperationResult> storedValueOperation(
-            String name, StoredValueTransactionTypeEnum type, StoredValueCard card,
-            BigDecimal amount) {
-        Objects.requireNonNull(card, "card");
-        return operation(name, () -> {
-            requireOpen(name);
-            return storedValueManager.operation(type, card, amount, null, null);
-        });
+  // ─── Settlement ───
+
+  /** Starts the settlement orchestration chain with default options. */
+  public SettlementFlow settle() {
+    return settle(SettlementOptions.defaults());
+  }
+
+  /**
+   * Starts the settlement orchestration chain. Nothing is sent — and no precondition is verified —
+   * until the returned {@link SettlementFlow}'s {@code execute()}, {@code executeSync()}, {@code
+   * get()}, or {@code getOrNull()} is invoked: the session must then be open with a non-empty,
+   * unconsumed basket. With the default {@link SettlementType#REFUND_THEN_CHARGE}, sale lines less
+   * credits are charged through the normal tender sequence and return lines are covered by
+   * register-supplied refund allocations. With {@link SettlementType#NET}, only the signed basket
+   * difference moves: a positive balance is charged, a negative balance is allocated as a refund,
+   * and a zero balance sends no monetary movement.
+   *
+   * <p>Terminal-backed refund allocations carry itemization on the first {@code
+   * PaymentRequest(Refund)} leg only. A separate refund carries the refund-side lines; a net refund
+   * carries the signed mixed basket. Additional refund legs are amount-only because allocations are
+   * tender-level, not line-level.
+   *
+   * <p>Refund allocations are not retried in the same settlement run. If one fails,
+   * already-committed refund allocation movements remain recorded, and the register retries by
+   * calling {@code settle()} again with the same committed allocation prefix. Charge-side failures
+   * after refund allocations use {@link SettlementFlow#onError} recovery decisions.
+   *
+   * <p>A same-session void that already reversed one or more movements must be retried to
+   * completion before another settlement can replace its payment target.
+   */
+  public SettlementFlow settle(SettlementOptions options) {
+    Objects.requireNonNull(options, "options");
+    operations.track("settle");
+    return new SettlementFlow(flow -> executeSettlement(flow, options)).session(operations);
+  }
+
+  private SettlementResult executeSettlement(SettlementFlow flow, SettlementOptions options) {
+    operations.begin("settle");
+    PaymentOrchestrator.Request request = new PaymentOrchestrator.Request();
+    Basket fullBasket;
+    Basket chargePortion;
+    BigDecimal returnTotal;
+    BigDecimal refundAmount;
+    boolean netSettlement;
+    lock.lock();
+    try {
+      requireOpen("settle");
+      if (moneyMovementInFlight()) {
+        throw invalidState("settle() is not allowed while money movement is in flight");
+      }
+      if (lastPaymentVoidIncomplete) {
+        throw invalidState(
+            "a void of the most recent payment is partially complete; "
+                + "retry voidTransaction() before starting another settlement");
+      }
+      if (basketConsumed) {
+        throw invalidState(
+            "the basket has already settled; call basket().clear() "
+                + "before starting another settlement");
+      }
+      if (basketEngine.isEmpty()) {
+        throw invalidState("the basket is empty; settlement cannot start");
+      }
+      fullBasket = basketEngine.snapshot();
+      chargePortion = fullBasket.chargePortion();
+      returnTotal = fullBasket.returnTotal();
+      netSettlement = options.getSettlementType() == SettlementType.NET;
+      refundAmount = fullBasket.getRefundAmount(options.getSettlementType());
+      validateSettlementOptions(fullBasket, chargePortion, returnTotal, refundAmount, options);
+      if (chargePortion.isEmpty() && returnTotal.signum() == 0) {
+        throw invalidState("settlement requires a sale, return, or credit line");
+      }
+      Basket chargeBasket = netSettlement ? fullBasket : chargePortion;
+      if ((chargeBasket.isEmpty() || chargeBasket.getGrandTotal().signum() <= 0)
+          && options.getCashback() != null) {
+        throw invalidState("cashback requires a card charge in the settlement");
+      }
+      phase = SessionPhase.SETTLING;
+      // the abort flag is scoped to a single settlement run: a stale
+      // abort left over from an earlier operation must
+      // not kill a legitimate retry at its first checkAbort
+      abortRequested = false;
+    } finally {
+      lock.unlock();
     }
-
-    private static void requirePositiveAmount(BigDecimal amount) {
-        Objects.requireNonNull(amount, "amount");
-        if (amount.signum() <= 0) {
-            throw new IllegalArgumentException("amount must be positive");
-        }
-    }
-
-    private static void requireNonNegative(BigDecimal amount) {
-        if (amount.signum() < 0) {
-            throw new IllegalArgumentException("amount must not be negative");
-        }
-    }
-
-    // ─── Settlement ───
-
-    /** Starts the settlement orchestration chain with default options. */
-    public SettlementFlow settle() {
-        return settle(SettlementOptions.defaults());
-    }
-
-    /**
-     * Starts the settlement orchestration chain. Nothing is sent — and no
-     * precondition is verified — until the returned {@link SettlementFlow}'s
-     * {@code execute()}, {@code executeSync()}, {@code get()}, or
-     * {@code getOrNull()} is invoked: the session must then be open with a
-     * non-empty, unconsumed basket. With the default
-     * {@link SettlementType#REFUND_THEN_CHARGE}, sale lines less credits are
-     * charged through the normal tender sequence and return lines are covered
-     * by register-supplied refund allocations. With
-     * {@link SettlementType#NET}, only the signed basket difference moves:
-     * a positive balance is charged, a negative balance is allocated as a
-     * refund, and a zero balance sends no monetary movement.
-     *
-     * <p>Terminal-backed refund allocations carry itemization on the first
-     * {@code PaymentRequest(Refund)} leg only. A separate refund carries the
-     * refund-side lines; a net refund carries the signed mixed basket. Additional
-     * refund legs are amount-only because allocations are tender-level, not
-     * line-level.</p>
-     *
-     * <p>Refund allocations are not retried in the same settlement run. If
-     * one fails, already-committed refund allocation movements remain
-     * recorded, and the register retries
-     * by calling {@code settle()} again with the same committed allocation
-     * prefix. Charge-side failures after refund allocations use
-     * {@link SettlementFlow#onError} recovery decisions.</p>
-     *
-     * <p>A same-session void that already reversed one or more movements
-     * must be retried to completion before another settlement can replace
-     * its payment target.</p>
-     */
-    public SettlementFlow settle(SettlementOptions options) {
-        Objects.requireNonNull(options, "options");
-        operations.track("settle");
-        return new SettlementFlow(flow -> executeSettlement(flow, options))
-                .session(operations);
-    }
-
-    private SettlementResult executeSettlement(SettlementFlow flow,
-            SettlementOptions options) {
-        operations.begin("settle");
-        PaymentOrchestrator.Request request = new PaymentOrchestrator.Request();
-        Basket fullBasket;
-        Basket chargePortion;
-        BigDecimal returnTotal;
-        BigDecimal refundAmount;
-        boolean netSettlement;
-        lock.lock();
-        try {
-            requireOpen("settle");
-            if (moneyMovementInFlight()) {
-                throw invalidState("settle() is not allowed while money movement is in flight");
-            }
-            if (lastPaymentVoidIncomplete) {
-                throw invalidState("a void of the most recent payment is partially complete; "
-                        + "retry voidTransaction() before starting another settlement");
-            }
-            if (basketConsumed) {
-                throw invalidState("the basket has already settled; call basket().clear() "
-                        + "before starting another settlement");
-            }
-            if (basketEngine.isEmpty()) {
-                throw invalidState("the basket is empty; settlement cannot start");
-            }
-            fullBasket = basketEngine.snapshot();
-            chargePortion = fullBasket.chargePortion();
-            returnTotal = fullBasket.returnTotal();
-            netSettlement = options.getSettlementType() == SettlementType.NET;
-            refundAmount = fullBasket.getRefundAmount(options.getSettlementType());
-            validateSettlementOptions(fullBasket, chargePortion, returnTotal,
-                    refundAmount, options);
-            if (chargePortion.isEmpty() && returnTotal.signum() == 0) {
-                throw invalidState("settlement requires a sale, return, or credit line");
-            }
-            Basket chargeBasket = netSettlement ? fullBasket : chargePortion;
-            if ((chargeBasket.isEmpty() || chargeBasket.getGrandTotal().signum() <= 0)
-                    && options.getCashback() != null) {
-                throw invalidState("cashback requires a card charge in the settlement");
-            }
-            phase = SessionPhase.SETTLING;
-            // the abort flag is scoped to a single settlement run: a stale
-            // abort left over from an earlier operation must
-            // not kill a legitimate retry at its first checkAbort
-            abortRequested = false;
-        } finally {
-            lock.unlock();
-        }
-        request.member = getMember();
-        request.storedValueCard = storedValueCard;
-        request.options = options;
-        request.basket = netSettlement ? fullBasket : chargePortion;
-        request.fullBasket = fullBasket;
-        request.abortRequested = () -> abortRequested;
-        // movements an incomplete unwind left standing are kept so that
-        // voidTransaction() on the failed session can finish the reversal
-        request.onUnreversed = movements -> standingMovements = List.copyOf(movements);
-        request.onAbandoned = record -> {
-            lock.lock();
-            try {
-                standingMovements = List.of();
-                clearCommittedRefundAllocations();
-            } finally {
-                lock.unlock();
-            }
-        };
-        request.handlers.beforeStep = flow.beforeStepHandler();
-        request.handlers.onRebatesRedeemed = flow.rebatesHandler();
-        request.handlers.onPointsRedeemed = flow.pointsHandler();
-        request.handlers.onGiftCardPayment = flow.giftCardHandler();
-        request.handlers.onMovement = flow.movementHandler();
-        request.handlers.onError = flow.errorHandler();
-
-        try {
-            // a previous run's incomplete rollback left movements standing:
-            // finish that unwind before charging anew — a retry on top of
-            // them would double-charge the tender or double-commit loyalty
-            if (rollbackIncomplete()) {
-                try {
-                    drainStandingMovements();
-                } catch (SessionException e) {
-                    throw new SessionException(Wire.annotated(e.getError(),
-                            "the previous payment's rollback is still incomplete; the "
-                                    + "retry did not start: " + e.getError().getMessage(), e));
-                }
-            }
-            List<SettlementMovement> refundMovements = new ArrayList<>(
-                    committedRefundMovementsSnapshot());
-            List<CommittedStep> committedRefundSteps = committedRefundSteps(refundMovements);
-            int committedRefundCount = committedRefundAllocationsCount();
-            List<RefundAllocation> refunds = options.getRefunds();
-            validateCommittedRefundRetry(refunds);
-            List<RefundAllocation> pendingAllocations = refunds
-                    .subList(committedRefundCount, refunds.size());
-            refundMovements.addAll(executeRefundAllocations(flow, fullBasket,
-                    pendingAllocations, committedRefundSteps,
-                    hasItemizedRefundAllocation(
-                            refunds.subList(0, committedRefundCount)),
-                    netSettlement && refundAmount.signum() > 0));
-            request.priorSteps = committedRefundSteps;
-            request.priorMovements = List.copyOf(refundMovements);
-            boolean chargeSideWork = request.basket.getGrandTotal().signum() > 0
-                    || !options.getFulfillments().isEmpty();
-            SettlementResult purchaseResult = chargeSideWork
-                    ? paymentOrchestrator.run(request) : null;
-            SettlementResult result = combineSettlementResult(fullBasket, purchaseResult,
-                    refundMovements, netSettlement);
-            showFinalSettlement(result.getFinalBasket());
-            lock.lock();
-            try {
-                basketConsumed = true;
-                lastSettlementRecord = result.toOriginalSaleRecord(request.member == null
-                        ? null : request.member.getMemberId());
-                lastSettlementIncludesRefunds = returnTotal.signum() > 0;
-                lastPaymentVoidIncomplete = false;
-                clearCommittedRefundAllocations();
-                // this settlement replaced the void target, so the guard on
-                // the previous one and all of its resume progress lift.
-                guards.reset();
-            } finally {
-                lock.unlock();
-            }
-            if (abortRequested) {
-                LOGGER.warning("abort() arrived after settlement completed; the transaction "
-                        + "stands — use voidTransaction() to reverse it");
-            }
-            return result;
-        } finally {
-            lock.lock();
-            try {
-                phase = SessionPhase.OPEN;
-            } finally {
-                lock.unlock();
-            }
-        }
-    }
-
-    private List<SettlementMovement> executeRefundAllocations(
-            SettlementFlow flow, Basket basket, List<RefundAllocation> allocations,
-            List<CommittedStep> committedSteps, boolean refundSaleItemsAlreadySent,
-            boolean netRefund) {
-        List<SettlementMovement> movements = new ArrayList<>();
-        Function<SettlementContext, String> beforeStep = flow.beforeStepHandler();
-        Consumer<SettlementMovement> onMovement = flow.movementHandler();
-        List<SaleItem> refundSaleItems = refundSaleItemsAlreadySent
-                ? List.of() : netRefund
-                        ? SaleItemMapper.toNetRefundSaleItems(basket)
-                        : SaleItemMapper.toRefundSaleItems(basket.returnPortion());
-        boolean refundSaleItemsSent = refundSaleItemsAlreadySent;
-        for (RefundAllocation allocation : allocations) {
-            if (abortRequested) {
-                throw new SessionException(new SessionError(SessionErrorCode.ABORTED,
-                        "the settlement was aborted"));
-            }
-            SettlementStep step = refundStep(allocation.getType());
-            String saleTransactionId = SettlementContext.resolveSaleTransactionId(
-                    step, basket, allocation.getAmount(), committedSteps, beforeStep);
-            // Refund allocation failures deliberately bypass the
-            // charge-side onError recovery loop: successful refunds cannot
-            // be re-charged as compensation, so a failed run is resumed by
-            // retrying settle() with the same committed allocation prefix.
-            List<SaleItem> saleItems = null;
-            if (!refundSaleItemsSent && carriesRefundSaleItems(allocation.getType())
-                    && !refundSaleItems.isEmpty()) {
-                // Allocations are tender-level, not line-level. Carry the
-                // complete return itemization once, on the first refund
-                // PaymentRequest, so split refunds do not duplicate receipt
-                // lines across tender legs.
-                saleItems = refundSaleItems;
-                refundSaleItemsSent = true;
-            }
-            SettlementMovement movement = executeRefundAllocation(allocation, step,
-                    saleTransactionId, saleItems);
-            movements.add(movement);
-            committedSteps.add(new CommittedStep(step, saleTransactionId,
-                    movement.getPoiTransactionId(), movement.getPoiTransactionTimestamp(), true));
-            recordCommittedRefundAllocation(allocation, movement);
-            if (onMovement != null) {
-                onMovement.accept(movement);
-            }
-        }
-        return movements;
-    }
-
-    private SettlementMovement executeRefundAllocation(RefundAllocation allocation,
-                                                       SettlementStep step,
-                                                       String saleTransactionId,
-                                                       List<SaleItem> saleItems) {
-        switch (allocation.getType()) {
-            case CARD:
-            case STORED_VALUE: {
-                RefundResult card = reversalManager.refund(allocation.getAmount(), saleItems,
-                        allocation.getOriginalPoiTransactionId(),
-                        allocation.getOriginalPoiTransactionTimestamp(),
-                        null, null, allocation.getMemberId(), saleTransactionId,
-                        null, () -> { }, () -> { });
-                return refundMovement(step, allocation, saleTransactionId,
-                        card.getRefundedAmount(), card.getPoiTransactionId(),
-                        card.getPoiTransactionTimestamp(), null, null);
-            }
-            case STORE_CREDIT:
-                StoredValueOperationResult storeCredit = storedValueManager.operation(
-                        StoredValueTransactionTypeEnum.LOAD,
-                        allocation.getStoredValueCard(), allocation.getAmount(),
-                        null, null, saleTransactionId);
-                return refundMovement(step, allocation, saleTransactionId,
-                        storeCredit.getAmount(), storeCredit.getPoiTransactionId(),
-                        storeCredit.getPoiTransactionTimestamp(), null, null);
-            case EXTERNAL:
-                return refundMovement(step, allocation, saleTransactionId,
-                        allocation.getAmount(), null, null, null, null);
-            case POINT_REDEMPTION:
-                VoidResult points = reversalManager.refundLoyalty(ReversalStep.REDEMPTION,
-                        allocation.getOriginalPoiTransactionId(),
-                        allocation.getOriginalPoiTransactionTimestamp(),
-                        allocation.getMemberId(), saleTransactionId);
-                return refundMovement(step, allocation, saleTransactionId,
-                        points.getReversedAmount(), points.getPoiTransactionId(),
-                        points.getPoiTransactionTimestamp(), points.getPointsReversed(),
-                        points.getRemainingPointBalance());
-            case REBATE:
-                VoidResult rebate = reversalManager.refundLoyalty(ReversalStep.REBATE,
-                        allocation.getOriginalPoiTransactionId(),
-                        allocation.getOriginalPoiTransactionTimestamp(),
-                        allocation.getMemberId(), saleTransactionId);
-                return refundMovement(step, allocation, saleTransactionId,
-                        rebate.getReversedAmount(), rebate.getPoiTransactionId(),
-                        rebate.getPoiTransactionTimestamp(), rebate.getPointsReversed(),
-                        rebate.getRemainingPointBalance());
-            case AWARD:
-                VoidResult award = reversalManager.refundLoyalty(ReversalStep.AWARD,
-                        allocation.getOriginalPoiTransactionId(),
-                        allocation.getOriginalPoiTransactionTimestamp(),
-                        allocation.getMemberId(), saleTransactionId);
-                return refundMovement(step, allocation, saleTransactionId,
-                        BigDecimal.ZERO, award.getPoiTransactionId(),
-                        award.getPoiTransactionTimestamp(), award.getPointsReversed(),
-                        award.getRemainingPointBalance());
-            default:
-                throw new IllegalArgumentException("unsupported refund allocation type "
-                        + allocation.getType());
-        }
-    }
-
-    private static boolean hasItemizedRefundAllocation(List<RefundAllocation> allocations) {
-        for (RefundAllocation allocation : allocations) {
-            if (carriesRefundSaleItems(allocation.getType())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean carriesRefundSaleItems(RefundAllocationType type) {
-        return type == RefundAllocationType.CARD
-                || type == RefundAllocationType.STORED_VALUE;
-    }
-
-    private static SettlementMovement refundMovement(SettlementStep step,
-            RefundAllocation allocation, String saleTransactionId, BigDecimal actualAmount,
-            String poiTransactionId, Instant poiTransactionTimestamp, Integer points,
-            Integer pointBalance) {
-        BigDecimal amount = actualAmount != null ? actualAmount : allocation.getAmount();
-        return SettlementMovement.builder()
-                .step(step)
-                .target(allocation.getTarget())
-                .amount(amount)
-                .saleTransactionId(saleTransactionId)
-                .poiTransactionId(poiTransactionId)
-                .poiTransactionTimestamp(poiTransactionTimestamp)
-                .memberId(allocation.getMemberId())
-                .points(points)
-                .pointBalance(pointBalance)
-                .build();
-    }
-
-    private static SettlementStep refundStep(RefundAllocationType type) {
-        switch (type) {
-            case CARD:
-                return SettlementStep.CARD_REFUND;
-            case STORED_VALUE:
-            case STORE_CREDIT:
-                return SettlementStep.STORED_VALUE_REFUND;
-            case EXTERNAL:
-                return SettlementStep.EXTERNAL_REFUND;
-            case POINT_REDEMPTION:
-                return SettlementStep.POINT_REDEMPTION_REFUND;
-            case REBATE:
-                return SettlementStep.REBATE_REFUND;
-            case AWARD:
-                return SettlementStep.AWARD_REFUND;
-            default:
-                throw new IllegalArgumentException("unsupported refund allocation type " + type);
-        }
-    }
-
-    private static void validateSettlementOptions(Basket basket, Basket chargePortion,
-            BigDecimal returnTotal, BigDecimal netRefundAmount, SettlementOptions options) {
-        if (chargePortion.getGrandTotal().signum() < 0) {
-            throw invalidState("credit lines exceed the sale-side value; credits cannot "
-                    + "create a customer payout");
-        }
-        validateRefundAllocations(returnTotal, netRefundAmount, options);
-        validateFulfillments(basket, options.getFulfillments());
-    }
-
-    private static void validateRefundAllocations(BigDecimal returnTotal,
-            BigDecimal netRefundAmount, SettlementOptions options) {
-        List<RefundAllocation> allocations = options.getRefunds();
-        if (returnTotal.signum() == 0 && !allocations.isEmpty()) {
-            throw invalidState("refund allocations require at least one return line");
-        }
-        BigDecimal allocated = monetaryAllocationTotal(allocations);
-        if (returnTotal.signum() == 0) {
-            return;
-        }
-        if (options.getSettlementType() == SettlementType.REFUND_THEN_CHARGE
-                && allocated.compareTo(returnTotal) != 0) {
-            throw invalidState("refund allocations total " + allocated
-                    + " but return lines total " + returnTotal);
-        }
-        if (options.getSettlementType() != SettlementType.NET) {
-            return;
-        }
-        if (allocated.compareTo(netRefundAmount) != 0) {
-            throw invalidState("net refund allocations total " + allocated
-                    + " but the net refund amount is " + netRefundAmount);
-        }
-    }
-
-    private static void validateFulfillments(Basket basket,
-            List<StoredValueLoad> fulfillments) {
-        HashSet<String> fulfilled = new HashSet<>();
-        for (StoredValueLoad fulfillment : fulfillments) {
-            String reference = fulfillment.getBasketReference();
-            if (!fulfilled.add(reference)) {
-                throw invalidState("basket line " + reference
-                        + " has more than one stored value fulfillment");
-            }
-            BasketLineItem line = basket.getItemByReference(reference);
-            if (line == null) {
-                throw invalidState("stored value fulfillment references missing basket line "
-                        + reference);
-            }
-            if (!line.isSale()) {
-                throw invalidState("basket line " + reference
-                        + " is not a sale and cannot be fulfilled");
-            }
-            if (line.getOriginalTotal().signum() <= 0) {
-                throw invalidState("basket line " + reference
-                        + " must have a positive original total for fulfillment");
-            }
-        }
-    }
-
-    private static BigDecimal monetaryAllocationTotal(List<RefundAllocation> allocations) {
-        BigDecimal allocated = BigDecimal.ZERO;
-        for (RefundAllocation allocation : allocations) {
-            if (allocation.countsTowardRefundTotal()) {
-                allocated = allocated.add(allocation.getAmount());
-            }
-        }
-        return allocated;
-    }
-
-    private void validateCommittedRefundRetry(List<RefundAllocation> allocations) {
-        List<RefundAllocation> committed = committedRefundAllocations;
-        if (committed.isEmpty()) {
-            return;
-        }
-        if (allocations.size() < committed.size()) {
-            throw committedRefundRetryError();
-        }
-        for (int i = 0; i < committed.size(); i++) {
-            if (!Objects.equals(committed.get(i), allocations.get(i))) {
-                throw committedRefundRetryError();
-            }
-        }
-    }
-
-    private static SessionException committedRefundRetryError() {
-        return invalidState("a previous settlement attempt already committed refund "
-                + "allocations; retry settle() with the same refund allocations");
-    }
-
-    private int committedRefundAllocationsCount() {
-        return committedRefundAllocations.size();
-    }
-
-    private List<SettlementMovement> committedRefundMovementsSnapshot() {
-        return List.copyOf(committedRefundMovements);
-    }
-
-    private boolean hasCommittedRefundAllocations() {
-        return !committedRefundAllocations.isEmpty();
-    }
-
-    private void recordCommittedRefundAllocation(RefundAllocation allocation,
-                                                 SettlementMovement movement) {
-        lock.lock();
-        try {
-            List<RefundAllocation> allocations = new ArrayList<>(committedRefundAllocations);
-            allocations.add(allocation);
-            committedRefundAllocations = List.copyOf(allocations);
-
-            List<SettlementMovement> movements = new ArrayList<>(committedRefundMovements);
-            movements.add(movement);
-            committedRefundMovements = List.copyOf(movements);
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private void clearCommittedRefundAllocations() {
-        committedRefundAllocations = List.of();
-        committedRefundMovements = List.of();
-    }
-
-    private static List<CommittedStep> committedRefundSteps(
-            List<SettlementMovement> movements) {
-        List<CommittedStep> steps = new ArrayList<>();
-        for (SettlementMovement movement : movements) {
-            steps.add(new CommittedStep(movement.getStep(), movement.getSaleTransactionId(),
-                    movement.getPoiTransactionId(), movement.getPoiTransactionTimestamp(), true));
-        }
-        return steps;
-    }
-
-    private static SettlementResult combineSettlementResult(Basket fullBasket,
-            SettlementResult purchase, List<SettlementMovement> refundMovements,
-            boolean netSettlement) {
-        List<SettlementMovement> movements = new ArrayList<>(refundMovements);
-        if (purchase != null) {
-            movements.addAll(purchase.getMovements());
-        }
-        BigDecimal cardRefunded = sumMovements(refundMovements, SettlementStep.CARD_REFUND);
-        BigDecimal storedValueRefunded = sumMovements(refundMovements,
-                SettlementStep.STORED_VALUE_REFUND);
-        BigDecimal externalRefunded = sumMovements(refundMovements,
-                SettlementStep.EXTERNAL_REFUND);
-        BigDecimal loyaltyRefunded = sumMovements(refundMovements,
-                SettlementStep.POINT_REDEMPTION_REFUND)
-                .add(sumMovements(refundMovements, SettlementStep.REBATE_REFUND));
-        Basket finalBasket = purchase == null
-                ? fullBasket
-                : netSettlement ? purchase.getFinalBasket()
-                        : fullBasket.withSettledChargePortion(purchase.getFinalBasket());
-        return (purchase == null ? SettlementResult.builder() : purchase.toBuilder())
-                .success(true)
-                .finalBasket(finalBasket)
-                .cardRefundedAmount(cardRefunded)
-                .storedValueRefundedAmount(storedValueRefunded)
-                .externalRefundedAmount(externalRefunded)
-                .loyaltyRefundedAmount(loyaltyRefunded)
-                .movements(movements)
-                .build();
-    }
-
-    private static BigDecimal sumMovements(List<SettlementMovement> movements,
-                                           SettlementStep step) {
-        BigDecimal total = BigDecimal.ZERO;
-        for (SettlementMovement movement : movements) {
-            if (movement.getStep() == step && movement.getAmount() != null) {
-                total = total.add(movement.getAmount());
-            }
-        }
-        return total;
-    }
-
-    private void showFinalSettlement(Basket basket) {
-        if (!autoDisplay) {
-            return;
-        }
-        try {
-            showBasket(basket);
-        } catch (RuntimeException e) {
-            operations.backgroundError("the final settlement display", e);
-        }
-    }
-
-
-    // ─── Refund ───
-
-    /**
-     * Full linked refund of this session's completed payment. Also
-     * reverses the loyalty award when one ran — best-effort by default
-     * (override via {@link ReversalFlow#onError}).
-     *
-     * <p>Linked refunds reference a single transaction: after a split
-     * tender this is the card leg — use {@code voidTransaction()} to
-     * reverse both legs, or the stored value operations to return funds to
-     * the gift card. A refund reverses the card leg and award only; the
-     * sale's committed rebate and redemption movements are reversed by
-     * {@link #voidTransaction()}. Once a refund has returned money the
-     * payment can no longer be voided; a tender skipped by an
-     * {@code onError} decision leaves it voidable, with an award the flow
-     * reversed remembered so nothing re-credits it. Once a void has
-     * partially reversed the payment's money legs, refunds are refused
-     * until the void is finished. To refund a sale taken by an earlier
-     * session, ring return lines into a new checkout session and provide
-     * refund allocations on {@link SettlementOptions}. Loyalty reversals use
-     * the member attached when this payment settled, even if the session was
-     * subsequently re-identified.</p>
-     */
-    public ReversalFlow<RefundResult> refund() {
-        operations.track("refund");
-        return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", null, true))
-                .session(operations);
-    }
-
-    /**
-     * Partial linked refund of this session's completed payment. Also
-     * reverses the loyalty award when one ran (best-effort by default).
-     */
-    public ReversalFlow<RefundResult> refund(BigDecimal amount) {
-        Objects.requireNonNull(amount, "amount");
-        requirePositive(amount);
-        operations.track("refund");
-        return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", amount, true))
-                .session(operations);
-    }
-
-    /**
-     * Unlinked refund, not tied to a prior transaction. Payment-only — no
-     * loyalty reversal.
-     */
-    public ReversalFlow<RefundResult> refundUnlinked(BigDecimal amount) {
-        Objects.requireNonNull(amount, "amount");
-        requirePositive(amount);
-        operations.track("refundUnlinked");
-        return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refundUnlinked", amount, false))
-                .session(operations);
-    }
-
-    private RefundResult executeRefund(ReversalFlow<RefundResult> flow, String name,
-                                       BigDecimal amount, boolean linked) {
-        operations.begin(name);
-        requireRefundable(name);
-        if (linked) {
-            guards.requireNoReversedMoneyLeg();
-        }
-        OriginalSaleRecord paid = linked ? lastSettlementRecord : NO_SETTLEMENT;
-        if (linked && paid.getCardPoiTransactionId() == null) {
-            throw invalidState("a linked refund requires a completed payment in this "
-                    + "session; refund a prior sale through settle() with return lines "
-                    + "and SettlementOptions refund allocations");
-        }
-        boolean awardReversed = linked && guards.awardReversed();
-        return reversalManager.refund(amount, null,
-                paid.getCardPoiTransactionId(), paid.getCardPoiTransactionTimestamp(),
-                awardReversed ? null : paid.getAwardPoiTransactionId(),
-                awardReversed ? null : paid.getAwardPoiTransactionTimestamp(),
-                linked ? paid.getMemberId() : null,
-                flow.decider(),
-                linked ? guards::markRefunded : () -> { },
-                linked ? () -> guards.markAwardReversed(paid.getAwardPoiTransactionId())
-                        : () -> { });
-    }
-
-    private void requireRefundable(String operationName) {
-        lock.lock();
-        try {
-            requireOpen(operationName);
-            if (moneyMovementInFlight()) {
-                throw invalidState(operationName
-                        + " is not allowed while money movement is in flight");
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private static void requirePositive(BigDecimal amount) {
-        if (amount.signum() <= 0) {
-            throw new IllegalArgumentException("refund amount must be positive");
-        }
-    }
-
-    // ─── Void ───
-
-    /**
-     * Reverses this session's completed payment: every movement it
-     * committed — the card and stored value legs (Nexo
-     * {@code ReversalRequest}), then the redemption, rebate, and award
-     * (their {@code LoyaltyRequest} refund types) — in that order. A
-     * checkout fully covered by rewards has no money leg; voiding it
-     * refunds the loyalty movements alone. To void a sale taken by an
-     * earlier session, use {@link #voidTransaction(OriginalSaleRecord)}.
-     *
-     * <p>When a step fails, the flow's {@link ReversalFlow#onError onError}
-     * handler decides between retry, skip, and abort — see
-     * {@link ReversalFlow} for the default policy. A retried void resumes
-     * at the first movement still standing — reversed movements are never
-     * re-credited, and the retry's {@link VoidResult} describes only the
-     * movements that call sent. Until that retry succeeds, the session
-     * refuses {@code basket().clear()}, another settlement, and
-     * {@link #end()} because each would discard the in-memory resume
-     * progress. After the void succeeds, that progress is discarded; a later
-     * void or linked refund reaches the terminal, which owns already-voided
-     * transaction enforcement.</p>
-     *
-     * <p>On a session whose payment failed with an incomplete rollback,
-     * {@code voidTransaction()} finishes the unwind by retrying the
-     * reversals that did not go through. Not allowed once the payment has
-     * been refunded from this session — a void would return the full amount
-     * on top of the refund, so further returns must use
-     * {@link #refund(BigDecimal)}. Loyalty reversals use the member attached
-     * when this payment settled, not a later session identification.</p>
-     */
-    public ReversalFlow<VoidResult> voidTransaction() {
-        operations.track("voidTransaction");
-        return new ReversalFlow<VoidResult>(this::executeVoid)
-                .session(operations);
-    }
-
-    /**
-     * Voids a prior sale by its persisted original-sale record. This is a
-     * whole-transaction void: every referenced card, stored value, rebate,
-     * redemption, and award movement is reversed in the same order as a
-     * same-session void. If the void partially fails, retry it on the same
-     * session instance because the in-memory reversed-movement progress is what
-     * prevents already-reversed legs from being sent again; {@link #end()} is
-     * refused until that retry succeeds. Mixed sale/return settlements should
-     * use {@link #settle(SettlementOptions)} with refund allocations instead.
-     * A record containing any movement of this session's most recent
-     * settlement is refused; use parameterless {@link #voidTransaction()} so
-     * the settlement's shared refund/void guards remain authoritative.
-     */
-    public ReversalFlow<VoidResult> voidTransaction(OriginalSaleRecord originalSale) {
-        Objects.requireNonNull(originalSale, "originalSale");
-        operations.track("voidTransaction");
-        return new ReversalFlow<VoidResult>(flow -> executeVoid(flow, originalSale))
-                .session(operations);
-    }
-
-    private VoidResult executeVoid(ReversalFlow<VoidResult> flow) {
-        operations.begin("voidTransaction");
-        beginVoid();
-        boolean sameSessionVoidStarted = false;
-        Set<ReversalMovement.Key> reversedBefore = Set.of();
-        OriginalSaleRecord paid = NO_SETTLEMENT;
-        try {
-            // A failed settlement whose rollback was incomplete left
-            // movements standing; voiding that session finishes the unwind.
-            boolean resumeRollback = rollbackIncomplete();
-            List<ReversalMovement> movements = List.of();
-            if (!resumeRollback) {
-                if (hasCommittedRefundAllocations()) {
-                    throw invalidState("voidTransaction cannot reverse committed refund "
-                            + "allocations; retry settle() with the same refund allocations");
-                }
-                guards.requireNotRefunded();
-                if (lastSettlementIncludesRefunds) {
-                    throw invalidState("voidTransaction is only supported for a pure sale "
-                            + "settlement; this settlement included return lines");
-                }
-                paid = lastSettlementRecord;
-                movements = voidTarget(paid);
-                if (movements.isEmpty()) {
-                    throw invalidState(
-                            "voidTransaction requires a completed payment in this "
-                                    + "session; to void a prior sale, use "
-                                    + "voidTransaction(OriginalSaleRecord)");
-                }
-            }
-            if (resumeRollback) {
-                drainStandingMovements();
-            } else {
-                reversedBefore = Set.copyOf(guards.reversedMovements());
-                sameSessionVoidStarted = true;
-            }
-            // the manager filters against the reversed-movement set (and
-            // records progress into it), so a retry resumes at the
-            // movements still standing while the default policy still sees
-            // the whole target
-            VoidResult result = reversalManager.voidMovements(movements, paid.getMemberId(),
-                    flow.decider(), guards.reversedMovements());
-            if (!resumeRollback) {
-                guards.completeVoid();
-                lastPaymentVoidIncomplete = false;
-            }
-            return result;
-        } catch (RuntimeException e) {
-            if (sameSessionVoidStarted
-                    && !guards.reversedMovements().equals(reversedBefore)) {
-                lastPaymentVoidIncomplete = true;
-            }
-            throw e;
-        } finally {
-            endVoid();
-        }
-    }
-
-    private VoidResult executeVoid(ReversalFlow<VoidResult> flow,
-                                   OriginalSaleRecord originalSale) {
-        operations.begin("voidTransaction");
-        if (!originalSale.hasMovement()) {
-            throw invalidState("voidTransaction(OriginalSaleRecord) requires at least "
-                    + "one original transaction reference");
-        }
-        beginVoid();
-        try {
-            if (lastSettlementRecord.sharesMovementWith(originalSale)) {
-                throw invalidState("the original sale record references the most recent "
-                        + "settlement in this session; use parameterless voidTransaction() "
-                        + "so its refund and void guards remain consistent");
-            }
-            List<ReversalMovement> movements = voidTarget(originalSale);
-            Set<ReversalMovement.Key> reversedMovements = priorSaleVoidProgress(originalSale);
-            VoidResult result = reversalManager.voidMovements(movements,
-                    originalSale.getMemberId(), flow.decider(),
-                    reversedMovements);
-            clearPriorSaleVoidProgress(originalSale);
-            return result;
-        } finally {
-            endVoid();
-        }
-    }
-
-    private void beginVoid() {
-        lock.lock();
-        try {
-            requireOpen("voidTransaction");
-            if (moneyMovementInFlight()) {
-                throw invalidState("voidTransaction is not allowed while money movement "
-                        + "is in flight");
-            }
-            phase = SessionPhase.VOIDING;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private void endVoid() {
-        lock.lock();
-        try {
-            phase = SessionPhase.OPEN;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private static List<ReversalMovement> voidTarget(OriginalSaleRecord originalSale) {
-        return ReversalMovement.ofSale(
-                originalSale.getStoredValueLoads(),
-                PoiRef.ofNullable(originalSale.getCardPoiTransactionId(),
-                        originalSale.getCardPoiTransactionTimestamp()),
-                PoiRef.ofNullable(originalSale.getStoredValuePoiTransactionId(),
-                        originalSale.getStoredValuePoiTransactionTimestamp()),
-                PoiRef.ofNullable(originalSale.getRedemptionPoiTransactionId(),
-                        originalSale.getRedemptionPoiTransactionTimestamp()),
-                PoiRef.ofNullable(originalSale.getRebatePoiTransactionId(),
-                        originalSale.getRebatePoiTransactionTimestamp()),
-                PoiRef.ofNullable(originalSale.getAwardPoiTransactionId(),
-                        originalSale.getAwardPoiTransactionTimestamp()));
-    }
-
-    private Set<ReversalMovement.Key> priorSaleVoidProgress(OriginalSaleRecord originalSale) {
-        lock.lock();
-        try {
-            if (priorSaleVoidTarget == null) {
-                priorSaleVoidTarget = originalSale;
-                return priorSaleVoidReversedMovements;
-            }
-            if (Objects.equals(priorSaleVoidTarget, originalSale)) {
-                return priorSaleVoidReversedMovements;
-            }
-            if (!priorSaleVoidReversedMovements.isEmpty()) {
-                throw invalidState("a void of another prior sale is partially complete; "
-                        + "retry voidTransaction(OriginalSaleRecord) with the same "
-                        + "original sale record before voiding another sale");
-            }
-            priorSaleVoidTarget = originalSale;
-            priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();
-            return priorSaleVoidReversedMovements;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private void clearPriorSaleVoidProgress(OriginalSaleRecord originalSale) {
-        lock.lock();
-        try {
-            if (Objects.equals(priorSaleVoidTarget, originalSale)) {
-                priorSaleVoidTarget = null;
-                priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * Re-runs each standing reversal in the unwind's own order, dropping
-     * movements as they succeed so a failed attempt can be retried from the
-     * first movement still standing.
-     */
-    private void drainStandingMovements() {
-        List<PaymentOrchestrator.StandingMovement> remaining;
-        lock.lock();
-        try {
-            // take ownership atomically: concurrent drains (abort() vs a
-            // retried settle() vs a second abort()) must not reverse the same
-            // movement twice, and only ONE drain may be reversing at a time
-            // — a concurrent caller fails fast instead of concluding from
-            // the empty list that the rollback completed
-            if (drainInFlight) {
-                throw invalidState("another recovery attempt is already reversing the "
-                        + "standing movements; retry once it settles");
-            }
-            remaining = new ArrayList<>(standingMovements);
-            if (remaining.isEmpty()) {
-                return;
-            }
+    request.member = getMember();
+    request.storedValueCard = storedValueCard;
+    request.options = options;
+    request.basket = netSettlement ? fullBasket : chargePortion;
+    request.fullBasket = fullBasket;
+    request.abortRequested = () -> abortRequested;
+    // movements an incomplete unwind left standing are kept so that
+    // voidTransaction() on the failed session can finish the reversal
+    request.onUnreversed = movements -> standingMovements = List.copyOf(movements);
+    request.onAbandoned =
+        record -> {
+          lock.lock();
+          try {
             standingMovements = List.of();
-            drainInFlight = true;
-        } finally {
+            clearCommittedRefundAllocations();
+          } finally {
             lock.unlock();
-        }
+          }
+        };
+    request.handlers.beforeStep = flow.beforeStepHandler();
+    request.handlers.onRebatesRedeemed = flow.rebatesHandler();
+    request.handlers.onPointsRedeemed = flow.pointsHandler();
+    request.handlers.onGiftCardPayment = flow.giftCardHandler();
+    request.handlers.onMovement = flow.movementHandler();
+    request.handlers.onError = flow.errorHandler();
+
+    try {
+      // a previous run's incomplete rollback left movements standing:
+      // finish that unwind before charging anew — a retry on top of
+      // them would double-charge the tender or double-commit loyalty
+      if (rollbackIncomplete()) {
         try {
-            for (Iterator<PaymentOrchestrator.StandingMovement> it = remaining.iterator();
-                    it.hasNext(); ) {
-                it.next().reverse();
-                it.remove();
-            }
-        } finally {
-            // publish the outcome under the same lock the claim used: the
-            // remainder (if a reversal failed) and the end of the drain
-            lock.lock();
-            try {
-                if (!remaining.isEmpty()) {
-                    standingMovements = List.copyOf(remaining);
-                }
-                drainInFlight = false;
-            } finally {
-                lock.unlock();
-            }
+          drainStandingMovements();
+        } catch (SessionException e) {
+          throw new SessionException(
+              Wire.annotated(
+                  e.getError(),
+                  "the previous payment's rollback is still incomplete; the "
+                      + "retry did not start: "
+                      + e.getError().getMessage(),
+                  e));
         }
+      }
+      List<SettlementMovement> refundMovements =
+          new ArrayList<>(committedRefundMovementsSnapshot());
+      List<CommittedStep> committedRefundSteps = committedRefundSteps(refundMovements);
+      int committedRefundCount = committedRefundAllocationsCount();
+      List<RefundAllocation> refunds = options.getRefunds();
+      validateCommittedRefundRetry(refunds);
+      List<RefundAllocation> pendingAllocations =
+          refunds.subList(committedRefundCount, refunds.size());
+      refundMovements.addAll(
+          executeRefundAllocations(
+              flow,
+              fullBasket,
+              pendingAllocations,
+              committedRefundSteps,
+              hasItemizedRefundAllocation(refunds.subList(0, committedRefundCount)),
+              netSettlement && refundAmount.signum() > 0));
+      request.priorSteps = committedRefundSteps;
+      request.priorMovements = List.copyOf(refundMovements);
+      boolean chargeSideWork =
+          request.basket.getGrandTotal().signum() > 0 || !options.getFulfillments().isEmpty();
+      SettlementResult purchaseResult = chargeSideWork ? paymentOrchestrator.run(request) : null;
+      SettlementResult result =
+          combineSettlementResult(fullBasket, purchaseResult, refundMovements, netSettlement);
+      showFinalSettlement(result.getFinalBasket());
+      lock.lock();
+      try {
+        basketConsumed = true;
+        lastSettlementRecord =
+            result.toOriginalSaleRecord(
+                request.member == null ? null : request.member.getMemberId());
+        lastSettlementIncludesRefunds = returnTotal.signum() > 0;
+        lastPaymentVoidIncomplete = false;
+        clearCommittedRefundAllocations();
+        // this settlement replaced the void target, so the guard on
+        // the previous one and all of its resume progress lift.
+        guards.reset();
+      } finally {
+        lock.unlock();
+      }
+      if (abortRequested) {
+        LOGGER.warning(
+            "abort() arrived after settlement completed; the transaction "
+                + "stands — use voidTransaction() to reverse it");
+      }
+      return result;
+    } finally {
+      lock.lock();
+      try {
+        phase = SessionPhase.OPEN;
+      } finally {
+        lock.unlock();
+      }
     }
+  }
 
-    /**
-     * The previous payment's unwind left movements standing — or a drain
-     * has claimed them and is still reversing on the wire, which every
-     * guard must treat the same way: the rollback is not complete.
-     */
-    private boolean rollbackIncomplete() {
-        return !standingMovements.isEmpty() || drainInFlight;
+  private List<SettlementMovement> executeRefundAllocations(
+      SettlementFlow flow,
+      Basket basket,
+      List<RefundAllocation> allocations,
+      List<CommittedStep> committedSteps,
+      boolean refundSaleItemsAlreadySent,
+      boolean netRefund) {
+    List<SettlementMovement> movements = new ArrayList<>();
+    Function<SettlementContext, String> beforeStep = flow.beforeStepHandler();
+    Consumer<SettlementMovement> onMovement = flow.movementHandler();
+    List<SaleItem> refundSaleItems =
+        refundSaleItemsAlreadySent
+            ? List.of()
+            : netRefund
+                ? SaleItemMapper.toNetRefundSaleItems(basket)
+                : SaleItemMapper.toRefundSaleItems(basket.returnPortion());
+    boolean refundSaleItemsSent = refundSaleItemsAlreadySent;
+    for (RefundAllocation allocation : allocations) {
+      if (abortRequested) {
+        throw new SessionException(
+            new SessionError(SessionErrorCode.ABORTED, "the settlement was aborted"));
+      }
+      SettlementStep step = refundStep(allocation.getType());
+      String saleTransactionId =
+          SettlementContext.resolveSaleTransactionId(
+              step, basket, allocation.getAmount(), committedSteps, beforeStep);
+      // Refund allocation failures deliberately bypass the
+      // charge-side onError recovery loop: successful refunds cannot
+      // be re-charged as compensation, so a failed run is resumed by
+      // retrying settle() with the same committed allocation prefix.
+      List<SaleItem> saleItems = null;
+      if (!refundSaleItemsSent
+          && carriesRefundSaleItems(allocation.getType())
+          && !refundSaleItems.isEmpty()) {
+        // Allocations are tender-level, not line-level. Carry the
+        // complete return itemization once, on the first refund
+        // PaymentRequest, so split refunds do not duplicate receipt
+        // lines across tender legs.
+        saleItems = refundSaleItems;
+        refundSaleItemsSent = true;
+      }
+      SettlementMovement movement =
+          executeRefundAllocation(allocation, step, saleTransactionId, saleItems);
+      movements.add(movement);
+      committedSteps.add(
+          new CommittedStep(
+              step,
+              saleTransactionId,
+              movement.getPoiTransactionId(),
+              movement.getPoiTransactionTimestamp(),
+              true));
+      recordCommittedRefundAllocation(allocation, movement);
+      if (onMovement != null) {
+        onMovement.accept(movement);
+      }
     }
+    return movements;
+  }
 
-    /** The uniform guard failure for operations the session cannot honor. */
-    private static SessionException invalidState(String message) {
-        return new SessionException(
-                new SessionError(SessionErrorCode.INVALID_STATE, message));
+  private SettlementMovement executeRefundAllocation(
+      RefundAllocation allocation,
+      SettlementStep step,
+      String saleTransactionId,
+      List<SaleItem> saleItems) {
+    switch (allocation.getType()) {
+      case CARD:
+      case STORED_VALUE:
+        {
+          RefundResult card =
+              reversalManager.refund(
+                  allocation.getAmount(),
+                  saleItems,
+                  allocation.getOriginalPoiTransactionId(),
+                  allocation.getOriginalPoiTransactionTimestamp(),
+                  null,
+                  null,
+                  allocation.getMemberId(),
+                  saleTransactionId,
+                  null,
+                  () -> {},
+                  () -> {});
+          return refundMovement(
+              step,
+              allocation,
+              saleTransactionId,
+              card.getRefundedAmount(),
+              card.getPoiTransactionId(),
+              card.getPoiTransactionTimestamp(),
+              null,
+              null);
+        }
+      case STORE_CREDIT:
+        StoredValueOperationResult storeCredit =
+            storedValueManager.operation(
+                StoredValueTransactionTypeEnum.LOAD,
+                allocation.getStoredValueCard(),
+                allocation.getAmount(),
+                null,
+                null,
+                saleTransactionId);
+        return refundMovement(
+            step,
+            allocation,
+            saleTransactionId,
+            storeCredit.getAmount(),
+            storeCredit.getPoiTransactionId(),
+            storeCredit.getPoiTransactionTimestamp(),
+            null,
+            null);
+      case EXTERNAL:
+        return refundMovement(
+            step, allocation, saleTransactionId, allocation.getAmount(), null, null, null, null);
+      case POINT_REDEMPTION:
+        VoidResult points =
+            reversalManager.refundLoyalty(
+                ReversalStep.REDEMPTION,
+                allocation.getOriginalPoiTransactionId(),
+                allocation.getOriginalPoiTransactionTimestamp(),
+                allocation.getMemberId(),
+                saleTransactionId);
+        return refundMovement(
+            step,
+            allocation,
+            saleTransactionId,
+            points.getReversedAmount(),
+            points.getPoiTransactionId(),
+            points.getPoiTransactionTimestamp(),
+            points.getPointsReversed(),
+            points.getRemainingPointBalance());
+      case REBATE:
+        VoidResult rebate =
+            reversalManager.refundLoyalty(
+                ReversalStep.REBATE,
+                allocation.getOriginalPoiTransactionId(),
+                allocation.getOriginalPoiTransactionTimestamp(),
+                allocation.getMemberId(),
+                saleTransactionId);
+        return refundMovement(
+            step,
+            allocation,
+            saleTransactionId,
+            rebate.getReversedAmount(),
+            rebate.getPoiTransactionId(),
+            rebate.getPoiTransactionTimestamp(),
+            rebate.getPointsReversed(),
+            rebate.getRemainingPointBalance());
+      case AWARD:
+        VoidResult award =
+            reversalManager.refundLoyalty(
+                ReversalStep.AWARD,
+                allocation.getOriginalPoiTransactionId(),
+                allocation.getOriginalPoiTransactionTimestamp(),
+                allocation.getMemberId(),
+                saleTransactionId);
+        return refundMovement(
+            step,
+            allocation,
+            saleTransactionId,
+            BigDecimal.ZERO,
+            award.getPoiTransactionId(),
+            award.getPoiTransactionTimestamp(),
+            award.getPointsReversed(),
+            award.getRemainingPointBalance());
+      default:
+        throw new IllegalArgumentException(
+            "unsupported refund allocation type " + allocation.getType());
     }
+  }
 
-    // ─── Display ───
+  private static boolean hasItemizedRefundAllocation(List<RefundAllocation> allocations) {
+    for (RefundAllocation allocation : allocations) {
+      if (carriesRefundSaleItems(allocation.getType())) {
+        return true;
+      }
+    }
+    return false;
+  }
 
-    /**
-     * Refreshes the customer display from the given basket snapshot using the
-     * configured {@link DisplayRenderer}. Failures are delivered through the
-     * returned result's {@code onError}, not the session's
-     * {@code onBackgroundError} — that handler is only for pushes the
-     * session initiates itself. Allowed until the session has ended.
-     */
-    public SessionResult<Void> updateDisplay(Basket basket) {
-        Objects.requireNonNull(basket, "basket");
-        return this.<Void>operation("updateDisplay", () -> {
-            requireOpen("updateDisplay");
-            display.show(basket);
-            return null;
+  private static boolean carriesRefundSaleItems(RefundAllocationType type) {
+    return type == RefundAllocationType.CARD || type == RefundAllocationType.STORED_VALUE;
+  }
+
+  private static SettlementMovement refundMovement(
+      SettlementStep step,
+      RefundAllocation allocation,
+      String saleTransactionId,
+      BigDecimal actualAmount,
+      String poiTransactionId,
+      Instant poiTransactionTimestamp,
+      Integer points,
+      Integer pointBalance) {
+    BigDecimal amount = actualAmount != null ? actualAmount : allocation.getAmount();
+    return SettlementMovement.builder()
+        .step(step)
+        .target(allocation.getTarget())
+        .amount(amount)
+        .saleTransactionId(saleTransactionId)
+        .poiTransactionId(poiTransactionId)
+        .poiTransactionTimestamp(poiTransactionTimestamp)
+        .memberId(allocation.getMemberId())
+        .points(points)
+        .pointBalance(pointBalance)
+        .build();
+  }
+
+  private static SettlementStep refundStep(RefundAllocationType type) {
+    switch (type) {
+      case CARD:
+        return SettlementStep.CARD_REFUND;
+      case STORED_VALUE:
+      case STORE_CREDIT:
+        return SettlementStep.STORED_VALUE_REFUND;
+      case EXTERNAL:
+        return SettlementStep.EXTERNAL_REFUND;
+      case POINT_REDEMPTION:
+        return SettlementStep.POINT_REDEMPTION_REFUND;
+      case REBATE:
+        return SettlementStep.REBATE_REFUND;
+      case AWARD:
+        return SettlementStep.AWARD_REFUND;
+      default:
+        throw new IllegalArgumentException("unsupported refund allocation type " + type);
+    }
+  }
+
+  private static void validateSettlementOptions(
+      Basket basket,
+      Basket chargePortion,
+      BigDecimal returnTotal,
+      BigDecimal netRefundAmount,
+      SettlementOptions options) {
+    if (chargePortion.getGrandTotal().signum() < 0) {
+      throw invalidState(
+          "credit lines exceed the sale-side value; credits cannot " + "create a customer payout");
+    }
+    validateRefundAllocations(returnTotal, netRefundAmount, options);
+    validateFulfillments(basket, options.getFulfillments());
+  }
+
+  private static void validateRefundAllocations(
+      BigDecimal returnTotal, BigDecimal netRefundAmount, SettlementOptions options) {
+    List<RefundAllocation> allocations = options.getRefunds();
+    if (returnTotal.signum() == 0 && !allocations.isEmpty()) {
+      throw invalidState("refund allocations require at least one return line");
+    }
+    BigDecimal allocated = monetaryAllocationTotal(allocations);
+    if (returnTotal.signum() == 0) {
+      return;
+    }
+    if (options.getSettlementType() == SettlementType.REFUND_THEN_CHARGE
+        && allocated.compareTo(returnTotal) != 0) {
+      throw invalidState(
+          "refund allocations total " + allocated + " but return lines total " + returnTotal);
+    }
+    if (options.getSettlementType() != SettlementType.NET) {
+      return;
+    }
+    if (allocated.compareTo(netRefundAmount) != 0) {
+      throw invalidState(
+          "net refund allocations total "
+              + allocated
+              + " but the net refund amount is "
+              + netRefundAmount);
+    }
+  }
+
+  private static void validateFulfillments(Basket basket, List<StoredValueLoad> fulfillments) {
+    HashSet<String> fulfilled = new HashSet<>();
+    for (StoredValueLoad fulfillment : fulfillments) {
+      String reference = fulfillment.getBasketReference();
+      if (!fulfilled.add(reference)) {
+        throw invalidState(
+            "basket line " + reference + " has more than one stored value fulfillment");
+      }
+      BasketLineItem line = basket.getItemByReference(reference);
+      if (line == null) {
+        throw invalidState("stored value fulfillment references missing basket line " + reference);
+      }
+      if (!line.isSale()) {
+        throw invalidState("basket line " + reference + " is not a sale and cannot be fulfilled");
+      }
+      if (line.getOriginalTotal().signum() <= 0) {
+        throw invalidState(
+            "basket line " + reference + " must have a positive original total for fulfillment");
+      }
+    }
+  }
+
+  private static BigDecimal monetaryAllocationTotal(List<RefundAllocation> allocations) {
+    BigDecimal allocated = BigDecimal.ZERO;
+    for (RefundAllocation allocation : allocations) {
+      if (allocation.countsTowardRefundTotal()) {
+        allocated = allocated.add(allocation.getAmount());
+      }
+    }
+    return allocated;
+  }
+
+  private void validateCommittedRefundRetry(List<RefundAllocation> allocations) {
+    List<RefundAllocation> committed = committedRefundAllocations;
+    if (committed.isEmpty()) {
+      return;
+    }
+    if (allocations.size() < committed.size()) {
+      throw committedRefundRetryError();
+    }
+    for (int i = 0; i < committed.size(); i++) {
+      if (!Objects.equals(committed.get(i), allocations.get(i))) {
+        throw committedRefundRetryError();
+      }
+    }
+  }
+
+  private static SessionException committedRefundRetryError() {
+    return invalidState(
+        "a previous settlement attempt already committed refund "
+            + "allocations; retry settle() with the same refund allocations");
+  }
+
+  private int committedRefundAllocationsCount() {
+    return committedRefundAllocations.size();
+  }
+
+  private List<SettlementMovement> committedRefundMovementsSnapshot() {
+    return List.copyOf(committedRefundMovements);
+  }
+
+  private boolean hasCommittedRefundAllocations() {
+    return !committedRefundAllocations.isEmpty();
+  }
+
+  private void recordCommittedRefundAllocation(
+      RefundAllocation allocation, SettlementMovement movement) {
+    lock.lock();
+    try {
+      List<RefundAllocation> allocations = new ArrayList<>(committedRefundAllocations);
+      allocations.add(allocation);
+      committedRefundAllocations = List.copyOf(allocations);
+
+      List<SettlementMovement> movements = new ArrayList<>(committedRefundMovements);
+      movements.add(movement);
+      committedRefundMovements = List.copyOf(movements);
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private void clearCommittedRefundAllocations() {
+    committedRefundAllocations = List.of();
+    committedRefundMovements = List.of();
+  }
+
+  private static List<CommittedStep> committedRefundSteps(List<SettlementMovement> movements) {
+    List<CommittedStep> steps = new ArrayList<>();
+    for (SettlementMovement movement : movements) {
+      steps.add(
+          new CommittedStep(
+              movement.getStep(),
+              movement.getSaleTransactionId(),
+              movement.getPoiTransactionId(),
+              movement.getPoiTransactionTimestamp(),
+              true));
+    }
+    return steps;
+  }
+
+  private static SettlementResult combineSettlementResult(
+      Basket fullBasket,
+      SettlementResult purchase,
+      List<SettlementMovement> refundMovements,
+      boolean netSettlement) {
+    List<SettlementMovement> movements = new ArrayList<>(refundMovements);
+    if (purchase != null) {
+      movements.addAll(purchase.getMovements());
+    }
+    BigDecimal cardRefunded = sumMovements(refundMovements, SettlementStep.CARD_REFUND);
+    BigDecimal storedValueRefunded =
+        sumMovements(refundMovements, SettlementStep.STORED_VALUE_REFUND);
+    BigDecimal externalRefunded = sumMovements(refundMovements, SettlementStep.EXTERNAL_REFUND);
+    BigDecimal loyaltyRefunded =
+        sumMovements(refundMovements, SettlementStep.POINT_REDEMPTION_REFUND)
+            .add(sumMovements(refundMovements, SettlementStep.REBATE_REFUND));
+    Basket finalBasket =
+        purchase == null
+            ? fullBasket
+            : netSettlement
+                ? purchase.getFinalBasket()
+                : fullBasket.withSettledChargePortion(purchase.getFinalBasket());
+    return (purchase == null ? SettlementResult.builder() : purchase.toBuilder())
+        .success(true)
+        .finalBasket(finalBasket)
+        .cardRefundedAmount(cardRefunded)
+        .storedValueRefundedAmount(storedValueRefunded)
+        .externalRefundedAmount(externalRefunded)
+        .loyaltyRefundedAmount(loyaltyRefunded)
+        .movements(movements)
+        .build();
+  }
+
+  private static BigDecimal sumMovements(List<SettlementMovement> movements, SettlementStep step) {
+    BigDecimal total = BigDecimal.ZERO;
+    for (SettlementMovement movement : movements) {
+      if (movement.getStep() == step && movement.getAmount() != null) {
+        total = total.add(movement.getAmount());
+      }
+    }
+    return total;
+  }
+
+  private void showFinalSettlement(Basket basket) {
+    if (!autoDisplay) {
+      return;
+    }
+    try {
+      showBasket(basket);
+    } catch (RuntimeException e) {
+      operations.backgroundError("the final settlement display", e);
+    }
+  }
+
+  // ─── Refund ───
+
+  /**
+   * Full linked refund of this session's completed payment. Also reverses the loyalty award when
+   * one ran — best-effort by default (override via {@link ReversalFlow#onError}).
+   *
+   * <p>Linked refunds reference a single transaction: after a split tender this is the card leg —
+   * use {@code voidTransaction()} to reverse both legs, or the stored value operations to return
+   * funds to the gift card. A refund reverses the card leg and award only; the sale's committed
+   * rebate and redemption movements are reversed by {@link #voidTransaction()}. Once a refund has
+   * returned money the payment can no longer be voided; a tender skipped by an {@code onError}
+   * decision leaves it voidable, with an award the flow reversed remembered so nothing re-credits
+   * it. Once a void has partially reversed the payment's money legs, refunds are refused until the
+   * void is finished. To refund a sale taken by an earlier session, ring return lines into a new
+   * checkout session and provide refund allocations on {@link SettlementOptions}. Loyalty reversals
+   * use the member attached when this payment settled, even if the session was subsequently
+   * re-identified.
+   */
+  public ReversalFlow<RefundResult> refund() {
+    operations.track("refund");
+    return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", null, true))
+        .session(operations);
+  }
+
+  /**
+   * Partial linked refund of this session's completed payment. Also reverses the loyalty award when
+   * one ran (best-effort by default).
+   */
+  public ReversalFlow<RefundResult> refund(BigDecimal amount) {
+    Objects.requireNonNull(amount, "amount");
+    requirePositive(amount);
+    operations.track("refund");
+    return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", amount, true))
+        .session(operations);
+  }
+
+  /** Unlinked refund, not tied to a prior transaction. Payment-only — no loyalty reversal. */
+  public ReversalFlow<RefundResult> refundUnlinked(BigDecimal amount) {
+    Objects.requireNonNull(amount, "amount");
+    requirePositive(amount);
+    operations.track("refundUnlinked");
+    return new ReversalFlow<RefundResult>(
+            flow -> executeRefund(flow, "refundUnlinked", amount, false))
+        .session(operations);
+  }
+
+  private RefundResult executeRefund(
+      ReversalFlow<RefundResult> flow, String name, BigDecimal amount, boolean linked) {
+    operations.begin(name);
+    requireRefundable(name);
+    if (linked) {
+      guards.requireNoReversedMoneyLeg();
+    }
+    OriginalSaleRecord paid = linked ? lastSettlementRecord : NO_SETTLEMENT;
+    if (linked && paid.getCardPoiTransactionId() == null) {
+      throw invalidState(
+          "a linked refund requires a completed payment in this "
+              + "session; refund a prior sale through settle() with return lines "
+              + "and SettlementOptions refund allocations");
+    }
+    boolean awardReversed = linked && guards.awardReversed();
+    return reversalManager.refund(
+        amount,
+        null,
+        paid.getCardPoiTransactionId(),
+        paid.getCardPoiTransactionTimestamp(),
+        awardReversed ? null : paid.getAwardPoiTransactionId(),
+        awardReversed ? null : paid.getAwardPoiTransactionTimestamp(),
+        linked ? paid.getMemberId() : null,
+        flow.decider(),
+        linked ? guards::markRefunded : () -> {},
+        linked ? () -> guards.markAwardReversed(paid.getAwardPoiTransactionId()) : () -> {});
+  }
+
+  private void requireRefundable(String operationName) {
+    lock.lock();
+    try {
+      requireOpen(operationName);
+      if (moneyMovementInFlight()) {
+        throw invalidState(operationName + " is not allowed while money movement is in flight");
+      }
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private static void requirePositive(BigDecimal amount) {
+    if (amount.signum() <= 0) {
+      throw new IllegalArgumentException("refund amount must be positive");
+    }
+  }
+
+  // ─── Void ───
+
+  /**
+   * Reverses this session's completed payment: every movement it committed — the card and stored
+   * value legs (Nexo {@code ReversalRequest}), then the redemption, rebate, and award (their {@code
+   * LoyaltyRequest} refund types) — in that order. A checkout fully covered by rewards has no money
+   * leg; voiding it refunds the loyalty movements alone. To void a sale taken by an earlier
+   * session, use {@link #voidTransaction(OriginalSaleRecord)}.
+   *
+   * <p>When a step fails, the flow's {@link ReversalFlow#onError onError} handler decides between
+   * retry, skip, and abort — see {@link ReversalFlow} for the default policy. A retried void
+   * resumes at the first movement still standing — reversed movements are never re-credited, and
+   * the retry's {@link VoidResult} describes only the movements that call sent. Until that retry
+   * succeeds, the session refuses {@code basket().clear()}, another settlement, and {@link #end()}
+   * because each would discard the in-memory resume progress. After the void succeeds, that
+   * progress is discarded; a later void or linked refund reaches the terminal, which owns
+   * already-voided transaction enforcement.
+   *
+   * <p>On a session whose payment failed with an incomplete rollback, {@code voidTransaction()}
+   * finishes the unwind by retrying the reversals that did not go through. Not allowed once the
+   * payment has been refunded from this session — a void would return the full amount on top of the
+   * refund, so further returns must use {@link #refund(BigDecimal)}. Loyalty reversals use the
+   * member attached when this payment settled, not a later session identification.
+   */
+  public ReversalFlow<VoidResult> voidTransaction() {
+    operations.track("voidTransaction");
+    return new ReversalFlow<VoidResult>(this::executeVoid).session(operations);
+  }
+
+  /**
+   * Voids a prior sale by its persisted original-sale record. This is a whole-transaction void:
+   * every referenced card, stored value, rebate, redemption, and award movement is reversed in the
+   * same order as a same-session void. If the void partially fails, retry it on the same session
+   * instance because the in-memory reversed-movement progress is what prevents already-reversed
+   * legs from being sent again; {@link #end()} is refused until that retry succeeds. Mixed
+   * sale/return settlements should use {@link #settle(SettlementOptions)} with refund allocations
+   * instead. A record containing any movement of this session's most recent settlement is refused;
+   * use parameterless {@link #voidTransaction()} so the settlement's shared refund/void guards
+   * remain authoritative.
+   */
+  public ReversalFlow<VoidResult> voidTransaction(OriginalSaleRecord originalSale) {
+    Objects.requireNonNull(originalSale, "originalSale");
+    operations.track("voidTransaction");
+    return new ReversalFlow<VoidResult>(flow -> executeVoid(flow, originalSale))
+        .session(operations);
+  }
+
+  private VoidResult executeVoid(ReversalFlow<VoidResult> flow) {
+    operations.begin("voidTransaction");
+    beginVoid();
+    boolean sameSessionVoidStarted = false;
+    Set<ReversalMovement.Key> reversedBefore = Set.of();
+    OriginalSaleRecord paid = NO_SETTLEMENT;
+    try {
+      // A failed settlement whose rollback was incomplete left
+      // movements standing; voiding that session finishes the unwind.
+      boolean resumeRollback = rollbackIncomplete();
+      List<ReversalMovement> movements = List.of();
+      if (!resumeRollback) {
+        if (hasCommittedRefundAllocations()) {
+          throw invalidState(
+              "voidTransaction cannot reverse committed refund "
+                  + "allocations; retry settle() with the same refund allocations");
+        }
+        guards.requireNotRefunded();
+        if (lastSettlementIncludesRefunds) {
+          throw invalidState(
+              "voidTransaction is only supported for a pure sale "
+                  + "settlement; this settlement included return lines");
+        }
+        paid = lastSettlementRecord;
+        movements = voidTarget(paid);
+        if (movements.isEmpty()) {
+          throw invalidState(
+              "voidTransaction requires a completed payment in this "
+                  + "session; to void a prior sale, use "
+                  + "voidTransaction(OriginalSaleRecord)");
+        }
+      }
+      if (resumeRollback) {
+        drainStandingMovements();
+      } else {
+        reversedBefore = Set.copyOf(guards.reversedMovements());
+        sameSessionVoidStarted = true;
+      }
+      // the manager filters against the reversed-movement set (and
+      // records progress into it), so a retry resumes at the
+      // movements still standing while the default policy still sees
+      // the whole target
+      VoidResult result =
+          reversalManager.voidMovements(
+              movements, paid.getMemberId(), flow.decider(), guards.reversedMovements());
+      if (!resumeRollback) {
+        guards.completeVoid();
+        lastPaymentVoidIncomplete = false;
+      }
+      return result;
+    } catch (RuntimeException e) {
+      if (sameSessionVoidStarted && !guards.reversedMovements().equals(reversedBefore)) {
+        lastPaymentVoidIncomplete = true;
+      }
+      throw e;
+    } finally {
+      endVoid();
+    }
+  }
+
+  private VoidResult executeVoid(ReversalFlow<VoidResult> flow, OriginalSaleRecord originalSale) {
+    operations.begin("voidTransaction");
+    if (!originalSale.hasMovement()) {
+      throw invalidState(
+          "voidTransaction(OriginalSaleRecord) requires at least "
+              + "one original transaction reference");
+    }
+    beginVoid();
+    try {
+      if (lastSettlementRecord.sharesMovementWith(originalSale)) {
+        throw invalidState(
+            "the original sale record references the most recent "
+                + "settlement in this session; use parameterless voidTransaction() "
+                + "so its refund and void guards remain consistent");
+      }
+      List<ReversalMovement> movements = voidTarget(originalSale);
+      Set<ReversalMovement.Key> reversedMovements = priorSaleVoidProgress(originalSale);
+      VoidResult result =
+          reversalManager.voidMovements(
+              movements, originalSale.getMemberId(), flow.decider(), reversedMovements);
+      clearPriorSaleVoidProgress(originalSale);
+      return result;
+    } finally {
+      endVoid();
+    }
+  }
+
+  private void beginVoid() {
+    lock.lock();
+    try {
+      requireOpen("voidTransaction");
+      if (moneyMovementInFlight()) {
+        throw invalidState("voidTransaction is not allowed while money movement " + "is in flight");
+      }
+      phase = SessionPhase.VOIDING;
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private void endVoid() {
+    lock.lock();
+    try {
+      phase = SessionPhase.OPEN;
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private static List<ReversalMovement> voidTarget(OriginalSaleRecord originalSale) {
+    return ReversalMovement.ofSale(
+        originalSale.getStoredValueLoads(),
+        PoiRef.ofNullable(
+            originalSale.getCardPoiTransactionId(), originalSale.getCardPoiTransactionTimestamp()),
+        PoiRef.ofNullable(
+            originalSale.getStoredValuePoiTransactionId(),
+            originalSale.getStoredValuePoiTransactionTimestamp()),
+        PoiRef.ofNullable(
+            originalSale.getRedemptionPoiTransactionId(),
+            originalSale.getRedemptionPoiTransactionTimestamp()),
+        PoiRef.ofNullable(
+            originalSale.getRebatePoiTransactionId(),
+            originalSale.getRebatePoiTransactionTimestamp()),
+        PoiRef.ofNullable(
+            originalSale.getAwardPoiTransactionId(),
+            originalSale.getAwardPoiTransactionTimestamp()));
+  }
+
+  private Set<ReversalMovement.Key> priorSaleVoidProgress(OriginalSaleRecord originalSale) {
+    lock.lock();
+    try {
+      if (priorSaleVoidTarget == null) {
+        priorSaleVoidTarget = originalSale;
+        return priorSaleVoidReversedMovements;
+      }
+      if (Objects.equals(priorSaleVoidTarget, originalSale)) {
+        return priorSaleVoidReversedMovements;
+      }
+      if (!priorSaleVoidReversedMovements.isEmpty()) {
+        throw invalidState(
+            "a void of another prior sale is partially complete; "
+                + "retry voidTransaction(OriginalSaleRecord) with the same "
+                + "original sale record before voiding another sale");
+      }
+      priorSaleVoidTarget = originalSale;
+      priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();
+      return priorSaleVoidReversedMovements;
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private void clearPriorSaleVoidProgress(OriginalSaleRecord originalSale) {
+    lock.lock();
+    try {
+      if (Objects.equals(priorSaleVoidTarget, originalSale)) {
+        priorSaleVoidTarget = null;
+        priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();
+      }
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  /**
+   * Re-runs each standing reversal in the unwind's own order, dropping movements as they succeed so
+   * a failed attempt can be retried from the first movement still standing.
+   */
+  private void drainStandingMovements() {
+    List<PaymentOrchestrator.StandingMovement> remaining;
+    lock.lock();
+    try {
+      // take ownership atomically: concurrent drains (abort() vs a
+      // retried settle() vs a second abort()) must not reverse the same
+      // movement twice, and only ONE drain may be reversing at a time
+      // — a concurrent caller fails fast instead of concluding from
+      // the empty list that the rollback completed
+      if (drainInFlight) {
+        throw invalidState(
+            "another recovery attempt is already reversing the "
+                + "standing movements; retry once it settles");
+      }
+      remaining = new ArrayList<>(standingMovements);
+      if (remaining.isEmpty()) {
+        return;
+      }
+      standingMovements = List.of();
+      drainInFlight = true;
+    } finally {
+      lock.unlock();
+    }
+    try {
+      for (Iterator<PaymentOrchestrator.StandingMovement> it = remaining.iterator();
+          it.hasNext(); ) {
+        it.next().reverse();
+        it.remove();
+      }
+    } finally {
+      // publish the outcome under the same lock the claim used: the
+      // remainder (if a reversal failed) and the end of the drain
+      lock.lock();
+      try {
+        if (!remaining.isEmpty()) {
+          standingMovements = List.copyOf(remaining);
+        }
+        drainInFlight = false;
+      } finally {
+        lock.unlock();
+      }
+    }
+  }
+
+  /**
+   * The previous payment's unwind left movements standing — or a drain has claimed them and is
+   * still reversing on the wire, which every guard must treat the same way: the rollback is not
+   * complete.
+   */
+  private boolean rollbackIncomplete() {
+    return !standingMovements.isEmpty() || drainInFlight;
+  }
+
+  /** The uniform guard failure for operations the session cannot honor. */
+  private static SessionException invalidState(String message) {
+    return new SessionException(new SessionError(SessionErrorCode.INVALID_STATE, message));
+  }
+
+  // ─── Display ───
+
+  /**
+   * Refreshes the customer display from the given basket snapshot using the configured {@link
+   * DisplayRenderer}. Failures are delivered through the returned result's {@code onError}, not the
+   * session's {@code onBackgroundError} — that handler is only for pushes the session initiates
+   * itself. Allowed until the session has ended.
+   */
+  public SessionResult<Void> updateDisplay(Basket basket) {
+    Objects.requireNonNull(basket, "basket");
+    return this.<Void>operation(
+        "updateDisplay",
+        () -> {
+          requireOpen("updateDisplay");
+          display.show(basket);
+          return null;
         });
-    }
+  }
 
-    /** Shows a basket snapshot; callers decide whether failures are fatal. */
-    private void showBasket(Basket basket) {
-        display.show(basket);
-    }
+  /** Shows a basket snapshot; callers decide whether failures are fatal. */
+  private void showBasket(Basket basket) {
+    display.show(basket);
+  }
 
-    /**
-     * Sends a custom display payload to the customer display (or the external
-     * display when configured). Same contract as
-     * {@link #updateDisplay(Basket)}.
-     */
-    public SessionResult<Void> updateDisplay(DisplayPayload payload) {
-        Objects.requireNonNull(payload, "payload");
-        return this.<Void>operation("updateDisplay", () -> {
-            requireOpen("updateDisplay");
-            display.send(payload);
-            return null;
+  /**
+   * Sends a custom display payload to the customer display (or the external display when
+   * configured). Same contract as {@link #updateDisplay(Basket)}.
+   */
+  public SessionResult<Void> updateDisplay(DisplayPayload payload) {
+    Objects.requireNonNull(payload, "payload");
+    return this.<Void>operation(
+        "updateDisplay",
+        () -> {
+          requireOpen("updateDisplay");
+          display.send(payload);
+          return null;
         });
-    }
+  }
 
-    // ─── Abort ───
+  // ─── Abort ───
 
-    /**
-     * Aborts the in-flight operation. The session itself continues — an
-     * abort is a normal register maneuver (cancel the signature prompt, stop
-     * a tender to take a gift card first), not an abandonment; to abandon
-     * the checkout after recovery, {@link #end()} the session. If recovery
-     * cannot be completed, use {@link #forceEnd(String)} explicitly.
-     *
-     * <p>If a terminal operation is awaiting a response, a Nexo
-     * {@code AbortRequest} referencing it is sent (best-effort) to the
-     * device that is processing it. An aborted payment stops at its next
-     * step boundary, reverses the committed steps, and leaves the basket
-     * intact so {@code settle()} may retry (the thrown error carries
-     * {@link SessionErrorCode#ABORTED}). Aborted prompts (input, PIN, card
-     * reads, identification) deliver their aborted/cancelled outcome. With
-     * nothing in flight this is a no-op.</p>
-     *
-     * <p>Money-moving operations (refunds, stored value) always deliver
-     * their outcome even when the abort raced them: the movement may have
-     * completed on the terminal, and the register must know. Voids and the
-     * session lifecycle signals are never the abort's target — cancelling
-     * an in-flight {@link #end()} would only strand the terminal's
-     * session-scoped data. An abort that lands after the payment completed
-     * leaves the transaction standing; use {@code voidTransaction()} to
-     * reverse it.</p>
-     *
-     * <p>Deliberately <em>unordered</em>: queued on the session's operation
-     * lane, the abort would wait on the very operation it cancels, so it
-     * overtakes it instead. Safe to call from any thread.</p>
-     */
-    public SessionResult<Void> abort() {
-        return this.<Void>operation("abort", () -> {
-            lock.lock();
-            try {
+  /**
+   * Aborts the in-flight operation. The session itself continues — an abort is a normal register
+   * maneuver (cancel the signature prompt, stop a tender to take a gift card first), not an
+   * abandonment; to abandon the checkout after recovery, {@link #end()} the session. If recovery
+   * cannot be completed, use {@link #forceEnd(String)} explicitly.
+   *
+   * <p>If a terminal operation is awaiting a response, a Nexo {@code AbortRequest} referencing it
+   * is sent (best-effort) to the device that is processing it. An aborted payment stops at its next
+   * step boundary, reverses the committed steps, and leaves the basket intact so {@code settle()}
+   * may retry (the thrown error carries {@link SessionErrorCode#ABORTED}). Aborted prompts (input,
+   * PIN, card reads, identification) deliver their aborted/cancelled outcome. With nothing in
+   * flight this is a no-op.
+   *
+   * <p>Money-moving operations (refunds, stored value) always deliver their outcome even when the
+   * abort raced them: the movement may have completed on the terminal, and the register must know.
+   * Voids and the session lifecycle signals are never the abort's target — cancelling an in-flight
+   * {@link #end()} would only strand the terminal's session-scoped data. An abort that lands after
+   * the payment completed leaves the transaction standing; use {@code voidTransaction()} to reverse
+   * it.
+   *
+   * <p>Deliberately <em>unordered</em>: queued on the session's operation lane, the abort would
+   * wait on the very operation it cancels, so it overtakes it instead. Safe to call from any
+   * thread.
+   */
+  public SessionResult<Void> abort() {
+    return this.<Void>operation(
+            "abort",
+            () -> {
+              lock.lock();
+              try {
                 // The flag and in-flight check share this critical section,
                 // so the reset a starting settlement performs cannot
                 // eat a live abort. Outside settlement the flag stays clear: a
@@ -1755,580 +1821,588 @@ public final class CheckoutSession implements AutoCloseable {
                 // checkAbort, and prompts are aborted via the wire request
                 // below.
                 if (phase == SessionPhase.SETTLING) {
-                    abortRequested = true;
+                  abortRequested = true;
                 }
-            } finally {
+              } finally {
                 lock.unlock();
-            }
-            // the session lifecycle signals are never the abort's target —
-            // Like a void, an in-flight end() always settles.
-            exchange.abortInFlight();
-            return null;
-        }).unordered();
+              }
+              // the session lifecycle signals are never the abort's target —
+              // Like a void, an in-flight end() always settles.
+              exchange.abortInFlight();
+              return null;
+            })
+        .unordered();
+  }
+
+  // ─── Session lifecycle ───
+
+  /**
+   * Announces this session to the terminal. Invoked by the builder's {@link Builder#start()
+   * start()} — the session is handed out only after this succeeds, so an unstarted session never
+   * escapes.
+   */
+  private CheckoutSession started() {
+    exchange.sendSessionSignal(SessionSignalCodec.start(sessionId));
+    return this;
+  }
+
+  /**
+   * Ends the session: tells the terminal to discard the session-scoped data it accumulated (Nexo
+   * {@code Admin} session end signal). After it succeeds, no session operation is allowed; create a
+   * new session to establish another terminal bracket.
+   *
+   * <p>Refused while money is in flight, while a failed payment's rollback is incomplete, while a
+   * same-session or prior-sale void is partially complete, or while refund allocations from a
+   * failed settlement have committed — finish the unwind with {@link #voidTransaction()} or retry
+   * {@code settle()} first, or the terminal/register state would be abandoned with money movements
+   * still unresolved. If the end signal fails, the session remains open so the call can be retried.
+   * A concurrent {@link #abort()} never cancels an in-flight end — the exchange always settles.
+   */
+  public SessionResult<Void> end() {
+    return endSession(false, null);
+  }
+
+  /**
+   * Irrevocably abandons this session and its in-memory recovery progress. Use only when an
+   * incomplete settlement rollback, refund allocation, or void cannot be recovered and the register
+   * has recorded the incident for reconciliation. Start a new {@code CheckoutSession} afterwards;
+   * forced termination never makes this instance reusable.
+   *
+   * <p>Unlike {@link #end()}, this operation bypasses unresolved-recovery guards. It still refuses
+   * to run while a settlement, void, or recovery drain is actively moving money. The supplied
+   * reason and the abandoned recovery categories are logged. The terminal end signal remains
+   * best-effort: if it fails, the returned result reports that failure, but the local session is
+   * still sealed and cannot be retried. A later recovery from a new session must use externally
+   * persisted transaction progress; this session's duplicate-movement protection is discarded.
+   *
+   * <p>{@link #close()} deliberately does not call this method. Automatic resource cleanup must
+   * never silently abandon financial recovery.
+   *
+   * @param reason nonblank operational reason recorded in the warning log
+   * @throws NullPointerException if {@code reason} is null
+   * @throws IllegalArgumentException if {@code reason} is blank
+   */
+  public SessionResult<Void> forceEnd(String reason) {
+    Objects.requireNonNull(reason, "reason");
+    String normalizedReason = reason.strip();
+    if (normalizedReason.isEmpty()) {
+      throw new IllegalArgumentException("reason must not be blank");
     }
+    return endSession(true, normalizedReason);
+  }
 
-    // ─── Session lifecycle ───
-
-    /**
-     * Announces this session to the terminal. Invoked by the builder's
-     * {@link Builder#start() start()} — the session is handed out only after
-     * this succeeds, so an unstarted session never escapes.
-     */
-    private CheckoutSession started() {
-        exchange.sendSessionSignal(SessionSignalCodec.start(sessionId));
-        return this;
+  /**
+   * Best-effort {@link #end()} for try-with-resources: a failure to send the end signal, or an
+   * unresolved movement that refuses {@code end()}, is logged, not thrown, and an already-ended
+   * session is left alone. Registers that need to react to a failed end should call {@code end()}
+   * directly.
+   *
+   * <p>Blocking, and queued behind any in-flight operation — so with a callback executor
+   * configured, never call it from that executor's thread while operations may be in flight: the
+   * in-flight operation may need this thread for its handlers before it can finish, and both would
+   * wait forever. UI-driven teardown should use {@code end().execute()} with an {@code onComplete}
+   * instead; close() is for try-with-resources and process-exit paths.
+   */
+  @Override
+  public void close() {
+    if (phase == SessionPhase.ENDED) {
+      return;
     }
+    // synchronous deliberately: close() runs on teardown paths (often
+    // try-with-resources or process exit) where a queued async end
+    // would be lost with the closing scope
+    end().onError(e -> LOGGER.warning("close() could not end the session: " + e)).executeSync();
+  }
 
-    /**
-     * Ends the session: tells the terminal to discard the session-scoped
-     * data it accumulated (Nexo {@code Admin} session end signal). After it
-     * succeeds, no session operation is allowed; create a new session to
-     * establish another terminal bracket.
-     *
-     * <p>Refused while money is in flight, while a failed payment's rollback
-     * is incomplete, while a same-session or prior-sale void is partially
-     * complete, or while refund allocations from a failed settlement have
-     * committed — finish the unwind with {@link #voidTransaction()} or retry
-     * {@code settle()} first, or the terminal/register state would be
-     * abandoned with money movements still unresolved. If the end signal
-     * fails, the session remains open so the call can be retried.
-     * A concurrent {@link #abort()} never cancels an in-flight end — the
-     * exchange always settles.</p>
-     */
-    public SessionResult<Void> end() {
-        return endSession(false, null);
-    }
+  // ─── Transaction Status ───
 
-    /**
-     * Irrevocably abandons this session and its in-memory recovery progress.
-     * Use only when an incomplete settlement rollback, refund allocation, or
-     * void cannot be recovered and the register has recorded the incident for
-     * reconciliation. Start a new {@code CheckoutSession} afterwards; forced
-     * termination never makes this instance reusable.
-     *
-     * <p>Unlike {@link #end()}, this operation bypasses unresolved-recovery
-     * guards. It still refuses to run while a settlement, void, or recovery
-     * drain is actively moving money. The supplied reason and the abandoned
-     * recovery categories are logged. The terminal end signal remains
-     * best-effort: if it fails, the returned result reports that failure, but
-     * the local session is still sealed and cannot be retried. A later
-     * recovery from a new session must use externally persisted transaction
-     * progress; this session's duplicate-movement protection is discarded.</p>
-     *
-     * <p>{@link #close()} deliberately does not call this method. Automatic
-     * resource cleanup must never silently abandon financial recovery.</p>
-     *
-     * @param reason nonblank operational reason recorded in the warning log
-     * @throws NullPointerException if {@code reason} is null
-     * @throws IllegalArgumentException if {@code reason} is blank
-     */
-    public SessionResult<Void> forceEnd(String reason) {
-        Objects.requireNonNull(reason, "reason");
-        String normalizedReason = reason.strip();
-        if (normalizedReason.isEmpty()) {
-            throw new IllegalArgumentException("reason must not be blank");
-        }
-        return endSession(true, normalizedReason);
-    }
+  /**
+   * Checks the status of a prior request by the {@code ServiceID} it was sent with. Maps to Nexo
+   * {@code TransactionStatusRequest}; the terminal repeats the original response when the
+   * transaction is found.
+   *
+   * @param originalServiceId the {@code ServiceID} of the original request
+   */
+  public SessionResult<TransactionStatusResult> getTransactionStatus(String originalServiceId) {
+    return getTransactionStatus(originalServiceId, TransactionStatusOptions.defaults());
+  }
 
-    /**
-     * Best-effort {@link #end()} for try-with-resources: a failure to send
-     * the end signal, or an unresolved movement that refuses {@code end()}, is
-     * logged, not thrown, and an already-ended session is left alone.
-     * Registers that need to react to a failed end should call
-     * {@code end()} directly.
-     *
-     * <p>Blocking, and queued behind any in-flight operation — so with a
-     * callback executor configured, never call it from that executor's
-     * thread while operations may be in flight: the in-flight operation
-     * may need this thread for its handlers before it can finish, and
-     * both would wait forever. UI-driven teardown should use
-     * {@code end().execute()} with an {@code onComplete} instead; close()
-     * is for try-with-resources and process-exit paths.</p>
-     */
-    @Override
-    public void close() {
-        if (phase == SessionPhase.ENDED) {
-            return;
-        }
-        // synchronous deliberately: close() runs on teardown paths (often
-        // try-with-resources or process exit) where a queued async end
-        // would be lost with the closing scope
-        end().onError(e -> LOGGER.warning("close() could not end the session: " + e))
-                .executeSync();
-    }
-
-    // ─── Transaction Status ───
-
-    /**
-     * Checks the status of a prior request by the {@code ServiceID} it was
-     * sent with. Maps to Nexo {@code TransactionStatusRequest}; the terminal
-     * repeats the original response when the transaction is found.
-     *
-     * @param originalServiceId the {@code ServiceID} of the original request
-     */
-    public SessionResult<TransactionStatusResult> getTransactionStatus(String originalServiceId) {
-        return getTransactionStatus(originalServiceId, TransactionStatusOptions.defaults());
-    }
-
-    /**
-     * Checks the status of a prior request, optionally requesting receipt
-     * data for reprinting and referencing a non-payment original.
-     */
-    public SessionResult<TransactionStatusResult> getTransactionStatus(
-            String originalServiceId, TransactionStatusOptions options) {
-        Objects.requireNonNull(originalServiceId, "originalServiceId");
-        Objects.requireNonNull(options, "options");
-        return operation("getTransactionStatus", () -> {
-            requireOpen("getTransactionStatus");
-            TransactionStatusRequest.Builder statusRequest = TransactionStatusRequest.builder()
-                    .messageReference(MessageReference.builder()
-                            .messageCategory(options.getOriginalCategory())
-                            .serviceID(originalServiceId)
-                            .saleID(factory.getSaleId())
-                            .build());
-            if (options.isReceiptReprint()) {
-                statusRequest.receiptReprintFlag(true)
-                        .documentQualifier(options.getDocumentQualifiers()
-                                .toArray(new DocumentQualifierEnum[0]));
-            }
-            SaleToPOIRequest request = SaleToPOIRequest.builder()
-                    .messageHeader(factory.header(MessageClassType.SERVICE,
-                            MessageCategoryType.TRANSACTION_STATUS))
-                    .transactionStatusRequest(statusRequest.build())
-                    .build();
-            SaleToPOIResponse response = exchange.sendExpectingBody(
-                    MessageCategoryType.TRANSACTION_STATUS, request);
-            TransactionStatusResponse body = response.getTransactionStatusResponse();
-            if (body == null) {
-                throw Wire.missing("TransactionStatusResponse");
-            }
-            if (body.getResponse() != null
-                    && body.getResponse().getResult() == ResultType.FAILURE
-                    && body.getResponse().getErrorCondition() == ErrorConditionType.NOT_FOUND) {
-                return TransactionStatusResult.notFound();
-            }
-            exchange.requireSuccess(MessageCategoryType.TRANSACTION_STATUS, body.getResponse());
-            return toTransactionStatusResult(body);
-        });
-    }
-
-    private static TransactionStatusResult toTransactionStatusResult(TransactionStatusResponse body) {
-        RepeatedResponseMessageBody repeated = body.getRepeatedMessageResponse() == null
-                ? null
-                : body.getRepeatedMessageResponse().getRepeatedResponseMessageBody();
-        if (repeated == null) {
+  /**
+   * Checks the status of a prior request, optionally requesting receipt data for reprinting and
+   * referencing a non-payment original.
+   */
+  public SessionResult<TransactionStatusResult> getTransactionStatus(
+      String originalServiceId, TransactionStatusOptions options) {
+    Objects.requireNonNull(originalServiceId, "originalServiceId");
+    Objects.requireNonNull(options, "options");
+    return operation(
+        "getTransactionStatus",
+        () -> {
+          requireOpen("getTransactionStatus");
+          TransactionStatusRequest.Builder statusRequest =
+              TransactionStatusRequest.builder()
+                  .messageReference(
+                      MessageReference.builder()
+                          .messageCategory(options.getOriginalCategory())
+                          .serviceID(originalServiceId)
+                          .saleID(factory.getSaleId())
+                          .build());
+          if (options.isReceiptReprint()) {
+            statusRequest
+                .receiptReprintFlag(true)
+                .documentQualifier(
+                    options.getDocumentQualifiers().toArray(new DocumentQualifierEnum[0]));
+          }
+          SaleToPOIRequest request =
+              SaleToPOIRequest.builder()
+                  .messageHeader(
+                      factory.header(
+                          MessageClassType.SERVICE, MessageCategoryType.TRANSACTION_STATUS))
+                  .transactionStatusRequest(statusRequest.build())
+                  .build();
+          SaleToPOIResponse response =
+              exchange.sendExpectingBody(MessageCategoryType.TRANSACTION_STATUS, request);
+          TransactionStatusResponse body = response.getTransactionStatusResponse();
+          if (body == null) {
+            throw Wire.missing("TransactionStatusResponse");
+          }
+          if (body.getResponse() != null
+              && body.getResponse().getResult() == ResultType.FAILURE
+              && body.getResponse().getErrorCondition() == ErrorConditionType.NOT_FOUND) {
             return TransactionStatusResult.notFound();
-        }
-        String category = null;
-        if (body.getRepeatedMessageResponse().getMessageHeader() != null
-                && body.getRepeatedMessageResponse().getMessageHeader().getMessageCategory() != null) {
-            category = body.getRepeatedMessageResponse().getMessageHeader()
-                    .getMessageCategory().toValue();
-        }
-        return TransactionStatusResult.found(category,
-                repeated.getPaymentResponse(),
-                repeated.getLoyaltyResponse(),
-                repeated.getStoredValueResponse(),
-                repeated.getReversalResponse());
+          }
+          exchange.requireSuccess(MessageCategoryType.TRANSACTION_STATUS, body.getResponse());
+          return toTransactionStatusResult(body);
+        });
+  }
+
+  private static TransactionStatusResult toTransactionStatusResult(TransactionStatusResponse body) {
+    RepeatedResponseMessageBody repeated =
+        body.getRepeatedMessageResponse() == null
+            ? null
+            : body.getRepeatedMessageResponse().getRepeatedResponseMessageBody();
+    if (repeated == null) {
+      return TransactionStatusResult.notFound();
     }
+    String category = null;
+    if (body.getRepeatedMessageResponse().getMessageHeader() != null
+        && body.getRepeatedMessageResponse().getMessageHeader().getMessageCategory() != null) {
+      category =
+          body.getRepeatedMessageResponse().getMessageHeader().getMessageCategory().toValue();
+    }
+    return TransactionStatusResult.found(
+        category,
+        repeated.getPaymentResponse(),
+        repeated.getLoyaltyResponse(),
+        repeated.getStoredValueResponse(),
+        repeated.getReversalResponse());
+  }
 
-    // ─── Input update ───
+  // ─── Input update ───
 
-    /**
-     * Replaces the display content of the input prompt currently awaiting a
-     * response (Nexo {@code InputUpdate}) — e.g. to update a countdown or
-     * amend the prompt while the customer decides.
-     *
-     * <p>Because input calls block their calling thread, this must be
-     * invoked from a different thread; like {@link #abort()} it is safe to
-     * do so. Fails with {@link SessionErrorCode#INVALID_STATE} when no input
-     * is in progress.</p>
-     */
-    public SessionResult<Void> updateInputDisplay(DisplayPayload payload) {
-        Objects.requireNonNull(payload, "payload");
-        // unordered, like abort(): both exist to overlap the in-flight
-        // operation occupying the operation thread — queued behind it,
-        // this would wait on the very prompt it amends, and an abort on
-        // the very operation it cancels
-        return this.<Void>operation("updateInputDisplay", () -> {
-            NexoExchange.InFlight inFlight = exchange.currentInFlight();
-            if (inFlight == null || inFlight.getCategory() != MessageCategoryType.INPUT) {
+  /**
+   * Replaces the display content of the input prompt currently awaiting a response (Nexo {@code
+   * InputUpdate}) — e.g. to update a countdown or amend the prompt while the customer decides.
+   *
+   * <p>Because input calls block their calling thread, this must be invoked from a different
+   * thread; like {@link #abort()} it is safe to do so. Fails with {@link
+   * SessionErrorCode#INVALID_STATE} when no input is in progress.
+   */
+  public SessionResult<Void> updateInputDisplay(DisplayPayload payload) {
+    Objects.requireNonNull(payload, "payload");
+    // unordered, like abort(): both exist to overlap the in-flight
+    // operation occupying the operation thread — queued behind it,
+    // this would wait on the very prompt it amends, and an abort on
+    // the very operation it cancels
+    return this.<Void>operation(
+            "updateInputDisplay",
+            () -> {
+              NexoExchange.InFlight inFlight = exchange.currentInFlight();
+              if (inFlight == null || inFlight.getCategory() != MessageCategoryType.INPUT) {
                 throw invalidState(
-                        "updateInputDisplay requires an input request awaiting a response");
-            }
-            String base64;
-            try {
+                    "updateInputDisplay requires an input request awaiting a response");
+              }
+              String base64;
+              try {
                 base64 = DisplayPayloadHelper.toBase64(payload);
-            } catch (JAXBException e) {
-                throw new SessionException(new SessionError(SessionErrorCode.UNKNOWN,
-                        "failed to serialize input update payload", null, e));
-            }
-            SaleToPOIRequest request = SaleToPOIRequest.builder()
-                    .messageHeader(factory.header(MessageClassType.DEVICE,
-                            MessageCategoryType.INPUT_UPDATE))
-                    .inputUpdate(InputUpdate.builder()
-                            .messageReference(MessageReference.builder()
-                                    .messageCategory(MessageCategoryType.INPUT)
-                                    .serviceID(inFlight.getServiceId())
-                                    .saleID(factory.getSaleId())
-                                    .build())
-                            .outputContent(OutputContent.builder()
-                                    .outputFormat(OutputFormatEnum.XHTML)
-                                    .outputXHTML(base64)
-                                    .build())
-                            .build())
-                    .build();
-            try {
+              } catch (JAXBException e) {
+                throw new SessionException(
+                    new SessionError(
+                        SessionErrorCode.UNKNOWN,
+                        "failed to serialize input update payload",
+                        null,
+                        e));
+              }
+              SaleToPOIRequest request =
+                  SaleToPOIRequest.builder()
+                      .messageHeader(
+                          factory.header(MessageClassType.DEVICE, MessageCategoryType.INPUT_UPDATE))
+                      .inputUpdate(
+                          InputUpdate.builder()
+                              .messageReference(
+                                  MessageReference.builder()
+                                      .messageCategory(MessageCategoryType.INPUT)
+                                      .serviceID(inFlight.getServiceId())
+                                      .saleID(factory.getSaleId())
+                                      .build())
+                              .outputContent(
+                                  OutputContent.builder()
+                                      .outputFormat(OutputFormatEnum.XHTML)
+                                      .outputXHTML(base64)
+                                      .build())
+                              .build())
+                      .build();
+              try {
                 // must go to the device processing the input, not through routing
                 inFlight.getClient().request(factory.envelope(request));
-            } catch (BiltNexoClientException e) {
-                throw new SessionException(new SessionError(SessionErrorCode.NETWORK,
-                        "input update failed: " + e.getMessage(), null, e));
+              } catch (BiltNexoClientException e) {
+                throw new SessionException(
+                    new SessionError(
+                        SessionErrorCode.NETWORK,
+                        "input update failed: " + e.getMessage(),
+                        null,
+                        e));
+              }
+              return null;
+            })
+        .unordered();
+  }
+
+  // ─── Terminal (device & admin operations) ───
+
+  /**
+   * The device and admin operations of this session's terminal — {@code diagnose()}, {@code
+   * getTotals()}, {@code reconcile()}, {@code print()}, {@code playSound()}/{@code stopSound()} —
+   * built from this session's client, identifiers, and callback executor. Created lazily and
+   * cached; see {@link Terminal}.
+   *
+   * <p>The terminal is deliberately independent of the session: it has its own operation thread and
+   * exchange, so its operations do not queue behind an in-flight payment (a connectivity check
+   * mid-payment works), they keep working after {@link #end()}, and its {@link Terminal#close()
+   * close()} does not touch the session. For the same reason {@link #abort()} does not target
+   * terminal operations — they run on a separate exchange.
+   */
+  public Terminal terminal() {
+    Terminal current = terminal;
+    if (current != null) {
+      return current;
+    }
+    lock.lock();
+    try {
+      if (terminal == null) {
+        terminal =
+            Terminal.builder()
+                .client(client)
+                .saleId(factory.getSaleId())
+                .poiId(factory.getPoiId())
+                .storeLocation(storeLocation)
+                .callbackExecutor(operations.callback())
+                .build();
+      }
+      return terminal;
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  // ─── Escape hatch ───
+
+  /** The underlying terminal client, for raw Nexo access. */
+  public BiltNexoTerminalClient getClient() {
+    return client;
+  }
+
+  // ─── Internals ───
+
+  private SessionResult<Void> endSession(boolean forced, String reason) {
+    String operationName = forced ? "forceEnd" : "end";
+    return operation(
+        operationName,
+        () -> {
+          String abandonedRecovery = null;
+          lock.lock();
+          try {
+            if (phase == SessionPhase.ENDING || phase == SessionPhase.ENDED) {
+              throw invalidState("the session has already ended; create a new session");
             }
+            if (moneyMovementInFlight()) {
+              throw invalidState(
+                  operationName + "() is not allowed while money movement " + "is in flight");
+            }
+            if (forced) {
+              if (drainInFlight) {
+                throw invalidState(
+                    "forceEnd() is not allowed while settlement " + "recovery is moving money");
+              }
+              abandonedRecovery = unresolvedRecoverySummary();
+            } else {
+              requireRecoveryCompleteForEnd();
+            }
+            phase = SessionPhase.ENDING;
+          } finally {
+            lock.unlock();
+          }
+
+          if (!forced) {
+            try {
+              exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
+            } catch (RuntimeException e) {
+              lock.lock();
+              try {
+                phase = SessionPhase.OPEN;
+              } finally {
+                lock.unlock();
+              }
+              throw e;
+            }
+            sealSession(false);
             return null;
-        }).unordered();
+          }
+
+          try {
+            LOGGER.warning(
+                "forceEnd() is abandoning session "
+                    + sessionId
+                    + " (reason: "
+                    + reason
+                    + "); unresolved recovery: "
+                    + abandonedRecovery);
+            exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
+          } finally {
+            // This is the escape hatch: local teardown is final even if
+            // the terminal cannot acknowledge its own cleanup.
+            sealSession(true);
+          }
+          return null;
+        });
+  }
+
+  private void requireRecoveryCompleteForEnd() {
+    if (rollbackIncomplete()) {
+      throw invalidState(
+          "a failed payment's rollback is incomplete; "
+              + "finish the unwind with voidTransaction() before ending "
+              + "the session");
+    }
+    if (lastPaymentVoidIncomplete) {
+      throw invalidState(
+          "a void of the most recent payment is partially "
+              + "complete; retry voidTransaction() before ending the session");
+    }
+    if (!priorSaleVoidReversedMovements.isEmpty()) {
+      throw invalidState(
+          "a prior-sale void is partially complete; retry "
+              + "voidTransaction(OriginalSaleRecord) with the same original "
+              + "sale record before ending the session");
+    }
+    if (hasCommittedRefundAllocations()) {
+      throw invalidState(
+          "refund allocations from a failed settlement are "
+              + "committed; retry settle() with the same refund allocations "
+              + "before ending the session");
+    }
+  }
+
+  private String unresolvedRecoverySummary() {
+    List<String> unresolved = new ArrayList<>();
+    if (!standingMovements.isEmpty()) {
+      unresolved.add(standingMovements.size() + " standing rollback movement(s)");
+    }
+    if (lastPaymentVoidIncomplete) {
+      unresolved.add(guards.reversedMovements().size() + " reversed same-session void movement(s)");
+    }
+    if (!priorSaleVoidReversedMovements.isEmpty()) {
+      unresolved.add(
+          priorSaleVoidReversedMovements.size() + " reversed prior-sale void movement(s)");
+    }
+    if (hasCommittedRefundAllocations()) {
+      unresolved.add(committedRefundAllocations.size() + " committed refund allocation(s)");
+    }
+    return unresolved.isEmpty() ? "none" : String.join(", ", unresolved);
+  }
+
+  private void sealSession(boolean abandonRecovery) {
+    lock.lock();
+    try {
+      if (abandonRecovery) {
+        standingMovements = List.of();
+        committedRefundAllocations = List.of();
+        committedRefundMovements = List.of();
+        lastPaymentVoidIncomplete = false;
+        guards.reset();
+        priorSaleVoidTarget = null;
+        priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();
+      }
+      phase = SessionPhase.ENDED;
+    } finally {
+      lock.unlock();
+    }
+    // no further operations may run; asynchronous submissions after
+    // this fail into their handlers instead of queueing forever
+    operations.shutdown();
+  }
+
+  private <T> SessionResult<T> operation(String name, Supplier<T> body) {
+    return operations.operation(name, body);
+  }
+
+  /** Builder for {@link CheckoutSession}. */
+  public static final class Builder {
+
+    private BiltNexoTerminalClient client;
+    private String saleId;
+    private String poiId;
+    private String currency;
+    private String storeLocation;
+    private boolean autoDisplay = true;
+    private BiltNexoTerminalClient externalDisplayClient;
+    private DisplayRenderer displayRenderer;
+    private Consumer<Basket> onBasketUpdated;
+    private Executor callbackExecutor;
+    private Consumer<SessionError> onBackgroundError;
+
+    private Builder() {}
+
+    /** The terminal client. Required. */
+    public Builder client(BiltNexoTerminalClient client) {
+      this.client = client;
+      return this;
     }
 
-    // ─── Terminal (device & admin operations) ───
+    /** POS identifier sent as {@code SaleID}. Required. */
+    public Builder saleId(String saleId) {
+      this.saleId = saleId;
+      return this;
+    }
+
+    /** Target terminal identifier sent as {@code POIID}. Required. */
+    public Builder poiId(String poiId) {
+      this.poiId = poiId;
+      return this;
+    }
+
+    /** ISO 4217 currency code, e.g. {@code "USD"}. Required. */
+    public Builder currency(String currency) {
+      this.currency = currency;
+      return this;
+    }
 
     /**
-     * The device and admin operations of this session's terminal —
-     * {@code diagnose()}, {@code getTotals()}, {@code reconcile()},
-     * {@code print()}, {@code playSound()}/{@code stopSound()} — built from
-     * this session's client, identifiers, and callback executor. Created
-     * lazily and cached; see {@link Terminal}.
-     *
-     * <p>The terminal is deliberately independent of the session: it has its
-     * own operation thread and exchange, so its operations do not queue
-     * behind an in-flight payment (a connectivity check mid-payment works),
-     * they keep working after {@link #end()}, and its {@link Terminal#close()
-     * close()} does not touch the session. For the same reason
-     * {@link #abort()} does not target terminal operations — they run on a
-     * separate exchange.</p>
+     * Store location identifier, sent as {@code SaleTerminalData.TotalsGroupID} on every
+     * transaction this session creates — it groups the store's transactions for totals and
+     * reconciliation ({@code getTotals()} filters by it). Optional.
      */
-    public Terminal terminal() {
-        Terminal current = terminal;
-        if (current != null) {
-            return current;
-        }
-        lock.lock();
-        try {
-            if (terminal == null) {
-                terminal = Terminal.builder()
-                        .client(client)
-                        .saleId(factory.getSaleId())
-                        .poiId(factory.getPoiId())
-                        .storeLocation(storeLocation)
-                        .callbackExecutor(operations.callback())
-                        .build();
-            }
-            return terminal;
-        } finally {
-            lock.unlock();
-        }
+    public Builder storeLocation(String storeLocation) {
+      this.storeLocation = storeLocation;
+      return this;
     }
 
-    // ─── Escape hatch ───
-
-    /** The underlying terminal client, for raw Nexo access. */
-    public BiltNexoTerminalClient getClient() {
-        return client;
+    /**
+     * Whether basket mutations automatically refresh the customer display. Default {@code true}.
+     */
+    public Builder autoDisplay(boolean autoDisplay) {
+      this.autoDisplay = autoDisplay;
+      return this;
     }
 
-    // ─── Internals ───
-
-    private SessionResult<Void> endSession(boolean forced, String reason) {
-        String operationName = forced ? "forceEnd" : "end";
-        return operation(operationName, () -> {
-            String abandonedRecovery = null;
-            lock.lock();
-            try {
-                if (phase == SessionPhase.ENDING || phase == SessionPhase.ENDED) {
-                    throw invalidState(
-                            "the session has already ended; create a new session");
-                }
-                if (moneyMovementInFlight()) {
-                    throw invalidState(operationName + "() is not allowed while money movement "
-                            + "is in flight");
-                }
-                if (forced) {
-                    if (drainInFlight) {
-                        throw invalidState("forceEnd() is not allowed while settlement "
-                                + "recovery is moving money");
-                    }
-                    abandonedRecovery = unresolvedRecoverySummary();
-                } else {
-                    requireRecoveryCompleteForEnd();
-                }
-                phase = SessionPhase.ENDING;
-            } finally {
-                lock.unlock();
-            }
-
-            if (!forced) {
-                try {
-                    exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
-                } catch (RuntimeException e) {
-                    lock.lock();
-                    try {
-                        phase = SessionPhase.OPEN;
-                    } finally {
-                        lock.unlock();
-                    }
-                    throw e;
-                }
-                sealSession(false);
-                return null;
-            }
-
-            try {
-                LOGGER.warning("forceEnd() is abandoning session " + sessionId
-                        + " (reason: " + reason + "); unresolved recovery: "
-                        + abandonedRecovery);
-                exchange.sendSessionSignal(SessionSignalCodec.end(sessionId));
-            } finally {
-                // This is the escape hatch: local teardown is final even if
-                // the terminal cannot acknowledge its own cleanup.
-                sealSession(true);
-            }
-            return null;
-        });
+    /**
+     * A second client for an external customer display device. When set, {@code Display} and {@code
+     * Input} messages are routed to it, while payment, card, and PIN operations stay on the
+     * terminal.
+     */
+    public Builder externalDisplayClient(BiltNexoTerminalClient externalDisplayClient) {
+      this.externalDisplayClient = externalDisplayClient;
+      return this;
     }
 
-    private void requireRecoveryCompleteForEnd() {
-        if (rollbackIncomplete()) {
-            throw invalidState("a failed payment's rollback is incomplete; "
-                    + "finish the unwind with voidTransaction() before ending "
-                    + "the session");
-        }
-        if (lastPaymentVoidIncomplete) {
-            throw invalidState("a void of the most recent payment is partially "
-                    + "complete; retry voidTransaction() before ending the session");
-        }
-        if (!priorSaleVoidReversedMovements.isEmpty()) {
-            throw invalidState("a prior-sale void is partially complete; retry "
-                    + "voidTransaction(OriginalSaleRecord) with the same original "
-                    + "sale record before ending the session");
-        }
-        if (hasCommittedRefundAllocations()) {
-            throw invalidState("refund allocations from a failed settlement are "
-                    + "committed; retry settle() with the same refund allocations "
-                    + "before ending the session");
-        }
+    /**
+     * Custom rendering of basket snapshots for the customer display. Rarely necessary; defaults to
+     * the standard itemised receipt.
+     */
+    public Builder displayRenderer(DisplayRenderer displayRenderer) {
+      this.displayRenderer = displayRenderer;
+      return this;
     }
 
-    private String unresolvedRecoverySummary() {
-        List<String> unresolved = new ArrayList<>();
-        if (!standingMovements.isEmpty()) {
-            unresolved.add(standingMovements.size() + " standing rollback movement(s)");
-        }
-        if (lastPaymentVoidIncomplete) {
-            unresolved.add(guards.reversedMovements().size()
-                    + " reversed same-session void movement(s)");
-        }
-        if (!priorSaleVoidReversedMovements.isEmpty()) {
-            unresolved.add(priorSaleVoidReversedMovements.size()
-                    + " reversed prior-sale void movement(s)");
-        }
-        if (hasCommittedRefundAllocations()) {
-            unresolved.add(committedRefundAllocations.size()
-                    + " committed refund allocation(s)");
-        }
-        return unresolved.isEmpty() ? "none" : String.join(", ", unresolved);
+    /**
+     * Out-of-band basket update callback. Reserved for a future reactive mode in which the terminal
+     * pushes offer/member changes during scanning; not invoked in v1.
+     */
+    public Builder onBasketUpdated(Consumer<Basket> onBasketUpdated) {
+      this.onBasketUpdated = onBasketUpdated;
+      return this;
     }
 
-    private void sealSession(boolean abandonRecovery) {
-        lock.lock();
-        try {
-            if (abandonRecovery) {
-                standingMovements = List.of();
-                committedRefundAllocations = List.of();
-                committedRefundMovements = List.of();
-                lastPaymentVoidIncomplete = false;
-                guards.reset();
-                priorSaleVoidTarget = null;
-                priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();
-            }
-            phase = SessionPhase.ENDED;
-        } finally {
-            lock.unlock();
-        }
-        // no further operations may run; asynchronous submissions after
-        // this fail into their handlers instead of queueing forever
-        operations.shutdown();
+    /**
+     * Where asynchronously executed operations deliver their handlers — e.g. an Android main-thread
+     * executor so handlers may touch UI directly. Applies to {@code execute()}; {@code
+     * executeSync()} and the blocking accessors are unaffected. Overridable per call with {@code
+     * callbackOn(executor)}. Without one, handlers run directly on the session's operation thread
+     * and must be fast, non-blocking, and must never synchronously invoke another session
+     * operation.
+     */
+    public Builder callbackExecutor(Executor callbackExecutor) {
+      this.callbackExecutor = callbackExecutor;
+      return this;
     }
 
-    private <T> SessionResult<T> operation(String name, Supplier<T> body) {
-        return operations.operation(name, body);
+    /**
+     * Handler for failures of work the session performs on its own behalf, with no result object to
+     * report through: the automatic display push after a basket mutation ({@link
+     * #autoDisplay(boolean)}) and the final settlement display refresh. Manual {@code
+     * updateDisplay(...)} failures are not delivered here — they report through their own per-call
+     * {@code onError}.
+     *
+     * <p>Background failures never interrupt the checkout and are logged whether or not a handler
+     * is registered. Delivered through the {@link #callbackExecutor(Executor) callbackExecutor}
+     * when one is configured, directly on the failing thread otherwise.
+     */
+    public Builder onBackgroundError(Consumer<SessionError> onBackgroundError) {
+      this.onBackgroundError = onBackgroundError;
+      return this;
     }
 
-    /** Builder for {@link CheckoutSession}. */
-    public static final class Builder {
-
-        private BiltNexoTerminalClient client;
-        private String saleId;
-        private String poiId;
-        private String currency;
-        private String storeLocation;
-        private boolean autoDisplay = true;
-        private BiltNexoTerminalClient externalDisplayClient;
-        private DisplayRenderer displayRenderer;
-        private Consumer<Basket> onBasketUpdated;
-        private Executor callbackExecutor;
-        private Consumer<SessionError> onBackgroundError;
-
-        private Builder() {
-        }
-
-        /** The terminal client. Required. */
-        public Builder client(BiltNexoTerminalClient client) {
-            this.client = client;
-            return this;
-        }
-
-        /** POS identifier sent as {@code SaleID}. Required. */
-        public Builder saleId(String saleId) {
-            this.saleId = saleId;
-            return this;
-        }
-
-        /** Target terminal identifier sent as {@code POIID}. Required. */
-        public Builder poiId(String poiId) {
-            this.poiId = poiId;
-            return this;
-        }
-
-        /** ISO 4217 currency code, e.g. {@code "USD"}. Required. */
-        public Builder currency(String currency) {
-            this.currency = currency;
-            return this;
-        }
-
-        /**
-         * Store location identifier, sent as
-         * {@code SaleTerminalData.TotalsGroupID} on every transaction this
-         * session creates — it groups the store's transactions for totals
-         * and reconciliation ({@code getTotals()} filters by it). Optional.
-         */
-        public Builder storeLocation(String storeLocation) {
-            this.storeLocation = storeLocation;
-            return this;
-        }
-
-        /**
-         * Whether basket mutations automatically refresh the customer
-         * display. Default {@code true}.
-         */
-        public Builder autoDisplay(boolean autoDisplay) {
-            this.autoDisplay = autoDisplay;
-            return this;
-        }
-
-        /**
-         * A second client for an external customer display device. When set,
-         * {@code Display} and {@code Input} messages are routed to it, while
-         * payment, card, and PIN operations stay on the terminal.
-         */
-        public Builder externalDisplayClient(BiltNexoTerminalClient externalDisplayClient) {
-            this.externalDisplayClient = externalDisplayClient;
-            return this;
-        }
-
-        /**
-         * Custom rendering of basket snapshots for the customer display.
-         * Rarely necessary; defaults to the standard itemised receipt.
-         */
-        public Builder displayRenderer(DisplayRenderer displayRenderer) {
-            this.displayRenderer = displayRenderer;
-            return this;
-        }
-
-        /**
-         * Out-of-band basket update callback. Reserved for a future reactive
-         * mode in which the terminal pushes offer/member changes during
-         * scanning; not invoked in v1.
-         */
-        public Builder onBasketUpdated(Consumer<Basket> onBasketUpdated) {
-            this.onBasketUpdated = onBasketUpdated;
-            return this;
-        }
-
-        /**
-         * Where asynchronously executed operations deliver their handlers —
-         * e.g. an Android main-thread executor so handlers may touch UI
-         * directly. Applies to {@code execute()}; {@code executeSync()} and
-         * the blocking accessors are unaffected. Overridable per call with
-         * {@code callbackOn(executor)}. Without one, handlers run directly
-         * on the session's operation thread and must be fast, non-blocking,
-         * and must never synchronously invoke another session operation.
-         */
-        public Builder callbackExecutor(Executor callbackExecutor) {
-            this.callbackExecutor = callbackExecutor;
-            return this;
-        }
-
-        /**
-         * Handler for failures of work the session performs on its own
-         * behalf, with no result object to report through: the automatic
-         * display push after a basket mutation ({@link #autoDisplay(boolean)})
-         * and the final settlement display refresh. Manual
-         * {@code updateDisplay(...)} failures are not delivered here — they
-         * report through their own per-call {@code onError}.
-         *
-         * <p>Background failures never interrupt the checkout and are
-         * logged whether or not a handler is registered. Delivered through
-         * the {@link #callbackExecutor(Executor) callbackExecutor} when one
-         * is configured, directly on the failing thread otherwise.</p>
-         */
-        public Builder onBackgroundError(Consumer<SessionError> onBackgroundError) {
-            this.onBackgroundError = onBackgroundError;
-            return this;
-        }
-
-        /**
-         * Validates the configuration and returns a lazy operation that
-         * announces the session to the terminal (Nexo {@code Admin} session
-         * start signal) and yields it once the terminal acknowledged — an
-         * unstarted session never exists, so no operation can reach the
-         * terminal before the start. Like every session operation, nothing
-         * is sent until {@code execute()}, {@code get()}, or
-         * {@code getOrNull()} is invoked.
-         *
-         * <p>A refused start yields no session; call {@code start()} again
-         * for a fresh attempt (each attempt is a new session with a new
-         * session ID).</p>
-         *
-         * <p>If the registered {@code onSuccess} handler itself throws, the
-         * just-started session is ended on the terminal (best-effort) before
-         * the exception propagates: a {@code start()} whose execution threw
-         * never leaves a terminal-side session behind, and any session it
-         * may have delivered to the handler must be considered lost.</p>
-         *
-         * @throws IllegalStateException if a required field is missing
-         */
-        public SessionResult<CheckoutSession> start() {
-            if (client == null) {
-                throw new IllegalStateException("client is required");
-            }
-            if (saleId == null || saleId.isEmpty()) {
-                throw new IllegalStateException("saleId is required");
-            }
-            if (poiId == null || poiId.isEmpty()) {
-                throw new IllegalStateException("poiId is required");
-            }
-            if (currency == null || currency.isEmpty()) {
-                throw new IllegalStateException("currency is required");
-            }
-            CheckoutSession session = new CheckoutSession(this);
-            // the terminal has acknowledged Start by the time onSuccess
-            // runs; a handler that throws would strand that session-scoped
-            // context with no session object to end it, so it is released.
-            // Built through the session's operations so an asynchronous
-            // start runs on (and its handlers deliver like) every other
-            // operation of the session it creates.
-            return session.operations.operation("start", session::started)
-                    .releasing(CheckoutSession::close);
-        }
+    /**
+     * Validates the configuration and returns a lazy operation that announces the session to the
+     * terminal (Nexo {@code Admin} session start signal) and yields it once the terminal
+     * acknowledged — an unstarted session never exists, so no operation can reach the terminal
+     * before the start. Like every session operation, nothing is sent until {@code execute()},
+     * {@code get()}, or {@code getOrNull()} is invoked.
+     *
+     * <p>A refused start yields no session; call {@code start()} again for a fresh attempt (each
+     * attempt is a new session with a new session ID).
+     *
+     * <p>If the registered {@code onSuccess} handler itself throws, the just-started session is
+     * ended on the terminal (best-effort) before the exception propagates: a {@code start()} whose
+     * execution threw never leaves a terminal-side session behind, and any session it may have
+     * delivered to the handler must be considered lost.
+     *
+     * @throws IllegalStateException if a required field is missing
+     */
+    public SessionResult<CheckoutSession> start() {
+      if (client == null) {
+        throw new IllegalStateException("client is required");
+      }
+      if (saleId == null || saleId.isEmpty()) {
+        throw new IllegalStateException("saleId is required");
+      }
+      if (poiId == null || poiId.isEmpty()) {
+        throw new IllegalStateException("poiId is required");
+      }
+      if (currency == null || currency.isEmpty()) {
+        throw new IllegalStateException("currency is required");
+      }
+      CheckoutSession session = new CheckoutSession(this);
+      // the terminal has acknowledged Start by the time onSuccess
+      // runs; a handler that throws would strand that session-scoped
+      // context with no session object to end it, so it is released.
+      // Built through the session's operations so an asynchronous
+      // start runs on (and its handlers deliver like) every other
+      // operation of the session it creates.
+      return session
+          .operations
+          .operation("start", session::started)
+          .releasing(CheckoutSession::close);
     }
+  }
 }

@@ -15,158 +15,157 @@ import java.time.Instant;
 /** One money or loyalty movement committed as part of a settlement. */
 public final class SettlementMovement {
 
-    private final SettlementStep step;
-    private final SettlementTarget target;
-    private final BigDecimal amount;
-    private final String saleTransactionId;
-    private final String poiTransactionId;
-    private final Instant poiTransactionTimestamp;
-    private final String memberId;
-    private final Integer points;
-    private final Integer pointBalance;
-    private final String externalTenderType;
-    private final String externalReference;
+  private final SettlementStep step;
+  private final SettlementTarget target;
+  private final BigDecimal amount;
+  private final String saleTransactionId;
+  private final String poiTransactionId;
+  private final Instant poiTransactionTimestamp;
+  private final String memberId;
+  private final Integer points;
+  private final Integer pointBalance;
+  private final String externalTenderType;
+  private final String externalReference;
 
-    private SettlementMovement(Builder builder) {
-        this.step = builder.step;
-        this.target = builder.target;
-        this.amount = builder.amount;
-        this.saleTransactionId = builder.saleTransactionId;
-        this.poiTransactionId = builder.poiTransactionId;
-        this.poiTransactionTimestamp = builder.poiTransactionTimestamp;
-        this.memberId = builder.memberId;
-        this.points = builder.points;
-        this.pointBalance = builder.pointBalance;
-        this.externalTenderType = builder.externalTenderType;
-        this.externalReference = builder.externalReference;
+  private SettlementMovement(Builder builder) {
+    this.step = builder.step;
+    this.target = builder.target;
+    this.amount = builder.amount;
+    this.saleTransactionId = builder.saleTransactionId;
+    this.poiTransactionId = builder.poiTransactionId;
+    this.poiTransactionTimestamp = builder.poiTransactionTimestamp;
+    this.memberId = builder.memberId;
+    this.points = builder.points;
+    this.pointBalance = builder.pointBalance;
+    this.externalTenderType = builder.externalTenderType;
+    this.externalReference = builder.externalReference;
+  }
+
+  public static Builder builder() {
+    return new Builder();
+  }
+
+  public SettlementStep getStep() {
+    return step;
+  }
+
+  /** Basket obligation resolved by this movement. */
+  public SettlementTarget getTarget() {
+    return target;
+  }
+
+  public BigDecimal getAmount() {
+    return amount;
+  }
+
+  public String getSaleTransactionId() {
+    return saleTransactionId;
+  }
+
+  public String getPoiTransactionId() {
+    return poiTransactionId;
+  }
+
+  public Instant getPoiTransactionTimestamp() {
+    return poiTransactionTimestamp;
+  }
+
+  public String getMemberId() {
+    return memberId;
+  }
+
+  public Integer getPoints() {
+    return points;
+  }
+
+  public Integer getPointBalance() {
+    return pointBalance;
+  }
+
+  /** Register-managed tender name, populated for {@code EXTERNAL_PAYMENT}. */
+  public String getExternalTenderType() {
+    return externalTenderType;
+  }
+
+  /** Register transaction reference, populated when supplied for external payment. */
+  public String getExternalReference() {
+    return externalReference;
+  }
+
+  /** Builder for {@link SettlementMovement}. */
+  public static final class Builder {
+
+    private SettlementStep step;
+    private SettlementTarget target = SettlementTarget.sales();
+    private BigDecimal amount = BigDecimal.ZERO;
+    private String saleTransactionId;
+    private String poiTransactionId;
+    private Instant poiTransactionTimestamp;
+    private String memberId;
+    private Integer points;
+    private Integer pointBalance;
+    private String externalTenderType;
+    private String externalReference;
+
+    private Builder() {}
+
+    public Builder step(SettlementStep step) {
+      this.step = step;
+      return this;
     }
 
-    public static Builder builder() {
-        return new Builder();
+    public Builder target(SettlementTarget target) {
+      this.target = target;
+      return this;
     }
 
-    public SettlementStep getStep() {
-        return step;
+    public Builder amount(BigDecimal amount) {
+      this.amount = amount;
+      return this;
     }
 
-    /** Basket obligation resolved by this movement. */
-    public SettlementTarget getTarget() {
-        return target;
+    public Builder saleTransactionId(String saleTransactionId) {
+      this.saleTransactionId = saleTransactionId;
+      return this;
     }
 
-    public BigDecimal getAmount() {
-        return amount;
+    public Builder poiTransactionId(String poiTransactionId) {
+      this.poiTransactionId = poiTransactionId;
+      return this;
     }
 
-    public String getSaleTransactionId() {
-        return saleTransactionId;
+    public Builder poiTransactionTimestamp(Instant poiTransactionTimestamp) {
+      this.poiTransactionTimestamp = poiTransactionTimestamp;
+      return this;
     }
 
-    public String getPoiTransactionId() {
-        return poiTransactionId;
+    public Builder memberId(String memberId) {
+      this.memberId = memberId;
+      return this;
     }
 
-    public Instant getPoiTransactionTimestamp() {
-        return poiTransactionTimestamp;
+    public Builder points(Integer points) {
+      this.points = points;
+      return this;
     }
 
-    public String getMemberId() {
-        return memberId;
+    public Builder pointBalance(Integer pointBalance) {
+      this.pointBalance = pointBalance;
+      return this;
     }
 
-    public Integer getPoints() {
-        return points;
+    public Builder externalTenderType(String externalTenderType) {
+      this.externalTenderType = externalTenderType;
+      return this;
     }
 
-    public Integer getPointBalance() {
-        return pointBalance;
+    public Builder externalReference(String externalReference) {
+      this.externalReference = externalReference;
+      return this;
     }
 
-    /** Register-managed tender name, populated for {@code EXTERNAL_PAYMENT}. */
-    public String getExternalTenderType() {
-        return externalTenderType;
+    public SettlementMovement build() {
+      return new SettlementMovement(this);
     }
-
-    /** Register transaction reference, populated when supplied for external payment. */
-    public String getExternalReference() {
-        return externalReference;
-    }
-
-    /** Builder for {@link SettlementMovement}. */
-    public static final class Builder {
-
-        private SettlementStep step;
-        private SettlementTarget target = SettlementTarget.sales();
-        private BigDecimal amount = BigDecimal.ZERO;
-        private String saleTransactionId;
-        private String poiTransactionId;
-        private Instant poiTransactionTimestamp;
-        private String memberId;
-        private Integer points;
-        private Integer pointBalance;
-        private String externalTenderType;
-        private String externalReference;
-
-        private Builder() {
-        }
-
-        public Builder step(SettlementStep step) {
-            this.step = step;
-            return this;
-        }
-
-        public Builder target(SettlementTarget target) {
-            this.target = target;
-            return this;
-        }
-
-        public Builder amount(BigDecimal amount) {
-            this.amount = amount;
-            return this;
-        }
-
-        public Builder saleTransactionId(String saleTransactionId) {
-            this.saleTransactionId = saleTransactionId;
-            return this;
-        }
-
-        public Builder poiTransactionId(String poiTransactionId) {
-            this.poiTransactionId = poiTransactionId;
-            return this;
-        }
-
-        public Builder poiTransactionTimestamp(Instant poiTransactionTimestamp) {
-            this.poiTransactionTimestamp = poiTransactionTimestamp;
-            return this;
-        }
-
-        public Builder memberId(String memberId) {
-            this.memberId = memberId;
-            return this;
-        }
-
-        public Builder points(Integer points) {
-            this.points = points;
-            return this;
-        }
-
-        public Builder pointBalance(Integer pointBalance) {
-            this.pointBalance = pointBalance;
-            return this;
-        }
-
-        public Builder externalTenderType(String externalTenderType) {
-            this.externalTenderType = externalTenderType;
-            return this;
-        }
-
-        public Builder externalReference(String externalReference) {
-            this.externalReference = externalReference;
-            return this;
-        }
-
-        public SettlementMovement build() {
-            return new SettlementMovement(this);
-        }
-    }
+  }
 }
