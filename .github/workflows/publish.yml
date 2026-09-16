@@ -16,7 +16,8 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          # 21 to match build.yml; google-java-format needs it. The SDK still compiles to 11.
+          java-version: 21
 
       - uses: gradle/actions/setup-gradle@v4
 
