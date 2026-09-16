@@ -1171,43 +1171,59 @@ class NexoEmulatorController(
         session
             .identifyMember(IdentifyOptions.builder().forceEntryMode(ForceEntryMode.KEYED).build())
             .onSuccess { outcome ->
-                if (connection !== conn) return@onSuccess
-                val identity = outcome.toUi()
-                _state.update { it.copy(member = identity) }
-                when (identity) {
-                    is MemberIdentity.Found ->
-                        log(
-                            "Member identified: ${identity.headline}, " +
-                                (identity.pointBalance?.let { "$it pts, " } ?: "") +
-                                "${identity.rewards.size} reward(s)"
-                        )
-                    is MemberIdentity.Absent ->
-                        log("${identity.headline} — loyalty steps will be skipped")
-                    // a Success the emulator could not read — the response
-                    // claimed a member and carried no id for them; the
-                    // headline covers the case where the SDK gave no detail
-                    is MemberIdentity.Failed ->
-                        log(
-                            "${identity.detail ?: identity.headline} — " +
-                                "loyalty steps will be skipped"
-                        )
-                }
+                // a checkout that ended under a late-arriving prompt owns
+                // neither the card nor the display any more
+                if (connection !== conn || conn.session !== session) return@onSuccess
+                publishIdentity(session, outcome.toUi())
             }
             .onError { error ->
-                if (connection !== conn) return@onError
-                _state.update { it.copy(member = MemberIdentity.Failed(error.message)) }
-                log("Loyalty sign-in failed: ${error.message}")
+                if (connection !== conn || conn.session !== session) return@onError
+                publishIdentity(session, MemberIdentity.Failed(error.message))
                 error.cause?.let { detailedLog(it.stackTraceToString()) }
             }
             .onComplete {
                 conn.operationClaimed.set(false)
-                if (connection === conn) {
-                    _state.update { it.copy(identifyInProgress = false) }
-                    // after the prompt settles, so the refresh can't race it
+                if (connection !== conn) return@onComplete
+                _state.update { it.copy(identifyInProgress = false) }
+                // after the prompt settles, so the refresh can't race it
+                if (conn.session === session) {
                     refreshCustomerDisplay(session)
                 }
             }
             .execute()
+    }
+
+    /**
+     * Report the sign-in as the account the checkout will actually settle against, which is not the
+     * same thing as how the last prompt went: the SDK detaches a prior member only on an
+     * affirmative NOT_FOUND or SUSPENDED, so a cancelled or failed prompt leaves an earlier
+     * identification standing. Reporting [outcome] alone would tell the operator nobody is attached
+     * while settlement went on applying loyalty to that member.
+     */
+    private fun publishIdentity(session: CheckoutSession, outcome: MemberIdentity) {
+        val identity =
+            if (outcome is MemberIdentity.Found) {
+                outcome
+            } else {
+                session.member?.toUi()?.let { retained ->
+                    (retained as? MemberIdentity.Found)?.copy(retained = true)
+                } ?: outcome
+            }
+        _state.update { it.copy(member = identity) }
+        when (identity) {
+            is MemberIdentity.Found ->
+                log(
+                    "Member identified: ${identity.headline}, " +
+                        (identity.pointBalance?.let { "$it pts, " } ?: "") +
+                        "${identity.rewards.size} reward(s)"
+                )
+            is MemberIdentity.Absent -> log("${identity.headline} — loyalty steps will be skipped")
+            // either an Absent/Failed with no member left attached, or a
+            // Success the emulator could not read; the headline covers the
+            // case where the SDK gave no detail
+            is MemberIdentity.Failed ->
+                log("${identity.detail ?: identity.headline} — loyalty steps will be skipped")
+        }
     }
 
     /**

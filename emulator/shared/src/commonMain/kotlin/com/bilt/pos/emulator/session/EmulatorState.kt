@@ -164,9 +164,17 @@ sealed interface MemberIdentity {
          */
         val pointBalance: Int? = null,
         val rewards: List<MemberRewardUi> = emptyList(),
+        /**
+         * True when this member predates the latest sign-in attempt. A cancelled or failed prompt
+         * leaves an earlier identification attached to the session, and the card reports the
+         * account settlement will actually use rather than how the last attempt went.
+         */
+        val retained: Boolean = false,
     ) : MemberIdentity {
         override val headline: String
-            get() = listOfNotNull(memberId, loyaltyBrand).joinToString(" · ")
+            get() =
+                listOfNotNull(memberId, loyaltyBrand).joinToString(" · ") +
+                    if (retained) " — kept from an earlier sign-in" else ""
     }
 
     /** The terminal answered, but with no member to attach — [reason] says why. */
