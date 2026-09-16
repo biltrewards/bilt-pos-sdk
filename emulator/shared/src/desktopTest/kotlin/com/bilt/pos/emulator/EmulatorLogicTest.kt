@@ -3,6 +3,7 @@ package com.bilt.pos.emulator
 import com.bilt.pos.emulator.catalog.CustomItem
 import com.bilt.pos.emulator.catalog.MockProductProvider
 import com.bilt.pos.emulator.catalog.Product
+import com.bilt.pos.emulator.session.MemberIdentity
 import com.bilt.pos.emulator.session.NjSalesTax
 import java.math.BigDecimal
 import kotlin.test.Test
@@ -118,5 +119,30 @@ class EmulatorLogicTest {
         entry.reset()
         assertNull(entry.editingSku)
         assertEquals(0L, entry.minor)
+    }
+
+    @Test
+    fun memberHeadlineJoinsIdAndBrandWhenTheTerminalReportsOne() {
+        assertEquals("98234", MemberIdentity.Found(memberId = "98234").headline)
+        assertEquals(
+            "98234 · K-Club",
+            MemberIdentity.Found(memberId = "98234", loyaltyBrand = "K-Club").headline,
+        )
+    }
+
+    @Test
+    fun memberHeadlineExplainsWhyNobodyIsAttached() {
+        assertEquals(
+            "No member found",
+            MemberIdentity.Absent(MemberIdentity.Absent.Reason.NOT_FOUND).headline,
+        )
+        assertEquals(
+            "Cancelled on the terminal",
+            MemberIdentity.Absent(MemberIdentity.Absent.Reason.CANCELLED).headline,
+        )
+        // the detail renders on its own line, so the headline stays the
+        // same whether or not the SDK gave one
+        assertEquals("Sign-in failed", MemberIdentity.Failed("host unreachable").headline)
+        assertEquals("Sign-in failed", MemberIdentity.Failed().headline)
     }
 }

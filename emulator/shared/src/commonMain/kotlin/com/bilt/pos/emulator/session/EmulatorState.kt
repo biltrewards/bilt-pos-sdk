@@ -121,6 +121,74 @@ data class StoredValueOptions(
     val cardNumber: String = ""
 )
 
+/** Kind of a [MemberRewardUi], mirroring the SDK's `RewardType`. */
+enum class MemberRewardKind {
+    REWARD,
+    COUPON,
+    POINT,
+
+    /** A wire value the SDK itself did not recognize. */
+    UNKNOWN,
+}
+
+/** One reward or coupon the terminal returned for an identified member. */
+data class MemberRewardUi(
+    /**
+     * Redemption handle the SDK quotes back when the reward is redeemed, e.g. `rwd:RWD-44021`; null
+     * when the terminal's payload omitted it, which is a malformed response worth showing.
+     */
+    val rewardRef: String?,
+    val kind: MemberRewardKind,
+    val description: String,
+    /** Expiry formatted in local time; null when the reward does not expire. */
+    val expiresAtLabel: String? = null,
+)
+
+/**
+ * The terminal's answer to a loyalty sign-in, kept for the rest of the checkout so the operator can
+ * read it after the prompt closes.
+ */
+sealed interface MemberIdentity {
+
+    /** One-line headline for the sign-in card. */
+    val headline: String
+
+    /** A member signed in and is attached to the checkout. */
+    data class Found(
+        val memberId: String,
+        /** The loyalty program's name; the terminal leaves it unset on the prompted sign-in. */
+        val loyaltyBrand: String? = null,
+        /**
+         * Available points, or null when the terminal reported none — which the prompted sign-in
+         * always does, since its response carries no balance at all.
+         */
+        val pointBalance: Int? = null,
+        val rewards: List<MemberRewardUi> = emptyList(),
+    ) : MemberIdentity {
+        override val headline: String
+            get() = listOfNotNull(memberId, loyaltyBrand).joinToString(" · ")
+    }
+
+    /** The terminal answered, but with no member to attach — [reason] says why. */
+    data class Absent(val reason: Reason) : MemberIdentity {
+
+        enum class Reason(val label: String) {
+            NOT_FOUND("No member found"),
+            SUSPENDED("Member suspended"),
+            CANCELLED("Cancelled on the terminal"),
+        }
+
+        override val headline: String
+            get() = reason.label
+    }
+
+    /** The sign-in itself failed; [detail] carries the SDK's message when it gave one. */
+    data class Failed(val detail: String? = null) : MemberIdentity {
+        override val headline: String
+            get() = "Sign-in failed"
+    }
+}
+
 /**
  * A card read from the terminal (CardAcquisition request) that returned a full card number,
  * published for stored-value fields to adopt. [sequence] increments per read so re-reading the same
@@ -255,6 +323,11 @@ data class EmulatorState(
      * read.
      */
     val acquiredCard: AcquiredCard? = null,
+    /**
+     * The last loyalty sign-in the terminal answered on this checkout, or null when none ran. Held
+     * until the checkout ends so the response stays readable after the terminal prompt closes.
+     */
+    val member: MemberIdentity? = null,
     /** Stored completed sales, newest first, listed on the Refund tab. */
     val sales: List<StoredSaleUi> = emptyList(),
     /** Curated one-line event feed shown on the Events tab. */
@@ -387,6 +460,14 @@ interface EmulatorController {
         storedValue: StoredValueOptions? = null,
         net: Boolean = true,
     )
+
+    /**
+     * Prompt the customer to sign in to loyalty on the terminal — the same member identification
+     * [startSession] can run, offered on demand so it can follow a declined or mistyped first
+     * attempt without restarting the checkout. Requires an active checkout session; the terminal's
+     * answer lands in [EmulatorState.member].
+     */
+    fun identifyMember()
 
     /**
      * Read a card on the terminal (nexo CardAcquisition request) without charging it. A read that

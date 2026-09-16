@@ -3,6 +3,7 @@ package com.bilt.pos.emulator.session
 import com.bilt.pos.emulator.catalog.CustomItem
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.catalog.minorUnitsToDecimal
+import com.bilt.pos.emulator.session.MemberIdentity.Absent.Reason
 import com.bilt.pos.emulator.store.LegType
 import com.bilt.pos.emulator.store.RefundRecord
 import com.bilt.pos.emulator.store.RefundedItem
@@ -31,7 +32,10 @@ import com.bilt.pos.session.basket.BasketItemType
 import com.bilt.pos.session.identity.CardAcquisitionOptions
 import com.bilt.pos.session.identity.ForceEntryMode
 import com.bilt.pos.session.identity.IdentifyOptions
+import com.bilt.pos.session.identity.IdentifyResult
 import com.bilt.pos.session.identity.IdentifyStatus
+import com.bilt.pos.session.identity.Reward
+import com.bilt.pos.session.identity.RewardType
 import com.bilt.pos.session.settlement.OriginalSaleRecord
 import com.bilt.pos.session.settlement.RefundAllocation
 import com.bilt.pos.session.settlement.SettlementOptions
@@ -76,6 +80,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 private val saleTimeFormat =
     DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(ZoneId.systemDefault())
+
+/** Reward expiries are dates, not moments — the time of day would be noise. */
+private val rewardExpiryFormat =
+    DateTimeFormatter.ofPattern("MMM d, yyyy").withZone(ZoneId.systemDefault())
 
 /**
  * The emulator session engine. A connection to the terminal and a checkout session are separate
@@ -682,9 +690,9 @@ class NexoEmulatorController(
                 }
                 log("Checkout session started (id ${started.sessionId})")
                 if (identifyOnStart) {
-                    identifyMember(conn, started)
+                    runIdentifyPrompt(conn, started)
                 } else {
-                    clearCustomerDisplay(started)
+                    refreshCustomerDisplay(started)
                 }
             }
             .onError { error ->
@@ -1128,22 +1136,35 @@ class NexoEmulatorController(
         }
     }
 
+    override fun identifyMember() {
+        val conn = connection
+        val session = conn?.session
+        if (conn == null || session == null) {
+            log("No active checkout session — press Start Checkout first")
+            return
+        }
+        runIdentifyPrompt(conn, session)
+    }
+
     /**
-     * The post-start member-identification prompt (its own operation, not part of the Start
-     * bracket); a failed or declined prompt degrades to a guest checkout.
+     * The loyalty sign-in prompt — run right after the Start bracket when the operator asked for
+     * it, and on demand from the Loyalty Sign-In button. Always its own operation, never part of
+     * the bracket; a failed or declined prompt leaves the checkout without a member.
      */
-    private fun identifyMember(conn: Connection, session: CheckoutSession) {
+    private fun runIdentifyPrompt(conn: Connection, session: CheckoutSession) {
         // Claimed like pay/acquireCard: without the claim, a Pay tapped
         // during the prompt would queue behind it on the session's
         // operation thread — and an abort would cancel only the prompt
         // while the queued payment went on to charge
         if (!conn.operationClaimed.compareAndSet(false, true)) {
-            log("Another operation is already in progress — continuing as guest")
-            clearCustomerDisplay(session)
+            log("Another operation is already in progress — sign-in skipped")
+            refreshCustomerDisplay(session)
             return
         }
-        _state.update { it.copy(identifyInProgress = true) }
-        log("Identifying member on the terminal…")
+        // A re-run starts from a blank card rather than leaving the previous
+        // answer on screen while the terminal collects the next one
+        _state.update { it.copy(identifyInProgress = true, member = null) }
+        log("Loyalty sign-in on the terminal…")
         // The terminal's keyed loyalty capture engages only with
         // ForceEntryMode=Keyed; without it the terminal waits on the card
         // reader instead of showing the input form
@@ -1151,41 +1172,97 @@ class NexoEmulatorController(
             .identifyMember(IdentifyOptions.builder().forceEntryMode(ForceEntryMode.KEYED).build())
             .onSuccess { outcome ->
                 if (connection !== conn) return@onSuccess
-                if (outcome.status == IdentifyStatus.FOUND) {
-                    log(
-                        "Member identified: ${outcome.memberId}" +
-                            (outcome.loyaltyBrand?.let { " ($it)" } ?: "") +
-                            ", ${outcome.pointBalance} pts, ${outcome.rewards.size} reward(s)"
-                    )
-                } else {
-                    log("No member (${outcome.status}) — loyalty steps will be skipped")
+                val identity = outcome.toUi()
+                _state.update { it.copy(member = identity) }
+                when (identity) {
+                    is MemberIdentity.Found ->
+                        log(
+                            "Member identified: ${identity.headline}, " +
+                                (identity.pointBalance?.let { "$it pts, " } ?: "") +
+                                "${identity.rewards.size} reward(s)"
+                        )
+                    is MemberIdentity.Absent ->
+                        log("${identity.headline} — loyalty steps will be skipped")
+                    // a Success the emulator could not read — the response
+                    // claimed a member and carried no id for them; the
+                    // headline covers the case where the SDK gave no detail
+                    is MemberIdentity.Failed ->
+                        log(
+                            "${identity.detail ?: identity.headline} — " +
+                                "loyalty steps will be skipped"
+                        )
                 }
             }
             .onError { error ->
                 if (connection !== conn) return@onError
-                log("Member identification failed: ${error.message} — continuing as guest")
+                _state.update { it.copy(member = MemberIdentity.Failed(error.message)) }
+                log("Loyalty sign-in failed: ${error.message}")
                 error.cause?.let { detailedLog(it.stackTraceToString()) }
             }
             .onComplete {
                 conn.operationClaimed.set(false)
                 if (connection === conn) {
                     _state.update { it.copy(identifyInProgress = false) }
-                    // after the prompt settles, so the clear can't race it
-                    clearCustomerDisplay(session)
+                    // after the prompt settles, so the refresh can't race it
+                    refreshCustomerDisplay(session)
                 }
             }
             .execute()
     }
 
     /**
-     * Blank the customer display — autoDisplay only fires on basket mutations, so the previous
-     * checkout's receipt (or the identify prompt's leftovers) would linger.
+     * The SDK's identification outcome as the UI's SDK-free projection of it. A FOUND outcome
+     * carrying no loyalty id is a malformed response rather than a member, and is reported as a
+     * failure instead of rendering a nameless card.
      */
-    private fun clearCustomerDisplay(session: CheckoutSession) {
+    private fun IdentifyResult.toUi(): MemberIdentity =
+        when (status) {
+            IdentifyStatus.FOUND ->
+                memberId?.let { id ->
+                    MemberIdentity.Found(
+                        memberId = id,
+                        loyaltyBrand = loyaltyBrand,
+                        // the SDK reports an unknown balance as 0, and the
+                        // prompted flow never carries one — so 0 here means
+                        // "not reported", not a member with nothing banked
+                        pointBalance = pointBalance.takeIf { it > 0 },
+                        rewards = rewards.map { it.toUi() },
+                    )
+                } ?: MemberIdentity.Failed("The terminal reported a member with no loyalty id")
+            IdentifyStatus.NOT_FOUND -> MemberIdentity.Absent(Reason.NOT_FOUND)
+            IdentifyStatus.SUSPENDED -> MemberIdentity.Absent(Reason.SUSPENDED)
+            IdentifyStatus.CANCELLED -> MemberIdentity.Absent(Reason.CANCELLED)
+            IdentifyStatus.ERROR -> MemberIdentity.Failed()
+        }
+
+    private fun Reward.toUi() =
+        MemberRewardUi(
+            // both are null for a payload that omitted them; the emulator
+            // shows the gap rather than dropping the reward or throwing
+            // inside the result handler, where the failure would be swallowed
+            rewardRef = rewardRef,
+            kind = type?.toUi() ?: MemberRewardKind.UNKNOWN,
+            description = description.orEmpty(),
+            expiresAtLabel = expirationDate?.let(rewardExpiryFormat::format),
+        )
+
+    private fun RewardType.toUi() =
+        when (this) {
+            RewardType.REWARD -> MemberRewardKind.REWARD
+            RewardType.COUPON -> MemberRewardKind.COUPON
+            RewardType.POINT -> MemberRewardKind.POINT
+        }
+
+    /**
+     * Push the session's current basket to the customer display. autoDisplay only fires on basket
+     * mutations, so without this the previous checkout's receipt — or the sign-in prompt's
+     * leftovers — would linger over an untouched basket.
+     */
+    private fun refreshCustomerDisplay(session: CheckoutSession) {
         session
             .updateDisplay(session.basket().snapshot())
-            .onSuccess { log("Customer display cleared (empty basket)") }
-            .onError { error -> log("Display clear failed: ${error.message}") }
+            .onSuccess { log("Customer display refreshed") }
+            .onError { error -> log("Display refresh failed: ${error.message}") }
             .execute()
     }
 
@@ -2588,6 +2665,8 @@ class NexoEmulatorController(
             basketTotal = "0.00",
             basketTax = "0.00",
             lastPayment = lastPayment,
+            // the member belongs to the checkout that signed them in
+            member = null,
         )
 
     /** A minor-unit amount as the two-decimal [BigDecimal] the basket APIs expect. */
