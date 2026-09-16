@@ -1,0 +1,6 @@
+# Commits to skip in git blame. GitHub, IntelliJ/Android Studio and GitLens
+# pick this file up automatically; the git CLI needs a one-time
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Whole-repo reformat with google-java-format and ktfmt (spotlessApply), PR #125
+a6ec3203c13d02466f70c18d41fdeaff1404cde6
