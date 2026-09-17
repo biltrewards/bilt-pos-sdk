@@ -77,6 +77,8 @@ import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
+import com.bilt.pos.emulator.session.MemberIdentity
+import com.bilt.pos.emulator.session.MemberRewardUi
 import com.bilt.pos.emulator.session.PaymentOutcome
 import com.bilt.pos.emulator.session.StoredSaleUi
 import com.bilt.pos.emulator.session.StoredValueOptions
@@ -158,6 +160,9 @@ private val WIDE_LAYOUT_BREAKPOINT = 700.dp
  * under the tab content instead of starving it.
  */
 private val SIDE_LOG_BREAKPOINT = 1000.dp
+
+/** Outcome green, for the states the operator should read as "this worked". */
+private val SUCCESS_GREEN = Color(0xFF2E7D32)
 
 /**
  * Root composable of the terminal emulator, shared by the Android and desktop targets. All
@@ -284,6 +289,9 @@ internal fun EmulatorApp(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     ConnectionPanel(state, controller)
+                    // Only after a sign-in ran, and only for the checkout it
+                    // ran in: no card is exactly a guest checkout
+                    state.member?.let { MemberCard(it) }
                     if (sideLog) {
                         Row(
                             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -643,7 +651,7 @@ private fun PaymentOutcomeDialog(outcome: PaymentOutcome, onDismiss: () -> Unit)
         title = {
             Text(
                 outcome.title,
-                color = if (outcome.success) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                color = if (outcome.success) SUCCESS_GREEN else MaterialTheme.colorScheme.error,
             )
         },
         text = {
@@ -673,6 +681,7 @@ private fun PaymentOutcomeDialog(outcome: PaymentOutcome, onDismiss: () -> Unit)
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController) {
     // Saveable so an Android configuration change keeps the typed values;
@@ -797,6 +806,19 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         Text(if (sessionActive) "End Checkout" else "Start Checkout")
                     }
                 }
+                // The same prompt the Identify toggle runs at Start
+                // Checkout, on demand: a customer who declined or mistyped
+                // can sign in again without restarting the checkout
+                val signInButton: @Composable (Modifier) -> Unit = { modifier ->
+                    Button(
+                        onClick = { controller.identifyMember() },
+                        enabled = state.canOperate,
+                        colors = ButtonDefaults.filledTonalButtonColors(),
+                        modifier = modifier,
+                    ) {
+                        Text(if (state.identifyInProgress) "Signing in…" else "Loyalty Sign-In")
+                    }
+                }
                 // Read at Start Checkout: prompts for member identification
                 // right after the session starts
                 val identifyToggle: @Composable () -> Unit = {
@@ -830,10 +852,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                 val clearBasketButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
                         onClick = { controller.clearBasket() },
-                        enabled =
-                            state.sessionId != null &&
-                                state.basket.isNotEmpty() &&
-                                !state.sessionOperationInProgress,
+                        enabled = state.canOperate && state.basket.isNotEmpty(),
                         colors = ButtonDefaults.filledTonalButtonColors(),
                         modifier = modifier,
                     ) {
@@ -853,7 +872,13 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         }
                         connectButton(Modifier.fillMaxWidth())
                         identifyToggle()
-                        sessionButton(Modifier.fillMaxWidth())
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            sessionButton(Modifier.weight(1f))
+                            signInButton(Modifier.weight(1f))
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -863,18 +888,21 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         }
                     }
                 } else {
-                    // Two rows, one per concern: reaching the terminal, then
-                    // driving the checkout. One row no longer fits — an
-                    // overflowing Row squeezes its last children into
-                    // word-per-line buttons that blow the panel up vertically.
+                    // Two flow rows, one per concern: reaching the terminal,
+                    // then driving the checkout. FlowRow, not Row — a plain
+                    // Row squeezes its last children into word-per-line
+                    // buttons that blow the panel up vertically, and neither
+                    // row's width is predictable (the passphrase field comes
+                    // and goes, button labels grow with fontScale).
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
                             ipField(Modifier.width(160.dp))
                             tunnelToggle()
@@ -884,14 +912,19 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                             }
                             connectButton(Modifier)
                         }
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
                             sessionButton(Modifier)
+                            signInButton(Modifier)
                             identifyToggle()
-                            Spacer(Modifier.weight(1f))
+                            // a fixed gap, not weight(1f): a weighted spacer
+                            // eats the rest of its line and forces everything
+                            // after it onto the next one, every time
+                            Spacer(Modifier.width(16.dp))
                             clearBasketButton(Modifier)
                             abortButton(Modifier)
                         }
@@ -900,6 +933,83 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
             }
         }
     }
+}
+
+/**
+ * The terminal's answer to the last loyalty sign-in: who signed in, what they are worth, and the
+ * rewards the payment may redeem — or why nobody is attached.
+ */
+@Composable
+private fun MemberCard(member: MemberIdentity) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Loyalty sign-in", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    member.headline,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color =
+                        if (member is MemberIdentity.Found) {
+                            SUCCESS_GREEN
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                )
+            }
+            when (member) {
+                is MemberIdentity.Found -> {
+                    Text(
+                        listOf(
+                                member.pointBalance?.let { "$it pts" } ?: "points not reported",
+                                "${member.rewards.size} reward(s)",
+                            )
+                            .joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    // capped and scrollable: a long reward wallet must not
+                    // push the basket off the screen
+                    Column(
+                        modifier =
+                            Modifier.heightIn(max = 96.dp).verticalScroll(rememberScrollState())
+                    ) {
+                        member.rewards.forEach { RewardRow(it) }
+                    }
+                }
+                // the headline already says why nobody is attached
+                is MemberIdentity.Absent -> Unit
+                is MemberIdentity.Failed ->
+                    member.detail?.let { detail ->
+                        Text(
+                            detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+            }
+        }
+    }
+}
+
+/** One reward line: kind and handle, then whatever else the terminal reported about it. */
+@Composable
+private fun RewardRow(reward: MemberRewardUi) {
+    Text(
+        listOfNotNull(
+                // a payload that omitted the handle is malformed, and the
+                // gap is the point — this card is how it gets noticed
+                "${reward.kind} ${reward.rewardRef ?: "(no rewardRef)"}",
+                reward.description.ifBlank { null },
+                reward.expiresAtLabel?.let { "expires $it" },
+            )
+            .joinToString(" — "),
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
 
 /**
@@ -961,7 +1071,7 @@ private fun StatusIndicators(state: EmulatorState) {
         ) {
             val (color, label) =
                 when (state.connection.phase) {
-                    ConnectionPhase.CONNECTED -> Color(0xFF2E7D32) to "Connected"
+                    ConnectionPhase.CONNECTED -> SUCCESS_GREEN to "Connected"
                     ConnectionPhase.CONNECTING -> Color(0xFFF9A825) to "Connecting…"
                     ConnectionPhase.ERROR -> Color(0xFFC62828) to "Unreachable"
                     ConnectionPhase.DISCONNECTED -> Color(0xFF9E9E9E) to "Disconnected"
@@ -1076,7 +1186,7 @@ private fun ProductGrid(
         items(products, key = { it.sku }) { product ->
             Button(
                 onClick = { controller.addProduct(product) },
-                enabled = state.canRingProducts,
+                enabled = state.canOperate,
                 // fixed height so rows stay even when names differ
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -1248,7 +1358,6 @@ private fun StoredValuePanel(
             cardNumber = read.number
         }
     }
-    val canOperate = state.sessionId != null && !state.sessionOperationInProgress
 
     Column(
         modifier = modifier.padding(top = 8.dp),
@@ -1295,7 +1404,7 @@ private fun StoredValuePanel(
             )
             Button(
                 onClick = { controller.acquireCard() },
-                enabled = canOperate,
+                enabled = state.canOperate,
             ) {
                 Text(if (state.cardReadInProgress) "Reading…" else "Read card")
             }
@@ -1332,8 +1441,8 @@ private fun StoredValuePanel(
             enabled =
                 when (action) {
                     StoredValueAction.PURCHASE ->
-                        positiveMoneyMinor(amount) != null && state.canRingProducts
-                    else -> canOperate
+                        positiveMoneyMinor(amount) != null && state.canOperate
+                    else -> state.canOperate
                 },
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1583,7 +1692,10 @@ private val EmulatorState.sessionOperationInProgress: Boolean
             identifyInProgress ||
             refundInProgress
 
-private val EmulatorState.canRingProducts: Boolean
+/**
+ * A checkout is open and the terminal is not busy — the precondition of every session operation.
+ */
+private val EmulatorState.canOperate: Boolean
     get() = sessionId != null && !sessionOperationInProgress
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -1607,11 +1719,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
     val paid = state.lastPayment != null
     // no Pay during a card read or identify prompt: the shared operation
     // claim would refuse it
-    val canPay =
-        state.sessionId != null &&
-            state.basket.isNotEmpty() &&
-            !state.sessionOperationInProgress &&
-            !paid
+    val canPay = state.canOperate && state.basket.isNotEmpty() && !paid
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // FlowRow: five labeled checkboxes overflow a narrow card; wrap
@@ -1654,7 +1762,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                 )
                 Button(
                     onClick = { controller.acquireCard() },
-                    enabled = state.sessionId != null && !state.sessionOperationInProgress,
+                    enabled = state.canOperate,
                 ) {
                     Text("Read card")
                 }
@@ -1672,7 +1780,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             Text(
                 "${state.lastPayment} — $next",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF2E7D32),
+                color = SUCCESS_GREEN,
             )
         }
         Button(

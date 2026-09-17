@@ -12,6 +12,9 @@ import com.bilt.pos.emulator.session.ConnectionStatus
 import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
+import com.bilt.pos.emulator.session.MemberIdentity
+import com.bilt.pos.emulator.session.MemberRewardKind
+import com.bilt.pos.emulator.session.MemberRewardUi
 import com.bilt.pos.emulator.session.SaleItemUi
 import com.bilt.pos.emulator.session.StoredSaleUi
 import com.bilt.pos.emulator.session.StoredValueOptions
@@ -73,6 +76,8 @@ class ScreenshotGenerator {
             net: Boolean,
         ) = Unit
 
+        override fun identifyMember() = Unit
+
         override fun acquireCard() = Unit
 
         override fun refundSale(saleId: String) = Unit
@@ -132,17 +137,34 @@ class ScreenshotGenerator {
                     ),
                 basketTotal = "189.89",
                 basketTax = "10.93",
+                // the prompted sign-in reports neither brand nor balance,
+                // so the fixture doesn't claim them either
+                member =
+                    MemberIdentity.Found(
+                        memberId = "98234",
+                        rewards =
+                            listOf(
+                                MemberRewardUi(
+                                    rewardRef = "rwd:RWD-44021",
+                                    kind = MemberRewardKind.REWARD,
+                                    description = "$10 Off Purchase",
+                                    expiresAtLabel = "Sep 30, 2025",
+                                )
+                            ),
+                    ),
                 events =
                     listOf(
                         "10:41:03 Connecting to https://192.168.1.57:8443/nexo (encryption=true)",
                         "10:41:04 TLS: verified",
                         "10:41:04 Terminal connected (POI status: OK)",
                         "10:41:12 Checkout session started (id 3f9c2a7e)",
-                        "10:41:12 Customer display cleared (empty basket)",
+                        "10:41:12 Customer display refreshed",
                         "10:41:20 Added Wireless Earbuds ($129.99)",
                         "10:41:24 Added Sparkling Water 12-pack ($6.99)",
                         "10:41:25 Added Sparkling Water 12-pack ($6.99)",
                         "10:41:31 Added Desk Lamp ($34.99)",
+                        "10:41:34 Loyalty sign-in on the terminal…",
+                        "10:41:38 Member identified: 98234, 1 reward(s)",
                     ),
             )
         render(midCheckout, File(dir, "emulator-mid-checkout.png"))
@@ -173,14 +195,14 @@ class ScreenshotGenerator {
                 basket = emptyList(),
                 basketTotal = "0.00",
                 basketTax = "0.00",
+                // and the member with it — they belong to that checkout
+                member = null,
                 lastPayment =
                     "Settled $174.89 — card $169.89 (Visa), rebates −$10.00, " +
                         "5 pts −$5.00, earned 175 pts (balance 964)",
                 events =
                     midCheckout.events +
                         listOf(
-                            "10:41:40 Identifying member on the terminal…",
-                            "10:41:47 Member identified: 98234 (K-Club), 789 pts, 1 reward(s)",
                             "10:41:48 Starting settlement — rebates on, redemption on, award on",
                             "10:41:50 Rebates applied: −$10.00 → total $179.89",
                             "10:41:51 Points redeemed: 5 (−$5.00) → total $174.89",

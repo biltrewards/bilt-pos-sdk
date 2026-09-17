@@ -1725,7 +1725,7 @@ class NexoEmulatorControllerRefundTest {
                 withTimeout(10_000) {
                     controller.state.first { state ->
                         state.sessionId != null &&
-                            state.events.any { "Customer display cleared (empty basket)" in it }
+                            state.events.any { "Customer display refreshed" in it }
                     }
                 }
 
