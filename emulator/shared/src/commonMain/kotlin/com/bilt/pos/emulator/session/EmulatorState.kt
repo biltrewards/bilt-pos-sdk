@@ -4,6 +4,26 @@ import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.catalog.minorUnitsToDecimal
 import kotlinx.coroutines.flow.StateFlow
 
+enum class PaymentRecoveryAction(val label: String, val description: String) {
+    RETRY("Retry", "Retry the failed step, or check its status again if the outcome is unknown."),
+    SKIP("Skip step", "Continue without this optional step."),
+    CASH(
+        "Confirm cash received",
+        "Record the full amount due as cash. Choose only after collecting it.",
+    ),
+    ABORT("Abort and roll back", "Stop settlement and reverse committed charge-side steps."),
+    ABANDON(
+        "Abandon recovery",
+        "Stop without rollback. Reconcile all movements manually before settling again.",
+    ),
+}
+
+data class PaymentRecoveryPrompt(
+    val message: String,
+    val actions: List<PaymentRecoveryAction>,
+    val choose: (PaymentRecoveryAction) -> Unit,
+)
+
 enum class ConnectionPhase {
     DISCONNECTED,
     CONNECTING,
@@ -261,6 +281,7 @@ data class StoredSaleUi(
      * does NOT — a retried full refund is precisely how the outstanding tender gets finished.
      */
     val fullRefundAvailable: Boolean = !voided && !fullyRefunded,
+    val externalPaymentAmount: String? = null,
 ) {
     /**
      * A voided or fully refunded sale cannot be refunded again (mirrors `StoredSale.refundable`).
@@ -276,6 +297,7 @@ data class StoredSaleUi(
         get() =
             listOfNotNull(
                     memberLabel,
+                    externalPaymentAmount?.let { "cash $$it — refund manually" },
                     when {
                         voided -> "voided"
                         fullyRefunded -> "refunded"
@@ -326,6 +348,7 @@ data class EmulatorState(
      * popup until dismissed.
      */
     val paymentOutcome: PaymentOutcome? = null,
+    val paymentRecovery: PaymentRecoveryPrompt? = null,
     /**
      * Last terminal card read that carried a full card number; the gift card field adopts each new
      * read.

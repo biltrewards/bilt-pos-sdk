@@ -69,6 +69,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.catalog.minorUnitsToDecimal
 import com.bilt.pos.emulator.session.BasketLine
@@ -80,6 +81,7 @@ import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.MemberIdentity
 import com.bilt.pos.emulator.session.MemberRewardUi
 import com.bilt.pos.emulator.session.PaymentOutcome
+import com.bilt.pos.emulator.session.PaymentRecoveryPrompt
 import com.bilt.pos.emulator.session.StoredSaleUi
 import com.bilt.pos.emulator.session.StoredValueOptions
 
@@ -191,6 +193,7 @@ internal fun EmulatorApp(
     val state by controller.state.collectAsState()
 
     MaterialTheme {
+        state.paymentRecovery?.let { PaymentRecoveryDialog(it) }
         state.paymentOutcome?.let { outcome ->
             PaymentOutcomeDialog(outcome) { controller.dismissPaymentOutcome() }
         }
@@ -442,6 +445,12 @@ private fun RefundDetailsCard(
                 "$${sale.totalAmount} · ${sale.completedAtLabel} · ${sale.memberLabel}",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            sale.externalPaymentAmount?.let { amount ->
+                Text(
+                    "Cash $$amount must be reimbursed manually; this refund reverses terminal movements only.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             when {
                 sale.voided ->
                     Text(
@@ -451,7 +460,8 @@ private fun RefundDetailsCard(
                     )
                 sale.fullyRefunded ->
                     Text(
-                        "Refunded in full — nothing left to refund",
+                        if (sale.externalPaymentAmount != null) "Terminal movements reversed"
+                        else "Refunded in full — nothing left to refund",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -642,6 +652,36 @@ private fun LineItemRow(
         Text(amountLabel, style = MaterialTheme.typography.bodyMedium)
         trailing()
     }
+}
+
+@Composable
+private fun PaymentRecoveryDialog(prompt: PaymentRecoveryPrompt) {
+    AlertDialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        title = { Text("Payment step failed", color = MaterialTheme.colorScheme.error) },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(prompt.message)
+                Text("Choose how to continue:")
+                prompt.actions.forEach { action ->
+                    Button(
+                        onClick = { prompt.choose(action) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(action.label)
+                            Text(action.description, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+    )
 }
 
 @Composable

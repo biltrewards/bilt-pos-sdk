@@ -15,6 +15,8 @@ import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.MemberIdentity
 import com.bilt.pos.emulator.session.MemberRewardKind
 import com.bilt.pos.emulator.session.MemberRewardUi
+import com.bilt.pos.emulator.session.PaymentRecoveryAction
+import com.bilt.pos.emulator.session.PaymentRecoveryPrompt
 import com.bilt.pos.emulator.session.SaleItemUi
 import com.bilt.pos.emulator.session.StoredSaleUi
 import com.bilt.pos.emulator.session.StoredValueOptions
@@ -109,7 +111,8 @@ class ScreenshotGenerator {
                     initialSalePane,
                 )
             }
-        val png = scene.render().encodeToData(EncodedImageFormat.PNG)!!.bytes
+        repeat(3) { scene.render(it * 1_000_000_000L) }
+        val png = scene.render(3_000_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes
         scene.close()
         // the render itself is the test: a composition crash or an empty
         // frame fails here, screenshots are the byproduct
@@ -168,6 +171,23 @@ class ScreenshotGenerator {
                     ),
             )
         render(midCheckout, File(dir, "emulator-mid-checkout.png"))
+        render(
+            midCheckout.copy(
+                paymentInProgress = true,
+                paymentRecovery =
+                    PaymentRecoveryPrompt(
+                        "Step: CARD_CHARGE\nDECLINED: Payment refused\nAmount due: USD 189.89",
+                        listOf(
+                            PaymentRecoveryAction.RETRY,
+                            PaymentRecoveryAction.CASH,
+                            PaymentRecoveryAction.ABORT,
+                            PaymentRecoveryAction.ABANDON,
+                        ),
+                        {},
+                    ),
+            ),
+            File(dir, "emulator-payment-recovery.png"),
+        )
 
         val keypad =
             midCheckout.copy(
