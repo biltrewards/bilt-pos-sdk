@@ -445,6 +445,12 @@ private fun RefundDetailsCard(
                 "$${sale.totalAmount} · ${sale.completedAtLabel} · ${sale.memberLabel}",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            sale.externalPaymentAmount?.let { amount ->
+                Text(
+                    "Cash $$amount must be reimbursed manually; this refund reverses terminal movements only.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             when {
                 sale.voided ->
                     Text(
@@ -454,7 +460,8 @@ private fun RefundDetailsCard(
                     )
                 sale.fullyRefunded ->
                     Text(
-                        "Refunded in full — nothing left to refund",
+                        if (sale.externalPaymentAmount != null) "Terminal movements reversed"
+                        else "Refunded in full — nothing left to refund",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )

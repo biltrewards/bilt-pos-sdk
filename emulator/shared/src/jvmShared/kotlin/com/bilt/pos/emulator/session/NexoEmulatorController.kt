@@ -1767,12 +1767,6 @@ class NexoEmulatorController(
                     log("The sale has no recorded movements — nothing to reverse")
                     return@launch
                 }
-                if (sale.externalPaymentAmount.toBigDecimal().signum() > 0) {
-                    log(
-                        "The sale includes cash — reconcile its refund manually; a terminal void cannot return cash"
-                    )
-                    return@launch
-                }
                 executeFullRefund(conn, stored)
             }
         // Releases on every path, including a job cancelled before it ran
@@ -2063,6 +2057,7 @@ class NexoEmulatorController(
      */
     private fun executeFullRefund(conn: Connection, stored: StoredSale) {
         val sale = stored.sale
+        val hasCash = sale.externalPaymentAmount.toBigDecimal().signum() > 0
         log(
             "Starting full refund of sale ${sale.id.take(8)} — voiding every " +
                 "movement of the prior sale " +
@@ -2132,9 +2127,14 @@ class NexoEmulatorController(
                 val parts = buildList {
                     // the terminal does not always echo the reversed amount
                     add(
-                        "Refunded" +
+                        (if (hasCash) "Terminal movements reversed" else "Refunded") +
                             (result.reversedAmount?.let { " $${it.toPlainString()}" } ?: "")
                     )
+                    if (hasCash) {
+                        add(
+                            "Return ${sale.currency} ${sale.externalPaymentAmount} cash manually; the terminal did not reimburse it."
+                        )
+                    }
                     if (result.pointsReversed > 0) {
                         add(
                             "reversed ${result.pointsReversed} pts (balance ${result.remainingPointBalance})"
@@ -2146,6 +2146,7 @@ class NexoEmulatorController(
                     parts,
                     recorded,
                     receiptText(result.customerReceipt, result.merchantReceipt),
+                    title = if (hasCash) "Terminal refund complete" else "Refund complete",
                 )
             }
         }
@@ -2403,6 +2404,7 @@ class NexoEmulatorController(
         parts: List<String>,
         recorded: Boolean,
         receipt: String?,
+        title: String,
     ) {
         val all =
             if (recorded) parts
@@ -2418,7 +2420,7 @@ class NexoEmulatorController(
                     paymentOutcome =
                         PaymentOutcome(
                             success = true,
-                            title = "Refund complete",
+                            title = title,
                             message = all.joinToString("\n"),
                             receipt = receipt,
                         )
@@ -2471,9 +2473,11 @@ class NexoEmulatorController(
     }
 
     override fun abort() {
-        _state.value.paymentRecovery?.let {
-            it.choose(PaymentRecoveryAction.ABORT)
-            return
+        synchronized(connectionLock) {
+            _state.value.paymentRecovery?.let {
+                it.choose(PaymentRecoveryAction.ABORT)
+                return
+            }
         }
         val conn = connection
         if (conn == null) {
@@ -2667,7 +2671,7 @@ class NexoEmulatorController(
             fullRefundAvailable =
                 refundable &&
                     refunds.none { it.isPartialRefund } &&
-                    sale.externalPaymentAmount.toBigDecimal().signum() == 0,
+                    (sale.legs.isNotEmpty() || sale.giftCardLoads.isNotEmpty()),
             externalPaymentAmount =
                 sale.externalPaymentAmount.takeIf { it.toBigDecimal().signum() > 0 },
             voided = voided != null,

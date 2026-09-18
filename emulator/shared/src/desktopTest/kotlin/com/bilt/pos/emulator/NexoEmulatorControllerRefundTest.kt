@@ -5,9 +5,11 @@ import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.session.BasketLineType
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorConfig
+import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.NexoEmulatorController
 import com.bilt.pos.emulator.session.PaymentRecoveryAction
+import com.bilt.pos.emulator.session.PaymentRecoveryPrompt
 import com.bilt.pos.emulator.session.StoredValueOptions
 import com.bilt.pos.emulator.store.GiftCardLoad
 import com.bilt.pos.emulator.store.JsonlSaleStore
@@ -36,7 +38,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
@@ -1797,6 +1801,58 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
+    fun abortResolvesTheCurrentPromptAfterWaitingForTheConnectionLock() {
+        val controller = controller(storeWithOneSale())
+        val lock =
+            NexoEmulatorController::class
+                .java
+                .getDeclaredField("connectionLock")
+                .apply { isAccessible = true }
+                .get(controller)
+        @Suppress("UNCHECKED_CAST")
+        val state =
+            NexoEmulatorController::class
+                .java
+                .getDeclaredField("_state")
+                .apply { isAccessible = true }
+                .get(controller) as MutableStateFlow<EmulatorState>
+        val decisions = ConcurrentLinkedQueue<Pair<String, PaymentRecoveryAction>>()
+        fun prompt(name: String): PaymentRecoveryPrompt {
+            lateinit var prompt: PaymentRecoveryPrompt
+            prompt =
+                PaymentRecoveryPrompt(name, listOf(PaymentRecoveryAction.ABORT)) { action ->
+                    synchronized(lock) {
+                        if (state.value.paymentRecovery === prompt) {
+                            decisions.add(name to action)
+                            state.update { it.copy(paymentRecovery = null) }
+                        }
+                    }
+                }
+            return prompt
+        }
+        val abortThread = Thread(controller::abort, "test-abort").apply { isDaemon = true }
+        try {
+            synchronized(lock) {
+                state.update { it.copy(paymentRecovery = prompt("first")) }
+                abortThread.start()
+                val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
+                while (abortThread.state != Thread.State.BLOCKED && System.nanoTime() < deadline) {
+                    Thread.sleep(1)
+                }
+                assertEquals(Thread.State.BLOCKED, abortThread.state)
+                state.update { it.copy(paymentRecovery = prompt("replacement")) }
+            }
+            abortThread.join(5_000)
+            assertFalse(abortThread.isAlive)
+            assertEquals(listOf("replacement" to PaymentRecoveryAction.ABORT), decisions.toList())
+            assertEquals(null, state.value.paymentRecovery)
+        } finally {
+            abortThread.join(5_000)
+            controller.shutdown()
+        }
+    }
+
+    @Test
     fun paymentFailureWaitsForCashierBeforeRollingBack() {
         server.dispatcher = respondingWith { body ->
             if ("\"PaymentRequest\"" in body) {
@@ -1979,6 +2035,37 @@ class NexoEmulatorControllerRefundTest {
     }
 
     @Test
+    fun cashOnlySaleDoesNotOfferATerminalRefund() {
+        val store = storeWithOneSale()
+        val cashSale =
+            store
+                .listSales()
+                .single()
+                .sale
+                .copy(
+                    id = "cash-only",
+                    legs = emptyList(),
+                    externalPaymentAmount = "2.10",
+                )
+        store.recordSale(cashSale)
+        val controller = controller(store)
+        try {
+            val sale = runBlocking {
+                withTimeout(10_000) {
+                    controller.state
+                        .first { it.sales.size == 2 }
+                        .sales
+                        .first { it.id == cashSale.id }
+                }
+            }
+            assertFalse(sale.fullRefundAvailable)
+            assertTrue("cash $2.10 — refund manually" in sale.statusLabel)
+        } finally {
+            controller.shutdown()
+        }
+    }
+
+    @Test
     fun cashierCanRecordCashOrAbandonAndShutdownReleasesAPendingDecision() {
         for (action in listOf(PaymentRecoveryAction.CASH, PaymentRecoveryAction.ABANDON, null)) {
             requests.clear()
@@ -2014,6 +2101,7 @@ class NexoEmulatorControllerRefundTest {
                             }
                         val outcome = assertNotNull(stopped.paymentOutcome)
                         assertEquals(action == PaymentRecoveryAction.CASH, outcome.success)
+                        assertTrue(requests.none { "\"Reverse\"" in it })
                         if (action == PaymentRecoveryAction.CASH) {
                             assertTrue("cash $25.00" in outcome.message)
                             val sale =
@@ -2027,22 +2115,36 @@ class NexoEmulatorControllerRefundTest {
                                         .first { it.externalPaymentAmount != null }
                                 }
                             assertEquals("25.00", sale.externalPaymentAmount)
-                            assertFalse(sale.fullRefundAvailable)
+                            assertTrue(sale.fullRefundAvailable)
                             assertTrue("refund manually" in sale.statusLabel)
                             controller.refundSale(sale.id)
-                            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
-                            assertTrue(
-                                controller.state.value.events.any {
-                                    "a terminal void cannot return cash" in it
+                            val refunded =
+                                withTimeout(10_000) {
+                                    controller.state.first { state ->
+                                        !state.refundInProgress &&
+                                            state.sales.any { it.id == sale.id && it.fullyRefunded }
+                                    }
                                 }
+                            val refund = assertNotNull(refunded.paymentOutcome)
+                            assertTrue(refund.success, refund.message)
+                            assertEquals("Terminal refund complete", refund.title)
+                            assertTrue("Return USD 25.00 cash manually" in refund.message)
+                            assertTrue("terminal did not reimburse it" in refund.message)
+                            assertFalse(
+                                refunded.sales.first { it.id == sale.id }.fullRefundAvailable
                             )
+                            val reversal = requests.single { "\"Reverse\"" in it }
+                            assertTrue("POI-GIFT-LOAD" in reversal)
+                            assertTrue(requests.none { "\"ReversalRequest\"" in it })
+                            controller.refundSale(sale.id)
+                            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+                            assertEquals(1, requests.count { "\"Reverse\"" in it })
                         } else {
                             assertEquals("Settlement abandoned", outcome.title)
                             assertTrue("POI-GIFT-LOAD" in outcome.message)
                             assertTrue("Reconcile" in outcome.message)
                             assertEquals(1, stopped.basket.size)
                         }
-                        assertTrue(requests.none { "\"Reverse\"" in it })
                     }
                     assertEquals(null, controller.state.value.paymentRecovery)
                     assertEquals(1, requests.count { "\"PaymentRequest\"" in it })
