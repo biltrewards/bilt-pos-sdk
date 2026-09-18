@@ -37,12 +37,14 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -2069,11 +2071,20 @@ class NexoEmulatorControllerRefundTest {
     fun cashierCanRecordCashOrAbandonAndShutdownReleasesAPendingDecision() {
         for (action in listOf(PaymentRecoveryAction.CASH, PaymentRecoveryAction.ABANDON, null)) {
             requests.clear()
+            val rollbackOnWire = java.util.concurrent.CountDownLatch(1)
+            val releaseRollback = java.util.concurrent.CountDownLatch(1)
             server.dispatcher = respondingWith { body ->
-                if ("\"PaymentRequest\"" in body) {
-                    """{"SaleToPOIResponse":{"PaymentResponse":{
-                        "Response":{"Result":"Failure","ErrorCondition":"Refusal"}}}}"""
-                } else defaultResponse(body)
+                when {
+                    "\"PaymentRequest\"" in body ->
+                        """{"SaleToPOIResponse":{"PaymentResponse":{
+                            "Response":{"Result":"Failure","ErrorCondition":"Refusal"}}}}"""
+                    action == null && "\"Reverse\"" in body -> {
+                        rollbackOnWire.countDown()
+                        releaseRollback.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                        defaultResponse(body)
+                    }
+                    else -> defaultResponse(body)
+                }
             }
             val controller = controller(storeWithOneSale())
             try {
@@ -2091,8 +2102,24 @@ class NexoEmulatorControllerRefundTest {
                             controller.state.first { it.paymentRecovery != null }.paymentRecovery!!
                         }
                     if (action == null) {
-                        kotlinx.coroutines.withContext(Dispatchers.IO) { controller.shutdown() }
-                        assertEquals(1, requests.count { "\"Reverse\"" in it })
+                        val shutdown = async(Dispatchers.IO) { controller.shutdown() }
+                        try {
+                            assertTrue(
+                                rollbackOnWire.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                            )
+                            assertEquals(null, withTimeoutOrNull(100) { shutdown.await() })
+                            assertTrue(requests.none { "BiltSession,End,v1," in it })
+                        } finally {
+                            releaseRollback.countDown()
+                        }
+                        withTimeout(10_000) { shutdown.await() }
+                        val completed = requests.toList()
+                        assertEquals(1, completed.count { "\"Reverse\"" in it })
+                        assertEquals(1, completed.count { "BiltSession,End,v1," in it })
+                        assertTrue(
+                            completed.indexOfFirst { "BiltSession,End,v1," in it } >
+                                completed.indexOfFirst { "\"Reverse\"" in it }
+                        )
                     } else {
                         prompt.choose(action)
                         val stopped =

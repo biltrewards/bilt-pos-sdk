@@ -626,6 +626,8 @@ class NexoEmulatorController(
                 withTimeoutOrNull(15_000) { conn.refundJob?.join() }
             }
             conn.scope.cancel()
+            // This stops the diagnostics/admin handle, not the shared client or
+            // checkout executor; session.close() below waits for payment rollback.
             conn.terminal.close()
             conn.session?.let { runCatching { it.close() } }
             // after the blocking session close — its End bracket crossed the
