@@ -64,6 +64,7 @@ class NexoEmulatorControllerIdentifyTest {
     private lateinit var server: MockWebServer
     private val requests = ConcurrentLinkedQueue<String>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val controllers = mutableListOf<NexoEmulatorController>()
     private val callbackExecutor = Executors.newSingleThreadExecutor { task ->
         Thread(task, "test-ui").apply { isDaemon = true }
     }
@@ -97,6 +98,7 @@ class NexoEmulatorControllerIdentifyTest {
 
     @AfterTest
     fun tearDown() {
+        controllers.forEach { it.shutdown() }
         scope.cancel()
         callbackExecutor.shutdownNow()
         server.shutdown()
@@ -120,21 +122,22 @@ class NexoEmulatorControllerIdentifyTest {
 
     private fun controller() =
         NexoEmulatorController(
-            scope = scope,
-            config =
-                EmulatorConfig(
-                    passphrase = null,
-                    keyId = "emulator",
-                    keyVersion = 0,
-                    caPem = null,
-                    hostnamePattern = "*",
-                ),
-            saleStore =
-                JsonlSaleStore(
-                    Files.createTempDirectory("identify-e2e").resolve("sales.jsonl").toFile()
-                ),
-            callbackExecutor = callbackExecutor,
-        )
+                scope = scope,
+                config =
+                    EmulatorConfig(
+                        passphrase = null,
+                        keyId = "emulator",
+                        keyVersion = 0,
+                        caPem = null,
+                        hostnamePattern = "*",
+                    ),
+                saleStore =
+                    JsonlSaleStore(
+                        Files.createTempDirectory("identify-e2e").resolve("sales.jsonl").toFile()
+                    ),
+                callbackExecutor = callbackExecutor,
+            )
+            .also { controllers += it }
 
     private suspend fun NexoEmulatorController.connectAndStartCheckout() {
         connect("127.0.0.1", encryptionEnabled = false)
@@ -230,7 +233,11 @@ class NexoEmulatorControllerIdentifyTest {
         runBlocking {
             controller.connectAndStartCheckout()
             controller.identifyMember()
-            withTimeout(10_000) { controller.state.first { it.member is MemberIdentity.Found } }
+            withTimeout(10_000) {
+                controller.state.first {
+                    it.member is MemberIdentity.Found && !it.identifyInProgress
+                }
+            }
 
             cancelNext = true
             controller.identifyMember()
@@ -262,7 +269,11 @@ class NexoEmulatorControllerIdentifyTest {
         runBlocking {
             controller.connectAndStartCheckout()
             controller.identifyMember()
-            withTimeout(10_000) { controller.state.first { it.member is MemberIdentity.Found } }
+            withTimeout(10_000) {
+                controller.state.first {
+                    it.member is MemberIdentity.Found && !it.identifyInProgress
+                }
+            }
 
             notFoundNext = true
             controller.identifyMember()

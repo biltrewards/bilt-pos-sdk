@@ -179,6 +179,7 @@ class NexoEmulatorControllerRefundTest {
     private lateinit var server: MockWebServer
     private val requests = ConcurrentLinkedQueue<String>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val controllers = mutableListOf<NexoEmulatorController>()
     private val callbackExecutor = Executors.newSingleThreadExecutor { task ->
         Thread(task, "test-ui").apply { isDaemon = true }
     }
@@ -227,6 +228,7 @@ class NexoEmulatorControllerRefundTest {
 
     @AfterTest
     fun tearDown() {
+        controllers.forEach { it.shutdown() }
         scope.cancel()
         callbackExecutor.shutdownNow()
         server.shutdown()
@@ -388,18 +390,19 @@ class NexoEmulatorControllerRefundTest {
 
     private fun controller(store: SaleStore) =
         NexoEmulatorController(
-            scope = scope,
-            config =
-                EmulatorConfig(
-                    passphrase = null,
-                    keyId = "emulator",
-                    keyVersion = 0,
-                    caPem = null,
-                    hostnamePattern = "*",
-                ),
-            saleStore = store,
-            callbackExecutor = callbackExecutor,
-        )
+                scope = scope,
+                config =
+                    EmulatorConfig(
+                        passphrase = null,
+                        keyId = "emulator",
+                        keyVersion = 0,
+                        caPem = null,
+                        hostnamePattern = "*",
+                    ),
+                saleStore = store,
+                callbackExecutor = callbackExecutor,
+            )
+            .also { controllers += it }
 
     @Test
     fun fullRefundRunsAgainstTheTerminalAndRecordsIntoTheStore() {
@@ -2108,7 +2111,11 @@ class NexoEmulatorControllerRefundTest {
                                 rollbackOnWire.await(10, java.util.concurrent.TimeUnit.SECONDS)
                             )
                             assertEquals(null, withTimeoutOrNull(100) { shutdown.await() })
-                            assertTrue(requests.none { "BiltSession,End,v1," in it })
+                            assertTrue(
+                                requests.none { "BiltSession,End,v1," in it },
+                                "Unexpected End while rolling back ${controller.state.value.sessionId}: " +
+                                    requests.filter { "BiltSession,End,v1," in it },
+                            )
                         } finally {
                             releaseRollback.countDown()
                         }
