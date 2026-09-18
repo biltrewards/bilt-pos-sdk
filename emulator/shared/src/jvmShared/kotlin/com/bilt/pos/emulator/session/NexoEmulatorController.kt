@@ -36,8 +36,10 @@ import com.bilt.pos.session.identity.IdentifyResult
 import com.bilt.pos.session.identity.IdentifyStatus
 import com.bilt.pos.session.identity.Reward
 import com.bilt.pos.session.identity.RewardType
+import com.bilt.pos.session.settlement.ExternalPayment
 import com.bilt.pos.session.settlement.OriginalSaleRecord
 import com.bilt.pos.session.settlement.RefundAllocation
+import com.bilt.pos.session.settlement.SettlementFailure
 import com.bilt.pos.session.settlement.SettlementOptions
 import com.bilt.pos.session.settlement.SettlementRecovery
 import com.bilt.pos.session.settlement.SettlementResult
@@ -53,6 +55,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
@@ -234,6 +237,7 @@ class NexoEmulatorController(
          * active operation. Released by each operation's `onComplete`.
          */
         val operationClaimed = AtomicBoolean(false)
+        var paymentRecovery: CompletableFuture<SettlementRecovery>? = null
     }
 
     /**
@@ -604,7 +608,12 @@ class NexoEmulatorController(
         val conn =
             synchronized(connectionLock) {
                 connectEpoch.incrementAndGet()
-                connection.also { connection = null }
+                connection.also {
+                    connection = null
+                    it?.paymentRecovery?.complete(SettlementRecovery.abort())
+                    it?.paymentRecovery = null
+                    _state.update { state -> state.copy(paymentRecovery = null) }
+                }
             }
         if (conn != null) {
             // A refund may be mid-void with money already reversed on the
@@ -1383,6 +1392,7 @@ class NexoEmulatorController(
         )
         session
             .settle(options)
+            .callbackOn(Executor { it.run() })
             .onCardRefunded { movement ->
                 log(
                     "Card refund committed: $${movement.amount?.toPlainString()}" +
@@ -1424,21 +1434,38 @@ class NexoEmulatorController(
                 )
             }
             .onError { error ->
+                log("Settlement failed: ${error.code} — ${error.message}")
+                val recovery = awaitPaymentRecovery(conn, error)
+                if (recovery.isAbort) {
+                    attempt = PaymentAttempt.FAILED
+                    if (connection === conn) {
+                        _state.update {
+                            it.copy(
+                                paymentOutcome =
+                                    PaymentOutcome(
+                                        success = false,
+                                        title = "Settlement failed",
+                                        message = "${error.code}\n${error.message}",
+                                    )
+                            )
+                        }
+                    }
+                }
+                recovery
+            }
+            .onAbandoned { record ->
                 attempt = PaymentAttempt.FAILED
+                val message =
+                    "No rollback was performed. Reconcile these movements manually before settling again.\n\n" +
+                        paymentFailureDetails(record.failure)
+                log("Settlement abandoned: $message")
                 if (connection === conn) {
-                    log("Settlement failed: ${error.code} — ${error.message}")
                     _state.update {
                         it.copy(
-                            paymentOutcome =
-                                PaymentOutcome(
-                                    success = false,
-                                    title = "Settlement failed",
-                                    message = "${error.code}\n${error.message}",
-                                )
+                            paymentOutcome = PaymentOutcome(false, "Settlement abandoned", message)
                         )
                     }
                 }
-                SettlementRecovery.abort()
             }
             .onSuccess { result ->
                 attempt = PaymentAttempt.SUCCEEDED
@@ -1514,6 +1541,93 @@ class NexoEmulatorController(
             _state.update { it.copy(paymentInProgress = false) }
         }
     }
+
+    private fun awaitPaymentRecovery(
+        conn: Connection,
+        failure: SettlementFailure,
+    ): SettlementRecovery {
+        if (failure.step == null) return SettlementRecovery.abort()
+        val actions = buildList {
+            add(PaymentRecoveryAction.RETRY)
+            if (!failure.isIndeterminate) {
+                if (
+                    failure.step in
+                        listOf(
+                            SettlementStep.REBATE_REDEMPTION,
+                            SettlementStep.POINT_REDEMPTION,
+                            SettlementStep.STORED_VALUE_CHARGE,
+                        ) && failure.committedMovements.none { it.step == failure.step }
+                ) {
+                    add(PaymentRecoveryAction.SKIP)
+                }
+                if (failure.step == SettlementStep.CARD_CHARGE && failure.amountDue.signum() > 0) {
+                    add(PaymentRecoveryAction.CASH)
+                }
+            }
+            add(PaymentRecoveryAction.ABORT)
+            add(PaymentRecoveryAction.ABANDON)
+        }
+        val decision = CompletableFuture<SettlementRecovery>()
+        val prompt =
+            PaymentRecoveryPrompt(paymentFailureDetails(failure), actions) { action ->
+                synchronized(connectionLock) {
+                    if (
+                        connection === conn &&
+                            conn.paymentRecovery === decision &&
+                            action in actions
+                    ) {
+                        conn.paymentRecovery = null
+                        _state.update { it.copy(paymentRecovery = null) }
+                        log("Cashier chose ${action.label} for ${failure.step}")
+                        decision.complete(
+                            when (action) {
+                                PaymentRecoveryAction.RETRY -> SettlementRecovery.retry()
+                                PaymentRecoveryAction.SKIP -> SettlementRecovery.skip()
+                                PaymentRecoveryAction.CASH ->
+                                    SettlementRecovery.external(
+                                        ExternalPayment.cash(failure.amountDue)
+                                    )
+                                PaymentRecoveryAction.ABORT -> SettlementRecovery.abort()
+                                PaymentRecoveryAction.ABANDON -> SettlementRecovery.abandon()
+                            }
+                        )
+                    }
+                }
+            }
+        synchronized(connectionLock) {
+            if (connection !== conn) return SettlementRecovery.abort()
+            conn.paymentRecovery = decision
+            _state.update { it.copy(paymentRecovery = prompt) }
+        }
+        return try {
+            decision.get()
+        } finally {
+            synchronized(connectionLock) {
+                if (conn.paymentRecovery === decision) {
+                    conn.paymentRecovery = null
+                    if (connection === conn) _state.update { it.copy(paymentRecovery = null) }
+                }
+            }
+        }
+    }
+
+    private fun paymentFailureDetails(failure: SettlementFailure): String = buildList {
+        add("Step: ${failure.step}")
+        add("${failure.code}: ${failure.message}")
+        add("Amount due: ${config.currency} ${failure.amountDue.toPlainString()}")
+        if (failure.isIndeterminate)
+            add("Outcome unknown — retry checks status without charging again.")
+        failure.serviceId?.let { add("Request: $it") }
+        if (failure.committedMovements.isNotEmpty()) {
+            add("Committed movements (not yet rolled back):")
+            failure.committedMovements.forEach {
+                add(
+                    "${it.step}: ${it.amount?.toPlainString().orEmpty()} (txn ${it.poiTransactionId ?: it.saleTransactionId})"
+                )
+            }
+        }
+    }
+        .joinToString("\n")
 
     override fun acquireCard() {
         val conn = connection
@@ -1651,6 +1765,12 @@ class NexoEmulatorController(
                 }
                 if (sale.legs.isEmpty() && sale.giftCardLoads.isEmpty()) {
                     log("The sale has no recorded movements — nothing to reverse")
+                    return@launch
+                }
+                if (sale.externalPaymentAmount.toBigDecimal().signum() > 0) {
+                    log(
+                        "The sale includes cash — reconcile its refund manually; a terminal void cannot return cash"
+                    )
                     return@launch
                 }
                 executeFullRefund(conn, stored)
@@ -2351,6 +2471,10 @@ class NexoEmulatorController(
     }
 
     override fun abort() {
+        _state.value.paymentRecovery?.let {
+            it.choose(PaymentRecoveryAction.ABORT)
+            return
+        }
         val conn = connection
         if (conn == null) {
             log("Nothing to abort")
@@ -2434,6 +2558,11 @@ class NexoEmulatorController(
         result.finalBasket?.let(::publishBasket)
         val parts = buildList {
             addAll(returnParts)
+            if (result.externalPaymentAmount.signum() > 0) {
+                add(
+                    "cash $${result.externalPaymentAmount.toPlainString()} (register-managed; refund manually)"
+                )
+            }
             if (result.cardAmountCharged.signum() > 0) {
                 add(
                     "card $${result.cardAmountCharged.toPlainString()}" +
@@ -2535,7 +2664,12 @@ class NexoEmulatorController(
             hasGiftCardPurchase = sale.giftCardLoads.isNotEmpty(),
             refunded = refunds.isNotEmpty(),
             fullyRefunded = fullyRefunded,
-            fullRefundAvailable = refundable && refunds.none { it.isPartialRefund },
+            fullRefundAvailable =
+                refundable &&
+                    refunds.none { it.isPartialRefund } &&
+                    sale.externalPaymentAmount.toBigDecimal().signum() == 0,
+            externalPaymentAmount =
+                sale.externalPaymentAmount.takeIf { it.toBigDecimal().signum() > 0 },
             voided = voided != null,
         )
 

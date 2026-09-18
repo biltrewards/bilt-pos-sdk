@@ -7,6 +7,8 @@ import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorConfig
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.NexoEmulatorController
+import com.bilt.pos.emulator.session.PaymentRecoveryAction
+import com.bilt.pos.emulator.session.StoredValueOptions
 import com.bilt.pos.emulator.store.GiftCardLoad
 import com.bilt.pos.emulator.store.JsonlSaleStore
 import com.bilt.pos.emulator.store.LegType
@@ -1791,6 +1793,263 @@ class NexoEmulatorControllerRefundTest {
             controller.clearBasket()
             assertTrue(controller.state.value.basket.isEmpty())
             assertTrue(controller.state.value.events.any { "Basket cleared" in it })
+        }
+    }
+
+    @Test
+    fun paymentFailureWaitsForCashierBeforeRollingBack() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"PaymentRequest\"" in body) {
+                """{"SaleToPOIResponse":{"PaymentResponse":{
+                    "Response":{"Result":"Failure","ErrorCondition":"Refusal"}}}}"""
+            } else defaultResponse(body)
+        }
+        val controller = controller(storeWithOneSale())
+        try {
+            runBlocking {
+                controller.connect("127.0.0.1", encryptionEnabled = false)
+                withTimeout(10_000) {
+                    controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+                }
+                controller.startSession()
+                withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+                controller.addGiftCardPurchase("25.00", "GC-123")
+                controller.settle(LoyaltyOptions(false, false, false))
+                val prompt =
+                    withTimeout(10_000) {
+                        controller.state.first { it.paymentRecovery != null }.paymentRecovery!!
+                    }
+                callbackExecutor.submit {}.get(5, java.util.concurrent.TimeUnit.SECONDS)
+                assertEquals(null, controller.state.value.paymentOutcome)
+                assertTrue(controller.state.value.paymentInProgress)
+                assertTrue(requests.none { "\"Reverse\"" in it })
+                assertEquals(
+                    listOf(
+                        PaymentRecoveryAction.RETRY,
+                        PaymentRecoveryAction.CASH,
+                        PaymentRecoveryAction.ABORT,
+                        PaymentRecoveryAction.ABANDON,
+                    ),
+                    prompt.actions,
+                )
+                assertTrue("CARD_CHARGE" in prompt.message && "25.00" in prompt.message)
+                assertTrue("POI-GIFT-LOAD" in prompt.message)
+                prompt.choose(PaymentRecoveryAction.SKIP)
+                assertTrue(controller.state.value.paymentRecovery === prompt)
+                callbackExecutor
+                    .submit { prompt.choose(PaymentRecoveryAction.RETRY) }
+                    .get(5, java.util.concurrent.TimeUnit.SECONDS)
+                val next =
+                    withTimeout(10_000) {
+                        controller.state
+                            .first { it.paymentRecovery != null && it.paymentRecovery !== prompt }
+                            .paymentRecovery!!
+                    }
+                prompt.choose(PaymentRecoveryAction.ABORT)
+                assertTrue(controller.state.value.paymentRecovery === next)
+                assertEquals(2, requests.count { "\"PaymentRequest\"" in it })
+                assertEquals(1, requests.count { "\"Load\"" in it })
+                assertTrue(requests.none { "\"Reverse\"" in it })
+                next.choose(PaymentRecoveryAction.ABORT)
+                val stopped =
+                    withTimeout(10_000) {
+                        controller.state.first { !it.paymentInProgress }
+                    }
+                assertEquals(null, stopped.paymentRecovery)
+                assertFalse(assertNotNull(stopped.paymentOutcome).success)
+                assertEquals(1, requests.count { "\"Reverse\"" in it })
+                assertEquals(1, stopped.basket.size)
+                assertNotNull(stopped.sessionId)
+            }
+        } finally {
+            controller.shutdown()
+        }
+    }
+
+    @Test
+    fun unknownPaymentOutcomeOnlyOffersStatusRetryAbortOrAbandon() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"PaymentRequest\"" in body || "\"TransactionStatusRequest\"" in body) "{}"
+            else defaultResponse(body)
+        }
+        val controller = controller(storeWithOneSale())
+        try {
+            runBlocking {
+                controller.connect("127.0.0.1", encryptionEnabled = false)
+                withTimeout(10_000) {
+                    controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+                }
+                controller.startSession()
+                withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+                controller.addCustomItem(2500)
+                controller.settle(LoyaltyOptions(false, false, false))
+                val prompt =
+                    withTimeout(10_000) {
+                        controller.state.first { it.paymentRecovery != null }.paymentRecovery!!
+                    }
+                assertTrue("Outcome unknown" in prompt.message)
+                assertEquals(
+                    listOf(
+                        PaymentRecoveryAction.RETRY,
+                        PaymentRecoveryAction.ABORT,
+                        PaymentRecoveryAction.ABANDON,
+                    ),
+                    prompt.actions,
+                )
+                prompt.choose(PaymentRecoveryAction.CASH)
+                assertTrue(controller.state.value.paymentRecovery === prompt)
+                prompt.choose(PaymentRecoveryAction.RETRY)
+                val next =
+                    withTimeout(10_000) {
+                        controller.state
+                            .first { it.paymentRecovery != null && it.paymentRecovery !== prompt }
+                            .paymentRecovery!!
+                    }
+                assertEquals(prompt.actions, next.actions)
+                assertEquals(1, requests.count { "\"PaymentRequest\"" in it })
+                assertEquals(2, requests.count { "\"TransactionStatusRequest\"" in it })
+                controller.abort()
+                withTimeout(10_000) { controller.state.first { !it.paymentInProgress } }
+                assertEquals(null, controller.state.value.paymentRecovery)
+            }
+        } finally {
+            controller.shutdown()
+        }
+    }
+
+    @Test
+    fun cashierCanSkipAnOptionalTenderOrRetryARequiredLoad() {
+        for (optional in listOf(true, false)) {
+            requests.clear()
+            var fail = true
+            server.dispatcher = respondingWith { body ->
+                when {
+                    optional && "\"PaymentRequest\"" in body && "GC-123" in body ->
+                        """{"SaleToPOIResponse":{"PaymentResponse":{
+                            "Response":{"Result":"Failure","ErrorCondition":"Refusal"}}}}"""
+                    !optional && fail && "\"StoredValueRequest\"" in body -> {
+                        fail = false
+                        STORED_VALUE_REVERSE_FAIL
+                    }
+                    "\"PaymentRequest\"" in body -> PAYMENT_OK_25
+                    else -> defaultResponse(body)
+                }
+            }
+            val controller = controller(storeWithOneSale())
+            try {
+                runBlocking {
+                    controller.connect("127.0.0.1", encryptionEnabled = false)
+                    withTimeout(10_000) {
+                        controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+                    }
+                    controller.startSession()
+                    withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+                    if (optional) controller.addCustomItem(2500)
+                    else controller.addGiftCardPurchase("25.00", "GC-123")
+                    controller.settle(
+                        LoyaltyOptions(false, false, false),
+                        if (optional) StoredValueOptions("GC-123") else null,
+                    )
+                    val prompt =
+                        withTimeout(10_000) {
+                            controller.state.first { it.paymentRecovery != null }.paymentRecovery!!
+                        }
+                    assertEquals(optional, PaymentRecoveryAction.SKIP in prompt.actions)
+                    assertFalse(PaymentRecoveryAction.CASH in prompt.actions)
+                    prompt.choose(
+                        if (optional) PaymentRecoveryAction.SKIP else PaymentRecoveryAction.RETRY
+                    )
+                    val settled =
+                        withTimeout(10_000) {
+                            controller.state.first { !it.paymentInProgress && it.sessionId == null }
+                        }
+                    assertTrue(assertNotNull(settled.paymentOutcome).success)
+                    assertEquals(null, settled.paymentRecovery)
+                    assertEquals(
+                        if (optional) 2 else 1,
+                        requests.count { "\"PaymentRequest\"" in it },
+                    )
+                    assertEquals(if (optional) 0 else 2, requests.count { "\"Load\"" in it })
+                    assertTrue(requests.none { "\"Reverse\"" in it })
+                }
+            } finally {
+                controller.shutdown()
+            }
+        }
+    }
+
+    @Test
+    fun cashierCanRecordCashOrAbandonAndShutdownReleasesAPendingDecision() {
+        for (action in listOf(PaymentRecoveryAction.CASH, PaymentRecoveryAction.ABANDON, null)) {
+            requests.clear()
+            server.dispatcher = respondingWith { body ->
+                if ("\"PaymentRequest\"" in body) {
+                    """{"SaleToPOIResponse":{"PaymentResponse":{
+                        "Response":{"Result":"Failure","ErrorCondition":"Refusal"}}}}"""
+                } else defaultResponse(body)
+            }
+            val controller = controller(storeWithOneSale())
+            try {
+                runBlocking {
+                    controller.connect("127.0.0.1", encryptionEnabled = false)
+                    withTimeout(10_000) {
+                        controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+                    }
+                    controller.startSession()
+                    withTimeout(10_000) { controller.state.first { it.sessionId != null } }
+                    controller.addGiftCardPurchase("25.00", "GC-123")
+                    controller.settle(LoyaltyOptions(false, false, false))
+                    val prompt =
+                        withTimeout(10_000) {
+                            controller.state.first { it.paymentRecovery != null }.paymentRecovery!!
+                        }
+                    if (action == null) {
+                        kotlinx.coroutines.withContext(Dispatchers.IO) { controller.shutdown() }
+                        assertEquals(1, requests.count { "\"Reverse\"" in it })
+                    } else {
+                        prompt.choose(action)
+                        val stopped =
+                            withTimeout(10_000) {
+                                controller.state.first { !it.paymentInProgress }
+                            }
+                        val outcome = assertNotNull(stopped.paymentOutcome)
+                        assertEquals(action == PaymentRecoveryAction.CASH, outcome.success)
+                        if (action == PaymentRecoveryAction.CASH) {
+                            assertTrue("cash $25.00" in outcome.message)
+                            val sale =
+                                withTimeout(10_000) {
+                                    controller.state
+                                        .first { state ->
+                                            state.sales.any { it.externalPaymentAmount != null } &&
+                                                state.sessionId == null
+                                        }
+                                        .sales
+                                        .first { it.externalPaymentAmount != null }
+                                }
+                            assertEquals("25.00", sale.externalPaymentAmount)
+                            assertFalse(sale.fullRefundAvailable)
+                            assertTrue("refund manually" in sale.statusLabel)
+                            controller.refundSale(sale.id)
+                            withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
+                            assertTrue(
+                                controller.state.value.events.any {
+                                    "a terminal void cannot return cash" in it
+                                }
+                            )
+                        } else {
+                            assertEquals("Settlement abandoned", outcome.title)
+                            assertTrue("POI-GIFT-LOAD" in outcome.message)
+                            assertTrue("Reconcile" in outcome.message)
+                            assertEquals(1, stopped.basket.size)
+                        }
+                        assertTrue(requests.none { "\"Reverse\"" in it })
+                    }
+                    assertEquals(null, controller.state.value.paymentRecovery)
+                    assertEquals(1, requests.count { "\"PaymentRequest\"" in it })
+                }
+            } finally {
+                controller.shutdown()
+            }
         }
     }
 

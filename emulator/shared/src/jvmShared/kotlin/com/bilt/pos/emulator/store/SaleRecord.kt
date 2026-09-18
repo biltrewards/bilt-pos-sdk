@@ -91,6 +91,7 @@ data class SaleRecord(
     val totalPointsEarned: Int = 0,
     val legs: List<TransactionLeg> = emptyList(),
     val giftCardLoads: List<GiftCardLoad> = emptyList(),
+    val externalPaymentAmount: String = "0",
 ) {
     fun leg(type: LegType): TransactionLeg? = legs.firstOrNull { it.type == type }
 }
