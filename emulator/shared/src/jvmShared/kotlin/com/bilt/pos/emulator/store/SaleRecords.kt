@@ -128,5 +128,6 @@ fun SettlementResult.toSaleRecord(
         totalPointsEarned = totalPointsEarned,
         legs = legs,
         giftCardLoads = giftCardLoads,
+        externalPaymentAmount = externalPaymentAmount.toPlainString(),
     )
 }

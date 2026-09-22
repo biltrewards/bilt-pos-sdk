@@ -91,7 +91,14 @@ data class SaleRecord(
     val totalPointsEarned: Int = 0,
     val legs: List<TransactionLeg> = emptyList(),
     val giftCardLoads: List<GiftCardLoad> = emptyList(),
+    val externalPaymentAmount: String = "0",
 ) {
+    init {
+        require(externalPaymentAmount.toBigDecimalOrNull()?.let { it.signum() >= 0 } == true) {
+            "externalPaymentAmount must be a non-negative decimal amount"
+        }
+    }
+
     fun leg(type: LegType): TransactionLeg? = legs.firstOrNull { it.type == type }
 }
 

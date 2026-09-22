@@ -12,10 +12,15 @@ import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 
 class JsonlSaleStoreTest {
 
@@ -162,6 +167,39 @@ class JsonlSaleStoreTest {
         file.appendText("""{"type":"sale","sale":{"id":"s2","sess""")
 
         assertEquals(listOf("s1"), store.listSales().map { it.sale.id })
+    }
+
+    @Test
+    fun invalidExternalPaymentAmountsAreRejectedWithoutBreakingValidSales() {
+        val file = newFile()
+        val store = JsonlSaleStore(file)
+        store.recordSale(sale("legacy"))
+        assertFalse("externalPaymentAmount" in file.readText())
+        val invalidAmounts =
+            listOf("", " ", "not-a-number", "NaN", "Infinity", "1e999999999999999999999", "-0.01")
+        invalidAmounts.forEachIndexed { index, amount ->
+            val record =
+                Json.encodeToJsonElement(SaleRecord.serializer(), sale("invalid-$index")).jsonObject
+            val invalid = JsonObject(record + ("externalPaymentAmount" to JsonPrimitive(amount)))
+            file.appendText("""{"type":"sale","sale":$invalid}""" + "\n")
+        }
+        store.recordSale(sale("zero").copy(externalPaymentAmount = "0.00"))
+        store.recordSale(sale("cash").copy(externalPaymentAmount = "1.10"))
+        val contents = file.readText()
+
+        assertEquals(listOf("cash", "zero", "legacy"), store.listSales().map { it.sale.id })
+        assertEquals("0", assertNotNull(store.findSale("legacy")).sale.externalPaymentAmount)
+        assertEquals("0.00", assertNotNull(store.findSale("zero")).sale.externalPaymentAmount)
+        assertEquals("1.10", assertNotNull(store.findSale("cash")).sale.externalPaymentAmount)
+        invalidAmounts.forEachIndexed { index, amount ->
+            assertNull(store.findSale("invalid-$index"))
+            val error =
+                assertFailsWith<IllegalArgumentException> {
+                    sale("invalid-$index").copy(externalPaymentAmount = amount)
+                }
+            assertTrue("externalPaymentAmount" in error.message.orEmpty())
+        }
+        assertEquals(contents, file.readText())
     }
 
     @Test
