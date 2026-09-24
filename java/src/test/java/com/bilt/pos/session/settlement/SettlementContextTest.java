@@ -55,6 +55,20 @@ class SettlementContextTest {
   }
 
   @Test
+  void resolveSaleTransactionIdKeepsBasketTupleWhenHandlerReturnsDefault() {
+    TransactionIdentificationType id =
+        SettlementContext.resolveSaleTransactionId(
+            SettlementStep.CARD_CHARGE,
+            BASKET,
+            new BigDecimal("10.00"),
+            List.of(),
+            ctx -> ctx.getDefaultTransactionId());
+
+    assertEquals(BASKET.getSaleTransactionID().getTransactionID(), id.getTransactionID());
+    assertEquals(BASKET.getSaleTransactionID().getTimeStamp(), id.getTimeStamp());
+  }
+
+  @Test
   void resolveSaleTransactionIdUsesHandlerOverrideAndContext() {
     CommittedStep priorStep =
         new CommittedStep(

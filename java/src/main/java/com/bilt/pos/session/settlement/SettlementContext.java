@@ -46,9 +46,10 @@ public final class SettlementContext {
   /**
    * Resolves the {@code SaleTransactionID} for a settlement step using the same contract as {@code
    * SettlementFlow.beforeStep}: the basket's own sale transaction is the default — every step,
-   * retry, and reversal of one checkout shares it — the handler is called when registered, and a
-   * handler override is stamped with the send time. Falling back to the basket's transaction
-   * happens when the handler returns {@code null} or an empty string.
+   * retry, and reversal of one checkout shares it — the handler is called when registered, and an
+   * override returning a different ID is stamped with the send time. The basket's transaction —
+   * including its timestamp — is kept unchanged when the handler returns {@code null}, an empty
+   * string, or the default ID itself, since nexo treats ID and timestamp as one identity.
    */
   public static TransactionIdentificationType resolveSaleTransactionId(
       SettlementStep step,
@@ -68,12 +69,14 @@ public final class SettlementContext {
                 currentTotal,
                 defaultTransaction.getTransactionID(),
                 priorSteps));
-    return transactionId != null && !transactionId.isEmpty()
-        ? TransactionIdentificationType.builder()
+    return transactionId == null
+            || transactionId.isEmpty()
+            || transactionId.equals(defaultTransaction.getTransactionID())
+        ? defaultTransaction
+        : TransactionIdentificationType.builder()
             .transactionID(transactionId)
             .timeStamp(Instant.now().toString())
-            .build()
-        : defaultTransaction;
+            .build();
   }
 
   /** The step about to run. */

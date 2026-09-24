@@ -53,7 +53,13 @@ public final class Basket {
 
   private Basket(Builder builder) {
     this.cartId = builder.cartId;
-    this.saleTransactionID = builder.saleTransactionID;
+    this.saleTransactionID =
+        builder.saleTransactionID == null
+            ? TransactionIdentificationType.builder()
+                .transactionID(UUID.randomUUID().toString())
+                .timeStamp(Instant.now().toString())
+                .build()
+            : builder.saleTransactionID;
     this.items = Collections.unmodifiableList(new ArrayList<>(builder.items));
     this.taxTotal = builder.taxTotal;
     this.originalTotal = builder.originalTotal;
@@ -84,10 +90,14 @@ public final class Basket {
   /**
    * The sale transaction identity shared by every wire request of this basket's checkout —
    * identify, payment, loyalty, stored value, and their reversals all carry it so the sale reads as
-   * one transaction end to end. Retries reuse it; a new basket mints a new one.
+   * one transaction end to end. Retries reuse it; a new basket mints a new one. Returns a copy: the
+   * nexo model types are mutable, and mutating the shared instance would split the sale's records.
    */
   public TransactionIdentificationType getSaleTransactionID() {
-    return saleTransactionID;
+    return TransactionIdentificationType.builder()
+        .transactionID(saleTransactionID.getTransactionID())
+        .timeStamp(saleTransactionID.getTimeStamp())
+        .build();
   }
 
   /** Line items, in insertion order. Never {@code null}. */
@@ -423,11 +433,7 @@ public final class Basket {
   public static final class Builder {
 
     private String cartId;
-    private TransactionIdentificationType saleTransactionID =
-        TransactionIdentificationType.builder()
-            .transactionID(UUID.randomUUID().toString())
-            .timeStamp(Instant.now().toString())
-            .build();
+    private TransactionIdentificationType saleTransactionID;
     private List<BasketLineItem> items = new ArrayList<>();
     private BigDecimal taxTotal = BigDecimal.ZERO;
     private BigDecimal originalTotal = BigDecimal.ZERO;

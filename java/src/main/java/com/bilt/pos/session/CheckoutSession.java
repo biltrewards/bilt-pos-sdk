@@ -429,6 +429,9 @@ public final class CheckoutSession implements AutoCloseable {
     return lookup.get();
   }
 
+  // nexo addresses the reversed sale through ReversalData's OriginalPOITransaction, so a reversal's
+  // own SaleTransactionID is the live basket's identity — correct even for a sale settled before
+  // basket().clear().
   private TransactionIdentificationType currentSaleTransaction() {
     lock.lock();
     try {
