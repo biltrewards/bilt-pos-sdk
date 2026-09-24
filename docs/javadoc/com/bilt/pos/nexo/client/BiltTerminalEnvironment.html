@@ -100,10 +100,14 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Enum.html" title="class or interface in java.lang" class="external-link">Enum</a>&lt;<a href="BiltTerminalEnvironment.html" title="enum class in com.bilt.pos.nexo.client">BiltTerminalEnvironment</a>&gt;</span></div>
 <div class="block">A Bilt POS terminal deployment environment.
 
- <p>Production and staging terminals are issued certificates from <strong>fully separate CA
- hierarchies</strong> and use distinct synthetic hostname domains, so a certificate from one
- environment can never be trusted in the other. Selecting an environment here pins <a href="BiltNexoTerminalClient.Builder.html#expectedHostnamePattern(java.lang.String)"><code>the expected hostname pattern</code></a> to
- that environment's domain; the caller still supplies the matching CA trust anchor via <a href="BiltNexoTerminalClient.Builder.html#trustCertificate(java.nio.file.Path)"><code>BiltNexoTerminalClient.Builder.trustCertificate(java.nio.file.Path)</code></a>.</div>
+ <p>Production and staging terminals are issued certificates from
+ <strong>fully separate CA hierarchies</strong> and use distinct synthetic
+ hostname domains, so a certificate from one environment can never be trusted
+ in the other. Selecting an environment here pins
+ <a href="BiltNexoTerminalClient.Builder.html#expectedHostnamePattern(java.lang.String)"><code>the
+ expected hostname pattern</code></a> to that environment's domain; the caller still
+ supplies the matching CA trust anchor via
+ <a href="BiltNexoTerminalClient.Builder.html#trustCertificate(java.nio.file.Path)"><code>BiltNexoTerminalClient.Builder.trustCertificate(java.nio.file.Path)</code></a>.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -239,8 +243,8 @@ not permitted.)</div>
 <section class="detail" id="hostnamePattern()">
 <h3>hostnamePattern</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">hostnamePattern</span>()</div>
-<div class="block">The expected certificate hostname pattern for this environment, e.g. <code>
- "*.live.pos.bilt.com"</code>.</div>
+<div class="block">The expected certificate hostname pattern for this environment, e.g.
+ <code>"*.live.pos.bilt.com"</code>.</div>
 </section>
 </li>
 </ul>

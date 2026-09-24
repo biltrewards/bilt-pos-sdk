@@ -92,14 +92,14 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">ReceiptHelper</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">Utility class for serializing and deserializing <a href="ReceiptType.html" title="class in com.bilt.pos.receipt"><code>ReceiptType</code></a> objects to/from XML and
- Base64-encoded XML strings.
+<div class="block">Utility class for serializing and deserializing <a href="ReceiptType.html" title="class in com.bilt.pos.receipt"><code>ReceiptType</code></a> objects
+ to/from XML and Base64-encoded XML strings.
 
- <p>Receipt XML payloads conform to the <code>urn:bilt:receipt:v1</code> schema and are carried inside
- <code>OutputContent.OutputXHTML</code> fields of Nexo <code>PaymentReceipt</code> objects.
+ <p>Receipt XML payloads conform to the <code>urn:bilt:receipt:v1</code> schema
+ and are carried inside <code>OutputContent.OutputXHTML</code> fields of Nexo
+ <code>PaymentReceipt</code> objects.
 
  <p>Example usage:
-
  <pre><code>
  // Parse a receipt from Base64 (as received in OutputXHTML)
  ReceiptType receipt = ReceiptHelper.fromBase64(outputXhtml);
@@ -220,12 +220,15 @@ loadScripts(document, 'script');</script>
                               throws <span class="exceptions">jakarta.xml.bind.JAXBException</span></div>
 <div class="block">Deserializes a <a href="ReceiptType.html" title="class in com.bilt.pos.receipt"><code>ReceiptType</code></a> from a Base64-encoded XML string.
 
- <p>Some terminals put the receipt XML into <code>OutputXHTML</code> raw, skipping the Base64
- encoding the schema calls for. A payload opening with <code>'&lt;'</code> cannot be Base64 (<code>'&lt;'</code>
- is outside the alphabet), so it is unambiguously the raw form and parsed as XML directly.</div>
+ <p>Some terminals put the receipt XML into <code>OutputXHTML</code> raw,
+ skipping the Base64 encoding the schema calls for. A payload opening
+ with <code>'&lt;'</code> cannot be Base64 (<code>'&lt;'</code> is outside the
+ alphabet), so it is unambiguously the raw form and parsed as XML
+ directly.</div>
 <dl class="notes">
 <dt>Parameters:</dt>
-<dd><code>base64</code> - the Base64-encoded (or raw) XML string, as found in <code>OutputXHTML</code></dd>
+<dd><code>base64</code> - the Base64-encoded (or raw) XML string, as found in
+        <code>OutputXHTML</code></dd>
 <dt>Returns:</dt>
 <dd>the deserialized receipt</dd>
 <dt>Throws:</dt>
@@ -239,8 +242,8 @@ loadScripts(document, 'script');</script>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">htmlAsString</span><wbr><span class="parameters">(<a href="ReceiptType.html" title="class in com.bilt.pos.receipt">ReceiptType</a>&nbsp;receipt)</span></div>
 <div class="block">Returns the HTML receipt content as a String, or <code>null</code> if not present.
 
- <p>The schema stores HTML as <code>xs:base64Binary</code>, so JAXB represents it as <code>byte[]</code>.
- This convenience method decodes it to a UTF-8 string.</div>
+ <p>The schema stores HTML as <code>xs:base64Binary</code>, so JAXB represents it
+ as <code>byte[]</code>. This convenience method decodes it to a UTF-8 string.</div>
 <dl class="notes">
 <dt>Parameters:</dt>
 <dd><code>receipt</code> - the receipt</dd>

@@ -94,8 +94,9 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">A rendered receipt returned from a payment, refund, or void operation.
 
- <p>Thin, decoded view over the SDK's <a href="../receipt/ReceiptType.html" title="class in com.bilt.pos.receipt"><code>ReceiptType</code></a> (<code>receipt.xsd</code>, <code>
- urn:bilt:receipt:v1</code>) as carried Base64-encoded in Nexo <code>PaymentReceipt</code> content.</div>
+ <p>Thin, decoded view over the SDK's <a href="../receipt/ReceiptType.html" title="class in com.bilt.pos.receipt"><code>ReceiptType</code></a>
+ (<code>receipt.xsd</code>, <code>urn:bilt:receipt:v1</code>) as carried
+ Base64-encoded in Nexo <code>PaymentReceipt</code> content.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -118,8 +119,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#fromBase64(java.lang.String)" class="member-name-link">fromBase64</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;base64)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">Builds a <code>Receipt</code> from a Base64-encoded receipt XML payload, as found in <code>
- OutputContent.OutputXHTML</code>.</div>
+<div class="block">Builds a <code>Receipt</code> from a Base64-encoded receipt XML payload, as
+ found in <code>OutputContent.OutputXHTML</code>.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getHtml()" class="member-name-link">getHtml</a>()</code></div>
@@ -134,8 +135,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="../receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getReceiptData()" class="member-name-link">getReceiptData</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Structured receipt fields — merchant identity, amounts, card data, and EMV tags — or <code>
- null</code> if not present.</div>
+<div class="block">Structured receipt fields — merchant identity, amounts, card data, and
+ EMV tags — or <code>null</code> if not present.</div>
 </div>
 </div>
 </div>
@@ -166,8 +167,8 @@ loadScripts(document, 'script');</script>
 <h3>fromBase64</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></span>&nbsp;<span class="element-name">fromBase64</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;base64)</span>
                           throws <span class="exceptions">jakarta.xml.bind.JAXBException</span></div>
-<div class="block">Builds a <code>Receipt</code> from a Base64-encoded receipt XML payload, as found in <code>
- OutputContent.OutputXHTML</code>.</div>
+<div class="block">Builds a <code>Receipt</code> from a Base64-encoded receipt XML payload, as
+ found in <code>OutputContent.OutputXHTML</code>.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code>jakarta.xml.bind.JAXBException</code> - if the payload cannot be parsed</dd>
@@ -192,8 +193,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getReceiptData()">
 <h3>getReceiptData</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="../receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></span>&nbsp;<span class="element-name">getReceiptData</span>()</div>
-<div class="block">Structured receipt fields — merchant identity, amounts, card data, and EMV tags — or <code>
- null</code> if not present.</div>
+<div class="block">Structured receipt fields — merchant identity, amounts, card data, and
+ EMV tags — or <code>null</code> if not present.</div>
 </section>
 </li>
 </ul>

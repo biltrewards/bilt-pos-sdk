@@ -94,8 +94,9 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">Options for <code>requestConfirmation</code>.
 
- <p>The terminal confirmation screen has two buttons; custom labels replace the default
- confirm/cancel texts. For three or more choices use <code>requestMenuEntry</code> instead.</div>
+ <p>The terminal confirmation screen has two buttons; custom labels replace
+ the default confirm/cancel texts. For three or more choices use
+ <code>requestMenuEntry</code> instead.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -125,7 +126,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="ConfirmationOptions.html" title="class in com.bilt.pos.session.input">ConfirmationOptions</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#withButtons(java.lang.String...)" class="member-name-link">withButtons</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>...&nbsp;buttons)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">Custom button labels: the first is the confirm button, the optional second the cancel button.</div>
+<div class="block">Custom button labels: the first is the confirm button, the optional
+ second the cancel button.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ConfirmationOptions.html" title="class in com.bilt.pos.session.input">ConfirmationOptions</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#withTimeout(java.time.Duration)" class="member-name-link">withTimeout</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Duration.html" title="class or interface in java.time" class="external-link">Duration</a>&nbsp;timeout)</code></div>
@@ -159,11 +161,12 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="withButtons(java.lang.String...)">
 <h3>withButtons</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="ConfirmationOptions.html" title="class in com.bilt.pos.session.input">ConfirmationOptions</a></span>&nbsp;<span class="element-name">withButtons</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>...&nbsp;buttons)</span></div>
-<div class="block">Custom button labels: the first is the confirm button, the optional second the cancel button.</div>
+<div class="block">Custom button labels: the first is the confirm button, the optional
+ second the cancel button.</div>
 <dl class="notes">
 <dt>Throws:</dt>
-<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link">IllegalArgumentException</a></code> - for more than two labels — use <code>requestMenuEntry</code> for
-     multi-choice prompts</dd>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link">IllegalArgumentException</a></code> - for more than two labels — use
+         <code>requestMenuEntry</code> for multi-choice prompts</dd>
 </dl>
 </section>
 </li>

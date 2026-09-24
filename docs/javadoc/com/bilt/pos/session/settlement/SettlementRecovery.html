@@ -127,8 +127,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#abandon()" class="member-name-link">abandon</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">Stop without further status recovery, retry, or unwind and transfer responsibility for all
- committed movements to the register.</div>
+<div class="block">Stop without further status recovery, retry, or unwind and transfer
+ responsibility for all committed movements to the register.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#abort()" class="member-name-link">abort</a>()</code></div>
@@ -189,39 +189,40 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="retry()">
 <h3>retry</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></span>&nbsp;<span class="element-name">retry</span>()</div>
-<div class="block">Retry only the failed step, preserving every earlier committed step. When TransactionStatus
- could not resolve an indeterminate terminal request, retry checks its status again and never
- resends the original request.</div>
+<div class="block">Retry only the failed step, preserving every earlier committed step.
+ When TransactionStatus could not resolve an indeterminate terminal request,
+ retry checks its status again and never resends the original request.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="skip()">
 <h3>skip</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></span>&nbsp;<span class="element-name">skip</span>()</div>
-<div class="block">Skip the failed step. Valid only when all basket obligations remain satisfiable; the final card
- tender and stored-value fulfillment cannot skip.</div>
+<div class="block">Skip the failed step. Valid only when all basket obligations remain
+ satisfiable; the final card tender and stored-value fulfillment cannot skip.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="external(com.bilt.pos.session.settlement.ExternalPayment)">
 <h3>external</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></span>&nbsp;<span class="element-name">external</span><wbr><span class="parameters">(<a href="ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a>&nbsp;payment)</span></div>
-<div class="block">Records a register-managed tender and continues after the failed card step. The payment amount
- must exactly equal the outstanding amount, and the failure outcome must be definitive. The SDK
- attempts to resolve an indeterminate original request before asking the register for a recovery
- decision; external replacement remains invalid unless resolution is definitive, preventing it
- from replacing a committed card payment.</div>
+<div class="block">Records a register-managed tender and continues after the failed card step.
+ The payment amount must exactly equal the outstanding amount, and the
+ failure outcome must be definitive. The SDK attempts to resolve an
+ indeterminate original request before asking the register for a recovery
+ decision; external replacement remains invalid unless resolution is
+ definitive, preventing it from replacing a committed card payment.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="abandon()">
 <h3>abandon</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></span>&nbsp;<span class="element-name">abandon</span>()</div>
-<div class="block">Stop without further status recovery, retry, or unwind and transfer responsibility for all
- committed movements to the register. Automatic TransactionStatus recovery may already have
- occurred before <code>onError</code>. The basket remains usable and SDK recovery guards are
- released, so a later settlement can duplicate those movements unless the register reconciles
- them.</div>
+<div class="block">Stop without further status recovery, retry, or unwind and transfer
+ responsibility for all committed movements to the register. Automatic
+ TransactionStatus recovery may already have occurred before <code>onError</code>.
+ The basket remains usable and SDK recovery guards are released, so a later
+ settlement can duplicate those movements unless the register reconciles them.</div>
 </section>
 </li>
 <li>

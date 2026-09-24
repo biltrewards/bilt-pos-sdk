@@ -92,14 +92,15 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">BiltNexoTerminalClient</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">Client for communicating with a Bilt payment terminal over the local Nexo Sale to POI protocol
- (v3.0).
+<div class="block">Client for communicating with a Bilt payment terminal over the local Nexo
+ Sale to POI protocol (v3.0).
 
- <p>The terminal exposes a single HTTPS endpoint at <code>https://&lt;device_ip&gt;:8443/nexo</code>. Each
- call sends a <code>NexoTerminalAPI</code> containing a <code>SaleToPOIRequest</code> and receives a <code>NexoTerminalAPI</code> containing a <code>SaleToPOIResponse</code>.
+ <p>The terminal exposes a single HTTPS endpoint at
+ <code>https://&lt;device_ip&gt;:8443/nexo</code>. Each call sends a
+ <code>NexoTerminalAPI</code> containing a <code>SaleToPOIRequest</code> and receives
+ a <code>NexoTerminalAPI</code> containing a <code>SaleToPOIResponse</code>.</p>
 
  <h2 id="unencrypted-development-testing--heading">Unencrypted (development/testing)</h2>
-
  <pre><code>
  BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
      .endpoint("https://192.168.1.100:8443/nexo")
@@ -116,7 +117,6 @@ loadScripts(document, 'script');</script>
  </code></pre>
 
  <h2 id="encrypted-production--heading">Encrypted (production)</h2>
-
  <pre><code>
  SecurityKey key = SecurityKey.builder()
      .passphrase("sharedSecret")
@@ -136,12 +136,10 @@ loadScripts(document, 'script');</script>
  </code></pre>
 
  <h2 id="verified-tls-recommended--heading">Verified TLS (recommended)</h2>
-
- <p>Rather than disabling verification with <a href="BiltNexoTerminalClient.Builder.html#trustAllCertificates()"><code>BiltNexoTerminalClient.Builder.trustAllCertificates()</code></a>, trust the
- merchant (or small-merchant-pool) CA certificate so any device leaf certificate issued under it
- is accepted, and verify the device identity against the certificate's synthetic hostname instead
- of the connection IP:
-
+ <p>Rather than disabling verification with <a href="BiltNexoTerminalClient.Builder.html#trustAllCertificates()"><code>BiltNexoTerminalClient.Builder.trustAllCertificates()</code></a>,
+ trust the merchant (or small-merchant-pool) CA certificate so any device leaf
+ certificate issued under it is accepted, and verify the device identity
+ against the certificate's synthetic hostname instead of the connection IP:</p>
  <pre><code>
  BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
      .endpoint("https://192.168.1.100:8443/nexo")
@@ -186,7 +184,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#create(java.lang.String)" class="member-name-link">create</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;host)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">Convenience factory for an unencrypted client pointing at <code>https://&lt;host&gt;:8443/nexo</code>.</div>
+<div class="block">Convenience factory for an unencrypted client pointing at
+ <code>https://&lt;host&gt;:8443/nexo</code>.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isEncrypted()" class="member-name-link">isEncrypted</a>()</code></div>
@@ -228,17 +227,17 @@ loadScripts(document, 'script');</script>
                                                 throws <span class="exceptions"><a href="BiltNexoClientException.html" title="class in com.bilt.pos.nexo.client">BiltNexoClientException</a></span></div>
 <div class="block">Send a Sale to POI request to the terminal and return the response.
 
- <p>If a <a href="../security/SecurityKey.html" title="class in com.bilt.pos.nexo.security"><code>SecurityKey</code></a> was provided to the builder, the request is automatically encrypted
- and the response is decrypted.</div>
+ <p>If a <a href="../security/SecurityKey.html" title="class in com.bilt.pos.nexo.security"><code>SecurityKey</code></a> was provided to the builder, the request is
+ automatically encrypted and the response is decrypted.</p></div>
 <dl class="notes">
 <dt>Parameters:</dt>
 <dd><code>request</code> - the request envelope; must have <code>saleToPOIRequest</code> set</dd>
 <dt>Returns:</dt>
-<dd>the terminal's response envelope containing <code>saleToPOIResponse</code>, or <code>null</code>
-     if the terminal returns an empty body (e.g. abort requests)</dd>
+<dd>the terminal's response envelope containing <code>saleToPOIResponse</code>,
+         or <code>null</code> if the terminal returns an empty body (e.g. abort requests)</dd>
 <dt>Throws:</dt>
-<dd><code><a href="BiltNexoClientException.html" title="class in com.bilt.pos.nexo.client">BiltNexoClientException</a></code> - if serialization, encryption, HTTP transport, decryption, or
-     deserialization fails</dd>
+<dd><code><a href="BiltNexoClientException.html" title="class in com.bilt.pos.nexo.client">BiltNexoClientException</a></code> - if serialization, encryption, HTTP transport,
+         decryption, or deserialization fails</dd>
 </dl>
 </section>
 </li>
@@ -254,8 +253,8 @@ loadScripts(document, 'script');</script>
 <dd><code>request</code> - the request envelope; must have <code>saleToPOIRequest</code> set</dd>
 <dd><code>timeout</code> - per-request timeout, or <code>null</code> to use the client default</dd>
 <dt>Returns:</dt>
-<dd>the terminal's response envelope containing <code>saleToPOIResponse</code>, or <code>null</code>
-     if the terminal returns an empty body (e.g. abort requests)</dd>
+<dd>the terminal's response envelope containing <code>saleToPOIResponse</code>,
+         or <code>null</code> if the terminal returns an empty body (e.g. abort requests)</dd>
 <dt>Throws:</dt>
 <dd><code><a href="BiltNexoClientException.html" title="class in com.bilt.pos.nexo.client">BiltNexoClientException</a></code> - if any step in the request/response pipeline fails</dd>
 </dl>
@@ -279,7 +278,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="create(java.lang.String)">
 <h3>create</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a></span>&nbsp;<span class="element-name">create</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;host)</span></div>
-<div class="block">Convenience factory for an unencrypted client pointing at <code>https://&lt;host&gt;:8443/nexo</code>.</div>
+<div class="block">Convenience factory for an unencrypted client pointing at
+ <code>https://&lt;host&gt;:8443/nexo</code>.</div>
 <dl class="notes">
 <dt>Parameters:</dt>
 <dd><code>host</code> - the terminal's IP address or hostname</dd>

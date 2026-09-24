@@ -92,15 +92,18 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">SessionBasket</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">The basket surface of a checkout session: item and tax mutations, batch edits, and immutable
- snapshots. Sale, return, and register-credit items can coexist in one basket.
+<div class="block">The basket surface of a checkout session: item and tax mutations, batch
+ edits, and immutable snapshots. Sale, return, and register-credit items
+ can coexist in one basket.
 
- <p>Every mutation is applied atomically, returning the updated snapshot synchronously; when the
- session has automatic display enabled it also enqueues an asynchronous, conflated customer
- display refresh showing the itemised basket. The owning session decides when mutations are
- allowed: a basket frozen by in-flight money movement, already consumed by settlement, or owned by
- an ended session rejects them with <code>IllegalStateException</code>. Call <a href="#clear()"><code>clear()</code></a> after
- settlement to start another basket in the same session.
+ <p>Every mutation is applied atomically, returning the updated snapshot
+ synchronously; when the session has automatic display enabled it also
+ enqueues an asynchronous, conflated customer display refresh showing
+ the itemised basket. The owning session decides when mutations are
+ allowed: a basket frozen by in-flight money movement, already consumed by
+ settlement, or owned by an ended session rejects them with
+ <code>IllegalStateException</code>. Call <a href="#clear()"><code>clear()</code></a> after settlement to
+ start another basket in the same session.</p>
 
  <pre><code>
  session.basket().addItem(
@@ -109,7 +112,8 @@ loadScripts(document, 'script');</script>
  Basket basket = session.basket().snapshot();
  </code></pre>
 
- <p>Like the session that owns it, the basket is intended for use from a single register thread.</div>
+ <p>Like the session that owns it, the basket is intended for use from a
+ single register thread.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -138,14 +142,14 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#clear()" class="member-name-link">clear</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Clears all items and tax, starts a fresh basket with a new cart ID, and clears the stored-value
- card selected for split tender.</div>
+<div class="block">Clears all items and tax, starts a fresh basket with a new cart ID,
+ and clears the stored-value card selected for split tender.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#mutate(java.util.function.Consumer)" class="member-name-link">mutate</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/BasketMutation.html" title="interface in com.bilt.pos.session.basket">BasketMutation</a>&gt;&nbsp;mutation)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Applies a batch of basket mutations atomically, with a single display update for the whole
- batch.</div>
+<div class="block">Applies a batch of basket mutations atomically, with a single
+ display update for the whole batch.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#removeItem(java.lang.String)" class="member-name-link">removeItem</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId)</code></div>
@@ -185,8 +189,8 @@ loadScripts(document, 'script');</script>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setTaxRate(java.lang.String,java.math.BigDecimal)" class="member-name-link">setTaxRate</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;rate)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Sets the tax rate on a line (<code>taxAmount = subtotal × rate</code>); clears any explicit fixed
- tax amount previously set on it.</div>
+<div class="block">Sets the tax rate on a line (<code>taxAmount = subtotal × rate</code>);
+ clears any explicit fixed tax amount previously set on it.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setTaxRateBySku(java.lang.String,java.math.BigDecimal)" class="member-name-link">setTaxRateBySku</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku,
@@ -197,7 +201,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setTaxTotal(java.math.BigDecimal)" class="member-name-link">setTaxTotal</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Overrides the basket's total tax; passing <code>null</code> restores item-level computation.</div>
+<div class="block">Overrides the basket's total tax; passing <code>null</code> restores
+ item-level computation.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#snapshot()" class="member-name-link">snapshot</a>()</code></div>
@@ -244,18 +249,22 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="clear()">
 <h3>clear</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">clear</span>()</div>
-<div class="block">Clears all items and tax, starts a fresh basket with a new cart ID, and clears the stored-value
- card selected for split tender.
+<div class="block">Clears all items and tax, starts a fresh basket with a new cart ID,
+ and clears the stored-value card selected for split tender.
 
- <p>This is the explicit transaction boundary for a session that runs more than one settlement.
- A settled basket cannot be charged again; clear it before ringing the next one. Clearing never
- abandons financial recovery. When recovery cannot be completed, call <a href="CheckoutSession.html#forceEnd(java.lang.String)"><code>CheckoutSession.forceEnd(String)</code></a> and start a new session rather than reusing this basket.</div>
+ <p>This is the explicit transaction boundary for a session that runs
+ more than one settlement. A settled basket cannot be charged again;
+ clear it before ringing the next one. Clearing never abandons financial
+ recovery. When recovery cannot be completed, call
+ <a href="CheckoutSession.html#forceEnd(java.lang.String)"><code>CheckoutSession.forceEnd(String)</code></a> and start a new session rather
+ than reusing this basket.</p></div>
 <dl class="notes">
 <dt>Returns:</dt>
 <dd>the new empty basket snapshot</dd>
 <dt>Throws:</dt>
-<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if money movement, settlement recovery, or a partially completed
-     same-session void is still in progress, or the session has ended</dd>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if money movement, settlement recovery,
+         or a partially completed same-session void is still in
+         progress, or the session has ended</dd>
 </dl>
 </section>
 </li>
@@ -263,13 +272,14 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="addItem(com.bilt.pos.session.basket.BasketItem)">
 <h3>addItem</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">addItem</span><wbr><span class="parameters">(<a href="basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a>&nbsp;item)</span></div>
-<div class="block">Adds an item. When the SKU is already in the basket, its quantity is incremented (upsert).</div>
+<div class="block">Adds an item. When the SKU is already in the basket, its quantity is
+ incremented (upsert).</div>
 <dl class="notes">
 <dt>Returns:</dt>
 <dd>the updated basket snapshot</dd>
 <dt>Throws:</dt>
-<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the basket is frozen (payment in progress) or the session has
-     ended</dd>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the basket is frozen (payment in
+         progress) or the session has ended</dd>
 </dl>
 </section>
 </li>
@@ -331,8 +341,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="mutate(java.util.function.Consumer)">
 <h3>mutate</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">mutate</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/BasketMutation.html" title="interface in com.bilt.pos.session.basket">BasketMutation</a>&gt;&nbsp;mutation)</span></div>
-<div class="block">Applies a batch of basket mutations atomically, with a single display update for the whole
- batch.</div>
+<div class="block">Applies a batch of basket mutations atomically, with a single
+ display update for the whole batch.</div>
 </section>
 </li>
 <li>
@@ -340,8 +350,8 @@ loadScripts(document, 'script');</script>
 <h3>setTaxRate</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setTaxRate</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;rate)</span></div>
-<div class="block">Sets the tax rate on a line (<code>taxAmount = subtotal × rate</code>); clears any explicit fixed
- tax amount previously set on it.</div>
+<div class="block">Sets the tax rate on a line (<code>taxAmount = subtotal × rate</code>);
+ clears any explicit fixed tax amount previously set on it.</div>
 </section>
 </li>
 <li>
@@ -372,9 +382,9 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="setTaxTotal(java.math.BigDecimal)">
 <h3>setTaxTotal</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">setTaxTotal</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
-<div class="block">Overrides the basket's total tax; passing <code>null</code> restores item-level computation. Like
- every tax value the override is a magnitude; an all-refund basket carries it with a negative
- sign.</div>
+<div class="block">Overrides the basket's total tax; passing <code>null</code> restores
+ item-level computation. Like every tax value the override is a
+ magnitude; an all-refund basket carries it with a negative sign.</div>
 </section>
 </li>
 </ul>

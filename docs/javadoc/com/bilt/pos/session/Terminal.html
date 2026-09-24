@@ -97,20 +97,24 @@ loadScripts(document, 'script');</script>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">Terminal</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a>
 implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" title="class or interface in java.lang" class="external-link">AutoCloseable</a></span></div>
-<div class="block">A terminal's device and admin operations — diagnostics, totals, reconciliation, printing, sound —
- outside any session.
+<div class="block">A terminal's device and admin operations — diagnostics, totals,
+ reconciliation, printing, sound — outside any session.
 
- <p>These map to SERVICE/DEVICE-class nexo messages that carry no session reference on the wire,
- so unlike a <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> there is no bracket: <a href="Terminal.Builder.html#build()"><code>build()</code></a> sends
- nothing, and the terminal holds no state on this object's behalf. Use it for a connectivity ping
- before the first checkout, end-of-day reconciliation with no customer present, or a receipt
- reprint after the session that took the payment has ended.
+ <p>These map to SERVICE/DEVICE-class nexo messages that carry no session
+ reference on the wire, so unlike a <a href="CheckoutSession.html" title="class in com.bilt.pos.session"><code>CheckoutSession</code></a> there is no
+ bracket: <a href="Terminal.Builder.html#build()"><code>build()</code></a> sends nothing, and the terminal
+ holds no state on this object's behalf. Use it for a connectivity ping
+ before the first checkout, end-of-day reconciliation with no customer
+ present, or a receipt reprint after the session that took the payment has
+ ended.</p>
 
- <p>Operations are lazy like every session operation: methods returning a <a href="SessionResult.html" title="class in com.bilt.pos.session"><code>SessionResult</code></a>
- send nothing until <code>execute()</code>, <code>executeSync()</code>, <code>get()</code>, or <code>
- getOrNull()</code> is invoked. Asynchronous executions run one at a time on the terminal's own
- operation thread and deliver their handlers through the configured <a href="Terminal.Builder.html#callbackExecutor(java.util.concurrent.Executor)"><code>callbackExecutor</code></a>, with the same semantics as the session
- builders.
+ <p>Operations are lazy like every session operation: methods returning a
+ <a href="SessionResult.html" title="class in com.bilt.pos.session"><code>SessionResult</code></a> send nothing until <code>execute()</code>,
+ <code>executeSync()</code>, <code>get()</code>, or <code>getOrNull()</code> is invoked.
+ Asynchronous executions run one at a time on the terminal's own operation
+ thread and deliver their handlers through the configured
+ <a href="Terminal.Builder.html#callbackExecutor(java.util.concurrent.Executor)"><code>callbackExecutor</code></a>, with the same
+ semantics as the session builders.</p>
 
  <pre><code>
  Terminal terminal = Terminal.builder()
@@ -125,9 +129,10 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
          .execute();
  </code></pre>
 
- <p><a href="#close()"><code>close()</code></a> sends nothing — there is nothing to end on the terminal — it only stops this
- object accepting further operations. Mid-checkout, <a href="CheckoutSession.html#terminal()"><code>CheckoutSession.terminal()</code></a> keeps these
- operations one call away.</div>
+ <p><a href="#close()"><code>close()</code></a> sends nothing — there is nothing to end on the
+ terminal — it only stops this object accepting further operations.
+ Mid-checkout, <a href="CheckoutSession.html#terminal()"><code>CheckoutSession.terminal()</code></a> keeps these operations
+ one call away.</p></div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -180,8 +185,9 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="ReconciliationResult.html" title="class in com.bilt.pos.session">ReconciliationResult</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getTotals()" class="member-name-link">getTotals</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Queries the terminal's running totals since the last reconciliation (Nexo <code>GetTotals</code>) —
- lighter than <a href="#reconcile()"><code>reconcile()</code></a>, which closes the period.</div>
+<div class="block">Queries the terminal's running totals since the last reconciliation
+ (Nexo <code>GetTotals</code>) — lighter than <a href="#reconcile()"><code>reconcile()</code></a>, which
+ closes the period.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Void.html" title="class or interface in java.lang" class="external-link">Void</a>&gt;</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#playSound(java.lang.String)" class="member-name-link">playSound</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;soundReferenceId)</code></div>
@@ -243,10 +249,10 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <section class="detail" id="getTotals()">
 <h3>getTotals</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="ReconciliationResult.html" title="class in com.bilt.pos.session">ReconciliationResult</a>&gt;</span>&nbsp;<span class="element-name">getTotals</span>()</div>
-<div class="block">Queries the terminal's running totals since the last reconciliation (Nexo <code>GetTotals</code>) —
- lighter than <a href="#reconcile()"><code>reconcile()</code></a>, which closes the period. Filtered by this terminal's <code>
- SaleID</code> and, when configured, the <a href="Terminal.Builder.html#storeLocation(java.lang.String)"><code>storeLocation</code></a> as <code>
- TotalsGroupID</code>.</div>
+<div class="block">Queries the terminal's running totals since the last reconciliation
+ (Nexo <code>GetTotals</code>) — lighter than <a href="#reconcile()"><code>reconcile()</code></a>, which
+ closes the period. Filtered by this terminal's <code>SaleID</code> and,
+ when configured, the <a href="Terminal.Builder.html#storeLocation(java.lang.String)"><code>storeLocation</code></a> as <code>TotalsGroupID</code>.</div>
 </section>
 </li>
 <li>
@@ -293,9 +299,11 @@ implements <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base
 <section class="detail" id="close()">
 <h3>close</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">close</span>()</div>
-<div class="block">Stops accepting operations. Sends nothing — the terminal holds no state for this object, so
- there is nothing to end — and is idempotent. Operations executed after this fail with <a href="SessionErrorCode.html#INVALID_STATE"><code>SessionErrorCode.INVALID_STATE</code></a> through their normal <code>onError</code>/<code>onComplete</code>
- delivery.</div>
+<div class="block">Stops accepting operations. Sends nothing — the terminal holds no
+ state for this object, so there is nothing to end — and is
+ idempotent. Operations executed after this fail with
+ <a href="SessionErrorCode.html#INVALID_STATE"><code>SessionErrorCode.INVALID_STATE</code></a> through their normal
+ <code>onError</code>/<code>onComplete</code> delivery.</div>
 <dl class="notes">
 <dt>Specified by:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html#close()" title="class or interface in java.lang" class="external-link">close</a></code>&nbsp;in interface&nbsp;<code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" title="class or interface in java.lang" class="external-link">AutoCloseable</a></code></dd>

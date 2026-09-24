@@ -92,17 +92,19 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">MessageEncryptor</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">Encrypts and decrypts Nexo Sale to POI messages using CMS structures with AES-256-CBC encryption
- and HMAC-SHA256 authentication.
+<div class="block">Encrypts and decrypts Nexo Sale to POI messages using CMS structures
+ with AES-256-CBC encryption and HMAC-SHA256 authentication.
 
- <p>Key material is derived from the <a href="SecurityKey.html" title="class in com.bilt.pos.nexo.security"><code>SecurityKey</code></a> passphrase via PBKDF2. The derived cipher
- key acts as the KEK (Key Encryption Key) for wrapping per-message session keys. The derived HMAC
- key is used directly for message authentication.
+ <p>Key material is derived from the <a href="SecurityKey.html" title="class in com.bilt.pos.nexo.security"><code>SecurityKey</code></a> passphrase via
+ PBKDF2. The derived cipher key acts as the KEK (Key Encryption Key) for
+ wrapping per-message session keys. The derived HMAC key is used directly
+ for message authentication.</p>
 
- <p>Each message uses a fresh random AES-256 session key, wrapped by the KEK using AES Key Wrap
- (RFC 3394). The HMAC covers both the serialized message header and the plaintext body.
+ <p>Each message uses a fresh random AES-256 session key, wrapped by the
+ KEK using AES Key Wrap (RFC 3394). The HMAC covers both the serialized
+ message header and the plaintext body.</p>
 
- <p>Instances are thread-safe and should be reused across requests.
+ <p>Instances are thread-safe and should be reused across requests.</p>
 
  <pre><code>
  SecurityKey key = SecurityKey.builder()
@@ -212,11 +214,12 @@ loadScripts(document, 'script');</script>
                throws <span class="exceptions"><a href="EncryptionException.html" title="class in com.bilt.pos.nexo.security">EncryptionException</a></span></div>
 <div class="block">Decrypt a secured Nexo message back to its JSON payload.
 
- <p>The <code>rawHeaderBytes</code> must be the exact bytes of the <code>MessageHeader</code> JSON as
- received on the wire (before deserialization), since the HMAC is computed over the raw header
- bytes concatenated with the plaintext body. Re-serializing the deserialized Java object could
- produce different byte output if the sender's JSON library uses a different field ordering,
- which would cause HMAC verification to fail.</div>
+ <p>The <code>rawHeaderBytes</code> must be the exact bytes of the
+ <code>MessageHeader</code> JSON as received on the wire (before deserialization),
+ since the HMAC is computed over the raw header bytes concatenated with the
+ plaintext body. Re-serializing the deserialized Java object could produce
+ different byte output if the sender's JSON library uses a different field
+ ordering, which would cause HMAC verification to fail.</p></div>
 <dl class="notes">
 <dt>Parameters:</dt>
 <dd><code>message</code> - the encrypted message</dd>
