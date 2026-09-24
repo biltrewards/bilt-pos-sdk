@@ -5,10 +5,12 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
 import com.bilt.pos.session.settlement.ExternalPayment;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
+import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
@@ -1985,6 +1987,80 @@ class CheckoutSessionPaymentTest {
   }
 
   @Test
+  void saleTransactionIsSharedAcrossCheckoutStepsAndRetries() throws Exception {
+    server.enqueue(new MockResponse().setBody(IDENTIFY_OK));
+    session.identifyMember().get();
+    SaleToPOIRequest acquisition = nextRequest();
+    TransactionIdentificationType sale =
+        acquisition.getCardAcquisitionRequest().getSaleData().getSaleTransactionID();
+    assertNotNull(sale.getTransactionID());
+    assertNotNull(sale.getTimeStamp());
+    addHundredDollarItem();
+    session.basket().addItem(BasketItem.returnItem("RET-1", "Return", 1, new BigDecimal("10.00")));
+    session.setStoredValueCard("GC-1234-5678");
+
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-REFUND-1", 10.00)));
+    server.enqueue(new MockResponse().setBody(REBATE_OK));
+    server.enqueue(new MockResponse().setBody(REDEEM_OK));
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-GIFT-1", 30.00)));
+    server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-CARD-1", 55.00)));
+    server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+    SettlementResult result =
+        session
+            .settle(
+                SettlementOptions.builder()
+                    .addRefund(
+                        RefundAllocation.card(
+                            new BigDecimal("10.00"), PRIOR_CARD_POI_TXN, ORIGINAL_TIME))
+                    .build())
+            .onError(failure -> SettlementRecovery.retry())
+            .get();
+
+    assertEquals(0, new BigDecimal("30.00").compareTo(result.getStoredValueAmountCharged()));
+    assertEquals(0, new BigDecimal("55.00").compareTo(result.getCardAmountCharged()));
+    List<SaleToPOIRequest> requests = drainRequests();
+    assertEquals(7, requests.size());
+    Set<String> serviceIds = new HashSet<>();
+    serviceIds.add(acquisition.getMessageHeader().getServiceID());
+    for (SaleToPOIRequest request : requests) {
+      TransactionIdentificationType transaction =
+          (request.getPaymentRequest() != null
+                  ? request.getPaymentRequest().getSaleData()
+                  : request.getLoyaltyRequest().getSaleData())
+              .getSaleTransactionID();
+      assertAll(
+          () -> assertEquals(sale.getTransactionID(), transaction.getTransactionID()),
+          () -> assertEquals(sale.getTimeStamp(), transaction.getTimeStamp()));
+      assertTrue(serviceIds.add(request.getMessageHeader().getServiceID()));
+    }
+    for (SettlementMovement movement : result.getMovements()) {
+      assertEquals(sale.getTransactionID(), movement.getSaleTransactionId());
+    }
+  }
+
+  @Test
+  void newBasketAndSessionUseNewSaleTransactions() throws Exception {
+    List<TransactionIdentificationType> sales = new ArrayList<>();
+    for (int i = 0; i < 3; i++) {
+      if (i == 1) {
+        session.basket().clear();
+      } else if (i == 2) {
+        session = start(sessionBuilder());
+      }
+      addHundredDollarItem();
+      server.enqueue(new MockResponse().setBody(paymentOk("POI-CARD-" + i, 100.00)));
+      session.settle().get();
+      sales.add(nextRequest().getPaymentRequest().getSaleData().getSaleTransactionID());
+    }
+    assertEquals(
+        3, sales.stream().map(TransactionIdentificationType::getTransactionID).distinct().count());
+    assertEquals(
+        3, sales.stream().map(TransactionIdentificationType::getTimeStamp).distinct().count());
+  }
+
+  @Test
   void beforeStepControlsSaleTransactionIds() throws Exception {
     identifyMember();
     addHundredDollarItem();
@@ -1993,8 +2069,17 @@ class CheckoutSessionPaymentTest {
     server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 85.00)));
     server.enqueue(new MockResponse().setBody(AWARD_OK));
 
-    session.settle().beforeStep(ctx -> "TXN-" + ctx.getStep()).executeSync();
+    Set<String> defaultIds = new HashSet<>();
+    session
+        .settle()
+        .beforeStep(
+            ctx -> {
+              defaultIds.add(ctx.getDefaultTransactionId());
+              return "TXN-" + ctx.getStep();
+            })
+        .executeSync();
 
+    assertEquals(1, defaultIds.size());
     List<SaleToPOIRequest> requests = drainRequests();
     assertEquals(
         "TXN-" + SettlementStep.REBATE_REDEMPTION,

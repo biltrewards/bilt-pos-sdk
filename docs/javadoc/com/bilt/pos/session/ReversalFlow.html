@@ -96,20 +96,16 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">ReversalFlow&lt;T&gt;</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">The reversal chain returned by <a href="CheckoutSession.html#voidTransaction()"><code>CheckoutSession.voidTransaction()</code></a>,
- prior-sale voids, and same-session refund operations.
+<div class="block">The reversal chain returned by <a href="CheckoutSession.html#voidTransaction()"><code>CheckoutSession.voidTransaction()</code></a>, prior-sale voids, and
+ same-session refund operations.
 
- <p>Registering handlers sends nothing; the reversal steps run when
- <a href="#execute()"><code>execute()</code></a> (asynchronously, on the session's operation thread) or
- <a href="#executeSync()"><code>executeSync()</code></a>, <a href="#get()"><code>get()</code></a>, or <a href="#getOrNull()"><code>getOrNull()</code></a>
- (blocking) is invoked. When a step fails, the <code>onError</code> handler
- decides how to proceed — <a href="ReversalDecision.html#RETRY"><code>ReversalDecision.RETRY</code></a>,
- <a href="ReversalDecision.html#SKIP"><code>ReversalDecision.SKIP</code></a>, or <a href="ReversalDecision.html#ABORT"><code>ReversalDecision.ABORT</code></a>. Without
- a handler the default policy applies: a failed money step (the card or
- stored value leg) aborts; a failed loyalty movement riding along with a
- money step is skipped (the terminal can retry it via
- store-and-forward); a failed loyalty movement that is the substance of
- the reversal aborts.</p>
+ <p>Registering handlers sends nothing; the reversal steps run when <a href="#execute()"><code>execute()</code></a>
+ (asynchronously, on the session's operation thread) or <a href="#executeSync()"><code>executeSync()</code></a>, <a href="#get()"><code>get()</code></a>, or
+ <a href="#getOrNull()"><code>getOrNull()</code></a> (blocking) is invoked. When a step fails, the <code>onError</code> handler
+ decides how to proceed — <a href="ReversalDecision.html#RETRY"><code>ReversalDecision.RETRY</code></a>, <a href="ReversalDecision.html#SKIP"><code>ReversalDecision.SKIP</code></a>, or <a href="ReversalDecision.html#ABORT"><code>ReversalDecision.ABORT</code></a>. Without a handler the default policy applies: a failed money step (the
+ card or stored value leg) aborts; a failed loyalty movement riding along with a money step is
+ skipped (the terminal can retry it via store-and-forward); a failed loyalty movement that is the
+ substance of the reversal aborts.
 
  <pre><code>
  session.voidTransaction()
@@ -119,14 +115,12 @@ loadScripts(document, 'script');</script>
      .execute();
  </code></pre>
 
- <p>With <a href="#execute()"><code>execute()</code></a>, handlers are delivered through the callback
- executor (the session builder's <code>callbackExecutor</code>, or the per-flow
- <a href="#callbackOn(java.util.concurrent.Executor)"><code>callbackOn(Executor)</code></a> override) and the reversal thread waits for
- each answer — the <code>onError</code> step decisions steer the flow exactly
- as if they ran inline, just physically on the integrator's thread. Keep
- handlers quick, and never block a callback thread on this flow's
- <code>get()</code>. Without a callback executor, handlers run directly on the
- thread executing the reversal.</p></div>
+ <p>With <a href="#execute()"><code>execute()</code></a>, handlers are delivered through the callback executor (the session
+ builder's <code>callbackExecutor</code>, or the per-flow <a href="#callbackOn(java.util.concurrent.Executor)"><code>callbackOn(Executor)</code></a> override) and
+ the reversal thread waits for each answer — the <code>onError</code> step decisions steer the flow
+ exactly as if they ran inline, just physically on the integrator's thread. Keep handlers quick,
+ and never block a callback thread on this flow's <code>get()</code>. Without a callback executor,
+ handlers run directly on the thread executing the reversal.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -144,22 +138,21 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="ReversalFlow.html" title="type parameter in ReversalFlow">T</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#callbackOn(java.util.concurrent.Executor)" class="member-name-link">callbackOn</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;executor)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Delivers this flow's handlers through <code>executor</code> instead of the
- session's default callback executor.</div>
+<div class="block">Delivers this flow's handlers through <code>executor</code> instead of the session's default
+ callback executor.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>final void</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#execute()" class="member-name-link">execute</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Runs the flow asynchronously on the session's operation thread —
- handlers included, see the class docs — and returns immediately.</div>
+<div class="block">Runs the flow asynchronously on the session's operation thread — handlers included, see the
+ class docs — and returns immediately.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>final void</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#executeSync()" class="member-name-link">executeSync</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Runs the flow blocking — the operation takes its turn on the
- session's operation thread (queueing behind anything in flight, so
- a sync call never races an asynchronous one) while the caller
- waits; handlers dispatch on the calling thread.</div>
+<div class="block">Runs the flow blocking — the operation takes its turn on the session's operation thread
+ (queueing behind anything in flight, so a sync call never races an asynchronous one) while the
+ caller waits; handlers dispatch on the calling thread.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>final <a href="ReversalFlow.html" title="type parameter in ReversalFlow">T</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#get()" class="member-name-link">get</a>()</code></div>
@@ -174,15 +167,15 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="ReversalFlow.html" title="type parameter in ReversalFlow">T</a>&gt;</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onComplete(java.lang.Runnable)" class="member-name-link">onComplete</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Runnable.html" title="class or interface in java.lang" class="external-link">Runnable</a>&nbsp;handler)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Registers a hook that runs exactly once after the reversal settles,
- on every path — success, failure, unexpected exception, or rejection
- because the session ended before the reversal could run.</div>
+<div class="block">Registers a hook that runs exactly once after the reversal settles, on every path — success,
+ failure, unexpected exception, or rejection because the session ended before the reversal could
+ run.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="ReversalFlow.html" title="type parameter in ReversalFlow">T</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onError(java.util.function.BiFunction)" class="member-name-link">onError</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/BiFunction.html" title="class or interface in java.util.function" class="external-link">BiFunction</a>&lt;<a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a>,<wbr><a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>,<wbr><a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a>&gt;&nbsp;handler)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Called when a step fails; the returned <a href="ReversalDecision.html" title="enum class in com.bilt.pos.session"><code>ReversalDecision</code></a>
- controls whether the flow retries the step, skips it, or aborts.</div>
+<div class="block">Called when a step fails; the returned <a href="ReversalDecision.html" title="enum class in com.bilt.pos.session"><code>ReversalDecision</code></a> controls whether the flow
+ retries the step, skips it, or aborts.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="ReversalFlow.html" title="type parameter in ReversalFlow">T</a>&gt;</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onSuccess(java.util.function.Consumer)" class="member-name-link">onSuccess</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="ReversalFlow.html" title="type parameter in ReversalFlow">T</a>&gt;&nbsp;handler)</code></div>
@@ -210,9 +203,9 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="callbackOn(java.util.concurrent.Executor)">
 <h3>callbackOn</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;<a href="ReversalFlow.html" title="type parameter in ReversalFlow">T</a>&gt;</span>&nbsp;<span class="element-name">callbackOn</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;executor)</span></div>
-<div class="block">Delivers this flow's handlers through <code>executor</code> instead of the
- session's default callback executor. Affects <a href="#execute()"><code>execute()</code></a> only —
- the synchronous paths always dispatch on the calling thread.</div>
+<div class="block">Delivers this flow's handlers through <code>executor</code> instead of the session's default
+ callback executor. Affects <a href="#execute()"><code>execute()</code></a> only — the synchronous paths always dispatch on
+ the calling thread.</div>
 </section>
 </li>
 <li>
@@ -226,50 +219,40 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="onError(java.util.function.BiFunction)">
 <h3>onError</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;<a href="ReversalFlow.html" title="type parameter in ReversalFlow">T</a>&gt;</span>&nbsp;<span class="element-name">onError</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/BiFunction.html" title="class or interface in java.util.function" class="external-link">BiFunction</a>&lt;<a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a>,<wbr><a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>,<wbr><a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when a step fails; the returned <a href="ReversalDecision.html" title="enum class in com.bilt.pos.session"><code>ReversalDecision</code></a>
- controls whether the flow retries the step, skips it, or aborts.
- A <code>null</code> decision counts as <a href="ReversalDecision.html#ABORT"><code>ReversalDecision.ABORT</code></a>.
+<div class="block">Called when a step fails; the returned <a href="ReversalDecision.html" title="enum class in com.bilt.pos.session"><code>ReversalDecision</code></a> controls whether the flow
+ retries the step, skips it, or aborts. A <code>null</code> decision counts as <a href="ReversalDecision.html#ABORT"><code>ReversalDecision.ABORT</code></a>.
 
- <p>A terminal failure the handler did not resolve with an abort —
- one before any step ran (a state rejection, a missing reference), or
- a reversal whose every step was skipped and therefore reversed
- nothing — is delivered with a <code>null</code> step; the returned
- decision is then ignored, there is nothing left to resolve.</p>
+ <p>A terminal failure the handler did not resolve with an abort — one before any step ran (a
+ state rejection, a missing reference), or a reversal whose every step was skipped and therefore
+ reversed nothing — is delivered with a <code>null</code> step; the returned decision is then
+ ignored, there is nothing left to resolve.
 
- <p>For a whole-sale void, <a href="SessionError.html#getReversedMovements()"><code>SessionError.getReversedMovements()</code></a>
- is the structured prefix that completed before the failed step. Persist
- it before returning <a href="ReversalDecision.html#ABORT"><code>ReversalDecision.ABORT</code></a> when a later session
- will resume the void.</p>
+ <p>For a whole-sale void, <a href="SessionError.html#getReversedMovements()"><code>SessionError.getReversedMovements()</code></a> is the structured prefix
+ that completed before the failed step. Persist it before returning <a href="ReversalDecision.html#ABORT"><code>ReversalDecision.ABORT</code></a> when a later session will resume the void.
 
- <p>Because of that <code>null</code>-step delivery, a handler that
- <code>switch</code>es on the step must guard for <code>null</code> first — an
- exception thrown from the handler would mask the very failure being
- delivered. Null-safe comparisons, as in the class example
- (<code>step == ReversalStep.AWARD ? SKIP : ABORT</code>), need no
- guard.</p></div>
+ <p>Because of that <code>null</code>-step delivery, a handler that <code>switch</code>es on the step must
+ guard for <code>null</code> first — an exception thrown from the handler would mask the very failure
+ being delivered. Null-safe comparisons, as in the class example (<code>step ==
+ ReversalStep.AWARD ? SKIP : ABORT</code>), need no guard.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="onComplete(java.lang.Runnable)">
 <h3>onComplete</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;<a href="ReversalFlow.html" title="type parameter in ReversalFlow">T</a>&gt;</span>&nbsp;<span class="element-name">onComplete</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Runnable.html" title="class or interface in java.lang" class="external-link">Runnable</a>&nbsp;handler)</span></div>
-<div class="block">Registers a hook that runs exactly once after the reversal settles,
- on every path — success, failure, unexpected exception, or rejection
- because the session ended before the reversal could run. The place
- for cleanup that must not leak. A throwing hook is logged, never
- propagated.</div>
+<div class="block">Registers a hook that runs exactly once after the reversal settles, on every path — success,
+ failure, unexpected exception, or rejection because the session ended before the reversal could
+ run. The place for cleanup that must not leak. A throwing hook is logged, never propagated.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="execute()">
 <h3>execute</h3>
 <div class="member-signature"><span class="modifiers">public final</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">execute</span>()</div>
-<div class="block">Runs the flow asynchronously on the session's operation thread —
- handlers included, see the class docs — and returns immediately.
- When the session has already ended and its executor rejects the
- submission, the flow fails with
- <a href="SessionErrorCode.html#INVALID_STATE"><code>SessionErrorCode.INVALID_STATE</code></a> through <code>onError</code> and
- <code>onComplete</code>.</div>
+<div class="block">Runs the flow asynchronously on the session's operation thread — handlers included, see the
+ class docs — and returns immediately. When the session has already ended and its executor
+ rejects the submission, the flow fails with <a href="SessionErrorCode.html#INVALID_STATE"><code>SessionErrorCode.INVALID_STATE</code></a> through
+ <code>onError</code> and <code>onComplete</code>.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the flow has already run</dd>
@@ -280,10 +263,9 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="executeSync()">
 <h3>executeSync</h3>
 <div class="member-signature"><span class="modifiers">public final</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">executeSync</span>()</div>
-<div class="block">Runs the flow blocking — the operation takes its turn on the
- session's operation thread (queueing behind anything in flight, so
- a sync call never races an asynchronous one) while the caller
- waits; handlers dispatch on the calling thread.</div>
+<div class="block">Runs the flow blocking — the operation takes its turn on the session's operation thread
+ (queueing behind anything in flight, so a sync call never races an asynchronous one) while the
+ caller waits; handlers dispatch on the calling thread.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the flow has already run</dd>
@@ -294,8 +276,7 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="get()">
 <h3>get</h3>
 <div class="member-signature"><span class="modifiers">public final</span>&nbsp;<span class="return-type"><a href="ReversalFlow.html" title="type parameter in ReversalFlow">T</a></span>&nbsp;<span class="element-name">get</span>()</div>
-<div class="block">Runs the flow if it has not run yet and returns the result. Waits
- for an in-flight <a href="#execute()"><code>execute()</code></a> to settle first.</div>
+<div class="block">Runs the flow if it has not run yet and returns the result. Waits for an in-flight <a href="#execute()"><code>execute()</code></a> to settle first.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code><a href="SessionException.html" title="class in com.bilt.pos.session">SessionException</a></code> - if the flow failed</dd>

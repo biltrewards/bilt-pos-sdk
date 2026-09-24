@@ -31,6 +31,7 @@ import com.bilt.pos.nexo.model.Response;
 import com.bilt.pos.nexo.model.ResultType;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
 import com.bilt.pos.session.identity.CardAcquisitionResult;
@@ -54,7 +55,8 @@ public final class IdentityManager {
   }
 
   /** Terminal-prompted identification (Nexo {@code CardAcquisition}). */
-  public IdentifyResult identifyPrompted(IdentifyOptions options) {
+  public IdentifyResult identifyPrompted(
+      IdentifyOptions options, TransactionIdentificationType saleTransaction) {
     CardAcquisitionTransaction.Builder transaction =
         CardAcquisitionTransaction.builder()
             .loyaltyHandling(
@@ -75,7 +77,7 @@ public final class IdentityManager {
                     .header(MessageClassType.SERVICE, MessageCategoryType.CARD_ACQUISITION))
             .cardAcquisitionRequest(
                 CardAcquisitionRequest.builder()
-                    .saleData(exchange.factory().saleData())
+                    .saleData(exchange.factory().saleData(saleTransaction))
                     .cardAcquisitionTransaction(transaction.build())
                     .build())
             .build();
@@ -169,7 +171,8 @@ public final class IdentityManager {
   }
 
   /** Card read without payment (Nexo {@code CardAcquisition}, loyalty forbidden). */
-  public CardAcquisitionResult acquireCard(CardAcquisitionOptions options) {
+  public CardAcquisitionResult acquireCard(
+      CardAcquisitionOptions options, TransactionIdentificationType saleTransaction) {
     CardAcquisitionTransaction.Builder transaction =
         CardAcquisitionTransaction.builder().loyaltyHandling(LoyaltyHandlingEnum.FORBIDDEN);
     if (!options.getForceEntryModes().isEmpty()) {
@@ -186,7 +189,7 @@ public final class IdentityManager {
                     .header(MessageClassType.SERVICE, MessageCategoryType.CARD_ACQUISITION))
             .cardAcquisitionRequest(
                 CardAcquisitionRequest.builder()
-                    .saleData(exchange.factory().saleData())
+                    .saleData(exchange.factory().saleData(saleTransaction))
                     .cardAcquisitionTransaction(transaction.build())
                     .build())
             .build();

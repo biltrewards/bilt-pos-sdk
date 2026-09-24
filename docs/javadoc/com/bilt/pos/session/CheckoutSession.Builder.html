@@ -114,14 +114,12 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#autoDisplay(boolean)" class="member-name-link">autoDisplay</a><wbr>(boolean&nbsp;autoDisplay)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Whether basket mutations automatically refresh the customer
- display.</div>
+<div class="block">Whether basket mutations automatically refresh the customer display.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#callbackExecutor(java.util.concurrent.Executor)" class="member-name-link">callbackExecutor</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;callbackExecutor)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Where asynchronously executed operations deliver their handlers —
- e.g.</div>
+<div class="block">Where asynchronously executed operations deliver their handlers — e.g.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#client(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">client</a><wbr>(<a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a>&nbsp;client)</code></div>
@@ -146,10 +144,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onBackgroundError(java.util.function.Consumer)" class="member-name-link">onBackgroundError</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>&gt;&nbsp;onBackgroundError)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Handler for failures of work the session performs on its own
- behalf, with no result object to report through: the automatic
- display push after a basket mutation (<a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>)
- and the final settlement display refresh.</div>
+<div class="block">Handler for failures of work the session performs on its own behalf, with no result object to
+ report through: the automatic display push after a basket mutation (<a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>) and the final settlement display refresh.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onBasketUpdated(java.util.function.Consumer)" class="member-name-link">onBasketUpdated</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&gt;&nbsp;onBasketUpdated)</code></div>
@@ -169,19 +165,17 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a>&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#start()" class="member-name-link">start</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Validates the configuration and returns a lazy operation that
- announces the session to the terminal (Nexo <code>Admin</code> session
- start signal) and yields it once the terminal acknowledged — an
- unstarted session never exists, so no operation can reach the
- terminal before the start.</div>
+<div class="block">Validates the configuration and returns a lazy operation that announces the session to the
+ terminal (Nexo <code>Admin</code> session start signal) and yields it once the terminal
+ acknowledged — an unstarted session never exists, so no operation can reach the terminal
+ before the start.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#storeLocation(java.lang.String)" class="member-name-link">storeLocation</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;storeLocation)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Store location identifier, sent as
- <code>SaleTerminalData.TotalsGroupID</code> on every transaction this
- session creates — it groups the store's transactions for totals
- and reconciliation (<code>getTotals()</code> filters by it).</div>
+<div class="block">Store location identifier, sent as <code>SaleTerminalData.TotalsGroupID</code> on every
+ transaction this session creates — it groups the store's transactions for totals and
+ reconciliation (<code>getTotals()</code> filters by it).</div>
 </div>
 </div>
 </div>
@@ -232,97 +226,86 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="storeLocation(java.lang.String)">
 <h3>storeLocation</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></span>&nbsp;<span class="element-name">storeLocation</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;storeLocation)</span></div>
-<div class="block">Store location identifier, sent as
- <code>SaleTerminalData.TotalsGroupID</code> on every transaction this
- session creates — it groups the store's transactions for totals
- and reconciliation (<code>getTotals()</code> filters by it). Optional.</div>
+<div class="block">Store location identifier, sent as <code>SaleTerminalData.TotalsGroupID</code> on every
+ transaction this session creates — it groups the store's transactions for totals and
+ reconciliation (<code>getTotals()</code> filters by it). Optional.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="autoDisplay(boolean)">
 <h3>autoDisplay</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></span>&nbsp;<span class="element-name">autoDisplay</span><wbr><span class="parameters">(boolean&nbsp;autoDisplay)</span></div>
-<div class="block">Whether basket mutations automatically refresh the customer
- display. Default <code>true</code>.</div>
+<div class="block">Whether basket mutations automatically refresh the customer display. Default <code>true</code>.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="externalDisplayClient(com.bilt.pos.nexo.client.BiltNexoTerminalClient)">
 <h3>externalDisplayClient</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></span>&nbsp;<span class="element-name">externalDisplayClient</span><wbr><span class="parameters">(<a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a>&nbsp;externalDisplayClient)</span></div>
-<div class="block">A second client for an external customer display device. When set,
- <code>Display</code> and <code>Input</code> messages are routed to it, while
- payment, card, and PIN operations stay on the terminal.</div>
+<div class="block">A second client for an external customer display device. When set, <code>Display</code> and <code>
+ Input</code> messages are routed to it, while payment, card, and PIN operations stay on the
+ terminal.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="displayRenderer(com.bilt.pos.session.display.DisplayRenderer)">
 <h3>displayRenderer</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></span>&nbsp;<span class="element-name">displayRenderer</span><wbr><span class="parameters">(<a href="display/DisplayRenderer.html" title="interface in com.bilt.pos.session.display">DisplayRenderer</a>&nbsp;displayRenderer)</span></div>
-<div class="block">Custom rendering of basket snapshots for the customer display.
- Rarely necessary; defaults to the standard itemised receipt.</div>
+<div class="block">Custom rendering of basket snapshots for the customer display. Rarely necessary; defaults to
+ the standard itemised receipt.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="onBasketUpdated(java.util.function.Consumer)">
 <h3>onBasketUpdated</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></span>&nbsp;<span class="element-name">onBasketUpdated</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&gt;&nbsp;onBasketUpdated)</span></div>
-<div class="block">Out-of-band basket update callback. Reserved for a future reactive
- mode in which the terminal pushes offer/member changes during
- scanning; not invoked in v1.</div>
+<div class="block">Out-of-band basket update callback. Reserved for a future reactive mode in which the terminal
+ pushes offer/member changes during scanning; not invoked in v1.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="callbackExecutor(java.util.concurrent.Executor)">
 <h3>callbackExecutor</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></span>&nbsp;<span class="element-name">callbackExecutor</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;callbackExecutor)</span></div>
-<div class="block">Where asynchronously executed operations deliver their handlers —
- e.g. an Android main-thread executor so handlers may touch UI
- directly. Applies to <code>execute()</code>; <code>executeSync()</code> and
- the blocking accessors are unaffected. Overridable per call with
- <code>callbackOn(executor)</code>. Without one, handlers run directly
- on the session's operation thread and must be fast, non-blocking,
- and must never synchronously invoke another session operation.</div>
+<div class="block">Where asynchronously executed operations deliver their handlers — e.g. an Android main-thread
+ executor so handlers may touch UI directly. Applies to <code>execute()</code>; <code>
+ executeSync()</code> and the blocking accessors are unaffected. Overridable per call with <code>
+ callbackOn(executor)</code>. Without one, handlers run directly on the session's operation thread
+ and must be fast, non-blocking, and must never synchronously invoke another session
+ operation.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="onBackgroundError(java.util.function.Consumer)">
 <h3>onBackgroundError</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="CheckoutSession.Builder.html" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></span>&nbsp;<span class="element-name">onBackgroundError</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>&gt;&nbsp;onBackgroundError)</span></div>
-<div class="block">Handler for failures of work the session performs on its own
- behalf, with no result object to report through: the automatic
- display push after a basket mutation (<a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>)
- and the final settlement display refresh. Manual
- <code>updateDisplay(...)</code> failures are not delivered here — they
- report through their own per-call <code>onError</code>.
+<div class="block">Handler for failures of work the session performs on its own behalf, with no result object to
+ report through: the automatic display push after a basket mutation (<a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>) and the final settlement display refresh. Manual <code>
+ updateDisplay(...)</code> failures are not delivered here — they report through their own per-call
+ <code>onError</code>.
 
- <p>Background failures never interrupt the checkout and are
- logged whether or not a handler is registered. Delivered through
- the <a href="#callbackExecutor(java.util.concurrent.Executor)"><code>callbackExecutor</code></a> when one
- is configured, directly on the failing thread otherwise.</p></div>
+ <p>Background failures never interrupt the checkout and are logged whether or not a handler
+ is registered. Delivered through the <a href="#callbackExecutor(java.util.concurrent.Executor)"><code>callbackExecutor</code></a>
+ when one is configured, directly on the failing thread otherwise.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="start()">
 <h3>start</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="CheckoutSession.html" title="class in com.bilt.pos.session">CheckoutSession</a>&gt;</span>&nbsp;<span class="element-name">start</span>()</div>
-<div class="block">Validates the configuration and returns a lazy operation that
- announces the session to the terminal (Nexo <code>Admin</code> session
- start signal) and yields it once the terminal acknowledged — an
- unstarted session never exists, so no operation can reach the
- terminal before the start. Like every session operation, nothing
- is sent until <code>execute()</code>, <code>get()</code>, or
- <code>getOrNull()</code> is invoked.
+<div class="block">Validates the configuration and returns a lazy operation that announces the session to the
+ terminal (Nexo <code>Admin</code> session start signal) and yields it once the terminal
+ acknowledged — an unstarted session never exists, so no operation can reach the terminal
+ before the start. Like every session operation, nothing is sent until <code>execute()</code>,
+ <code>get()</code>, or <code>getOrNull()</code> is invoked.
 
- <p>A refused start yields no session; call <code>start()</code> again
- for a fresh attempt (each attempt is a new session with a new
- session ID).</p>
+ <p>A refused start yields no session; call <code>start()</code> again for a fresh attempt (each
+ attempt is a new session with a new session ID).
 
- <p>If the registered <code>onSuccess</code> handler itself throws, the
- just-started session is ended on the terminal (best-effort) before
- the exception propagates: a <code>start()</code> whose execution threw
- never leaves a terminal-side session behind, and any session it
- may have delivered to the handler must be considered lost.</p></div>
+ <p>If the registered <code>onSuccess</code> handler itself throws, the just-started session is
+ ended on the terminal (best-effort) before the exception propagates: a <code>start()</code> whose
+ execution threw never leaves a terminal-side session behind, and any session it may have
+ delivered to the handler must be considered lost.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if a required field is missing</dd>

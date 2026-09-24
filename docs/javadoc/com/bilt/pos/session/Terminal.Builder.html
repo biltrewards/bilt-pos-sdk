@@ -119,8 +119,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#callbackExecutor(java.util.concurrent.Executor)" class="member-name-link">callbackExecutor</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;callbackExecutor)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Where asynchronously executed operations deliver their handlers —
- see <code>CheckoutSession.Builder#callbackExecutor</code>.</div>
+<div class="block">Where asynchronously executed operations deliver their handlers — see <code>
+ CheckoutSession.Builder#callbackExecutor</code>.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#client(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">client</a><wbr>(<a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a>&nbsp;client)</code></div>
@@ -140,8 +140,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#storeLocation(java.lang.String)" class="member-name-link">storeLocation</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;storeLocation)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Store location identifier: the <code>TotalsGroupID</code> that
- <a href="Terminal.html#getTotals()"><code>Terminal.getTotals()</code></a> filters by.</div>
+<div class="block">Store location identifier: the <code>TotalsGroupID</code> that <a href="Terminal.html#getTotals()"><code>Terminal.getTotals()</code></a>
+ filters by.</div>
 </div>
 </div>
 </div>
@@ -185,26 +185,25 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="storeLocation(java.lang.String)">
 <h3>storeLocation</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></span>&nbsp;<span class="element-name">storeLocation</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;storeLocation)</span></div>
-<div class="block">Store location identifier: the <code>TotalsGroupID</code> that
- <a href="Terminal.html#getTotals()"><code>Terminal.getTotals()</code></a> filters by. Optional.</div>
+<div class="block">Store location identifier: the <code>TotalsGroupID</code> that <a href="Terminal.html#getTotals()"><code>Terminal.getTotals()</code></a>
+ filters by. Optional.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="callbackExecutor(java.util.concurrent.Executor)">
 <h3>callbackExecutor</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></span>&nbsp;<span class="element-name">callbackExecutor</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;callbackExecutor)</span></div>
-<div class="block">Where asynchronously executed operations deliver their handlers —
- see <code>CheckoutSession.Builder#callbackExecutor</code>. Applies to
- <code>execute()</code>; <code>executeSync()</code> and the blocking
- accessors are unaffected.</div>
+<div class="block">Where asynchronously executed operations deliver their handlers — see <code>
+ CheckoutSession.Builder#callbackExecutor</code>. Applies to <code>execute()</code>; <code>
+ executeSync()</code> and the blocking accessors are unaffected.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="build()">
 <h3>build</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Terminal.html" title="class in com.bilt.pos.session">Terminal</a></span>&nbsp;<span class="element-name">build</span>()</div>
-<div class="block">Validates the configuration and returns the terminal. Sends
- nothing — there is no session bracket to announce.</div>
+<div class="block">Validates the configuration and returns the terminal. Sends nothing — there is no session
+ bracket to announce.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if a required field is missing</dd>

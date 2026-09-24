@@ -9,6 +9,7 @@
  */
 package com.bilt.pos.session.basket;
 
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.settlement.SettlementType;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -19,6 +20,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * An immutable snapshot of the session's basket.
@@ -35,6 +37,7 @@ public final class Basket {
   private static final int MONEY_SCALE = 2;
 
   private final String cartId;
+  private final TransactionIdentificationType saleTransactionID;
   private final List<BasketLineItem> items;
   private final BigDecimal taxTotal;
   private final BigDecimal originalTotal;
@@ -50,6 +53,7 @@ public final class Basket {
 
   private Basket(Builder builder) {
     this.cartId = builder.cartId;
+    this.saleTransactionID = builder.saleTransactionID;
     this.items = Collections.unmodifiableList(new ArrayList<>(builder.items));
     this.taxTotal = builder.taxTotal;
     this.originalTotal = builder.originalTotal;
@@ -75,6 +79,15 @@ public final class Basket {
   /** Stable identifier of this cart within the session. */
   public String getCartId() {
     return cartId;
+  }
+
+  /**
+   * The sale transaction identity shared by every wire request of this basket's checkout —
+   * identify, payment, loyalty, stored value, and their reversals all carry it so the sale reads as
+   * one transaction end to end. Retries reuse it; a new basket mints a new one.
+   */
+  public TransactionIdentificationType getSaleTransactionID() {
+    return saleTransactionID;
   }
 
   /** Line items, in insertion order. Never {@code null}. */
@@ -299,6 +312,7 @@ public final class Basket {
     BigDecimal mergedTaxTotal = settledChargePortion.getTaxTotal().add(returns.getTaxTotal());
     return Basket.builder()
         .cartId(cartId)
+        .saleTransactionID(saleTransactionID)
         .items(mergedItems)
         .originalTotal(mergedOriginalTotal)
         .discountTotal(mergedDiscountTotal)
@@ -332,6 +346,7 @@ public final class Basket {
         filteredTaxTotal(types, filteredLineTaxTotal, !filteredItems.isEmpty());
     return Basket.builder()
         .cartId(cartId)
+        .saleTransactionID(saleTransactionID)
         .items(filteredItems)
         .originalTotal(filteredOriginalTotal)
         .discountTotal(filteredDiscountTotal)
@@ -408,6 +423,11 @@ public final class Basket {
   public static final class Builder {
 
     private String cartId;
+    private TransactionIdentificationType saleTransactionID =
+        TransactionIdentificationType.builder()
+            .transactionID(UUID.randomUUID().toString())
+            .timeStamp(Instant.now().toString())
+            .build();
     private List<BasketLineItem> items = new ArrayList<>();
     private BigDecimal taxTotal = BigDecimal.ZERO;
     private BigDecimal originalTotal = BigDecimal.ZERO;
@@ -425,6 +445,11 @@ public final class Basket {
 
     public Builder cartId(String cartId) {
       this.cartId = cartId;
+      return this;
+    }
+
+    public Builder saleTransactionID(TransactionIdentificationType saleTransactionID) {
+      this.saleTransactionID = saleTransactionID;
       return this;
     }
 

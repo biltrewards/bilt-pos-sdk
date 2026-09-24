@@ -34,8 +34,6 @@ import com.bilt.pos.nexo.model.SaleTerminalData;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import java.security.SecureRandom;
-import java.time.Instant;
-import java.util.UUID;
 
 /**
  * Builds Nexo message headers and envelopes for a checkout session, encapsulating the {@code
@@ -103,24 +101,14 @@ public final class NexoMessageFactory {
     return NexoTerminalAPI.builder().saleToPOIRequest(request).build();
   }
 
-  /** Sale data with a fresh random {@code SaleTransactionID}. */
-  public SaleData saleData() {
-    return saleData(UUID.randomUUID().toString());
-  }
-
   /**
-   * Sale data with the given {@code SaleTransactionID} and a current timestamp. When a totals group
-   * (store location) is configured it is attached as {@code SaleTerminalData.TotalsGroupID},
-   * grouping the session's transactions for totals and reconciliation.
+   * Sale data carrying the basket's shared {@code SaleTransactionID} — ID and timestamp as minted,
+   * so every step of the checkout reads as one transaction. When a totals group (store location) is
+   * configured it is attached as {@code SaleTerminalData.TotalsGroupID}, grouping the session's
+   * transactions for totals and reconciliation.
    */
-  public SaleData saleData(String saleTransactionId) {
-    SaleData.Builder saleData =
-        SaleData.builder()
-            .saleTransactionID(
-                TransactionIdentificationType.builder()
-                    .transactionID(saleTransactionId)
-                    .timeStamp(Instant.now().toString())
-                    .build());
+  public SaleData saleData(TransactionIdentificationType saleTransaction) {
+    SaleData.Builder saleData = SaleData.builder().saleTransactionID(saleTransaction);
     if (totalsGroupId != null) {
       saleData.saleTerminalData(SaleTerminalData.builder().totalsGroupID(totalsGroupId).build());
     }
@@ -135,21 +123,13 @@ public final class NexoMessageFactory {
    * LoyaltyData} is attached when known.
    */
   public SaleToPOIRequest loyaltyRefundRequest(
-      LoyaltyTransactionTypeEnum refundType, OriginalPOITransaction original, String memberId) {
-    return loyaltyRefundRequest(refundType, original, memberId, null);
-  }
-
-  public SaleToPOIRequest loyaltyRefundRequest(
       LoyaltyTransactionTypeEnum refundType,
       OriginalPOITransaction original,
       String memberId,
-      String saleTransactionId) {
+      TransactionIdentificationType saleTransaction) {
     LoyaltyRequest.Builder loyaltyRequest =
         LoyaltyRequest.builder()
-            .saleData(
-                saleTransactionId == null || saleTransactionId.isEmpty()
-                    ? saleData()
-                    : saleData(saleTransactionId))
+            .saleData(saleData(saleTransaction))
             .loyaltyTransaction(
                 LoyaltyTransaction.builder()
                     .loyaltyTransactionType(refundType)
@@ -168,12 +148,13 @@ public final class NexoMessageFactory {
   }
 
   /** A {@code ReversalRequest} (merchant cancel) against a prior transaction. */
-  public SaleToPOIRequest reversalRequest(OriginalPOITransaction original) {
+  public SaleToPOIRequest reversalRequest(
+      OriginalPOITransaction original, TransactionIdentificationType saleTransaction) {
     return SaleToPOIRequest.builder()
         .messageHeader(header(MessageClassType.SERVICE, MessageCategoryType.REVERSAL))
         .reversalRequest(
             ReversalRequest.builder()
-                .saleData(saleData())
+                .saleData(saleData(saleTransaction))
                 .originalPOITransaction(original)
                 .reversalReason(ReversalReasonEnum.MERCHANT_CANCEL)
                 .build())

@@ -94,16 +94,13 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">The settlement orchestration chain returned by <code>CheckoutSession.settle()</code>.
 
- <p>Registering handlers sends nothing. With the default settlement option,
- the sequence is refund allocations (including external register-managed
- refunds), rebate redemption, point redemption, stored value line fulfillment,
- stored value tender, card charge, and award. With net settlement, only the signed basket difference is charged or
- refunded. The sequence runs when
- <a href="#execute()"><code>execute()</code></a> (asynchronously, on the session's operation thread),
- <a href="#executeSync()"><code>executeSync()</code></a> (blocking), <a href="#get()"><code>get()</code></a>, or <a href="#getOrNull()"><code>getOrNull()</code></a>
- is invoked. Each step handler receives that step's result and returns the
- updated total for the next step (letting the register recompute tax on
- discounted amounts).</p>
+ <p>Registering handlers sends nothing. With the default settlement option, the sequence is refund
+ allocations (including external register-managed refunds), rebate redemption, point redemption,
+ stored value line fulfillment, stored value tender, card charge, and award. With net settlement,
+ only the signed basket difference is charged or refunded. The sequence runs when <a href="#execute()"><code>execute()</code></a> (asynchronously, on the session's operation thread), <a href="#executeSync()"><code>executeSync()</code></a>
+ (blocking), <a href="#get()"><code>get()</code></a>, or <a href="#getOrNull()"><code>getOrNull()</code></a> is invoked. Each step handler receives that
+ step's result and returns the updated total for the next step (letting the register recompute tax
+ on discounted amounts).
 
  <pre><code>
  session.settle()
@@ -114,42 +111,33 @@ loadScripts(document, 'script');</script>
      .execute();
  </code></pre>
 
- <p>With <a href="#execute()"><code>execute()</code></a>, every handler — the step handlers,
- <code>onSuccess</code>, <code>onError</code>, and <code>onComplete</code> — is delivered
- through the callback executor (the session builder's
- <code>callbackExecutor</code>, or the per-flow <a href="#callbackOn(java.util.concurrent.Executor)"><code>callbackOn(Executor)</code></a>
- override), and the settlement thread <em>waits for each answer</em>: the
- handlers are part of the settlement negotiation, so their return values
- steer the sequence exactly as if they ran inline — they just physically
- run on the integrator's thread. Keep them quick (settlement is paused
- while they run), and never block a callback thread on this flow's
- <code>get()</code> — the flow would be waiting on that thread's handler while
- it waits on the flow. Without a callback executor, handlers run directly
- on the thread executing the sequence.</p>
+ <p>With <a href="#execute()"><code>execute()</code></a>, every handler — the step handlers, <code>onSuccess</code>, <code>
+ onError</code>, and <code>onComplete</code> — is delivered through the callback executor (the session
+ builder's <code>callbackExecutor</code>, or the per-flow <a href="#callbackOn(java.util.concurrent.Executor)"><code>callbackOn(Executor)</code></a> override), and
+ the settlement thread <em>waits for each answer</em>: the handlers are part of the settlement
+ negotiation, so their return values steer the sequence exactly as if they ran inline — they just
+ physically run on the integrator's thread. Keep them quick (settlement is paused while they run),
+ and never block a callback thread on this flow's <code>get()</code> — the flow would be waiting on
+ that thread's handler while it waits on the flow. Without a callback executor, handlers run
+ directly on the thread executing the sequence.
 
- <p>If a charge-side terminal request has an indeterminate outcome, the SDK
- first resolves it through TransactionStatus. A recovered success continues
- without calling <code>onError</code>; a recovered failure or authoritative
- not-found result is reported as definitive. <code>onError</code> also receives an
- indeterminate failure when TransactionStatus itself cannot resolve the request.
- Its <a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement"><code>SettlementRecovery</code></a> retries only the failed step, skips an optional
- step, records an external final tender, aborts and unwinds, or abandons the
- partial flow to the register. Earlier successful steps remain committed unless
- the register returns <a href="settlement/SettlementRecovery.html#abort()"><code>SettlementRecovery.abort()</code></a>. Refund allocation
- failures are different:
- they are not retried in the same run, and committed refund allocations are
- not unwound. Retry by calling <code>settle()</code> again with the same committed
- allocation prefix. The default charge-side policy (no handler) is
- <code>abort()</code>.</p>
+ <p>If a charge-side terminal request has an indeterminate outcome, the SDK first resolves it
+ through TransactionStatus. A recovered success continues without calling <code>onError</code>; a
+ recovered failure or authoritative not-found result is reported as definitive. <code>onError</code>
+ also receives an indeterminate failure when TransactionStatus itself cannot resolve the request.
+ Its <a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement"><code>SettlementRecovery</code></a> retries only the failed step, skips an optional step, records an
+ external final tender, aborts and unwinds, or abandons the partial flow to the register. Earlier
+ successful steps remain committed unless the register returns <a href="settlement/SettlementRecovery.html#abort()"><code>SettlementRecovery.abort()</code></a>.
+ Refund allocation failures are different: they are not retried in the same run, and committed
+ refund allocations are not unwound. Retry by calling <code>settle()</code> again with the same
+ committed allocation prefix. The default charge-side policy (no handler) is <code>abort()</code>.
 
- <p>Movement callbacks are immediate observations, not the authoritative
- final ledger. An abort may reverse charge-side movements, and retrying,
- skipping, or replacing a partially committed failed step first reverses
- only that step's partial movements. Those reversals do not emit compensating
- movement callbacks. Refund allocation movements are durable because
- settlement never unwinds them. Treat
- <a href="settlement/SettlementResult.html#getMovements()"><code>SettlementResult.getMovements()</code></a> from a successful result as the
- final movement ledger.</p></div>
+ <p>Movement callbacks are immediate observations, not the authoritative final ledger. An abort
+ may reverse charge-side movements, and retrying, skipping, or replacing a partially committed
+ failed step first reverses only that step's partial movements. Those reversals do not emit
+ compensating movement callbacks. Refund allocation movements are durable because settlement never
+ unwinds them. Treat <a href="settlement/SettlementResult.html#getMovements()"><code>SettlementResult.getMovements()</code></a> from a successful result as the final
+ movement ledger.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -167,27 +155,26 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#beforeStep(java.util.function.Function)" class="member-name-link">beforeStep</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;&nbsp;handler)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Called before each step; returns the <code>SaleTransactionID</code> to use.</div>
+<div class="block">Called before each step; returns the <code>SaleTransactionID</code> to use for that step.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#callbackOn(java.util.concurrent.Executor)" class="member-name-link">callbackOn</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;executor)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Delivers this flow's handlers through <code>executor</code> instead of the
- session's default callback executor.</div>
+<div class="block">Delivers this flow's handlers through <code>executor</code> instead of the session's default
+ callback executor.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>final void</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#execute()" class="member-name-link">execute</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Runs the flow asynchronously on the session's operation thread —
- handlers included, see the class docs — and returns immediately.</div>
+<div class="block">Runs the flow asynchronously on the session's operation thread — handlers included, see the
+ class docs — and returns immediately.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>final void</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#executeSync()" class="member-name-link">executeSync</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Runs the flow blocking — the operation takes its turn on the
- session's operation thread (queueing behind anything in flight, so
- a sync call never races an asynchronous one) while the caller
- waits; handlers dispatch on the calling thread.</div>
+<div class="block">Runs the flow blocking — the operation takes its turn on the session's operation thread
+ (queueing behind anything in flight, so a sync call never races an asynchronous one) while the
+ caller waits; handlers dispatch on the calling thread.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>final <a href="settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#get()" class="member-name-link">get</a>()</code></div>
@@ -227,15 +214,15 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onComplete(java.lang.Runnable)" class="member-name-link">onComplete</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Runnable.html" title="class or interface in java.lang" class="external-link">Runnable</a>&nbsp;handler)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Registers a hook that runs exactly once after settlement completes, on
- every path — success, failure, unexpected exception, or rejection
- because the session ended before settlement could run.</div>
+<div class="block">Registers a hook that runs exactly once after settlement completes, on every path — success,
+ failure, unexpected exception, or rejection because the session ended before settlement could
+ run.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onError(java.util.function.Function)" class="member-name-link">onError</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a>,<wbr><a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a>&gt;&nbsp;handler)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Called when a charge-side step definitively fails, or when automatic
- TransactionStatus recovery cannot resolve an indeterminate terminal request.</div>
+<div class="block">Called when a charge-side step definitively fails, or when automatic TransactionStatus recovery
+ cannot resolve an indeterminate terminal request.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onExternallyPaid(java.util.function.Consumer)" class="member-name-link">onExternallyPaid</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</code></div>
@@ -313,49 +300,49 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="callbackOn(java.util.concurrent.Executor)">
 <h3>callbackOn</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">callbackOn</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;executor)</span></div>
-<div class="block">Delivers this flow's handlers through <code>executor</code> instead of the
- session's default callback executor. Affects <a href="#execute()"><code>execute()</code></a> only —
- the synchronous paths always dispatch on the calling thread.</div>
+<div class="block">Delivers this flow's handlers through <code>executor</code> instead of the session's default
+ callback executor. Affects <a href="#execute()"><code>execute()</code></a> only — the synchronous paths always dispatch on
+ the calling thread.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="beforeStep(java.util.function.Function)">
 <h3>beforeStep</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">beforeStep</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called before each step; returns the <code>SaleTransactionID</code> to use.
- Default: a fresh UUID per step.</div>
+<div class="block">Called before each step; returns the <code>SaleTransactionID</code> to use for that step. Default:
+ the basket's shared sale transaction ID, carried by every checkout request of that basket.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="onRebatesRedeemed(java.util.function.Function)">
 <h3>onRebatesRedeemed</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onRebatesRedeemed</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="payment/RebateRedemptionResult.html" title="class in com.bilt.pos.session.payment">RebateRedemptionResult</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when rebates/coupons are committed. Returns the updated total
- for the next step. Default: accept, <code>previousTotal − rebates</code>.</div>
+<div class="block">Called when rebates/coupons are committed. Returns the updated total for the next step.
+ Default: accept, <code>previousTotal − rebates</code>.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="onPointsRedeemed(java.util.function.Function)">
 <h3>onPointsRedeemed</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onPointsRedeemed</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="payment/PointRedemptionResult.html" title="class in com.bilt.pos.session.payment">PointRedemptionResult</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when points/rewards are redeemed for monetary value. Returns
- the updated total. Default: accept, subtract the monetary value.</div>
+<div class="block">Called when points/rewards are redeemed for monetary value. Returns the updated total. Default:
+ accept, subtract the monetary value.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="onGiftCardPayment(java.util.function.Function)">
 <h3>onGiftCardPayment</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onGiftCardPayment</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="payment/GiftCardPaymentResult.html" title="class in com.bilt.pos.session.payment">GiftCardPaymentResult</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when the stored value card is charged. Returns the updated
- total. Default: accept, subtract the charged amount.</div>
+<div class="block">Called when the stored value card is charged. Returns the updated total. Default: accept,
+ subtract the charged amount.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="onCardCharged(java.util.function.Consumer)">
 <h3>onCardCharged</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onCardCharged</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when the card charge leg commits. See <a href="#onMovement(java.util.function.Consumer)"><code>onMovement(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a> for
- the provisional charge-side callback contract.</div>
+<div class="block">Called when the card charge leg commits. See <a href="#onMovement(java.util.function.Consumer)"><code>onMovement(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a> for the provisional
+ charge-side callback contract.</div>
 </section>
 </li>
 <li>
@@ -369,8 +356,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="onAwarded(java.util.function.Consumer)">
 <h3>onAwarded</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onAwarded</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when the loyalty award leg commits. See <a href="#onMovement(java.util.function.Consumer)"><code>onMovement(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a> for
- the provisional charge-side callback contract.</div>
+<div class="block">Called when the loyalty award leg commits. See <a href="#onMovement(java.util.function.Consumer)"><code>onMovement(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a> for the provisional
+ charge-side callback contract.</div>
 </section>
 </li>
 <li>
@@ -428,13 +415,11 @@ loadScripts(document, 'script');</script>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onMovement</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</span></div>
 <div class="block">Called after any externally visible money or loyalty movement commits.
 
- <p>Charge-side movement callbacks are provisional: an abort can unwind
- them, and retrying, skipping, or replacing a partially committed failed
- step can reverse that step's movements without emitting a compensating
- callback. Earlier successful steps remain committed. Refund allocation
- movements are not unwound. Use
- <a href="settlement/SettlementResult.html#getMovements()"><code>SettlementResult.getMovements()</code></a> from the successful result as
- the authoritative final ledger.</p></div>
+ <p>Charge-side movement callbacks are provisional: an abort can unwind them, and retrying,
+ skipping, or replacing a partially committed failed step can reverse that step's movements
+ without emitting a compensating callback. Earlier successful steps remain committed. Refund
+ allocation movements are not unwound. Use <a href="settlement/SettlementResult.html#getMovements()"><code>SettlementResult.getMovements()</code></a> from the
+ successful result as the authoritative final ledger.</div>
 </section>
 </li>
 <li>
@@ -448,19 +433,15 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="onError(java.util.function.Function)">
 <h3>onError</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onError</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a>,<wbr><a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when a charge-side step definitively fails, or when automatic
- TransactionStatus recovery cannot resolve an indeterminate terminal request.
- A recovered successful request continues without invoking this handler.
- The returned <a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement"><code>SettlementRecovery</code></a> retries recovery, skips the failed
- step, records an external tender, aborts with unwind, or abandons recovery
- to the register. For an indeterminate failure delivered here, retry checks
- TransactionStatus again; skip and external replacement are invalid until
- the original request is resolved.
- For refund allocation failures, the handler is a terminal failure
- notification: the returned recovery decision is ignored, committed refund
- allocations stay recorded, and the register retries with the same
- committed allocation prefix. Default charge-side policy:
- <code>abort()</code>.</div>
+<div class="block">Called when a charge-side step definitively fails, or when automatic TransactionStatus recovery
+ cannot resolve an indeterminate terminal request. A recovered successful request continues
+ without invoking this handler. The returned <a href="settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement"><code>SettlementRecovery</code></a> retries recovery, skips
+ the failed step, records an external tender, aborts with unwind, or abandons recovery to the
+ register. For an indeterminate failure delivered here, retry checks TransactionStatus again;
+ skip and external replacement are invalid until the original request is resolved. For refund
+ allocation failures, the handler is a terminal failure notification: the returned recovery
+ decision is ignored, committed refund allocations stay recorded, and the register retries with
+ the same committed allocation prefix. Default charge-side policy: <code>abort()</code>.</div>
 </section>
 </li>
 <li>
@@ -474,23 +455,19 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="onComplete(java.lang.Runnable)">
 <h3>onComplete</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onComplete</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Runnable.html" title="class or interface in java.lang" class="external-link">Runnable</a>&nbsp;handler)</span></div>
-<div class="block">Registers a hook that runs exactly once after settlement completes, on
- every path — success, failure, unexpected exception, or rejection
- because the session ended before settlement could run. The place for
- cleanup that must not leak. A throwing hook is logged, never
- propagated.</div>
+<div class="block">Registers a hook that runs exactly once after settlement completes, on every path — success,
+ failure, unexpected exception, or rejection because the session ended before settlement could
+ run. The place for cleanup that must not leak. A throwing hook is logged, never propagated.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="execute()">
 <h3>execute</h3>
 <div class="member-signature"><span class="modifiers">public final</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">execute</span>()</div>
-<div class="block">Runs the flow asynchronously on the session's operation thread —
- handlers included, see the class docs — and returns immediately.
- When the session has already ended and its executor rejects the
- submission, the flow fails with
- <a href="SessionErrorCode.html#INVALID_STATE"><code>SessionErrorCode.INVALID_STATE</code></a> through <code>onError</code> and
- <code>onComplete</code>.</div>
+<div class="block">Runs the flow asynchronously on the session's operation thread — handlers included, see the
+ class docs — and returns immediately. When the session has already ended and its executor
+ rejects the submission, the flow fails with <a href="SessionErrorCode.html#INVALID_STATE"><code>SessionErrorCode.INVALID_STATE</code></a> through
+ <code>onError</code> and <code>onComplete</code>.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the flow has already run</dd>
@@ -501,10 +478,9 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="executeSync()">
 <h3>executeSync</h3>
 <div class="member-signature"><span class="modifiers">public final</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">executeSync</span>()</div>
-<div class="block">Runs the flow blocking — the operation takes its turn on the
- session's operation thread (queueing behind anything in flight, so
- a sync call never races an asynchronous one) while the caller
- waits; handlers dispatch on the calling thread.</div>
+<div class="block">Runs the flow blocking — the operation takes its turn on the session's operation thread
+ (queueing behind anything in flight, so a sync call never races an asynchronous one) while the
+ caller waits; handlers dispatch on the calling thread.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the flow has already run</dd>
@@ -515,8 +491,7 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="get()">
 <h3>get</h3>
 <div class="member-signature"><span class="modifiers">public final</span>&nbsp;<span class="return-type"><a href="settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></span>&nbsp;<span class="element-name">get</span>()</div>
-<div class="block">Runs the flow if it has not run yet and returns the result. Waits
- for an in-flight <a href="#execute()"><code>execute()</code></a> to settle first.</div>
+<div class="block">Runs the flow if it has not run yet and returns the result. Waits for an in-flight <a href="#execute()"><code>execute()</code></a> to settle first.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code><a href="SessionException.html" title="class in com.bilt.pos.session">SessionException</a></code> - if the flow failed</dd>

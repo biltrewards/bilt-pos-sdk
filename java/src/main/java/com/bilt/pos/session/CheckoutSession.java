@@ -27,6 +27,7 @@ import com.bilt.pos.nexo.model.SaleItem;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.nexo.model.TransactionStatusRequest;
 import com.bilt.pos.nexo.model.TransactionStatusResponse;
 import com.bilt.pos.session.basket.Basket;
@@ -409,7 +410,8 @@ public final class CheckoutSession implements AutoCloseable {
         "identifyMember",
         () ->
             completeIdentify(
-                identifyStateChecked(() -> identityManager.identifyPrompted(options))));
+                identifyStateChecked(
+                    () -> identityManager.identifyPrompted(options, currentSaleTransaction()))));
   }
 
   /** POS-driven member lookup by an identifier on file; no terminal prompt. */
@@ -425,6 +427,15 @@ public final class CheckoutSession implements AutoCloseable {
   private IdentifyResult identifyStateChecked(Supplier<IdentifyResult> lookup) {
     requireOpen("identifyMember");
     return lookup.get();
+  }
+
+  private TransactionIdentificationType currentSaleTransaction() {
+    lock.lock();
+    try {
+      return basketEngine.getSaleTransaction();
+    } finally {
+      lock.unlock();
+    }
   }
 
   /**
@@ -465,7 +476,8 @@ public final class CheckoutSession implements AutoCloseable {
         "acquireCard",
         () -> {
           requireOpen("acquireCard");
-          CardAcquisitionResult acquired = identityManager.acquireCard(options);
+          CardAcquisitionResult acquired =
+              identityManager.acquireCard(options, currentSaleTransaction());
           discardIfEndedMidFlight("acquireCard");
           return acquired;
         });
@@ -738,7 +750,8 @@ public final class CheckoutSession implements AutoCloseable {
               null,
               null,
               originalPoiTransactionId,
-              originalPoiTransactionTimestamp);
+              originalPoiTransactionTimestamp,
+              currentSaleTransaction());
         });
   }
 
@@ -758,7 +771,8 @@ public final class CheckoutSession implements AutoCloseable {
         name,
         () -> {
           requireOpen(name);
-          return storedValueManager.operation(type, card, amount, null, null);
+          return storedValueManager.operation(
+              type, card, amount, null, null, currentSaleTransaction());
         });
   }
 
@@ -981,7 +995,7 @@ public final class CheckoutSession implements AutoCloseable {
             new SessionError(SessionErrorCode.ABORTED, "the settlement was aborted"));
       }
       SettlementStep step = refundStep(allocation.getType());
-      String saleTransactionId =
+      TransactionIdentificationType saleTransaction =
           SettlementContext.resolveSaleTransactionId(
               step, basket, allocation.getAmount(), committedSteps, beforeStep);
       // Refund allocation failures deliberately bypass the
@@ -1000,12 +1014,12 @@ public final class CheckoutSession implements AutoCloseable {
         refundSaleItemsSent = true;
       }
       SettlementMovement movement =
-          executeRefundAllocation(allocation, step, saleTransactionId, saleItems);
+          executeRefundAllocation(allocation, step, saleTransaction, saleItems);
       movements.add(movement);
       committedSteps.add(
           new CommittedStep(
               step,
-              saleTransactionId,
+              saleTransaction.getTransactionID(),
               movement.getPoiTransactionId(),
               movement.getPoiTransactionTimestamp(),
               true));
@@ -1020,7 +1034,7 @@ public final class CheckoutSession implements AutoCloseable {
   private SettlementMovement executeRefundAllocation(
       RefundAllocation allocation,
       SettlementStep step,
-      String saleTransactionId,
+      TransactionIdentificationType saleTransaction,
       List<SaleItem> saleItems) {
     switch (allocation.getType()) {
       case CARD:
@@ -1035,14 +1049,14 @@ public final class CheckoutSession implements AutoCloseable {
                   null,
                   null,
                   allocation.getMemberId(),
-                  saleTransactionId,
+                  saleTransaction,
                   null,
                   () -> {},
                   () -> {});
           return refundMovement(
               step,
               allocation,
-              saleTransactionId,
+              saleTransaction,
               card.getRefundedAmount(),
               card.getPoiTransactionId(),
               card.getPoiTransactionTimestamp(),
@@ -1057,11 +1071,11 @@ public final class CheckoutSession implements AutoCloseable {
                 allocation.getAmount(),
                 null,
                 null,
-                saleTransactionId);
+                saleTransaction);
         return refundMovement(
             step,
             allocation,
-            saleTransactionId,
+            saleTransaction,
             storeCredit.getAmount(),
             storeCredit.getPoiTransactionId(),
             storeCredit.getPoiTransactionTimestamp(),
@@ -1069,7 +1083,7 @@ public final class CheckoutSession implements AutoCloseable {
             null);
       case EXTERNAL:
         return refundMovement(
-            step, allocation, saleTransactionId, allocation.getAmount(), null, null, null, null);
+            step, allocation, saleTransaction, allocation.getAmount(), null, null, null, null);
       case POINT_REDEMPTION:
         VoidResult points =
             reversalManager.refundLoyalty(
@@ -1077,11 +1091,11 @@ public final class CheckoutSession implements AutoCloseable {
                 allocation.getOriginalPoiTransactionId(),
                 allocation.getOriginalPoiTransactionTimestamp(),
                 allocation.getMemberId(),
-                saleTransactionId);
+                saleTransaction);
         return refundMovement(
             step,
             allocation,
-            saleTransactionId,
+            saleTransaction,
             points.getReversedAmount(),
             points.getPoiTransactionId(),
             points.getPoiTransactionTimestamp(),
@@ -1094,11 +1108,11 @@ public final class CheckoutSession implements AutoCloseable {
                 allocation.getOriginalPoiTransactionId(),
                 allocation.getOriginalPoiTransactionTimestamp(),
                 allocation.getMemberId(),
-                saleTransactionId);
+                saleTransaction);
         return refundMovement(
             step,
             allocation,
-            saleTransactionId,
+            saleTransaction,
             rebate.getReversedAmount(),
             rebate.getPoiTransactionId(),
             rebate.getPoiTransactionTimestamp(),
@@ -1111,11 +1125,11 @@ public final class CheckoutSession implements AutoCloseable {
                 allocation.getOriginalPoiTransactionId(),
                 allocation.getOriginalPoiTransactionTimestamp(),
                 allocation.getMemberId(),
-                saleTransactionId);
+                saleTransaction);
         return refundMovement(
             step,
             allocation,
-            saleTransactionId,
+            saleTransaction,
             BigDecimal.ZERO,
             award.getPoiTransactionId(),
             award.getPoiTransactionTimestamp(),
@@ -1143,7 +1157,7 @@ public final class CheckoutSession implements AutoCloseable {
   private static SettlementMovement refundMovement(
       SettlementStep step,
       RefundAllocation allocation,
-      String saleTransactionId,
+      TransactionIdentificationType saleTransaction,
       BigDecimal actualAmount,
       String poiTransactionId,
       Instant poiTransactionTimestamp,
@@ -1154,7 +1168,7 @@ public final class CheckoutSession implements AutoCloseable {
         .step(step)
         .target(allocation.getTarget())
         .amount(amount)
-        .saleTransactionId(saleTransactionId)
+        .saleTransactionId(saleTransaction.getTransactionID())
         .poiTransactionId(poiTransactionId)
         .poiTransactionTimestamp(poiTransactionTimestamp)
         .memberId(allocation.getMemberId())
@@ -1447,6 +1461,7 @@ public final class CheckoutSession implements AutoCloseable {
         awardReversed ? null : paid.getAwardPoiTransactionId(),
         awardReversed ? null : paid.getAwardPoiTransactionTimestamp(),
         linked ? paid.getMemberId() : null,
+        currentSaleTransaction(),
         flow.decider(),
         linked ? guards::markRefunded : () -> {},
         linked ? () -> guards.markAwardReversed(paid.getAwardPoiTransactionId()) : () -> {});
@@ -1561,7 +1576,11 @@ public final class CheckoutSession implements AutoCloseable {
       // the whole target
       VoidResult result =
           reversalManager.voidMovements(
-              movements, paid.getMemberId(), flow.decider(), guards.reversedMovements());
+              movements,
+              paid.getMemberId(),
+              currentSaleTransaction(),
+              flow.decider(),
+              guards.reversedMovements());
       if (!resumeRollback) {
         guards.completeVoid();
         lastPaymentVoidIncomplete = false;
@@ -1596,7 +1615,11 @@ public final class CheckoutSession implements AutoCloseable {
       Set<ReversalMovement.Key> reversedMovements = priorSaleVoidProgress(originalSale);
       VoidResult result =
           reversalManager.voidMovements(
-              movements, originalSale.getMemberId(), flow.decider(), reversedMovements);
+              movements,
+              originalSale.getMemberId(),
+              currentSaleTransaction(),
+              flow.decider(),
+              reversedMovements);
       clearPriorSaleVoidProgress(originalSale);
       return result;
     } finally {

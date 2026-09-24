@@ -102,7 +102,7 @@ Treat charge-side movement callbacks as provisional until settlement succeeds. `
 
 | Step | Default |
 | --- | --- |
-| `beforeStep` | Returns a new UUID as the sale transaction ID. |
+| `beforeStep` | Returns the basket's shared sale transaction ID (`ctx.getDefaultTransactionId()`). Every checkout carries one sale transaction tuple — transaction ID and timestamp minted once per basket — and returning it keeps the step on that shared identity; a returned override applies to that step only. |
 | `onRebatesRedeemed` | Accept rebates. New total = previous − rebate amount. |
 | `onPointsRedeemed` | Accept points. New total = previous − monetary value. |
 | `onGiftCardPayment` | Accept charge. New total = previous − amount charged. |
