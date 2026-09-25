@@ -351,6 +351,63 @@ class WebSurfaceTest {
   }
 
   @Test
+  void aFailureInAnotherThreadsDrainStillDeliversTheQueuedScript() throws Exception {
+    CountDownLatch readyEvaluating = new CountDownLatch(1);
+    CountDownLatch releaseReady = new CountDownLatch(1);
+    FakeWebSurface surface = new FakeWebSurface();
+    surface.show(sensodyne(), new RecordingSink());
+    surface.onEvaluate =
+        script -> {
+          if (surface.evaluated.size() == 1) {
+            readyEvaluating.countDown();
+            try {
+              releaseReady.await();
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+            }
+            throw new IllegalStateException("renderer crashed");
+          }
+        };
+    Thread platform = new Thread(() -> surface.post("{\"type\":\"ready\"}"));
+    platform.start();
+    assertTrue(readyEvaluating.await(5, TimeUnit.SECONDS));
+
+    surface.show(sensodyne().toBuilder().creativeId("crt_2").build(), new RecordingSink());
+    releaseReady.countDown();
+    platform.join(5000);
+
+    assertFalse(platform.isAlive());
+    assertEquals(2, surface.evaluated.size());
+    assertEquals("crt_2", creativeIdOf(surface.evaluated.get(1)));
+    assertEquals(1, surface.errors.size(), "the bridge callback reports the failure");
+    assertTrue(surface.errors.get(0).contains("renderer crashed"));
+  }
+
+  @Test
+  void aFailedCallStillLetsTheRestOfTheQueueRunAndRethrowsTheFirstFailure() throws Exception {
+    FakeWebSurface surface = readySurface(sensodyne(), new RecordingSink());
+    surface.onEvaluate =
+        script -> {
+          if (surface.evaluated.size() == 1) {
+            // A nested ready queues a second push behind the failing one.
+            surface.post("{\"type\":\"ready\"}");
+            throw new IllegalStateException("first");
+          }
+        };
+
+    IllegalStateException thrown =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                surface.show(
+                    sensodyne().toBuilder().creativeId("crt_2").build(), new RecordingSink()));
+
+    assertEquals("first", thrown.getMessage());
+    assertEquals(2, surface.evaluated.size(), "the queued push still went out");
+    assertEquals("crt_2", creativeIdOf(surface.evaluated.get(1)));
+  }
+
+  @Test
   void aThrowingEvaluateDoesNotWedgeLaterScripts() throws Exception {
     FakeWebSurface surface = readySurface(sensodyne(), new RecordingSink());
     surface.onEvaluate =

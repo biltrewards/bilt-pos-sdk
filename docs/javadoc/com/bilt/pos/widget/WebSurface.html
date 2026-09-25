@@ -262,15 +262,17 @@ implements <a href="Surface.html" title="interface in com.bilt.pos.widget">Surfa
 <h3>loadUrl</h3>
 <div class="member-signature"><span class="modifiers">protected abstract</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">loadUrl</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;url)</span></div>
 <div class="block">Navigates the browser control to <code>url</code>. Called with no lock held; may be asynchronous. If
- it throws, the exception propagates out of the <a href="#show(com.bilt.pos.widget.Rendering,com.bilt.pos.widget.ActionSink)"><code>show(com.bilt.pos.widget.Rendering, com.bilt.pos.widget.ActionSink)</code></a> that triggered it and the next
- show tries the load again.</div>
+ it throws, the next show tries the load again.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="evaluateJavascript(java.lang.String)">
 <h3>evaluateJavascript</h3>
 <div class="member-signature"><span class="modifiers">protected abstract</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">evaluateJavascript</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;script)</span></div>
-<div class="block">Runs <code>script</code> in the loaded page. Called with no lock held; may be asynchronous.</div>
+<div class="block">Runs <code>script</code> in the loaded page. Called with no lock held; may be asynchronous.
+
+ <p>If this or <a href="#loadUrl(java.lang.String)"><code>loadUrl(java.lang.String)</code></a> throws, the calls queued behind it still run and the first
+ exception is rethrown to whichever caller was sending the queue: the <a href="#show(com.bilt.pos.widget.Rendering,com.bilt.pos.widget.ActionSink)"><code>show(com.bilt.pos.widget.Rendering, com.bilt.pos.widget.ActionSink)</code></a> or <a href="#clear()"><code>clear()</code></a> that queued it, or a concurrent bridge callback, which reports it through <a href="#onBridgeError(java.lang.String,java.lang.String)"><code>onBridgeError(java.lang.String, java.lang.String)</code></a>.</div>
 </section>
 </li>
 <li>

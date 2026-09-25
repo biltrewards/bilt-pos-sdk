@@ -112,12 +112,18 @@ public abstract class WebSurface implements Surface {
 
   /**
    * Navigates the browser control to {@code url}. Called with no lock held; may be asynchronous. If
-   * it throws, the exception propagates out of the {@link #show} that triggered it and the next
-   * show tries the load again.
+   * it throws, the next show tries the load again.
    */
   protected abstract void loadUrl(String url);
 
-  /** Runs {@code script} in the loaded page. Called with no lock held; may be asynchronous. */
+  /**
+   * Runs {@code script} in the loaded page. Called with no lock held; may be asynchronous.
+   *
+   * <p>If this or {@link #loadUrl} throws, the calls queued behind it still run and the first
+   * exception is rethrown to whichever caller was sending the queue: the {@link #show} or {@link
+   * #clear} that queued it, or a concurrent bridge callback, which reports it through {@link
+   * #onBridgeError}.
+   */
   protected abstract void evaluateJavascript(String script);
 
   /**
@@ -190,24 +196,33 @@ public abstract class WebSurface implements Surface {
       }
       draining = true;
     }
+    // A failed call must not strand the ones queued behind it: their callers may already have
+    // returned, trusting this drain to deliver them. Keep going and rethrow the first failure.
+    Throwable failure = null;
     while (true) {
       Runnable call;
       synchronized (lock) {
         call = outbox.poll();
         if (call == null) {
           draining = false;
-          return;
+          break;
         }
       }
       try {
         call.run();
       } catch (RuntimeException | Error e) {
-        // Release the drain so the calls still queued go out on the next state change.
-        synchronized (lock) {
-          draining = false;
+        if (failure == null) {
+          failure = e;
+        } else {
+          failure.addSuppressed(e);
         }
-        throw e;
       }
+    }
+    if (failure instanceof Error) {
+      throw (Error) failure;
+    }
+    if (failure != null) {
+      throw (RuntimeException) failure;
     }
   }
 
