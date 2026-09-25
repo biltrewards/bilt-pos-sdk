@@ -124,7 +124,9 @@ implements <a href="AdDecisionService.html" title="interface in com.bilt.pos.med
  <p>Everything the fake sees is recorded: <a href="#snapshots(com.bilt.pos.media.service.SessionHandle)"><code>snapshots(com.bilt.pos.media.service.SessionHandle)</code></a> (registration first, then every
  update), <a href="#served(com.bilt.pos.media.service.SessionHandle)"><code>served(com.bilt.pos.media.service.SessionHandle)</code></a>, <a href="#reports(com.bilt.pos.media.service.SessionHandle)"><code>reports(com.bilt.pos.media.service.SessionHandle)</code></a>. Events reach subscribers only when a test injects
  them with <a href="#emit(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.Offer)"><code>emit(SessionHandle, Offer)</code></a> or <a href="#emit(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.AdInteraction)"><code>emit(SessionHandle, AdInteraction)</code></a>;
- delivery is synchronous on the emitting thread.
+ delivery is synchronous on the emitting thread by default, so a test can assert right after
+ <code>emit</code>, and moves to a thread of the test's choosing with <code>eventExecutor</code> to
+ exercise the service-owned callback thread the contract describes.
 
  <p>Thread-safe.</div>
 </section>
@@ -177,101 +179,107 @@ implements <a href="AdDecisionService.html" title="interface in com.bilt.pos.med
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#emit(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.AdInteraction)" class="member-name-link">emit</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
  <a href="../AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a>&nbsp;interaction)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Delivers <code>interaction</code> to every subscriber of <code>handle</code>, on the calling thread.</div>
+<div class="block">Delivers <code>interaction</code> to every subscriber of <code>handle</code> through <code>eventExecutor</code>.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#emit(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.Offer)" class="member-name-link">emit</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
  <a href="../Offer.html" title="class in com.bilt.pos.media">Offer</a>&nbsp;offer)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Delivers <code>offer</code> to every subscriber of <code>handle</code>, on the calling thread.</div>
+<div class="block">Delivers <code>offer</code> to every subscriber of <code>handle</code> through <code>eventExecutor</code>.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#failNext(java.lang.RuntimeException)" class="member-name-link">failNext</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/RuntimeException.html" title="class or interface in java.lang" class="external-link">RuntimeException</a>&nbsp;failure)</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#eventExecutor(java.util.concurrent.Executor)" class="member-name-link">eventExecutor</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;executor)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Delivers injected events through <code>executor</code> instead of on the thread calling <code>
+ emit</code>; pass a single-thread executor to stand in for the service-owned callback thread.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#failNext(java.lang.RuntimeException)" class="member-name-link">failNext</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/RuntimeException.html" title="class or interface in java.lang" class="external-link">RuntimeException</a>&nbsp;failure)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Makes the next call fail as described in the class documentation.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isOpen(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">isOpen</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isOpen(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">isOpen</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Whether <code>handle</code> was issued and has not been closed.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#latency(java.time.Duration)" class="member-name-link">latency</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Duration.html" title="class or interface in java.time" class="external-link">Duration</a>&nbsp;latency)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#latency(java.time.Duration)" class="member-name-link">latency</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Duration.html" title="class or interface in java.time" class="external-link">Duration</a>&nbsp;latency)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Delays every decision by <code>latency</code>; a latency beyond the caller's timeout is a miss.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#offerFor(java.lang.String,com.bilt.pos.media.Offer)" class="member-name-link">offerFor</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;token,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#offerFor(java.lang.String,com.bilt.pos.media.Offer)" class="member-name-link">offerFor</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;token,
  <a href="../Offer.html" title="class in com.bilt.pos.media">Offer</a>&nbsp;offer)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Registers the offer an <code>APPLY_OFFER</code> tap carrying <code>token</code> will be answered with.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onPlacement(com.bilt.pos.media.Placement,com.bilt.pos.widget.Rendering...)" class="member-name-link">onPlacement</a><wbr>(<a href="../Placement.html" title="class in com.bilt.pos.media">Placement</a>&nbsp;placement,
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onPlacement(com.bilt.pos.media.Placement,com.bilt.pos.widget.Rendering...)" class="member-name-link">onPlacement</a><wbr>(<a href="../Placement.html" title="class in com.bilt.pos.media">Placement</a>&nbsp;placement,
  <a href="../../widget/Rendering.html" title="class in com.bilt.pos.widget">Rendering</a>...&nbsp;renderings)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Serves <code>renderings</code> in rotation for <code>placement</code>; no renderings clears the script.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onPlacement(com.bilt.pos.media.Placement,java.util.function.Function)" class="member-name-link">onPlacement</a><wbr>(<a href="../Placement.html" title="class in com.bilt.pos.media">Placement</a>&nbsp;placement,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onPlacement(com.bilt.pos.media.Placement,java.util.function.Function)" class="member-name-link">onPlacement</a><wbr>(<a href="../Placement.html" title="class in com.bilt.pos.media">Placement</a>&nbsp;placement,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/Optional.html" title="class or interface in java.util" class="external-link">Optional</a>&lt;<a href="../../widget/Rendering.html" title="class in com.bilt.pos.widget">Rendering</a>&gt;&gt;&nbsp;rule)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Lets <code>rule</code> pick a rendering for <code>placement</code> from the session's latest snapshot.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#registerSession(com.bilt.pos.media.service.AdSessionSnapshot)" class="member-name-link">registerSession</a><wbr>(<a href="AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a>&nbsp;snapshot)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#registerSession(com.bilt.pos.media.service.AdSessionSnapshot)" class="member-name-link">registerSession</a><wbr>(<a href="AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a>&nbsp;snapshot)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Announces a shopper session and returns the handle every later call uses.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#report(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.AdInteraction)" class="member-name-link">report</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#report(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.AdInteraction)" class="member-name-link">report</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
  <a href="../AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a>&nbsp;interaction)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Reports one interaction for measurement.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="../AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#reports()" class="member-name-link">reports</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="../AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#reports()" class="member-name-link">reports</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Every interaction reported for any session, in order.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="../AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#reports(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">reports</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="../AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#reports(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">reports</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Every interaction reported for <code>handle</code>, in order.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="../../widget/Rendering.html" title="class in com.bilt.pos.widget">Rendering</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#served(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">served</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="../../widget/Rendering.html" title="class in com.bilt.pos.widget">Rendering</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#served(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">served</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Every rendering served to <code>handle</code>, in order.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#snapshots(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">snapshots</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#snapshots(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">snapshots</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Every snapshot seen for <code>handle</code>: the registration first, then each update, in order.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="AdEventSubscription.html" title="interface in com.bilt.pos.media.service">AdEventSubscription</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#subscribe(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.service.AdEventListener)" class="member-name-link">subscribe</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="AdEventSubscription.html" title="interface in com.bilt.pos.media.service">AdEventSubscription</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#subscribe(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.service.AdEventListener)" class="member-name-link">subscribe</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
  <a href="AdEventListener.html" title="interface in com.bilt.pos.media.service">AdEventListener</a>&nbsp;listener)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Opens the server-to-SDK event channel for <code>handle</code>: offers and interactions that
  originate outside the SDK's own renderer (a hosted page, a send-to-phone confirmation).</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/RuntimeException.html" title="class or interface in java.lang" class="external-link">RuntimeException</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#swallowedFailures()" class="member-name-link">swallowedFailures</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/RuntimeException.html" title="class or interface in java.lang" class="external-link">RuntimeException</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#swallowedFailures()" class="member-name-link">swallowedFailures</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Injected failures that <code>decide</code> or <code>validateAction</code> absorbed into a miss.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#updateSession(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.service.AdSessionSnapshot)" class="member-name-link">updateSession</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>void</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#updateSession(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.service.AdSessionSnapshot)" class="member-name-link">updateSession</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
  <a href="AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a>&nbsp;snapshot)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Replaces the service's view of the session with <code>snapshot</code>.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ActionOutcome.html" title="class in com.bilt.pos.media.service">ActionOutcome</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#validateAction(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.widget.Cta,java.lang.String)" class="member-name-link">validateAction</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ActionOutcome.html" title="class in com.bilt.pos.media.service">ActionOutcome</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#validateAction(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.widget.Cta,java.lang.String)" class="member-name-link">validateAction</a><wbr>(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
  <a href="../../widget/Cta.html" title="class in com.bilt.pos.widget">Cta</a>&nbsp;cta,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;creativeId)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Presents a tapped <code>cta</code> for <code>creativeId</code> to the platform.</div>
 </div>
 </div>
@@ -339,6 +347,14 @@ implements <a href="AdDecisionService.html" title="interface in com.bilt.pos.med
 </section>
 </li>
 <li>
+<section class="detail" id="eventExecutor(java.util.concurrent.Executor)">
+<h3>eventExecutor</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></span>&nbsp;<span class="element-name">eventExecutor</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;executor)</span></div>
+<div class="block">Delivers injected events through <code>executor</code> instead of on the thread calling <code>
+ emit</code>; pass a single-thread executor to stand in for the service-owned callback thread.</div>
+</section>
+</li>
+<li>
 <section class="detail" id="clock(java.time.Clock)">
 <h3>clock</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></span>&nbsp;<span class="element-name">clock</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Clock.html" title="class or interface in java.time" class="external-link">Clock</a>&nbsp;clock)</span></div>
@@ -399,7 +415,7 @@ implements <a href="AdDecisionService.html" title="interface in com.bilt.pos.med
 <h3>emit</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">emit</span><wbr><span class="parameters">(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
  <a href="../Offer.html" title="class in com.bilt.pos.media">Offer</a>&nbsp;offer)</span></div>
-<div class="block">Delivers <code>offer</code> to every subscriber of <code>handle</code>, on the calling thread.</div>
+<div class="block">Delivers <code>offer</code> to every subscriber of <code>handle</code> through <code>eventExecutor</code>.</div>
 </section>
 </li>
 <li>
@@ -407,7 +423,7 @@ implements <a href="AdDecisionService.html" title="interface in com.bilt.pos.med
 <h3>emit</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">emit</span><wbr><span class="parameters">(<a href="SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a>&nbsp;handle,
  <a href="../AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a>&nbsp;interaction)</span></div>
-<div class="block">Delivers <code>interaction</code> to every subscriber of <code>handle</code>, on the calling thread.</div>
+<div class="block">Delivers <code>interaction</code> to every subscriber of <code>handle</code> through <code>eventExecutor</code>.</div>
 </section>
 </li>
 <li>

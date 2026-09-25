@@ -1267,11 +1267,11 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#emit(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.AdInteraction)" class="member-name-link">emit(SessionHandle, AdInteraction)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
 <dd>
-<div class="block">Delivers <code>interaction</code> to every subscriber of <code>handle</code>, on the calling thread.</div>
+<div class="block">Delivers <code>interaction</code> to every subscriber of <code>handle</code> through <code>InMemoryAdDecisionService.eventExecutor</code>.</div>
 </dd>
 <dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#emit(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.Offer)" class="member-name-link">emit(SessionHandle, Offer)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
 <dd>
-<div class="block">Delivers <code>offer</code> to every subscriber of <code>handle</code>, on the calling thread.</div>
+<div class="block">Delivers <code>offer</code> to every subscriber of <code>handle</code> through <code>InMemoryAdDecisionService.eventExecutor</code>.</div>
 </dd>
 <dt><a href="com/bilt/pos/nexo/security/MessageEncryptor.html#encrypt(java.lang.String,com.bilt.pos.nexo.model.MessageHeader)" class="member-name-link">encrypt(String, MessageHeader)</a> - Method in class com.bilt.pos.nexo.security.<a href="com/bilt/pos/nexo/security/MessageEncryptor.html" title="class in com.bilt.pos.nexo.security">MessageEncryptor</a></dt>
 <dd>
@@ -1377,6 +1377,11 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/widget/WebSurface.html#evaluateJavascript(java.lang.String)" class="member-name-link">evaluateJavascript(String)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/WebSurface.html" title="class in com.bilt.pos.widget">WebSurface</a></dt>
 <dd>
 <div class="block">Runs <code>script</code> in the loaded page.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#eventExecutor(java.util.concurrent.Executor)" class="member-name-link">eventExecutor(Executor)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Delivers injected events through <code>executor</code> instead of on the thread calling <code>
+ emit</code>; pass a single-thread executor to stand in for the service-owned callback thread.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/ReversalFlow.html#execute()" class="member-name-link">execute()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a></dt>
 <dd>

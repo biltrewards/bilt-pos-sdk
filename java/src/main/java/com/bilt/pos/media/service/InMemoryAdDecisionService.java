@@ -31,6 +31,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -66,7 +67,9 @@ import java.util.logging.Logger;
  * <p>Everything the fake sees is recorded: {@link #snapshots} (registration first, then every
  * update), {@link #served}, {@link #reports}. Events reach subscribers only when a test injects
  * them with {@link #emit(SessionHandle, Offer)} or {@link #emit(SessionHandle, AdInteraction)};
- * delivery is synchronous on the emitting thread.
+ * delivery is synchronous on the emitting thread by default, so a test can assert right after
+ * {@code emit}, and moves to a thread of the test's choosing with {@link #eventExecutor} to
+ * exercise the service-owned callback thread the contract describes.
  *
  * <p>Thread-safe.
  */
@@ -84,6 +87,7 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
   private final AtomicInteger handleSequence = new AtomicInteger();
   private Duration latency = Duration.ZERO;
   private Clock clock = Clock.systemUTC();
+  private Executor eventExecutor = Runnable::run;
   private RuntimeException pendingFailure;
 
   private static final class Session {
@@ -162,6 +166,18 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
     return this;
   }
 
+  /**
+   * Delivers injected events through {@code executor} instead of on the thread calling {@code
+   * emit}; pass a single-thread executor to stand in for the service-owned callback thread.
+   */
+  public InMemoryAdDecisionService eventExecutor(Executor executor) {
+    Objects.requireNonNull(executor, "executor");
+    synchronized (lock) {
+      this.eventExecutor = executor;
+    }
+    return this;
+  }
+
   /** Sets the clock that rendering TTLs and offer expiries are judged against. */
   public InMemoryAdDecisionService clock(Clock clock) {
     Objects.requireNonNull(clock, "clock");
@@ -230,26 +246,34 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
 
   // ── event injection ──────────────────────────────────────────────────────────────────────────
 
-  /** Delivers {@code offer} to every subscriber of {@code handle}, on the calling thread. */
+  /**
+   * Delivers {@code offer} to every subscriber of {@code handle} through {@link #eventExecutor}.
+   */
   public void emit(SessionHandle handle, Offer offer) {
     Objects.requireNonNull(offer, "offer");
-    for (Subscription subscription : subscriptionsOf(handle)) {
-      subscription.deliver(listener -> listener.onOffer(offer));
-    }
+    emit(handle, listener -> listener.onOffer(offer));
   }
 
-  /** Delivers {@code interaction} to every subscriber of {@code handle}, on the calling thread. */
+  /**
+   * Delivers {@code interaction} to every subscriber of {@code handle} through {@link
+   * #eventExecutor}.
+   */
   public void emit(SessionHandle handle, AdInteraction interaction) {
     Objects.requireNonNull(interaction, "interaction");
-    for (Subscription subscription : subscriptionsOf(handle)) {
-      subscription.deliver(listener -> listener.onInteraction(interaction));
-    }
+    emit(handle, listener -> listener.onInteraction(interaction));
   }
 
-  private List<Subscription> subscriptionsOf(SessionHandle handle) {
+  private void emit(SessionHandle handle, Consumer<AdEventListener> callback) {
+    List<Subscription> subscriptions;
+    Executor executor;
     synchronized (lock) {
       Session session = sessions.get(handle);
-      return session == null ? Collections.emptyList() : new ArrayList<>(session.subscriptions);
+      subscriptions =
+          session == null ? Collections.emptyList() : new ArrayList<>(session.subscriptions);
+      executor = eventExecutor;
+    }
+    for (Subscription subscription : subscriptions) {
+      executor.execute(() -> subscription.deliver(callback));
     }
   }
 

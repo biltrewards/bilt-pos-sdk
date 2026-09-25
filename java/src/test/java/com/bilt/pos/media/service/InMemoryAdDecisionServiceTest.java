@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
@@ -471,6 +473,43 @@ class InMemoryAdDecisionServiceTest {
         IllegalStateException.class,
         () -> service.report(handle, AdInteraction.of("crt_1", BANNER, AdInteraction.Kind.SHOWN)));
     assertEquals(2, service.swallowedFailures().size());
+  }
+
+  @Test
+  void anEventExecutorMovesDeliveryOffTheEmittingThread() throws Exception {
+    ExecutorService callbacks = Executors.newSingleThreadExecutor(r -> new Thread(r, "ad-events"));
+    try {
+      InMemoryAdDecisionService service = new InMemoryAdDecisionService().eventExecutor(callbacks);
+      SessionHandle handle = service.registerSession(snapshot("browsing"));
+      CountDownLatch release = new CountDownLatch(1);
+      CompletableFuture<String> deliveredOn = new CompletableFuture<>();
+      service.subscribe(
+          handle,
+          new AdEventListener() {
+            @Override
+            public void onOffer(Offer offer) {
+              try {
+                release.await();
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              deliveredOn.complete(Thread.currentThread().getName());
+            }
+
+            @Override
+            public void onInteraction(AdInteraction interaction) {}
+          });
+
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(2),
+          () -> service.emit(handle, offer("crt_hosted")),
+          "a slow listener must not stall the emitter");
+      release.countDown();
+
+      assertEquals("ad-events", deliveredOn.get(5, TimeUnit.SECONDS));
+    } finally {
+      callbacks.shutdownNow();
+    }
   }
 
   @Test
