@@ -14,6 +14,7 @@ import com.bilt.pos.session.basket.BasketMutation;
 import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
 import com.bilt.pos.session.internal.BasketEngine;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.concurrent.locks.ReentrantLock;
@@ -43,17 +44,32 @@ abstract class AbstractShopperSession implements ShopperSession {
   private BasketEngine basketEngine = new BasketEngine();
   private final SessionBasket basket;
   private volatile IdentifyResult member;
+  private final DefaultSessionContext context;
 
   AbstractShopperSession(
       String saleId,
       String currency,
       String storeLocation,
       Executor callbackExecutor,
-      Consumer<SessionError> onBackgroundError) {
+      Consumer<SessionError> onBackgroundError,
+      String poiId,
+      CheckoutPhase initialPhase,
+      Map<String, String> initialAttributes) {
     this.operations = new SessionOperations(callbackExecutor, onBackgroundError);
     this.saleId = saleId;
     this.currency = currency;
     this.storeLocation = storeLocation;
+    this.context =
+        new DefaultSessionContext(
+            lock,
+            saleId,
+            currency,
+            storeLocation,
+            poiId,
+            initialPhase,
+            initialAttributes,
+            this::ended,
+            this::contextChanged);
     this.basket =
         new SessionBasket(
             new SessionBasket.Host() {
@@ -128,6 +144,21 @@ abstract class AbstractShopperSession implements ShopperSession {
 
   /** Called under the lock with every new snapshot, whether from a mutation or a clear. */
   void basketChanged(Basket snapshot) {}
+
+  // ─── Context ───
+
+  @Override
+  public SessionContext context() {
+    return context;
+  }
+
+  /**
+   * Called under the lock with a fresh snapshot after every context write that changed something,
+   * whether the POS made it or the session itself did (a terminal session's phase transitions). The
+   * {@link #basketChanged(Basket)} counterpart for the context; a no-op until a subclass routes it
+   * somewhere.
+   */
+  void contextChanged(SessionContextSnapshot snapshot) {}
 
   private Basket mutateBasket(Consumer<BasketMutation> mutation) {
     lock.lock();

@@ -34,7 +34,9 @@ import com.bilt.pos.session.storedvalue.StoredValueCard;
 import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -474,6 +476,8 @@ public interface TerminalShopperSession extends ShopperSession {
     Consumer<Basket> onBasketUpdated;
     Executor callbackExecutor;
     Consumer<SessionError> onBackgroundError;
+    CheckoutPhase phase = CheckoutPhase.SCANNING;
+    final LinkedHashMap<String, String> attributes = new LinkedHashMap<>();
 
     private Builder() {}
 
@@ -573,6 +577,32 @@ public interface TerminalShopperSession extends ShopperSession {
      */
     public Builder onBackgroundError(Consumer<SessionError> onBackgroundError) {
       this.onBackgroundError = onBackgroundError;
+      return this;
+    }
+
+    // ─── Context ───
+
+    /**
+     * The phase the session's {@link SessionContext} starts in. Default {@link
+     * CheckoutPhase#SCANNING}. The session moves it itself around settlement afterwards — see
+     * {@link CheckoutPhase}.
+     */
+    public Builder phase(CheckoutPhase phase) {
+      this.phase = Objects.requireNonNull(phase, "phase");
+      return this;
+    }
+
+    /**
+     * Pre-seeds one attribute of the session's {@link SessionContext}; repeatable. A {@code null}
+     * value removes a key seeded earlier.
+     */
+    public Builder attribute(String key, String value) {
+      Objects.requireNonNull(key, "key");
+      if (value == null) {
+        attributes.remove(key);
+      } else {
+        attributes.put(key, value);
+      }
       return this;
     }
 
