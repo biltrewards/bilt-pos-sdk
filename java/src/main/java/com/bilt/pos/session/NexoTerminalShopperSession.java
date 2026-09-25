@@ -30,6 +30,7 @@ import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
 import com.bilt.pos.nexo.model.TransactionStatusRequest;
 import com.bilt.pos.nexo.model.TransactionStatusResponse;
 import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.basket.BasketChange;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.display.DisplayRenderer;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
@@ -248,6 +249,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     }
   }
 
+  @Override
+  boolean basketConsumed() {
+    return basketConsumed;
+  }
+
   /** A cleared basket also drops the stored-value tender selected for the previous one. */
   @Override
   void basketCleared() {
@@ -256,11 +262,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   }
 
   @Override
-  void basketChanged(Basket snapshot) {
+  void basketChanged(BasketChange change) {
     if (autoDisplay) {
       // under the lock so concurrent mutations cannot enter the
       // conflated push out of snapshot order
-      autoDisplayPush.push(snapshot);
+      autoDisplayPush.push(change.current());
     }
   }
 
