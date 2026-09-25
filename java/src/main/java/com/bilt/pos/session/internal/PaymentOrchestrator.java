@@ -495,7 +495,7 @@ public final class PaymentOrchestrator {
     checkAbort(request, committed);
 
     // The working ledger starts with refund movements so recovery callbacks
-    // see the full settlement. CheckoutSession composes that prefix onto the
+    // see the full settlement. NexoTerminalShopperSession composes that prefix onto the
     // result separately, so this builder owns only the charge-side suffix.
     List<SettlementMovement> chargeSideMovements =
         movements.subList(request.priorMovements.size(), movements.size());

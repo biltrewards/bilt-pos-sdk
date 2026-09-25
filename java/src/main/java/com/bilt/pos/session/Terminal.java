@@ -22,9 +22,9 @@ import java.util.function.Supplier;
  * outside any session.
  *
  * <p>These map to SERVICE/DEVICE-class nexo messages that carry no session reference on the wire,
- * so unlike a {@link CheckoutSession} there is no bracket: {@link Builder#build() build()} sends
- * nothing, and the terminal holds no state on this object's behalf. Use it for a connectivity ping
- * before the first checkout, end-of-day reconciliation with no customer present, or a receipt
+ * so unlike a {@link TerminalShopperSession} there is no bracket: {@link Builder#build() build()}
+ * sends nothing, and the terminal holds no state on this object's behalf. Use it for a connectivity
+ * ping before the first checkout, end-of-day reconciliation with no customer present, or a receipt
  * reprint after the session that took the payment has ended.
  *
  * <p>Operations are lazy like every session operation: methods returning a {@link SessionResult}
@@ -48,8 +48,8 @@ import java.util.function.Supplier;
  * }</pre>
  *
  * <p>{@link #close()} sends nothing — there is nothing to end on the terminal — it only stops this
- * object accepting further operations. Mid-checkout, {@link CheckoutSession#terminal()} keeps these
- * operations one call away.
+ * object accepting further operations. Mid-checkout, {@link TerminalShopperSession#terminal()}
+ * keeps these operations one call away.
  */
 public final class Terminal implements AutoCloseable {
 
@@ -208,7 +208,7 @@ public final class Terminal implements AutoCloseable {
 
     /**
      * Where asynchronously executed operations deliver their handlers — see {@code
-     * CheckoutSession.Builder#callbackExecutor}. Applies to {@code execute()}; {@code
+     * TerminalShopperSession.Builder#callbackExecutor}. Applies to {@code execute()}; {@code
      * executeSync()} and the blocking accessors are unaffected.
      */
     public Builder callbackExecutor(Executor callbackExecutor) {

@@ -22,7 +22,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class CheckoutSessionStoredValueTest {
+class TerminalShopperSessionStoredValueTest {
 
   private static String storedValueOk(String type, double amount, double balance) {
     return "{\"SaleToPOIResponse\":{\"StoredValueResponse\":{"
@@ -46,15 +46,15 @@ class CheckoutSessionStoredValueTest {
       new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
   private MockWebServer server;
-  private CheckoutSession session;
+  private TerminalShopperSession session;
 
   @BeforeEach
   void setUp() throws Exception {
     server = new MockWebServer();
     server.start();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session =
-        CheckoutSession.builder()
+        TerminalShopperSession.builder()
             .client(
                 BiltNexoTerminalClient.builder()
                     .endpoint(server.url("/nexo").toString())

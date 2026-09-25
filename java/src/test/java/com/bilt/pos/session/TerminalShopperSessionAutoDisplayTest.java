@@ -29,9 +29,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /** The asynchronous, conflated auto-display push and the session-level background-error handler. */
-class CheckoutSessionAutoDisplayTest {
+class TerminalShopperSessionAutoDisplayTest {
 
-  private static final String ADMIN_OK = CheckoutSessionTest.ADMIN_OK;
+  private static final String ADMIN_OK = TerminalShopperSessionTest.ADMIN_OK;
 
   private static final String DISPLAY_OK = "{\"SaleToPOIResponse\":{\"DisplayResponse\":{}}}";
 
@@ -59,8 +59,8 @@ class CheckoutSessionAutoDisplayTest {
     server.shutdown();
   }
 
-  private CheckoutSession.Builder sessionBuilder() {
-    return CheckoutSession.builder()
+  private TerminalShopperSession.Builder sessionBuilder() {
+    return TerminalShopperSession.builder()
         .client(
             BiltNexoTerminalClient.builder()
                 .endpoint(server.url("/nexo").toString())
@@ -72,8 +72,8 @@ class CheckoutSessionAutoDisplayTest {
   }
 
   /** Starts the session and drains the session-start Admin request. */
-  private CheckoutSession start(CheckoutSession.Builder builder) throws Exception {
-    CheckoutSession session = builder.start().get();
+  private TerminalShopperSession start(TerminalShopperSession.Builder builder) throws Exception {
+    TerminalShopperSession session = builder.start().get();
     server.takeRequest(5, TimeUnit.SECONDS);
     return session;
   }
@@ -124,7 +124,7 @@ class CheckoutSessionAutoDisplayTest {
             return new MockResponse().setBody(ADMIN_OK);
           }
         });
-    CheckoutSession session = start(sessionBuilder());
+    TerminalShopperSession session = start(sessionBuilder());
 
     for (int i = 1; i <= 5; i++) {
       session
@@ -138,7 +138,7 @@ class CheckoutSessionAutoDisplayTest {
 
     List<SaleToPOIRequest> displays =
         drainRequests().stream()
-            .filter(CheckoutSessionAutoDisplayTest::isDisplay)
+            .filter(TerminalShopperSessionAutoDisplayTest::isDisplay)
             .collect(Collectors.toList());
     assertFalse(displays.isEmpty(), "the ring-up must reach the customer display");
     assertTrue(
@@ -168,7 +168,7 @@ class CheckoutSessionAutoDisplayTest {
             return new MockResponse().setBody(ADMIN_OK);
           }
         });
-    CheckoutSession session = start(sessionBuilder());
+    TerminalShopperSession session = start(sessionBuilder());
 
     CountDownLatch paid = new CountDownLatch(1);
     session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("50.00")));
@@ -218,7 +218,7 @@ class CheckoutSessionAutoDisplayTest {
             return new MockResponse().setBody(ADMIN_OK);
           }
         });
-    CheckoutSession session = start(sessionBuilder());
+    TerminalShopperSession session = start(sessionBuilder());
 
     session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("50.00")));
     assertTrue(firstPushOnTheWire.await(5, TimeUnit.SECONDS));
@@ -265,7 +265,7 @@ class CheckoutSessionAutoDisplayTest {
             return new MockResponse().setBody(ADMIN_OK);
           }
         });
-    CheckoutSession session = start(sessionBuilder());
+    TerminalShopperSession session = start(sessionBuilder());
 
     CountDownLatch ended = new CountDownLatch(1);
     session.end().onComplete(ended::countDown).execute();
@@ -284,7 +284,7 @@ class CheckoutSessionAutoDisplayTest {
 
     List<SaleToPOIRequest> requests = drainRequests();
     assertTrue(
-        requests.stream().noneMatch(CheckoutSessionAutoDisplayTest::isDisplay),
+        requests.stream().noneMatch(TerminalShopperSessionAutoDisplayTest::isDisplay),
         "a closing session must not enqueue another basket display");
   }
 
@@ -308,7 +308,7 @@ class CheckoutSessionAutoDisplayTest {
       CountDownLatch reported = new CountDownLatch(1);
       AtomicReference<SessionError> error = new AtomicReference<>();
       AtomicReference<String> deliveryThread = new AtomicReference<>();
-      CheckoutSession session =
+      TerminalShopperSession session =
           start(
               sessionBuilder()
                   .callbackExecutor(callbackExecutor)
@@ -364,7 +364,7 @@ class CheckoutSessionAutoDisplayTest {
       CountDownLatch reported = new CountDownLatch(1);
       AtomicReference<SessionError> error = new AtomicReference<>();
       AtomicReference<String> deliveryThread = new AtomicReference<>();
-      CheckoutSession session =
+      TerminalShopperSession session =
           start(
               sessionBuilder()
                   .callbackExecutor(callbackExecutor)
@@ -410,7 +410,7 @@ class CheckoutSessionAutoDisplayTest {
           }
         });
     AtomicReference<SessionError> background = new AtomicReference<>();
-    CheckoutSession session =
+    TerminalShopperSession session =
         start(sessionBuilder().autoDisplay(false).onBackgroundError(background::set));
 
     AtomicReference<SessionError> ownError = new AtomicReference<>();
@@ -454,7 +454,7 @@ class CheckoutSessionAutoDisplayTest {
             return new MockResponse().setBody(ADMIN_OK);
           }
         });
-    CheckoutSession session = start(sessionBuilder().autoDisplay(false));
+    TerminalShopperSession session = start(sessionBuilder().autoDisplay(false));
     session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("50.00")));
 
     CountDownLatch paymentSettled = new CountDownLatch(1);

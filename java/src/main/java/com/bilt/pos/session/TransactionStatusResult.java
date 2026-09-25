@@ -15,7 +15,7 @@ import com.bilt.pos.nexo.model.ReversalResponse;
 import com.bilt.pos.nexo.model.StoredValueResponse;
 
 /**
- * Outcome of {@link CheckoutSession#getTransactionStatus(String)}.
+ * Outcome of {@link TerminalShopperSession#getTransactionStatus(String)}.
  *
  * <p>When the original transaction was found ({@link #isFound()}), the terminal repeats the
  * original response; exactly one of the typed response accessors is non-null, indicated by {@link

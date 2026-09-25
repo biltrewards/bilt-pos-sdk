@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
  * session, {@code end()} tells the terminal to discard its session-scoped data and seals the
  * session.
  */
-class CheckoutSessionLifecycleTest {
+class TerminalShopperSessionLifecycleTest {
 
   private static final String ADMIN_FAILED =
       "{\"SaleToPOIResponse\":{\"AdminResponse\":{"
@@ -48,8 +48,8 @@ class CheckoutSessionLifecycleTest {
     server.shutdown();
   }
 
-  private CheckoutSession.Builder sessionBuilder() {
-    return CheckoutSession.builder()
+  private TerminalShopperSession.Builder sessionBuilder() {
+    return TerminalShopperSession.builder()
         .client(
             BiltNexoTerminalClient.builder()
                 .endpoint(server.url("/nexo").toString())
@@ -61,9 +61,9 @@ class CheckoutSessionLifecycleTest {
         .autoDisplay(false);
   }
 
-  private CheckoutSession startedSession() throws Exception {
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
-    CheckoutSession session = sessionBuilder().start().get();
+  private TerminalShopperSession startedSession() throws Exception {
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
+    TerminalShopperSession session = sessionBuilder().start().get();
     server.takeRequest(5, TimeUnit.SECONDS);
     return session;
   }
@@ -86,9 +86,9 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void startSendsSessionStartAdminSignalAndYieldsTheSession() throws Exception {
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
 
-    CheckoutSession session = sessionBuilder().start().get();
+    TerminalShopperSession session = sessionBuilder().start().get();
 
     assertNotNull(session);
 
@@ -111,12 +111,12 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void throwingStartSuccessHandlerEndsTheJustStartedSession() throws Exception {
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK)); // start
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK)); // release end
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK)); // start
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK)); // release end
 
-    java.util.concurrent.atomic.AtomicReference<CheckoutSession> delivered =
+    java.util.concurrent.atomic.AtomicReference<TerminalShopperSession> delivered =
         new java.util.concurrent.atomic.AtomicReference<>();
-    SessionResult<CheckoutSession> start =
+    SessionResult<TerminalShopperSession> start =
         sessionBuilder()
             .start()
             .onSuccess(
@@ -148,10 +148,10 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void failedReleaseEndDoesNotMaskTheHandlerFailure() throws Exception {
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK)); // start
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK)); // start
     server.enqueue(new MockResponse().setBody(ADMIN_FAILED)); // release end fails
 
-    SessionResult<CheckoutSession> start =
+    SessionResult<TerminalShopperSession> start =
         sessionBuilder()
             .start()
             .onSuccess(
@@ -178,8 +178,8 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void endSendsSessionEndAdminSignalAndSealsTheSession() throws Exception {
-    CheckoutSession session = startedSession();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    TerminalShopperSession session = startedSession();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
 
     session.end().executeSync();
 
@@ -192,16 +192,16 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void endIsAllowedAfterAnAbort() throws Exception {
-    CheckoutSession session = startedSession();
+    TerminalShopperSession session = startedSession();
     session.abort().executeSync();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session.end().executeSync();
   }
 
   @Test
   void secondEndFailsWithInvalidState() throws Exception {
-    CheckoutSession session = startedSession();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    TerminalShopperSession session = startedSession();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session.end().executeSync();
 
     SessionException e = assertThrows(SessionException.class, () -> session.end().get());
@@ -210,20 +210,20 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void failedEndKeepsTheSessionUsableForARetry() throws Exception {
-    CheckoutSession session = startedSession();
+    TerminalShopperSession session = startedSession();
     session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
 
     server.enqueue(new MockResponse().setBody(ADMIN_FAILED));
     SessionException e = assertThrows(SessionException.class, () -> session.end().get());
     assertEquals(SessionErrorCode.TERMINAL_ERROR, e.getError().getCode());
 
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session.end().executeSync();
   }
 
   @Test
   void failedForceEndStillSealsTheLocalSession() throws Exception {
-    CheckoutSession session = startedSession();
+    TerminalShopperSession session = startedSession();
     server.enqueue(new MockResponse().setBody(ADMIN_FAILED));
 
     SessionException failure =
@@ -247,7 +247,7 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void forceEndRequiresAnOperationalReason() throws Exception {
-    CheckoutSession session = startedSession();
+    TerminalShopperSession session = startedSession();
 
     assertThrows(NullPointerException.class, () -> session.forceEnd(null));
     assertThrows(IllegalArgumentException.class, () -> session.forceEnd("  \t"));
@@ -270,15 +270,15 @@ class CheckoutSessionLifecycleTest {
               endOnTheWire.countDown();
               // hold the end response until abort() has run
               abortIssued.await(5, TimeUnit.SECONDS);
-              return new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK);
+              return new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK);
             }
             if (body.contains("\"AdminRequest\"")) {
-              return new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK);
+              return new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK);
             }
             return new MockResponse(); // an AbortRequest would land here
           }
         });
-    CheckoutSession session = sessionBuilder().start().get();
+    TerminalShopperSession session = sessionBuilder().start().get();
 
     AtomicReference<SessionError> failed = new AtomicReference<>();
     Thread register = new Thread(() -> session.end().onError(failed::set).executeSync());
@@ -303,8 +303,8 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void endedSessionRejectsEveryOperation() throws Exception {
-    CheckoutSession session = startedSession();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    TerminalShopperSession session = startedSession();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session.end().executeSync();
     int requestsBefore = server.getRequestCount();
 
@@ -352,8 +352,8 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void abortAfterEndLeavesTheSessionEnded() throws Exception {
-    CheckoutSession session = startedSession();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    TerminalShopperSession session = startedSession();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session.end().executeSync();
 
     assertDoesNotThrow(() -> session.abort().executeSync());
@@ -363,10 +363,10 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void closeSendsTheEndSignal() throws Exception {
-    CheckoutSession session = startedSession();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    TerminalShopperSession session = startedSession();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
 
-    try (CheckoutSession resource = session) {}
+    try (TerminalShopperSession resource = session) {}
 
     SaleToPOIRequest sent = recordedRequest();
     assertEquals(
@@ -376,8 +376,8 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void closeAfterEndIsANoOp() throws Exception {
-    CheckoutSession session = startedSession();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    TerminalShopperSession session = startedSession();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session.end().executeSync();
     int requestsBefore = server.getRequestCount();
 
@@ -387,7 +387,7 @@ class CheckoutSessionLifecycleTest {
 
   @Test
   void closeSwallowsAFailedEnd() throws Exception {
-    CheckoutSession session = startedSession();
+    TerminalShopperSession session = startedSession();
     server.enqueue(new MockResponse().setBody(ADMIN_FAILED));
 
     assertDoesNotThrow(session::close);

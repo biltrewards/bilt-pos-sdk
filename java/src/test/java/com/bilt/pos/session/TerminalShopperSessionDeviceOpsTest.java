@@ -19,21 +19,21 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class CheckoutSessionDeviceOpsTest {
+class TerminalShopperSessionDeviceOpsTest {
 
   private final ObjectMapper mapper =
       new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
   private MockWebServer server;
-  private CheckoutSession session;
+  private TerminalShopperSession session;
 
   @BeforeEach
   void setUp() throws Exception {
     server = new MockWebServer();
     server.start();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session =
-        CheckoutSession.builder()
+        TerminalShopperSession.builder()
             .client(
                 BiltNexoTerminalClient.builder()
                     .endpoint(server.url("/nexo").toString())
@@ -132,7 +132,7 @@ class CheckoutSessionDeviceOpsTest {
   @Test
   void terminalOperationsKeepWorkingAfterEnd() throws Exception {
     Terminal terminal = session.terminal();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session.end().executeSync();
     server.takeRequest(5, TimeUnit.SECONDS); // drain the session-end Admin request
 
