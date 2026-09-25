@@ -410,7 +410,33 @@ session.basket().mutate(m -> m
     .removeItemBySku("KRK-FRAME-5X7-BLK"));
 ```
 
-After `settle()` succeeds, that basket is consumed and cannot be charged or modified again. Start another transaction inside the same session explicitly:
+### One basket, three updaters
+
+Whether the register calls `addItem` or pushes its whole cart is a choice of updater over the same basket, not a different concept. All three styles apply atomically, return the updated `Basket`, and end in exactly one `BasketChange` (the type behind the display push and any future basket observer): `previous()`, `current()`, a `source()` of `INCREMENTAL`, `BATCH`, `REPLACE` or `CLEAR`, and a line-level diff (`added`, `removed`, `quantityChanged`, `priceChanged`, `discountsChanged`, `taxChanged`, `taxTotalChanged`). A change that leaves the basket as it was is not reported, and so pushes nothing.
+
+- **Incremental** — one call per register action, as above. Each call is one change.
+- **Batched** — `mutate(m -> ...)` applies several mutations as one change, with one display update.
+- **Snapshot** — `replace(...)` for a POS that owns its own cart: push the current cart after every change and let the SDK diff it against the previous basket.
+
+```java
+// The register's cart is the source of truth; hand the whole thing over after each change.
+List<BasketItem> items = pos.cart().lines().stream()
+    .map(line -> BasketItem.builder()
+        .reference(line.id())                 // stable per line: pairs across snapshots
+        .sku(line.sku()).description(line.name())
+        .quantity(line.qty()).unitPrice(line.price())
+        .taxRate(line.taxRate())
+        .build())
+    .collect(Collectors.toList());
+Basket basket = session.basket().replace(items);
+
+// Or with a Basket the register assembled or received earlier
+session.basket().replace(snapshot);
+```
+
+`replace()` pairs snapshot lines with the current basket the way the basket keys them — by `reference` when a line has one, otherwise by SKU and item type among the unreferenced lines — and keeps the item ids of paired lines, so anything the register recorded by `itemId` stays valid; new lines get new ids. Two unreferenced lines with the same SKU and type, or two lines with the same reference, are ambiguous and rejected with `IllegalArgumentException`, leaving the basket untouched; give such lines references. Tax follows the items: `replace(List<BasketItem>)` uses each item's `taxRate`/`taxAmount` and keeps a standing `setTaxTotal()` override only when no item carries tax, while `replace(Basket)` takes the snapshot's `taxTotal` as the override only when it differs from the sum of its lines' tax amounts. Description, category and metadata are not part of the diff, so a snapshot that changes only those is treated as unchanged.
+
+After `settle()` succeeds, that basket is consumed and cannot be charged or modified again. Start another transaction inside the same session explicitly — or, for a snapshot-style register, just `replace()` the next cart: on a consumed basket `replace()` starts a fresh cart with a new cart id exactly as `clear()` does (same guards; the split-tender gift card selection is dropped), reporting every line of the new cart as added.
 
 ```java
 session.basket().clear();  // new cart ID; also clears the selected split-tender gift card

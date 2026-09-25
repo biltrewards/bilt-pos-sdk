@@ -10,10 +10,13 @@
 package com.bilt.pos.session;
 
 import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.basket.BasketChange;
+import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.basket.BasketMutation;
 import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
 import com.bilt.pos.session.internal.BasketEngine;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
@@ -28,8 +31,9 @@ import java.util.logging.Logger;
  * member, the operation machinery, and the session lock every state transition takes.
  *
  * <p>Subclasses own the lifecycle and decide when the basket may change; this class applies each
- * change atomically under the lock and hands the fresh snapshot to {@link #basketChanged(Basket)}
- * for whatever the subclass does with it (the terminal session pushes it to the customer display).
+ * change atomically under the lock and hands the resulting {@link BasketChange} to {@link
+ * #basketChanged(BasketChange)} for whatever the subclass does with it (the terminal session pushes
+ * it to the customer display).
  */
 abstract class AbstractShopperSession implements ShopperSession {
 
@@ -74,8 +78,18 @@ abstract class AbstractShopperSession implements ShopperSession {
         new SessionBasket(
             new SessionBasket.Host() {
               @Override
-              public Basket mutate(Consumer<BasketMutation> mutation) {
-                return mutateBasket(mutation);
+              public Basket mutate(Consumer<BasketMutation> mutation, BasketChange.Source source) {
+                return mutateBasket(mutation, source);
+              }
+
+              @Override
+              public Basket replace(Basket snapshot) {
+                return replaceBasket(engine -> engine.replace(snapshot));
+              }
+
+              @Override
+              public Basket replace(List<BasketItem> items) {
+                return replaceBasket(engine -> engine.replace(items));
               }
 
               @Override
@@ -137,13 +151,28 @@ abstract class AbstractShopperSession implements ShopperSession {
   abstract void requireBasketClearable();
 
   /**
+   * Whether the current basket has been consumed by a settlement, so that a {@link
+   * SessionBasket#replace(Basket)} starts a fresh basket under the {@link
+   * #requireBasketClearable()} guards instead of failing under {@link #requireBasketMutable()}.
+   * Read under the lock.
+   */
+  boolean basketConsumed() {
+    return false;
+  }
+
+  /**
    * Called under the lock once a clear has installed the fresh engine and before its snapshot is
    * published, so a subclass can reset whatever state belonged to the previous basket.
    */
   void basketCleared() {}
 
-  /** Called under the lock with every new snapshot, whether from a mutation or a clear. */
-  void basketChanged(Basket snapshot) {}
+  /**
+   * Called under the lock with every non-empty change, whatever updater produced it: an incremental
+   * mutation, a batch, a replacement, or a clear. An updater that leaves the basket as it was (a
+   * {@code replace} with an identical snapshot, a {@code clear} of an empty basket) is not
+   * reported.
+   */
+  void basketChanged(BasketChange change) {}
 
   // ─── Context ───
 
@@ -155,20 +184,42 @@ abstract class AbstractShopperSession implements ShopperSession {
   /**
    * Called under the lock with a fresh snapshot after every context write that changed something,
    * whether the POS made it or the session itself did (a terminal session's phase transitions). The
-   * {@link #basketChanged(Basket)} counterpart for the context; a no-op until a subclass routes it
+   * {@link #basketChanged(BasketChange)} counterpart for the context; a no-op until a subclass routes it
    * somewhere.
    */
   void contextChanged(SessionContextSnapshot snapshot) {}
 
-  private Basket mutateBasket(Consumer<BasketMutation> mutation) {
+  private Basket mutateBasket(Consumer<BasketMutation> mutation, BasketChange.Source source) {
     lock.lock();
     try {
       requireBasketMutable();
+      Basket previous = basketEngine.snapshot();
       // Atomic: a mutation (or batch) that throws restores the basket.
       basketEngine.mutateAtomically(mutation);
-      Basket snapshot = basketEngine.snapshot();
-      basketChanged(snapshot);
-      return snapshot;
+      return publishBasketChange(previous, source);
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private Basket replaceBasket(Consumer<BasketEngine> replacement) {
+    lock.lock();
+    try {
+      Basket previous = basketEngine.snapshot();
+      if (basketConsumed()) {
+        // a settled basket is gone for editing purposes; a whole new
+        // snapshot is the next cart, so this is clear() plus install,
+        // validated before anything is swapped in
+        requireBasketClearable();
+        BasketEngine fresh = new BasketEngine();
+        replacement.accept(fresh);
+        basketEngine = fresh;
+        basketCleared();
+      } else {
+        requireBasketMutable();
+        replacement.accept(basketEngine);
+      }
+      return publishBasketChange(previous, BasketChange.Source.REPLACE);
     } finally {
       lock.unlock();
     }
@@ -178,14 +229,22 @@ abstract class AbstractShopperSession implements ShopperSession {
     lock.lock();
     try {
       requireBasketClearable();
+      Basket previous = basketEngine.snapshot();
       basketEngine = new BasketEngine();
       basketCleared();
-      Basket snapshot = basketEngine.snapshot();
-      basketChanged(snapshot);
-      return snapshot;
+      return publishBasketChange(previous, BasketChange.Source.CLEAR);
     } finally {
       lock.unlock();
     }
+  }
+
+  private Basket publishBasketChange(Basket previous, BasketChange.Source source) {
+    Basket current = basketEngine.snapshot();
+    BasketChange change = BasketChange.between(previous, current, source);
+    if (!change.isEmpty()) {
+      basketChanged(change);
+    }
+    return current;
   }
 
   // ─── Member ───
