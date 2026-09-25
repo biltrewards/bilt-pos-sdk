@@ -474,6 +474,30 @@ class InMemoryAdDecisionServiceTest {
   }
 
   @Test
+  void aSubscriptionClosedMidEmitReceivesNothingFurther() {
+    InMemoryAdDecisionService service = new InMemoryAdDecisionService();
+    SessionHandle handle = service.registerSession(snapshot("browsing"));
+    RecordingListener late = new RecordingListener();
+    AdEventSubscription[] lateSubscription = new AdEventSubscription[1];
+    service.subscribe(
+        handle,
+        new AdEventListener() {
+          @Override
+          public void onOffer(Offer offer) {
+            lateSubscription[0].close();
+          }
+
+          @Override
+          public void onInteraction(AdInteraction interaction) {}
+        });
+    lateSubscription[0] = service.subscribe(handle, late);
+
+    service.emit(handle, offer("crt_hosted"));
+
+    assertTrue(late.offers.isEmpty(), "closed after emit copied the list, before its delivery");
+  }
+
+  @Test
   void deliversInjectedEventsToSubscribersAndStopsAfterClose() {
     InMemoryAdDecisionService service = new InMemoryAdDecisionService();
     SessionHandle handle = service.registerSession(snapshot("browsing"));

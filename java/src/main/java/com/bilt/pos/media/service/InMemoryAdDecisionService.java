@@ -32,6 +32,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -93,7 +94,7 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
     final Map<String, Action> actionByToken = new HashMap<>();
     final Map<String, Instant> expiryByToken = new HashMap<>();
     final Set<String> usedTokens = new HashSet<>();
-    final List<AdEventListener> listeners = new CopyOnWriteArrayList<>();
+    final List<Subscription> subscriptions = new CopyOnWriteArrayList<>();
 
     AdSessionSnapshot latest() {
       return snapshots.get(snapshots.size() - 1);
@@ -232,31 +233,56 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
   /** Delivers {@code offer} to every subscriber of {@code handle}, on the calling thread. */
   public void emit(SessionHandle handle, Offer offer) {
     Objects.requireNonNull(offer, "offer");
-    for (AdEventListener listener : listenersOf(handle)) {
-      deliver(listener, () -> listener.onOffer(offer));
+    for (Subscription subscription : subscriptionsOf(handle)) {
+      subscription.deliver(listener -> listener.onOffer(offer));
     }
   }
 
   /** Delivers {@code interaction} to every subscriber of {@code handle}, on the calling thread. */
   public void emit(SessionHandle handle, AdInteraction interaction) {
     Objects.requireNonNull(interaction, "interaction");
-    for (AdEventListener listener : listenersOf(handle)) {
-      deliver(listener, () -> listener.onInteraction(interaction));
+    for (Subscription subscription : subscriptionsOf(handle)) {
+      subscription.deliver(listener -> listener.onInteraction(interaction));
     }
   }
 
-  private List<AdEventListener> listenersOf(SessionHandle handle) {
+  private List<Subscription> subscriptionsOf(SessionHandle handle) {
     synchronized (lock) {
       Session session = sessions.get(handle);
-      return session == null ? Collections.emptyList() : new ArrayList<>(session.listeners);
+      return session == null ? Collections.emptyList() : new ArrayList<>(session.subscriptions);
     }
   }
 
-  private static void deliver(AdEventListener listener, Runnable callback) {
-    try {
-      callback.run();
-    } catch (RuntimeException e) {
-      LOGGER.log(Level.WARNING, "AdEventListener " + listener + " threw; event dropped", e);
+  /**
+   * One listener registration. The closed check and the callback share the subscription's monitor,
+   * so an {@code emit} that copied the list before {@link #close()} cannot start a callback after
+   * {@code close()} returns; {@code close()} from another thread waits out a callback in flight.
+   */
+  private static final class Subscription implements AdEventSubscription {
+    private final Session session;
+    private final AdEventListener listener;
+    private boolean closed;
+
+    Subscription(Session session, AdEventListener listener) {
+      this.session = session;
+      this.listener = listener;
+    }
+
+    synchronized void deliver(Consumer<AdEventListener> callback) {
+      if (closed) {
+        return;
+      }
+      try {
+        callback.accept(listener);
+      } catch (RuntimeException e) {
+        LOGGER.log(Level.WARNING, "AdEventListener " + listener + " threw; event dropped", e);
+      }
+    }
+
+    @Override
+    public synchronized void close() {
+      closed = true;
+      session.subscriptions.remove(this);
     }
   }
 
@@ -388,21 +414,23 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
   @Override
   public AdEventSubscription subscribe(SessionHandle handle, AdEventListener listener) {
     Objects.requireNonNull(listener, "listener");
-    Session session;
     synchronized (lock) {
-      session = requireSession(handle);
-      session.listeners.add(listener);
+      Session session = requireSession(handle);
+      Subscription subscription = new Subscription(session, listener);
+      session.subscriptions.add(subscription);
+      return subscription;
     }
-    return () -> session.listeners.remove(listener);
   }
 
   @Override
   public void closeSession(SessionHandle handle) {
+    Session session;
     synchronized (lock) {
-      Session session = sessions.remove(handle);
-      if (session != null) {
-        session.listeners.clear();
-      }
+      session = sessions.remove(handle);
+    }
+    // Outside the lock: close() may wait on a callback that is itself calling into this service.
+    if (session != null) {
+      session.subscriptions.forEach(Subscription::close);
     }
   }
 
