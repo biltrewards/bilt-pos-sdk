@@ -35,6 +35,7 @@ val publicApiJavadoc =
             "com/bilt/pos/session/**",
             "com/bilt/pos/nexo/client/**",
             "com/bilt/pos/nexo/security/**",
+            "com/bilt/pos/platform/**",
             "com/bilt/pos/display/**",
             "com/bilt/pos/receipt/**",
         )
