@@ -12,6 +12,7 @@ package com.bilt.pos.platform;
 import java.io.IOException;
 import java.time.Duration;
 import okhttp3.Authenticator;
+import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -26,6 +27,11 @@ import okhttp3.Route;
  * the response. It must be installed on a client that the token source does not itself use, or the
  * token request would recurse into it.
  *
+ * <p>A token is only ever attached to a URL {@linkplain #isWithin within} the API base: same
+ * scheme, host and port, and a path beneath the base path. A call that has been redirected
+ * elsewhere keeps no credentials, and a {@code 401} from such a host is not answered with a fresh
+ * token.
+ *
  * <p>OkHttp only lets these hooks throw {@link IOException}, so a token failure travels as a {@link
  * TokenUnavailableException} and is unwrapped into its {@link PlatformException} by the caller.
  */
@@ -34,9 +40,23 @@ final class BearerTokenAuth implements Interceptor, Authenticator {
   private static final String BEARER_PREFIX = "Bearer ";
 
   private final ClientCredentialsTokenSource tokenSource;
+  private final HttpUrl apiBase;
 
-  BearerTokenAuth(ClientCredentialsTokenSource tokenSource) {
+  /** {@code apiBase} must end in a slash, so that its path is a whole-segment prefix. */
+  BearerTokenAuth(ClientCredentialsTokenSource tokenSource, HttpUrl apiBase) {
     this.tokenSource = tokenSource;
+    this.apiBase = apiBase;
+  }
+
+  /**
+   * Whether {@code url} addresses the API behind {@code apiBase}. OkHttp has already normalised
+   * {@code url}, so dot segments, percent-encoded dots and backslashes cannot hide an escape.
+   */
+  static boolean isWithin(HttpUrl apiBase, HttpUrl url) {
+    return url.scheme().equals(apiBase.scheme())
+        && url.host().equals(apiBase.host())
+        && url.port() == apiBase.port()
+        && url.encodedPath().startsWith(apiBase.encodedPath());
   }
 
   /** Tags a request with the longest it may wait for a token; untagged requests wait as needed. */
@@ -51,6 +71,9 @@ final class BearerTokenAuth implements Interceptor, Authenticator {
   @Override
   public Response intercept(Chain chain) throws IOException {
     Request request = chain.request();
+    if (!isWithin(apiBase, request.url())) {
+      return chain.proceed(request);
+    }
     return chain.proceed(withToken(request, accessToken(request)));
   }
 
@@ -62,6 +85,9 @@ final class BearerTokenAuth implements Interceptor, Authenticator {
       }
     }
     Request request = response.request();
+    if (!isWithin(apiBase, request.url())) {
+      return null;
+    }
     String used = request.header("Authorization");
     if (used != null && used.startsWith(BEARER_PREFIX)) {
       tokenSource.invalidate(used.substring(BEARER_PREFIX.length()));

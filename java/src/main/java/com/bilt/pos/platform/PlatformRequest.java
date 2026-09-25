@@ -29,7 +29,9 @@ import java.util.Objects;
  * and a path of {@code v1/members:resolve} address {@code
  * https://api.example/gateway/v1/members:resolve}. A leading slash on the path is ignored rather
  * than treated as absolute, which keeps a base path prefix intact. Query strings may be included in
- * the path.
+ * the path. A path that would leave the API base, such as an absolute URL or one climbing out of
+ * the base path with {@code ..}, is refused when the request is sent, before any credentials are
+ * attached.
  */
 public final class PlatformRequest {
 

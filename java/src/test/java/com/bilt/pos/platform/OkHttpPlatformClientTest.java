@@ -410,6 +410,62 @@ class OkHttpPlatformClientTest {
   }
 
   @Test
+  void pathsThatLeaveTheApiBaseAreRefusedBeforeAnyTokenIsFetched() throws Exception {
+    client = newClient(Duration.ofSeconds(60));
+
+    for (String path :
+        List.of(
+            "https://elsewhere.example/steal",
+            "\\\\elsewhere.example/steal",
+            "../outside",
+            "v1/../../outside",
+            "%2e%2e/outside")) {
+      PlatformException e =
+          assertThrows(
+              PlatformException.class,
+              () -> client.execute(PlatformRequest.get(path).build()),
+              path);
+      assertFalse(e instanceof PlatformAuthException, path);
+    }
+    assertEquals(0, server.getRequestCount());
+  }
+
+  @Test
+  void dotSegmentsThatStayWithinTheApiBaseAreSent() throws Exception {
+    server.enqueue(tokenResponse("tok-1", 3600));
+    server.enqueue(new MockResponse().setResponseCode(200));
+    client = newClient(Duration.ofSeconds(60));
+
+    client.execute(PlatformRequest.get("v1/../v2/a").build());
+
+    server.takeRequest();
+    RecordedRequest api = server.takeRequest();
+    assertEquals("/gateway/v2/a", api.getPath());
+    assertEquals("Bearer tok-1", api.getHeader("Authorization"));
+  }
+
+  @Test
+  void redirectToAnotherHostCarriesNoTokenAndItsUnauthorizedIsNotAnswered() throws Exception {
+    try (MockWebServer elsewhere = new MockWebServer()) {
+      elsewhere.enqueue(new MockResponse().setResponseCode(401));
+      elsewhere.start();
+      server.enqueue(tokenResponse("tok-1", 3600));
+      server.enqueue(
+          new MockResponse()
+              .setResponseCode(302)
+              .setHeader("Location", elsewhere.url("/landing").toString()));
+      client = newClient(Duration.ofSeconds(60));
+
+      PlatformResponse response = client.execute(PlatformRequest.get("v1/a").build());
+
+      assertEquals(401, response.status());
+      assertEquals(1, elsewhere.getRequestCount());
+      assertNull(elsewhere.takeRequest().getHeader("Authorization"));
+      assertEquals(2, server.getRequestCount(), "no second token was fetched for the other host");
+    }
+  }
+
+  @Test
   void builderRequiresCredentialsAndEnvironment() {
     assertThrows(
         IllegalStateException.class,

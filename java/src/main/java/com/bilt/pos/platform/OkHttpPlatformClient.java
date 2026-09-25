@@ -95,7 +95,7 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
             userAgent,
             builder.refreshSkew,
             builder.clock);
-    BearerTokenAuth auth = new BearerTokenAuth(tokenSource);
+    BearerTokenAuth auth = new BearerTokenAuth(tokenSource, apiBase);
     OkHttpClient.Builder apiClientBuilder = httpClient.newBuilder().authenticator(auth);
     // First, so the caller's own interceptors see API calls as they are sent.
     apiClientBuilder.interceptors().add(0, auth);
@@ -173,6 +173,9 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
     HttpUrl url = apiBase.resolve(request.path());
     if (url == null) {
       throw new PlatformException("Request path cannot be resolved: " + request.path());
+    }
+    if (!BearerTokenAuth.isWithin(apiBase, url)) {
+      throw new PlatformException("Request path resolves outside the API base: " + request.path());
     }
     Request.Builder httpRequest = new Request.Builder().url(url);
     boolean userAgentSet = false;
