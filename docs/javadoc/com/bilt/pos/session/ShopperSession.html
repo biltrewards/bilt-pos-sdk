@@ -228,6 +228,17 @@ extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/ja
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
 <div class="block">Attaches the member for this visit, or clears it with <code>null</code> (signed out).</div>
 </div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code>&lt;W extends <a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&gt;<br>W</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#widget(java.lang.Class)" class="member-name-link">widget</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Class.html" title="class or interface in java.lang" class="external-link">Class</a>&lt;W&gt;&nbsp;type)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
+<div class="block">The registered widget of the given type — the runtime handle for pausing, resuming or otherwise
+ driving a widget configured with <code>widget(..)</code> on the builder, e.g.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#widgets()" class="member-name-link">widgets</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
+<div class="block">Every registered widget, in registration order; empty for a session without widgets.</div>
+</div>
 </div>
 </div>
 </div>
@@ -340,6 +351,28 @@ extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/ja
 <div class="member-signature"><span class="return-type"><a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a></span>&nbsp;<span class="element-name">member</span>()</div>
 <div class="block">The member attached to this visit, resolved or pending resolution, or <code>null</code> when none
  is. A terminal session's identification prompt attaches the member it finds here too.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="widget(java.lang.Class)">
+<h3>widget</h3>
+<div class="member-signature"><span class="type-parameters">&lt;W extends <a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&gt;</span>&nbsp;<span class="return-type">W</span>&nbsp;<span class="element-name">widget</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Class.html" title="class or interface in java.lang" class="external-link">Class</a>&lt;W&gt;&nbsp;type)</span></div>
+<div class="block">The registered widget of the given type — the runtime handle for pausing, resuming or otherwise
+ driving a widget configured with <code>widget(..)</code> on the builder, e.g. <code>
+ session.widget(RetailMedia.class).pause()</code>. Matches by assignability, so a widget interface
+ works as well as a class.
+
+ <p>A missing widget is a programming error — the set of widgets is fixed on the builder, so
+ asking for one that was never registered means the builder and this call disagree — and throws
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link"><code>IllegalArgumentException</code></a> rather than returning <code>null</code>. Two registered widgets of
+ the type are ambiguous and throw too; pick one from <a href="#widgets()"><code>widgets()</code></a> instead.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="widgets()">
+<h3>widgets</h3>
+<div class="member-signature"><span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&gt;</span>&nbsp;<span class="element-name">widgets</span>()</div>
+<div class="block">Every registered widget, in registration order; empty for a session without widgets.</div>
 </section>
 </li>
 <li>
