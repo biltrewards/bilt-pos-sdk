@@ -2,6 +2,7 @@ package com.bilt.pos.session;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.bilt.pos.platform.BiltEnvironment;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketChange;
 import com.bilt.pos.session.basket.BasketChange.Source;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -28,6 +30,8 @@ class SessionBasketTest {
     boolean consumed;
     int cleared;
 
+    private final SessionMember memberState;
+
     RecordingSession() {
       super(
           "POS-LANE-3",
@@ -37,11 +41,14 @@ class SessionBasketTest {
           null,
           null,
           CheckoutPhase.SCANNING,
-          Collections.emptyMap());
+          Map.of(),
+          List.of(),
+          null,
+          BiltEnvironment.PRODUCTION);
+      memberState =
+          new SessionMember(
+              lock, operations, MemberResolver.NONE, this::ended, null, this::memberChanged, null);
     }
-
-    private final SessionMember memberState =
-        new SessionMember(lock, operations, MemberResolver.NONE, this::ended, null, null);
 
     @Override
     SessionMember memberState() {
