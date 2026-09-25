@@ -44,6 +44,9 @@ public enum SessionErrorCode {
   /** The operation is not valid in the session's current state. */
   INVALID_STATE,
 
+  /** The session type or terminal does not support what was asked of it. */
+  UNSUPPORTED,
+
   /** The terminal reported a device or service error. */
   TERMINAL_ERROR,
 
