@@ -125,8 +125,8 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
   }
 
   /**
-   * Called before each step; returns the {@code SaleTransactionID} to use. Default: a fresh UUID
-   * per step.
+   * Called before each step; returns the {@code SaleTransactionID} to use for that step. Default:
+   * the basket's shared sale transaction ID, carried by every checkout request of that basket.
    */
   public SettlementFlow beforeStep(Function<SettlementContext, String> handler) {
     return register(() -> this.beforeStepHandler = requireHandler(handler));

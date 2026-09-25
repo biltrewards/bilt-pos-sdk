@@ -61,20 +61,11 @@ public final class StoredValueManager {
       StoredValueCard card,
       BigDecimal amount,
       String originalPoiTxnId,
-      Instant originalPoiTimestamp) {
-    return operation(type, card, amount, originalPoiTxnId, originalPoiTimestamp, null);
-  }
-
-  public StoredValueOperationResult operation(
-      StoredValueTransactionTypeEnum type,
-      StoredValueCard card,
-      BigDecimal amount,
-      String originalPoiTxnId,
       Instant originalPoiTimestamp,
-      String saleTransactionId) {
+      TransactionIdentificationType saleTransaction) {
     SaleToPOIRequest request =
         operationRequest(
-            type, card, amount, originalPoiTxnId, originalPoiTimestamp, saleTransactionId);
+            type, card, amount, originalPoiTxnId, originalPoiTimestamp, saleTransaction);
     SaleToPOIResponse response =
         exchange.sendExpectingBody(MessageCategoryType.STORED_VALUE, request);
     return operationResult(type, amount, response);
@@ -87,7 +78,7 @@ public final class StoredValueManager {
       BigDecimal amount,
       String originalPoiTxnId,
       Instant originalPoiTimestamp,
-      String saleTransactionId) {
+      TransactionIdentificationType saleTransaction) {
     StoredValueData.Builder data =
         StoredValueData.builder()
             .storedValueTransactionType(type)
@@ -107,10 +98,7 @@ public final class StoredValueManager {
             exchange.factory().header(MessageClassType.SERVICE, MessageCategoryType.STORED_VALUE))
         .storedValueRequest(
             StoredValueRequest.builder()
-                .saleData(
-                    saleTransactionId == null || saleTransactionId.isEmpty()
-                        ? exchange.factory().saleData()
-                        : exchange.factory().saleData(saleTransactionId))
+                .saleData(exchange.factory().saleData(saleTransaction))
                 .storedValueData(new StoredValueData[] {data.build()})
                 .build())
         .build();

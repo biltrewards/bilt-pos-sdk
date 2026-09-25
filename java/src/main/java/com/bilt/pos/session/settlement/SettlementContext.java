@@ -9,13 +9,14 @@
  */
 package com.bilt.pos.session.settlement;
 
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.basket.Basket;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.Function;
 
 /** Context handed to the {@code beforeStep} handler before each payment step. */
@@ -44,25 +45,38 @@ public final class SettlementContext {
 
   /**
    * Resolves the {@code SaleTransactionID} for a settlement step using the same contract as {@code
-   * SettlementFlow.beforeStep}: generate a fresh default ID, call the handler when one is
-   * registered, and fall back to the default when the handler returns {@code null} or an empty
-   * string.
+   * SettlementFlow.beforeStep}: the basket's own sale transaction is the default — every step,
+   * retry, and reversal of one checkout shares it — the handler is called when registered, and an
+   * override returning a different ID is stamped with the send time. The basket's transaction —
+   * including its timestamp — is kept unchanged when the handler returns {@code null}, an empty
+   * string, or the default ID itself, since nexo treats ID and timestamp as one identity.
    */
-  public static String resolveSaleTransactionId(
+  public static TransactionIdentificationType resolveSaleTransactionId(
       SettlementStep step,
       Basket currentBasket,
       BigDecimal currentTotal,
       List<CommittedStep> priorSteps,
       Function<SettlementContext, String> handler) {
-    String defaultTransactionId = UUID.randomUUID().toString();
+    TransactionIdentificationType defaultTransaction = currentBasket.getSaleTransactionID();
     if (handler == null) {
-      return defaultTransactionId;
+      return defaultTransaction;
     }
     String transactionId =
         handler.apply(
             new SettlementContext(
-                step, currentBasket, currentTotal, defaultTransactionId, priorSteps));
-    return transactionId != null && !transactionId.isEmpty() ? transactionId : defaultTransactionId;
+                step,
+                currentBasket,
+                currentTotal,
+                defaultTransaction.getTransactionID(),
+                priorSteps));
+    return transactionId == null
+            || transactionId.isEmpty()
+            || transactionId.equals(defaultTransaction.getTransactionID())
+        ? defaultTransaction
+        : TransactionIdentificationType.builder()
+            .transactionID(transactionId)
+            .timeStamp(Instant.now().toString())
+            .build();
   }
 
   /** The step about to run. */

@@ -29,6 +29,7 @@ import com.bilt.pos.nexo.model.SaleItem;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.RefundResult;
 import com.bilt.pos.session.ReversalDecision;
 import com.bilt.pos.session.ReversalStep;
@@ -130,32 +131,7 @@ public final class ReversalManager {
       String awardPoiTxnId,
       Instant awardPoiTimestamp,
       String memberId,
-      StepDecider decider,
-      Runnable onRefunded,
-      Runnable onAwardReversed) {
-    return refund(
-        amount,
-        saleItems,
-        originalPoiTxnId,
-        originalPoiTimestamp,
-        awardPoiTxnId,
-        awardPoiTimestamp,
-        memberId,
-        null,
-        decider,
-        onRefunded,
-        onAwardReversed);
-  }
-
-  public RefundResult refund(
-      BigDecimal amount,
-      List<SaleItem> saleItems,
-      String originalPoiTxnId,
-      Instant originalPoiTimestamp,
-      String awardPoiTxnId,
-      Instant awardPoiTimestamp,
-      String memberId,
-      String saleTransactionId,
+      TransactionIdentificationType saleTransaction,
       StepDecider decider,
       Runnable onRefunded,
       Runnable onAwardReversed) {
@@ -169,7 +145,7 @@ public final class ReversalManager {
             effective,
             () ->
                 sendRefund(
-                    amount, saleItems, originalPoiTxnId, originalPoiTimestamp, saleTransactionId),
+                    amount, saleItems, originalPoiTxnId, originalPoiTimestamp, saleTransaction),
             e -> {
               lastFailure[0] = e;
               LOGGER.warning(
@@ -195,7 +171,7 @@ public final class ReversalManager {
                       awardPoiTxnId,
                       awardPoiTimestamp,
                       memberId,
-                      null),
+                      saleTransaction),
               e -> {
                 lastFailure[0] = e;
                 LOGGER.warning(
@@ -253,16 +229,8 @@ public final class ReversalManager {
       BigDecimal amount,
       List<SaleItem> saleItems,
       String originalPoiTxnId,
-      Instant originalPoiTimestamp) {
-    return sendRefund(amount, saleItems, originalPoiTxnId, originalPoiTimestamp, null);
-  }
-
-  private PaymentResponse sendRefund(
-      BigDecimal amount,
-      List<SaleItem> saleItems,
-      String originalPoiTxnId,
       Instant originalPoiTimestamp,
-      String saleTransactionId) {
+      TransactionIdentificationType saleTransaction) {
     AmountsReq.Builder amounts = AmountsReq.builder().currency(currency);
     if (amount != null) {
       amounts.requestedAmount(amount.doubleValue());
@@ -282,10 +250,7 @@ public final class ReversalManager {
                 exchange.factory().header(MessageClassType.SERVICE, MessageCategoryType.PAYMENT))
             .paymentRequest(
                 PaymentRequest.builder()
-                    .saleData(
-                        saleTransactionId == null || saleTransactionId.isEmpty()
-                            ? exchange.factory().saleData()
-                            : exchange.factory().saleData(saleTransactionId))
+                    .saleData(exchange.factory().saleData(saleTransaction))
                     .paymentData(PaymentData.builder().paymentType(PaymentTypeEnum.REFUND).build())
                     .paymentTransaction(transaction.build())
                     .build())
@@ -306,14 +271,14 @@ public final class ReversalManager {
       String originalPoiTxnId,
       Instant originalPoiTimestamp,
       String memberId,
-      String saleTransactionId) {
+      TransactionIdentificationType saleTransaction) {
     LoyaltyTransactionTypeEnum refundType = LOYALTY_REFUND_TYPES.get(step);
     if (refundType == null || isMoneyLeg(step)) {
       throw new IllegalArgumentException(step + " is not a loyalty refund movement");
     }
     LoyaltyResponse body =
         loyaltyRefund(
-            refundType, originalPoiTxnId, originalPoiTimestamp, memberId, saleTransactionId);
+            refundType, originalPoiTxnId, originalPoiTimestamp, memberId, saleTransaction);
     LoyaltyReversal reversal = parseReversal(body);
     return VoidResult.builder()
         .success(true)
@@ -350,6 +315,7 @@ public final class ReversalManager {
   public VoidResult voidMovements(
       List<ReversalMovement> movements,
       String memberId,
+      TransactionIdentificationType saleTransaction,
       StepDecider decider,
       Set<ReversalMovement.Key> reversedMovements) {
     StepDecider effective =
@@ -382,7 +348,7 @@ public final class ReversalManager {
               movement.getStep(),
               progressAware,
               () -> {
-                execute(movement, memberId, money, loyalty, storedValueLoads);
+                execute(movement, memberId, saleTransaction, money, loyalty, storedValueLoads);
                 return true;
               },
               e -> {
@@ -459,6 +425,7 @@ public final class ReversalManager {
   private void execute(
       ReversalMovement movement,
       String memberId,
+      TransactionIdentificationType saleTransaction,
       Map<ReversalStep, ReversalResponse> money,
       Map<ReversalStep, LoyaltyResponse> loyalty,
       List<StoredValueOperationResult> storedValueLoads) {
@@ -470,11 +437,14 @@ public final class ReversalManager {
               null,
               null,
               movement.poiTransactionId,
-              movement.poiTransactionTimestamp));
+              movement.poiTransactionTimestamp,
+              saleTransaction));
       return;
     }
     if (isMoneyLeg(step)) {
-      money.put(step, reverse(movement.poiTransactionId, movement.poiTransactionTimestamp));
+      money.put(
+          step,
+          reverse(movement.poiTransactionId, movement.poiTransactionTimestamp, saleTransaction));
       return;
     }
     LoyaltyTransactionTypeEnum refundType = LOYALTY_REFUND_TYPES.get(step);
@@ -488,7 +458,7 @@ public final class ReversalManager {
             movement.poiTransactionId,
             movement.poiTransactionTimestamp,
             memberId,
-            null));
+            saleTransaction));
   }
 
   private static VoidResult buildVoidResult(
@@ -663,16 +633,8 @@ public final class ReversalManager {
       LoyaltyTransactionTypeEnum refundType,
       String originalPoiTxnId,
       Instant originalPoiTimestamp,
-      String memberId) {
-    return loyaltyRefund(refundType, originalPoiTxnId, originalPoiTimestamp, memberId, null);
-  }
-
-  private LoyaltyResponse loyaltyRefund(
-      LoyaltyTransactionTypeEnum refundType,
-      String originalPoiTxnId,
-      Instant originalPoiTimestamp,
       String memberId,
-      String saleTransactionId) {
+      TransactionIdentificationType saleTransaction) {
     SaleToPOIRequest request =
         exchange
             .factory()
@@ -680,7 +642,7 @@ public final class ReversalManager {
                 refundType,
                 Wire.originalTransaction(originalPoiTxnId, originalPoiTimestamp),
                 memberId,
-                saleTransactionId);
+                saleTransaction);
     SaleToPOIResponse response = exchange.sendExpectingBody(MessageCategoryType.LOYALTY, request);
     LoyaltyResponse body = response.getLoyaltyResponse();
     if (body == null) {
@@ -690,11 +652,15 @@ public final class ReversalManager {
     return body;
   }
 
-  private ReversalResponse reverse(String originalPoiTxnId, Instant originalPoiTimestamp) {
+  private ReversalResponse reverse(
+      String originalPoiTxnId,
+      Instant originalPoiTimestamp,
+      TransactionIdentificationType saleTransaction) {
     SaleToPOIRequest request =
         exchange
             .factory()
-            .reversalRequest(Wire.originalTransaction(originalPoiTxnId, originalPoiTimestamp));
+            .reversalRequest(
+                Wire.originalTransaction(originalPoiTxnId, originalPoiTimestamp), saleTransaction);
     SaleToPOIResponse response = exchange.sendExpectingBody(MessageCategoryType.REVERSAL, request);
     ReversalResponse body = response.getReversalResponse();
     if (body == null) {

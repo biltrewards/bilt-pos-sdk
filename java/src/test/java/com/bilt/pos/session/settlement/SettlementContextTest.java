@@ -2,10 +2,10 @@ package com.bilt.pos.session.settlement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.basket.Basket;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -21,19 +21,20 @@ class SettlementContextTest {
 
   @Test
   void resolveSaleTransactionIdUsesGeneratedDefaultWithoutHandler() {
-    String id =
+    TransactionIdentificationType id =
         SettlementContext.resolveSaleTransactionId(
             SettlementStep.CARD_CHARGE, BASKET, new BigDecimal("10.00"), List.of(), null);
 
-    assertNotNull(id);
-    assertFalse(id.isEmpty());
+    assertNotNull(id.getTransactionID());
+    assertFalse(id.getTransactionID().isEmpty());
+    assertNotNull(id.getTimeStamp());
   }
 
   @Test
   void resolveSaleTransactionIdFallsBackWhenHandlerReturnsNothing() {
     AtomicReference<String> defaultId = new AtomicReference<>();
 
-    String nullResult =
+    TransactionIdentificationType nullResult =
         SettlementContext.resolveSaleTransactionId(
             SettlementStep.CARD_CHARGE,
             BASKET,
@@ -43,13 +44,28 @@ class SettlementContextTest {
               defaultId.set(ctx.getDefaultTransactionId());
               return null;
             });
-    assertEquals(defaultId.get(), nullResult);
+    assertEquals(defaultId.get(), nullResult.getTransactionID());
 
-    String emptyResult =
+    TransactionIdentificationType emptyResult =
         SettlementContext.resolveSaleTransactionId(
             SettlementStep.CARD_CHARGE, BASKET, new BigDecimal("10.00"), List.of(), ctx -> "");
-    assertFalse(emptyResult.isEmpty());
-    assertNotEquals(nullResult, emptyResult);
+    assertFalse(emptyResult.getTransactionID().isEmpty());
+    assertEquals(nullResult.getTransactionID(), emptyResult.getTransactionID());
+    assertEquals(nullResult.getTimeStamp(), emptyResult.getTimeStamp());
+  }
+
+  @Test
+  void resolveSaleTransactionIdKeepsBasketTupleWhenHandlerReturnsDefault() {
+    TransactionIdentificationType id =
+        SettlementContext.resolveSaleTransactionId(
+            SettlementStep.CARD_CHARGE,
+            BASKET,
+            new BigDecimal("10.00"),
+            List.of(),
+            ctx -> ctx.getDefaultTransactionId());
+
+    assertEquals(BASKET.getSaleTransactionID().getTransactionID(), id.getTransactionID());
+    assertEquals(BASKET.getSaleTransactionID().getTimeStamp(), id.getTimeStamp());
   }
 
   @Test
@@ -62,7 +78,7 @@ class SettlementContextTest {
             Instant.parse("2026-07-20T10:00:00Z"),
             true);
 
-    String id =
+    TransactionIdentificationType id =
         SettlementContext.resolveSaleTransactionId(
             SettlementStep.STORED_VALUE_CHARGE,
             BASKET,
@@ -77,7 +93,8 @@ class SettlementContextTest {
               return "register-txn-1";
             });
 
-    assertEquals("register-txn-1", id);
+    assertEquals("register-txn-1", id.getTransactionID());
+    assertNotNull(id.getTimeStamp());
   }
 
   @Test

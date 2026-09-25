@@ -11,6 +11,7 @@
  */
 package com.bilt.pos.session.internal;
 
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketDiscount;
 import com.bilt.pos.session.basket.BasketItem;
@@ -19,6 +20,7 @@ import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.basket.BasketMutation;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -99,12 +101,24 @@ public final class BasketEngine implements BasketMutation {
   }
 
   private final String cartId = UUID.randomUUID().toString();
+  // one sale transaction identity per basket: every checkout request and
+  // reversal of this sale carries it; replaced wholesale by clearBasket()
+  private final TransactionIdentificationType saleTransaction =
+      TransactionIdentificationType.builder()
+          .transactionID(UUID.randomUUID().toString())
+          .timeStamp(Instant.now().toString())
+          .build();
   // keyed by commercial identity — see key(); iteration order is insertion order
   private final Map<String, Line> lines = new LinkedHashMap<>();
   private int nextItemId = 1;
   private BigDecimal taxTotalOverride;
 
   public BasketEngine() {}
+
+  /** The sale transaction identity minted with this basket, shared by all its requests. */
+  public TransactionIdentificationType getSaleTransaction() {
+    return saleTransaction;
+  }
 
   /**
    * Applies a batch of mutations atomically: if any of them throws, the pre-batch state is restored
@@ -377,6 +391,7 @@ public final class BasketEngine implements BasketMutation {
     }
     return Basket.builder()
         .cartId(cartId)
+        .saleTransactionID(saleTransaction)
         .items(items)
         .originalTotal(originalTotal)
         .discountTotal(discountTotal)

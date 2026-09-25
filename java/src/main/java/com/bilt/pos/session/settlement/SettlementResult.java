@@ -148,6 +148,11 @@ public final class SettlementResult {
     return storedValueAmountUsed;
   }
 
+  /** Amount charged to the stored value card; zero if no split. */
+  public BigDecimal getStoredValueAmountCharged() {
+    return storedValueAmountUsed;
+  }
+
   /** Total value activated or loaded for stored value basket lines. */
   public BigDecimal getStoredValueLoadedAmount() {
     return storedValueLoadedAmount;

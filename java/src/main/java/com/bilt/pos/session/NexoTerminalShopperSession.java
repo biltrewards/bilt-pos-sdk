@@ -27,6 +27,7 @@ import com.bilt.pos.nexo.model.SaleItem;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
+import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.nexo.model.TransactionStatusRequest;
 import com.bilt.pos.nexo.model.TransactionStatusResponse;
 import com.bilt.pos.session.basket.Basket;
@@ -282,7 +283,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         "identifyMember",
         () ->
             completeIdentify(
-                identifyStateChecked(() -> identityManager.identifyPrompted(options))));
+                identifyStateChecked(
+                    () -> identityManager.identifyPrompted(options, currentSaleTransaction()))));
   }
 
   @Override
@@ -298,6 +300,18 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   private IdentifyResult identifyStateChecked(Supplier<IdentifyResult> lookup) {
     requireOpen("identifyMember");
     return lookup.get();
+  }
+
+  // nexo addresses the reversed sale through ReversalData's OriginalPOITransaction, so a reversal's
+  // own SaleTransactionID is the live basket's identity — correct even for a sale settled before
+  // basket().clear().
+  private TransactionIdentificationType currentSaleTransaction() {
+    lock.lock();
+    try {
+      return basketEngine().getSaleTransaction();
+    } finally {
+      lock.unlock();
+    }
   }
 
   /**
@@ -331,7 +345,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         "acquireCard",
         () -> {
           requireOpen("acquireCard");
-          CardAcquisitionResult acquired = identityManager.acquireCard(options);
+          CardAcquisitionResult acquired =
+              identityManager.acquireCard(options, currentSaleTransaction());
           discardIfEndedMidFlight("acquireCard");
           return acquired;
         });
@@ -590,7 +605,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
               null,
               null,
               originalPoiTransactionId,
-              originalPoiTransactionTimestamp);
+              originalPoiTransactionTimestamp,
+              currentSaleTransaction());
         });
   }
 
@@ -607,7 +623,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         name,
         () -> {
           requireOpen(name);
-          return storedValueManager.operation(type, card, amount, null, null);
+          return storedValueManager.operation(
+              type, card, amount, null, null, currentSaleTransaction());
         });
   }
 
@@ -808,7 +825,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
             new SessionError(SessionErrorCode.ABORTED, "the settlement was aborted"));
       }
       SettlementStep step = refundStep(allocation.getType());
-      String saleTransactionId =
+      TransactionIdentificationType saleTransaction =
           SettlementContext.resolveSaleTransactionId(
               step, basket, allocation.getAmount(), committedSteps, beforeStep);
       // Refund allocation failures deliberately bypass the
@@ -827,12 +844,12 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         refundSaleItemsSent = true;
       }
       SettlementMovement movement =
-          executeRefundAllocation(allocation, step, saleTransactionId, saleItems);
+          executeRefundAllocation(allocation, step, saleTransaction, saleItems);
       movements.add(movement);
       committedSteps.add(
           new CommittedStep(
               step,
-              saleTransactionId,
+              saleTransaction.getTransactionID(),
               movement.getPoiTransactionId(),
               movement.getPoiTransactionTimestamp(),
               true));
@@ -847,7 +864,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   private SettlementMovement executeRefundAllocation(
       RefundAllocation allocation,
       SettlementStep step,
-      String saleTransactionId,
+      TransactionIdentificationType saleTransaction,
       List<SaleItem> saleItems) {
     switch (allocation.getType()) {
       case CARD:
@@ -862,14 +879,14 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                   null,
                   null,
                   allocation.getMemberId(),
-                  saleTransactionId,
+                  saleTransaction,
                   null,
                   () -> {},
                   () -> {});
           return refundMovement(
               step,
               allocation,
-              saleTransactionId,
+              saleTransaction,
               card.getRefundedAmount(),
               card.getPoiTransactionId(),
               card.getPoiTransactionTimestamp(),
@@ -884,11 +901,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                 allocation.getAmount(),
                 null,
                 null,
-                saleTransactionId);
+                saleTransaction);
         return refundMovement(
             step,
             allocation,
-            saleTransactionId,
+            saleTransaction,
             storeCredit.getAmount(),
             storeCredit.getPoiTransactionId(),
             storeCredit.getPoiTransactionTimestamp(),
@@ -896,7 +913,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
             null);
       case EXTERNAL:
         return refundMovement(
-            step, allocation, saleTransactionId, allocation.getAmount(), null, null, null, null);
+            step, allocation, saleTransaction, allocation.getAmount(), null, null, null, null);
       case POINT_REDEMPTION:
         VoidResult points =
             reversalManager.refundLoyalty(
@@ -904,11 +921,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                 allocation.getOriginalPoiTransactionId(),
                 allocation.getOriginalPoiTransactionTimestamp(),
                 allocation.getMemberId(),
-                saleTransactionId);
+                saleTransaction);
         return refundMovement(
             step,
             allocation,
-            saleTransactionId,
+            saleTransaction,
             points.getReversedAmount(),
             points.getPoiTransactionId(),
             points.getPoiTransactionTimestamp(),
@@ -921,11 +938,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                 allocation.getOriginalPoiTransactionId(),
                 allocation.getOriginalPoiTransactionTimestamp(),
                 allocation.getMemberId(),
-                saleTransactionId);
+                saleTransaction);
         return refundMovement(
             step,
             allocation,
-            saleTransactionId,
+            saleTransaction,
             rebate.getReversedAmount(),
             rebate.getPoiTransactionId(),
             rebate.getPoiTransactionTimestamp(),
@@ -938,11 +955,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                 allocation.getOriginalPoiTransactionId(),
                 allocation.getOriginalPoiTransactionTimestamp(),
                 allocation.getMemberId(),
-                saleTransactionId);
+                saleTransaction);
         return refundMovement(
             step,
             allocation,
-            saleTransactionId,
+            saleTransaction,
             BigDecimal.ZERO,
             award.getPoiTransactionId(),
             award.getPoiTransactionTimestamp(),
@@ -970,7 +987,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   private static SettlementMovement refundMovement(
       SettlementStep step,
       RefundAllocation allocation,
-      String saleTransactionId,
+      TransactionIdentificationType saleTransaction,
       BigDecimal actualAmount,
       String poiTransactionId,
       Instant poiTransactionTimestamp,
@@ -981,7 +998,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         .step(step)
         .target(allocation.getTarget())
         .amount(amount)
-        .saleTransactionId(saleTransactionId)
+        .saleTransactionId(saleTransaction.getTransactionID())
         .poiTransactionId(poiTransactionId)
         .poiTransactionTimestamp(poiTransactionTimestamp)
         .memberId(allocation.getMemberId())
@@ -1256,6 +1273,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         awardReversed ? null : paid.getAwardPoiTransactionId(),
         awardReversed ? null : paid.getAwardPoiTransactionTimestamp(),
         linked ? paid.getMemberId() : null,
+        currentSaleTransaction(),
         flow.decider(),
         linked ? guards::markRefunded : () -> {},
         linked ? () -> guards.markAwardReversed(paid.getAwardPoiTransactionId()) : () -> {});
@@ -1337,9 +1355,15 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       // records progress into it), so a retry resumes at the
       // movements still standing while the default policy still sees
       // the whole target
+      // the live basket's tuple is the void's own sale identity; the sale being voided is
+      // referenced through ReversalData's OriginalPOITransaction, not through this ID
       VoidResult result =
           reversalManager.voidMovements(
-              movements, paid.getMemberId(), flow.decider(), guards.reversedMovements());
+              movements,
+              paid.getMemberId(),
+              currentSaleTransaction(),
+              flow.decider(),
+              guards.reversedMovements());
       if (!resumeRollback) {
         guards.completeVoid();
         lastPaymentVoidIncomplete = false;
@@ -1374,7 +1398,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       Set<ReversalMovement.Key> reversedMovements = priorSaleVoidProgress(originalSale);
       VoidResult result =
           reversalManager.voidMovements(
-              movements, originalSale.getMemberId(), flow.decider(), reversedMovements);
+              movements,
+              originalSale.getMemberId(),
+              currentSaleTransaction(),
+              flow.decider(),
+              reversedMovements);
       clearPriorSaleVoidProgress(originalSale);
       return result;
     } finally {
