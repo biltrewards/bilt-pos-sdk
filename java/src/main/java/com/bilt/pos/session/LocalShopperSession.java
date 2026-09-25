@@ -17,14 +17,31 @@ package com.bilt.pos.session;
 final class LocalShopperSession extends AbstractShopperSession {
 
   private volatile boolean ended;
+  private final SessionMember memberState;
 
   LocalShopperSession(ShopperSession.Builder builder) {
+    // a member pending resolution stays pending: the platform-side
+    // resolver a local session will use is not built yet
+    this(builder, MemberResolver.NONE);
+  }
+
+  /** Package-private so tests can supply a resolver that actually resolves. */
+  LocalShopperSession(ShopperSession.Builder builder, MemberResolver memberResolver) {
     super(
         builder.saleId,
         builder.currency,
         builder.storeLocation,
         builder.callbackExecutor,
         builder.onBackgroundError);
+    this.memberState =
+        new SessionMember(
+            lock, operations, memberResolver, this::ended, builder.onMemberChanged, builder.member);
+    memberState.resolveSeed();
+  }
+
+  @Override
+  SessionMember memberState() {
+    return memberState;
   }
 
   @Override

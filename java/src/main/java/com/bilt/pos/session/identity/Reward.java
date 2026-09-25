@@ -10,6 +10,7 @@
 package com.bilt.pos.session.identity;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * A reward or coupon available to an identified member.
@@ -46,5 +47,30 @@ public final class Reward {
   /** Expiry, or {@code null} if the reward does not expire. */
   public Instant getExpirationDate() {
     return expirationDate;
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (this == other) {
+      return true;
+    }
+    if (!(other instanceof Reward)) {
+      return false;
+    }
+    Reward that = (Reward) other;
+    return Objects.equals(rewardRef, that.rewardRef)
+        && type == that.type
+        && Objects.equals(description, that.description)
+        && Objects.equals(expirationDate, that.expirationDate);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(rewardRef, type, description, expirationDate);
+  }
+
+  @Override
+  public String toString() {
+    return "Reward{" + rewardRef + ", " + type + ", " + description + "}";
   }
 }
