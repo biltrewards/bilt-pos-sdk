@@ -332,6 +332,65 @@ class OkHttpPlatformClientTest {
   }
 
   @Test
+  void invalidExpiresInIsRejected() throws Exception {
+    List<String> invalid = List.of("0", "-5", "\"soon\"", "\"-5\"", "1.5", "true", "{}");
+    for (String expiresIn : invalid) {
+      server.enqueue(
+          new MockResponse()
+              .setBody(
+                  "{\"access_token\":\"t\",\"token_type\":\"Bearer\",\"expires_in\":"
+                      + expiresIn
+                      + "}"));
+    }
+    client = newClient(Duration.ofSeconds(60));
+
+    for (String expiresIn : invalid) {
+      PlatformAuthException e =
+          assertThrows(
+              PlatformAuthException.class,
+              () -> client.execute(PlatformRequest.get("v1/a").build()),
+              expiresIn);
+      assertTrue(e.getMessage().contains("expires_in"), e.getMessage());
+    }
+    assertEquals(invalid.size(), server.getRequestCount(), "no API call without a valid token");
+  }
+
+  @Test
+  void quotedExpiresInIsHonoured() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody("{\"access_token\":\"t1\",\"token_type\":\"Bearer\",\"expires_in\":\"300\"}"));
+    server.enqueue(new MockResponse().setResponseCode(200));
+    server.enqueue(tokenResponse("t2", 300));
+    server.enqueue(new MockResponse().setResponseCode(200));
+    client = newClient(Duration.ofSeconds(60));
+
+    client.execute(PlatformRequest.get("v1/a").build());
+    clock.advance(Duration.ofSeconds(301));
+    client.execute(PlatformRequest.get("v1/b").build());
+
+    server.takeRequest();
+    assertEquals("Bearer t1", server.takeRequest().getHeader("Authorization"));
+    assertEquals(TOKEN_PATH, server.takeRequest().getPath(), "quoted lifetime was honoured");
+    assertEquals("Bearer t2", server.takeRequest().getHeader("Authorization"));
+  }
+
+  @Test
+  void omittedExpiresInKeepsTheTokenUntilRejected() throws Exception {
+    server.enqueue(
+        new MockResponse().setBody("{\"access_token\":\"t1\",\"token_type\":\"Bearer\"}"));
+    server.enqueue(new MockResponse().setResponseCode(200));
+    server.enqueue(new MockResponse().setResponseCode(200));
+    client = newClient(Duration.ofSeconds(60));
+
+    client.execute(PlatformRequest.get("v1/a").build());
+    clock.advance(Duration.ofDays(1));
+    client.execute(PlatformRequest.get("v1/b").build());
+
+    assertEquals(3, server.getRequestCount());
+  }
+
+  @Test
   void failedTokenFetchIsRetriedOnTheNextCall() throws Exception {
     server.enqueue(new MockResponse().setResponseCode(503));
     server.enqueue(tokenResponse("tok-1", 3600));

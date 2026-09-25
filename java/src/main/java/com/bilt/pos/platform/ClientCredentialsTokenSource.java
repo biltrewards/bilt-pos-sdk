@@ -42,7 +42,8 @@ import okhttp3.ResponseBody;
  * <p>The grant is a {@code POST} of {@code grant_type=client_credentials} to the token endpoint,
  * with the client id and secret as HTTP Basic credentials, each form-encoded first as RFC 6749
  * section 2.3.1 requires. The answer's {@code access_token}, {@code token_type} (which must be
- * {@code Bearer}) and {@code expires_in} are read; anything else is ignored.
+ * {@code Bearer}) and {@code expires_in} (a positive number of seconds, when present) are read;
+ * anything else is ignored.
  *
  * <p>Lifecycle of a token: it is served from {@link #accessToken} until {@code expires_in} has
  * elapsed. A background refresh is scheduled {@code refreshSkew} before that moment, so under
@@ -285,20 +286,44 @@ final class ClientCredentialsTokenSource implements AutoCloseable {
       throw new PlatformAuthException(
           "Token response has unsupported token_type '" + tokenType + "'");
     }
-    JsonNode expiresIn = root.path("expires_in");
+    Long expiresIn = expiresInSeconds(root.get("expires_in"));
     Instant expiresAt = null;
     Instant refreshAt = null;
-    if (expiresIn.isNumber() && expiresIn.asLong() > 0) {
+    if (expiresIn != null) {
       // Counted from before the request, so the estimate errs early: the server issued the token
       // later. A token that looks expired on arrival still goes to the callers who waited for it,
       // since it may well be valid, while accessToken() fetches afresh for anyone after them.
-      expiresAt = requestedAt.plusSeconds(expiresIn.asLong());
+      expiresAt = requestedAt.plusSeconds(expiresIn);
       Instant proactive = expiresAt.minus(refreshSkew);
       // A token shorter than the skew is used until it expires; refreshing it from birth would
       // hammer the token endpoint.
       refreshAt = proactive.isAfter(requestedAt) ? proactive : null;
     }
     return new CachedToken(accessToken, expiresAt, refreshAt);
+  }
+
+  /**
+   * The token lifetime in seconds, or {@code null} when the server omitted it, which RFC 6749
+   * allows. A value that is present but not a positive whole number is refused rather than read as
+   * "never expires", which would keep a stale token in use until the API rejects it. Integer
+   * strings are accepted, since some servers quote the number.
+   */
+  private static Long expiresInSeconds(JsonNode expiresIn) throws PlatformAuthException {
+    if (expiresIn == null || expiresIn.isNull()) {
+      return null;
+    }
+    long seconds;
+    if (expiresIn.isIntegralNumber() && expiresIn.canConvertToLong()) {
+      seconds = expiresIn.longValue();
+    } else if (expiresIn.isTextual() && expiresIn.textValue().matches("\\d{1,18}")) {
+      seconds = Long.parseLong(expiresIn.textValue());
+    } else {
+      throw new PlatformAuthException("Token response has an invalid expires_in");
+    }
+    if (seconds <= 0) {
+      throw new PlatformAuthException("Token response has a non-positive expires_in");
+    }
+    return seconds;
   }
 
   private String errorCode(String body) {
