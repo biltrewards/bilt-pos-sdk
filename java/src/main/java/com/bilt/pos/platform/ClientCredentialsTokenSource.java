@@ -289,6 +289,9 @@ final class ClientCredentialsTokenSource implements AutoCloseable {
     Instant expiresAt = null;
     Instant refreshAt = null;
     if (expiresIn.isNumber() && expiresIn.asLong() > 0) {
+      // Counted from before the request, so the estimate errs early: the server issued the token
+      // later. A token that looks expired on arrival still goes to the callers who waited for it,
+      // since it may well be valid, while accessToken() fetches afresh for anyone after them.
       expiresAt = requestedAt.plusSeconds(expiresIn.asLong());
       Instant proactive = expiresAt.minus(refreshSkew);
       // A token shorter than the skew is used until it expires; refreshing it from birth would
