@@ -98,13 +98,12 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public enum </span><span class="element-name type-name-label">ReversalDecision</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Enum.html" title="class or interface in java.lang" class="external-link">Enum</a>&lt;<a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a>&gt;</span></div>
-<div class="block">How a reversal flow proceeds after one of its steps failed, returned by
- the handler registered with <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a>.
+<div class="block">How a reversal flow proceeds after one of its steps failed, returned by the handler registered
+ with <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a>.
 
- <p>Already-reversed steps always stand — there is no compensating
- re-commit. A step left standing by <a href="#SKIP"><code>SKIP</code></a> or <a href="#ABORT"><code>ABORT</code></a> is
- retried by the next <code>voidTransaction()</code> on the same session, which
- resumes at the first step still standing.</p></div>
+ <p>Already-reversed steps always stand — there is no compensating re-commit. A step left standing
+ by <a href="#SKIP"><code>SKIP</code></a> or <a href="#ABORT"><code>ABORT</code></a> is retried by the next <code>voidTransaction()</code> on the same
+ session, which resumes at the first step still standing.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -135,9 +134,8 @@ loadScripts(document, 'script');</script>
 </div>
 <div class="col-first even-row-color"><code><a href="#SKIP" class="member-name-link">SKIP</a></code></div>
 <div class="col-last even-row-color">
-<div class="block">Leave this movement standing (the terminal may retry loyalty
- movements via store-and-forward) and continue with the remaining
- steps.</div>
+<div class="block">Leave this movement standing (the terminal may retry loyalty movements via store-and-forward)
+ and continue with the remaining steps.</div>
 </div>
 </div>
 </section>
@@ -195,25 +193,21 @@ the order they are declared.</div>
 <section class="detail" id="SKIP">
 <h3>SKIP</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></span>&nbsp;<span class="element-name">SKIP</span></div>
-<div class="block">Leave this movement standing (the terminal may retry loyalty
- movements via store-and-forward) and continue with the remaining
- steps. A void honors a skipped money leg the same way — the
- remaining steps still run — but then fails as incomplete: a standing
- card or stored value leg has no
- terminal-side retry, so the reversed movements stay recorded and a
- retried <code>voidTransaction()</code> sends only the legs still
- standing. A refund flow's tender step may be skipped outright: no
- money moves and the sale stays voidable.</div>
+<div class="block">Leave this movement standing (the terminal may retry loyalty movements via store-and-forward)
+ and continue with the remaining steps. A void honors a skipped money leg the same way — the
+ remaining steps still run — but then fails as incomplete: a standing card or stored value leg
+ has no terminal-side retry, so the reversed movements stay recorded and a retried <code>
+ voidTransaction()</code> sends only the legs still standing. A refund flow's tender step may be
+ skipped outright: no money moves and the sale stays voidable.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="ABORT">
 <h3>ABORT</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></span>&nbsp;<span class="element-name">ABORT</span></div>
-<div class="block">Stop the flow. The failure is thrown, already-reversed steps stand,
- so the operation can be retried. The resulting error's
- <a href="SessionError.html#getReversedMovements()"><code>SessionError.getReversedMovements()</code></a> identifies the progress
- that must be persisted before resuming in another session.</div>
+<div class="block">Stop the flow. The failure is thrown, already-reversed steps stand, so the operation can be
+ retried. The resulting error's <a href="SessionError.html#getReversedMovements()"><code>SessionError.getReversedMovements()</code></a> identifies the
+ progress that must be persisted before resuming in another session.</div>
 </section>
 </li>
 </ul>

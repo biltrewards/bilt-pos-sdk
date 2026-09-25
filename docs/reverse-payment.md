@@ -17,7 +17,7 @@ Voiding a payment is an all or nothing operation, only the full amount can be re
 
 You need the transaction identifier of the original payment. This is returned in the payment response as `POIData.POITransactionID.TransactionID`. Make sure your POS app stores this when a payment completes.
 
-> Through the session API: `CheckoutSession.voidTransaction()` reverses the payment the session itself just took, and `CheckoutSession.voidTransaction(OriginalSaleRecord)` voids a prior sale. A void also reverses the sale's other movements when the original-sale record includes stored value, rebate, redemption, award, and member references from the original `SettlementResult`. See the [integration guide](./checkout-session-integration.md#reversing-a-prior-sale-originalsalerecord).
+> Through the session API: `TerminalShopperSession.voidTransaction()` reverses the payment the session itself just took, and `TerminalShopperSession.voidTransaction(OriginalSaleRecord)` voids a prior sale. A void also reverses the sale's other movements when the original-sale record includes stored value, rebate, redemption, award, and member references from the original `SettlementResult`. See the [integration guide](./checkout-session-integration.md#reversing-a-prior-sale-originalsalerecord).
 
 ---
 

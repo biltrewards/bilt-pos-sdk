@@ -94,10 +94,9 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">Register-selected refund/restoration movement for a settlement with returns.
 
- <p>The SDK does not infer tender allocation policy. For a mixed card/gift
- card/points/cash sale, the register supplies one allocation per movement it
- wants recorded or executed, including split refunds for a single return
- item.</p></div>
+ <p>The SDK does not infer tender allocation policy. For a mixed card/gift card/points/cash sale,
+ the register supplies one allocation per movement it wants recorded or executed, including split
+ refunds for a single return item.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -173,14 +172,12 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#external(java.math.BigDecimal)" class="member-name-link">external</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
-<div class="block">Register-managed refund/restoration outside the terminal, such as
- cash paid from the drawer.</div>
+<div class="block">Register-managed refund/restoration outside the terminal, such as cash paid from the drawer.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getAmount()" class="member-name-link">getAmount</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Monetary value this movement contributes to the merchandise return
- allocation.</div>
+<div class="block">Monetary value this movement contributes to the merchandise return allocation.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getMemberId()" class="member-name-link">getMemberId</a>()</code></div>
@@ -275,9 +272,8 @@ loadScripts(document, 'script');</script>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></span>&nbsp;<span class="element-name">card</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;originalPoiTransactionId,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a>&nbsp;originalPoiTransactionTimestamp)</span></div>
-<div class="block">Linked card refund. Requires an original POI transaction ID; use
- <a href="#cardUnlinked(java.math.BigDecimal)"><code>cardUnlinked(BigDecimal)</code></a> when the refund should be issued
- against a card presented at the terminal.</div>
+<div class="block">Linked card refund. Requires an original POI transaction ID; use <a href="#cardUnlinked(java.math.BigDecimal)"><code>cardUnlinked(BigDecimal)</code></a> when the refund should be issued against a card presented at the
+ terminal.</div>
 </section>
 </li>
 <li>
@@ -285,10 +281,9 @@ loadScripts(document, 'script');</script>
 <h3>card</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></span>&nbsp;<span class="element-name">card</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a>&nbsp;originalSale)</span></div>
-<div class="block">Linked card refund against a persisted original sale record. The
- record must contain a card leg; use <a href="#cardUnlinked(java.math.BigDecimal)"><code>cardUnlinked(BigDecimal)</code></a>
- when the refund should be issued against a card presented at the
- terminal.</div>
+<div class="block">Linked card refund against a persisted original sale record. The record must contain a card
+ leg; use <a href="#cardUnlinked(java.math.BigDecimal)"><code>cardUnlinked(BigDecimal)</code></a> when the refund should be issued against a card
+ presented at the terminal.</div>
 </section>
 </li>
 <li>
@@ -327,9 +322,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="external(java.math.BigDecimal)">
 <h3>external</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></span>&nbsp;<span class="element-name">external</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
-<div class="block">Register-managed refund/restoration outside the terminal, such as
- cash paid from the drawer. Counts toward the return allocation total
- but sends no Nexo movement.</div>
+<div class="block">Register-managed refund/restoration outside the terminal, such as cash paid from the drawer.
+ Counts toward the return allocation total but sends no Nexo movement.</div>
 </section>
 </li>
 <li>
@@ -407,8 +401,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getAmount()">
 <h3>getAmount</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getAmount</span>()</div>
-<div class="block">Monetary value this movement contributes to the merchandise return
- allocation. Award reversals are bookkeeping and use zero.</div>
+<div class="block">Monetary value this movement contributes to the merchandise return allocation. Award reversals
+ are bookkeeping and use zero.</div>
 </section>
 </li>
 <li>

@@ -94,12 +94,13 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">Extracts and parses receipt XML payloads from a Nexo <code>NexoTerminalAPI</code> response.
 
- <p>After a payment, reversal, loyalty, or balance inquiry, the terminal returns
- receipts inside <code>PaymentReceipt[]</code> with Base64-encoded XML in
- <code>OutputContent.OutputXHTML</code>. This class locates the customer and merchant
- receipt entries, decodes them, and provides typed access to the receipt content.
+ <p>After a payment, reversal, loyalty, or balance inquiry, the terminal returns receipts inside
+ <code>PaymentReceipt[]</code> with Base64-encoded XML in <code>OutputContent.OutputXHTML</code>. This class
+ locates the customer and merchant receipt entries, decodes them, and provides typed access to the
+ receipt content.
 
  <p>Example usage:
+
  <pre><code>
  NexoTerminalAPI response = client.request(paymentRequest);
  Receipts receipts = Receipts.fromResponse(response);
@@ -179,14 +180,14 @@ loadScripts(document, 'script');</script>
                              throws <span class="exceptions">jakarta.xml.bind.JAXBException</span></div>
 <div class="block">Extracts receipts from a <code>NexoTerminalAPI</code> response.
 
- <p>Searches for <code>PaymentReceipt</code> entries across payment, reversal,
- loyalty, and balance inquiry responses.</div>
+ <p>Searches for <code>PaymentReceipt</code> entries across payment, reversal, loyalty, and balance
+ inquiry responses.</div>
 <dl class="notes">
 <dt>Parameters:</dt>
 <dd><code>response</code> - the Nexo terminal API response</dd>
 <dt>Returns:</dt>
-<dd>a <a href="Receipts.html" title="class in com.bilt.pos.receipt"><code>Receipts</code></a> instance (receipts may be absent if the response
-         does not contain them)</dd>
+<dd>a <a href="Receipts.html" title="class in com.bilt.pos.receipt"><code>Receipts</code></a> instance (receipts may be absent if the response does not contain
+     them)</dd>
 <dt>Throws:</dt>
 <dd><code>jakarta.xml.bind.JAXBException</code> - if receipt XML parsing fails</dd>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link">IllegalArgumentException</a></code> - if the response or its SaleToPOIResponse is null</dd>
