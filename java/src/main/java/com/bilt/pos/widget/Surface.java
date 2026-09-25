@@ -9,6 +9,11 @@
  */
 package com.bilt.pos.widget;
 
+import com.bilt.pos.media.SurfaceKind;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Set;
+
 /**
  * A place on the register where a widget can draw a {@link Rendering}.
  *
@@ -32,8 +37,34 @@ package com.bilt.pos.widget;
  * there is no stacking. {@link #clear} removes the current rendering and is idempotent: clearing an
  * empty surface is a no-op, and clearing twice is the same as clearing once. A surface that is
  * cleared must stop reporting interactions for the rendering it was showing.
+ *
+ * <h2>Capability hints</h2>
+ *
+ * <p>{@link #supportedFormats()} and {@link #kind()} describe the surface to the widget, which
+ * folds them into the {@code Capabilities} it sends with every decision so the platform only serves
+ * what the register can draw. Both have defaults suited to a native adapter that plays everything;
+ * a surface that cannot play video, or that draws in some other way, overrides them.
  */
 public interface Surface {
+
+  /**
+   * The media formats this surface can draw. The default is every {@link MediaSpec.MediaType}; a
+   * surface without a video player, say, returns the formats it does handle so the platform never
+   * serves it a video.
+   */
+  default Set<MediaSpec.MediaType> supportedFormats() {
+    return Collections.unmodifiableSet(EnumSet.allOf(MediaSpec.MediaType.class));
+  }
+
+  /**
+   * How this surface draws, one of the tiers in the {@link com.bilt.pos.widget} package
+   * documentation. The default is {@link SurfaceKind#NATIVE}; {@link WebSurface} answers {@link
+   * SurfaceKind#WEB}, and a hand-off or hosted surface says so, since the kind affects which
+   * formats and actions make sense for the platform to serve.
+   */
+  default SurfaceKind kind() {
+    return SurfaceKind.NATIVE;
+  }
 
   /**
    * Draws {@code rendering}, replacing anything currently shown, and reports the shopper's

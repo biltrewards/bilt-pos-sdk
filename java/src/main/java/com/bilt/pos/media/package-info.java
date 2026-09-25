@@ -19,8 +19,14 @@
  * ActionSink} — lives in {@code com.bilt.pos.widget}; the service contract that produces renderings
  * and validates actions lives in {@link com.bilt.pos.media.service}.
  *
- * <p>Nothing here depends on the checkout session types. The service layer works from its own
- * {@code AdSessionSnapshot} so the ad platform integration can evolve independently of the session
- * API.
+ * <p>{@link com.bilt.pos.media.RetailMedia} is the widget itself. Registered on a session builder,
+ * it follows the session's basket, member and context, decides through an {@link
+ * com.bilt.pos.media.service.AdDecisionService} what to show on the surfaces the register bound to
+ * its placements, and hands the register validated offers ({@code onOffer}) and an informational
+ * interaction stream ({@code onInteraction}).
+ *
+ * <p>The service layer works from its own {@code AdSessionSnapshot} rather than the session types,
+ * so the ad platform integration can evolve independently of the session API; the widget is the one
+ * place that translates between the two.
  */
 package com.bilt.pos.media;
