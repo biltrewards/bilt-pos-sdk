@@ -96,6 +96,14 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The operation was aborted (by <code>abort()</code> or the terminal).</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/ActionOutcome.html#accepted()" class="member-name-link">accepted()</a> - Static method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/ActionOutcome.html" title="class in com.bilt.pos.media.service">ActionOutcome</a></dt>
+<dd>
+<div class="block">An accepted action that carries no offer.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/ActionOutcome.html#accepted(com.bilt.pos.media.Offer)" class="member-name-link">accepted(Offer)</a> - Static method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/ActionOutcome.html" title="class in com.bilt.pos.media.service">ActionOutcome</a></dt>
+<dd>
+<div class="block">An <code>APPLY_OFFER</code> the platform honours; <code>offer</code> is what the register applies.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/identity/MemberIdentifier.Type.html#ACCOUNT_NUMBER" class="member-name-link">ACCOUNT_NUMBER</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/MemberIdentifier.Type.html" title="enum class in com.bilt.pos.session.identity">MemberIdentifier.Type</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/MemberIdentifier.html#accountNumber(java.lang.String)" class="member-name-link">accountNumber(String)</a> - Static method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/MemberIdentifier.html" title="class in com.bilt.pos.session.identity">MemberIdentifier</a></dt>
@@ -116,10 +124,20 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#acquirerTransactionId(java.lang.String)" class="member-name-link">acquirerTransactionId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Builder.html#action(com.bilt.pos.widget.Action)" class="member-name-link">action(Action)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Builder.html" title="class in com.bilt.pos.media">AdInteraction.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.Builder.html#action(com.bilt.pos.widget.Action)" class="member-name-link">action(Action)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/Action.html" class="type-name-link" title="enum class in com.bilt.pos.widget">Action</a> - Enum Class in <a href="com/bilt/pos/widget/package-summary.html">com.bilt.pos.widget</a></dt>
 <dd>
 <div class="block">What a <a href="com/bilt/pos/widget/Cta.html" title="class in com.bilt.pos.widget"><code>Cta</code></a> asks the SDK to do when the shopper taps it.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/ActionOutcome.html" class="type-name-link" title="class in com.bilt.pos.media.service">ActionOutcome</a> - Class in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
+<dd>
+<div class="block">The platform's answer to a tapped call to action.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.Builder.html#actions(java.util.Set)" class="member-name-link">actions(Set&lt;Action&gt;)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/ActionSink.html" class="type-name-link" title="interface in com.bilt.pos.widget">ActionSink</a> - Interface in <a href="com/bilt/pos/widget/package-summary.html">com.bilt.pos.widget</a></dt>
 <dd>
 <div class="block">Where a <a href="com/bilt/pos/widget/Surface.html" title="interface in com.bilt.pos.widget"><code>Surface</code></a> reports what the shopper did with a <a href="com/bilt/pos/widget/Rendering.html" title="class in com.bilt.pos.widget"><code>Rendering</code></a>.</div>
@@ -136,6 +154,11 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.Builder.html#addDiscount(com.bilt.pos.session.basket.BasketDiscount)" class="member-name-link">addDiscount(BasketDiscount)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdDecisionService.html" class="type-name-link" title="interface in com.bilt.pos.media.service">AdDecisionService</a> - Interface in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
+<dd>
+<div class="block">The ad platform as the retail-media widget sees it: register a session, ask for decisions,
+ validate taps, report interactions, listen for platform-originated events.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html#addFulfillment(com.bilt.pos.session.settlement.StoredValueLoad)" class="member-name-link">addFulfillment(StoredValueLoad)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></dt>
 <dd>
 <div class="block">Adds one activation or reload instruction for a referenced basket line.</div>
@@ -168,6 +191,8 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/input/InputOptions.Builder.html#additionalText2(java.lang.String)" class="member-name-link">additionalText2(String)</a> - Method in class com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/InputOptions.Builder.html" title="class in com.bilt.pos.session.input">InputOptions.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#addLine(com.bilt.pos.media.service.AdSessionSnapshot.LineSummary)" class="member-name-link">addLine(AdSessionSnapshot.LineSummary)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html#addRefund(com.bilt.pos.session.settlement.RefundAllocation)" class="member-name-link">addRefund(RefundAllocation)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></dt>
 <dd>
 <div class="block">Adds one register-selected refund allocation.</div>
@@ -176,6 +201,28 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.Builder.html#addTracking(java.lang.String,java.net.URI)" class="member-name-link">addTracking(String, URI)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.Builder.html" title="class in com.bilt.pos.widget">Rendering.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdEventListener.html" class="type-name-link" title="interface in com.bilt.pos.media.service">AdEventListener</a> - Interface in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
+<dd>
+<div class="block">Receives events the ad platform originates for a session, as opposed to answers to the SDK's own
+ calls.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdEventSubscription.html" class="type-name-link" title="interface in com.bilt.pos.media.service">AdEventSubscription</a> - Interface in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
+<dd>
+<div class="block">A live <a href="com/bilt/pos/media/service/AdEventListener.html" title="interface in com.bilt.pos.media.service"><code>AdEventListener</code></a> registration; closing it stops delivery.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html" class="type-name-link" title="class in com.bilt.pos.media">AdInteraction</a> - Class in <a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a></dt>
+<dd>
+<div class="block">One thing the shopper did with a creative, reported to the ad platform for measurement and
+ frequency capping.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Builder.html" class="type-name-link" title="class in com.bilt.pos.media">AdInteraction.Builder</a> - Class in <a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a></dt>
+<dd>
+<div class="block">Builder for <a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media"><code>AdInteraction</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Kind.html" class="type-name-link" title="enum class in com.bilt.pos.media">AdInteraction.Kind</a> - Enum Class in <a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a></dt>
+<dd>
+<div class="block">What happened.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html#adjustedTotal(java.math.BigDecimal)" class="member-name-link">adjustedTotal(BigDecimal)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/AdjustmentsType.html#adjustmentItem" class="member-name-link">adjustmentItem</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/AdjustmentsType.html" title="class in com.bilt.pos.display">AdjustmentsType</a></dt>
@@ -188,6 +235,22 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/display/AdjustmentsType.html#%3Cinit%3E()" class="member-name-link">AdjustmentsType()</a> - Constructor for class com.bilt.pos.display.<a href="com/bilt/pos/display/AdjustmentsType.html" title="class in com.bilt.pos.display">AdjustmentsType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html" class="type-name-link" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a> - Class in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
+<dd>
+<div class="block">What the ad decision service needs to know about a shopper session, at one moment.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" class="type-name-link" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a> - Class in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
+<dd>
+<div class="block">Builder for <a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service"><code>AdSessionSnapshot</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" class="type-name-link" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a> - Class in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
+<dd>
+<div class="block">One basket line as the ad platform sees it: catalog identity, quantity, price, category.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html" class="type-name-link" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary.Builder</a> - Class in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
+<dd>
+<div class="block">Builder for <a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service"><code>AdSessionSnapshot.LineSummary</code></a>.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#aed" class="member-name-link">aed</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#aid" class="member-name-link">aid</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
@@ -200,6 +263,10 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#amount" class="member-name-link">amount</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.Builder.html#amount(java.math.BigDecimal)" class="member-name-link">amount(BigDecimal)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Builder.html" title="class in com.bilt.pos.media">Offer.Builder</a></dt>
+<dd>
+<div class="block">Fixed amount off; mutually exclusive with <code>Offer.Builder.percentage</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html#amount(java.math.BigDecimal)" class="member-name-link">amount(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html" title="class in com.bilt.pos.session.settlement">RefundAllocation.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html#amount(java.math.BigDecimal)" class="member-name-link">amount(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></dt>
@@ -227,6 +294,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#arc" class="member-name-link">arc</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#atc" class="member-name-link">atc</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#attribute(java.lang.String,java.lang.String)" class="member-name-link">attribute(String, String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#attributes(java.util.Map)" class="member-name-link">attributes(Map&lt;String, String&gt;)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#authCode" class="member-name-link">authCode</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
@@ -282,6 +353,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/basket/Basket.html" class="type-name-link" title="class in com.bilt.pos.session.basket">Basket</a> - Class in <a href="com/bilt/pos/session/basket/package-summary.html">com.bilt.pos.session.basket</a></dt>
 <dd>
 <div class="block">An immutable snapshot of the session's basket.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Offer.Scope.html#BASKET" class="member-name-link">BASKET</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Scope.html" title="enum class in com.bilt.pos.media">Offer.Scope</a></dt>
+<dd>
+<div class="block">The basket total.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementTarget.Type.html#BASKET_LINE" class="member-name-link">BASKET_LINE</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementTarget.Type.html" title="enum class in com.bilt.pos.session.settlement">SettlementTarget.Type</a></dt>
 <dd>
@@ -387,6 +462,16 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/widget/WebSurface.html#bridge-protocol-heading" class="search-tag-link">Bridge protocol</a> - Search tag in class com.bilt.pos.widget.WebSurface</dt>
 <dd>Section</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Builder.html" title="class in com.bilt.pos.media">AdInteraction.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Builder.html" title="class in com.bilt.pos.media">Offer.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/nexo/security/SecurityKey.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.nexo.security.<a href="com/bilt/pos/nexo/security/SecurityKey.Builder.html" title="class in com.bilt.pos.nexo.security">SecurityKey.Builder</a></dt>
@@ -446,6 +531,16 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/widget/MediaSpec.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/MediaSpec.Builder.html" title="class in com.bilt.pos.widget">MediaSpec.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.Builder.html" title="class in com.bilt.pos.widget">Rendering.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a></dt>
 <dd>
@@ -568,6 +663,14 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The customer cancelled on the terminal.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html" class="type-name-link" title="class in com.bilt.pos.media">Capabilities</a> - Class in <a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a></dt>
+<dd>
+<div class="block">What this SDK build and this register can render.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.Builder.html" class="type-name-link" title="class in com.bilt.pos.media">Capabilities.Builder</a> - Class in <a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a></dt>
+<dd>
+<div class="block">Builder for <a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media"><code>Capabilities</code></a>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#card(java.math.BigDecimal,com.bilt.pos.session.settlement.OriginalSaleRecord)" class="member-name-link">card(BigDecimal, OriginalSaleRecord)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
 <dd>
 <div class="block">Linked card refund against a persisted original sale record.</div>
@@ -642,6 +745,8 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#cashbackAmount" class="member-name-link">cashbackAmount</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html#category(java.lang.String)" class="member-name-link">category(String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.Builder.html#category(java.lang.String)" class="member-name-link">category(String)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html#category(java.lang.String)" class="member-name-link">category(String)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></dt>
@@ -680,6 +785,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The public identifier of these credentials, safe to log.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdEventSubscription.html#close()" class="member-name-link">close()</a> - Method in interface com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdEventSubscription.html" title="interface in com.bilt.pos.media.service">AdEventSubscription</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/platform/BiltPlatformClient.html#close()" class="member-name-link">close()</a> - Method in interface com.bilt.pos.platform.<a href="com/bilt/pos/platform/BiltPlatformClient.html" title="interface in com.bilt.pos.platform">BiltPlatformClient</a></dt>
 <dd>
 <div class="block">Releases background threads and, for connections the client created itself, the connection
@@ -696,8 +803,24 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Stops accepting operations.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdDecisionService.html#closeSession(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">closeSession(SessionHandle)</a> - Method in interface com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdDecisionService.html" title="interface in com.bilt.pos.media.service">AdDecisionService</a></dt>
+<dd>
+<div class="block">Ends the session on the service side: outstanding tokens stop validating, subscriptions are
+ closed, and the handle is no longer accepted.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#closeSession(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">closeSession(SessionHandle)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/package-summary.html">com.bilt.pos.display</a> - package com.bilt.pos.display</dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a> - package com.bilt.pos.media</dt>
+<dd>
+<div class="block">Retail-media vocabulary shared by the widget, the ad decision service and the register.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a> - package com.bilt.pos.media.service</dt>
+<dd>
+<div class="block">The contract between the retail-media widget and the ad decision platform, plus an in-memory fake
+ for tests and the emulator.</div>
+</dd>
 <dt><a href="com/bilt/pos/nexo/client/package-summary.html">com.bilt.pos.nexo.client</a> - package com.bilt.pos.nexo.client</dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/nexo/security/package-summary.html">com.bilt.pos.nexo.security</a> - package com.bilt.pos.nexo.security</dt>
@@ -741,6 +864,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/widget/ActionSink.html#completed(com.bilt.pos.widget.Rendering)" class="member-name-link">completed(Rendering)</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/ActionSink.html" title="interface in com.bilt.pos.widget">ActionSink</a></dt>
 <dd>
 <div class="block">The rendering's video played to its end.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Kind.html#COMPLETED" class="member-name-link">COMPLETED</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Kind.html" title="enum class in com.bilt.pos.media">AdInteraction.Kind</a></dt>
+<dd>
+<div class="block">The creative's video played to the end.</div>
 </dd>
 <dt><a href="com/bilt/pos/display/InputPayload.html#confirmation" class="member-name-link">confirmation</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/InputPayload.html" title="class in com.bilt.pos.display">InputPayload</a></dt>
 <dd>&nbsp;</dd>
@@ -880,6 +1007,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Create an instance of <a href="com/bilt/pos/display/WaitingType.html" title="class in com.bilt.pos.display"><code>WaitingType</code></a></div>
 </dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Builder.html#creativeId(java.lang.String)" class="member-name-link">creativeId(String)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Builder.html" title="class in com.bilt.pos.media">AdInteraction.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.Builder.html#creativeId(java.lang.String)" class="member-name-link">creativeId(String)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Builder.html" title="class in com.bilt.pos.media">Offer.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.Builder.html#creativeId(java.lang.String)" class="member-name-link">creativeId(String)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.Builder.html" title="class in com.bilt.pos.widget">Rendering.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/platform/OkHttpPlatformClient.Builder.html#credentials(com.bilt.pos.platform.BiltCredentials)" class="member-name-link">credentials(BiltCredentials)</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/OkHttpPlatformClient.Builder.html" title="class in com.bilt.pos.platform">OkHttpPlatformClient.Builder</a></dt>
@@ -907,6 +1038,10 @@ loadScripts(document, 'script');</script>
 <div class="block">A call to action on a <a href="com/bilt/pos/widget/Rendering.html" title="class in com.bilt.pos.widget"><code>Rendering</code></a>: the button label the shopper sees, the <a href="com/bilt/pos/widget/Action.html" title="enum class in com.bilt.pos.widget"><code>Action</code></a> it
  requests, and an opaque token.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Kind.html#CTA_ACCEPTED" class="member-name-link">CTA_ACCEPTED</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Kind.html" title="enum class in com.bilt.pos.media">AdInteraction.Kind</a></dt>
+<dd>
+<div class="block">The platform accepted the tapped CTA; for <code>APPLY_OFFER</code> an offer was issued.</div>
+</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.html#ctaForToken(java.lang.String)" class="member-name-link">ctaForToken(String)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.html" title="class in com.bilt.pos.widget">Rendering</a></dt>
 <dd>
 <div class="block">Returns the CTA carrying <code>token</code>, or <code>null</code> if neither call to action on this
@@ -915,6 +1050,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/display/MoneyType.html#currency" class="member-name-link">currency</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/MoneyType.html" title="class in com.bilt.pos.display">MoneyType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#currency" class="member-name-link">currency</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#currency(java.lang.String)" class="member-name-link">currency(String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/ShopperSession.Builder.html#currency(java.lang.String)" class="member-name-link">currency(String)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.Builder.html" title="class in com.bilt.pos.session">ShopperSession.Builder</a></dt>
 <dd>
@@ -950,6 +1087,12 @@ loadScripts(document, 'script');</script>
 <h2 class="title" id="I:D">D</h2>
 <dl class="index">
 <dt><a href="com/bilt/pos/display/QrCodeType.html#data" class="member-name-link">data</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/QrCodeType.html" title="class in com.bilt.pos.display">QrCodeType</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdDecisionService.html#decide(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.Placement,com.bilt.pos.media.Capabilities,java.time.Duration)" class="member-name-link">decide(SessionHandle, Placement, Capabilities, Duration)</a> - Method in interface com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdDecisionService.html" title="interface in com.bilt.pos.media.service">AdDecisionService</a></dt>
+<dd>
+<div class="block">Asks for a creative to show in <code>placement</code>, given what the register can render.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#decide(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.Placement,com.bilt.pos.media.Capabilities,java.time.Duration)" class="member-name-link">decide(SessionHandle, Placement, Capabilities, Duration)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SessionErrorCode.html#DECLINED" class="member-name-link">DECLINED</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></dt>
 <dd>
@@ -992,6 +1135,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/display/LineItemType.html#description" class="member-name-link">description</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/SectionItemType.html#description" class="member-name-link">description</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/SectionItemType.html" title="class in com.bilt.pos.display">SectionItemType</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html#description(java.lang.String)" class="member-name-link">description(String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.Builder.html#description(java.lang.String)" class="member-name-link">description(String)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></dt>
 <dd>&nbsp;</dd>
@@ -1044,6 +1189,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The shopper closed the rendering from the surface itself (a close affordance rather than a
  <a href="com/bilt/pos/widget/Action.html#DISMISS"><code>Action.DISMISS</code></a> CTA).</div>
+</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Kind.html#DISMISSED" class="member-name-link">DISMISSED</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Kind.html" title="enum class in com.bilt.pos.media">AdInteraction.Kind</a></dt>
+<dd>
+<div class="block">The shopper closed the creative, or the widget cleared it on a dismiss CTA.</div>
 </dd>
 <dt><a href="com/bilt/pos/display/InputPayload.html#display" class="member-name-link">display</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/InputPayload.html" title="class in com.bilt.pos.display">InputPayload</a></dt>
 <dd>&nbsp;</dd>
@@ -1112,6 +1261,14 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#earnedRewards(java.util.List)" class="member-name-link">earnedRewards(List&lt;EarnedReward&gt;)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#emit(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.AdInteraction)" class="member-name-link">emit(SessionHandle, AdInteraction)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Delivers <code>interaction</code> to every subscriber of <code>handle</code>, on the calling thread.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#emit(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.Offer)" class="member-name-link">emit(SessionHandle, Offer)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Delivers <code>offer</code> to every subscriber of <code>handle</code>, on the calling thread.</div>
+</dd>
 <dt><a href="com/bilt/pos/nexo/security/MessageEncryptor.html#encrypt(java.lang.String,com.bilt.pos.nexo.model.MessageHeader)" class="member-name-link">encrypt(String, MessageHeader)</a> - Method in class com.bilt.pos.nexo.security.<a href="com/bilt/pos/nexo/security/MessageEncryptor.html" title="class in com.bilt.pos.nexo.security">MessageEncryptor</a></dt>
 <dd>
 <div class="block">Encrypt a JSON payload into a secured Nexo message using CMS structures.</div>
@@ -1158,6 +1315,22 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The platform deployment to talk to.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Placement.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Placement.html" title="class in com.bilt.pos.media">Placement</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/ActionOutcome.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/ActionOutcome.html" title="class in com.bilt.pos.media.service">ActionOutcome</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/SessionHandle.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/platform/BiltCredentials.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/BiltCredentials.html" title="class in com.bilt.pos.platform">BiltCredentials</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/platform/BiltEnvironment.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/BiltEnvironment.html" title="class in com.bilt.pos.platform">BiltEnvironment</a></dt>
@@ -1251,6 +1424,8 @@ loadScripts(document, 'script');</script>
  entries, falling back to the Common Name) against the given pattern, instead of matching the
  connection's IP address.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/Offer.Builder.html#expiry(java.time.Instant)" class="member-name-link">expiry(Instant)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Builder.html" title="class in com.bilt.pos.media">Offer.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#expiryDate" class="member-name-link">expiryDate</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/CardAcquisitionResult.Builder.html#expiryDate(java.lang.String)" class="member-name-link">expiryDate(String)</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionResult.Builder.html" title="class in com.bilt.pos.session.identity">CardAcquisitionResult.Builder</a></dt>
@@ -1304,6 +1479,10 @@ loadScripts(document, 'script');</script>
 </dl>
 <h2 class="title" id="I:F">F</h2>
 <dl class="index">
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#failNext(java.lang.RuntimeException)" class="member-name-link">failNext(RuntimeException)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Makes the next call fail as described in the class documentation.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#failure(com.bilt.pos.session.settlement.SettlementFailure)" class="member-name-link">failure(SettlementFailure)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/EntryMode.html#FILE" class="member-name-link">FILE</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/EntryMode.html" title="enum class in com.bilt.pos.session.identity">EntryMode</a></dt>
@@ -1335,6 +1514,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/identity/CardAcquisitionOptions.Builder.html#forceEntryModes(java.util.List)" class="member-name-link">forceEntryModes(List&lt;ForceEntryMode&gt;)</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionOptions.Builder.html" title="class in com.bilt.pos.session.identity">CardAcquisitionOptions.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/IdentifyOptions.Builder.html#forceEntryModes(java.util.List)" class="member-name-link">forceEntryModes(List&lt;ForceEntryMode&gt;)</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyOptions.Builder.html" title="class in com.bilt.pos.session.identity">IdentifyOptions.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.Builder.html#format(com.bilt.pos.widget.MediaSpec.MediaType)" class="member-name-link">format(MediaSpec.MediaType)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.Builder.html#formats(java.util.Set)" class="member-name-link">formats(Set&lt;MediaSpec.MediaType&gt;)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/TransactionStatusResult.html#found(java.lang.String,com.bilt.pos.nexo.model.PaymentResponse,com.bilt.pos.nexo.model.LoyaltyResponse,com.bilt.pos.nexo.model.StoredValueResponse,com.bilt.pos.nexo.model.ReversalResponse)" class="member-name-link">found(String, PaymentResponse, LoyaltyResponse, StoredValueResponse, ReversalResponse)</a> - Static method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TransactionStatusResult.html" title="class in com.bilt.pos.session">TransactionStatusResult</a></dt>
 <dd>
@@ -1444,10 +1627,18 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getAcquirerTransactionId()" class="member-name-link">getAcquirerTransactionId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html#getAction()" class="member-name-link">getAction()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
+<dd>
+<div class="block">The call to action involved, for tap-driven kinds; <code>null</code> otherwise.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#getAction()" class="member-name-link">getAction()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/Cta.html#getAction()" class="member-name-link">getAction()</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Cta.html" title="class in com.bilt.pos.widget">Cta</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#getActions()" class="member-name-link">getActions()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>
+<div class="block">Calls to action the register handles.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getAcType()" class="member-name-link">getAcType()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Gets the value of the acType property.</div>
@@ -1508,6 +1699,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Gets the value of the amount property.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/Offer.html#getAmount()" class="member-name-link">getAmount()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>
+<div class="block">Fixed amount off in the session currency, or <code>null</code> when the offer is a percentage.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketDiscount.html#getAmount()" class="member-name-link">getAmount()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a></dt>
 <dd>
 <div class="block">Positive discount magnitude.</div>
@@ -1551,6 +1746,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getAtc()" class="member-name-link">getAtc()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Gets the value of the atc property.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#getAttributes()" class="member-name-link">getAttributes()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>
+<div class="block">Deployment-defined pass-through attributes.</div>
 </dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getAuthCode()" class="member-name-link">getAuthCode()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
@@ -1646,6 +1845,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Gets the value of the cashbackAmount property.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html#getCategory()" class="member-name-link">getCategory()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a></dt>
+<dd>
+<div class="block">Product category, or <code>null</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.html#getCategory()" class="member-name-link">getCategory()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
 <dd>
 <div class="block">Optional product category; aids terminal-side offer matching.</div>
@@ -1690,6 +1893,12 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/PrintPayload.html#getContent()" class="member-name-link">getContent()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/PrintPayload.html" title="class in com.bilt.pos.session">PrintPayload</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html#getCreativeId()" class="member-name-link">getCreativeId()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.html#getCreativeId()" class="member-name-link">getCreativeId()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>
+<div class="block">The creative whose call to action produced this offer.</div>
+</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.html#getCreativeId()" class="member-name-link">getCreativeId()</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.html" title="class in com.bilt.pos.widget">Rendering</a></dt>
 <dd>
 <div class="block">Platform identifier of the creative; the key every interaction is reported against.</div>
@@ -1701,6 +1910,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/display/MoneyType.html#getCurrency()" class="member-name-link">getCurrency()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/MoneyType.html" title="class in com.bilt.pos.display">MoneyType</a></dt>
 <dd>
 <div class="block">Gets the value of the currency property.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#getCurrency()" class="member-name-link">getCurrency()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>
+<div class="block">ISO 4217 currency code of the basket, e.g.</div>
 </dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getCurrency()" class="member-name-link">getCurrency()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
@@ -1759,6 +1972,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/display/SectionItemType.html#getDescription()" class="member-name-link">getDescription()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/SectionItemType.html" title="class in com.bilt.pos.display">SectionItemType</a></dt>
 <dd>
 <div class="block">Gets the value of the description property.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html#getDescription()" class="member-name-link">getDescription()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a></dt>
+<dd>
+<div class="block">Human-readable description, or <code>null</code>.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.html#getDescription()" class="member-name-link">getDescription()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
 <dd>&nbsp;</dd>
@@ -1837,6 +2054,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Expiry, or <code>null</code> if the reward does not expire.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/Offer.html#getExpiry()" class="member-name-link">getExpiry()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>
+<div class="block">When the offer stops being applicable, or <code>null</code> when the platform set no expiry.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getExpiryDate()" class="member-name-link">getExpiryDate()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Gets the value of the expiryDate property.</div>
@@ -1901,6 +2122,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/PrintPayload.html#getFormat()" class="member-name-link">getFormat()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/PrintPayload.html" title="class in com.bilt.pos.session">PrintPayload</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#getFormats()" class="member-name-link">getFormats()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>
+<div class="block">Media formats at least one declared surface can play.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementOptions.html#getFulfillments()" class="member-name-link">getFulfillments()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></dt>
 <dd>
 <div class="block">Stored value operations fulfilling referenced basket lines.</div>
@@ -1939,6 +2164,16 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Gets the value of the htmlReceipt property.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/Offer.html#getId()" class="member-name-link">getId()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>
+<div class="block">Platform identifier of the offer.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Placement.html#getId()" class="member-name-link">getId()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Placement.html" title="class in com.bilt.pos.media">Placement</a></dt>
+<dd>
+<div class="block">The platform's identifier for this zone, e.g.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/SessionHandle.html#getId()" class="member-name-link">getId()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html#getIdentificationType()" class="member-name-link">getIdentificationType()</a> - Method in class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayload.html#getImage()" class="member-name-link">getImage()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a></dt>
@@ -2009,6 +2244,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Gets the value of the kind property.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html#getKind()" class="member-name-link">getKind()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/SectionType.html#getLabel()" class="member-name-link">getLabel()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/SectionType.html" title="class in com.bilt.pos.display">SectionType</a></dt>
 <dd>
 <div class="block">Gets the value of the label property.</div>
@@ -2023,6 +2260,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Button text, already localized by the platform.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#getLaneId()" class="member-name-link">getLaneId()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>
+<div class="block">Lane or terminal identifier within the store, or <code>null</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayload.html#getLayout()" class="member-name-link">getLayout()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a></dt>
 <dd>
 <div class="block">Gets the value of the layout property.</div>
@@ -2034,6 +2275,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/display/ReceiptType.html#getLineItems()" class="member-name-link">getLineItems()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/ReceiptType.html" title="class in com.bilt.pos.display">ReceiptType</a></dt>
 <dd>
 <div class="block">Gets the value of the lineItems property.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#getLines()" class="member-name-link">getLines()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>
+<div class="block">The basket's lines, in register order.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/identity/IdentifyResult.html#getLoyaltyBrand()" class="member-name-link">getLoyaltyBrand()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></dt>
 <dd>
@@ -2066,6 +2311,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/ShopperSession.html#getMember()" class="member-name-link">getMember()</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.html" title="interface in com.bilt.pos.session">ShopperSession</a></dt>
 <dd>
 <div class="block">The identified member, or <code>null</code> for a guest checkout.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#getMemberId()" class="member-name-link">getMemberId()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>
+<div class="block">The identified member's loyalty id, or <code>null</code> for a guest.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/identity/IdentifyResult.html#getMemberId()" class="member-name-link">getMemberId()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></dt>
 <dd>
@@ -2137,6 +2386,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/nexo/security/SaleToPOISecuredMessage.html#getMessageHeader()" class="member-name-link">getMessageHeader()</a> - Method in class com.bilt.pos.nexo.security.<a href="com/bilt/pos/nexo/security/SaleToPOISecuredMessage.html" title="class in com.bilt.pos.nexo.security">SaleToPOISecuredMessage</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html#getMetadata()" class="member-name-link">getMetadata()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a></dt>
+<dd>
+<div class="block">Pass-through metadata.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.html#getMetadata()" class="member-name-link">getMetadata()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
 <dd>
 <div class="block">Pass-through metadata.</div>
@@ -2165,6 +2418,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getNexoErrorCondition()" class="member-name-link">getNexoErrorCondition()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/ActionOutcome.html#getOffer()" class="member-name-link">getOffer()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/ActionOutcome.html" title="class in com.bilt.pos.media.service">ActionOutcome</a></dt>
+<dd>
+<div class="block">The offer to apply, present only for an accepted <code>APPLY_OFFER</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getOfflineDeletedReceipt()" class="member-name-link">getOfflineDeletedReceipt()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Gets the value of the offlineDeletedReceipt property.</div>
@@ -2237,13 +2494,27 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Optional hint for card routing, or <code>null</code>.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/Offer.html#getPercentage()" class="member-name-link">getPercentage()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>
+<div class="block">Percentage off, <code>0 &lt; p &lt;= 100</code>, or <code>null</code> when the offer is a fixed amount.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#getPhase()" class="member-name-link">getPhase()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>
+<div class="block">The checkout phase as the widget names it; free-form until <code>CheckoutPhase</code> lands.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/input/PinOptions.html#getPinVerificationMethod()" class="member-name-link">getPinVerificationMethod()</a> - Method in class com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/PinOptions.html" title="class in com.bilt.pos.session.input">PinOptions</a></dt>
 <dd>
 <div class="block">Verification method identifier for the verify modes, or <code>null</code>.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html#getPlacement()" class="member-name-link">getPlacement()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.html#getPlacement()" class="member-name-link">getPlacement()</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.html" title="class in com.bilt.pos.widget">Rendering</a></dt>
 <dd>
 <div class="block">Identifier of the placement this rendering was decided for, e.g.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#getPlacements()" class="member-name-link">getPlacements()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>
+<div class="block">Placements the register has a surface for.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/Receipt.html#getPlainText()" class="member-name-link">getPlainText()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/Receipt.html" title="class in com.bilt.pos.session">Receipt</a></dt>
 <dd>
@@ -2389,6 +2660,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Gets the value of the quantity property.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html#getQuantity()" class="member-name-link">getQuantity()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.html#getQuantity()" class="member-name-link">getQuantity()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.html#getQuantity()" class="member-name-link">getQuantity()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></dt>
@@ -2398,6 +2671,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/identity/CardAcquisitionResult.html#getRawPan()" class="member-name-link">getRawPan()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionResult.html" title="class in com.bilt.pos.session.identity">CardAcquisitionResult</a></dt>
 <dd>
 <div class="block">Full PAN; only returned for PLCC cards, otherwise <code>null</code>.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/ActionOutcome.html#getReason()" class="member-name-link">getReason()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/ActionOutcome.html" title="class in com.bilt.pos.media.service">ActionOutcome</a></dt>
+<dd>
+<div class="block">Why the action was rejected, or <code>null</code> when it was accepted.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.html#getRebateAmount()" class="member-name-link">getRebateAmount()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></dt>
 <dd>
@@ -2526,6 +2803,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Active rewards and coupons.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#getSaleId()" class="member-name-link">getSaleId()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>
+<div class="block">The register's identifier for this sale.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/ShopperSession.html#getSaleId()" class="member-name-link">getSaleId()</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.html" title="interface in com.bilt.pos.session">ShopperSession</a></dt>
 <dd>
 <div class="block">The register's identifier for this lane, sent as <code>SaleID</code> by a terminal session.</div>
@@ -2541,6 +2822,12 @@ loadScripts(document, 'script');</script>
 <div class="block">The sale transaction identity shared by every wire request of this basket's checkout —
  identify, payment, loyalty, stored value, and their reversals all carry it so the sale reads as
  one transaction end to end.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Offer.html#getScope()" class="member-name-link">getScope()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#getSdkVersion()" class="member-name-link">getSdkVersion()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>
+<div class="block">The SDK release these capabilities describe, e.g.</div>
 </dd>
 <dt><a href="com/bilt/pos/widget/Rendering.html#getSecondary()" class="member-name-link">getSecondary()</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.html" title="class in com.bilt.pos.widget">Rendering</a></dt>
 <dd>
@@ -2570,6 +2857,12 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Gets the value of the signature property.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/Offer.html#getSku()" class="member-name-link">getSku()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>
+<div class="block">The SKU a <a href="com/bilt/pos/media/Offer.Scope.html#LINE_ITEM"><code>Offer.Scope.LINE_ITEM</code></a> offer applies to; <code>null</code> for basket offers.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html#getSku()" class="member-name-link">getSku()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.html#getSku()" class="member-name-link">getSku()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
 <dd>
 <div class="block">Primary catalog identifier of the product.</div>
@@ -2652,6 +2945,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Amount charged to a stored value card; populated during payment.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#getStoreLocation()" class="member-name-link">getStoreLocation()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>
+<div class="block">The store, in whatever form the deployment identifies stores.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/ShopperSession.html#getStoreLocation()" class="member-name-link">getStoreLocation()</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.html" title="interface in com.bilt.pos.session">ShopperSession</a></dt>
 <dd>
 <div class="block">Store location identifier, or <code>null</code> if not configured.</div>
@@ -2687,6 +2984,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getSurchargeAmount()" class="member-name-link">getSurchargeAmount()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Gets the value of the surchargeAmount property.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#getSurfaces()" class="member-name-link">getSurfaces()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>
+<div class="block">The kind of surface behind each declared placement.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/display/DisplayContext.html#getTarget()" class="member-name-link">getTarget()</a> - Method in class com.bilt.pos.session.display.<a href="com/bilt/pos/session/display/DisplayContext.html" title="class in com.bilt.pos.session.display">DisplayContext</a></dt>
 <dd>
@@ -2773,6 +3074,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/input/MenuOptions.html#getTimeout()" class="member-name-link">getTimeout()</a> - Method in class com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/MenuOptions.html" title="class in com.bilt.pos.session.input">MenuOptions</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/input/PinOptions.html#getTimeout()" class="member-name-link">getTimeout()</a> - Method in class com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/PinOptions.html" title="class in com.bilt.pos.session.input">PinOptions</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html#getTimestamp()" class="member-name-link">getTimestamp()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getTipsAmount()" class="member-name-link">getTipsAmount()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
@@ -2899,6 +3202,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Gets the value of the unitPrice property.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html#getUnitPrice()" class="member-name-link">getUnitPrice()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.html#getUnitPrice()" class="member-name-link">getUnitPrice()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.html#getUnitPrice()" class="member-name-link">getUnitPrice()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></dt>
@@ -2970,6 +3275,10 @@ loadScripts(document, 'script');</script>
 </dl>
 <h2 class="title" id="I:H">H</h2>
 <dl class="index">
+<dt><a href="com/bilt/pos/media/SurfaceKind.html#HANDOFF" class="member-name-link">HANDOFF</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/SurfaceKind.html" title="enum class in com.bilt.pos.media">SurfaceKind</a></dt>
+<dd>
+<div class="block">The register draws the creative itself from the rendering's content, in its own design system.</div>
+</dd>
 <dt><a href="com/bilt/pos/platform/PlatformRequest.html#hasBody()" class="member-name-link">hasBody()</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/PlatformRequest.html" title="class in com.bilt.pos.platform">PlatformRequest</a></dt>
 <dd>
 <div class="block">Whether the request carries a body.</div>
@@ -2982,6 +3291,22 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Returns <code>true</code> if a customer receipt is present.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Placement.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Placement.html" title="class in com.bilt.pos.media">Placement</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/ActionOutcome.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/ActionOutcome.html" title="class in com.bilt.pos.media.service">ActionOutcome</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/SessionHandle.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/platform/BiltCredentials.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/BiltCredentials.html" title="class in com.bilt.pos.platform">BiltCredentials</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/platform/BiltEnvironment.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/BiltEnvironment.html" title="class in com.bilt.pos.platform">BiltEnvironment</a></dt>
@@ -3058,6 +3383,11 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/widget/Rendering.Builder.html#headline(java.lang.String)" class="member-name-link">headline(String)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.Builder.html" title="class in com.bilt.pos.widget">Rendering.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/SurfaceKind.html#HOSTED" class="member-name-link">HOSTED</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/SurfaceKind.html" title="enum class in com.bilt.pos.media">SurfaceKind</a></dt>
+<dd>
+<div class="block">A hosted Bilt page in a URL slot the register cannot script; interactions arrive through the
+ platform's event channel rather than a local sink.</div>
+</dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltTerminalEnvironment.html#hostnamePattern()" class="member-name-link">hostnamePattern()</a> - Method in enum class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/BiltTerminalEnvironment.html" title="enum class in com.bilt.pos.nexo.client">BiltTerminalEnvironment</a></dt>
 <dd>
 <div class="block">The expected certificate hostname pattern for this environment, e.g.</div>
@@ -3092,6 +3422,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/identity/EntryMode.html#ICC" class="member-name-link">ICC</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/EntryMode.html" title="enum class in com.bilt.pos.session.identity">EntryMode</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/ForceEntryMode.html#ICC" class="member-name-link">ICC</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/ForceEntryMode.html" title="enum class in com.bilt.pos.session.identity">ForceEntryMode</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.Builder.html#id(java.lang.String)" class="member-name-link">id(String)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Builder.html" title="class in com.bilt.pos.media">Offer.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/TerminalShopperSession.html#identifyMember()" class="member-name-link">identifyMember()</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.html" title="interface in com.bilt.pos.session">TerminalShopperSession</a></dt>
 <dd>
@@ -3144,6 +3476,12 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">TransactionStatus could not establish the terminal outcome.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" class="type-name-link" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a> - Class in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
+<dd>
+<div class="block">An <a href="com/bilt/pos/media/service/AdDecisionService.html" title="interface in com.bilt.pos.media.service"><code>AdDecisionService</code></a> that lives entirely in memory, for tests and the emulator.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#%3Cinit%3E()" class="member-name-link">InMemoryAdDecisionService()</a> - Constructor for class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayloadHelper.html#inputFromBase64(java.lang.String)" class="member-name-link">inputFromBase64(String)</a> - Static method in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayloadHelper.html" title="class in com.bilt.pos.display">DisplayPayloadHelper</a></dt>
 <dd>
 <div class="block">Deserializes an <a href="com/bilt/pos/display/InputPayload.html" title="class in com.bilt.pos.display"><code>InputPayload</code></a> from a Base64-encoded XML string.</div>
@@ -3171,6 +3509,8 @@ loadScripts(document, 'script');</script>
 <div class="block">The operation is not valid in the session's current state.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#isAbort()" class="member-name-link">isAbort()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/ActionOutcome.html#isAccepted()" class="member-name-link">isAccepted()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/ActionOutcome.html" title="class in com.bilt.pos.media.service">ActionOutcome</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.html#isCredit()" class="member-name-link">isCredit()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></dt>
 <dd>
@@ -3207,6 +3547,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/input/MenuOptions.html#isMultiSelect()" class="member-name-link">isMultiSelect()</a> - Method in class com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/MenuOptions.html" title="class in com.bilt.pos.session.input">MenuOptions</a></dt>
 <dd>
 <div class="block">Whether the customer may pick several entries.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#isOpen(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">isOpen(SessionHandle)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Whether <code>handle</code> was issued and has not been closed.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/TransactionStatusOptions.html#isReceiptReprint()" class="member-name-link">isReceiptReprint()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TransactionStatusOptions.html" title="class in com.bilt.pos.session">TransactionStatusOptions</a></dt>
 <dd>
@@ -3285,6 +3629,8 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#kind" class="member-name-link">kind</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Builder.html#kind(com.bilt.pos.media.AdInteraction.Kind)" class="member-name-link">kind(AdInteraction.Kind)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Builder.html" title="class in com.bilt.pos.media">AdInteraction.Builder</a></dt>
+<dd>&nbsp;</dd>
 </dl>
 <h2 class="title" id="I:L">L</h2>
 <dl class="index">
@@ -3304,10 +3650,20 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/display/LabeledAmountType.html#%3Cinit%3E()" class="member-name-link">LabeledAmountType()</a> - Constructor for class com.bilt.pos.display.<a href="com/bilt/pos/display/LabeledAmountType.html" title="class in com.bilt.pos.display">LabeledAmountType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#laneId(java.lang.String)" class="member-name-link">laneId(String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#latency(java.time.Duration)" class="member-name-link">latency(Duration)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Delays every decision by <code>latency</code>; a latency beyond the caller's timeout is a miss.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayload.html#layout" class="member-name-link">layout</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/WebSurface.html#lifecycle-heading" class="search-tag-link">Lifecycle</a> - Search tag in class com.bilt.pos.widget.WebSurface</dt>
 <dd>Section</dd>
+<dt><a href="com/bilt/pos/media/Offer.Scope.html#LINE_ITEM" class="member-name-link">LINE_ITEM</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Scope.html" title="enum class in com.bilt.pos.media">Offer.Scope</a></dt>
+<dd>
+<div class="block">One SKU; <a href="com/bilt/pos/media/Offer.html#getSku()"><code>Offer.getSku()</code></a> says which.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/LineItemsType.html#lineItem" class="member-name-link">lineItem</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemsType.html" title="class in com.bilt.pos.display">LineItemsType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayloadHelper.html#lineItem(com.bilt.pos.display.LineItemKindType,java.lang.String)" class="member-name-link">lineItem(LineItemKindType, String)</a> - Static method in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayloadHelper.html" title="class in com.bilt.pos.display">DisplayPayloadHelper</a></dt>
@@ -3331,6 +3687,8 @@ loadScripts(document, 'script');</script>
 <div class="block">Java class for LineItemType complex type</div>
 </dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#%3Cinit%3E()" class="member-name-link">LineItemType()</a> - Constructor for class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#lines(java.util.List)" class="member-name-link">lines(List&lt;AdSessionSnapshot.LineSummary&gt;)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/WebSurface.html#loadUrl(java.lang.String)" class="member-name-link">loadUrl(String)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/WebSurface.html" title="class in com.bilt.pos.widget">WebSurface</a></dt>
 <dd>
@@ -3383,6 +3741,8 @@ loadScripts(document, 'script');</script>
 <div class="block">The kinds of media a surface may be asked to draw.</div>
 </dd>
 <dt><a href="com/bilt/pos/display/ImageType.html#mediaType" class="member-name-link">mediaType</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/ImageType.html" title="class in com.bilt.pos.display">ImageType</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#memberId(java.lang.String)" class="member-name-link">memberId(String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#memberId(java.lang.String)" class="member-name-link">memberId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
 <dd>&nbsp;</dd>
@@ -3452,6 +3812,8 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/nexo/security/MessageEncryptor.html#%3Cinit%3E(com.bilt.pos.nexo.security.SecurityKey)" class="member-name-link">MessageEncryptor(SecurityKey)</a> - Constructor for class com.bilt.pos.nexo.security.<a href="com/bilt/pos/nexo/security/MessageEncryptor.html" title="class in com.bilt.pos.nexo.security">MessageEncryptor</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html#metadata(java.util.Map)" class="member-name-link">metadata(Map&lt;String, String&gt;)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.Builder.html#metadata(java.util.Map)" class="member-name-link">metadata(Map&lt;String, String&gt;)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html#metadata(java.util.Map)" class="member-name-link">metadata(Map&lt;String, String&gt;)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></dt>
@@ -3499,6 +3861,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/platform/BiltEnvironment.html#name()" class="member-name-link">name()</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/BiltEnvironment.html" title="class in com.bilt.pos.platform">BiltEnvironment</a></dt>
 <dd>
 <div class="block"><code>PRODUCTION</code>, <code>STAGING</code> or <code>CUSTOM</code>.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/SurfaceKind.html#NATIVE" class="member-name-link">NATIVE</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/SurfaceKind.html" title="enum class in com.bilt.pos.media">SurfaceKind</a></dt>
+<dd>
+<div class="block">A native adapter from a platform module draws the rendering with UI-toolkit widgets.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementType.html#NET" class="member-name-link">NET</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementType.html" title="enum class in com.bilt.pos.session.settlement">SettlementType</a></dt>
 <dd>
@@ -3558,8 +3924,20 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Provide a custom <code>ObjectMapper</code>.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/Placement.html#of(java.lang.String)" class="member-name-link">of(String)</a> - Static method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Placement.html" title="class in com.bilt.pos.media">Placement</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/SessionHandle.html#of(java.lang.String)" class="member-name-link">of(String)</a> - Static method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html#of(java.lang.String,com.bilt.pos.media.Placement,com.bilt.pos.media.AdInteraction.Kind)" class="member-name-link">of(String, Placement, AdInteraction.Kind)</a> - Static method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
+<dd>
+<div class="block">Shorthand for an interaction stamped now with no action.</div>
+</dd>
 <dt><a href="com/bilt/pos/widget/Cta.html#of(java.lang.String,com.bilt.pos.widget.Action,java.lang.String)" class="member-name-link">of(String, Action, String)</a> - Static method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Cta.html" title="class in com.bilt.pos.widget">Cta</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html#of(java.lang.String,java.lang.String,int,java.math.BigDecimal)" class="member-name-link">of(String, String, int, BigDecimal)</a> - Static method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a></dt>
+<dd>
+<div class="block">Shorthand for a line with no category or metadata.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html#of(java.lang.String,java.math.BigDecimal,java.lang.String)" class="member-name-link">of(String, BigDecimal, String)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></dt>
 <dd>
 <div class="block">Register-managed payment using an integrator-defined tender name.</div>
@@ -3571,6 +3949,22 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/basket/BasketDiscount.html#offer(java.lang.String,java.lang.String,java.math.BigDecimal)" class="member-name-link">offer(String, String, BigDecimal)</a> - Static method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a></dt>
 <dd>
 <div class="block">A discount produced by a register-known offer.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Offer.html" class="type-name-link" title="class in com.bilt.pos.media">Offer</a> - Class in <a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a></dt>
+<dd>
+<div class="block">A price action the ad platform has validated for this checkout.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Offer.Builder.html" class="type-name-link" title="class in com.bilt.pos.media">Offer.Builder</a> - Class in <a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a></dt>
+<dd>
+<div class="block">Builder for <a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media"><code>Offer</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Offer.Scope.html" class="type-name-link" title="enum class in com.bilt.pos.media">Offer.Scope</a> - Enum Class in <a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a></dt>
+<dd>
+<div class="block">What the offer applies to.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#offerFor(java.lang.String,com.bilt.pos.media.Offer)" class="member-name-link">offerFor(String, Offer)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Registers the offer an <code>APPLY_OFFER</code> tap carrying <code>token</code> will be answered with.</div>
 </dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#offlineDeletedReceipt" class="member-name-link">offlineDeletedReceipt</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
@@ -3676,11 +4070,27 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Called when a stored value refund allocation commits.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdEventListener.html#onInteraction(com.bilt.pos.media.AdInteraction)" class="member-name-link">onInteraction(AdInteraction)</a> - Method in interface com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdEventListener.html" title="interface in com.bilt.pos.media.service">AdEventListener</a></dt>
+<dd>
+<div class="block">An interaction with this session's creatives was observed outside the SDK's renderer.</div>
+</dd>
 <dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.html#onMessage(com.bilt.pos.nexo.client.NexoMessageListener.Direction,java.lang.String)" class="member-name-link">onMessage(NexoMessageListener.Direction, String)</a> - Method in interface com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/NexoMessageListener.html" title="interface in com.bilt.pos.nexo.client">NexoMessageListener</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#onMovement(java.util.function.Consumer)" class="member-name-link">onMovement(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
 <div class="block">Called after any externally visible money or loyalty movement commits.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdEventListener.html#onOffer(com.bilt.pos.media.Offer)" class="member-name-link">onOffer(Offer)</a> - Method in interface com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdEventListener.html" title="interface in com.bilt.pos.media.service">AdEventListener</a></dt>
+<dd>
+<div class="block">The platform issued an offer for this session outside the local action flow.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#onPlacement(com.bilt.pos.media.Placement,com.bilt.pos.widget.Rendering...)" class="member-name-link">onPlacement(Placement, Rendering...)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Serves <code>renderings</code> in rotation for <code>placement</code>; no renderings clears the script.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#onPlacement(com.bilt.pos.media.Placement,java.util.function.Function)" class="member-name-link">onPlacement(Placement, Function&lt;AdSessionSnapshot, Optional&lt;Rendering&gt;&gt;)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Lets <code>rule</code> pick a rendering for <code>placement</code> from the session's latest snapshot.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#onPointsRedeemed(java.util.function.Function)" class="member-name-link">onPointsRedeemed(Function&lt;PointRedemptionResult, BigDecimal&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
@@ -3766,10 +4176,16 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/identity/CardAcquisitionOptions.Builder.html#paymentType(com.bilt.pos.nexo.model.PaymentTypeEnum)" class="member-name-link">paymentType(PaymentTypeEnum)</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionOptions.Builder.html" title="class in com.bilt.pos.session.identity">CardAcquisitionOptions.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.Builder.html#percentage(java.math.BigDecimal)" class="member-name-link">percentage(BigDecimal)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Builder.html" title="class in com.bilt.pos.media">Offer.Builder</a></dt>
+<dd>
+<div class="block">Percentage off; mutually exclusive with <code>Offer.Builder.amount</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/widget/ActionSink.html#perform(com.bilt.pos.widget.Cta)" class="member-name-link">perform(Cta)</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/ActionSink.html" title="interface in com.bilt.pos.widget">ActionSink</a></dt>
 <dd>
 <div class="block">The shopper tapped <code>cta</code>.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#phase(java.lang.String)" class="member-name-link">phase(String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/MemberIdentifier.Type.html#PHONE_NUMBER" class="member-name-link">PHONE_NUMBER</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/MemberIdentifier.Type.html" title="enum class in com.bilt.pos.session.identity">MemberIdentifier.Type</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/MemberIdentifier.html#phoneNumber(java.lang.String)" class="member-name-link">phoneNumber(String)</a> - Static method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/MemberIdentifier.html" title="class in com.bilt.pos.session.identity">MemberIdentifier</a></dt>
@@ -3813,8 +4229,18 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/input/PinOptions.Builder.html#pinVerificationMethod(java.lang.String)" class="member-name-link">pinVerificationMethod(String)</a> - Method in class com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/PinOptions.Builder.html" title="class in com.bilt.pos.session.input">PinOptions.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Builder.html#placement(com.bilt.pos.media.Placement)" class="member-name-link">placement(Placement)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Builder.html" title="class in com.bilt.pos.media">AdInteraction.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.Builder.html#placement(com.bilt.pos.media.Placement,com.bilt.pos.media.SurfaceKind)" class="member-name-link">placement(Placement, SurfaceKind)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></dt>
+<dd>
+<div class="block">Declares a placement and the kind of surface the register draws it with.</div>
+</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.Builder.html#placement(java.lang.String)" class="member-name-link">placement(String)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.Builder.html" title="class in com.bilt.pos.widget">Rendering.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Placement.html" class="type-name-link" title="class in com.bilt.pos.media">Placement</a> - Class in <a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a></dt>
+<dd>
+<div class="block">A named zone on the register where an ad may be shown.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptType.html#plainTextReceipt" class="member-name-link">plainTextReceipt</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptType.html" title="class in com.bilt.pos.receipt">ReceiptType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/platform/PlatformAuthException.html" class="type-name-link" title="class in com.bilt.pos.platform">PlatformAuthException</a> - Exception Class in <a href="com/bilt/pos/platform/package-summary.html">com.bilt.pos.platform</a></dt>
@@ -3999,6 +4425,10 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#quantity" class="member-name-link">quantity</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html#quantity(int)" class="member-name-link">quantity(int)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary.Builder</a></dt>
+<dd>
+<div class="block">Default 1.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.Builder.html#quantity(int)" class="member-name-link">quantity(int)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></dt>
 <dd>
 <div class="block">Default 1.</div>
@@ -4191,6 +4621,16 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Unlinked refund, not tied to a prior transaction.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdDecisionService.html#registerSession(com.bilt.pos.media.service.AdSessionSnapshot)" class="member-name-link">registerSession(AdSessionSnapshot)</a> - Method in interface com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdDecisionService.html" title="interface in com.bilt.pos.media.service">AdDecisionService</a></dt>
+<dd>
+<div class="block">Announces a shopper session and returns the handle every later call uses.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#registerSession(com.bilt.pos.media.service.AdSessionSnapshot)" class="member-name-link">registerSession(AdSessionSnapshot)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/ActionOutcome.html#rejected(java.lang.String)" class="member-name-link">rejected(String)</a> - Static method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/ActionOutcome.html" title="class in com.bilt.pos.media.service">ActionOutcome</a></dt>
+<dd>
+<div class="block">The platform refused the action; <code>reason</code> is diagnostic, never shown to the shopper.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#rejectionReason" class="member-name-link">rejectionReason</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/StoredValueLoad.html#reload(java.lang.String,com.bilt.pos.session.storedvalue.StoredValueCard)" class="member-name-link">reload(String, StoredValueCard)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/StoredValueLoad.html" title="class in com.bilt.pos.session.settlement">StoredValueLoad</a></dt>
@@ -4233,6 +4673,20 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/widget/Surface.html#replacement-and-idempotence-heading" class="search-tag-link">Replacement and idempotence</a> - Search tag in interface com.bilt.pos.widget.Surface</dt>
 <dd>Section</dd>
+<dt><a href="com/bilt/pos/media/service/AdDecisionService.html#report(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.AdInteraction)" class="member-name-link">report(SessionHandle, AdInteraction)</a> - Method in interface com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdDecisionService.html" title="interface in com.bilt.pos.media.service">AdDecisionService</a></dt>
+<dd>
+<div class="block">Reports one interaction for measurement.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#report(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.AdInteraction)" class="member-name-link">report(SessionHandle, AdInteraction)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#reports()" class="member-name-link">reports()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Every interaction reported for any session, in order.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#reports(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">reports(SessionHandle)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Every interaction reported for <code>handle</code>, in order.</div>
+</dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html#request(com.bilt.pos.nexo.model.NexoTerminalAPI)" class="member-name-link">request(NexoTerminalAPI)</a> - Method in class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a></dt>
 <dd>
 <div class="block">Send a Sale to POI request to the terminal and return the response.</div>
@@ -4396,6 +4850,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">A line sold to the customer.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#saleId(java.lang.String)" class="member-name-link">saleId(String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/ShopperSession.Builder.html#saleId(java.lang.String)" class="member-name-link">saleId(String)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.Builder.html" title="class in com.bilt.pos.session">ShopperSession.Builder</a></dt>
 <dd>
 <div class="block">The register's identifier for this lane.</div>
@@ -4436,6 +4892,10 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/ForceEntryMode.html#SCANNED" class="member-name-link">SCANNED</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/ForceEntryMode.html" title="enum class in com.bilt.pos.session.identity">ForceEntryMode</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.Builder.html#scope(com.bilt.pos.media.Offer.Scope)" class="member-name-link">scope(Offer.Scope)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Builder.html" title="class in com.bilt.pos.media">Offer.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.Builder.html#sdkVersion(java.lang.String)" class="member-name-link">sdkVersion(String)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.Builder.html#secondary(com.bilt.pos.widget.Cta)" class="member-name-link">secondary(Cta)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.Builder.html" title="class in com.bilt.pos.widget">Rendering.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#section" class="member-name-link">section</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
@@ -4472,8 +4932,16 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Send the offer or details to the shopper's phone.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Kind.html#SEND_TO_PHONE_REQUESTED" class="member-name-link">SEND_TO_PHONE_REQUESTED</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Kind.html" title="enum class in com.bilt.pos.media">AdInteraction.Kind</a></dt>
+<dd>
+<div class="block">A send-to-phone was requested and handed to the platform.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/LineItemKindType.html#SEPARATOR" class="member-name-link">SEPARATOR</a> - Enum constant in enum class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemKindType.html" title="enum class in com.bilt.pos.display">LineItemKindType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#served(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">served(SessionHandle)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Every rendering served to <code>handle</code>, in order.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#serviceId(java.lang.String)" class="member-name-link">serviceId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SessionBasket.html" class="type-name-link" title="class in com.bilt.pos.session">SessionBasket</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
@@ -4506,6 +4974,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/SessionException.html#%3Cinit%3E(com.bilt.pos.session.SessionError,com.bilt.pos.session.settlement.AbandonedSettlementRecord)" class="member-name-link">SessionException(SessionError, AbandonedSettlementRecord)</a> - Constructor for exception class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionException.html" title="class in com.bilt.pos.session">SessionException</a></dt>
 <dd>
 <div class="block">Creates a settlement-abandonment failure carrying its manual-takeover record.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/SessionHandle.html" class="type-name-link" title="class in com.bilt.pos.media.service">SessionHandle</a> - Class in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
+<dd>
+<div class="block">An opaque reference to a shopper session registered with an <a href="com/bilt/pos/media/service/AdDecisionService.html" title="interface in com.bilt.pos.media.service"><code>AdDecisionService</code></a>.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SessionResult.html" class="type-name-link" title="class in com.bilt.pos.session">SessionResult&lt;T&gt;</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
@@ -5104,6 +5576,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/widget/WebSurface.html#show(com.bilt.pos.widget.Rendering,com.bilt.pos.widget.ActionSink)" class="member-name-link">show(Rendering, ActionSink)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/WebSurface.html" title="class in com.bilt.pos.widget">WebSurface</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Kind.html#SHOWN" class="member-name-link">SHOWN</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Kind.html" title="enum class in com.bilt.pos.media">AdInteraction.Kind</a></dt>
+<dd>
+<div class="block">The rendering was handed to a surface.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/InputPayload.html#signature" class="member-name-link">signature</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/InputPayload.html" title="class in com.bilt.pos.display">InputPayload</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayloadHelper.html#signature(java.lang.String)" class="member-name-link">signature(String)</a> - Static method in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayloadHelper.html" title="class in com.bilt.pos.display">DisplayPayloadHelper</a></dt>
@@ -5135,6 +5611,12 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Skip an optional failed step and continue.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/Offer.Builder.html#sku(java.lang.String)" class="member-name-link">sku(String)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Builder.html" title="class in com.bilt.pos.media">Offer.Builder</a></dt>
+<dd>
+<div class="block">Required when the scope is <a href="com/bilt/pos/media/Offer.Scope.html#LINE_ITEM"><code>Offer.Scope.LINE_ITEM</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html#sku(java.lang.String)" class="member-name-link">sku(String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.Builder.html#sku(java.lang.String)" class="member-name-link">sku(String)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html#sku(java.lang.String)" class="member-name-link">sku(String)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></dt>
@@ -5142,6 +5624,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/SessionBasket.html#snapshot()" class="member-name-link">snapshot()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></dt>
 <dd>
 <div class="block">An immutable snapshot of the current basket.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#snapshots(com.bilt.pos.media.service.SessionHandle)" class="member-name-link">snapshots(SessionHandle)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Every snapshot seen for <code>handle</code>: the registration first, then each update, in order.</div>
 </dd>
 <dt><a href="com/bilt/pos/display/LineItemKindType.html#SPACER" class="member-name-link">SPACER</a> - Enum constant in enum class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemKindType.html" title="enum class in com.bilt.pos.display">LineItemKindType</a></dt>
 <dd>&nbsp;</dd>
@@ -5324,6 +5810,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Unloads (cashes out) funds from a stored value card.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#storeLocation(java.lang.String)" class="member-name-link">storeLocation(String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/ShopperSession.Builder.html#storeLocation(java.lang.String)" class="member-name-link">storeLocation(String)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.Builder.html" title="class in com.bilt.pos.session">ShopperSession.Builder</a></dt>
 <dd>
 <div class="block">Store location identifier.</div>
@@ -5339,6 +5827,13 @@ loadScripts(document, 'script');</script>
  transaction this session creates — it groups the store's transactions for totals and
  reconciliation (<code>getTotals()</code> filters by it).</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdDecisionService.html#subscribe(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.service.AdEventListener)" class="member-name-link">subscribe(SessionHandle, AdEventListener)</a> - Method in interface com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdDecisionService.html" title="interface in com.bilt.pos.media.service">AdDecisionService</a></dt>
+<dd>
+<div class="block">Opens the server-to-SDK event channel for <code>handle</code>: offers and interactions that
+ originate outside the SDK's own renderer (a hosted page, a send-to-phone confirmation).</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#subscribe(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.service.AdEventListener)" class="member-name-link">subscribe(SessionHandle, AdEventListener)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#subtitle" class="member-name-link">subtitle</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/ReceiptType.html#subtotal" class="member-name-link">subtotal</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/ReceiptType.html" title="class in com.bilt.pos.display">ReceiptType</a></dt>
@@ -5353,17 +5848,29 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/VoidResult.Builder.html#success(boolean)" class="member-name-link">success(boolean)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/VoidResult.Builder.html" title="class in com.bilt.pos.session">VoidResult.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#supports(com.bilt.pos.widget.Rendering)" class="member-name-link">supports(Rendering)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>
+<div class="block">Whether every format and action a rendering needs is declared here.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#surchargeAmount" class="member-name-link">surchargeAmount</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/Surface.html" class="type-name-link" title="interface in com.bilt.pos.widget">Surface</a> - Interface in <a href="com/bilt/pos/widget/package-summary.html">com.bilt.pos.widget</a></dt>
 <dd>
 <div class="block">A place on the register where a widget can draw a <a href="com/bilt/pos/widget/Rendering.html" title="class in com.bilt.pos.widget"><code>Rendering</code></a>.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/SurfaceKind.html" class="type-name-link" title="enum class in com.bilt.pos.media">SurfaceKind</a> - Enum Class in <a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a></dt>
+<dd>
+<div class="block">How a register draws a given <a href="com/bilt/pos/media/Placement.html" title="class in com.bilt.pos.media"><code>Placement</code></a>, reported to the ad platform in <a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media"><code>Capabilities</code></a> so it can pick creatives the surface can actually do justice to.</div>
+</dd>
 <dt><a href="com/bilt/pos/widget/package-summary.html#surface-tiers-heading" class="search-tag-link">Surface tiers</a> - Search tag in package com.bilt.pos.widget</dt>
 <dd>Section</dd>
 <dt><a href="com/bilt/pos/session/identity/IdentifyStatus.html#SUSPENDED" class="member-name-link">SUSPENDED</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyStatus.html" title="enum class in com.bilt.pos.session.identity">IdentifyStatus</a></dt>
 <dd>
 <div class="block">The member exists but is suspended or inactive.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#swallowedFailures()" class="member-name-link">swallowedFailures()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>
+<div class="block">Injected failures that <code>decide</code> or <code>validateAction</code> absorbed into a miss.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html#swiped()" class="member-name-link">swiped()</a> - Static method in class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></dt>
 <dd>
@@ -5377,6 +5884,10 @@ loadScripts(document, 'script');</script>
 </dl>
 <h2 class="title" id="I:T">T</h2>
 <dl class="index">
+<dt><a href="com/bilt/pos/media/AdInteraction.Kind.html#TAPPED" class="member-name-link">TAPPED</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Kind.html" title="enum class in com.bilt.pos.media">AdInteraction.Kind</a></dt>
+<dd>
+<div class="block">The shopper tapped a call to action; <a href="com/bilt/pos/media/AdInteraction.html#getAction()"><code>AdInteraction.getAction()</code></a> says which.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/identity/EntryMode.html#TAPPED" class="member-name-link">TAPPED</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/EntryMode.html" title="enum class in com.bilt.pos.session.identity">EntryMode</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/ForceEntryMode.html#TAPPED" class="member-name-link">TAPPED</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/ForceEntryMode.html" title="enum class in com.bilt.pos.session.identity">ForceEntryMode</a></dt>
@@ -5417,6 +5928,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">A terminal's device and admin operations — diagnostics, totals, reconciliation, printing, sound —
  outside any session.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/SurfaceKind.html#TERMINAL" class="member-name-link">TERMINAL</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/SurfaceKind.html" title="enum class in com.bilt.pos.media">SurfaceKind</a></dt>
+<dd>
+<div class="block">The payment terminal's own screen, driven through the Nexo display messages.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/display/DisplayTarget.html#TERMINAL" class="member-name-link">TERMINAL</a> - Enum constant in enum class com.bilt.pos.session.display.<a href="com/bilt/pos/session/display/DisplayTarget.html" title="enum class in com.bilt.pos.session.display">DisplayTarget</a></dt>
 <dd>
@@ -5482,6 +5997,12 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The operation did not complete within the configured timeout.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdDecisionService.html#timeouts-and-failures-heading" class="search-tag-link">Timeouts and failures</a> - Search tag in interface com.bilt.pos.media.service.AdDecisionService</dt>
+<dd>Section</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Builder.html#timestamp(java.time.Instant)" class="member-name-link">timestamp(Instant)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Builder.html" title="class in com.bilt.pos.media">AdInteraction.Builder</a></dt>
+<dd>
+<div class="block">Defaults to the build time.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#tipsAmount" class="member-name-link">tipsAmount</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/DisplayType.html#title" class="member-name-link">title</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayType.html" title="class in com.bilt.pos.display">DisplayType</a></dt>
@@ -5498,6 +6019,14 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Serializes a <a href="com/bilt/pos/receipt/ReceiptType.html" title="class in com.bilt.pos.receipt"><code>ReceiptType</code></a> to a Base64-encoded XML string.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html#toBuilder()" class="member-name-link">toBuilder()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#toBuilder()" class="member-name-link">toBuilder()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.html#toBuilder()" class="member-name-link">toBuilder()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#toBuilder()" class="member-name-link">toBuilder()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#toBuilder()" class="member-name-link">toBuilder()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
 <dd>
 <div class="block">Returns a builder initialized with this result's current values.</div>
@@ -5516,6 +6045,22 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">References needed to void or refund against this completed settlement later.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Offer.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media">Offer</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/Placement.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Placement.html" title="class in com.bilt.pos.media">Placement</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/ActionOutcome.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/ActionOutcome.html" title="class in com.bilt.pos.media.service">ActionOutcome</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/SessionHandle.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/SessionHandle.html" title="class in com.bilt.pos.media.service">SessionHandle</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/platform/BiltCredentials.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/BiltCredentials.html" title="class in com.bilt.pos.platform">BiltCredentials</a></dt>
 <dd>
 <div class="block">Names the grant and the client id; the secret is always shown as <code>&lt;redacted&gt;</code>.</div>
@@ -5658,6 +6203,8 @@ loadScripts(document, 'script');</script>
 <dd>Section</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#unitPrice" class="member-name-link">unitPrice</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html#unitPrice(java.math.BigDecimal)" class="member-name-link">unitPrice(BigDecimal)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.LineSummary.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.LineSummary.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.Builder.html#unitPrice(java.math.BigDecimal)" class="member-name-link">unitPrice(BigDecimal)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketItem.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html#unitPrice(java.math.BigDecimal)" class="member-name-link">unitPrice(BigDecimal)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></dt>
@@ -5698,6 +6245,12 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Sets an absolute quantity by SKU; <code>0</code> removes the line.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/service/AdDecisionService.html#updateSession(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.service.AdSessionSnapshot)" class="member-name-link">updateSession(SessionHandle, AdSessionSnapshot)</a> - Method in interface com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdDecisionService.html" title="interface in com.bilt.pos.media.service">AdDecisionService</a></dt>
+<dd>
+<div class="block">Replaces the service's view of the session with <code>snapshot</code>.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#updateSession(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.service.AdSessionSnapshot)" class="member-name-link">updateSession(SessionHandle, AdSessionSnapshot)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/MediaSpec.Builder.html#url(java.net.URI)" class="member-name-link">url(URI)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/MediaSpec.Builder.html" title="class in com.bilt.pos.widget">MediaSpec.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/platform/OkHttpPlatformClient.Builder.html#userAgent(java.lang.String)" class="member-name-link">userAgent(String)</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/OkHttpPlatformClient.Builder.html" title="class in com.bilt.pos.platform">OkHttpPlatformClient.Builder</a></dt>
@@ -5707,6 +6260,12 @@ loadScripts(document, 'script');</script>
 </dl>
 <h2 class="title" id="I:V">V</h2>
 <dl class="index">
+<dt><a href="com/bilt/pos/media/service/AdDecisionService.html#validateAction(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.widget.Cta,java.lang.String)" class="member-name-link">validateAction(SessionHandle, Cta, String)</a> - Method in interface com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdDecisionService.html" title="interface in com.bilt.pos.media.service">AdDecisionService</a></dt>
+<dd>
+<div class="block">Presents a tapped <code>cta</code> for <code>creativeId</code> to the platform.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#validateAction(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.widget.Cta,java.lang.String)" class="member-name-link">validateAction(SessionHandle, Cta, String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/ImageType.html#value" class="member-name-link">value</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/ImageType.html" title="class in com.bilt.pos.display">ImageType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/MoneyType.html#value" class="member-name-link">value</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/MoneyType.html" title="class in com.bilt.pos.display">MoneyType</a></dt>
@@ -5718,6 +6277,18 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/receipt/ReceiptCopyEnum.html#value()" class="member-name-link">value()</a> - Method in enum class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptCopyEnum.html" title="enum class in com.bilt.pos.receipt">ReceiptCopyEnum</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemKindType.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemKindType.html" title="enum class in com.bilt.pos.display">LineItemKindType</a></dt>
+<dd>
+<div class="block">Returns the enum constant of this class with the specified name.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Kind.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Kind.html" title="enum class in com.bilt.pos.media">AdInteraction.Kind</a></dt>
+<dd>
+<div class="block">Returns the enum constant of this class with the specified name.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Offer.Scope.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Scope.html" title="enum class in com.bilt.pos.media">Offer.Scope</a></dt>
+<dd>
+<div class="block">Returns the enum constant of this class with the specified name.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/SurfaceKind.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/SurfaceKind.html" title="enum class in com.bilt.pos.media">SurfaceKind</a></dt>
 <dd>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
 </dd>
@@ -5818,6 +6389,21 @@ loadScripts(document, 'script');</script>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
 </dd>
 <dt><a href="com/bilt/pos/display/LineItemKindType.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemKindType.html" title="enum class in com.bilt.pos.display">LineItemKindType</a></dt>
+<dd>
+<div class="block">Returns an array containing the constants of this enum class, in
+the order they are declared.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Kind.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Kind.html" title="enum class in com.bilt.pos.media">AdInteraction.Kind</a></dt>
+<dd>
+<div class="block">Returns an array containing the constants of this enum class, in
+the order they are declared.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/Offer.Scope.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Scope.html" title="enum class in com.bilt.pos.media">Offer.Scope</a></dt>
+<dd>
+<div class="block">Returns an array containing the constants of this enum class, in
+the order they are declared.</div>
+</dd>
+<dt><a href="com/bilt/pos/media/SurfaceKind.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/SurfaceKind.html" title="enum class in com.bilt.pos.media">SurfaceKind</a></dt>
 <dd>
 <div class="block">Returns an array containing the constants of this enum class, in
 the order they are declared.</div>
@@ -5963,6 +6549,10 @@ the order they are declared.</div>
 <div class="block">The rendering became visible to the shopper for long enough to count as seen, by whatever
  viewability rule the surface applies.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/AdInteraction.Kind.html#VIEWED" class="member-name-link">VIEWED</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.Kind.html" title="enum class in com.bilt.pos.media">AdInteraction.Kind</a></dt>
+<dd>
+<div class="block">The surface reported the creative as seen under its viewability rule.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/LineItemKindType.html#VOID" class="member-name-link">VOID</a> - Enum constant in enum class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemKindType.html" title="enum class in com.bilt.pos.display">LineItemKindType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/VoidResult.html" class="type-name-link" title="class in com.bilt.pos.session">VoidResult</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
@@ -5999,6 +6589,10 @@ the order they are declared.</div>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#warning(java.lang.String)" class="member-name-link">warning(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/media/SurfaceKind.html#WEB" class="member-name-link">WEB</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/SurfaceKind.html" title="enum class in com.bilt.pos.media">SurfaceKind</a></dt>
+<dd>
+<div class="block">A <code>WebSurface</code> subclass drives Bilt's hosted renderer page inside a browser control.</div>
+</dd>
 <dt><a href="com/bilt/pos/widget/WebSurface.html" class="type-name-link" title="class in com.bilt.pos.widget">WebSurface</a> - Class in <a href="com/bilt/pos/widget/package-summary.html">com.bilt.pos.widget</a></dt>
 <dd>
 <div class="block">A <a href="com/bilt/pos/widget/Surface.html" title="interface in com.bilt.pos.widget"><code>Surface</code></a> that draws through a browser control the register already embeds.</div>
