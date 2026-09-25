@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bilt.com/schemas/pos/widget/bridge-messages.schema.json",
+  "title": "Bilt POS SDK WebSurface bridge messages",
+  "description": "Messages exchanged between the SDK's WebSurface and the hosted renderer page. Outbound messages are passed as the single argument of window.BiltMedia.receive(message); inbound messages are the string the page posts to the platform's JavaScript interface, which the host forwards to WebSurface.onBridgeMessage. No message carries PII.",
+  "oneOf": [
+    { "$ref": "#/$defs/outbound" },
+    { "$ref": "#/$defs/inbound" }
+  ],
+  "$defs": {
+    "outbound": {
+      "description": "SDK to page.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "rendering"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "rendering" },
+            "rendering": { "$ref": "#/$defs/rendering" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "clear" }
+          }
+        }
+      ]
+    },
+    "inbound": {
+      "description": "Page to SDK. The SDK accepts only these types and only for the creative currently on display; anything else is dropped and reported to WebSurface.onBridgeError.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "ready" }
+          },
+          "description": "The renderer page has installed window.BiltMedia.receive and can accept messages. Sent once per page load."
+        },
+        {
+          "type": "object",
+          "required": ["type", "creativeId", "action", "token"],
+          "properties": {
+            "type": { "const": "action" },
+            "creativeId": { "$ref": "#/$defs/creativeId" },
+            "action": { "$ref": "#/$defs/action" },
+            "token": { "$ref": "#/$defs/token" }
+          },
+          "description": "The shopper tapped a CTA. creativeId and token must match the rendering on display and action must match that CTA's declared action."
+        },
+        {
+          "type": "object",
+          "required": ["type", "creativeId"],
+          "properties": {
+            "type": { "enum": ["viewed", "dismissed", "completed"] },
+            "creativeId": { "$ref": "#/$defs/creativeId" }
+          },
+          "description": "viewed: the creative met the page's viewability rule (at most once). dismissed: the shopper closed it from the page's own close affordance. completed: its video played to the end."
+        }
+      ]
+    },
+    "rendering": {
+      "type": "object",
+      "required": ["creativeId", "placement", "media", "headline", "ttlMs", "tracking"],
+      "additionalProperties": false,
+      "properties": {
+        "creativeId": { "$ref": "#/$defs/creativeId" },
+        "placement": { "type": "string", "minLength": 1, "description": "Placement identifier, e.g. lane-banner." },
+        "media": { "$ref": "#/$defs/media" },
+        "headline": { "type": "string" },
+        "body": { "type": "string" },
+        "cta": { "$ref": "#/$defs/cta" },
+        "secondary": { "$ref": "#/$defs/cta" },
+        "ttlMs": { "type": "integer", "minimum": 1, "description": "Freshness bound in milliseconds, rounded up to a whole millisecond." },
+        "tracking": {
+          "type": "object",
+          "description": "Tracking beacons keyed by event name, e.g. impression and viewability.",
+          "additionalProperties": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "required": ["type", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["image", "video", "html"] },
+        "url": { "type": "string", "format": "uri", "description": "Signed, short-lived CDN URL." },
+        "durationMs": { "type": "integer", "minimum": 1, "description": "Video running time in milliseconds, rounded up to a whole millisecond." },
+        "poster": { "type": "string", "format": "uri", "description": "Still frame shown before a video starts." }
+      }
+    },
+    "cta": {
+      "type": "object",
+      "required": ["label", "action", "token"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string" },
+        "action": { "$ref": "#/$defs/action" },
+        "token": { "$ref": "#/$defs/token" }
+      }
+    },
+    "action": {
+      "enum": ["APPLY_OFFER", "SEND_TO_PHONE", "DETAILS", "DISMISS"]
+    },
+    "creativeId": { "type": "string", "minLength": 1 },
+    "token": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque token minted by the ad platform for this CTA on this creative in this session. Returned verbatim; never constructed by the page."
+    }
+  }
+}

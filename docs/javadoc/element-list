@@ -11,3 +11,4 @@ com.bilt.pos.session.input
 com.bilt.pos.session.payment
 com.bilt.pos.session.settlement
 com.bilt.pos.session.storedvalue
+com.bilt.pos.widget
