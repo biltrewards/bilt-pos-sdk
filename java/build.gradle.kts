@@ -21,6 +21,16 @@ dependencies {
     testImplementation(libs.okhttp.tls)
 }
 
+// Stamps the release into bilt-pos-sdk-version.properties so RetailMedia can
+// report the SDK version in Capabilities without a hand-maintained constant.
+tasks.processResources {
+    val sdkVersion = providers.gradleProperty("VERSION")
+    inputs.property("sdkVersion", sdkVersion)
+    filesMatching("bilt-pos-sdk-version.properties") {
+        expand(mapOf("sdkVersion" to sdkVersion.get()))
+    }
+}
+
 // Browsable Javadoc for the SDK's public surface, served on the docs site
 // from docs/javadoc (checked in, like the Redoc api-reference.html).
 // Excludes the internal packages and the ~190 generated nexo wire models,
