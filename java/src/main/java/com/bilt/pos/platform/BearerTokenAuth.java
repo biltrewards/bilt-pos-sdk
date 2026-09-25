@@ -105,6 +105,7 @@ final class BearerTokenAuth implements Interceptor, Authenticator {
     }
   }
 
+  // Runs once per call, before any redirect; redirectGuard() keeps later hops within the base.
   @Override
   public Response intercept(Chain chain) throws IOException {
     Request request = chain.request();
