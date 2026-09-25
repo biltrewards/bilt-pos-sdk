@@ -1355,6 +1355,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       // records progress into it), so a retry resumes at the
       // movements still standing while the default policy still sees
       // the whole target
+      // the live basket's tuple is the void's own sale identity; the sale being voided is
+      // referenced through ReversalData's OriginalPOITransaction, not through this ID
       VoidResult result =
           reversalManager.voidMovements(
               movements,
