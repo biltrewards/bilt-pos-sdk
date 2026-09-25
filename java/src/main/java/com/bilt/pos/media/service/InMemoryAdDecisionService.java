@@ -40,15 +40,16 @@ import java.util.logging.Logger;
  * <p>The fake is scripted rather than clever. {@link #onPlacement(Placement, Rendering...)} rotates
  * through the given renderings on successive decisions for that placement; {@link
  * #onPlacement(Placement, Function)} lets a rule pick from the latest snapshot instead. Decisions
- * honour {@link Capabilities}: a rendering whose media type or CTA actions the caller did not
- * declare is refused and the decision is empty, as the contract requires. {@link #latency} adds an
- * artificial delay so timeout handling can be exercised — a latency longer than the caller's
- * timeout waits out the timeout and answers empty. A rule's own running time counts toward the
- * timeout too, and rules run outside the fake's lock; the fake cannot interrupt a rule, so a rule
- * slower than the timeout makes {@code decide} return late, but always with an empty answer. {@link
- * #failNext} injects one failure: the next {@code decide} answers empty, the next {@code
- * validateAction} answers rejected, and the next {@code registerSession}, {@code updateSession} or
- * {@code report} throws it, whichever comes first.
+ * honour {@link Capabilities}: a rendering whose placement, media type or CTA actions the caller
+ * did not declare is refused and the decision is empty, as the contract requires. So is a rendering
+ * scripted for a different placement than the one asked for. {@link #latency} adds an artificial
+ * delay so timeout handling can be exercised — a latency longer than the caller's timeout waits out
+ * the timeout and answers empty. A rule's own running time counts toward the timeout too, and rules
+ * run outside the fake's lock; the fake cannot interrupt a rule, so a rule slower than the timeout
+ * makes {@code decide} return late, but always with an empty answer. {@link #failNext} injects one
+ * failure: the next {@code decide} answers empty, the next {@code validateAction} answers rejected,
+ * and the next {@code registerSession}, {@code updateSession} or {@code report} throws it,
+ * whichever comes first.
  *
  * <p>Tokens are the ones on the scripted renderings; the fake remembers which tokens it served to
  * which session for which creative and action, and {@link #validateAction} rejects anything else.
@@ -296,7 +297,7 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
       return Optional.empty();
     }
     Rendering rendering = candidate.get();
-    if (!capabilities.supports(rendering)) {
+    if (!rendering.getPlacement().equals(placement.getId()) || !capabilities.supports(rendering)) {
       return Optional.empty();
     }
     synchronized (lock) {

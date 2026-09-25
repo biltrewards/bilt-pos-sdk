@@ -124,12 +124,13 @@ class MediaValueTypesTest {
   }
 
   @Test
-  void supportsChecksFormatAndEveryCtaAction() {
+  void supportsChecksPlacementFormatAndEveryCtaAction() {
     Capabilities capabilities =
         Capabilities.builder()
             .sdkVersion("0.24.0")
             .format(MediaSpec.MediaType.IMAGE)
             .action(Action.APPLY_OFFER)
+            .placement(Placement.of("lane-banner"), SurfaceKind.WEB)
             .build();
     Rendering.Builder image =
         Rendering.builder()
@@ -140,6 +141,10 @@ class MediaValueTypesTest {
             .ttl(Duration.ofSeconds(5));
 
     assertTrue(capabilities.supports(image.build()));
+    assertFalse(
+        capabilities.supports(image.placement("receipt-footer").build()),
+        "a placement the register has no surface for is not supported");
+    image.placement("lane-banner");
     assertTrue(capabilities.supports(image.cta(Cta.of("Apply", Action.APPLY_OFFER, "a")).build()));
     assertFalse(
         capabilities.supports(image.secondary(Cta.of("Text", Action.SEND_TO_PHONE, "b")).build()));

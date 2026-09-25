@@ -162,6 +162,31 @@ class InMemoryAdDecisionServiceTest {
   }
 
   @Test
+  void refusesARenderingForAnotherOrUndeclaredPlacement() {
+    Placement footer = Placement.of("receipt-footer");
+    Rendering footerCreative = creative("crt_f").placement(footer.getId()).build();
+    Capabilities withFooter = FULL.toBuilder().placement(footer, SurfaceKind.NATIVE).build();
+
+    InMemoryAdDecisionService misfiled =
+        new InMemoryAdDecisionService().onPlacement(BANNER, footerCreative);
+    SessionHandle banner = misfiled.registerSession(snapshot("browsing"));
+    assertEquals(
+        Optional.empty(),
+        misfiled.decide(banner, BANNER, withFooter, TIMEOUT),
+        "a rendering scripted for another slot is not served into this one");
+
+    InMemoryAdDecisionService service =
+        new InMemoryAdDecisionService().onPlacement(footer, footerCreative);
+    SessionHandle handle = service.registerSession(snapshot("browsing"));
+    assertEquals(
+        Optional.empty(),
+        service.decide(handle, footer, FULL, TIMEOUT),
+        "a placement the register did not declare is not served");
+    assertTrue(service.served(handle).isEmpty());
+    assertEquals(Optional.of(footerCreative), service.decide(handle, footer, withFooter, TIMEOUT));
+  }
+
+  @Test
   void validatesItsOwnTokensAndIssuesRegisteredOffers() {
     Rendering rendering = creative("crt_1").cta(APPLY).secondary(TEXT_ME).build();
     Offer offer = offer("crt_1");

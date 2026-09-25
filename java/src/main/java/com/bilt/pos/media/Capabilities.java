@@ -79,8 +79,13 @@ public final class Capabilities {
     return surfaces;
   }
 
-  /** Whether every format and action a rendering needs is declared here. */
+  /**
+   * Whether a rendering's placement is declared here, along with every format and action it needs.
+   */
   public boolean supports(com.bilt.pos.widget.Rendering rendering) {
+    if (!surfaces.containsKey(Placement.of(rendering.getPlacement()))) {
+      return false;
+    }
     if (!formats.contains(rendering.getMedia().getType())) {
       return false;
     }
