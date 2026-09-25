@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -62,6 +63,24 @@ final class ClientCredentialsTokenSource implements AutoCloseable {
   private static final MediaType FORM_MEDIA_TYPE =
       MediaType.get("application/x-www-form-urlencoded");
   private static final String GRANT_BODY = "grant_type=client_credentials";
+
+  /**
+   * Token endpoint error codes from RFC 6749 section 5.2, plus the RFC 6749 section 4.1.2.1 and RFC
+   * 6750 codes that authorization servers also return from the token endpoint.
+   */
+  private static final Set<String> KNOWN_ERROR_CODES =
+      Set.of(
+          "invalid_request",
+          "invalid_client",
+          "invalid_grant",
+          "unauthorized_client",
+          "unsupported_grant_type",
+          "invalid_scope",
+          "access_denied",
+          "server_error",
+          "temporarily_unavailable",
+          "invalid_token",
+          "insufficient_scope");
 
   private final BiltCredentials credentials;
   private final URI tokenEndpoint;
@@ -326,10 +345,19 @@ final class ClientCredentialsTokenSource implements AutoCloseable {
     return seconds;
   }
 
+  /**
+   * The response's {@code error} code if it is one of {@link #KNOWN_ERROR_CODES}, else {@code
+   * null}. The field is server-controlled text that ends up in exception messages and logs, so only
+   * registered codes are let through; a pattern check would not do, since an echoed secret can look
+   * just like a code.
+   */
   private String errorCode(String body) {
     try {
       JsonNode root = objectMapper.readTree(body);
-      return root != null && root.hasNonNull("error") ? root.get("error").asText() : null;
+      JsonNode error = root != null ? root.get("error") : null;
+      return error != null && error.isTextual() && KNOWN_ERROR_CODES.contains(error.textValue())
+          ? error.textValue()
+          : null;
     } catch (IOException e) {
       return null;
     }

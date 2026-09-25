@@ -106,8 +106,9 @@ loadScripts(document, 'script');</script>
 
  <p><a href="#status()"><code>status()</code></a> is the HTTP status the token endpoint answered with, or <code>0</code> when no
  response was received (transport failure, malformed token document). <a href="#errorCode()"><code>errorCode()</code></a> is the
- OAuth 2.0 <code>error</code> field from the response when the endpoint supplied one, e.g. <code>
- invalid_client</code> for a rejected client id or secret. Neither the request's credentials nor the
+ OAuth 2.0 <code>error</code> field from the response when the endpoint supplied a registered code,
+ e.g. <code>invalid_client</code> for a rejected client id or secret. Any other value is dropped,
+ because the field is free text chosen by the server. Neither the request's credentials nor the
  response body appear in the message.</div>
 <dl class="notes">
 <dt>See Also:</dt>
@@ -159,7 +160,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#errorCode()" class="member-name-link">errorCode</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">The OAuth 2.0 <code>error</code> code from the token endpoint, or <code>null</code>.</div>
+<div class="block">The token endpoint's OAuth 2.0 <code>error</code> code, or <code>null</code> when it sent none or one
+ that is not a registered code (such as <code>invalid_client</code> or <code>invalid_grant</code>).</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#status()" class="member-name-link">status</a>()</code></div>
@@ -235,7 +237,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="errorCode()">
 <h3>errorCode</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">errorCode</span>()</div>
-<div class="block">The OAuth 2.0 <code>error</code> code from the token endpoint, or <code>null</code>.</div>
+<div class="block">The token endpoint's OAuth 2.0 <code>error</code> code, or <code>null</code> when it sent none or one
+ that is not a registered code (such as <code>invalid_client</code> or <code>invalid_grant</code>).</div>
 </section>
 </li>
 </ul>

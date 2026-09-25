@@ -14,8 +14,9 @@ package com.bilt.pos.platform;
  *
  * <p>{@link #status()} is the HTTP status the token endpoint answered with, or {@code 0} when no
  * response was received (transport failure, malformed token document). {@link #errorCode()} is the
- * OAuth 2.0 {@code error} field from the response when the endpoint supplied one, e.g. {@code
- * invalid_client} for a rejected client id or secret. Neither the request's credentials nor the
+ * OAuth 2.0 {@code error} field from the response when the endpoint supplied a registered code,
+ * e.g. {@code invalid_client} for a rejected client id or secret. Any other value is dropped,
+ * because the field is free text chosen by the server. Neither the request's credentials nor the
  * response body appear in the message.
  */
 public final class PlatformAuthException extends PlatformException {
@@ -48,7 +49,10 @@ public final class PlatformAuthException extends PlatformException {
     return status;
   }
 
-  /** The OAuth 2.0 {@code error} code from the token endpoint, or {@code null}. */
+  /**
+   * The token endpoint's OAuth 2.0 {@code error} code, or {@code null} when it sent none or one
+   * that is not a registered code (such as {@code invalid_client} or {@code invalid_grant}).
+   */
   public String errorCode() {
     return errorCode;
   }

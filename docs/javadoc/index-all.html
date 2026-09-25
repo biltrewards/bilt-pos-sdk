@@ -1114,7 +1114,8 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/platform/PlatformAuthException.html#errorCode()" class="member-name-link">errorCode()</a> - Method in exception class com.bilt.pos.platform.<a href="com/bilt/pos/platform/PlatformAuthException.html" title="class in com.bilt.pos.platform">PlatformAuthException</a></dt>
 <dd>
-<div class="block">The OAuth 2.0 <code>error</code> code from the token endpoint, or <code>null</code>.</div>
+<div class="block">The token endpoint's OAuth 2.0 <code>error</code> code, or <code>null</code> when it sent none or one
+ that is not a registered code (such as <code>invalid_client</code> or <code>invalid_grant</code>).</div>
 </dd>
 <dt><a href="com/bilt/pos/session/ReversalFlow.html#execute()" class="member-name-link">execute()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a></dt>
 <dd>

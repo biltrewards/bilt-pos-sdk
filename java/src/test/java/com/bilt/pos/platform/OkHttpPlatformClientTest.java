@@ -308,6 +308,25 @@ class OkHttpPlatformClientTest {
   }
 
   @Test
+  void unregisteredTokenErrorCodeIsDroppedFromMessageAndException() throws Exception {
+    server.enqueue(
+        new MockResponse().setResponseCode(400).setBody("{\"error\":\"" + CLIENT_SECRET + "\"}"));
+    server.enqueue(new MockResponse().setResponseCode(400).setBody("{\"error\":{\"code\":1}}"));
+    client = newClient(Duration.ofSeconds(60));
+
+    for (int i = 0; i < 2; i++) {
+      PlatformAuthException e =
+          assertThrows(
+              PlatformAuthException.class,
+              () -> client.execute(PlatformRequest.get("v1/a").build()));
+      assertEquals(400, e.status());
+      assertNull(e.errorCode());
+      assertEquals("Token endpoint answered HTTP 400", e.getMessage());
+      assertFalse(fullText(e).contains(CLIENT_SECRET), "secret leaked: " + fullText(e));
+    }
+  }
+
+  @Test
   void malformedTokenDocumentIsTypedAndRedacted() throws Exception {
     server.enqueue(new MockResponse().setResponseCode(200).setBody("<html>" + CLIENT_SECRET));
     client = newClient(Duration.ofSeconds(60));
