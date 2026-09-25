@@ -89,9 +89,14 @@ loadScripts(document, 'script');</script>
 <div class="inheritance">com.bilt.pos.nexo.client.BiltNexoTerminalClient</div>
 </div>
 <section class="class-description" id="class-description">
+<dl class="notes">
+<dt>All Implemented Interfaces:</dt>
+<dd><code><a href="TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a></code></dd>
+</dl>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">BiltNexoTerminalClient</span>
-<span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
+<span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a>
+implements <a href="TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a></span></div>
 <div class="block">Client for communicating with a Bilt payment terminal over the local Nexo Sale to POI protocol
  (v3.0).
 
@@ -231,6 +236,8 @@ loadScripts(document, 'script');</script>
  <p>If a <a href="../security/SecurityKey.html" title="class in com.bilt.pos.nexo.security"><code>SecurityKey</code></a> was provided to the builder, the request is automatically encrypted
  and the response is decrypted.</div>
 <dl class="notes">
+<dt>Specified by:</dt>
+<dd><code><a href="TerminalClient.html#request(com.bilt.pos.nexo.model.NexoTerminalAPI)">request</a></code>&nbsp;in interface&nbsp;<code><a href="TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a></code></dd>
 <dt>Parameters:</dt>
 <dd><code>request</code> - the request envelope; must have <code>saleToPOIRequest</code> set</dd>
 <dt>Returns:</dt>
@@ -250,6 +257,8 @@ loadScripts(document, 'script');</script>
                                                 throws <span class="exceptions"><a href="BiltNexoClientException.html" title="class in com.bilt.pos.nexo.client">BiltNexoClientException</a></span></div>
 <div class="block">Send a Sale to POI request with a per-request timeout override.</div>
 <dl class="notes">
+<dt>Specified by:</dt>
+<dd><code><a href="TerminalClient.html#request(com.bilt.pos.nexo.model.NexoTerminalAPI,java.time.Duration)">request</a></code>&nbsp;in interface&nbsp;<code><a href="TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a></code></dd>
 <dt>Parameters:</dt>
 <dd><code>request</code> - the request envelope; must have <code>saleToPOIRequest</code> set</dd>
 <dd><code>timeout</code> - per-request timeout, or <code>null</code> to use the client default</dd>

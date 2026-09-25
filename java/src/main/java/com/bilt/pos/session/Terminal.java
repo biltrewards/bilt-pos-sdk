@@ -9,7 +9,7 @@
  */
 package com.bilt.pos.session;
 
-import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.client.TerminalClient;
 import com.bilt.pos.session.internal.DisplayRouter;
 import com.bilt.pos.session.internal.NexoExchange;
 import com.bilt.pos.session.internal.NexoMessageFactory;
@@ -54,7 +54,7 @@ import java.util.function.Supplier;
 public final class Terminal implements AutoCloseable {
 
   private final SessionOperations operations;
-  private final BiltNexoTerminalClient client;
+  private final TerminalClient client;
   private final TerminalServices services;
 
   private volatile boolean closed;
@@ -144,7 +144,7 @@ public final class Terminal implements AutoCloseable {
   // ─── Escape hatch ───
 
   /** The underlying terminal client, for raw Nexo access. */
-  public BiltNexoTerminalClient getClient() {
+  public TerminalClient getClient() {
     return client;
   }
 
@@ -171,7 +171,7 @@ public final class Terminal implements AutoCloseable {
   /** Builder for {@link Terminal}. */
   public static final class Builder {
 
-    private BiltNexoTerminalClient client;
+    private TerminalClient client;
     private String saleId;
     private String poiId;
     private String storeLocation;
@@ -179,8 +179,11 @@ public final class Terminal implements AutoCloseable {
 
     private Builder() {}
 
-    /** The terminal client. Required. */
-    public Builder client(BiltNexoTerminalClient client) {
+    /**
+     * The transport to the terminal, typically a {@link
+     * com.bilt.pos.nexo.client.BiltNexoTerminalClient}. Required.
+     */
+    public Builder client(TerminalClient client) {
       this.client = client;
       return this;
     }

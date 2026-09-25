@@ -11,7 +11,7 @@
  */
 package com.bilt.pos.session.internal;
 
-import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.client.TerminalClient;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import java.util.Objects;
 
@@ -24,17 +24,16 @@ import java.util.Objects;
  */
 public final class DisplayRouter {
 
-  private final BiltNexoTerminalClient terminalClient;
-  private final BiltNexoTerminalClient externalDisplayClient;
+  private final TerminalClient terminalClient;
+  private final TerminalClient externalDisplayClient;
 
-  public DisplayRouter(
-      BiltNexoTerminalClient terminalClient, BiltNexoTerminalClient externalDisplayClient) {
+  public DisplayRouter(TerminalClient terminalClient, TerminalClient externalDisplayClient) {
     this.terminalClient = Objects.requireNonNull(terminalClient, "terminalClient");
     this.externalDisplayClient = externalDisplayClient;
   }
 
   /** The client that should receive messages of the given category. */
-  public BiltNexoTerminalClient route(MessageCategoryType category) {
+  public TerminalClient route(MessageCategoryType category) {
     if (externalDisplayClient != null
         && (category == MessageCategoryType.DISPLAY
             || category == MessageCategoryType.INPUT
@@ -44,7 +43,7 @@ public final class DisplayRouter {
     return terminalClient;
   }
 
-  public BiltNexoTerminalClient terminal() {
+  public TerminalClient terminal() {
     return terminalClient;
   }
 
