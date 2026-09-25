@@ -101,8 +101,8 @@ extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/ja
 
  <p>A shopper session is the unit the register opens when a customer steps up and ends when they
  walk away. It owns the basket being rung — <a href="#basket()"><code>basket()</code></a> — and the member identified for the
- visit, if any — <a href="#getMember()"><code>getMember()</code></a> — and carries the lane's identifiers: the register's sale
- ID, the currency, and the store location. What it does not have is a device or a settlement:
+ visit, if any — <a href="#member()"><code>member()</code></a> — and carries the lane's identifiers: the register's sale ID,
+ the currency, and the store location. What it does not have is a device or a settlement:
  everything that needs a Bilt terminal — identification prompts, customer input, the customer
  display, stored value, settlement, refunds, and voids — lives on <a href="TerminalShopperSession.html" title="interface in com.bilt.pos.session"><code>TerminalShopperSession</code></a>.
  A lane with a terminal uses <a href="TerminalShopperSession.html#builder()"><code>TerminalShopperSession.builder()</code></a>; a lane without one, or a
@@ -156,7 +156,7 @@ extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/ja
 <section class="method-summary" id="method-summary">
 <h2>Method Summary</h2>
 <div id="method-summary-table">
-<div class="table-tabs" role="tablist" aria-orientation="horizontal"><button id="method-summary-table-tab0" role="tab" aria-selected="true" aria-controls="method-summary-table.tabpanel" tabindex="0" onkeydown="switchTab(event)" onclick="show('method-summary-table', 'method-summary-table', 3)" class="active-table-tab">All Methods</button><button id="method-summary-table-tab1" role="tab" aria-selected="false" aria-controls="method-summary-table.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('method-summary-table', 'method-summary-table-tab1', 3)" class="table-tab">Static Methods</button><button id="method-summary-table-tab2" role="tab" aria-selected="false" aria-controls="method-summary-table.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('method-summary-table', 'method-summary-table-tab2', 3)" class="table-tab">Instance Methods</button><button id="method-summary-table-tab3" role="tab" aria-selected="false" aria-controls="method-summary-table.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('method-summary-table', 'method-summary-table-tab3', 3)" class="table-tab">Abstract Methods</button></div>
+<div class="table-tabs" role="tablist" aria-orientation="horizontal"><button id="method-summary-table-tab0" role="tab" aria-selected="true" aria-controls="method-summary-table.tabpanel" tabindex="0" onkeydown="switchTab(event)" onclick="show('method-summary-table', 'method-summary-table', 3)" class="active-table-tab">All Methods</button><button id="method-summary-table-tab1" role="tab" aria-selected="false" aria-controls="method-summary-table.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('method-summary-table', 'method-summary-table-tab1', 3)" class="table-tab">Static Methods</button><button id="method-summary-table-tab2" role="tab" aria-selected="false" aria-controls="method-summary-table.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('method-summary-table', 'method-summary-table-tab2', 3)" class="table-tab">Instance Methods</button><button id="method-summary-table-tab3" role="tab" aria-selected="false" aria-controls="method-summary-table.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('method-summary-table', 'method-summary-table-tab3', 3)" class="table-tab">Abstract Methods</button><button id="method-summary-table-tab6" role="tab" aria-selected="false" aria-controls="method-summary-table.tabpanel" tabindex="-1" onkeydown="switchTab(event)" onclick="show('method-summary-table', 'method-summary-table-tab6', 3)" class="table-tab">Deprecated Methods</button></div>
 <div id="method-summary-table.tabpanel" role="tabpanel" aria-labelledby="method-summary-table-tab0">
 <div class="summary-table three-column-summary">
 <div class="table-header col-first">Modifier and Type</div>
@@ -194,10 +194,13 @@ extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/ja
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
 <div class="block">ISO 4217 currency code used by this session.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#getMember()" class="member-name-link">getMember</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
-<div class="block">The identified member, or <code>null</code> for a guest checkout.</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3 method-summary-table-tab6"><code><a href="identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3 method-summary-table-tab6"><code><a href="#getMember()" class="member-name-link">getMember</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3 method-summary-table-tab6">
+<div class="block"><span class="deprecated-label">Deprecated.</span>
+<div class="deprecation-comment">use <a href="#member()"><code>member()</code></a>, which also reports a member the POS attached and one pending
+     resolution; this accessor only survives until integrators have moved over</div>
+</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#getSaleId()" class="member-name-link">getSaleId</a>()</code></div>
@@ -213,6 +216,28 @@ extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/ja
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#getStoreLocation()" class="member-name-link">getStoreLocation</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
 <div class="block">Store location identifier, or <code>null</code> if not configured.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#member()" class="member-name-link">member</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
+<div class="block">The member attached to this visit, resolved or pending resolution, or <code>null</code> when none
+ is.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code>void</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#member(com.bilt.pos.session.identity.Member)" class="member-name-link">member</a><wbr>(<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&nbsp;member)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
+<div class="block">Attaches the member for this visit, or clears it with <code>null</code> (signed out).</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code>&lt;W extends <a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&gt;<br>W</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#widget(java.lang.Class)" class="member-name-link">widget</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Class.html" title="class or interface in java.lang" class="external-link">Class</a>&lt;W&gt;&nbsp;type)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
+<div class="block">The registered widget of the given type — the runtime handle for pausing, resuming or otherwise
+ driving a widget configured with <code>widget(..)</code> on the builder, e.g.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#widgets()" class="member-name-link">widgets</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
+<div class="block">Every registered widget, in registration order; empty for a session without widgets.</div>
 </div>
 </div>
 </div>
@@ -286,10 +311,65 @@ extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/ja
 <li>
 <section class="detail" id="getMember()">
 <h3>getMember</h3>
-<div class="member-signature"><span class="return-type"><a href="identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></span>&nbsp;<span class="element-name">getMember</span>()</div>
-<div class="block">The identified member, or <code>null</code> for a guest checkout. A local session has no way to
- identify anyone yet, so this stays <code>null</code> there; on a terminal session, identification
- never forces the customer — if they opted out, this stays <code>null</code> too.</div>
+<div class="member-signature"><span class="annotations"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Deprecated.html" title="class or interface in java.lang" class="external-link">@Deprecated</a>
+</span><span class="return-type"><a href="identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></span>&nbsp;<span class="element-name">getMember</span>()</div>
+<div class="deprecation-block"><span class="deprecated-label">Deprecated.</span>
+<div class="deprecation-comment">use <a href="#member()"><code>member()</code></a>, which also reports a member the POS attached and one pending
+     resolution; this accessor only survives until integrators have moved over</div>
+</div>
+<div class="block">The identified member as an identification result, or <code>null</code> for a guest checkout or
+ while a member is still pending resolution.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="member(com.bilt.pos.session.identity.Member)">
+<h3>member</h3>
+<div class="member-signature"><span class="return-type">void</span>&nbsp;<span class="element-name">member</span><wbr><span class="parameters">(<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&nbsp;member)</span></div>
+<div class="block">Attaches the member for this visit, or clears it with <code>null</code> (signed out). Allowed at any
+ time — before scanning, mid-basket, or after a failed settlement — and on both session types.
+
+ <p>A resolved member (<a href="identity/Member.html#id(java.lang.String)"><code>Member.id(String)</code></a>) attaches immediately with no roundtrip. A
+ member pending resolution (<a href="identity/Member.html#idResolver()"><code>Member.idResolver()</code></a>) attaches as pending and is resolved in
+ the background on the session's operation lane: on a terminal session by looking the identifier
+ up on the terminal (Nexo <code>BalanceInquiry</code>; account id and phone number only — email and
+ custom identifiers cannot be resolved there, report through <code>onBackgroundError</code>, and stay
+ pending), on a local session not at all yet (the member stays pending). Until a pending member
+ resolves, the visit is treated as a guest's: settlement does not send a member id and <a href="#getMember()"><code>getMember()</code></a> is <code>null</code>. A lookup that finds nobody clears the member; a lookup that
+ fails reports through <code>onBackgroundError</code> and leaves the member pending. Whatever member
+ is attached last wins, so a stale lookup never overwrites a member set after it.
+
+ <p>Every change to the member — from this method, a terminal identification, or a completed
+ lookup — is announced through the builder's <code>onMemberChanged</code> handler.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="member()">
+<h3>member</h3>
+<div class="member-signature"><span class="return-type"><a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a></span>&nbsp;<span class="element-name">member</span>()</div>
+<div class="block">The member attached to this visit, resolved or pending resolution, or <code>null</code> when none
+ is. A terminal session's identification prompt attaches the member it finds here too.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="widget(java.lang.Class)">
+<h3>widget</h3>
+<div class="member-signature"><span class="type-parameters">&lt;W extends <a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&gt;</span>&nbsp;<span class="return-type">W</span>&nbsp;<span class="element-name">widget</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Class.html" title="class or interface in java.lang" class="external-link">Class</a>&lt;W&gt;&nbsp;type)</span></div>
+<div class="block">The registered widget of the given type — the runtime handle for pausing, resuming or otherwise
+ driving a widget configured with <code>widget(..)</code> on the builder, e.g. <code>
+ session.widget(RetailMedia.class).pause()</code>. Matches by assignability, so a widget interface
+ works as well as a class.
+
+ <p>A missing widget is a programming error — the set of widgets is fixed on the builder, so
+ asking for one that was never registered means the builder and this call disagree — and throws
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link"><code>IllegalArgumentException</code></a> rather than returning <code>null</code>. Two registered widgets of
+ the type are ambiguous and throw too; pick one from <a href="#widgets()"><code>widgets()</code></a> instead.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="widgets()">
+<h3>widgets</h3>
+<div class="member-signature"><span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&gt;</span>&nbsp;<span class="element-name">widgets</span>()</div>
+<div class="block">Every registered widget, in registration order; empty for a session without widgets.</div>
 </section>
 </li>
 <li>
