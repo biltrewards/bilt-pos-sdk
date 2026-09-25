@@ -30,7 +30,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class CheckoutSessionIdentityTest {
+class TerminalShopperSessionIdentityTest {
 
   private static final String REWARDS_JSON =
       "{\"rewards\":["
@@ -45,15 +45,15 @@ class CheckoutSessionIdentityTest {
       new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
   private MockWebServer server;
-  private CheckoutSession session;
+  private TerminalShopperSession session;
 
   @BeforeEach
   void setUp() throws Exception {
     server = new MockWebServer();
     server.start();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session =
-        CheckoutSession.builder()
+        TerminalShopperSession.builder()
             .client(
                 BiltNexoTerminalClient.builder()
                     .endpoint(server.url("/nexo").toString())

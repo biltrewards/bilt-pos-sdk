@@ -92,12 +92,11 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">TransactionStatusOptions</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">Options for <a href="CheckoutSession.html#getTransactionStatus(java.lang.String)"><code>CheckoutSession.getTransactionStatus(java.lang.String)</code></a>.
+<div class="block">Options for <a href="TerminalShopperSession.html#getTransactionStatus(java.lang.String)"><code>TerminalShopperSession.getTransactionStatus(java.lang.String)</code></a>.
 
- <p>By default the referenced request is assumed to be a payment and no
- receipt data is requested. Enable <code>TransactionStatusOptions.Builder.receiptReprint</code> to have
- the terminal include the original receipts in the repeated response — used
- to reprint after a crash or connection loss.</p></div>
+ <p>By default the referenced request is assumed to be a payment and no receipt data is requested.
+ Enable <code>TransactionStatusOptions.Builder.receiptReprint</code> to have the terminal include the original receipts in the
+ repeated response — used to reprint after a crash or connection loss.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -140,8 +139,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;com.bilt.pos.nexo.model.DocumentQualifierEnum&gt;</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getDocumentQualifiers()" class="member-name-link">getDocumentQualifiers</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Receipt kinds to include when <a href="#isReceiptReprint()"><code>isReceiptReprint()</code></a>; defaults to
- customer and cashier receipts.</div>
+<div class="block">Receipt kinds to include when <a href="#isReceiptReprint()"><code>isReceiptReprint()</code></a>; defaults to customer and cashier
+ receipts.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>com.bilt.pos.nexo.model.MessageCategoryType</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getOriginalCategory()" class="member-name-link">getOriginalCategory</a>()</code></div>
@@ -201,8 +200,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getDocumentQualifiers()">
 <h3>getDocumentQualifiers</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;com.bilt.pos.nexo.model.DocumentQualifierEnum&gt;</span>&nbsp;<span class="element-name">getDocumentQualifiers</span>()</div>
-<div class="block">Receipt kinds to include when <a href="#isReceiptReprint()"><code>isReceiptReprint()</code></a>; defaults to
- customer and cashier receipts.</div>
+<div class="block">Receipt kinds to include when <a href="#isReceiptReprint()"><code>isReceiptReprint()</code></a>; defaults to customer and cashier
+ receipts.</div>
 </section>
 </li>
 </ul>

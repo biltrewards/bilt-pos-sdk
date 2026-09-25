@@ -27,7 +27,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * The settlement orchestration chain returned by {@code CheckoutSession.settle()}.
+ * The settlement orchestration chain returned by {@code TerminalShopperSession.settle()}.
  *
  * <p>Registering handlers sends nothing. With the default settlement option, the sequence is refund
  * allocations (including external register-managed refunds), rebate redemption, point redemption,

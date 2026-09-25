@@ -317,7 +317,7 @@ public final class Main {
     BiltNexoTerminalClient client = clientBuilder.build();
 
     if ("session".equals(type)) {
-      runCheckoutSessionDemo(client, amount, currency, identifyMember);
+      runTerminalShopperSessionDemo(client, amount, currency, identifyMember);
       return;
     }
 
@@ -960,15 +960,16 @@ public final class Main {
   }
 
   /**
-   * End-to-end CheckoutSession demo: optional member identification, item scanning with automatic
-   * terminal display, tax, and the orchestrated payment sequence with inline step handlers.
+   * End-to-end TerminalShopperSession demo: optional member identification, item scanning with
+   * automatic terminal display, tax, and the orchestrated payment sequence with inline step
+   * handlers.
    */
-  private static void runCheckoutSessionDemo(
+  private static void runTerminalShopperSessionDemo(
       BiltNexoTerminalClient client, double amount, String currency, boolean identifyMember) {
     // try-with-resources: close() sends the end signal best-effort even
     // when a demo step throws, so the terminal never keeps a stale session
-    try (com.bilt.pos.session.CheckoutSession session =
-        com.bilt.pos.session.CheckoutSession.builder()
+    try (com.bilt.pos.session.TerminalShopperSession session =
+        com.bilt.pos.session.TerminalShopperSession.builder()
             .client(client)
             .saleId("bilt-cli")
             .poiId("bilt-terminal")
@@ -1099,7 +1100,7 @@ public final class Main {
             "",
             "Options:",
             "  --type <payment|gift-card|refund|diagnosis|display-standby|display-receipt|confirmation|signature|reversal|transaction-status|abort|session>",
-            "                               'session' runs a full CheckoutSession demo: basket, display, pay",
+            "                               'session' runs a full TerminalShopperSession demo: basket, display, pay",
             "  --identify                   In the session demo, prompt for member identification first",
             "  --no-encryption              Disable message encryption",
             "  --cacert <path>              Verify TLS against this CA/public cert file (PEM or DER).",

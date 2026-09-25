@@ -19,7 +19,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * The basket surface of a checkout session: item and tax mutations, batch edits, and immutable
+ * The basket surface of a shopper session: item and tax mutations, batch edits, and immutable
  * snapshots. Sale, return, and register-credit items can coexist in one basket.
  *
  * <p>Every mutation is applied atomically, returning the updated snapshot synchronously; when the
@@ -74,7 +74,8 @@ public final class SessionBasket {
    * <p>This is the explicit transaction boundary for a session that runs more than one settlement.
    * A settled basket cannot be charged again; clear it before ringing the next one. Clearing never
    * abandons financial recovery. When recovery cannot be completed, call {@link
-   * CheckoutSession#forceEnd(String)} and start a new session rather than reusing this basket.
+   * TerminalShopperSession#forceEnd(String)} and start a new session rather than reusing this
+   * basket.
    *
    * @return the new empty basket snapshot
    * @throws IllegalStateException if money movement, settlement recovery, or a partially completed

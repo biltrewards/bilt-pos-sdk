@@ -11,10 +11,10 @@ Java and Kotlin libraries for the nexo POS protocol.
 
 ## Usage
 
-For most integrations, start with the high-level [`CheckoutSession` API](docs/checkout-session-integration.md) — it manages the basket, terminal display, loyalty, and the full payment sequence over the raw client shown below:
+For most integrations, start with the high-level [`TerminalShopperSession` API](docs/checkout-session-integration.md) — it manages the basket, terminal display, loyalty, and the full payment sequence over the raw client shown below:
 
 ```java
-try (CheckoutSession session = CheckoutSession.builder()
+try (TerminalShopperSession session = TerminalShopperSession.builder()
         .client(client)
         .saleId("POS-1").poiId("TERM-1").currency("USD")
         .start()

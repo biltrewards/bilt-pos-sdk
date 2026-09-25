@@ -31,11 +31,11 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Refunds and voids on the checkout session itself. Same-session reversal of a completed payment is
- * covered with the payment tests in {@link CheckoutSessionPaymentTest}.
+ * covered with the payment tests in {@link TerminalShopperSessionPaymentTest}.
  */
-class CheckoutSessionRefundTest {
+class TerminalShopperSessionRefundTest {
 
-  private static final String REFUND_OK = CheckoutSessionTest.refundOk(15.00);
+  private static final String REFUND_OK = TerminalShopperSessionTest.refundOk(15.00);
   private static final String PAYMENT_DECLINED =
       "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
           + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}";
@@ -50,7 +50,7 @@ class CheckoutSessionRefundTest {
   @BeforeEach
   void setUp() throws Exception {
     server = new MockWebServer();
-    server.setDispatcher(CheckoutSessionTest.adminAnsweringDispatcher());
+    server.setDispatcher(TerminalShopperSessionTest.adminAnsweringDispatcher());
     server.start();
   }
 
@@ -59,9 +59,9 @@ class CheckoutSessionRefundTest {
     server.shutdown();
   }
 
-  private CheckoutSession session() throws Exception {
-    CheckoutSession session =
-        CheckoutSession.builder()
+  private TerminalShopperSession session() throws Exception {
+    TerminalShopperSession session =
+        TerminalShopperSession.builder()
             .client(
                 BiltNexoTerminalClient.builder()
                     .endpoint(server.url("/nexo").toString())
@@ -160,7 +160,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void unlinkedRefundDoesNotPreventVoidingTheLatestPayment() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("100.00")));
     server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
     assertTrue(session.settle().get().isSuccess());
@@ -170,7 +170,7 @@ class CheckoutSessionRefundTest {
     assertTrue(session.refundUnlinked(new BigDecimal("15.00")).get().isSuccess());
     recordedRequest();
 
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.REVERSAL_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.REVERSAL_OK));
     assertTrue(session.voidTransaction().get().isSuccess());
 
     SaleToPOIRequest reversal = recordedRequest();
@@ -185,7 +185,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void linkedRefundWithoutPaymentFailsWithInvalidState() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     SessionException e = assertThrows(SessionException.class, () -> session.refund().get());
     assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
     assertTrue(
@@ -197,7 +197,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void voidWithoutPaymentFailsWithInvalidState() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     SessionException e =
         assertThrows(SessionException.class, () -> session.voidTransaction().get());
     assertEquals(SessionErrorCode.INVALID_STATE, e.getError().getCode());
@@ -210,7 +210,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void refundAmountMustBePositive() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     assertThrows(IllegalArgumentException.class, () -> session.refund(BigDecimal.ZERO));
     assertThrows(
         IllegalArgumentException.class, () -> session.refundUnlinked(new BigDecimal("-1")));
@@ -218,7 +218,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void settlementRefundAllocationsCanSplitReturnAcrossCardAndGiftCard() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session
         .basket()
         .addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
@@ -287,7 +287,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void settlementCanIssueStoreCreditByLoadingStoredValueCard() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session
         .basket()
         .addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("15.00")));
@@ -323,7 +323,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void settlementExchangeRefundsReturnAllocationsAndChargesSaleLines() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("75.00")));
     session
         .basket()
@@ -438,7 +438,7 @@ class CheckoutSessionRefundTest {
   @Test
   void exchangeSettlementPreservesBasketTaxTotalOverrideAcrossSaleAndReturnSides()
       throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("100.00")));
     session
         .basket()
@@ -488,7 +488,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void netSettlementChargesOnlyPositiveDifference() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("75.00")));
     session
         .basket()
@@ -538,7 +538,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void netSettlementRefundsOnlyNegativeDifferenceToSingleAllocation() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("25.00")));
     session
         .basket()
@@ -591,7 +591,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void netSettlementRefundsWhenSaleLineHasZeroValue() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("FREE-1", "Free item", 1, new BigDecimal("0.00")));
     session
         .basket()
@@ -631,7 +631,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void netSettlementAcceptsAllocationsForTheRefundDifference() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("15.00")));
     session
         .basket()
@@ -656,7 +656,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void registerCreditReducesTheChargeWithoutARefundAllocation() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("50.00")));
     session
         .basket()
@@ -680,7 +680,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void registerCreditCannotCreateACustomerPayout() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session
         .basket()
         .addItem(
@@ -697,7 +697,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void refundAllocationCannotBeAttachedToCreditLines() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("50.00")));
     session
         .basket()
@@ -728,7 +728,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void netSettlementMovesNoMoneyWhenSaleAndReturnAreEqual() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("40.00")));
     session
         .basket()
@@ -748,7 +748,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void netSettlementRejectsAllocationsThatDoNotMatchRefundDifference() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("15.00")));
     session
         .basket()
@@ -780,7 +780,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void settlementRequiresRefundAllocationsToMatchReturnTotal() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session
         .basket()
         .addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
@@ -805,7 +805,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void refundAllocationFailureNotifiesOnErrorWithoutInRunRecovery() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session
         .basket()
         .addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
@@ -842,7 +842,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void settlementCanRecordExternalRefundAllocationWithoutTerminalMovement() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session
         .basket()
         .addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
@@ -882,7 +882,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void settlementRetryDoesNotResendCommittedRefundAllocations() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("75.00")));
     session
         .basket()
@@ -973,7 +973,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void forceEndCanAbandonCommittedRefundRecovery() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("75.00")));
     session
         .basket()
@@ -1001,7 +1001,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void settlementRetryDoesNotReattachRefundItemsAfterCommittedRefundLeg() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session
         .basket()
         .addItem(BasketItem.returnItem("RET-1", "Returned item", 1, new BigDecimal("40.00")));
@@ -1045,7 +1045,7 @@ class CheckoutSessionRefundTest {
 
   @Test
   void settlementRetryRequiresSameCommittedRefundAllocationPrefix() throws Exception {
-    CheckoutSession session = session();
+    TerminalShopperSession session = session();
     session.basket().addItem(BasketItem.sale("BUY-1", "New item", 1, new BigDecimal("75.00")));
     session
         .basket()

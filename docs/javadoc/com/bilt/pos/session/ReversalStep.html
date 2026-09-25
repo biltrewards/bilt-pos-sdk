@@ -98,16 +98,13 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public enum </span><span class="element-name type-name-label">ReversalStep</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Enum.html" title="class or interface in java.lang" class="external-link">Enum</a>&lt;<a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a>&gt;</span></div>
-<div class="block">One reversible leg of a sale, as reported to
- <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a> when a reversal step fails. The step names
- the leg, not the wire verb — which operation was running is already
- known from the flow the handler is registered on.
+<div class="block">One reversible leg of a sale, as reported to <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a> when a reversal step
+ fails. The step names the leg, not the wire verb — which operation was running is already known
+ from the flow the handler is registered on.
 
- <p>A void reverses the known legs in this order: <a href="#STORED_VALUE_LOAD"><code>STORED_VALUE_LOAD</code></a>,
- <a href="#CARD"><code>CARD</code></a>, <a href="#STORED_VALUE"><code>STORED_VALUE</code></a>,
- <a href="#REDEMPTION"><code>REDEMPTION</code></a>, <a href="#REBATE"><code>REBATE</code></a>,
- <a href="#AWARD"><code>AWARD</code></a>. A refund flow has at most two steps: <a href="#CARD"><code>CARD</code></a> (the
- tender refund) and <a href="#AWARD"><code>AWARD</code></a>.</p></div>
+ <p>A void reverses the known legs in this order: <a href="#STORED_VALUE_LOAD"><code>STORED_VALUE_LOAD</code></a>, <a href="#CARD"><code>CARD</code></a>,
+ <a href="#STORED_VALUE"><code>STORED_VALUE</code></a>, <a href="#REDEMPTION"><code>REDEMPTION</code></a>, <a href="#REBATE"><code>REBATE</code></a>, <a href="#AWARD"><code>AWARD</code></a>. A refund flow has at
+ most two steps: <a href="#CARD"><code>CARD</code></a> (the tender refund) and <a href="#AWARD"><code>AWARD</code></a>.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -130,8 +127,7 @@ loadScripts(document, 'script');</script>
 <div class="table-header col-last">Description</div>
 <div class="col-first even-row-color"><code><a href="#AWARD" class="member-name-link">AWARD</a></code></div>
 <div class="col-last even-row-color">
-<div class="block">The loyalty award
- (Nexo <code>LoyaltyRequest</code> <code>AwardRefund</code>).</div>
+<div class="block">The loyalty award (Nexo <code>LoyaltyRequest</code> <code>AwardRefund</code>).</div>
 </div>
 <div class="col-first odd-row-color"><code><a href="#CARD" class="member-name-link">CARD</a></code></div>
 <div class="col-last odd-row-color">
@@ -139,18 +135,15 @@ loadScripts(document, 'script');</script>
 </div>
 <div class="col-first even-row-color"><code><a href="#REBATE" class="member-name-link">REBATE</a></code></div>
 <div class="col-last even-row-color">
-<div class="block">The committed rebate redemption
- (Nexo <code>LoyaltyRequest</code> <code>RebateRefund</code>).</div>
+<div class="block">The committed rebate redemption (Nexo <code>LoyaltyRequest</code> <code>RebateRefund</code>).</div>
 </div>
 <div class="col-first odd-row-color"><code><a href="#REDEMPTION" class="member-name-link">REDEMPTION</a></code></div>
 <div class="col-last odd-row-color">
-<div class="block">The committed point/reward redemption
- (Nexo <code>LoyaltyRequest</code> <code>RedemptionRefund</code>).</div>
+<div class="block">The committed point/reward redemption (Nexo <code>LoyaltyRequest</code> <code>RedemptionRefund</code>).</div>
 </div>
 <div class="col-first even-row-color"><code><a href="#STORED_VALUE" class="member-name-link">STORED_VALUE</a></code></div>
 <div class="col-last even-row-color">
-<div class="block">The stored value (gift card) leg of a split tender (Nexo
- <code>ReversalRequest</code>).</div>
+<div class="block">The stored value (gift card) leg of a split tender (Nexo <code>ReversalRequest</code>).</div>
 </div>
 <div class="col-first odd-row-color"><code><a href="#STORED_VALUE_LOAD" class="member-name-link">STORED_VALUE_LOAD</a></code></div>
 <div class="col-last odd-row-color">
@@ -212,43 +205,37 @@ the order they are declared.</div>
 <section class="detail" id="CARD">
 <h3>CARD</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></span>&nbsp;<span class="element-name">CARD</span></div>
-<div class="block">The card payment leg. A void reverses it (Nexo
- <code>ReversalRequest</code> — full, pre-settlement); a refund returns
- money against it (Nexo <code>PaymentRequest</code> of type <code>Refund</code>
- — amount-based and repeatable, and the leg an unlinked refund's
- money goes back to).</div>
+<div class="block">The card payment leg. A void reverses it (Nexo <code>ReversalRequest</code> — full, pre-settlement);
+ a refund returns money against it (Nexo <code>PaymentRequest</code> of type <code>Refund</code> —
+ amount-based and repeatable, and the leg an unlinked refund's money goes back to).</div>
 </section>
 </li>
 <li>
 <section class="detail" id="STORED_VALUE">
 <h3>STORED_VALUE</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></span>&nbsp;<span class="element-name">STORED_VALUE</span></div>
-<div class="block">The stored value (gift card) leg of a split tender (Nexo
- <code>ReversalRequest</code>).</div>
+<div class="block">The stored value (gift card) leg of a split tender (Nexo <code>ReversalRequest</code>).</div>
 </section>
 </li>
 <li>
 <section class="detail" id="REDEMPTION">
 <h3>REDEMPTION</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></span>&nbsp;<span class="element-name">REDEMPTION</span></div>
-<div class="block">The committed point/reward redemption
- (Nexo <code>LoyaltyRequest</code> <code>RedemptionRefund</code>).</div>
+<div class="block">The committed point/reward redemption (Nexo <code>LoyaltyRequest</code> <code>RedemptionRefund</code>).</div>
 </section>
 </li>
 <li>
 <section class="detail" id="REBATE">
 <h3>REBATE</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></span>&nbsp;<span class="element-name">REBATE</span></div>
-<div class="block">The committed rebate redemption
- (Nexo <code>LoyaltyRequest</code> <code>RebateRefund</code>).</div>
+<div class="block">The committed rebate redemption (Nexo <code>LoyaltyRequest</code> <code>RebateRefund</code>).</div>
 </section>
 </li>
 <li>
 <section class="detail" id="AWARD">
 <h3>AWARD</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></span>&nbsp;<span class="element-name">AWARD</span></div>
-<div class="block">The loyalty award
- (Nexo <code>LoyaltyRequest</code> <code>AwardRefund</code>).</div>
+<div class="block">The loyalty award (Nexo <code>LoyaltyRequest</code> <code>AwardRefund</code>).</div>
 </section>
 </li>
 </ul>

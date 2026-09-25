@@ -1,9 +1,9 @@
 ---
 ---
 
-# CheckoutSession — Integration Guide
+# TerminalShopperSession — Integration Guide
 
-`CheckoutSession` is a higher-level abstraction on top of [`BiltNexoTerminalClient`](./integration.md). It provides a terminal-side session bracket for loyalty-enabled operations — member identification, cart management, terminal display, settlement orchestration (refund allocations, rebate redemption, point redemption, stored value, card charge), reward award, refunds, and voids.
+`TerminalShopperSession` is a higher-level abstraction on top of [`BiltNexoTerminalClient`](./integration.md). It provides a terminal-side session bracket for loyalty-enabled operations — member identification, cart management, terminal display, settlement orchestration (refund allocations, rebate redemption, point redemption, stored value, card charge), reward award, refunds, and voids.
 
 You keep working with one object for the whole transaction instead of hand-assembling nexo messages. The raw nexo client is still available via `session.getClient()` as an escape hatch.
 
@@ -23,7 +23,7 @@ Make sure you have:
 
 A few principles explain most of the behavior:
 
-- **A session is bracketed on the terminal, not bound to one transaction.** The builder's `start()` announces the session to the terminal and only hands out the `CheckoutSession` once the terminal acknowledged — an unstarted session never exists. The register may run multiple settlements, refunds, voids, stored-value operations, and prompts sequentially inside that bracket. `end()` tells the terminal to discard the session-scoped data and seals the session; it cannot be restarted.
+- **A session is bracketed on the terminal, not bound to one transaction.** The builder's `start()` announces the session to the terminal and only hands out the `TerminalShopperSession` once the terminal acknowledged — an unstarted session never exists. The register may run multiple settlements, refunds, voids, stored-value operations, and prompts sequentially inside that bracket. `end()` tells the terminal to discard the session-scoped data and seals the session; it cannot be restarted.
 - **The session owns the basket.** Items, tax, and totals live in one place, and `Basket` is the single source of truth. Every mutation returns the updated basket.
 - **nexo underneath.** Every session operation maps to a standard nexo 3.0 message, but the SDK hides much more than message serialization: it manages the complexity of communicating with the terminal, and it orchestrates settlement when the transaction has returns, exchanges, or multiple tenders — sequencing refund allocations, rebates, point redemption, stored value, card, loyalty award, and reversal — so the register doesn't have to coordinate the wire calls itself.
 - **Terminal operations are lazy.** Methods returning a `SessionResult` or `SettlementFlow` send nothing until you call `.execute()` (asynchronous, handlers deliver the outcome), `.executeSync()`, `.get()`, or `.getOrNull()` (blocking). Register handlers first, then execute — a chain without a terminal method never reaches the terminal. See [lazy execution](#lazy-execution).
@@ -45,7 +45,7 @@ Loyalty is where a checkout gets complicated: identifying the member, looking up
 ## The end-to-end flow
 
 ```
-Register                    CheckoutSession                  Terminal (POI)
+Register                    TerminalShopperSession           Terminal (POI)
    │                              │                                │
    │ ── builder().start()…get() > │ ── Admin(SessionStart) ──────> │  session announced
    │ <── started session ──────── │                                │
@@ -131,7 +131,7 @@ Refund allocation failures are terminal for that settlement run. The `onError` h
 
 ## Session lifetime and repeated operations
 
-`CheckoutSession` has no public transaction state machine. The register owns the business flow, while the SDK enforces only concrete safety constraints:
+`TerminalShopperSession` has no public transaction state machine. The register owns the business flow, while the SDK enforces only concrete safety constraints:
 
 - Terminal operations run sequentially in submission order. A settlement or void already in flight cannot be started again re-entrantly.
 - A successful settlement consumes its basket. Calling `settle()` again or mutating that basket fails before another payment can be sent.
@@ -146,7 +146,7 @@ Refund allocation failures are terminal for that settlement run. The `onError` h
 ## Start a session
 
 ```java
-CheckoutSession session = CheckoutSession.builder()
+TerminalShopperSession session = TerminalShopperSession.builder()
     .client(client)                       // required
     .saleId("POS-LANE-3")                 // required — your POS identifier (SaleID)
     .poiId("VictaLane-275839164")         // required — target terminal (POIID)
@@ -156,7 +156,7 @@ CheckoutSession session = CheckoutSession.builder()
     .get();                               // announces the session; throws if refused
 ```
 
-The builder's `start()` announces the session to the terminal (the [session start signal](./session-start-end.md)) and yields the `CheckoutSession` once the terminal acknowledged. It is lazy like every other operation — chain `onSuccess`/`onError` and finish with `execute()`, `get()`, or `getOrNull()`. A refused start hands out no session; call `start()` again for a fresh attempt. And if your `onSuccess` handler itself throws, the just-started session is ended on the terminal (best-effort) before the exception propagates — a `start()` whose execution threw never leaves a terminal-side session behind.
+The builder's `start()` announces the session to the terminal (the [session start signal](./session-start-end.md)) and yields the `TerminalShopperSession` once the terminal acknowledged. It is lazy like every other operation — chain `onSuccess`/`onError` and finish with `execute()`, `get()`, or `getOrNull()`. A refused start hands out no session; call `start()` again for a fresh attempt. And if your `onSuccess` handler itself throws, the just-started session is ended on the terminal (best-effort) before the exception propagates — a `start()` whose execution threw never leaves a terminal-side session behind.
 
 A session represents one terminal interaction bracket and may contain multiple register-orchestrated transactions. Sessions are intended for use from a single register thread (`abort()` may be called from any thread).
 
@@ -182,10 +182,10 @@ session.forceEnd("operator escalated incomplete refund recovery").get();
 
 `forceEnd(reason)` bypasses incomplete rollback, committed-refund, and partial-void guards, logs the reason and abandoned recovery categories, sends the terminal End signal best-effort, and permanently seals the local session. It still refuses while settlement, void, or recovery money movement is actively on the wire. If the End signal fails, the returned `SessionResult` reports the terminal error but this Java session remains ended; create a new session rather than retrying it. A new session has none of the abandoned duplicate-movement protection, so any later financial recovery must use progress persisted by the register.
 
-`CheckoutSession` is `AutoCloseable`: `close()` is a best-effort normal `end()` (failures and lifecycle refusals are logged, an already-ended session is left alone), so try-with-resources attempts terminal cleanup even on exception paths. It never calls `forceEnd()` or silently abandons recovery:
+`TerminalShopperSession` is `AutoCloseable`: `close()` is a best-effort normal `end()` (failures and lifecycle refusals are logged, an already-ended session is left alone), so try-with-resources attempts terminal cleanup even on exception paths. It never calls `forceEnd()` or silently abandons recovery:
 
 ```java
-try (CheckoutSession session = CheckoutSession.builder()....start().get()) {
+try (TerminalShopperSession session = TerminalShopperSession.builder()....start().get()) {
     // scan, settle, ...
 }   // Admin(SessionEnd) sent here
 ```
@@ -217,7 +217,7 @@ Under `execute()`, handlers are delivered through the **callback executor** — 
 ## Quick start (minimal)
 
 ```java
-CheckoutSession session = CheckoutSession.builder()
+TerminalShopperSession session = TerminalShopperSession.builder()
     .client(client)
     .saleId("POS-LANE-3")
     .poiId("VictaLane-275839164")
@@ -250,7 +250,7 @@ BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
     .securityKey(key)
     .build();
 
-CheckoutSession session = CheckoutSession.builder()
+TerminalShopperSession session = TerminalShopperSession.builder()
     .client(client)
     .saleId("POS-LANE-3")
     .poiId("VictaLane-275839164")
@@ -426,7 +426,7 @@ The identified member stays attached across `clear()`. Re-identifying later chan
 
 ## Refund and void
 
-`CheckoutSession` can still reverse the positive sale it took itself: `refund()` and `voidTransaction()` work on the session's most recent completed pure-sale settlement, no references needed. Returns from an earlier sale are handled in `settle(...)` by adding return lines to the basket and supplying register-selected `RefundAllocation`s in `SettlementOptions`. A pure older-sale void uses `voidTransaction(OriginalSaleRecord)` — see [Reversing a prior sale](#reversing-a-prior-sale-originalsalerecord) below.
+`TerminalShopperSession` can still reverse the positive sale it took itself: `refund()` and `voidTransaction()` work on the session's most recent completed pure-sale settlement, no references needed. Returns from an earlier sale are handled in `settle(...)` by adding return lines to the basket and supplying register-selected `RefundAllocation`s in `SettlementOptions`. A pure older-sale void uses `voidTransaction(OriginalSaleRecord)` — see [Reversing a prior sale](#reversing-a-prior-sale-originalsalerecord) below.
 
 - `refund()` / `refund(amount)` — linked refunds of the most recent successful settlement's card payment; also reverse the loyalty award when one ran, best-effort by default. Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once a linked refund has returned money, that payment can no longer be voided from the session: a void would return the full amount on top of the refund. Refunds cover the card leg + award only; the sale's committed rebate and redemption movements are reversed by `voidTransaction()`.
 - `refundUnlinked(amount)` — payment-only, not tied to a prior transaction, no loyalty reversal, and does not alter the latest settlement's refund/void guards.
@@ -473,7 +473,7 @@ OriginalSaleRecord originalSale = OriginalSaleRecord.builder()
         .memberId(stored.memberId)
         .build();
 
-try (CheckoutSession session = CheckoutSession.builder()
+try (TerminalShopperSession session = TerminalShopperSession.builder()
         .client(client)
         .saleId("POS-LANE-3")
         .poiId("VictaLane-275839164")
@@ -484,16 +484,16 @@ try (CheckoutSession session = CheckoutSession.builder()
 }
 ```
 
-Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. The same `ReversalFlow` decision handling applies as on `CheckoutSession`. If the record includes any POI transaction ID from this session's most recent settlement, the call is refused; use parameterless `voidTransaction()` so an in-progress partial void or prior refund cannot be bypassed.
+Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. The same `ReversalFlow` decision handling applies as on `TerminalShopperSession`. If the record includes any POI transaction ID from this session's most recent settlement, the call is refused; use parameterless `voidTransaction()` so an in-progress partial void or prior refund cannot be bypassed.
 
-If a prior-sale void partially fails after reversing one or more legs, retry that void on the same `CheckoutSession` instance. The reversed-movement progress is held in memory so the retry resumes at the first still-standing movement; `end()` is refused until the void finishes because a new session created with the same `OriginalSaleRecord` has no memory of that progress and would send the full void sequence again.
+If a prior-sale void partially fails after reversing one or more legs, retry that void on the same `TerminalShopperSession` instance. The reversed-movement progress is held in memory so the retry resumes at the first still-standing movement; `end()` is refused until the void finishes because a new session created with the same `OriginalSaleRecord` has no memory of that progress and would send the full void sequence again.
 
 ### Item-based refunds in settlement
 
 To refund specific items of a prior sale, add them to the checkout basket as return lines and settle with allocations chosen by the register. The allocations can split one return amount across card, the original stored value tender, store credit, external tender such as cash, points, and rebate restoration:
 
 ```java
-try (CheckoutSession session = CheckoutSession.builder()
+try (TerminalShopperSession session = TerminalShopperSession.builder()
         .client(client)
         .saleId("POS-LANE-3")
         .poiId("VictaLane-275839164")
@@ -659,7 +659,7 @@ While an input prompt is awaiting a response, `updateInputDisplay(payload)` — 
 Setting an external display client routes all display/input calls (`updateDisplay`, `requestConfirmation`, etc.) to a separate screen driven by its own client, while payment, card read, and PIN entry still go to the terminal. The external display client runs on the machine the display is attached to (the register or another device).
 
 ```java
-CheckoutSession session = CheckoutSession.builder()
+TerminalShopperSession session = TerminalShopperSession.builder()
     .client(client)
     .saleId("POS-LANE-3")
     .poiId("VictaLane-275839164")
@@ -708,7 +708,7 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 
 | Task | Call |
 | --- | --- |
-| Start a session | `CheckoutSession.builder()...start().get()` |
+| Start a session | `TerminalShopperSession.builder()...start().get()` |
 | End the session (terminal discards its data) | `session.end()` |
 | Abandon an unrecoverable session | `session.forceEnd(reason)` |
 | Prompt customer to identify | `session.identifyMember()` |

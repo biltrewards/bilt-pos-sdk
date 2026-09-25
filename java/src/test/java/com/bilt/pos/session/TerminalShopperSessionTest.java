@@ -18,7 +18,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class CheckoutSessionTest {
+class TerminalShopperSessionTest {
 
   static final String ADMIN_OK =
       "{\"SaleToPOIResponse\":{\"MessageHeader\":{\"ProtocolVersion\":\"3.0\"},"
@@ -69,7 +69,7 @@ class CheckoutSessionTest {
       new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
   private MockWebServer server;
-  private CheckoutSession session;
+  private TerminalShopperSession session;
 
   @BeforeEach
   void setUp() throws Exception {
@@ -77,7 +77,7 @@ class CheckoutSessionTest {
     server.start();
     session =
         start(
-            CheckoutSession.builder()
+            TerminalShopperSession.builder()
                 .client(terminalClient())
                 .saleId("POS-LANE-3")
                 .poiId("VictaLane-275839164")
@@ -86,9 +86,9 @@ class CheckoutSessionTest {
   }
 
   /** Starts the session against a mocked session-start acknowledgement. */
-  private CheckoutSession start(CheckoutSession.Builder builder) throws Exception {
+  private TerminalShopperSession start(TerminalShopperSession.Builder builder) throws Exception {
     server.enqueue(new MockResponse().setBody(ADMIN_OK));
-    CheckoutSession started = builder.start().get();
+    TerminalShopperSession started = builder.start().get();
     server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
     return started;
   }
@@ -117,10 +117,15 @@ class CheckoutSessionTest {
 
   @Test
   void builderRequiresMandatoryFields() {
-    assertThrows(IllegalStateException.class, () -> CheckoutSession.builder().start());
+    assertThrows(IllegalStateException.class, () -> TerminalShopperSession.builder().start());
     assertThrows(
         IllegalStateException.class,
-        () -> CheckoutSession.builder().client(terminalClient()).saleId("s").poiId("p").start());
+        () ->
+            TerminalShopperSession.builder()
+                .client(terminalClient())
+                .saleId("s")
+                .poiId("p")
+                .start());
   }
 
   @Test
@@ -295,9 +300,9 @@ class CheckoutSessionTest {
       displayServer.enqueue(
           new MockResponse().setBody("{\"SaleToPOIResponse\":{\"DisplayResponse\":{}}}"));
 
-      CheckoutSession dual =
+      TerminalShopperSession dual =
           start(
-              CheckoutSession.builder()
+              TerminalShopperSession.builder()
                   .client(terminalClient())
                   .externalDisplayClient(
                       BiltNexoTerminalClient.builder()

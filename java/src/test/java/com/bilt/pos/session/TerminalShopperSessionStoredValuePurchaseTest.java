@@ -33,7 +33,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class CheckoutSessionStoredValuePurchaseTest {
+class TerminalShopperSessionStoredValuePurchaseTest {
 
   private static final String STORED_VALUE_FAILED =
       "{\"SaleToPOIResponse\":{\"StoredValueResponse\":{"
@@ -44,15 +44,15 @@ class CheckoutSessionStoredValuePurchaseTest {
       new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
   private MockWebServer server;
-  private CheckoutSession session;
+  private TerminalShopperSession session;
 
   @BeforeEach
   void setUp() throws Exception {
     server = new MockWebServer();
     server.start();
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session =
-        CheckoutSession.builder()
+        TerminalShopperSession.builder()
             .client(
                 BiltNexoTerminalClient.builder()
                     .endpoint(server.url("/nexo").toString())
@@ -402,7 +402,7 @@ class CheckoutSessionStoredValuePurchaseTest {
 
     server.enqueue(
         new MockResponse().setBody(storedValueOk("Reverse", "POI-REVERSE-LOAD-1", 25.00, 0.00)));
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.REVERSAL_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.REVERSAL_OK));
 
     assertTrue(session.voidTransaction().get().isSuccess());
 
@@ -462,7 +462,7 @@ class CheckoutSessionStoredValuePurchaseTest {
         new MockResponse().setBody(storedValueOk("Reverse", "POI-REVERSE-1", 10.00, 0.00)));
     server.enqueue(
         new MockResponse().setBody(storedValueOk("Reverse", "POI-REVERSE-2", 15.00, 15.00)));
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.REVERSAL_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.REVERSAL_OK));
     assertTrue(session.voidTransaction().get().isSuccess());
 
     List<SaleToPOIRequest> voidRequests = drainRequests();

@@ -94,15 +94,13 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">Final outcome of a successful settlement orchestration.
 
- <p>For returns and exchanges, <a href="#getMovements()"><code>getMovements()</code></a> is the complete
- ledger of externally visible money and loyalty movements that remain
- committed after settlement. The refund aggregate getters report the
- amounts returned by card, stored value, external register-managed tender,
- and loyalty restoration.</p>
+ <p>For returns and exchanges, <a href="#getMovements()"><code>getMovements()</code></a> is the complete ledger of externally
+ visible money and loyalty movements that remain committed after settlement. The refund aggregate
+ getters report the amounts returned by card, stored value, external register-managed tender, and
+ loyalty restoration.
 
- <p>The loyalty award is best-effort (the terminal stores-and-forwards when
- the loyalty host is down): a failed award does not fail the checkout but is
- reported in <a href="#getWarnings()"><code>getWarnings()</code></a>.</p></div>
+ <p>The loyalty award is best-effort (the terminal stores-and-forwards when the loyalty host is
+ down): a failed award does not fail the checkout but is reported in <a href="#getWarnings()"><code>getWarnings()</code></a>.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -151,8 +149,7 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getAwardPoiTransactionId()" class="member-name-link">getAwardPoiTransactionId</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Terminal reference of the loyalty award, or <code>null</code> when no award
- was submitted.</div>
+<div class="block">Terminal reference of the loyalty award, or <code>null</code> when no award was submitted.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getAwardPoiTransactionTimestamp()" class="member-name-link">getAwardPoiTransactionTimestamp</a>()</code></div>
@@ -199,8 +196,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getMovements()" class="member-name-link">getMovements</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Every externally visible money/loyalty movement that remained
- committed when this settlement completed successfully.</div>
+<div class="block">Every externally visible money/loyalty movement that remained committed when this settlement
+ completed successfully.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPaymentBrand()" class="member-name-link">getPaymentBrand</a>()</code></div>
@@ -232,8 +229,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRebatePoiTransactionId()" class="member-name-link">getRebatePoiTransactionId</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Terminal reference of the committed rebate redemption, or <code>null</code>
- when no rebates were applied.</div>
+<div class="block">Terminal reference of the committed rebate redemption, or <code>null</code> when no rebates were
+ applied.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRebatePoiTransactionTimestamp()" class="member-name-link">getRebatePoiTransactionTimestamp</a>()</code></div>
@@ -244,8 +241,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRedemptionPoiTransactionId()" class="member-name-link">getRedemptionPoiTransactionId</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Terminal reference of the committed point/reward redemption, or
- <code>null</code> when no points were redeemed.</div>
+<div class="block">Terminal reference of the committed point/reward redemption, or <code>null</code> when no points
+ were redeemed.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRedemptionPoiTransactionTimestamp()" class="member-name-link">getRedemptionPoiTransactionTimestamp</a>()</code></div>
@@ -268,8 +265,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getStoredValuePoiTransactionId()" class="member-name-link">getStoredValuePoiTransactionId</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Terminal reference of the stored value leg in a split tender, or
- <code>null</code> when no separate gift card charge was made.</div>
+<div class="block">Terminal reference of the stored value leg in a split tender, or <code>null</code> when no separate
+ gift card charge was made.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getStoredValuePoiTransactionTimestamp()" class="member-name-link">getStoredValuePoiTransactionTimestamp</a>()</code></div>
@@ -485,9 +482,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getStoredValuePoiTransactionId()">
 <h3>getStoredValuePoiTransactionId</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">getStoredValuePoiTransactionId</span>()</div>
-<div class="block">Terminal reference of the stored value leg in a split tender, or
- <code>null</code> when no separate gift card charge was made. A same-session
- void reverses both legs.</div>
+<div class="block">Terminal reference of the stored value leg in a split tender, or <code>null</code> when no separate
+ gift card charge was made. A same-session void reverses both legs.</div>
 </section>
 </li>
 <li>
@@ -500,8 +496,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getAwardPoiTransactionId()">
 <h3>getAwardPoiTransactionId</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">getAwardPoiTransactionId</span>()</div>
-<div class="block">Terminal reference of the loyalty award, or <code>null</code> when no award
- was submitted. The award-reversal contract references this ID.</div>
+<div class="block">Terminal reference of the loyalty award, or <code>null</code> when no award was submitted. The
+ award-reversal contract references this ID.</div>
 </section>
 </li>
 <li>
@@ -514,9 +510,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getRebatePoiTransactionId()">
 <h3>getRebatePoiTransactionId</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">getRebatePoiTransactionId</span>()</div>
-<div class="block">Terminal reference of the committed rebate redemption, or <code>null</code>
- when no rebates were applied. A void of a checkout with no payment
- legs reverses this movement.</div>
+<div class="block">Terminal reference of the committed rebate redemption, or <code>null</code> when no rebates were
+ applied. A void of a checkout with no payment legs reverses this movement.</div>
 </section>
 </li>
 <li>
@@ -529,9 +524,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getRedemptionPoiTransactionId()">
 <h3>getRedemptionPoiTransactionId</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">getRedemptionPoiTransactionId</span>()</div>
-<div class="block">Terminal reference of the committed point/reward redemption, or
- <code>null</code> when no points were redeemed. A void of a checkout with
- no payment legs reverses this movement.</div>
+<div class="block">Terminal reference of the committed point/reward redemption, or <code>null</code> when no points
+ were redeemed. A void of a checkout with no payment legs reverses this movement.</div>
 </section>
 </li>
 <li>
@@ -572,9 +566,9 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getMovements()">
 <h3>getMovements</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;</span>&nbsp;<span class="element-name">getMovements</span>()</div>
-<div class="block">Every externally visible money/loyalty movement that remained
- committed when this settlement completed successfully. Charge-side
- movements that were later unwound by same-run recovery are excluded.</div>
+<div class="block">Every externally visible money/loyalty movement that remained committed when this settlement
+ completed successfully. Charge-side movements that were later unwound by same-run recovery are
+ excluded.</div>
 </section>
 </li>
 <li>
