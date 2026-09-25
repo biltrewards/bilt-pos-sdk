@@ -13,7 +13,11 @@ import com.bilt.pos.widget.MediaSpec;
 import com.bilt.pos.widget.Rendering;
 import java.math.BigDecimal;
 import java.net.URI;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -71,6 +75,33 @@ class InMemoryAdDecisionServiceTest {
         .amount(new BigDecimal("2.00"))
         .creativeId(creativeId)
         .build();
+  }
+
+  private static final class MutableClock extends Clock {
+    private volatile Instant now;
+
+    MutableClock(Instant now) {
+      this.now = now;
+    }
+
+    void advance(Duration duration) {
+      now = now.plus(duration);
+    }
+
+    @Override
+    public ZoneOffset getZone() {
+      return ZoneOffset.UTC;
+    }
+
+    @Override
+    public Clock withZone(ZoneId zone) {
+      return this;
+    }
+
+    @Override
+    public Instant instant() {
+      return now;
+    }
   }
 
   private static final class RecordingListener implements AdEventListener {
@@ -254,6 +285,49 @@ class InMemoryAdDecisionServiceTest {
 
     service.decide(handle, BANNER, FULL, TIMEOUT);
     assertTrue(service.validateAction(handle, APPLY, "crt_1").isAccepted());
+  }
+
+  @Test
+  void tapsAfterTheRenderingTtlAreRejected() {
+    MutableClock clock = new MutableClock(Instant.parse("2026-09-25T12:00:00Z"));
+    Rendering rendering = creative("crt_1").cta(APPLY).build();
+    InMemoryAdDecisionService service =
+        new InMemoryAdDecisionService()
+            .clock(clock)
+            .onPlacement(BANNER, rendering)
+            .offerFor("act_apply", offer("crt_1"));
+    SessionHandle handle = service.registerSession(snapshot("browsing"));
+    service.decide(handle, BANNER, FULL, TIMEOUT);
+
+    clock.advance(rendering.getTtl());
+    ActionOutcome stale = service.validateAction(handle, APPLY, "crt_1");
+    assertFalse(stale.isAccepted());
+    assertTrue(stale.getReason().contains("expired"));
+
+    service.decide(handle, BANNER, FULL, TIMEOUT);
+    assertTrue(
+        service.validateAction(handle, APPLY, "crt_1").isAccepted(),
+        "serving the rendering again starts a fresh TTL");
+  }
+
+  @Test
+  void expiredOffersAreRejected() {
+    MutableClock clock = new MutableClock(Instant.parse("2026-09-25T12:00:00Z"));
+    Offer expiring =
+        offer("crt_1").toBuilder().expiry(clock.instant().plus(Duration.ofSeconds(10))).build();
+    InMemoryAdDecisionService service =
+        new InMemoryAdDecisionService()
+            .clock(clock)
+            .onPlacement(BANNER, creative("crt_1").cta(APPLY).build())
+            .offerFor("act_apply", expiring);
+    SessionHandle handle = service.registerSession(snapshot("browsing"));
+    service.decide(handle, BANNER, FULL, TIMEOUT);
+
+    clock.advance(Duration.ofSeconds(10));
+    ActionOutcome outcome = service.validateAction(handle, APPLY, "crt_1");
+
+    assertFalse(outcome.isAccepted());
+    assertTrue(outcome.getReason().contains("offer expired"));
   }
 
   @Test

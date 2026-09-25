@@ -16,7 +16,9 @@ import com.bilt.pos.media.Placement;
 import com.bilt.pos.widget.Action;
 import com.bilt.pos.widget.Cta;
 import com.bilt.pos.widget.Rendering;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -54,9 +56,10 @@ import java.util.logging.Logger;
  * <p>Tokens are the ones on the scripted renderings; the fake remembers which tokens it served to
  * which session for which creative and action, and {@link #validateAction} rejects anything else.
  * An {@code APPLY_OFFER} token validates only if {@link #offerFor} registered an offer for it. A
- * token is single-use: once accepted it is rejected as already used until a later {@code decide}
- * serves it again, because the scripted renderings reuse their tokens where the platform would
- * issue fresh ones.
+ * token is also rejected once its rendering's TTL has run out since it was served, and an offer
+ * once its expiry has passed, both judged against {@link #clock}. A token is single-use: once
+ * accepted it is rejected as already used until a later {@code decide} serves it again, because the
+ * scripted renderings reuse their tokens where the platform would issue fresh ones.
  *
  * <p>Everything the fake sees is recorded: {@link #snapshots} (registration first, then every
  * update), {@link #served}, {@link #reports}. Events reach subscribers only when a test injects
@@ -78,6 +81,7 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
   private final List<RuntimeException> swallowedFailures = new ArrayList<>();
   private final AtomicInteger handleSequence = new AtomicInteger();
   private Duration latency = Duration.ZERO;
+  private Clock clock = Clock.systemUTC();
   private RuntimeException pendingFailure;
 
   private static final class Session {
@@ -86,6 +90,7 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
     final List<AdInteraction> reports = new ArrayList<>();
     final Map<String, String> creativeByToken = new HashMap<>();
     final Map<String, Action> actionByToken = new HashMap<>();
+    final Map<String, Instant> expiryByToken = new HashMap<>();
     final Set<String> usedTokens = new HashSet<>();
     final List<AdEventListener> listeners = new CopyOnWriteArrayList<>();
 
@@ -149,6 +154,15 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
     }
     synchronized (lock) {
       this.latency = latency;
+    }
+    return this;
+  }
+
+  /** Sets the clock that rendering TTLs and offer expiries are judged against. */
+  public InMemoryAdDecisionService clock(Clock clock) {
+    Objects.requireNonNull(clock, "clock");
+    synchronized (lock) {
+      this.clock = clock;
     }
     return this;
   }
@@ -305,8 +319,9 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
       if (session == null) {
         return Optional.empty();
       }
-      rememberToken(session, rendering, rendering.getCta());
-      rememberToken(session, rendering, rendering.getSecondary());
+      Instant expiry = clock.instant().plus(rendering.getTtl());
+      rememberToken(session, rendering, rendering.getCta(), expiry);
+      rememberToken(session, rendering, rendering.getSecondary(), expiry);
       session.served.add(rendering);
     }
     return Optional.of(rendering);
@@ -337,11 +352,18 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
       if (session.usedTokens.contains(cta.getToken())) {
         return ActionOutcome.rejected("token already used");
       }
+      Instant now = clock.instant();
+      if (!now.isBefore(session.expiryByToken.get(cta.getToken()))) {
+        return ActionOutcome.rejected("rendering expired");
+      }
       Offer offer = null;
       if (cta.getAction() == Action.APPLY_OFFER) {
         offer = offersByToken.get(cta.getToken());
         if (offer == null) {
           return ActionOutcome.rejected("no offer registered for token");
+        }
+        if (offer.getExpiry() != null && !now.isBefore(offer.getExpiry())) {
+          return ActionOutcome.rejected("offer expired");
         }
       }
       session.usedTokens.add(cta.getToken());
@@ -392,8 +414,9 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
     return session;
   }
 
-  private static void rememberToken(Session session, Rendering rendering, Cta cta) {
+  private static void rememberToken(Session session, Rendering rendering, Cta cta, Instant expiry) {
     if (cta != null) {
+      session.expiryByToken.put(cta.getToken(), expiry);
       session.creativeByToken.put(cta.getToken(), rendering.getCreativeId());
       session.actionByToken.put(cta.getToken(), cta.getAction());
       session.usedTokens.remove(cta.getToken());
