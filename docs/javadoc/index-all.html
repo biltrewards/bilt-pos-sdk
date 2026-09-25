@@ -304,7 +304,7 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#beforeStep(java.util.function.Function)" class="member-name-link">beforeStep(Function&lt;SettlementContext, String&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
-<div class="block">Called before each step; returns the <code>SaleTransactionID</code> to use.</div>
+<div class="block">Called before each step; returns the <code>SaleTransactionID</code> to use for that step.</div>
 </dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltNexoClientException.html" class="type-name-link" title="class in com.bilt.pos.nexo.client">BiltNexoClientException</a> - Exception Class in <a href="com/bilt/pos/nexo/client/package-summary.html">com.bilt.pos.nexo.client</a></dt>
 <dd>
@@ -2302,6 +2302,12 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#getSaleTransactionId()" class="member-name-link">getSaleTransactionId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/basket/Basket.html#getSaleTransactionID()" class="member-name-link">getSaleTransactionID()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></dt>
+<dd>
+<div class="block">The sale transaction identity shared by every wire request of this basket's checkout —
+ identify, payment, loyalty, stored value, and their reversals all carry it so the sale reads as
+ one transaction end to end.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#getSection()" class="member-name-link">getSection()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
 <dd>
 <div class="block">Gets the value of the section property.</div>
@@ -2359,6 +2365,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#getStep()" class="member-name-link">getStep()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getStoredValueAmountCharged()" class="member-name-link">getStoredValueAmountCharged()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
+<dd>
+<div class="block">Amount charged to the stored value card; zero if no split.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getStoredValueAmountUsed()" class="member-name-link">getStoredValueAmountUsed()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
 <dd>
 <div class="block">Amount charged to the stored value card; zero if no split.</div>
@@ -3849,9 +3859,9 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.util.List,java.util.function.Function)" class="member-name-link">resolveSaleTransactionId(SettlementStep, Basket, BigDecimal, List&lt;CommittedStep&gt;, Function&lt;SettlementContext, String&gt;)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
 <dd>
 <div class="block">Resolves the <code>SaleTransactionID</code> for a settlement step using the same contract as <code>
- SettlementFlow.beforeStep</code>: generate a fresh default ID, call the handler when one is
- registered, and fall back to the default when the handler returns <code>null</code> or an empty
- string.</div>
+ SettlementFlow.beforeStep</code>: the basket's own sale transaction is the default — every step,
+ retry, and reversal of one checkout shares it — the handler is called when registered, and an
+ override returning a different ID is stamped with the send time.</div>
 </dd>
 <dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html#RESPONSE" class="member-name-link">RESPONSE</a> - Enum constant in enum class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html" title="enum class in com.bilt.pos.nexo.client">NexoMessageListener.Direction</a></dt>
 <dd>&nbsp;</dd>
@@ -3966,6 +3976,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/nexo/security/SaleToPOISecuredMessage.html#%3Cinit%3E()" class="member-name-link">SaleToPOISecuredMessage()</a> - Constructor for class com.bilt.pos.nexo.security.<a href="com/bilt/pos/nexo/security/SaleToPOISecuredMessage.html" title="class in com.bilt.pos.nexo.security">SaleToPOISecuredMessage</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html#saleTransactionId(java.lang.String)" class="member-name-link">saleTransactionId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/basket/Basket.Builder.html#saleTransactionID(com.bilt.pos.nexo.model.TransactionIdentificationType)" class="member-name-link">saleTransactionID(TransactionIdentificationType)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.Builder.html" title="class in com.bilt.pos.session.basket">Basket.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html#scanned(java.lang.String)" class="member-name-link">scanned(String)</a> - Static method in class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></dt>
 <dd>

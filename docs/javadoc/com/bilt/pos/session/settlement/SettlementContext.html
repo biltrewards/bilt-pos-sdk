@@ -149,7 +149,7 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">The step about to run.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static com.bilt.pos.nexo.model.TransactionIdentificationType</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.util.List,java.util.function.Function)" class="member-name-link">resolveSaleTransactionId</a><wbr>(<a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a>&nbsp;step,
  <a href="../basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;currentBasket,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;currentTotal,
@@ -157,9 +157,9 @@ loadScripts(document, 'script');</script>
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;&nbsp;handler)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
 <div class="block">Resolves the <code>SaleTransactionID</code> for a settlement step using the same contract as <code>
- SettlementFlow.beforeStep</code>: generate a fresh default ID, call the handler when one is
- registered, and fall back to the default when the handler returns <code>null</code> or an empty
- string.</div>
+ SettlementFlow.beforeStep</code>: the basket's own sale transaction is the default — every step,
+ retry, and reversal of one checkout shares it — the handler is called when registered, and an
+ override returning a different ID is stamped with the send time.</div>
 </div>
 </div>
 </div>
@@ -199,15 +199,17 @@ loadScripts(document, 'script');</script>
 <li>
 <section class="detail" id="resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.util.List,java.util.function.Function)">
 <h3>resolveSaleTransactionId</h3>
-<div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">resolveSaleTransactionId</span><wbr><span class="parameters">(<a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a>&nbsp;step,
+<div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type">com.bilt.pos.nexo.model.TransactionIdentificationType</span>&nbsp;<span class="element-name">resolveSaleTransactionId</span><wbr><span class="parameters">(<a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a>&nbsp;step,
  <a href="../basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;currentBasket,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;currentTotal,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="CommittedStep.html" title="class in com.bilt.pos.session.settlement">CommittedStep</a>&gt;&nbsp;priorSteps,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;&nbsp;handler)</span></div>
 <div class="block">Resolves the <code>SaleTransactionID</code> for a settlement step using the same contract as <code>
- SettlementFlow.beforeStep</code>: generate a fresh default ID, call the handler when one is
- registered, and fall back to the default when the handler returns <code>null</code> or an empty
- string.</div>
+ SettlementFlow.beforeStep</code>: the basket's own sale transaction is the default — every step,
+ retry, and reversal of one checkout shares it — the handler is called when registered, and an
+ override returning a different ID is stamped with the send time. The basket's transaction —
+ including its timestamp — is kept unchanged when the handler returns <code>null</code>, an empty
+ string, or the default ID itself, since nexo treats ID and timestamp as one identity.</div>
 </section>
 </li>
 <li>
