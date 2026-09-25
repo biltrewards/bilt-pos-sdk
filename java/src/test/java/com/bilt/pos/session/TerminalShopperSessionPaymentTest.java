@@ -33,7 +33,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class CheckoutSessionPaymentTest {
+class TerminalShopperSessionPaymentTest {
 
   private static final java.time.Instant ORIGINAL_TIME =
       java.time.Instant.parse("2026-07-20T10:00:00Z");
@@ -75,7 +75,7 @@ class CheckoutSessionPaymentTest {
           + "\"LoyaltyResult\":[{\"CurrentBalance\":700,"
           + "\"LoyaltyAmount\":{\"AmountValue\":5.00,\"LoyaltyUnit\":\"Monetary\"}}]}}}";
 
-  private static final String LOYALTY_REFUND_OK = CheckoutSessionTest.LOYALTY_REFUND_OK;
+  private static final String LOYALTY_REFUND_OK = TerminalShopperSessionTest.LOYALTY_REFUND_OK;
 
   private static final String AWARD_OK =
       "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
@@ -146,7 +146,7 @@ class CheckoutSessionPaymentTest {
       "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{"
           + "\"Response\":{\"Result\":\"Success\"}}}}";
 
-  private static final String REVERSAL_OK = CheckoutSessionTest.REVERSAL_OK;
+  private static final String REVERSAL_OK = TerminalShopperSessionTest.REVERSAL_OK;
   private static final String REVERSAL_UNREACHABLE =
       "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
           + "\"Response\":{\"Result\":\"Failure\","
@@ -156,7 +156,7 @@ class CheckoutSessionPaymentTest {
       new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
   private MockWebServer server;
-  private CheckoutSession session;
+  private TerminalShopperSession session;
 
   @BeforeEach
   void setUp() throws Exception {
@@ -165,8 +165,8 @@ class CheckoutSessionPaymentTest {
     session = start(sessionBuilder());
   }
 
-  private CheckoutSession.Builder sessionBuilder() {
-    return CheckoutSession.builder()
+  private TerminalShopperSession.Builder sessionBuilder() {
+    return TerminalShopperSession.builder()
         .client(
             BiltNexoTerminalClient.builder()
                 .endpoint(server.url("/nexo").toString())
@@ -179,9 +179,9 @@ class CheckoutSessionPaymentTest {
   }
 
   /** Starts a session, answering and draining the session-start Admin exchange. */
-  private CheckoutSession start(CheckoutSession.Builder builder) throws Exception {
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
-    CheckoutSession started = builder.start().get();
+  private TerminalShopperSession start(TerminalShopperSession.Builder builder) throws Exception {
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
+    TerminalShopperSession started = builder.start().get();
     server.takeRequest(5, TimeUnit.SECONDS); // drain the session-start Admin request
     return started;
   }
@@ -272,7 +272,7 @@ class CheckoutSessionPaymentTest {
           return SettlementRecovery.abort();
         });
 
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     session.end().get(); // the session ends before the flow executes
     flow.executeSync(); // must not return silently
 
@@ -365,9 +365,9 @@ class CheckoutSessionPaymentTest {
 
   @Test
   void storeLocationIsSentAsTotalsGroupId() throws Exception {
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
-    CheckoutSession storeSession =
-        CheckoutSession.builder()
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
+    TerminalShopperSession storeSession =
+        TerminalShopperSession.builder()
             .client(
                 BiltNexoTerminalClient.builder()
                     .endpoint(server.url("/nexo").toString())
@@ -915,7 +915,8 @@ class CheckoutSessionPaymentTest {
           + "\"LoyaltyResult\":[{\"CurrentBalance\":100,"
           + "\"LoyaltyAmount\":{\"AmountValue\":50.00,\"LoyaltyUnit\":\"Monetary\"}}]}}}";
 
-  private static final String LOYALTY_REFUND_FAILED = CheckoutSessionTest.LOYALTY_REFUND_FAILED;
+  private static final String LOYALTY_REFUND_FAILED =
+      TerminalShopperSessionTest.LOYALTY_REFUND_FAILED;
 
   /** Rewards cover the whole basket: rebate 50 + redemption 50 on a 100 item. */
   private void completeRewardOnlyCheckout() throws Exception {
@@ -1564,7 +1565,7 @@ class CheckoutSessionPaymentTest {
   // ─── Cross-session (referenced) reversal from a persisted result ───
 
   @Test
-  void persistedResultVoidsEveryLegFromCheckoutSessionOriginalSaleRecord() throws Exception {
+  void persistedResultVoidsEveryLegFromTerminalShopperSessionOriginalSaleRecord() throws Exception {
     // the original sale: rebate + redemption + card + award
     identifyMember();
     addHundredDollarItem();
@@ -1577,7 +1578,7 @@ class CheckoutSessionPaymentTest {
 
     // a later process: a checkout session built only from what the POS
     // persisted
-    CheckoutSession later = start(sessionBuilder());
+    TerminalShopperSession later = start(sessionBuilder());
 
     server.enqueue(new MockResponse().setBody(REVERSAL_OK)); // card leg
     server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK)); // redemption refund
@@ -1940,7 +1941,7 @@ class CheckoutSessionPaymentTest {
             .getTransactionID(),
         "retry must not reverse the already-completed card leg again");
 
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.ADMIN_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
     assertDoesNotThrow(
         () -> session.end().get(), "end is allowed after the prior-sale void finishes");
   }
@@ -3948,7 +3949,7 @@ class CheckoutSessionPaymentTest {
     identifyMember("56789");
     assertEquals("56789", session.getMember().getMemberId());
 
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.refundOk(25.00)));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(25.00)));
     server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
     assertTrue(session.refund(new BigDecimal("25.00")).get().isSuccess());
 
@@ -4018,7 +4019,8 @@ class CheckoutSessionPaymentTest {
         .executeSync();
     drainRequests();
 
-    server.enqueue(new MockResponse().setBody(CheckoutSessionTest.refundOk(25.00))); // money moved
+    server.enqueue(
+        new MockResponse().setBody(TerminalShopperSessionTest.refundOk(25.00))); // money moved
     server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED)); // award fails
     assertThrows(
         SessionException.class,

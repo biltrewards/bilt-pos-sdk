@@ -16,7 +16,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Options for {@link CheckoutSession#getTransactionStatus}.
+ * Options for {@link TerminalShopperSession#getTransactionStatus}.
  *
  * <p>By default the referenced request is assumed to be a payment and no receipt data is requested.
  * Enable {@link Builder#receiptReprint} to have the terminal include the original receipts in the

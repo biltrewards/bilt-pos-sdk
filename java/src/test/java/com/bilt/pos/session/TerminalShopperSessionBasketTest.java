@@ -21,7 +21,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class CheckoutSessionBasketTest {
+class TerminalShopperSessionBasketTest {
 
   // answers both the display sends and the session-start Admin exchange,
   // so the catch-all dispatcher can serve every request this class makes
@@ -52,8 +52,8 @@ class CheckoutSessionBasketTest {
     server.shutdown();
   }
 
-  private CheckoutSession.Builder sessionBuilder() {
-    return CheckoutSession.builder()
+  private TerminalShopperSession.Builder sessionBuilder() {
+    return TerminalShopperSession.builder()
         .client(
             BiltNexoTerminalClient.builder()
                 .endpoint(server.url("/nexo").toString())
@@ -65,8 +65,8 @@ class CheckoutSessionBasketTest {
   }
 
   /** Starts the session and drains the session-start Admin request. */
-  private CheckoutSession start(CheckoutSession.Builder builder) throws Exception {
-    CheckoutSession session = builder.start().get();
+  private TerminalShopperSession start(TerminalShopperSession.Builder builder) throws Exception {
+    TerminalShopperSession session = builder.start().get();
     server.takeRequest(5, TimeUnit.SECONDS);
     return session;
   }
@@ -87,7 +87,7 @@ class CheckoutSessionBasketTest {
 
   @Test
   void negativeTaxValuesAreRejected() throws Exception {
-    CheckoutSession session = start(sessionBuilder().autoDisplay(false));
+    TerminalShopperSession session = start(sessionBuilder().autoDisplay(false));
     session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("100.00")));
 
     assertThrows(
@@ -107,7 +107,7 @@ class CheckoutSessionBasketTest {
 
   @Test
   void mutateIsAtomicWhenABatchOperationThrows() throws Exception {
-    CheckoutSession session = start(sessionBuilder().autoDisplay(false));
+    TerminalShopperSession session = start(sessionBuilder().autoDisplay(false));
     session.basket().addItem(BasketItem.sale("SKU-1", "Item", 2, new BigDecimal("10.00")));
 
     assertThrows(
@@ -127,7 +127,7 @@ class CheckoutSessionBasketTest {
 
   @Test
   void itemsCanBeAddedAndRemovedBeforeSettlement() throws Exception {
-    CheckoutSession session = start(sessionBuilder().autoDisplay(false));
+    TerminalShopperSession session = start(sessionBuilder().autoDisplay(false));
 
     session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
     session.basket().removeItemBySku("SKU-1");
@@ -136,7 +136,7 @@ class CheckoutSessionBasketTest {
 
   @Test
   void basketOpsAreRejectedAfterEnd() throws Exception {
-    CheckoutSession session = start(sessionBuilder().autoDisplay(false));
+    TerminalShopperSession session = start(sessionBuilder().autoDisplay(false));
     // the catch-all dispatcher answers the end() Admin exchange
     session.end().get();
 
@@ -150,7 +150,7 @@ class CheckoutSessionBasketTest {
 
   @Test
   void designDocScanningExample() throws Exception {
-    CheckoutSession session = start(sessionBuilder().autoDisplay(false));
+    TerminalShopperSession session = start(sessionBuilder().autoDisplay(false));
 
     Basket basket =
         session
@@ -187,7 +187,7 @@ class CheckoutSessionBasketTest {
 
   @Test
   void addItemSendsItemisedReceiptDisplay() throws Exception {
-    CheckoutSession session = start(sessionBuilder());
+    TerminalShopperSession session = start(sessionBuilder());
 
     session
         .basket()
@@ -209,7 +209,7 @@ class CheckoutSessionBasketTest {
 
   @Test
   void autoDisplayOffSendsNothing() throws Exception {
-    CheckoutSession session = start(sessionBuilder().autoDisplay(false));
+    TerminalShopperSession session = start(sessionBuilder().autoDisplay(false));
 
     session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("10.00")));
     session.basket().setTaxTotal(new BigDecimal("1.00"));
@@ -219,7 +219,7 @@ class CheckoutSessionBasketTest {
 
   @Test
   void mutateBatchesToSingleDisplayUpdate() throws Exception {
-    CheckoutSession session = start(sessionBuilder());
+    TerminalShopperSession session = start(sessionBuilder());
 
     Basket basket =
         session
@@ -239,7 +239,7 @@ class CheckoutSessionBasketTest {
 
   @Test
   void customDisplayRendererIsUsed() throws Exception {
-    CheckoutSession session =
+    TerminalShopperSession session =
         start(
             sessionBuilder()
                 .displayRenderer((basket, context) -> DisplayPayloadHelper.standby("custom")));
@@ -252,7 +252,7 @@ class CheckoutSessionBasketTest {
 
   @Test
   void displayFailureDoesNotFailBasketOperation() throws Exception {
-    CheckoutSession session = start(sessionBuilder());
+    TerminalShopperSession session = start(sessionBuilder());
     server.shutdown();
 
     Basket basket =
@@ -263,7 +263,7 @@ class CheckoutSessionBasketTest {
 
   @Test
   void failingCustomRendererDoesNotFailBasketOperation() throws Exception {
-    CheckoutSession session =
+    TerminalShopperSession session =
         start(
             sessionBuilder()
                 .displayRenderer(

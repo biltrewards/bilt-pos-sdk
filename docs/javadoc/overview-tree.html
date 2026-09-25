@@ -92,8 +92,6 @@ loadScripts(document, 'script');</script>
 <li class="circle">com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionOptions.Builder.html" class="type-name-link" title="class in com.bilt.pos.session.identity">CardAcquisitionOptions.Builder</a></li>
 <li class="circle">com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionResult.html" class="type-name-link" title="class in com.bilt.pos.session.identity">CardAcquisitionResult</a></li>
 <li class="circle">com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionResult.Builder.html" class="type-name-link" title="class in com.bilt.pos.session.identity">CardAcquisitionResult.Builder</a></li>
-<li class="circle">com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.html" class="type-name-link" title="class in com.bilt.pos.session">CheckoutSession</a> (implements java.lang.<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" title="class or interface in java.lang" class="external-link">AutoCloseable</a>)</li>
-<li class="circle">com.bilt.pos.session.<a href="com/bilt/pos/session/CheckoutSession.Builder.html" class="type-name-link" title="class in com.bilt.pos.session">CheckoutSession.Builder</a></li>
 <li class="circle">com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CommittedStep.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">CommittedStep</a></li>
 <li class="circle">com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/ConfirmationOptions.html" class="type-name-link" title="class in com.bilt.pos.session.input">ConfirmationOptions</a></li>
 <li class="circle">com.bilt.pos.session.<a href="com/bilt/pos/session/DiagnosisResult.html" class="type-name-link" title="class in com.bilt.pos.session">DiagnosisResult</a></li>
@@ -168,6 +166,7 @@ loadScripts(document, 'script');</script>
 <li class="circle">com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementResult</a></li>
 <li class="circle">com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></li>
 <li class="circle">com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementTarget.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementTarget</a></li>
+<li class="circle">com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.Builder.html" class="type-name-link" title="class in com.bilt.pos.session">ShopperSession.Builder</a></li>
 <li class="circle">com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/Signature.html" class="type-name-link" title="class in com.bilt.pos.session.input">Signature</a></li>
 <li class="circle">com.bilt.pos.display.<a href="com/bilt/pos/display/StandbyType.html" class="type-name-link" title="class in com.bilt.pos.display">StandbyType</a></li>
 <li class="circle">com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueBalance.html" class="type-name-link" title="class in com.bilt.pos.session.storedvalue">StoredValueBalance</a></li>
@@ -180,6 +179,7 @@ loadScripts(document, 'script');</script>
 <li class="circle">com.bilt.pos.display.<a href="com/bilt/pos/display/TaxType.html" class="type-name-link" title="class in com.bilt.pos.display">TaxType</a></li>
 <li class="circle">com.bilt.pos.session.<a href="com/bilt/pos/session/Terminal.html" class="type-name-link" title="class in com.bilt.pos.session">Terminal</a> (implements java.lang.<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" title="class or interface in java.lang" class="external-link">AutoCloseable</a>)</li>
 <li class="circle">com.bilt.pos.session.<a href="com/bilt/pos/session/Terminal.Builder.html" class="type-name-link" title="class in com.bilt.pos.session">Terminal.Builder</a></li>
+<li class="circle">com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" class="type-name-link" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></li>
 <li class="circle">java.lang.<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Throwable.html" class="type-name-link external-link" title="class or interface in java.lang">Throwable</a> (implements java.io.<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/io/Serializable.html" title="class or interface in java.io" class="external-link">Serializable</a>)
 <ul>
 <li class="circle">java.lang.<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Exception.html" class="type-name-link external-link" title="class or interface in java.lang">Exception</a>
@@ -208,6 +208,15 @@ loadScripts(document, 'script');</script>
 <section class="hierarchy">
 <h2 title="Interface Hierarchy">Interface Hierarchy</h2>
 <ul>
+<li class="circle">java.lang.<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/AutoCloseable.html" class="type-name-link external-link" title="class or interface in java.lang">AutoCloseable</a>
+<ul>
+<li class="circle">com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.html" class="type-name-link" title="interface in com.bilt.pos.session">ShopperSession</a>
+<ul>
+<li class="circle">com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.html" class="type-name-link" title="interface in com.bilt.pos.session">TerminalShopperSession</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="circle">com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketMutation.html" class="type-name-link" title="interface in com.bilt.pos.session.basket">BasketMutation</a></li>
 <li class="circle">com.bilt.pos.session.display.<a href="com/bilt/pos/session/display/DisplayRenderer.html" class="type-name-link" title="interface in com.bilt.pos.session.display">DisplayRenderer</a></li>
 <li class="circle">com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/NexoMessageListener.html" class="type-name-link" title="interface in com.bilt.pos.nexo.client">NexoMessageListener</a></li>

@@ -2,7 +2,7 @@
   items:
     - name: Integration Guide
       url: /integration.html
-    - name: CheckoutSession
+    - name: TerminalShopperSession
       url: /checkout-session-integration.html
 
 - title: Session

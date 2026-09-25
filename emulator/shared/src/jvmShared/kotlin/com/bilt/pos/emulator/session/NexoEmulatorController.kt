@@ -15,7 +15,6 @@ import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient
 import com.bilt.pos.nexo.client.NexoMessageListener
 import com.bilt.pos.nexo.security.SecurityKey
-import com.bilt.pos.session.CheckoutSession
 import com.bilt.pos.session.Receipt
 import com.bilt.pos.session.ReversalDecision
 import com.bilt.pos.session.ReversalStep
@@ -25,6 +24,7 @@ import com.bilt.pos.session.SessionErrorCode
 import com.bilt.pos.session.SessionException
 import com.bilt.pos.session.SessionResult
 import com.bilt.pos.session.Terminal
+import com.bilt.pos.session.TerminalShopperSession
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketDiscount
 import com.bilt.pos.session.basket.BasketItem
@@ -94,9 +94,9 @@ private val rewardExpiryFormat =
  *
  * - **Connect** builds the client and a device-level [Terminal] handle, and runs the periodic
  *   diagnostics loop on it (pure connectivity — no session involved, and none required).
- * - **Start Checkout** opens a [CheckoutSession] (terminal Start bracket) on that connection: one
- *   session per customer checkout. **End Checkout** closes it (End bracket). Disconnect ends any
- *   active session best-effort.
+ * - **Start Checkout** opens a [TerminalShopperSession] (terminal Start bracket) on that
+ *   connection: one session per customer checkout. **End Checkout** closes it (End bracket).
+ *   Disconnect ends any active session best-effort.
  *
  * Session operations run through the SDK's asynchronous `execute()`: outcomes arrive via
  * `onSuccess`/`onError` on [callbackExecutor], and `onComplete` releases claims and busy flags on
@@ -190,12 +190,12 @@ class NexoEmulatorController(
          * the adb server on teardown.
          */
         val tunnel: AdbTunnel.Tunnel? = null,
-        @Volatile var session: CheckoutSession? = null,
+        @Volatile var session: TerminalShopperSession? = null,
         /**
          * The fresh checkout session a referenced refund is running on, so [abort] can reach a
          * refund the way it reaches a payment; null outside a refund.
          */
-        @Volatile var refundSession: CheckoutSession? = null,
+        @Volatile var refundSession: TerminalShopperSession? = null,
     ) {
         /**
          * Returns rung into the active checkout's basket, awaiting the settlement that restores
@@ -667,7 +667,7 @@ class NexoEmulatorController(
         // Logged before the roundtrip: an unresponsive terminal blocks the
         // Start bracket for the read timeout, and the UI would be silent
         log("Starting checkout session (Start bracket)…")
-        CheckoutSession.builder()
+        TerminalShopperSession.builder()
             .client(conn.client)
             .saleId(config.saleId)
             .poiId(config.poiId)
@@ -979,7 +979,7 @@ class NexoEmulatorController(
         cardNumber: String,
         startMessage: String,
         failureTitle: String,
-        operation: (CheckoutSession, StoredValueCard) -> SessionResult<T>,
+        operation: (TerminalShopperSession, StoredValueCard) -> SessionResult<T>,
         describe: (T) -> StoredValueOutcome,
     ) {
         val conn = connection
@@ -1162,7 +1162,7 @@ class NexoEmulatorController(
      * it, and on demand from the Loyalty Sign-In button. Always its own operation, never part of
      * the bracket; a failed or declined prompt leaves the checkout without a member.
      */
-    private fun runIdentifyPrompt(conn: Connection, session: CheckoutSession) {
+    private fun runIdentifyPrompt(conn: Connection, session: TerminalShopperSession) {
         // Claimed like pay/acquireCard: without the claim, a Pay tapped
         // during the prompt would queue behind it on the session's
         // operation thread — and an abort would cancel only the prompt
@@ -1211,7 +1211,7 @@ class NexoEmulatorController(
      * identification standing. Reporting [outcome] alone would tell the operator nobody is attached
      * while settlement went on applying loyalty to that member.
      */
-    private fun publishIdentity(session: CheckoutSession, outcome: MemberIdentity) {
+    private fun publishIdentity(session: TerminalShopperSession, outcome: MemberIdentity) {
         val identity =
             if (outcome is MemberIdentity.Found) {
                 outcome
@@ -1285,7 +1285,7 @@ class NexoEmulatorController(
      * mutations, so without this the previous checkout's receipt — or the sign-in prompt's
      * leftovers — would linger over an untouched basket.
      */
-    private fun refreshCustomerDisplay(session: CheckoutSession) {
+    private fun refreshCustomerDisplay(session: TerminalShopperSession) {
         session
             .updateDisplay(session.basket().snapshot())
             .onSuccess { log("Customer display refreshed") }
@@ -1511,7 +1511,7 @@ class NexoEmulatorController(
      * behind the settling payment on the session's operation thread; the payment summary stays
      * visible until the next Start Checkout.
      */
-    private fun endCompletedCheckout(conn: Connection, session: CheckoutSession) {
+    private fun endCompletedCheckout(conn: Connection, session: TerminalShopperSession) {
         session
             .end()
             .onSuccess {
@@ -2054,8 +2054,9 @@ class NexoEmulatorController(
 
     /**
      * Full refund of the prior sale, blocking the calling IO coroutine: a void of every referenced
-     * movement — the tender legs, redemption, rebate, and award — on a fresh [CheckoutSession],
-     * recorded as a legless full [RefundRecord] (the sale is exhausted for good).
+     * movement — the tender legs, redemption, rebate, and award — on a fresh
+     * [TerminalShopperSession], recorded as a legless full [RefundRecord] (the sale is exhausted
+     * for good).
      */
     private fun executeFullRefund(conn: Connection, stored: StoredSale) {
         val sale = stored.sale
@@ -2162,11 +2163,11 @@ class NexoEmulatorController(
     private fun runRefundSession(
         conn: Connection,
         sale: SaleRecord,
-        body: (CheckoutSession) -> Unit,
+        body: (TerminalShopperSession) -> Unit,
     ) {
         try {
             val session =
-                CheckoutSession.builder()
+                TerminalShopperSession.builder()
                     .client(conn.client)
                     // the record persisted the original sale's identity exactly
                     // so a later referenced reversal can present it

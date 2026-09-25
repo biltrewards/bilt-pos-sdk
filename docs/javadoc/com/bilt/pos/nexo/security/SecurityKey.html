@@ -94,10 +94,11 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">Holds the shared secret and metadata required for Nexo message encryption.
 
- <p>The terminal and the Sale System must be provisioned with the same
- passphrase. The passphrase is used to derive AES and HMAC keys via PBKDF2.</p>
+ <p>The terminal and the Sale System must be provisioned with the same passphrase. The passphrase
+ is used to derive AES and HMAC keys via PBKDF2.
 
- <p>Create instances via the <a href="SecurityKey.Builder.html" title="class in com.bilt.pos.nexo.security"><code>SecurityKey.Builder</code></a>:</p>
+ <p>Create instances via the <a href="SecurityKey.Builder.html" title="class in com.bilt.pos.nexo.security"><code>SecurityKey.Builder</code></a>:
+
  <pre><code>
  SecurityKey key = SecurityKey.builder()
      .passphrase("mySharedSecret")
