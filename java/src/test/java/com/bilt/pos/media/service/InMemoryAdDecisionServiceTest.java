@@ -200,6 +200,28 @@ class InMemoryAdDecisionServiceTest {
   }
 
   @Test
+  void acceptedTokensAreSingleUseUntilServedAgain() {
+    Rendering rendering = creative("crt_1").cta(APPLY).secondary(TEXT_ME).build();
+    InMemoryAdDecisionService service =
+        new InMemoryAdDecisionService()
+            .onPlacement(BANNER, rendering)
+            .offerFor("act_apply", offer("crt_1"));
+    SessionHandle handle = service.registerSession(snapshot("browsing"));
+    service.decide(handle, BANNER, FULL, TIMEOUT);
+
+    assertTrue(service.validateAction(handle, APPLY, "crt_1").isAccepted());
+    ActionOutcome doubleTap = service.validateAction(handle, APPLY, "crt_1");
+    assertFalse(doubleTap.isAccepted(), "a double tap must not apply the offer twice");
+    assertTrue(doubleTap.getReason().contains("already used"));
+
+    assertTrue(service.validateAction(handle, TEXT_ME, "crt_1").isAccepted());
+    assertFalse(service.validateAction(handle, TEXT_ME, "crt_1").isAccepted());
+
+    service.decide(handle, BANNER, FULL, TIMEOUT);
+    assertTrue(service.validateAction(handle, APPLY, "crt_1").isAccepted());
+  }
+
+  @Test
   void applyOfferWithoutARegisteredOfferIsRejected() {
     Rendering rendering = creative("crt_1").cta(APPLY).build();
     InMemoryAdDecisionService service =

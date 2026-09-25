@@ -21,11 +21,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -48,7 +50,10 @@ import java.util.logging.Logger;
  *
  * <p>Tokens are the ones on the scripted renderings; the fake remembers which tokens it served to
  * which session and for which creative, and {@link #validateAction} rejects anything else. An
- * {@code APPLY_OFFER} token validates only if {@link #offerFor} registered an offer for it.
+ * {@code APPLY_OFFER} token validates only if {@link #offerFor} registered an offer for it. A token
+ * is single-use: once accepted it is rejected as already used until a later {@code decide} serves
+ * it again, because the scripted renderings reuse their tokens where the platform would issue fresh
+ * ones.
  *
  * <p>Everything the fake sees is recorded: {@link #snapshots} (registration first, then every
  * update), {@link #served}, {@link #reports}. Events reach subscribers only when a test injects
@@ -77,6 +82,7 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
     final List<Rendering> served = new ArrayList<>();
     final List<AdInteraction> reports = new ArrayList<>();
     final Map<String, String> creativeByToken = new HashMap<>();
+    final Set<String> usedTokens = new HashSet<>();
     final List<AdEventListener> listeners = new CopyOnWriteArrayList<>();
 
     AdSessionSnapshot latest() {
@@ -314,13 +320,18 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
       if (!issuedFor.equals(creativeId)) {
         return ActionOutcome.rejected("token was issued for creative '" + issuedFor + "'");
       }
-      if (cta.getAction() != Action.APPLY_OFFER) {
-        return ActionOutcome.accepted();
+      if (session.usedTokens.contains(cta.getToken())) {
+        return ActionOutcome.rejected("token already used");
       }
-      Offer offer = offersByToken.get(cta.getToken());
-      return offer == null
-          ? ActionOutcome.rejected("no offer registered for token")
-          : ActionOutcome.accepted(offer);
+      Offer offer = null;
+      if (cta.getAction() == Action.APPLY_OFFER) {
+        offer = offersByToken.get(cta.getToken());
+        if (offer == null) {
+          return ActionOutcome.rejected("no offer registered for token");
+        }
+      }
+      session.usedTokens.add(cta.getToken());
+      return offer == null ? ActionOutcome.accepted() : ActionOutcome.accepted(offer);
     }
   }
 
@@ -370,6 +381,7 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
   private static void rememberToken(Session session, Rendering rendering, Cta cta) {
     if (cta != null) {
       session.creativeByToken.put(cta.getToken(), rendering.getCreativeId());
+      session.usedTokens.remove(cta.getToken());
     }
   }
 

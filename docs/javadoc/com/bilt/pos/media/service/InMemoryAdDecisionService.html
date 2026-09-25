@@ -111,7 +111,10 @@ implements <a href="AdDecisionService.html" title="interface in com.bilt.pos.med
 
  <p>Tokens are the ones on the scripted renderings; the fake remembers which tokens it served to
  which session and for which creative, and <a href="#validateAction(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.widget.Cta,java.lang.String)"><code>validateAction(com.bilt.pos.media.service.SessionHandle, com.bilt.pos.widget.Cta, java.lang.String)</code></a> rejects anything else. An
- <code>APPLY_OFFER</code> token validates only if <a href="#offerFor(java.lang.String,com.bilt.pos.media.Offer)"><code>offerFor(java.lang.String, com.bilt.pos.media.Offer)</code></a> registered an offer for it.
+ <code>APPLY_OFFER</code> token validates only if <a href="#offerFor(java.lang.String,com.bilt.pos.media.Offer)"><code>offerFor(java.lang.String, com.bilt.pos.media.Offer)</code></a> registered an offer for it. A token
+ is single-use: once accepted it is rejected as already used until a later <code>decide</code> serves
+ it again, because the scripted renderings reuse their tokens where the platform would issue fresh
+ ones.
 
  <p>Everything the fake sees is recorded: <a href="#snapshots(com.bilt.pos.media.service.SessionHandle)"><code>snapshots(com.bilt.pos.media.service.SessionHandle)</code></a> (registration first, then every
  update), <a href="#served(com.bilt.pos.media.service.SessionHandle)"><code>served(com.bilt.pos.media.service.SessionHandle)</code></a>, <a href="#reports(com.bilt.pos.media.service.SessionHandle)"><code>reports(com.bilt.pos.media.service.SessionHandle)</code></a>. Events reach subscribers only when a test injects
