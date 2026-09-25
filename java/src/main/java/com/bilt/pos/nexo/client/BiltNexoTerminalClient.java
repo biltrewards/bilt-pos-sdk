@@ -124,7 +124,7 @@ import okhttp3.ResponseBody;
  *     .build();
  * }</pre>
  */
-public final class BiltNexoTerminalClient {
+public final class BiltNexoTerminalClient implements TerminalClient {
 
   private static final Logger LOG = Logger.getLogger(BiltNexoTerminalClient.class.getName());
 
@@ -171,6 +171,7 @@ public final class BiltNexoTerminalClient {
    * @throws BiltNexoClientException if serialization, encryption, HTTP transport, decryption, or
    *     deserialization fails
    */
+  @Override
   public NexoTerminalAPI request(NexoTerminalAPI request) throws BiltNexoClientException {
     return request(request, null);
   }
@@ -184,6 +185,7 @@ public final class BiltNexoTerminalClient {
    *     if the terminal returns an empty body (e.g. abort requests)
    * @throws BiltNexoClientException if any step in the request/response pipeline fails
    */
+  @Override
   public NexoTerminalAPI request(NexoTerminalAPI request, Duration timeout)
       throws BiltNexoClientException {
     SaleToPOIRequest saleToPOIRequest = request.getSaleToPOIRequest();

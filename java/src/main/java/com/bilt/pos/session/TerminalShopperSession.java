@@ -10,7 +10,7 @@
 package com.bilt.pos.session;
 
 import com.bilt.pos.display.DisplayPayload;
-import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.client.TerminalClient;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.display.DisplayRenderer;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
@@ -40,7 +40,7 @@ import java.util.function.Consumer;
 
 /**
  * A shopper session with a Bilt terminal attached: a {@link ShopperSession} whose loyalty, prompts,
- * customer display, and settlement run on the terminal over {@link BiltNexoTerminalClient}.
+ * customer display, and settlement run on the terminal over a {@link TerminalClient}.
  *
  * <p>On top of the basket and member every shopper session has, this one drives the terminal (or an
  * external customer display) and orchestrates settlement — return allocations, rebate redemption,
@@ -458,18 +458,18 @@ public interface TerminalShopperSession extends ShopperSession {
   // ─── Escape hatch ───
 
   /** The underlying terminal client, for raw Nexo access. */
-  BiltNexoTerminalClient getClient();
+  TerminalClient getClient();
 
   /** Builder for a {@link TerminalShopperSession}. */
   final class Builder {
 
-    BiltNexoTerminalClient client;
+    TerminalClient client;
     String saleId;
     String poiId;
     String currency;
     String storeLocation;
     boolean autoDisplay = true;
-    BiltNexoTerminalClient externalDisplayClient;
+    TerminalClient externalDisplayClient;
     DisplayRenderer displayRenderer;
     Consumer<Basket> onBasketUpdated;
     Executor callbackExecutor;
@@ -477,8 +477,11 @@ public interface TerminalShopperSession extends ShopperSession {
 
     private Builder() {}
 
-    /** The terminal client. Required. */
-    public Builder client(BiltNexoTerminalClient client) {
+    /**
+     * The transport to the terminal, typically a {@link
+     * com.bilt.pos.nexo.client.BiltNexoTerminalClient}. Required.
+     */
+    public Builder client(TerminalClient client) {
       this.client = client;
       return this;
     }
@@ -524,7 +527,7 @@ public interface TerminalShopperSession extends ShopperSession {
      * Input} messages are routed to it, while payment, card, and PIN operations stay on the
      * terminal.
      */
-    public Builder externalDisplayClient(BiltNexoTerminalClient externalDisplayClient) {
+    public Builder externalDisplayClient(TerminalClient externalDisplayClient) {
       this.externalDisplayClient = externalDisplayClient;
       return this;
     }

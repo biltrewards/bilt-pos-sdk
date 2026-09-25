@@ -576,13 +576,13 @@ loadScripts(document, 'script');</script>
 <div class="block">Clears all items and tax, starts a fresh basket with a new cart ID, and clears the stored-value
  card selected for split tender.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/Terminal.Builder.html#client(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">client(BiltNexoTerminalClient)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></dt>
+<dt><a href="com/bilt/pos/session/Terminal.Builder.html#client(com.bilt.pos.nexo.client.TerminalClient)" class="member-name-link">client(TerminalClient)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></dt>
 <dd>
-<div class="block">The terminal client.</div>
+<div class="block">The transport to the terminal, typically a <a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client"><code>BiltNexoTerminalClient</code></a>.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#client(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">client(BiltNexoTerminalClient)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></dt>
+<dt><a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#client(com.bilt.pos.nexo.client.TerminalClient)" class="member-name-link">client(TerminalClient)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></dt>
 <dd>
-<div class="block">The terminal client.</div>
+<div class="block">The transport to the terminal, typically a <a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client"><code>BiltNexoTerminalClient</code></a>.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/ShopperSession.html#close()" class="member-name-link">close()</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.html" title="interface in com.bilt.pos.session">ShopperSession</a></dt>
 <dd>
@@ -1087,7 +1087,7 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Register records a refund fulfilled outside the terminal.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#externalDisplayClient(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">externalDisplayClient(BiltNexoTerminalClient)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></dt>
+<dt><a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#externalDisplayClient(com.bilt.pos.nexo.client.TerminalClient)" class="member-name-link">externalDisplayClient(TerminalClient)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></dt>
 <dd>
 <div class="block">A second client for an external customer display device.</div>
 </dd>
@@ -3778,9 +3778,19 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Send a Sale to POI request to the terminal and return the response.</div>
 </dd>
+<dt><a href="com/bilt/pos/nexo/client/TerminalClient.html#request(com.bilt.pos.nexo.model.NexoTerminalAPI)" class="member-name-link">request(NexoTerminalAPI)</a> - Method in interface com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a></dt>
+<dd>
+<div class="block">Sends a Sale to POI request and returns the terminal's response envelope, or <code>null</code> when
+ the terminal replies with an empty body (as it does for abort requests).</div>
+</dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html#request(com.bilt.pos.nexo.model.NexoTerminalAPI,java.time.Duration)" class="member-name-link">request(NexoTerminalAPI, Duration)</a> - Method in class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a></dt>
 <dd>
 <div class="block">Send a Sale to POI request with a per-request timeout override.</div>
+</dd>
+<dt><a href="com/bilt/pos/nexo/client/TerminalClient.html#request(com.bilt.pos.nexo.model.NexoTerminalAPI,java.time.Duration)" class="member-name-link">request(NexoTerminalAPI, Duration)</a> - Method in interface com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a></dt>
+<dd>
+<div class="block">Like <a href="com/bilt/pos/nexo/client/TerminalClient.html#request(com.bilt.pos.nexo.model.NexoTerminalAPI)"><code>TerminalClient.request(NexoTerminalAPI)</code></a> with a per-request read timeout overriding the
+ transport's default; <code>null</code> means the default.</div>
 </dd>
 <dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html#REQUEST" class="member-name-link">REQUEST</a> - Enum constant in enum class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html" title="enum class in com.bilt.pos.nexo.client">NexoMessageListener.Direction</a></dt>
 <dd>&nbsp;</dd>
@@ -4936,12 +4946,17 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Builder for <a href="com/bilt/pos/session/Terminal.html" title="class in com.bilt.pos.session"><code>Terminal</code></a>.</div>
 </dd>
+<dt><a href="com/bilt/pos/nexo/client/TerminalClient.html" class="type-name-link" title="interface in com.bilt.pos.nexo.client">TerminalClient</a> - Interface in <a href="com/bilt/pos/nexo/client/package-summary.html">com.bilt.pos.nexo.client</a></dt>
+<dd>
+<div class="block">The transport a session uses to reach a Bilt terminal: one Nexo Sale to POI request in, one
+ response out.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#terminalID" class="member-name-link">terminalID</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/TerminalShopperSession.html" class="type-name-link" title="interface in com.bilt.pos.session">TerminalShopperSession</a> - Interface in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">A shopper session with a Bilt terminal attached: a <a href="com/bilt/pos/session/ShopperSession.html" title="interface in com.bilt.pos.session"><code>ShopperSession</code></a> whose loyalty, prompts,
- customer display, and settlement run on the terminal over <a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client"><code>BiltNexoTerminalClient</code></a>.</div>
+ customer display, and settlement run on the terminal over a <a href="com/bilt/pos/nexo/client/TerminalClient.html" title="interface in com.bilt.pos.nexo.client"><code>TerminalClient</code></a>.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" class="type-name-link" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
