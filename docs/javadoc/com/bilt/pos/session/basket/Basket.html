@@ -157,6 +157,18 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Stable identifier of this cart within the session.</div>
 </div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCounterpart(com.bilt.pos.session.basket.BasketItem)" class="member-name-link">getCounterpart</a><wbr>(<a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a>&nbsp;item)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The line a register item would upsert into under the <a href="#getCounterpart(com.bilt.pos.session.basket.BasketLineItem)"><code>getCounterpart(com.bilt.pos.session.basket.BasketLineItem)</code></a> rules.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCounterpart(com.bilt.pos.session.basket.BasketLineItem)" class="member-name-link">getCounterpart</a><wbr>(<a href="BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a>&nbsp;line)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The line in this snapshot with the same identity as a line of another snapshot, or <code>
+ null</code>: the line with the same reference when <code>line</code> has one, otherwise the unreferenced
+ line with the same SKU and type.</div>
+</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getDiscountTotal()" class="member-name-link">getDiscountTotal</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
@@ -413,6 +425,28 @@ loadScripts(document, 'script');</script>
  unique sale line is returned. If multiple sale lines exist, or multiple non-sale lines exist
  without a sale line, the SKU is ambiguous and this method throws; use itemId or reference
  instead.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getCounterpart(com.bilt.pos.session.basket.BasketLineItem)">
+<h3>getCounterpart</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></span>&nbsp;<span class="element-name">getCounterpart</span><wbr><span class="parameters">(<a href="BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a>&nbsp;line)</span></div>
+<div class="block">The line in this snapshot with the same identity as a line of another snapshot, or <code>
+ null</code>: the line with the same reference when <code>line</code> has one, otherwise the unreferenced
+ line with the same SKU and type. This is how the basket keys its lines, so it pairs lines
+ across snapshots for <a href="BasketChange.html" title="class in com.bilt.pos.session.basket"><code>BasketChange</code></a> and <code>SessionBasket.replace</code>.</div>
+<dl class="notes">
+<dt>Throws:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link">IllegalArgumentException</a></code> - if more than one line here matches, which a session basket
+     never produces but a register-built snapshot can</dd>
+</dl>
+</section>
+</li>
+<li>
+<section class="detail" id="getCounterpart(com.bilt.pos.session.basket.BasketItem)">
+<h3>getCounterpart</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></span>&nbsp;<span class="element-name">getCounterpart</span><wbr><span class="parameters">(<a href="BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a>&nbsp;item)</span></div>
+<div class="block">The line a register item would upsert into under the <a href="#getCounterpart(com.bilt.pos.session.basket.BasketLineItem)"><code>getCounterpart(com.bilt.pos.session.basket.BasketLineItem)</code></a> rules.</div>
 </section>
 </li>
 <li>

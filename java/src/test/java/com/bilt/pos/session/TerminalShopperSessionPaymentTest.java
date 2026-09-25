@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
+import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
 import com.bilt.pos.session.settlement.ExternalPayment;
@@ -467,6 +468,40 @@ class TerminalShopperSessionPaymentTest {
     assertEquals(
         25.00,
         request.getPaymentRequest().getPaymentTransaction().getAmountsReq().getRequestedAmount());
+  }
+
+  @Test
+  void replacingASettledBasketStartsAFreshCartForAnotherSettlement() throws Exception {
+    addHundredDollarItem();
+    String firstCartId = session.basket().snapshot().getCartId();
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+    session.settle().get();
+    drainRequests();
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            session.basket().addItem(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("25.00"))));
+
+    Basket next =
+        session
+            .basket()
+            .replace(List.of(BasketItem.sale("SKU-2", "Item", 1, new BigDecimal("25.00"))));
+
+    assertNotEquals(firstCartId, next.getCartId(), "replace() on a consumed basket is a new cart");
+    assertEquals(1, next.getItemCount());
+    assertEquals("1", next.getItemBySku("SKU-2").getItemId(), "fresh cart, fresh ids");
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 25.00)));
+
+    SettlementResult second = session.settle().get();
+
+    assertEquals("POI-PAY-2", second.getPoiTransactionId());
+    assertEquals(
+        25.00,
+        nextRequest()
+            .getPaymentRequest()
+            .getPaymentTransaction()
+            .getAmountsReq()
+            .getRequestedAmount());
   }
 
   @Test

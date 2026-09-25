@@ -192,11 +192,53 @@ public final class Basket {
     return nonSale;
   }
 
+  /**
+   * The line in this snapshot with the same identity as a line of another snapshot, or {@code
+   * null}: the line with the same reference when {@code line} has one, otherwise the unreferenced
+   * line with the same SKU and type. This is how the basket keys its lines, so it pairs lines
+   * across snapshots for {@link BasketChange} and {@code SessionBasket.replace}.
+   *
+   * @throws IllegalArgumentException if more than one line here matches, which a session basket
+   *     never produces but a register-built snapshot can
+   */
+  public BasketLineItem getCounterpart(BasketLineItem line) {
+    Objects.requireNonNull(line, "line");
+    return getCounterpart(line.getReference(), line.getSku(), line.getType());
+  }
+
+  /** The line a register item would upsert into under the {@link #getCounterpart} rules. */
+  public BasketLineItem getCounterpart(BasketItem item) {
+    Objects.requireNonNull(item, "item");
+    return getCounterpart(item.getReference(), item.getSku(), item.getType());
+  }
+
+  private BasketLineItem getCounterpart(String reference, String sku, BasketItemType type) {
+    BasketLineItem match = null;
+    for (BasketLineItem item : items) {
+      boolean matches =
+          reference != null
+              ? reference.equals(item.getReference())
+              : item.getReference() == null && item.getSku().equals(sku) && item.getType() == type;
+      if (!matches) {
+        continue;
+      }
+      if (match != null) {
+        throw reference != null ? ambiguousReference(reference) : ambiguousSku(sku);
+      }
+      match = item;
+    }
+    return match;
+  }
+
   private static IllegalArgumentException ambiguousSku(String sku) {
     return new IllegalArgumentException(
         "more than one basket item has SKU "
             + sku
             + "; use itemId or reference to address a specific line");
+  }
+
+  private static IllegalArgumentException ambiguousReference(String reference) {
+    return new IllegalArgumentException("more than one basket item has reference " + reference);
   }
 
   public boolean isEmpty() {
