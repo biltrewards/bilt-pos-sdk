@@ -142,15 +142,27 @@ loadScripts(document, 'script');</script>
 <div class="block">A second client for an external customer display device.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onBackgroundError(java.util.function.Consumer)" class="member-name-link">onBackgroundError</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>&gt;&nbsp;onBackgroundError)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#member(com.bilt.pos.session.identity.Member)" class="member-name-link">member</a><wbr>(<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&nbsp;member)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The member to start the session with, when the shopper is already known before the visit
+ begins.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onBackgroundError(java.util.function.Consumer)" class="member-name-link">onBackgroundError</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>&gt;&nbsp;onBackgroundError)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Handler for failures of work the session performs on its own behalf, with no result object to
  report through: the automatic display push after a basket mutation (<a href="#autoDisplay(boolean)"><code>autoDisplay(boolean)</code></a>) and the final settlement display refresh.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onBasketUpdated(java.util.function.Consumer)" class="member-name-link">onBasketUpdated</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&gt;&nbsp;onBasketUpdated)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onBasketUpdated(java.util.function.Consumer)" class="member-name-link">onBasketUpdated</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&gt;&nbsp;onBasketUpdated)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Out-of-band basket update callback.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onMemberChanged(java.util.function.Consumer)" class="member-name-link">onMemberChanged</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&gt;&nbsp;onMemberChanged)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Handler for every change of the session's member: attached by the POS, found by a terminal
+ prompt or lookup, or cleared — with the new <a href="identity/Member.html" title="class in com.bilt.pos.session.identity"><code>Member</code></a>, <code>null</code> when signed out.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#poiId(java.lang.String)" class="member-name-link">poiId</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;poiId)</code></div>
@@ -287,6 +299,28 @@ loadScripts(document, 'script');</script>
  <p>Background failures never interrupt the checkout and are logged whether or not a handler
  is registered. Delivered through the <a href="#callbackExecutor(java.util.concurrent.Executor)"><code>callbackExecutor</code></a>
  when one is configured, directly on the failing thread otherwise.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="member(com.bilt.pos.session.identity.Member)">
+<h3>member</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">member</span><wbr><span class="parameters">(<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&nbsp;member)</span></div>
+<div class="block">The member to start the session with, when the shopper is already known before the visit
+ begins. Same semantics as <a href="ShopperSession.html#member(com.bilt.pos.session.identity.Member)"><code>ShopperSession.member(Member)</code></a>, except that the initial
+ member is not announced through <a href="#onMemberChanged(java.util.function.Consumer)"><code>onMemberChanged(Consumer)</code></a>; a pending member is
+ looked up on the terminal once the start is acknowledged, and that resolution is announced.
+ Optional.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="onMemberChanged(java.util.function.Consumer)">
+<h3>onMemberChanged</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">onMemberChanged</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&gt;&nbsp;onMemberChanged)</span></div>
+<div class="block">Handler for every change of the session's member: attached by the POS, found by a terminal
+ prompt or lookup, or cleared — with the new <a href="identity/Member.html" title="class in com.bilt.pos.session.identity"><code>Member</code></a>, <code>null</code> when signed out.
+ Delivered through the <a href="#callbackExecutor(java.util.concurrent.Executor)"><code>callbackExecutor</code></a> when one is
+ configured, directly on the changing thread otherwise. A throwing handler is logged and never
+ interrupts the checkout.</div>
 </section>
 </li>
 <li>
