@@ -548,6 +548,40 @@ class OkHttpPlatformClientTest {
   }
 
   @Test
+  void sameHostRedirectOutOfTheApiBaseCarriesNoToken() throws Exception {
+    server.enqueue(tokenResponse("tok-1", 3600));
+    server.enqueue(new MockResponse().setResponseCode(302).setHeader("Location", "/elsewhere/x"));
+    server.enqueue(new MockResponse().setResponseCode(401));
+    client = newClient(Duration.ofSeconds(60));
+
+    PlatformResponse response = client.execute(PlatformRequest.get("v1/a").build());
+
+    assertEquals(401, response.status(), "a 401 outside the base is not answered");
+    assertEquals(3, server.getRequestCount());
+    server.takeRequest();
+    assertEquals("Bearer tok-1", server.takeRequest().getHeader("Authorization"));
+    RecordedRequest redirected = server.takeRequest();
+    assertEquals("/elsewhere/x", redirected.getPath());
+    assertNull(redirected.getHeader("Authorization"));
+  }
+
+  @Test
+  void redirectWithinTheApiBaseKeepsTheToken() throws Exception {
+    server.enqueue(tokenResponse("tok-1", 3600));
+    server.enqueue(new MockResponse().setResponseCode(307).setHeader("Location", "/gateway/v2/a"));
+    server.enqueue(new MockResponse().setResponseCode(200));
+    client = newClient(Duration.ofSeconds(60));
+
+    assertEquals(200, client.execute(PlatformRequest.get("v1/a").build()).status());
+
+    server.takeRequest();
+    server.takeRequest();
+    RecordedRequest redirected = server.takeRequest();
+    assertEquals("/gateway/v2/a", redirected.getPath());
+    assertEquals("Bearer tok-1", redirected.getHeader("Authorization"));
+  }
+
+  @Test
   void redirectToAnotherHostCarriesNoTokenAndItsUnauthorizedIsNotAnswered() throws Exception {
     try (MockWebServer elsewhere = new MockWebServer()) {
       elsewhere.enqueue(new MockResponse().setResponseCode(401));

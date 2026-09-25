@@ -27,10 +27,13 @@ import okhttp3.Route;
  * the response. It must be installed on a client that the token source does not itself use, or the
  * token request would recurse into it.
  *
- * <p>A token is only ever attached to a URL {@linkplain #isWithin within} the API base: same
- * scheme, host and port, and a path beneath the base path. A call that has been redirected
- * elsewhere keeps no credentials, and a {@code 401} from such a host is not answered with a fresh
- * token.
+ * <p>A token is only ever sent to a URL {@linkplain #isWithin within} the API base: same scheme,
+ * host and port, and a path beneath the base path. The application interceptor sees a call only
+ * once, before any redirect, and OkHttp itself drops {@code Authorization} on a redirect only when
+ * the scheme, host or port changes. {@link #redirectGuard()} is therefore also installed as a
+ * network interceptor, which runs on every hop and strips the token from any hop outside the base,
+ * including a same-host redirect out of the base path. A {@code 401} from outside the base is not
+ * answered with a fresh token.
  *
  * <p>OkHttp only lets these hooks throw {@link IOException}, so a token failure travels as a {@link
  * TokenUnavailableException} and is unwrapped into its {@link PlatformException} by the caller.
@@ -52,6 +55,20 @@ final class BearerTokenAuth implements Interceptor, Authenticator {
    * Whether {@code url} addresses the API behind {@code apiBase}. OkHttp has already normalised
    * {@code url}, so dot segments, percent-encoded dots and backslashes cannot hide an escape.
    */
+  /**
+   * A network interceptor that removes {@code Authorization} from any hop that has left the API
+   * base. Redirects that stay within the base keep the token.
+   */
+  Interceptor redirectGuard() {
+    return chain -> {
+      Request request = chain.request();
+      if (request.header("Authorization") != null && !isWithin(apiBase, request.url())) {
+        request = request.newBuilder().removeHeader("Authorization").build();
+      }
+      return chain.proceed(request);
+    };
+  }
+
   static boolean isWithin(HttpUrl apiBase, HttpUrl url) {
     return url.scheme().equals(apiBase.scheme())
         && url.host().equals(apiBase.host())

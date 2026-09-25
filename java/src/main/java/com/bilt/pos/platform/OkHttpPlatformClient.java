@@ -97,8 +97,9 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
             builder.clock);
     BearerTokenAuth auth = new BearerTokenAuth(tokenSource, apiBase);
     OkHttpClient.Builder apiClientBuilder = httpClient.newBuilder().authenticator(auth);
-    // First, so the caller's own interceptors see API calls as they are sent.
+    // First in both lists, so the caller's own interceptors see API calls as they are sent.
     apiClientBuilder.interceptors().add(0, auth);
+    apiClientBuilder.networkInterceptors().add(0, auth.redirectGuard());
     this.apiClient = apiClientBuilder.build();
     AtomicInteger counter = new AtomicInteger();
     this.asyncExecutor =
