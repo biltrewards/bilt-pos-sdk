@@ -1,6 +1,7 @@
 com.bilt.pos.display
 com.bilt.pos.nexo.client
 com.bilt.pos.nexo.security
+com.bilt.pos.platform
 com.bilt.pos.receipt
 com.bilt.pos.session
 com.bilt.pos.session.basket
