@@ -14,7 +14,7 @@ import com.bilt.pos.session.basket.BasketChange;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.basket.BasketMutation;
 import com.bilt.pos.session.identity.IdentifyResult;
-import com.bilt.pos.session.identity.IdentifyStatus;
+import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.session.internal.BasketEngine;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +47,6 @@ abstract class AbstractShopperSession implements ShopperSession {
   private final String storeLocation;
   private BasketEngine basketEngine = new BasketEngine();
   private final SessionBasket basket;
-  private volatile IdentifyResult member;
   private final DefaultSessionContext context;
 
   AbstractShopperSession(
@@ -184,8 +183,8 @@ abstract class AbstractShopperSession implements ShopperSession {
   /**
    * Called under the lock with a fresh snapshot after every context write that changed something,
    * whether the POS made it or the session itself did (a terminal session's phase transitions). The
-   * {@link #basketChanged(BasketChange)} counterpart for the context; a no-op until a subclass routes it
-   * somewhere.
+   * {@link #basketChanged(BasketChange)} counterpart for the context; a no-op until a subclass
+   * routes it somewhere.
    */
   void contextChanged(SessionContextSnapshot snapshot) {}
 
@@ -249,25 +248,32 @@ abstract class AbstractShopperSession implements ShopperSession {
 
   // ─── Member ───
 
+  /**
+   * The member state, owned by the subclass because the resolver behind a pending member is
+   * implementation-specific (the terminal session looks it up on the terminal; the local session
+   * has nothing to look it up with yet).
+   */
+  abstract SessionMember memberState();
+
   @Override
-  public IdentifyResult getMember() {
-    IdentifyResult current = member;
-    return current != null && current.getStatus() == IdentifyStatus.FOUND ? current : null;
+  public Member member() {
+    return memberState().current();
   }
 
-  /**
-   * Applies an identification outcome to the session. The latest completed attempt wins: {@code
-   * FOUND} attaches the member; {@code NOT_FOUND} and {@code SUSPENDED} are affirmative "no usable
-   * member" outcomes and detach any previously identified member (so a re-identify cannot leave
-   * loyalty running against a stale account). {@code CANCELLED} only means the customer dismissed
-   * this prompt — a prior identification stands. Called under the lock.
-   */
-  void applyIdentification(IdentifyResult result) {
-    if (result.getStatus() == IdentifyStatus.FOUND) {
-      member = result;
-    } else if (result.getStatus() != IdentifyStatus.CANCELLED) {
-      member = null;
-    }
+  @Override
+  public void member(Member member) {
+    memberState().set(member);
+  }
+
+  @Override
+  @Deprecated
+  public IdentifyResult getMember() {
+    return identifiedMember();
+  }
+
+  /** The resolved member as the settlement path consumes it; null when none or still pending. */
+  IdentifyResult identifiedMember() {
+    return memberState().identified();
   }
 
   // ─── Lifecycle ───

@@ -3649,7 +3649,7 @@ class TerminalShopperSessionPaymentTest {
     // the register attaches the member after the failed settlement, then
     // retries the payment with the loyalty steps enabled
     identifyMember();
-    assertNotNull(session.getMember());
+    assertNotNull(session.member());
 
     server.enqueue(new MockResponse().setBody(REBATE_OK));
     server.enqueue(new MockResponse().setBody(REDEEM_OK));
@@ -3982,7 +3982,7 @@ class TerminalShopperSessionPaymentTest {
 
     session.basket().clear();
     identifyMember("56789");
-    assertEquals("56789", session.getMember().getMemberId());
+    assertEquals("56789", session.member().memberId());
 
     server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(25.00)));
     server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
@@ -4303,7 +4303,7 @@ class TerminalShopperSessionPaymentTest {
 
     session.basket().clear();
     identifyMember("56789");
-    assertEquals("56789", session.getMember().getMemberId());
+    assertEquals("56789", session.member().memberId());
 
     server.enqueue(new MockResponse().setBody(REVERSAL_OK));
     server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
