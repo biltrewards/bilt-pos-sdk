@@ -7,11 +7,13 @@ import com.bilt.pos.display.DisplayPayloadHelper;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
+import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketItem;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -148,6 +150,43 @@ class TerminalShopperSessionAutoDisplayTest {
         5,
         lineItemCount(displays.get(displays.size() - 1)),
         "the last push must carry the newest snapshot");
+  }
+
+  @Test
+  void replaceWithAnIdenticalSnapshotPushesNothing() throws Exception {
+    CountDownLatch ringUpDisplayed = new CountDownLatch(1);
+    server.setDispatcher(
+        new Dispatcher() {
+          @Override
+          public MockResponse dispatch(RecordedRequest request) {
+            if (request.getBody().clone().readUtf8().contains("\"DisplayRequest\"")) {
+              ringUpDisplayed.countDown();
+              return new MockResponse().setBody(DISPLAY_OK);
+            }
+            return new MockResponse().setBody(ADMIN_OK);
+          }
+        });
+    TerminalShopperSession session = start(sessionBuilder());
+    BasketItem item = BasketItem.sale("SKU-1", "Item", 2, new BigDecimal("10.00"));
+    Basket current = session.basket().addItem(item);
+    // wait for the ring-up push to reach the wire, so a push from the
+    // replace could not hide behind it through conflation
+    assertTrue(ringUpDisplayed.await(5, TimeUnit.SECONDS));
+
+    Basket replaced = session.basket().replace(current);
+    Basket replacedByItems = session.basket().replace(Collections.singletonList(item));
+    session.end().get();
+
+    assertEquals(current.getGrandTotal(), replaced.getGrandTotal());
+    assertEquals(current.getGrandTotal(), replacedByItems.getGrandTotal());
+    List<SaleToPOIRequest> displays =
+        drainRequests().stream()
+            .filter(TerminalShopperSessionAutoDisplayTest::isDisplay)
+            .collect(Collectors.toList());
+    assertEquals(
+        1,
+        displays.size(),
+        "only the ring-up reaches the display; an identical replace is an empty change");
   }
 
   // ─── Lane ordering ───
