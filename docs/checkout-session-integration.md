@@ -422,6 +422,31 @@ The identified member stays attached across `clear()`. Re-identifying later chan
 
 **Tax computation rules:** explicit item `taxAmount` wins; else item `taxRate` × `originalTotal`; else $0. `basket.taxTotal` is the sum of item amounts unless `setTaxTotal()` overrides it. `grandTotal = originalTotal + taxTotal`.
 
+### Session context
+
+Alongside the basket, every session carries a small `SessionContext` — what the POS knows about the checkout that a shopper-facing widget may use: a `CheckoutPhase` and free-form string attributes, plus the lane identifiers the session was built with (`saleId()`, `currency()`, `storeLocation()`, and on a terminal session `poiId()`). Widgets use the phase for eligibility — a retail media widget, for example, shows media only in the phases the retailer declares eligible and clears its surface on leaving one — and attributes as targeting and policy input. Widget-specific tuning does not live here; it lives on the widget.
+
+```java
+// Pre-seed on the builder (both session types) ...
+TerminalShopperSession session = TerminalShopperSession.builder()
+    .client(client).saleId("POS-LANE-3").poiId("VictaLane-275839164").currency("USD")
+    .phase(CheckoutPhase.SCANNING)                 // the default
+    .attribute("lane-type", "pharmacy")
+    .start()
+    .get();
+
+// ... and update at any time, from any thread. Pure local compute; nothing reaches the terminal.
+session.context().attribute("cashier-assisted", "true");
+session.context().phase(CheckoutPhase.MEMBER_IDENTIFIED);   // e.g. when the shopper signs in
+session.context().removeAttribute("cashier-assisted");      // or attribute("cashier-assisted", null)
+
+CheckoutPhase phase = session.context().phase();
+Map<String, String> attributes = session.context().attributes();   // unmodifiable copy
+SessionContextSnapshot snapshot = session.context().snapshot();     // one consistent, immutable view
+```
+
+A `TerminalShopperSession` moves the phase itself around settlement: `TENDERING` when `settle()` begins executing, `COMPLETE` when it succeeds, and back to whatever phase the checkout was in when the settlement began if it fails or is aborted (`SCANNING` unless the POS had set something else). `basket().clear()` returns it to `SCANNING` for the next transaction. `MEMBER_IDENTIFIED` is never set automatically; set it yourself when the shopper signs in. A local `ShopperSession` has no automatic transitions at all — the POS owns the phase there. Like the basket, the context refuses writes after `end()`; it stays readable.
+
 ---
 
 ## Refund and void
