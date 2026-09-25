@@ -46,8 +46,8 @@ public final class Rendering {
   private final Map<String, URI> tracking;
 
   private Rendering(Builder builder) {
-    this.creativeId = Objects.requireNonNull(builder.creativeId, "creativeId");
-    this.placement = Objects.requireNonNull(builder.placement, "placement");
+    this.creativeId = BridgeMessages.requireNonEmpty(builder.creativeId, "creativeId");
+    this.placement = BridgeMessages.requireNonEmpty(builder.placement, "placement");
     this.media = Objects.requireNonNull(builder.media, "media");
     this.headline = Objects.requireNonNull(builder.headline, "headline");
     this.body = builder.body;
@@ -246,7 +246,15 @@ public final class Rendering {
     }
 
     public Builder tracking(Map<String, URI> tracking) {
-      this.tracking = tracking == null ? null : new LinkedHashMap<>(tracking);
+      if (tracking == null) {
+        this.tracking = null;
+        return this;
+      }
+      Map<String, URI> copy = new LinkedHashMap<>();
+      tracking.forEach(
+          (event, url) ->
+              copy.put(Objects.requireNonNull(event, "event"), Objects.requireNonNull(url, "url")));
+      this.tracking = copy;
       return this;
     }
 

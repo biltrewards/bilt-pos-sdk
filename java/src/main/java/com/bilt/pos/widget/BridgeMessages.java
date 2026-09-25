@@ -14,7 +14,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * The JSON wire shapes of the {@link WebSurface} bridge, in both directions.
@@ -38,6 +40,17 @@ final class BridgeMessages {
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   private BridgeMessages() {}
+
+  /**
+   * Null-checks {@code value} and rejects an empty one, for the identifiers the bridge schema
+   * requires to be non-empty ({@code creativeId}, {@code placement}, CTA {@code token}).
+   */
+  static String requireNonEmpty(String value, String name) {
+    if (Objects.requireNonNull(value, name).isEmpty()) {
+      throw new IllegalArgumentException(name + " must not be empty");
+    }
+    return value;
+  }
 
   /** {@code window.BiltMedia.receive({"type":"rendering","rendering":{...}});} */
   static String renderingScript(Rendering rendering) {
@@ -69,7 +82,7 @@ final class BridgeMessages {
     if (rendering.getSecondary() != null) {
       node.set("secondary", toJson(rendering.getSecondary()));
     }
-    node.put("ttlMs", rendering.getTtl().toMillis());
+    node.put("ttlMs", wireMillis(rendering.getTtl()));
     ObjectNode tracking = node.putObject("tracking");
     for (Map.Entry<String, URI> beacon : rendering.getTracking().entrySet()) {
       tracking.put(beacon.getKey(), beacon.getValue().toString());
@@ -82,12 +95,19 @@ final class BridgeMessages {
     node.put("type", media.getType().name().toLowerCase(java.util.Locale.ROOT));
     node.put("url", media.getUrl().toString());
     if (media.getDuration() != null) {
-      node.put("durationMs", media.getDuration().toMillis());
+      node.put("durationMs", wireMillis(media.getDuration()));
     }
     if (media.getPoster() != null) {
       node.put("poster", media.getPoster().toString());
     }
     return node;
+  }
+
+  // The schema requires at least 1 ms, and the builders accept any positive duration, so round up
+  // rather than let a sub-millisecond value truncate to 0.
+  private static long wireMillis(Duration duration) {
+    long millis = duration.toMillis();
+    return duration.equals(Duration.ofMillis(millis)) ? millis : millis + 1;
   }
 
   private static ObjectNode toJson(Cta cta) {

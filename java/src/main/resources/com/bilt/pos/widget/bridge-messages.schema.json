@@ -75,7 +75,7 @@
         "body": { "type": "string" },
         "cta": { "$ref": "#/$defs/cta" },
         "secondary": { "$ref": "#/$defs/cta" },
-        "ttlMs": { "type": "integer", "minimum": 1, "description": "Freshness bound in milliseconds." },
+        "ttlMs": { "type": "integer", "minimum": 1, "description": "Freshness bound in milliseconds, rounded up to a whole millisecond." },
         "tracking": {
           "type": "object",
           "description": "Tracking beacons keyed by event name, e.g. impression and viewability.",
@@ -90,7 +90,7 @@
       "properties": {
         "type": { "enum": ["image", "video", "html"] },
         "url": { "type": "string", "format": "uri", "description": "Signed, short-lived CDN URL." },
-        "durationMs": { "type": "integer", "minimum": 1, "description": "Video running time in milliseconds." },
+        "durationMs": { "type": "integer", "minimum": 1, "description": "Video running time in milliseconds, rounded up to a whole millisecond." },
         "poster": { "type": "string", "format": "uri", "description": "Still frame shown before a video starts." }
       }
     },

@@ -44,6 +44,14 @@ class RenderingTest {
   }
 
   @Test
+  void identifiersMustBeNonEmpty() {
+    assertThrows(IllegalArgumentException.class, () -> valid().creativeId("").build());
+    assertThrows(IllegalArgumentException.class, () -> valid().placement("").build());
+    assertThrows(IllegalArgumentException.class, () -> Cta.of("Apply", Action.APPLY_OFFER, ""));
+    assertThrows(NullPointerException.class, () -> Cta.of("Apply", Action.APPLY_OFFER, null));
+  }
+
+  @Test
   void ttlMustBePositive() {
     assertThrows(IllegalArgumentException.class, () -> valid().ttl(Duration.ZERO).build());
     assertThrows(IllegalArgumentException.class, () -> valid().ttl(Duration.ofMillis(-1)).build());
@@ -67,6 +75,21 @@ class RenderingTest {
     assertEquals(text, rendering.ctaForToken("act_b"));
     assertNull(rendering.ctaForToken("act_c"));
     assertNull(rendering.ctaForToken(null));
+  }
+
+  @Test
+  void trackingMapRejectsNullEventsAndUrls() {
+    Map<String, URI> nullUrl = new LinkedHashMap<>();
+    nullUrl.put("impression", null);
+    Map<String, URI> nullEvent = new LinkedHashMap<>();
+    nullEvent.put(null, URI.create("https://t.example/i"));
+
+    assertThrows(NullPointerException.class, () -> valid().tracking(nullUrl));
+    assertThrows(NullPointerException.class, () -> valid().tracking(nullEvent));
+    assertThrows(NullPointerException.class, () -> valid().addTracking("impression", null));
+    assertThrows(
+        NullPointerException.class,
+        () -> valid().addTracking(null, URI.create("https://t.example/i")));
   }
 
   @Test

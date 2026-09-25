@@ -30,7 +30,7 @@ public final class Cta {
   private Cta(String label, Action action, String token) {
     this.label = Objects.requireNonNull(label, "label");
     this.action = Objects.requireNonNull(action, "action");
-    this.token = Objects.requireNonNull(token, "token");
+    this.token = BridgeMessages.requireNonEmpty(token, "token");
   }
 
   public static Cta of(String label, Action action, String token) {

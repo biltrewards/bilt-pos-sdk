@@ -133,24 +133,32 @@ implements <a href="Surface.html" title="interface in com.bilt.pos.widget">Surfa
  <p>Both directions are specified by <code>/com/bilt/pos/widget/bridge-messages.schema.json</code> on
  the SDK's classpath. Inbound messages are allow-listed by type; an <code>action</code> must name the
  creative currently on display and carry one of its own CTA tokens, and <code>viewed</code>, <code>
- dismissed</code> and <code>completed</code> must name the current creative. Anything else — malformed JSON,
- an unknown type, a foreign or stale token — is dropped and reported through <a href="#onBridgeError(java.lang.String,java.lang.String)"><code>onBridgeError(java.lang.String, java.lang.String)</code></a>, never thrown into the platform callback and never passed to the <a href="ActionSink.html" title="interface in com.bilt.pos.widget"><code>ActionSink</code></a>.
+ dismissed</code> and <code>completed</code> must name the current creative. Only the first <code>viewed</code>
+ for each shown rendering counts, so a page that reloads and sees the rendering again cannot
+ report a second view. A rendering's TTL runs from the <a href="#show(com.bilt.pos.widget.Rendering,com.bilt.pos.widget.ActionSink)"><code>show(com.bilt.pos.widget.Rendering, com.bilt.pos.widget.ActionSink)</code></a> that delivered it; once it
+ has passed, the rendering's CTAs are no longer acted on even if the widget's replacement or clear
+ has not yet arrived. Anything else — malformed JSON, an unknown type, a foreign or stale token,
+ an expired CTA, a repeated view — is dropped and reported through <a href="#onBridgeError(java.lang.String,java.lang.String)"><code>onBridgeError(java.lang.String, java.lang.String)</code></a>, never
+ thrown into the platform callback and never passed to the <a href="ActionSink.html" title="interface in com.bilt.pos.widget"><code>ActionSink</code></a>.
 
  <h2 id="lifecycle-heading">Lifecycle</h2>
 
  <p>The renderer page is loaded lazily on the first <a href="#show(com.bilt.pos.widget.Rendering,com.bilt.pos.widget.ActionSink)"><code>show(com.bilt.pos.widget.Rendering, com.bilt.pos.widget.ActionSink)</code></a>. Until the page posts <code>
  ready</code>, the latest rendering (or a clear) is held and pushed once the page announces itself;
  after that, shows and clears are evaluated directly. A page that reloads and posts <code>ready</code>
- again receives the current rendering again, so a browser crash or navigation heals itself. A host
- that preloads the page before the first show simply forwards the early <code>ready</code>.
+ again receives the current rendering again, so a browser crash or navigation heals itself, unless
+ that rendering's TTL has passed, in which case the page is left empty for the widget's next show.
+ A host that preloads the page before the first show simply forwards the early <code>ready</code>.
 
  <h2 id="threading-heading">Threading</h2>
 
  <p><a href="#show(com.bilt.pos.widget.Rendering,com.bilt.pos.widget.ActionSink)"><code>show(com.bilt.pos.widget.Rendering, com.bilt.pos.widget.ActionSink)</code></a> and <a href="#clear()"><code>clear()</code></a> arrive on the widget's executor, <a href="#onBridgeMessage(java.lang.String)"><code>onBridgeMessage(java.lang.String)</code></a> on
  whatever thread the platform delivers JavaScript messages on. The class serializes its own state
- and calls <a href="#loadUrl(java.lang.String)"><code>loadUrl(java.lang.String)</code></a>, <a href="#evaluateJavascript(java.lang.String)"><code>evaluateJavascript(java.lang.String)</code></a> and the sink with no lock held; a
- subclass is responsible for marshaling the two outbound calls to the thread its browser control
- requires and should return without waiting for the result.</div>
+ and calls <a href="#loadUrl(java.lang.String)"><code>loadUrl(java.lang.String)</code></a>, <a href="#evaluateJavascript(java.lang.String)"><code>evaluateJavascript(java.lang.String)</code></a> and the sink with no lock held. Outbound
+ calls are issued one at a time in the order of the state changes that produced them, even when a
+ <code>ready</code> races a show or clear; a subclass is responsible for marshaling them, in that
+ order, to the thread its browser control requires and should return without waiting for the
+ result.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -202,7 +210,8 @@ implements <a href="Surface.html" title="interface in com.bilt.pos.widget">Surfa
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;rawJson)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Called for every inbound message the bridge drops: malformed JSON, an unknown type, a message
- for a creative that is not on display, a foreign token, or a sink that threw.</div>
+ for a creative that is not on display, a foreign token, a CTA past its TTL, a repeated view, or
+ a sink that threw.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>protected final void</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onBridgeMessage(java.lang.String)" class="member-name-link">onBridgeMessage</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;json)</code></div>
@@ -252,7 +261,9 @@ implements <a href="Surface.html" title="interface in com.bilt.pos.widget">Surfa
 <section class="detail" id="loadUrl(java.lang.String)">
 <h3>loadUrl</h3>
 <div class="member-signature"><span class="modifiers">protected abstract</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">loadUrl</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;url)</span></div>
-<div class="block">Navigates the browser control to <code>url</code>. Called with no lock held; may be asynchronous.</div>
+<div class="block">Navigates the browser control to <code>url</code>. Called with no lock held; may be asynchronous. If
+ it throws, the exception propagates out of the <a href="#show(com.bilt.pos.widget.Rendering,com.bilt.pos.widget.ActionSink)"><code>show(com.bilt.pos.widget.Rendering, com.bilt.pos.widget.ActionSink)</code></a> that triggered it and the next
+ show tries the load again.</div>
 </section>
 </li>
 <li>
@@ -268,10 +279,11 @@ implements <a href="Surface.html" title="interface in com.bilt.pos.widget">Surfa
 <div class="member-signature"><span class="modifiers">protected</span>&nbsp;<span class="return-type">void</span>&nbsp;<span class="element-name">onBridgeError</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;reason,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;rawJson)</span></div>
 <div class="block">Called for every inbound message the bridge drops: malformed JSON, an unknown type, a message
- for a creative that is not on display, a foreign token, or a sink that threw. <code>rawJson</code>
- is the message as received (possibly <code>null</code>). The default logs a <code>
- java.util.logging</code> warning; a subclass may route it to the register's own error channel. Must
- not throw.</div>
+ for a creative that is not on display, a foreign token, a CTA past its TTL, a repeated view, or
+ a sink that threw. <code>rawJson</code> is the message as received (possibly <code>null</code>). Called
+ with no lock held, on the thread that delivered the message, so a subclass may hand the error
+ to the widget synchronously. The default logs a <code>java.util.logging</code> warning; a subclass
+ may route it to the register's own error channel. Must not throw.</div>
 </section>
 </li>
 <li>
