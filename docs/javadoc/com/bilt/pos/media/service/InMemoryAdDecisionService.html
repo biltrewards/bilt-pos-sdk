@@ -104,10 +104,11 @@ implements <a href="AdDecisionService.html" title="interface in com.bilt.pos.med
  honour <a href="../Capabilities.html" title="class in com.bilt.pos.media"><code>Capabilities</code></a>: a rendering whose media type or CTA actions the caller did not
  declare is refused and the decision is empty, as the contract requires. <code>latency</code> adds an
  artificial delay so timeout handling can be exercised — a latency longer than the caller's
- timeout waits out the timeout and answers empty. <a href="#failNext(java.lang.RuntimeException)"><code>failNext(java.lang.RuntimeException)</code></a> injects one failure: the next
- <code>decide</code> answers empty, the next <code>validateAction</code> answers rejected, and the next
- <code>registerSession</code>, <code>updateSession</code> or <code>report</code> throws it, whichever comes
- first.
+ timeout waits out the timeout and answers empty. A rule's own running time counts toward the
+ timeout too, and rules run outside the fake's lock; the fake cannot interrupt a rule, so a rule
+ slower than the timeout makes <code>decide</code> return late, but always with an empty answer. <a href="#failNext(java.lang.RuntimeException)"><code>failNext(java.lang.RuntimeException)</code></a> injects one failure: the next <code>decide</code> answers empty, the next <code>
+ validateAction</code> answers rejected, and the next <code>registerSession</code>, <code>updateSession</code> or
+ <code>report</code> throws it, whichever comes first.
 
  <p>Tokens are the ones on the scripted renderings; the fake remembers which tokens it served to
  which session for which creative and action, and <a href="#validateAction(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.widget.Cta,java.lang.String)"><code>validateAction(com.bilt.pos.media.service.SessionHandle, com.bilt.pos.widget.Cta, java.lang.String)</code></a> rejects anything else.

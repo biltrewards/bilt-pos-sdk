@@ -43,10 +43,12 @@ import java.util.logging.Logger;
  * honour {@link Capabilities}: a rendering whose media type or CTA actions the caller did not
  * declare is refused and the decision is empty, as the contract requires. {@link #latency} adds an
  * artificial delay so timeout handling can be exercised — a latency longer than the caller's
- * timeout waits out the timeout and answers empty. {@link #failNext} injects one failure: the next
- * {@code decide} answers empty, the next {@code validateAction} answers rejected, and the next
- * {@code registerSession}, {@code updateSession} or {@code report} throws it, whichever comes
- * first.
+ * timeout waits out the timeout and answers empty. A rule's own running time counts toward the
+ * timeout too, and rules run outside the fake's lock; the fake cannot interrupt a rule, so a rule
+ * slower than the timeout makes {@code decide} return late, but always with an empty answer. {@link
+ * #failNext} injects one failure: the next {@code decide} answers empty, the next {@code
+ * validateAction} answers rejected, and the next {@code registerSession}, {@code updateSession} or
+ * {@code report} throws it, whichever comes first.
  *
  * <p>Tokens are the ones on the scripted renderings; the fake remembers which tokens it served to
  * which session for which creative and action, and {@link #validateAction} rejects anything else.
@@ -271,19 +273,25 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
     Objects.requireNonNull(placement, "placement");
     Objects.requireNonNull(capabilities, "capabilities");
     Objects.requireNonNull(timeout, "timeout");
-    Optional<Rendering> candidate;
-    Duration wait;
-    boolean timesOut;
+    long started = System.nanoTime();
+    Function<AdSessionSnapshot, Optional<Rendering>> script;
+    AdSessionSnapshot snapshot;
+    Duration delay;
     synchronized (lock) {
       Session session = requireSession(handle);
       if (swallowPendingFailure()) {
         return Optional.empty();
       }
-      Function<AdSessionSnapshot, Optional<Rendering>> script = scripts.get(placement);
-      candidate = script == null ? Optional.empty() : script.apply(session.latest());
-      timesOut = latency.compareTo(timeout) > 0;
-      wait = timesOut ? timeout : latency;
+      script = scripts.get(placement);
+      snapshot = session.latest();
+      delay = latency;
     }
+    // A rule is caller code: running it outside the lock keeps a slow one from stalling other
+    // sessions, and its running time is charged against the caller's deadline.
+    Optional<Rendering> candidate = script == null ? Optional.empty() : script.apply(snapshot);
+    Duration remaining = timeout.minusNanos(System.nanoTime() - started);
+    boolean timesOut = delay.compareTo(remaining) > 0;
+    Duration wait = timesOut ? (remaining.isNegative() ? Duration.ZERO : remaining) : delay;
     if (!sleep(wait) || timesOut || !candidate.isPresent()) {
       return Optional.empty();
     }

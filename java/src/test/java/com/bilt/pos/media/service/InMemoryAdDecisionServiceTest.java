@@ -17,6 +17,9 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 class InMemoryAdDecisionServiceTest {
@@ -278,6 +281,41 @@ class InMemoryAdDecisionServiceTest {
 
     assertEquals(Optional.empty(), decision);
     assertTrue(elapsedMs < 2_000, "decide took " + elapsedMs + "ms");
+  }
+
+  @Test
+  void aSlowRuleRunsOutsideTheLockAndItsTimeCountsAgainstTheTimeout() throws Exception {
+    CountDownLatch entered = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    InMemoryAdDecisionService service =
+        new InMemoryAdDecisionService()
+            .onPlacement(
+                BANNER,
+                snapshot -> {
+                  entered.countDown();
+                  try {
+                    release.await();
+                  } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                  }
+                  return Optional.of(creative("crt_1").build());
+                });
+    SessionHandle handle = service.registerSession(snapshot("browsing"));
+    SessionHandle other = service.registerSession(snapshot("browsing"));
+
+    CompletableFuture<Optional<Rendering>> decision =
+        CompletableFuture.supplyAsync(
+            () -> service.decide(handle, BANNER, FULL, Duration.ofMillis(20)));
+    assertTrue(entered.await(5, TimeUnit.SECONDS));
+    assertTimeoutPreemptively(
+        Duration.ofSeconds(2),
+        () -> service.updateSession(other, snapshot("paying")),
+        "other sessions must not wait on a running rule");
+    Thread.sleep(50);
+    release.countDown();
+
+    assertEquals(Optional.empty(), decision.get(5, TimeUnit.SECONDS));
+    assertTrue(service.served(handle).isEmpty());
   }
 
   @Test
