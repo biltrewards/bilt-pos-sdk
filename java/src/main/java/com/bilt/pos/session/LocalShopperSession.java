@@ -24,7 +24,10 @@ final class LocalShopperSession extends AbstractShopperSession {
         builder.currency,
         builder.storeLocation,
         builder.callbackExecutor,
-        builder.onBackgroundError);
+        builder.onBackgroundError,
+        null,
+        builder.phase,
+        builder.attributes);
   }
 
   @Override
