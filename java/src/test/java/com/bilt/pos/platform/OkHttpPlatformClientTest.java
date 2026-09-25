@@ -228,6 +228,31 @@ class OkHttpPlatformClientTest {
   }
 
   @Test
+  void retryAfterUnauthorizedSpendsOnlyTheRemainingTimeout() throws Exception {
+    server.enqueue(tokenResponse("tok-1", 3600));
+    server.enqueue(new MockResponse().setResponseCode(200));
+    server.enqueue(
+        new MockResponse().setResponseCode(401).setHeadersDelay(700, TimeUnit.MILLISECONDS));
+    server.enqueue(tokenResponse("tok-2", 3600).setHeadersDelay(3, TimeUnit.SECONDS));
+    client = newClient(Duration.ofSeconds(60));
+    // Holds tok-1, so the timed call below starts with a token and meets its 401 at ~0.7 s.
+    client.execute(PlatformRequest.get("v1/warm").build());
+
+    long started = System.nanoTime();
+    PlatformException e =
+        assertThrows(
+            PlatformException.class,
+            () ->
+                client.execute(PlatformRequest.get("v1/a").timeout(Duration.ofSeconds(1)).build()));
+    Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
+
+    // Either the token wait or OkHttp's call timeout may report first; both end the call on time.
+    assertFalse(e instanceof PlatformAuthException, String.valueOf(e));
+    // A fresh budget for the retry's token wait would end near 1.7 s.
+    assertTrue(elapsed.compareTo(Duration.ofMillis(1400)) < 0, "took " + elapsed);
+  }
+
+  @Test
   void concurrentCallersShareOneTokenRequest() throws Exception {
     CountingDispatcher dispatcher = new CountingDispatcher();
     dispatcher.tokenDelay = Duration.ofMillis(300);

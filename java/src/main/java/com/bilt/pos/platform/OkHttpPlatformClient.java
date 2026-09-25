@@ -187,13 +187,14 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
       httpRequest.header("User-Agent", userAgent);
     }
     httpRequest.method(request.method(), requestBody(request));
-    httpRequest.tag(
-        BearerTokenAuth.TokenWait.class, new BearerTokenAuth.TokenWait(request.timeout()));
 
     OkHttpClient client =
         request.timeout() == null
             ? apiClient
             : apiClient.newBuilder().callTimeout(request.timeout()).build();
+    httpRequest.tag(
+        BearerTokenAuth.TokenWait.class,
+        BearerTokenAuth.TokenWait.startingNow(Duration.ofMillis(client.callTimeoutMillis())));
     try (Response response = client.newCall(httpRequest.build()).execute()) {
       PlatformResponse.Builder result = PlatformResponse.builder().status(response.code());
       Headers headers = response.headers();

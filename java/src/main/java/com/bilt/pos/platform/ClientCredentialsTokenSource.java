@@ -313,12 +313,12 @@ final class ClientCredentialsTokenSource implements AutoCloseable {
   private static CachedToken await(CompletableFuture<CachedToken> future, Duration timeout)
       throws PlatformException {
     try {
-      return timeout == null ? future.get() : future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+      return timeout == null ? future.get() : future.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new PlatformAuthException("Interrupted while waiting for an access token", e);
     } catch (TimeoutException e) {
-      throw new PlatformException("Timed out after " + timeout + " waiting for an access token", e);
+      throw new PlatformException("Timed out waiting for an access token", e);
     } catch (ExecutionException e) {
       Throwable cause = e.getCause();
       if (cause instanceof PlatformException) {

@@ -98,7 +98,7 @@ public final class PlatformRequest {
     return contentType;
   }
 
-  /** Per-call timeout for the whole exchange, or {@code null} to use the client default. */
+  /** Timeout for the whole call, token waits included, or {@code null} for the client default. */
   public Duration timeout() {
     return timeout;
   }
@@ -179,8 +179,8 @@ public final class PlatformRequest {
     }
 
     /**
-     * Timeout for the exchange with the API. A call that first has to wait for an access token
-     * waits at most this long for it as well, so the caller is never blocked past twice this.
+     * Timeout for the whole call: any wait for an access token, the exchange with the API and the
+     * one retry after a {@code 401} all share this budget, so the caller is not blocked past it.
      */
     public Builder timeout(Duration timeout) {
       Objects.requireNonNull(timeout, "timeout");

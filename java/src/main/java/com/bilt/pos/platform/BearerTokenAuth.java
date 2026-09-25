@@ -59,12 +59,32 @@ final class BearerTokenAuth implements Interceptor, Authenticator {
         && url.encodedPath().startsWith(apiBase.encodedPath());
   }
 
-  /** Tags a request with the longest it may wait for a token; untagged requests wait as needed. */
+  /**
+   * Tags a request with the deadline of the call it belongs to. Every token wait in the call, the
+   * first one and the one after a {@code 401}, takes only the time left, because OkHttp's call
+   * timeout cancels the exchange but does not interrupt a thread waiting here. Untagged requests,
+   * and calls without a timeout, wait as long as the token request takes.
+   */
   static final class TokenWait {
-    final Duration timeout;
+    private final long deadlineNanos;
+    private final boolean bounded;
 
-    TokenWait(Duration timeout) {
-      this.timeout = timeout;
+    private TokenWait(long deadlineNanos, boolean bounded) {
+      this.deadlineNanos = deadlineNanos;
+      this.bounded = bounded;
+    }
+
+    /**
+     * A call that must finish within {@code timeout} from now; {@code null} or zero is unbounded.
+     */
+    static TokenWait startingNow(Duration timeout) {
+      return timeout == null || timeout.isZero()
+          ? new TokenWait(0, false)
+          : new TokenWait(System.nanoTime() + timeout.toNanos(), true);
+    }
+
+    Duration remaining() {
+      return bounded ? Duration.ofNanos(Math.max(0, deadlineNanos - System.nanoTime())) : null;
     }
   }
 
@@ -98,7 +118,7 @@ final class BearerTokenAuth implements Interceptor, Authenticator {
   private String accessToken(Request request) throws TokenUnavailableException {
     TokenWait wait = request.tag(TokenWait.class);
     try {
-      return tokenSource.accessToken(wait != null ? wait.timeout : null);
+      return tokenSource.accessToken(wait != null ? wait.remaining() : null);
     } catch (PlatformException e) {
       throw new TokenUnavailableException(e);
     }

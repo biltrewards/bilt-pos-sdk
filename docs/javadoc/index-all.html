@@ -5210,11 +5210,12 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/platform/PlatformRequest.html#timeout()" class="member-name-link">timeout()</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/PlatformRequest.html" title="class in com.bilt.pos.platform">PlatformRequest</a></dt>
 <dd>
-<div class="block">Per-call timeout for the whole exchange, or <code>null</code> to use the client default.</div>
+<div class="block">Timeout for the whole call, token waits included, or <code>null</code> for the client default.</div>
 </dd>
 <dt><a href="com/bilt/pos/platform/PlatformRequest.Builder.html#timeout(java.time.Duration)" class="member-name-link">timeout(Duration)</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/PlatformRequest.Builder.html" title="class in com.bilt.pos.platform">PlatformRequest.Builder</a></dt>
 <dd>
-<div class="block">Timeout for the exchange with the API.</div>
+<div class="block">Timeout for the whole call: any wait for an access token, the exchange with the API and the
+ one retry after a <code>401</code> all share this budget, so the caller is not blocked past it.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/identity/CardAcquisitionOptions.Builder.html#timeout(java.time.Duration)" class="member-name-link">timeout(Duration)</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionOptions.Builder.html" title="class in com.bilt.pos.session.identity">CardAcquisitionOptions.Builder</a></dt>
 <dd>&nbsp;</dd>

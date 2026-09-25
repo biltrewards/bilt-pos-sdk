@@ -144,7 +144,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="PlatformRequest.Builder.html" title="class in com.bilt.pos.platform">PlatformRequest.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#timeout(java.time.Duration)" class="member-name-link">timeout</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Duration.html" title="class or interface in java.time" class="external-link">Duration</a>&nbsp;timeout)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Timeout for the exchange with the API.</div>
+<div class="block">Timeout for the whole call: any wait for an access token, the exchange with the API and the
+ one retry after a <code>401</code> all share this budget, so the caller is not blocked past it.</div>
 </div>
 </div>
 </div>
@@ -205,8 +206,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="timeout(java.time.Duration)">
 <h3>timeout</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="PlatformRequest.Builder.html" title="class in com.bilt.pos.platform">PlatformRequest.Builder</a></span>&nbsp;<span class="element-name">timeout</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Duration.html" title="class or interface in java.time" class="external-link">Duration</a>&nbsp;timeout)</span></div>
-<div class="block">Timeout for the exchange with the API. A call that first has to wait for an access token
- waits at most this long for it as well, so the caller is never blocked past twice this.</div>
+<div class="block">Timeout for the whole call: any wait for an access token, the exchange with the API and the
+ one retry after a <code>401</code> all share this budget, so the caller is not blocked past it.</div>
 </section>
 </li>
 <li>
