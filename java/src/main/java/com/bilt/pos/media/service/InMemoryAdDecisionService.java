@@ -49,11 +49,11 @@ import java.util.logging.Logger;
  * first.
  *
  * <p>Tokens are the ones on the scripted renderings; the fake remembers which tokens it served to
- * which session and for which creative, and {@link #validateAction} rejects anything else. An
- * {@code APPLY_OFFER} token validates only if {@link #offerFor} registered an offer for it. A token
- * is single-use: once accepted it is rejected as already used until a later {@code decide} serves
- * it again, because the scripted renderings reuse their tokens where the platform would issue fresh
- * ones.
+ * which session for which creative and action, and {@link #validateAction} rejects anything else.
+ * An {@code APPLY_OFFER} token validates only if {@link #offerFor} registered an offer for it. A
+ * token is single-use: once accepted it is rejected as already used until a later {@code decide}
+ * serves it again, because the scripted renderings reuse their tokens where the platform would
+ * issue fresh ones.
  *
  * <p>Everything the fake sees is recorded: {@link #snapshots} (registration first, then every
  * update), {@link #served}, {@link #reports}. Events reach subscribers only when a test injects
@@ -82,6 +82,7 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
     final List<Rendering> served = new ArrayList<>();
     final List<AdInteraction> reports = new ArrayList<>();
     final Map<String, String> creativeByToken = new HashMap<>();
+    final Map<String, Action> actionByToken = new HashMap<>();
     final Set<String> usedTokens = new HashSet<>();
     final List<AdEventListener> listeners = new CopyOnWriteArrayList<>();
 
@@ -320,6 +321,10 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
       if (!issuedFor.equals(creativeId)) {
         return ActionOutcome.rejected("token was issued for creative '" + issuedFor + "'");
       }
+      Action issuedAction = session.actionByToken.get(cta.getToken());
+      if (issuedAction != cta.getAction()) {
+        return ActionOutcome.rejected("token was issued for action " + issuedAction);
+      }
       if (session.usedTokens.contains(cta.getToken())) {
         return ActionOutcome.rejected("token already used");
       }
@@ -381,6 +386,7 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
   private static void rememberToken(Session session, Rendering rendering, Cta cta) {
     if (cta != null) {
       session.creativeByToken.put(cta.getToken(), rendering.getCreativeId());
+      session.actionByToken.put(cta.getToken(), cta.getAction());
       session.usedTokens.remove(cta.getToken());
     }
   }

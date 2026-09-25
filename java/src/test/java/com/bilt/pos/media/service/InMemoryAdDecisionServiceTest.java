@@ -197,6 +197,13 @@ class InMemoryAdDecisionServiceTest {
 
     ActionOutcome wrongCreative = service.validateAction(served, APPLY, "crt_other");
     assertFalse(wrongCreative.isAccepted());
+
+    ActionOutcome wrongAction =
+        service.validateAction(served, Cta.of("x", Action.SEND_TO_PHONE, "act_apply"), "crt_1");
+    assertFalse(wrongAction.isAccepted(), "a token is bound to the action of the button it was on");
+    assertTrue(
+        service.validateAction(served, APPLY, "crt_1").isAccepted(),
+        "a mismatched presentation does not burn the token");
   }
 
   @Test
