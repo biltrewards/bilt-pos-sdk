@@ -126,15 +126,24 @@ public final class Offer {
     return id.equals(other.id)
         && scope == other.scope
         && Objects.equals(sku, other.sku)
-        && Objects.equals(amount, other.amount)
-        && Objects.equals(percentage, other.percentage)
+        && sameValue(amount, other.amount)
+        && sameValue(percentage, other.percentage)
         && Objects.equals(expiry, other.expiry)
         && creativeId.equals(other.creativeId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, scope, sku, amount, percentage, expiry, creativeId);
+    return Objects.hash(
+        id, scope, sku, normalized(amount), normalized(percentage), expiry, creativeId);
+  }
+
+  private static boolean sameValue(BigDecimal a, BigDecimal b) {
+    return a == null ? b == null : b != null && a.compareTo(b) == 0;
+  }
+
+  private static BigDecimal normalized(BigDecimal value) {
+    return value == null ? null : value.stripTrailingZeros();
   }
 
   @Override

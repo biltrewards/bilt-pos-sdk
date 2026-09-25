@@ -61,6 +61,21 @@ class MediaValueTypesTest {
   }
 
   @Test
+  void offerEqualityIsNumericForAmountAndPercentage() {
+    Offer twoDollars = basketOffer().amount(new BigDecimal("2")).build();
+    Offer twoDollarsAtScale = basketOffer().amount(new BigDecimal("2.00")).build();
+    assertEquals(twoDollars, twoDollarsAtScale);
+    assertEquals(twoDollars.hashCode(), twoDollarsAtScale.hashCode());
+    assertNotEquals(twoDollars, basketOffer().amount(new BigDecimal("2.01")).build());
+
+    Offer tenPercent = basketOffer().amount(null).percentage(new BigDecimal("10")).build();
+    Offer tenPercentAtScale = basketOffer().amount(null).percentage(new BigDecimal("10.0")).build();
+    assertEquals(tenPercent, tenPercentAtScale);
+    assertEquals(tenPercent.hashCode(), tenPercentAtScale.hashCode());
+    assertNotEquals(twoDollars, tenPercent);
+  }
+
+  @Test
   void offerRequiresIdScopeAndCreative() {
     assertThrows(NullPointerException.class, () -> basketOffer().id(null).build());
     assertThrows(NullPointerException.class, () -> basketOffer().scope(null).build());
