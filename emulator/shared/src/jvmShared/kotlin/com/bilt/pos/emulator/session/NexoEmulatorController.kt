@@ -34,6 +34,7 @@ import com.bilt.pos.session.identity.ForceEntryMode
 import com.bilt.pos.session.identity.IdentifyOptions
 import com.bilt.pos.session.identity.IdentifyResult
 import com.bilt.pos.session.identity.IdentifyStatus
+import com.bilt.pos.session.identity.Member
 import com.bilt.pos.session.identity.Reward
 import com.bilt.pos.session.identity.RewardType
 import com.bilt.pos.session.settlement.ExternalPayment
@@ -1216,9 +1217,7 @@ class NexoEmulatorController(
             if (outcome is MemberIdentity.Found) {
                 outcome
             } else {
-                session.member?.toUi()?.let { retained ->
-                    (retained as? MemberIdentity.Found)?.copy(retained = true)
-                } ?: outcome
+                session.member()?.toUi()?.copy(retained = true) ?: outcome
             }
         _state.update { it.copy(member = identity) }
         when (identity) {
@@ -1260,6 +1259,20 @@ class NexoEmulatorController(
             IdentifyStatus.SUSPENDED -> MemberIdentity.Absent(Reason.SUSPENDED)
             IdentifyStatus.CANCELLED -> MemberIdentity.Absent(Reason.CANCELLED)
             IdentifyStatus.ERROR -> MemberIdentity.Failed()
+        }
+
+    /**
+     * The member attached to the session as a sign-in card; null while none is attached or while a
+     * POS-provided member is still pending resolution, which the emulator never does.
+     */
+    private fun Member.toUi(): MemberIdentity.Found? =
+        memberId()?.let { id ->
+            MemberIdentity.Found(
+                memberId = id,
+                loyaltyBrand = loyaltyBrand(),
+                pointBalance = pointBalance().takeIf { it > 0 },
+                rewards = rewards().map { it.toUi() },
+            )
         }
 
     private fun Reward.toUi() =
@@ -1476,7 +1489,7 @@ class NexoEmulatorController(
                 // sale could never be refunded or voided. Session facts are
                 // captured now — the chained end() clears the member before
                 // the IO write runs.
-                persistSale(session.sessionId, session.member?.memberId, result)
+                persistSale(session.sessionId, session.member()?.memberId(), result)
                 val returnParts = recordSettledReturns(conn, returns, result)
                 conn.pendingGiftCards = emptyList()
                 if (connection === conn) {

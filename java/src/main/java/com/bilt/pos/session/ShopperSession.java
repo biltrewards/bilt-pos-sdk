@@ -10,6 +10,7 @@
 package com.bilt.pos.session;
 
 import com.bilt.pos.session.identity.IdentifyResult;
+import com.bilt.pos.session.identity.Member;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -18,8 +19,8 @@ import java.util.function.Consumer;
  *
  * <p>A shopper session is the unit the register opens when a customer steps up and ends when they
  * walk away. It owns the basket being rung — {@link #basket()} — and the member identified for the
- * visit, if any — {@link #getMember()} — and carries the lane's identifiers: the register's sale
- * ID, the currency, and the store location. What it does not have is a device or a settlement:
+ * visit, if any — {@link #member()} — and carries the lane's identifiers: the register's sale ID,
+ * the currency, and the store location. What it does not have is a device or a settlement:
  * everything that needs a Bilt terminal — identification prompts, customer input, the customer
  * display, stored value, settlement, refunds, and voids — lives on {@link TerminalShopperSession}.
  * A lane with a terminal uses {@link TerminalShopperSession#builder()}; a lane without one, or a
@@ -79,11 +80,42 @@ public interface ShopperSession extends AutoCloseable {
   SessionBasket basket();
 
   /**
-   * The identified member, or {@code null} for a guest checkout. A local session has no way to
-   * identify anyone yet, so this stays {@code null} there; on a terminal session, identification
-   * never forces the customer — if they opted out, this stays {@code null} too.
+   * The identified member as an identification result, or {@code null} for a guest checkout or
+   * while a member is still pending resolution.
+   *
+   * @deprecated use {@link #member()}, which also reports a member the POS attached and one pending
+   *     resolution; this accessor only survives until integrators have moved over
    */
+  @Deprecated
   IdentifyResult getMember();
+
+  // ─── Member (POS-provided) ───
+
+  /**
+   * Attaches the member for this visit, or clears it with {@code null} (signed out). Allowed at any
+   * time — before scanning, mid-basket, or after a failed settlement — and on both session types.
+   *
+   * <p>A resolved member ({@link Member#id(String)}) attaches immediately with no roundtrip. A
+   * member pending resolution ({@link Member#idResolver()}) attaches as pending and is resolved in
+   * the background on the session's operation lane: on a terminal session by looking the identifier
+   * up on the terminal (Nexo {@code BalanceInquiry}; account id and phone number only — email and
+   * custom identifiers cannot be resolved there, report through {@code onBackgroundError}, and stay
+   * pending), on a local session not at all yet (the member stays pending). Until a pending member
+   * resolves, the visit is treated as a guest's: settlement does not send a member id and {@link
+   * #getMember()} is {@code null}. A lookup that finds nobody clears the member; a lookup that
+   * fails reports through {@code onBackgroundError} and leaves the member pending. Whatever member
+   * is attached last wins, so a stale lookup never overwrites a member set after it.
+   *
+   * <p>Every change to the member — from this method, a terminal identification, or a completed
+   * lookup — is announced through the builder's {@code onMemberChanged} handler.
+   */
+  void member(Member member);
+
+  /**
+   * The member attached to this visit, resolved or pending resolution, or {@code null} when none
+   * is. A terminal session's identification prompt attaches the member it finds here too.
+   */
+  Member member();
 
   /**
    * Ends the session. After it succeeds no session operation is allowed and the basket is frozen;
@@ -120,6 +152,8 @@ public interface ShopperSession extends AutoCloseable {
     String storeLocation;
     Executor callbackExecutor;
     Consumer<SessionError> onBackgroundError;
+    Member member;
+    Consumer<Member> onMemberChanged;
 
     private Builder() {}
 
@@ -163,6 +197,31 @@ public interface ShopperSession extends AutoCloseable {
      */
     public Builder onBackgroundError(Consumer<SessionError> onBackgroundError) {
       this.onBackgroundError = onBackgroundError;
+      return this;
+    }
+
+    // ─── Member (POS-provided) ───
+
+    /**
+     * The member to start the session with, when the shopper is already known before the visit
+     * begins. Same semantics as {@link ShopperSession#member(Member)}, except that the initial
+     * member is not announced through {@link #onMemberChanged(Consumer)}; a pending member's
+     * resolution, once it completes, is. Optional.
+     */
+    public Builder member(Member member) {
+      this.member = member;
+      return this;
+    }
+
+    /**
+     * Handler for every change of the session's member: attached by the POS, resolved by a
+     * background lookup, or cleared — with the new {@link Member}, {@code null} when signed out.
+     * Delivered through the {@link #callbackExecutor(Executor) callbackExecutor} when one is
+     * configured, directly on the changing thread otherwise. A throwing handler is logged and never
+     * interrupts the session.
+     */
+    public Builder onMemberChanged(Consumer<Member> onMemberChanged) {
+      this.onMemberChanged = onMemberChanged;
       return this;
     }
 
