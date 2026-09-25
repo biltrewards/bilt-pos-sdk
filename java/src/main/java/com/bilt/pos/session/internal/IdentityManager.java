@@ -31,6 +31,8 @@ import com.bilt.pos.nexo.model.Response;
 import com.bilt.pos.nexo.model.ResultType;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
+import com.bilt.pos.session.SessionError;
+import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
 import com.bilt.pos.session.identity.CardAcquisitionResult;
@@ -39,7 +41,7 @@ import com.bilt.pos.session.identity.ForceEntryMode;
 import com.bilt.pos.session.identity.IdentifyOptions;
 import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
-import com.bilt.pos.session.identity.MemberIdentifier;
+import com.bilt.pos.session.identity.MemberIdResolver;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -112,8 +114,13 @@ public final class IdentityManager {
         0);
   }
 
-  /** POS-driven identification (Nexo {@code BalanceInquiry}). */
-  public IdentifyResult identifyByIdentifier(MemberIdentifier identifier) {
+  /**
+   * POS-driven identification (Nexo {@code BalanceInquiry}). The terminal resolves account ids and
+   * phone numbers; email and custom identifiers have no Nexo identification type and fail with
+   * {@link SessionErrorCode#UNSUPPORTED} before anything is sent.
+   */
+  public IdentifyResult identifyByIdentifier(MemberIdResolver resolver) {
+    IdentificationTypeEnum identificationType = identificationType(resolver);
     SaleToPOIRequest request =
         SaleToPOIRequest.builder()
             .messageHeader(
@@ -126,14 +133,11 @@ public final class IdentityManager {
                         LoyaltyAccountReq.builder()
                             .loyaltyAccountID(
                                 LoyaltyAccountID.builder()
-                                    .loyaltyID(identifier.getValue())
-                                    .identificationType(
-                                        identifier.getType() == MemberIdentifier.Type.PHONE_NUMBER
-                                            ? IdentificationTypeEnum.PHONE_NUMBER
-                                            : IdentificationTypeEnum.ACCOUNT_NUMBER)
+                                    .loyaltyID(resolver.value())
+                                    .identificationType(identificationType)
                                     .entryMode(
                                         new EntryModeType[] {
-                                          identifier.isKeyedByCashier()
+                                          resolver.keyedByCashier()
                                               ? EntryModeType.KEYED
                                               : EntryModeType.FILE
                                         })
@@ -225,6 +229,22 @@ public final class IdentityManager {
   }
 
   // ─── Internals ───
+
+  private static IdentificationTypeEnum identificationType(MemberIdResolver resolver) {
+    switch (resolver.type()) {
+      case ACCOUNT_ID:
+        return IdentificationTypeEnum.ACCOUNT_NUMBER;
+      case PHONE:
+        return IdentificationTypeEnum.PHONE_NUMBER;
+      default:
+        throw new SessionException(
+            new SessionError(
+                SessionErrorCode.UNSUPPORTED,
+                "the terminal cannot resolve a member by "
+                    + resolver.type()
+                    + "; only ACCOUNT_ID and PHONE identifiers are looked up on the terminal"));
+    }
+  }
 
   /**
    * Distinguishes "no member attached" outcomes from real errors: not found, suspended, and

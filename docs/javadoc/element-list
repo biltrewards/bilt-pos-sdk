@@ -1,6 +1,7 @@
 com.bilt.pos.display
 com.bilt.pos.nexo.client
 com.bilt.pos.nexo.security
+com.bilt.pos.platform
 com.bilt.pos.receipt
 com.bilt.pos.session
 com.bilt.pos.session.basket
@@ -10,3 +11,4 @@ com.bilt.pos.session.input
 com.bilt.pos.session.payment
 com.bilt.pos.session.settlement
 com.bilt.pos.session.storedvalue
+com.bilt.pos.widget

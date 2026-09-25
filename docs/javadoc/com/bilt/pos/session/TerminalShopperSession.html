@@ -225,9 +225,10 @@ extends <a href="ShopperSession.html" title="interface in com.bilt.pos.session">
  loyalty handling).</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a><wbr>&lt;<a href="identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#identifyMember(com.bilt.pos.session.identity.MemberIdentifier)" class="member-name-link">identifyMember</a><wbr>(<a href="identity/MemberIdentifier.html" title="class in com.bilt.pos.session.identity">MemberIdentifier</a>&nbsp;identifier)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#identifyMember(com.bilt.pos.session.identity.Member)" class="member-name-link">identifyMember</a><wbr>(<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&nbsp;pending)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
-<div class="block">POS-driven member lookup by an identifier on file; no terminal prompt.</div>
+<div class="block">POS-driven member lookup by an identifier on file (Nexo <code>BalanceInquiry</code>); no terminal
+ prompt.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a><wbr>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#refund()" class="member-name-link">refund</a>()</code></div>
@@ -433,7 +434,7 @@ extends <a href="ShopperSession.html" title="interface in com.bilt.pos.session">
 </div>
 <div class="inherited-list">
 <h3 id="methods-inherited-from-class-com.bilt.pos.session.ShopperSession">Methods inherited from interface&nbsp;com.bilt.pos.session.<a href="ShopperSession.html" title="interface in com.bilt.pos.session">ShopperSession</a></h3>
-<code><a href="ShopperSession.html#basket()">basket</a>, <a href="ShopperSession.html#close()">close</a>, <a href="ShopperSession.html#getCurrency()">getCurrency</a>, <a href="ShopperSession.html#getMember()">getMember</a>, <a href="ShopperSession.html#getSaleId()">getSaleId</a>, <a href="ShopperSession.html#getSessionId()">getSessionId</a>, <a href="ShopperSession.html#getStoreLocation()">getStoreLocation</a></code></div>
+<code><a href="ShopperSession.html#basket()">basket</a>, <a href="ShopperSession.html#close()">close</a>, <a href="ShopperSession.html#context()">context</a>, <a href="ShopperSession.html#getCurrency()">getCurrency</a>, <a href="ShopperSession.html#getMember()">getMember</a>, <a href="ShopperSession.html#getSaleId()">getSaleId</a>, <a href="ShopperSession.html#getSessionId()">getSessionId</a>, <a href="ShopperSession.html#getStoreLocation()">getStoreLocation</a>, <a href="ShopperSession.html#member()">member</a>, <a href="ShopperSession.html#member(com.bilt.pos.session.identity.Member)">member</a>, <a href="ShopperSession.html#widget(java.lang.Class)">widget</a>, <a href="ShopperSession.html#widgets()">widgets</a></code></div>
 </section>
 </li>
 </ul>
@@ -481,10 +482,21 @@ extends <a href="ShopperSession.html" title="interface in com.bilt.pos.session">
 </section>
 </li>
 <li>
-<section class="detail" id="identifyMember(com.bilt.pos.session.identity.MemberIdentifier)">
+<section class="detail" id="identifyMember(com.bilt.pos.session.identity.Member)">
 <h3>identifyMember</h3>
-<div class="member-signature"><span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a>&gt;</span>&nbsp;<span class="element-name">identifyMember</span><wbr><span class="parameters">(<a href="identity/MemberIdentifier.html" title="class in com.bilt.pos.session.identity">MemberIdentifier</a>&nbsp;identifier)</span></div>
-<div class="block">POS-driven member lookup by an identifier on file; no terminal prompt.</div>
+<div class="member-signature"><span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a>&gt;</span>&nbsp;<span class="element-name">identifyMember</span><wbr><span class="parameters">(<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&nbsp;pending)</span></div>
+<div class="block">POS-driven member lookup by an identifier on file (Nexo <code>BalanceInquiry</code>); no terminal
+ prompt. Takes a member pending resolution — <code>Member.idResolver().phone("...")</code> or <code>
+ .accountId("...")</code>, optionally <code>.keyedByCashier()</code> — and delivers the outcome like <a href="#identifyMember(com.bilt.pos.session.identity.IdentifyOptions)"><code>identifyMember(IdentifyOptions)</code></a> does: a found member attaches to the session, not found and
+ suspended detach any previous one. The same lookup runs in the background, without a result to
+ observe, when such a member is attached through <a href="ShopperSession.html#member(com.bilt.pos.session.identity.Member)"><code>ShopperSession.member(Member)</code></a>.
+
+ <p>The terminal resolves account ids and phone numbers only; an email or custom identifier
+ fails with <a href="SessionErrorCode.html#UNSUPPORTED"><code>SessionErrorCode.UNSUPPORTED</code></a>.</div>
+<dl class="notes">
+<dt>Throws:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link">IllegalArgumentException</a></code> - for a member that is already resolved — attach it with <a href="ShopperSession.html#member(com.bilt.pos.session.identity.Member)"><code>ShopperSession.member(Member)</code></a> instead</dd>
+</dl>
 </section>
 </li>
 <li>

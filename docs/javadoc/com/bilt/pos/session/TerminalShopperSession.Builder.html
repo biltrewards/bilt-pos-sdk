@@ -112,19 +112,31 @@ loadScripts(document, 'script');</script>
 <div class="table-header col-second">Method</div>
 <div class="table-header col-last">Description</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#autoDisplay(boolean)" class="member-name-link">autoDisplay</a><wbr>(boolean&nbsp;autoDisplay)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#attribute(java.lang.String,java.lang.String)" class="member-name-link">attribute</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;key,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;value)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Whether basket mutations automatically refresh the customer display.</div>
+<div class="block">Pre-seeds one attribute of the session's <a href="SessionContext.html" title="interface in com.bilt.pos.session"><code>SessionContext</code></a>; repeatable.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#callbackExecutor(java.util.concurrent.Executor)" class="member-name-link">callbackExecutor</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;callbackExecutor)</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#autoDisplay(boolean)" class="member-name-link">autoDisplay</a><wbr>(boolean&nbsp;autoDisplay)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Where asynchronously executed operations deliver their handlers — e.g.</div>
+<div class="block">Whether basket mutations automatically refresh the customer display.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#client(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">client</a><wbr>(<a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a>&nbsp;client)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#callbackExecutor(java.util.concurrent.Executor)" class="member-name-link">callbackExecutor</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/concurrent/Executor.html" title="class or interface in java.util.concurrent" class="external-link">Executor</a>&nbsp;callbackExecutor)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Where asynchronously executed operations deliver their handlers — e.g.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#client(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">client</a><wbr>(<a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a>&nbsp;client)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">The terminal client.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#credentials(com.bilt.pos.platform.BiltCredentials)" class="member-name-link">credentials</a><wbr>(<a href="../platform/BiltCredentials.html" title="class in com.bilt.pos.platform">BiltCredentials</a>&nbsp;credentials)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The credentials the session's widgets use to reach the Bilt platform, exchanged for access
+ tokens against the <a href="#environment(com.bilt.pos.platform.BiltEnvironment)"><code>environment</code></a>.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#currency(java.lang.String)" class="member-name-link">currency</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;currency)</code></div>
@@ -137,9 +149,20 @@ loadScripts(document, 'script');</script>
 <div class="block">Custom rendering of basket snapshots for the customer display.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#externalDisplayClient(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">externalDisplayClient</a><wbr>(<a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a>&nbsp;externalDisplayClient)</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#environment(com.bilt.pos.platform.BiltEnvironment)" class="member-name-link">environment</a><wbr>(<a href="../platform/BiltEnvironment.html" title="class in com.bilt.pos.platform">BiltEnvironment</a>&nbsp;environment)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The platform deployment the session's widgets talk to.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#externalDisplayClient(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">externalDisplayClient</a><wbr>(<a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a>&nbsp;externalDisplayClient)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">A second client for an external customer display device.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#member(com.bilt.pos.session.identity.Member)" class="member-name-link">member</a><wbr>(<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&nbsp;member)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The member to start the session with, when the shopper is already known before the visit
+ begins.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onBackgroundError(java.util.function.Consumer)" class="member-name-link">onBackgroundError</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a>&gt;&nbsp;onBackgroundError)</code></div>
@@ -151,6 +174,17 @@ loadScripts(document, 'script');</script>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onBasketUpdated(java.util.function.Consumer)" class="member-name-link">onBasketUpdated</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&gt;&nbsp;onBasketUpdated)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Out-of-band basket update callback.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onMemberChanged(java.util.function.Consumer)" class="member-name-link">onMemberChanged</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&gt;&nbsp;onMemberChanged)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Handler for every change of the session's member: attached by the POS, found by a terminal
+ prompt or lookup, or cleared — with the new <a href="identity/Member.html" title="class in com.bilt.pos.session.identity"><code>Member</code></a>, <code>null</code> when signed out.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#phase(com.bilt.pos.session.CheckoutPhase)" class="member-name-link">phase</a><wbr>(<a href="CheckoutPhase.html" title="enum class in com.bilt.pos.session">CheckoutPhase</a>&nbsp;phase)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The phase the session's <a href="SessionContext.html" title="interface in com.bilt.pos.session"><code>SessionContext</code></a> starts in.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#poiId(java.lang.String)" class="member-name-link">poiId</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;poiId)</code></div>
@@ -176,6 +210,18 @@ loadScripts(document, 'script');</script>
 <div class="block">Store location identifier, sent as <code>SaleTerminalData.TotalsGroupID</code> on every
  transaction this session creates — it groups the store's transactions for totals and
  reconciliation (<code>getTotals()</code> filters by it).</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#widget(com.bilt.pos.widget.Widget)" class="member-name-link">widget</a><wbr>(<a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&nbsp;widget)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Adds one shopper-facing widget to the session; repeatable, each call adds one, in the order
+ they are called.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#widgets(java.util.Collection)" class="member-name-link">widgets</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/Collection.html" title="class or interface in java.util" class="external-link">Collection</a>&lt;? extends <a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&gt;&nbsp;widgets)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Adds every widget of the collection, in iteration order — <a href="#widget(com.bilt.pos.widget.Widget)"><code>widget(Widget)</code></a> for callers
+ that assemble the list elsewhere.</div>
 </div>
 </div>
 </div>
@@ -287,6 +333,90 @@ loadScripts(document, 'script');</script>
  <p>Background failures never interrupt the checkout and are logged whether or not a handler
  is registered. Delivered through the <a href="#callbackExecutor(java.util.concurrent.Executor)"><code>callbackExecutor</code></a>
  when one is configured, directly on the failing thread otherwise.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="phase(com.bilt.pos.session.CheckoutPhase)">
+<h3>phase</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">phase</span><wbr><span class="parameters">(<a href="CheckoutPhase.html" title="enum class in com.bilt.pos.session">CheckoutPhase</a>&nbsp;phase)</span></div>
+<div class="block">The phase the session's <a href="SessionContext.html" title="interface in com.bilt.pos.session"><code>SessionContext</code></a> starts in. Default <a href="CheckoutPhase.html#SCANNING"><code>CheckoutPhase.SCANNING</code></a>. The session moves it itself around settlement afterwards — see
+ <a href="CheckoutPhase.html" title="enum class in com.bilt.pos.session"><code>CheckoutPhase</code></a>.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="attribute(java.lang.String,java.lang.String)">
+<h3>attribute</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">attribute</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;key,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;value)</span></div>
+<div class="block">Pre-seeds one attribute of the session's <a href="SessionContext.html" title="interface in com.bilt.pos.session"><code>SessionContext</code></a>; repeatable. A <code>null</code>
+ value removes a key seeded earlier.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="member(com.bilt.pos.session.identity.Member)">
+<h3>member</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">member</span><wbr><span class="parameters">(<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&nbsp;member)</span></div>
+<div class="block">The member to start the session with, when the shopper is already known before the visit
+ begins. Same semantics as <a href="ShopperSession.html#member(com.bilt.pos.session.identity.Member)"><code>ShopperSession.member(Member)</code></a>, except that the initial
+ member is not announced through <a href="#onMemberChanged(java.util.function.Consumer)"><code>onMemberChanged(Consumer)</code></a>; a pending member is
+ looked up on the terminal once the start is acknowledged, and that resolution is announced.
+ Optional.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="onMemberChanged(java.util.function.Consumer)">
+<h3>onMemberChanged</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">onMemberChanged</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&gt;&nbsp;onMemberChanged)</span></div>
+<div class="block">Handler for every change of the session's member: attached by the POS, found by a terminal
+ prompt or lookup, or cleared — with the new <a href="identity/Member.html" title="class in com.bilt.pos.session.identity"><code>Member</code></a>, <code>null</code> when signed out.
+ Delivered through the <a href="#callbackExecutor(java.util.concurrent.Executor)"><code>callbackExecutor</code></a> when one is
+ configured, directly on the changing thread otherwise. A throwing handler is logged and never
+ interrupts the checkout.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="widget(com.bilt.pos.widget.Widget)">
+<h3>widget</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">widget</span><wbr><span class="parameters">(<a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&nbsp;widget)</span></div>
+<div class="block">Adds one shopper-facing widget to the session; repeatable, each call adds one, in the order
+ they are called. Widgets follow the session's basket, member and context and render on the
+ surfaces they were configured with — a companion display beside the terminal, say. The
+ session attaches them once the terminal has acknowledged the start and detaches them when it
+ ends. A widget instance belongs to one session and cannot be registered twice. At runtime a
+ widget is reached through <a href="ShopperSession.html#widget(java.lang.Class)"><code>ShopperSession.widget(Class)</code></a>. With no widget the session
+ behaves exactly as before; the terminal's own customer display is not a widget.
+
+ <p>A session with widgets but no <a href="#credentials(com.bilt.pos.platform.BiltCredentials)"><code>credentials</code></a> is allowed
+ — a widget backed by a fake or a local source needs none — but a platform-backed widget
+ cannot run that way: it fails when the session attaches it, with a clear <a href="SessionError.html" title="class in com.bilt.pos.session"><code>SessionError</code></a>
+ through <a href="#onBackgroundError(java.util.function.Consumer)"><code>onBackgroundError</code></a>, and the checkout continues
+ without it.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="widgets(java.util.Collection)">
+<h3>widgets</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">widgets</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/Collection.html" title="class or interface in java.util" class="external-link">Collection</a>&lt;? extends <a href="../widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a>&gt;&nbsp;widgets)</span></div>
+<div class="block">Adds every widget of the collection, in iteration order — <a href="#widget(com.bilt.pos.widget.Widget)"><code>widget(Widget)</code></a> for callers
+ that assemble the list elsewhere.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="credentials(com.bilt.pos.platform.BiltCredentials)">
+<h3>credentials</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">credentials</span><wbr><span class="parameters">(<a href="../platform/BiltCredentials.html" title="class in com.bilt.pos.platform">BiltCredentials</a>&nbsp;credentials)</span></div>
+<div class="block">The credentials the session's widgets use to reach the Bilt platform, exchanged for access
+ tokens against the <a href="#environment(com.bilt.pos.platform.BiltEnvironment)"><code>environment</code></a>. Optional: without them
+ the session offers its widgets no platform client, which platform-backed widgets refuse at
+ attach. Tokens never reach widgets or surfaces directly. Unrelated to the terminal client's
+ own credentials.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="environment(com.bilt.pos.platform.BiltEnvironment)">
+<h3>environment</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">environment</span><wbr><span class="parameters">(<a href="../platform/BiltEnvironment.html" title="class in com.bilt.pos.platform">BiltEnvironment</a>&nbsp;environment)</span></div>
+<div class="block">The platform deployment the session's widgets talk to. Default <a href="../platform/BiltEnvironment.html#PRODUCTION"><code>BiltEnvironment.PRODUCTION</code></a>.</div>
 </section>
 </li>
 <li>

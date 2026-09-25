@@ -11,6 +11,8 @@ package com.bilt.pos.session;
 
 import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.platform.BiltCredentials;
+import com.bilt.pos.platform.BiltEnvironment;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.display.DisplayRenderer;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
@@ -18,7 +20,7 @@ import com.bilt.pos.session.identity.CardAcquisitionResult;
 import com.bilt.pos.session.identity.IdentifyOptions;
 import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
-import com.bilt.pos.session.identity.MemberIdentifier;
+import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.session.input.ConfirmationOptions;
 import com.bilt.pos.session.input.InputOptions;
 import com.bilt.pos.session.input.MenuOptions;
@@ -32,9 +34,14 @@ import com.bilt.pos.session.settlement.SettlementType;
 import com.bilt.pos.session.storedvalue.StoredValueBalance;
 import com.bilt.pos.session.storedvalue.StoredValueCard;
 import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
+import com.bilt.pos.widget.Widget;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -109,8 +116,21 @@ public interface TerminalShopperSession extends ShopperSession {
    */
   SessionResult<IdentifyResult> identifyMember(IdentifyOptions options);
 
-  /** POS-driven member lookup by an identifier on file; no terminal prompt. */
-  SessionResult<IdentifyResult> identifyMember(MemberIdentifier identifier);
+  /**
+   * POS-driven member lookup by an identifier on file (Nexo {@code BalanceInquiry}); no terminal
+   * prompt. Takes a member pending resolution — {@code Member.idResolver().phone("...")} or {@code
+   * .accountId("...")}, optionally {@code .keyedByCashier()} — and delivers the outcome like {@link
+   * #identifyMember(IdentifyOptions)} does: a found member attaches to the session, not found and
+   * suspended detach any previous one. The same lookup runs in the background, without a result to
+   * observe, when such a member is attached through {@link #member(Member)}.
+   *
+   * <p>The terminal resolves account ids and phone numbers only; an email or custom identifier
+   * fails with {@link SessionErrorCode#UNSUPPORTED}.
+   *
+   * @throws IllegalArgumentException for a member that is already resolved — attach it with {@link
+   *     #member(Member)} instead
+   */
+  SessionResult<IdentifyResult> identifyMember(Member pending);
 
   // ─── Card acquisition ───
 
@@ -474,6 +494,13 @@ public interface TerminalShopperSession extends ShopperSession {
     Consumer<Basket> onBasketUpdated;
     Executor callbackExecutor;
     Consumer<SessionError> onBackgroundError;
+    CheckoutPhase phase = CheckoutPhase.SCANNING;
+    final LinkedHashMap<String, String> attributes = new LinkedHashMap<>();
+    Member member;
+    Consumer<Member> onMemberChanged;
+    final List<Widget> widgets = new ArrayList<>();
+    BiltCredentials credentials;
+    BiltEnvironment environment = BiltEnvironment.PRODUCTION;
 
     private Builder() {}
 
@@ -573,6 +600,121 @@ public interface TerminalShopperSession extends ShopperSession {
      */
     public Builder onBackgroundError(Consumer<SessionError> onBackgroundError) {
       this.onBackgroundError = onBackgroundError;
+      return this;
+    }
+
+    // ─── Context ───
+
+    /**
+     * The phase the session's {@link SessionContext} starts in. Default {@link
+     * CheckoutPhase#SCANNING}. The session moves it itself around settlement afterwards — see
+     * {@link CheckoutPhase}.
+     */
+    public Builder phase(CheckoutPhase phase) {
+      this.phase = Objects.requireNonNull(phase, "phase");
+      return this;
+    }
+
+    /**
+     * Pre-seeds one attribute of the session's {@link SessionContext}; repeatable. A {@code null}
+     * value removes a key seeded earlier.
+     */
+    public Builder attribute(String key, String value) {
+      Objects.requireNonNull(key, "key");
+      if (value == null) {
+        attributes.remove(key);
+      } else {
+        attributes.put(key, value);
+      }
+      return this;
+    }
+
+    // ─── Member (POS-provided) ───
+
+    /**
+     * The member to start the session with, when the shopper is already known before the visit
+     * begins. Same semantics as {@link ShopperSession#member(Member)}, except that the initial
+     * member is not announced through {@link #onMemberChanged(Consumer)}; a pending member is
+     * looked up on the terminal once the start is acknowledged, and that resolution is announced.
+     * Optional.
+     */
+    public Builder member(Member member) {
+      this.member = member;
+      return this;
+    }
+
+    /**
+     * Handler for every change of the session's member: attached by the POS, found by a terminal
+     * prompt or lookup, or cleared — with the new {@link Member}, {@code null} when signed out.
+     * Delivered through the {@link #callbackExecutor(Executor) callbackExecutor} when one is
+     * configured, directly on the changing thread otherwise. A throwing handler is logged and never
+     * interrupts the checkout.
+     */
+    public Builder onMemberChanged(Consumer<Member> onMemberChanged) {
+      this.onMemberChanged = onMemberChanged;
+      return this;
+    }
+
+    // ─── Widgets ───
+
+    /**
+     * Adds one shopper-facing widget to the session; repeatable, each call adds one, in the order
+     * they are called. Widgets follow the session's basket, member and context and render on the
+     * surfaces they were configured with — a companion display beside the terminal, say. The
+     * session attaches them once the terminal has acknowledged the start and detaches them when it
+     * ends. A widget instance belongs to one session and cannot be registered twice. At runtime a
+     * widget is reached through {@link ShopperSession#widget(Class)}. With no widget the session
+     * behaves exactly as before; the terminal's own customer display is not a widget.
+     *
+     * <p>A session with widgets but no {@link #credentials(BiltCredentials) credentials} is allowed
+     * — a widget backed by a fake or a local source needs none — but a platform-backed widget
+     * cannot run that way: it fails when the session attaches it, with a clear {@link SessionError}
+     * through {@link #onBackgroundError(Consumer) onBackgroundError}, and the checkout continues
+     * without it.
+     */
+    public Builder widget(Widget widget) {
+      Objects.requireNonNull(widget, "widget");
+      for (Widget registered : widgets) {
+        if (registered == widget) {
+          throw new IllegalArgumentException("the widget is already registered on this builder");
+        }
+      }
+      widgets.add(widget);
+      return this;
+    }
+
+    /**
+     * Adds every widget of the collection, in iteration order — {@link #widget(Widget)} for callers
+     * that assemble the list elsewhere.
+     */
+    public Builder widgets(Collection<? extends Widget> widgets) {
+      Objects.requireNonNull(widgets, "widgets");
+      for (Widget widget : widgets) {
+        widget(widget);
+      }
+      return this;
+    }
+
+    // ─── Platform ───
+
+    /**
+     * The credentials the session's widgets use to reach the Bilt platform, exchanged for access
+     * tokens against the {@link #environment(BiltEnvironment) environment}. Optional: without them
+     * the session offers its widgets no platform client, which platform-backed widgets refuse at
+     * attach. Tokens never reach widgets or surfaces directly. Unrelated to the terminal client's
+     * own credentials.
+     */
+    public Builder credentials(BiltCredentials credentials) {
+      this.credentials = credentials;
+      return this;
+    }
+
+    /**
+     * The platform deployment the session's widgets talk to. Default {@link
+     * BiltEnvironment#PRODUCTION}.
+     */
+    public Builder environment(BiltEnvironment environment) {
+      this.environment = Objects.requireNonNull(environment, "environment");
       return this;
     }
 

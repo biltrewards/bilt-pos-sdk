@@ -35,8 +35,11 @@ val publicApiJavadoc =
             "com/bilt/pos/session/**",
             "com/bilt/pos/nexo/client/**",
             "com/bilt/pos/nexo/security/**",
+            "com/bilt/pos/platform/**",
             "com/bilt/pos/display/**",
             "com/bilt/pos/receipt/**",
+            "com/bilt/pos/widget/**",
+            "com/bilt/pos/media/**",
         )
         exclude("com/bilt/pos/session/internal/**")
         classpath = files(sourceSets["main"].compileClasspath, sourceSets["main"].output)

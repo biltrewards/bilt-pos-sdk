@@ -92,22 +92,53 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">SessionBasket</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">The basket surface of a shopper session: item and tax mutations, batch edits, and immutable
- snapshots. Sale, return, and register-credit items can coexist in one basket.
+<div class="block">The basket surface of a shopper session: item and tax mutations, batch edits, whole-basket
+ replacement, and immutable snapshots. Sale, return, and register-credit items can coexist in one
+ basket.
 
- <p>Every mutation is applied atomically, returning the updated snapshot synchronously; when the
- session has automatic display enabled it also enqueues an asynchronous, conflated customer
- display refresh showing the itemised basket. The owning session decides when mutations are
- allowed: a basket frozen by in-flight money movement, already consumed by settlement, or owned by
- an ended session rejects them with <code>IllegalStateException</code>. Call <a href="#clear()"><code>clear()</code></a> after
- settlement to start another basket in the same session.
+ <p>There is one basket and three ways to update it. They are different updaters over the same
+ engine, not different concepts: every one of them applies atomically, returns the updated
+ snapshot synchronously, and ends in exactly one <a href="basket/BasketChange.html" title="class in com.bilt.pos.session.basket"><code>BasketChange</code></a> notification (which, on a
+ terminal session with automatic display enabled, enqueues one asynchronous, conflated customer
+ display refresh).
+
+ <p><b>Incremental</b> (<a href="basket/BasketChange.Source.html#INCREMENTAL"><code>BasketChange.Source.INCREMENTAL</code></a>): one call per register action,
+ for a POS that rings items as the cashier scans them.
 
  <pre><code>
  session.basket().addItem(
-         BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, new BigDecimal("24.99")));
+     BasketItem.sale("KRK-CNDL-LRG-VAN", "Large Vanilla Candle", 2, new BigDecimal("24.99")));
+ session.basket().updateItemQuantityBySku("KRK-CNDL-LRG-VAN", 3);
  session.basket().setTaxRateBySku("KRK-CNDL-LRG-VAN", new BigDecimal("0.08875"));
- Basket basket = session.basket().snapshot();
  </code></pre>
+
+ <p><b>Batched</b> (<a href="basket/BasketChange.Source.html#BATCH"><code>BasketChange.Source.BATCH</code></a>): several mutations applied as one atomic
+ change, for a register action that touches more than one line.
+
+ <pre><code>
+ session.basket().mutate(m -&gt; m
+     .addItem(BasketItem.sale("KRK-FRAME-5X7-BLK", "5x7 Black Frame", 1, new BigDecimal("14.99")))
+     .removeItemBySku("KRK-CNDL-LRG-VAN")
+     .setTaxTotal(new BigDecimal("1.33")));
+ </code></pre>
+
+ <p><b>Snapshot</b> (<a href="basket/BasketChange.Source.html#REPLACE"><code>BasketChange.Source.REPLACE</code></a>): the whole basket at once, for a POS
+ that owns its own cart and would rather push its current state after every change than translate
+ each edit into incremental calls. The session diffs the snapshot against the current basket, so
+ downstream consumers still learn what changed.
+
+ <pre><code>
+ List&lt;BasketItem&gt; items =
+     pos.cart().lines().stream().map(Mapping::toBasketItem).collect(Collectors.toList());
+ session.basket().replace(items);
+ // or, with a Basket the register assembled or received earlier:
+ session.basket().replace(snapshot);
+ </code></pre>
+
+ <p>The owning session decides when updates are allowed: a basket frozen by in-flight money
+ movement, already consumed by settlement, or owned by an ended session rejects them with <code>
+ IllegalStateException</code>. Call <a href="#clear()"><code>clear()</code></a> after settlement to start another basket in the
+ same session; <a href="#replace(com.bilt.pos.session.basket.Basket)"><code>replace(Basket)</code></a> does that implicitly on a consumed basket.
 
  <p>Like the session that owns it, the basket is intended for use from a single register thread.</div>
 </section>
@@ -156,6 +187,18 @@ loadScripts(document, 'script');</script>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#removeItemBySku(java.lang.String)" class="member-name-link">removeItemBySku</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sku)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Removes the line with the given SKU.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#replace(com.bilt.pos.session.basket.Basket)" class="member-name-link">replace</a><wbr>(<a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;snapshot)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Replaces the whole basket with a snapshot: the session basket becomes equal to the snapshot's
+ lines, discounts, taxes and tax total, and the change is reported as one <a href="basket/BasketChange.Source.html#REPLACE"><code>BasketChange.Source.REPLACE</code></a> diff against the previous basket.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#replace(java.util.List)" class="member-name-link">replace</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a>&gt;&nbsp;items)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Replaces the whole basket with register items, the common shape of a POS-owned cart: the basket
+ becomes exactly these lines, paired with the current ones and reported as in <a href="#replace(com.bilt.pos.session.basket.Basket)"><code>replace(Basket)</code></a>.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#setDiscounts(java.lang.String,java.util.List)" class="member-name-link">setDiscounts</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;itemId,
@@ -334,6 +377,58 @@ loadScripts(document, 'script');</script>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">mutate</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="basket/BasketMutation.html" title="interface in com.bilt.pos.session.basket">BasketMutation</a>&gt;&nbsp;mutation)</span></div>
 <div class="block">Applies a batch of basket mutations atomically, with a single display update for the whole
  batch.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="replace(com.bilt.pos.session.basket.Basket)">
+<h3>replace</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">replace</span><wbr><span class="parameters">(<a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;snapshot)</span></div>
+<div class="block">Replaces the whole basket with a snapshot: the session basket becomes equal to the snapshot's
+ lines, discounts, taxes and tax total, and the change is reported as one <a href="basket/BasketChange.Source.html#REPLACE"><code>BasketChange.Source.REPLACE</code></a> diff against the previous basket. A snapshot equal to the current
+ basket produces an empty diff and no notification, and so no display push.
+
+ <p>Lines are paired with the current basket the way the basket keys them, by <code>reference</code>
+ when a line has one and otherwise by SKU and item type among the unreferenced lines; a paired
+ line keeps its item id, so register references into the basket stay stable, while new lines get
+ new ids. Each snapshot line needs a SKU, description, unit price and a quantity of at least
+ one, like a <a href="basket/BasketItem.html" title="class in com.bilt.pos.session.basket"><code>BasketItem</code></a>. Line tax follows the snapshot line (a <code>taxRate</code> makes it
+ rate-based, a disagreeing or rate-less non-zero <code>taxAmount</code> fixes it), and the snapshot's
+ <code>taxTotal</code> becomes a basket-level override only when it differs from the sum of its
+ lines' tax amounts.
+
+ <p>On a terminal session whose basket has been consumed by a successful settlement, <code>
+ replace</code> does not fail the way an incremental mutation does: it starts a fresh cart with a new
+ cart id exactly as <a href="#clear()"><code>clear()</code></a> would (same guards, and the split-tender stored-value
+ selection is dropped) and then installs the snapshot, reporting every line as added.</div>
+<dl class="notes">
+<dt>Returns:</dt>
+<dd>the updated basket snapshot</dd>
+<dt>Throws:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link">IllegalArgumentException</a></code> - if the snapshot holds two unreferenced lines with the same SKU
+     and type or two lines with the same reference, or a line fails item validation; the basket
+     is left untouched</dd>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the basket is frozen (payment in progress) or the session has
+     ended, or, for a consumed basket, under the <a href="#clear()"><code>clear()</code></a> guards</dd>
+</dl>
+</section>
+</li>
+<li>
+<section class="detail" id="replace(java.util.List)">
+<h3>replace</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></span>&nbsp;<span class="element-name">replace</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a>&gt;&nbsp;items)</span></div>
+<div class="block">Replaces the whole basket with register items, the common shape of a POS-owned cart: the basket
+ becomes exactly these lines, paired with the current ones and reported as in <a href="#replace(com.bilt.pos.session.basket.Basket)"><code>replace(Basket)</code></a>. Tax comes from the items' own <code>taxRate</code>/<code>taxAmount</code>; a
+ basket-level <a href="#setTaxTotal(java.math.BigDecimal)"><code>setTaxTotal(java.math.BigDecimal)</code></a> override already in place is kept when no item carries tax
+ and dropped when any does, so a register that taxes the whole basket sets the total once and
+ keeps replacing items.</div>
+<dl class="notes">
+<dt>Returns:</dt>
+<dd>the updated basket snapshot</dd>
+<dt>Throws:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link">IllegalArgumentException</a></code> - if two items share a reference, or two unreferenced items
+     share a SKU and type; the basket is left untouched</dd>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - under the same rules as <a href="#replace(com.bilt.pos.session.basket.Basket)"><code>replace(Basket)</code></a></dd>
+</dl>
 </section>
 </li>
 <li>

@@ -381,11 +381,27 @@ session.identifyMember()                     // terminal prompts the customer
 
 Identification is optional — the flow works for guests. Outcomes that simply leave the checkout without a member (`NOT_FOUND`, `SUSPENDED`, `CANCELLED`) are delivered to `onSuccess` with the corresponding `IdentifyStatus`; `onError` fires only for real failures.
 
-For a POS-driven lookup without a terminal prompt (identifier already on file):
+For a POS-driven lookup without a terminal prompt (identifier already on file), hand the session a member pending resolution. The terminal resolves account ids and phone numbers; `keyedByCashier()` marks an identifier the cashier typed rather than one loaded from a profile:
 
 ```java
-session.identifyMember(MemberIdentifier.phoneNumber("555-867-5309")).execute();
+session.identifyMember(Member.idResolver().phone("555-867-5309")).execute();
+session.identifyMember(Member.idResolver().accountId("98234").keyedByCashier()).execute();
 ```
+
+### POS-provided member
+
+When the register already knows who the shopper is, attach the member directly — at any time, before or after scanning, on a terminal session or a local one. A known Bilt member id attaches immediately with no roundtrip; a member pending resolution attaches as pending and is resolved in the background on the session's operation lane (on a terminal session through the same `BalanceInquiry` as above), so a `settle()` executed afterwards charges against the resolved member. Until it resolves, the visit is a guest's. `null` signs the shopper out.
+
+```java
+session.member(Member.id("mbr_8f2a"));                          // attaches immediately
+session.member(Member.idResolver().phone("+12015550123"));      // resolved in the background
+session.member(null);                                           // signed out
+
+Member current = session.member();                              // resolved or pending, null when none
+if (current != null && current.isResolved()) { register.showMember(current.memberId()); }
+```
+
+Every change of the member — attached by the register, found by a terminal prompt or lookup, resolved in the background, or cleared — is announced through the builder's `onMemberChanged(member -> ...)` handler on the callback executor, with `null` for a sign-out. A lookup that finds nobody clears the member; one that fails reports through `onBackgroundError` and leaves the member pending. Whatever member is attached last wins, so a stale lookup never overwrites a member set after it. Email and custom identifiers cannot be resolved on the terminal today and stay pending (`SessionErrorCode.UNSUPPORTED` through `onBackgroundError`).
 
 ---
 
@@ -410,7 +426,33 @@ session.basket().mutate(m -> m
     .removeItemBySku("KRK-FRAME-5X7-BLK"));
 ```
 
-After `settle()` succeeds, that basket is consumed and cannot be charged or modified again. Start another transaction inside the same session explicitly:
+### One basket, three updaters
+
+Whether the register calls `addItem` or pushes its whole cart is a choice of updater over the same basket, not a different concept. All three styles apply atomically, return the updated `Basket`, and end in exactly one `BasketChange` (the type behind the display push and any future basket observer): `previous()`, `current()`, a `source()` of `INCREMENTAL`, `BATCH`, `REPLACE` or `CLEAR`, and a line-level diff (`added`, `removed`, `quantityChanged`, `priceChanged`, `discountsChanged`, `taxChanged`, `taxTotalChanged`). A change that leaves the basket as it was is not reported, and so pushes nothing.
+
+- **Incremental** — one call per register action, as above. Each call is one change.
+- **Batched** — `mutate(m -> ...)` applies several mutations as one change, with one display update.
+- **Snapshot** — `replace(...)` for a POS that owns its own cart: push the current cart after every change and let the SDK diff it against the previous basket.
+
+```java
+// The register's cart is the source of truth; hand the whole thing over after each change.
+List<BasketItem> items = pos.cart().lines().stream()
+    .map(line -> BasketItem.builder()
+        .reference(line.id())                 // stable per line: pairs across snapshots
+        .sku(line.sku()).description(line.name())
+        .quantity(line.qty()).unitPrice(line.price())
+        .taxRate(line.taxRate())
+        .build())
+    .collect(Collectors.toList());
+Basket basket = session.basket().replace(items);
+
+// Or with a Basket the register assembled or received earlier
+session.basket().replace(snapshot);
+```
+
+`replace()` pairs snapshot lines with the current basket the way the basket keys them — by `reference` when a line has one, otherwise by SKU and item type among the unreferenced lines — and keeps the item ids of paired lines, so anything the register recorded by `itemId` stays valid; new lines get new ids. Two unreferenced lines with the same SKU and type, or two lines with the same reference, are ambiguous and rejected with `IllegalArgumentException`, leaving the basket untouched; give such lines references. Tax follows the items: `replace(List<BasketItem>)` uses each item's `taxRate`/`taxAmount` and keeps a standing `setTaxTotal()` override only when no item carries tax, while `replace(Basket)` takes the snapshot's `taxTotal` as the override only when it differs from the sum of its lines' tax amounts. Description, category and metadata are not part of the diff, so a snapshot that changes only those is treated as unchanged.
+
+After `settle()` succeeds, that basket is consumed and cannot be charged or modified again. Start another transaction inside the same session explicitly — or, for a snapshot-style register, just `replace()` the next cart: on a consumed basket `replace()` starts a fresh cart with a new cart id exactly as `clear()` does (same guards; the split-tender gift card selection is dropped), reporting every line of the new cart as added.
 
 ```java
 session.basket().clear();  // new cart ID; also clears the selected split-tender gift card
@@ -421,6 +463,31 @@ session.settle().execute();
 The identified member stays attached across `clear()`. Re-identifying later changes the member for future work but does not rewrite a completed settlement: same-session `refund()` and `voidTransaction()` use the member ID captured when their target payment settled. A failed settlement does not consume the basket, so correct or retry it without clearing. If a same-session void fails after reversing any movement, retry `voidTransaction()` on that session before clearing the basket, settling another transaction, or ending the session; those operations are refused so the in-memory resume progress cannot be discarded.
 
 **Tax computation rules:** explicit item `taxAmount` wins; else item `taxRate` × `originalTotal`; else $0. `basket.taxTotal` is the sum of item amounts unless `setTaxTotal()` overrides it. `grandTotal = originalTotal + taxTotal`.
+
+### Session context
+
+Alongside the basket, every session carries a small `SessionContext` — what the POS knows about the checkout that a shopper-facing widget may use: a `CheckoutPhase` and free-form string attributes, plus the lane identifiers the session was built with (`saleId()`, `currency()`, `storeLocation()`, and on a terminal session `poiId()`). Widgets use the phase for eligibility — a retail media widget, for example, shows media only in the phases the retailer declares eligible and clears its surface on leaving one — and attributes as targeting and policy input. Widget-specific tuning does not live here; it lives on the widget.
+
+```java
+// Pre-seed on the builder (both session types) ...
+TerminalShopperSession session = TerminalShopperSession.builder()
+    .client(client).saleId("POS-LANE-3").poiId("VictaLane-275839164").currency("USD")
+    .phase(CheckoutPhase.SCANNING)                 // the default
+    .attribute("lane-type", "pharmacy")
+    .start()
+    .get();
+
+// ... and update at any time, from any thread. Pure local compute; nothing reaches the terminal.
+session.context().attribute("cashier-assisted", "true");
+session.context().phase(CheckoutPhase.MEMBER_IDENTIFIED);   // e.g. when the shopper signs in
+session.context().removeAttribute("cashier-assisted");      // or attribute("cashier-assisted", null)
+
+CheckoutPhase phase = session.context().phase();
+Map<String, String> attributes = session.context().attributes();   // unmodifiable copy
+SessionContextSnapshot snapshot = session.context().snapshot();     // one consistent, immutable view
+```
+
+A `TerminalShopperSession` moves the phase itself around settlement: `TENDERING` when `settle()` begins executing, `COMPLETE` when it succeeds, and back to whatever phase the checkout was in when the settlement began if it fails or is aborted (`SCANNING` unless the POS had set something else). `basket().clear()` returns it to `SCANNING` for the next transaction. `MEMBER_IDENTIFIED` is never set automatically; set it yourself when the shopper signs in. A local `ShopperSession` has no automatic transitions at all — the POS owns the phase there. Like the basket, the context refuses writes after `end()`; it stays readable.
 
 ---
 
@@ -712,7 +779,9 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | End the session (terminal discards its data) | `session.end()` |
 | Abandon an unrecoverable session | `session.forceEnd(reason)` |
 | Prompt customer to identify | `session.identifyMember()` |
-| POS-driven member lookup (no prompt) | `session.identifyMember(identifier)` |
+| POS-driven member lookup (no prompt) | `session.identifyMember(Member.idResolver().phone("..."))` |
+| Attach a member the register knows | `session.member(Member.id("..."))`, `session.member(Member.idResolver().accountId("..."))`, `session.member(null)` |
+| Current member (resolved or pending) | `session.member()` |
 | Add / remove / update item | `session.basket().addItem(item)`, `.removeItemBySku(sku)`, `.updateItemQuantityBySku(sku, qty)` |
 | Apply or clear line discounts | `session.basket().setDiscountsBySku(sku, discounts)` / `.setDiscounts(itemId, List.of())` |
 | Batch edits, one display update | `session.basket().mutate(m -> ...)` |

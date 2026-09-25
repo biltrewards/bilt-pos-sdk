@@ -17,14 +17,54 @@ package com.bilt.pos.session;
 final class LocalShopperSession extends AbstractShopperSession {
 
   private volatile boolean ended;
+  private final SessionMember memberState;
 
   LocalShopperSession(ShopperSession.Builder builder) {
+    // a member pending resolution stays pending: the platform-side
+    // resolver a local session will use is not built yet
+    this(builder, MemberResolver.NONE);
+  }
+
+  /** Package-private so tests can supply a resolver that actually resolves. */
+  LocalShopperSession(ShopperSession.Builder builder, MemberResolver memberResolver) {
     super(
         builder.saleId,
         builder.currency,
         builder.storeLocation,
         builder.callbackExecutor,
-        builder.onBackgroundError);
+        builder.onBackgroundError,
+        null,
+        builder.phase,
+        builder.attributes,
+        builder.widgets,
+        builder.credentials,
+        builder.environment);
+    this.memberState =
+        new SessionMember(
+            lock,
+            operations,
+            memberResolver,
+            this::ended,
+            builder.onMemberChanged,
+            this::memberChanged,
+            builder.member);
+  }
+
+  /**
+   * The start behind {@link ShopperSession.Builder#start()}: binds the widgets and announces the
+   * start to the observers before the session is handed out, then begins resolving a pre-seeded
+   * member pending resolution — queued behind the start announcement on the operation lane, so
+   * observers see {@code started} before any {@code memberChanged} the lookup produces.
+   */
+  ShopperSession start() {
+    announceStarted();
+    memberState.resolveSeed();
+    return this;
+  }
+
+  @Override
+  SessionMember memberState() {
+    return memberState;
   }
 
   @Override
@@ -60,6 +100,7 @@ final class LocalShopperSession extends AbstractShopperSession {
           } finally {
             lock.unlock();
           }
+          announceEnded();
           // no further operations may run; asynchronous submissions after
           // this fail into their handlers instead of queueing forever
           operations.shutdown();
