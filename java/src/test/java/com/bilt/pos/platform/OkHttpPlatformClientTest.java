@@ -16,6 +16,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import okhttp3.OkHttpClient;
 import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -177,6 +178,53 @@ class OkHttpPlatformClientTest {
     assertEquals(401, response.status());
     assertEquals("still no", response.bodyAsString());
     assertEquals(4, server.getRequestCount());
+  }
+
+  @Test
+  void tokenFailureDuringRetryIsPlatformAuthException() throws Exception {
+    server.enqueue(tokenResponse("tok-1", 3600));
+    server.enqueue(new MockResponse().setResponseCode(401));
+    server.enqueue(
+        new MockResponse().setResponseCode(400).setBody("{\"error\":\"invalid_client\"}"));
+    client = newClient(Duration.ofSeconds(60));
+
+    PlatformAuthException e =
+        assertThrows(
+            PlatformAuthException.class, () -> client.execute(PlatformRequest.get("v1/a").build()));
+
+    assertEquals(400, e.status());
+    assertEquals("invalid_client", e.errorCode());
+    assertEquals(3, server.getRequestCount());
+  }
+
+  @Test
+  void suppliedHttpClientCarriesApiCallsButTokenRequestsStayUnauthenticated() throws Exception {
+    server.enqueue(tokenResponse("tok-1", 3600));
+    server.enqueue(new MockResponse().setResponseCode(200));
+    List<String> seen = new ArrayList<>();
+    OkHttpClient supplied =
+        new OkHttpClient.Builder()
+            .addInterceptor(
+                chain -> {
+                  seen.add(
+                      chain.request().url().encodedPath()
+                          + " "
+                          + chain.request().header("Authorization"));
+                  return chain.proceed(chain.request());
+                })
+            .build();
+    client =
+        OkHttpPlatformClient.builder()
+            .credentials(BiltCredentials.clientCredentials(CLIENT_ID, CLIENT_SECRET))
+            .environment(environment())
+            .httpClient(supplied)
+            .build();
+
+    client.execute(PlatformRequest.get("v1/a").build());
+
+    assertEquals(2, seen.size());
+    assertTrue(seen.get(0).startsWith(TOKEN_PATH + " Basic "), seen.get(0));
+    assertEquals("/gateway/v1/a Bearer tok-1", seen.get(1));
   }
 
   @Test

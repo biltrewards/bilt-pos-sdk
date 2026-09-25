@@ -175,7 +175,9 @@ loadScripts(document, 'script');</script>
 <h3>httpClient</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="OkHttpPlatformClient.Builder.html" title="class in com.bilt.pos.platform">OkHttpPlatformClient.Builder</a></span>&nbsp;<span class="element-name">httpClient</span><wbr><span class="parameters">(okhttp3.OkHttpClient&nbsp;httpClient)</span></div>
 <div class="block">An <code>OkHttpClient</code> to send with instead of the client's own. Its timeouts, proxy and TLS
- configuration apply to token requests and API calls alike, and it is not shut down on <a href="OkHttpPlatformClient.html#close()"><code>OkHttpPlatformClient.close()</code></a>.</div>
+ configuration apply to token requests and API calls alike, and it is not shut down on <a href="OkHttpPlatformClient.html#close()"><code>OkHttpPlatformClient.close()</code></a>. Its interceptors see both, with the credentials attached; its
+ <code>Authenticator</code> is replaced on API calls by the one that renews the access
+ token.</div>
 </section>
 </li>
 <li>

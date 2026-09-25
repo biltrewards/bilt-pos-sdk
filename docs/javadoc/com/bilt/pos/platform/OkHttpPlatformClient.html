@@ -113,12 +113,14 @@ implements <a href="BiltPlatformClient.html" title="interface in com.bilt.pos.pl
  requests reuse it. The token is refreshed on a background thread <a href="OkHttpPlatformClient.Builder.html#refreshSkew(java.time.Duration)">a little before</a> it expires, so callers do not pay for the token
  exchange in the normal case. When the platform answers <code>401</code> the token is discarded,
  re-acquired and the request is sent once more; a second <code>401</code> is returned to the caller as
- an ordinary response. Concurrent callers who all need a token share one token request.
+ an ordinary response. Concurrent callers who all need a token share one token request. The token
+ is attached by an OkHttp interceptor and the retry is OkHttp's <code>Authenticator</code>
+ hook, both installed on a client derived from the one used for token requests.
 
  <p>Without an explicit <a href="OkHttpPlatformClient.Builder.html#httpClient(okhttp3.OkHttpClient)"><code>OkHttpClient</code></a> the client creates
  its own with a 10 s connect and 30 s call timeout, and releases its pool and threads on <a href="#close()"><code>close()</code></a>. A supplied client is used as is and left running on close, since its owner may share
- it. Per-request <a href="PlatformRequest.html#timeout()"><code>timeouts</code></a> bound the exchange with the API and,
- separately, the wait for a token that the exchange may have to make first.</div>
+ it. A per-request <a href="PlatformRequest.html#timeout()"><code>timeout</code></a> bounds the whole call, including any
+ wait for a token and the retry after a <code>401</code>.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">

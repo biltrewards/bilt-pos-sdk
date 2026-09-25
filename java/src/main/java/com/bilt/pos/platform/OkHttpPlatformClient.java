@@ -47,13 +47,15 @@ import okhttp3.ResponseBody;
  * Builder#refreshSkew(Duration) a little before} it expires, so callers do not pay for the token
  * exchange in the normal case. When the platform answers {@code 401} the token is discarded,
  * re-acquired and the request is sent once more; a second {@code 401} is returned to the caller as
- * an ordinary response. Concurrent callers who all need a token share one token request.
+ * an ordinary response. Concurrent callers who all need a token share one token request. The token
+ * is attached by an OkHttp interceptor and the retry is OkHttp's {@link okhttp3.Authenticator}
+ * hook, both installed on a client derived from the one used for token requests.
  *
  * <p>Without an explicit {@link Builder#httpClient(OkHttpClient) OkHttpClient} the client creates
  * its own with a 10 s connect and 30 s call timeout, and releases its pool and threads on {@link
  * #close()}. A supplied client is used as is and left running on close, since its owner may share
- * it. Per-request {@link PlatformRequest#timeout() timeouts} bound the exchange with the API and,
- * separately, the wait for a token that the exchange may have to make first.
+ * it. A per-request {@link PlatformRequest#timeout() timeout} bounds the whole call, including any
+ * wait for a token and the retry after a {@code 401}.
  */
 public final class OkHttpPlatformClient implements BiltPlatformClient {
 
@@ -63,6 +65,7 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
 
   private final HttpUrl apiBase;
   private final OkHttpClient httpClient;
+  private final OkHttpClient apiClient;
   private final boolean ownsHttpClient;
   private final String userAgent;
   private final ClientCredentialsTokenSource tokenSource;
@@ -88,6 +91,11 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
             userAgent,
             builder.refreshSkew,
             builder.clock);
+    BearerTokenAuth auth = new BearerTokenAuth(tokenSource);
+    OkHttpClient.Builder apiClientBuilder = httpClient.newBuilder().authenticator(auth);
+    // First, so the caller's own interceptors see API calls as they are sent.
+    apiClientBuilder.interceptors().add(0, auth);
+    this.apiClient = apiClientBuilder.build();
     AtomicInteger counter = new AtomicInteger();
     this.asyncExecutor =
         Executors.newCachedThreadPool(
@@ -107,13 +115,7 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
   public PlatformResponse execute(PlatformRequest request) throws PlatformException {
     Objects.requireNonNull(request, "request");
     ensureOpen();
-    String token = tokenSource.accessToken(request.timeout());
-    PlatformResponse response = send(request, token);
-    if (response.status() != 401) {
-      return response;
-    }
-    tokenSource.invalidate(token);
-    return send(request, tokenSource.accessToken(request.timeout()));
+    return send(request);
   }
 
   @Override
@@ -154,8 +156,7 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
     }
   }
 
-  private PlatformResponse send(PlatformRequest request, String accessToken)
-      throws PlatformException {
+  private PlatformResponse send(PlatformRequest request) throws PlatformException {
     HttpUrl url = apiBase.resolve(request.path());
     if (url == null) {
       throw new PlatformException("Request path cannot be resolved: " + request.path());
@@ -169,13 +170,14 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
     if (!userAgentSet) {
       httpRequest.header("User-Agent", userAgent);
     }
-    httpRequest.header("Authorization", "Bearer " + accessToken);
     httpRequest.method(request.method(), requestBody(request));
+    httpRequest.tag(
+        BearerTokenAuth.TokenWait.class, new BearerTokenAuth.TokenWait(request.timeout()));
 
     OkHttpClient client =
         request.timeout() == null
-            ? httpClient
-            : httpClient.newBuilder().callTimeout(request.timeout()).build();
+            ? apiClient
+            : apiClient.newBuilder().callTimeout(request.timeout()).build();
     try (Response response = client.newCall(httpRequest.build()).execute()) {
       PlatformResponse.Builder result = PlatformResponse.builder().status(response.code());
       Headers headers = response.headers();
@@ -187,6 +189,8 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
         result.body(body.bytes());
       }
       return result.build();
+    } catch (BearerTokenAuth.TokenUnavailableException e) {
+      throw e.platformException();
     } catch (IOException e) {
       throw new PlatformException(
           "Request " + request.method() + " " + request.path() + " to the platform failed", e);
@@ -246,7 +250,9 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
     /**
      * An {@link OkHttpClient} to send with instead of the client's own. Its timeouts, proxy and TLS
      * configuration apply to token requests and API calls alike, and it is not shut down on {@link
-     * OkHttpPlatformClient#close()}.
+     * OkHttpPlatformClient#close()}. Its interceptors see both, with the credentials attached; its
+     * {@link okhttp3.Authenticator} is replaced on API calls by the one that renews the access
+     * token.
      */
     public Builder httpClient(OkHttpClient httpClient) {
       this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
