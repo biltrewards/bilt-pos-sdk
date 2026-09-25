@@ -238,7 +238,8 @@ class ShopperSessionTest {
             .currency("USD")
             .member(Member.idResolver().accountId("4823"))
             .onMemberChanged(member -> resolved.countDown());
-    ShopperSession session = new LocalShopperSession(builder, pending -> Member.id("mbr_4823"));
+    ShopperSession session =
+        new LocalShopperSession(builder, pending -> Member.id("mbr_4823")).start();
 
     assertTrue(resolved.await(5, TimeUnit.SECONDS));
     assertEquals(Member.id("mbr_4823"), session.member());

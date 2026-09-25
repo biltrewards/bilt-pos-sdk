@@ -11,6 +11,8 @@ package com.bilt.pos.session;
 
 import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.platform.BiltCredentials;
+import com.bilt.pos.platform.BiltEnvironment;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.display.DisplayRenderer;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
@@ -32,8 +34,11 @@ import com.bilt.pos.session.settlement.SettlementType;
 import com.bilt.pos.session.storedvalue.StoredValueBalance;
 import com.bilt.pos.session.storedvalue.StoredValueCard;
 import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
+import com.bilt.pos.widget.Widget;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
@@ -493,6 +498,9 @@ public interface TerminalShopperSession extends ShopperSession {
     final LinkedHashMap<String, String> attributes = new LinkedHashMap<>();
     Member member;
     Consumer<Member> onMemberChanged;
+    final List<Widget> widgets = new ArrayList<>();
+    BiltCredentials credentials;
+    BiltEnvironment environment = BiltEnvironment.PRODUCTION;
 
     private Builder() {}
 
@@ -644,6 +652,69 @@ public interface TerminalShopperSession extends ShopperSession {
      */
     public Builder onMemberChanged(Consumer<Member> onMemberChanged) {
       this.onMemberChanged = onMemberChanged;
+      return this;
+    }
+
+    // ─── Widgets ───
+
+    /**
+     * Adds one shopper-facing widget to the session; repeatable, each call adds one, in the order
+     * they are called. Widgets follow the session's basket, member and context and render on the
+     * surfaces they were configured with — a companion display beside the terminal, say. The
+     * session attaches them once the terminal has acknowledged the start and detaches them when it
+     * ends. A widget instance belongs to one session and cannot be registered twice. At runtime a
+     * widget is reached through {@link ShopperSession#widget(Class)}. With no widget the session
+     * behaves exactly as before; the terminal's own customer display is not a widget.
+     *
+     * <p>A session with widgets but no {@link #credentials(BiltCredentials) credentials} is allowed
+     * — a widget backed by a fake or a local source needs none — but a platform-backed widget
+     * cannot run that way: it fails when the session attaches it, with a clear {@link SessionError}
+     * through {@link #onBackgroundError(Consumer) onBackgroundError}, and the checkout continues
+     * without it.
+     */
+    public Builder widget(Widget widget) {
+      Objects.requireNonNull(widget, "widget");
+      for (Widget registered : widgets) {
+        if (registered == widget) {
+          throw new IllegalArgumentException("the widget is already registered on this builder");
+        }
+      }
+      widgets.add(widget);
+      return this;
+    }
+
+    /**
+     * Adds every widget of the collection, in iteration order — {@link #widget(Widget)} for callers
+     * that assemble the list elsewhere.
+     */
+    public Builder widgets(Collection<? extends Widget> widgets) {
+      Objects.requireNonNull(widgets, "widgets");
+      for (Widget widget : widgets) {
+        widget(widget);
+      }
+      return this;
+    }
+
+    // ─── Platform ───
+
+    /**
+     * The credentials the session's widgets use to reach the Bilt platform, exchanged for access
+     * tokens against the {@link #environment(BiltEnvironment) environment}. Optional: without them
+     * the session offers its widgets no platform client, which platform-backed widgets refuse at
+     * attach. Tokens never reach widgets or surfaces directly. Unrelated to the terminal client's
+     * own credentials.
+     */
+    public Builder credentials(BiltCredentials credentials) {
+      this.credentials = credentials;
+      return this;
+    }
+
+    /**
+     * The platform deployment the session's widgets talk to. Default {@link
+     * BiltEnvironment#PRODUCTION}.
+     */
+    public Builder environment(BiltEnvironment environment) {
+      this.environment = Objects.requireNonNull(environment, "environment");
       return this;
     }
 

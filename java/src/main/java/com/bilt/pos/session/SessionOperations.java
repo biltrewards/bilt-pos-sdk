@@ -263,6 +263,15 @@ final class SessionOperations {
             ? ((SessionException) failure).getError()
             : new SessionError(
                 SessionErrorCode.UNKNOWN, what + " failed unexpectedly", null, failure);
+    backgroundError(what, error, failure);
+  }
+
+  /** The {@link #backgroundError(String, RuntimeException)} for a failure already described. */
+  void backgroundError(String what, SessionError error) {
+    backgroundError(what, error, error.getCause());
+  }
+
+  private void backgroundError(String what, SessionError error, Throwable failure) {
     LOGGER.log(Level.WARNING, what + " failed: " + error, failure);
     if (onBackgroundError == null) {
       return;

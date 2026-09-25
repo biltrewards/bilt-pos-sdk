@@ -30,7 +30,6 @@ import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
 import com.bilt.pos.nexo.model.TransactionStatusRequest;
 import com.bilt.pos.nexo.model.TransactionStatusResponse;
 import com.bilt.pos.session.basket.Basket;
-import com.bilt.pos.session.basket.BasketChange;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.display.DisplayRenderer;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
@@ -116,7 +115,6 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   private final NexoExchange exchange;
   private final DisplayRouter router;
   private final BasketDisplay display;
-  private final AutoDisplayPush autoDisplayPush;
   private final DisplayRenderer displayRenderer;
   private final Consumer<Basket> onBasketUpdated;
   private final boolean autoDisplay;
@@ -180,7 +178,10 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         builder.onBackgroundError,
         builder.poiId,
         builder.phase,
-        builder.attributes);
+        builder.attributes,
+        builder.widgets,
+        builder.credentials,
+        builder.environment);
     this.client = builder.client;
     this.autoDisplay = builder.autoDisplay;
     this.displayRenderer =
@@ -197,6 +198,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
             this::resolveOnTerminal,
             this::ended,
             builder.onMemberChanged,
+            this::memberChanged,
             builder.member);
     this.inputManager = new InputManager(exchange);
     this.storedValueManager = new StoredValueManager(exchange, builder.currency);
@@ -204,7 +206,10 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     this.paymentOrchestrator =
         new PaymentOrchestrator(exchange, builder.currency, storedValueManager);
     this.display = new BasketDisplay(exchange, displayRenderer, builder.currency);
-    this.autoDisplayPush = new AutoDisplayPush(operations, display, this::basketDisplayIsCurrent);
+    if (autoDisplay) {
+      // first in line, so the customer display never waits behind a widget
+      observers.addFirst(new AutoDisplayPush(display, this::basketDisplayIsCurrent));
+    }
   }
 
   @Override
@@ -276,15 +281,6 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     basketConsumed = false;
     storedValueCard = null;
     context().phase(CheckoutPhase.SCANNING);
-  }
-
-  @Override
-  void basketChanged(BasketChange change) {
-    if (autoDisplay) {
-      // under the lock so concurrent mutations cannot enter the
-      // conflated push out of snapshot order
-      autoDisplayPush.push(change.current());
-    }
   }
 
   private boolean basketDisplayIsCurrent() {
@@ -1663,6 +1659,9 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
 
   private TerminalShopperSession started() {
     exchange.sendSessionSignal(SessionSignalCodec.start(getSessionId()));
+    // the terminal has acknowledged: widgets bind now, on this lane, and
+    // observers hear started before this result completes
+    announceStarted();
     // a pre-seeded member pending resolution is looked up only now that
     // the bracket exists; queued behind this start on the operation lane
     memberState.resolveSeed();
@@ -1985,6 +1984,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     } finally {
       lock.unlock();
     }
+    announceEnded();
     // no further operations may run; asynchronous submissions after
     // this fail into their handlers instead of queueing forever
     operations.shutdown();

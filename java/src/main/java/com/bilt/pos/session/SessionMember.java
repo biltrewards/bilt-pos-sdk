@@ -42,12 +42,14 @@ final class SessionMember {
   private final MemberResolver resolver;
   private final BooleanSupplier ended;
   private final Consumer<Member> onMemberChanged;
+  private final Consumer<Member> observers;
   private volatile Member member;
 
   /**
    * {@code seed} is the builder's pre-seeded member, or null; it is installed silently, as initial
    * state rather than a change. A pending seed is resolved once the owner calls {@link
-   * #resolveSeed()}.
+   * #resolveSeed()}. {@code observers} is the session's internal fan-out to its observers, told of
+   * every change before the register's {@code onMemberChanged} handler is dispatched.
    */
   SessionMember(
       ReentrantLock lock,
@@ -55,12 +57,14 @@ final class SessionMember {
       MemberResolver resolver,
       BooleanSupplier ended,
       Consumer<Member> onMemberChanged,
+      Consumer<Member> observers,
       Member seed) {
     this.lock = lock;
     this.operations = operations;
     this.resolver = Objects.requireNonNull(resolver, "resolver");
     this.ended = ended;
     this.onMemberChanged = onMemberChanged;
+    this.observers = Objects.requireNonNull(observers, "observers");
     this.member = seed;
   }
 
@@ -139,8 +143,12 @@ final class SessionMember {
     return !Objects.equals(previous, next);
   }
 
-  /** Delivers {@code onMemberChanged} on the callback executor, never throwing into the caller. */
+  /**
+   * Announces a change: to the session's observers first, then {@code onMemberChanged} on the
+   * callback executor, never throwing into the caller.
+   */
   void fireChanged(Member now) {
+    observers.accept(now);
     if (onMemberChanged == null) {
       return;
     }

@@ -9,9 +9,15 @@
  */
 package com.bilt.pos.session;
 
+import com.bilt.pos.platform.BiltCredentials;
+import com.bilt.pos.platform.BiltEnvironment;
 import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.Member;
+import com.bilt.pos.widget.Widget;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -129,6 +135,24 @@ public interface ShopperSession extends AutoCloseable {
    */
   Member member();
 
+  // ─── Widgets ───
+
+  /**
+   * The registered widget of the given type — the runtime handle for pausing, resuming or otherwise
+   * driving a widget configured with {@code widget(..)} on the builder, e.g. {@code
+   * session.widget(RetailMedia.class).pause()}. Matches by assignability, so a widget interface
+   * works as well as a class.
+   *
+   * <p>A missing widget is a programming error — the set of widgets is fixed on the builder, so
+   * asking for one that was never registered means the builder and this call disagree — and throws
+   * {@link IllegalArgumentException} rather than returning {@code null}. Two registered widgets of
+   * the type are ambiguous and throw too; pick one from {@link #widgets()} instead.
+   */
+  <W extends Widget> W widget(Class<W> type);
+
+  /** Every registered widget, in registration order; empty for a session without widgets. */
+  List<Widget> widgets();
+
   /**
    * Ends the session. After it succeeds no session operation is allowed and the basket is frozen;
    * create a new session for the next shopper. A terminal session also tells the terminal to
@@ -168,6 +192,9 @@ public interface ShopperSession extends AutoCloseable {
     final LinkedHashMap<String, String> attributes = new LinkedHashMap<>();
     Member member;
     Consumer<Member> onMemberChanged;
+    final List<Widget> widgets = new ArrayList<>();
+    BiltCredentials credentials;
+    BiltEnvironment environment = BiltEnvironment.PRODUCTION;
 
     private Builder() {}
 
@@ -264,6 +291,66 @@ public interface ShopperSession extends AutoCloseable {
       return this;
     }
 
+    // ─── Widgets ───
+
+    /**
+     * Adds one shopper-facing widget to the session; repeatable, each call adds one, in the order
+     * they are called. Widgets follow the session's basket, member and context and render on the
+     * surfaces they were configured with; the session attaches them when it starts and detaches
+     * them when it ends. A widget instance belongs to one session and cannot be registered twice.
+     * At runtime a widget is reached through {@link ShopperSession#widget(Class)}.
+     *
+     * <p>A session with widgets but no {@link #credentials(BiltCredentials) credentials} is allowed
+     * — a widget backed by a fake or a local source needs none — but a platform-backed widget
+     * cannot run that way: it fails when the session attaches it, with a clear {@link SessionError}
+     * through {@link #onBackgroundError(Consumer) onBackgroundError}, and the session continues
+     * without it.
+     */
+    public Builder widget(Widget widget) {
+      Objects.requireNonNull(widget, "widget");
+      for (Widget registered : widgets) {
+        if (registered == widget) {
+          throw new IllegalArgumentException("the widget is already registered on this builder");
+        }
+      }
+      widgets.add(widget);
+      return this;
+    }
+
+    /**
+     * Adds every widget of the collection, in iteration order — {@link #widget(Widget)} for callers
+     * that assemble the list elsewhere.
+     */
+    public Builder widgets(Collection<? extends Widget> widgets) {
+      Objects.requireNonNull(widgets, "widgets");
+      for (Widget widget : widgets) {
+        widget(widget);
+      }
+      return this;
+    }
+
+    // ─── Platform ───
+
+    /**
+     * The credentials the session's widgets use to reach the Bilt platform, exchanged for access
+     * tokens against the {@link #environment(BiltEnvironment) environment}. Optional: without them
+     * the session offers its widgets no platform client, which platform-backed widgets refuse at
+     * attach. Tokens never reach widgets or surfaces directly.
+     */
+    public Builder credentials(BiltCredentials credentials) {
+      this.credentials = credentials;
+      return this;
+    }
+
+    /**
+     * The platform deployment the session's widgets talk to. Default {@link
+     * BiltEnvironment#PRODUCTION}.
+     */
+    public Builder environment(BiltEnvironment environment) {
+      this.environment = Objects.requireNonNull(environment, "environment");
+      return this;
+    }
+
     /**
      * Validates the configuration and returns the session, ready to ring. There is no device to
      * acknowledge a local session, so unlike {@link TerminalShopperSession.Builder#start()} this
@@ -278,7 +365,7 @@ public interface ShopperSession extends AutoCloseable {
       if (currency == null || currency.isEmpty()) {
         throw new IllegalStateException("currency is required");
       }
-      return new LocalShopperSession(this);
+      return new LocalShopperSession(this).start();
     }
   }
 }
