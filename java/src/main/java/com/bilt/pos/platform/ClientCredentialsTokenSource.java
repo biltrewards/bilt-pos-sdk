@@ -136,16 +136,28 @@ final class ClientCredentialsTokenSource implements AutoCloseable {
     }
   }
 
+  /**
+   * Stops refreshing and releases every caller still waiting for a token with a {@link
+   * PlatformException}. The pending refresh may be discarded by the executor shutdown before it
+   * runs, so its future is failed here rather than left to the refresh task.
+   */
   @Override
   public void close() {
+    CompletableFuture<CachedToken> pending;
     synchronized (lock) {
       closed = true;
       current = null;
+      pending = inFlight;
+      inFlight = null;
       if (scheduledRefresh != null) {
         scheduledRefresh.cancel(false);
       }
     }
     refresher.shutdownNow();
+    if (pending != null) {
+      pending.completeExceptionally(
+          new PlatformException("Platform client closed while waiting for an access token"));
+    }
   }
 
   private CompletableFuture<CachedToken> startRefreshLocked() {
@@ -161,7 +173,9 @@ final class ClientCredentialsTokenSource implements AutoCloseable {
       token = fetchToken();
     } catch (PlatformAuthException | RuntimeException e) {
       synchronized (lock) {
-        inFlight = null;
+        if (inFlight == future) {
+          inFlight = null;
+        }
       }
       LOG.log(Level.WARNING, "Access token refresh failed: {0}", e.getMessage());
       future.completeExceptionally(
@@ -171,10 +185,11 @@ final class ClientCredentialsTokenSource implements AutoCloseable {
       return;
     }
     synchronized (lock) {
-      inFlight = null;
       if (closed) {
+        // close() has already failed this future; a late token must not reach its waiters.
         return;
       }
+      inFlight = null;
       current = token;
       scheduleRefreshLocked(token);
     }
@@ -303,8 +318,8 @@ final class ClientCredentialsTokenSource implements AutoCloseable {
       throw new PlatformException("Timed out after " + timeout + " waiting for an access token", e);
     } catch (ExecutionException e) {
       Throwable cause = e.getCause();
-      if (cause instanceof PlatformAuthException) {
-        throw (PlatformAuthException) cause;
+      if (cause instanceof PlatformException) {
+        throw (PlatformException) cause;
       }
       throw new PlatformAuthException("Access token refresh failed", cause);
     }

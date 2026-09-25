@@ -14,7 +14,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -71,6 +73,8 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
   private final ClientCredentialsTokenSource tokenSource;
   private final ExecutorService asyncExecutor;
   private final AtomicBoolean closed = new AtomicBoolean();
+  private final Set<CompletableFuture<PlatformResponse>> pendingAsync =
+      ConcurrentHashMap.newKeySet();
 
   private OkHttpPlatformClient(Builder builder) {
     this.apiBase = withTrailingSlash(HttpUrl.get(builder.environment.apiBaseUrl().toString()));
@@ -122,6 +126,8 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
   public CompletableFuture<PlatformResponse> executeAsync(PlatformRequest request) {
     Objects.requireNonNull(request, "request");
     CompletableFuture<PlatformResponse> future = new CompletableFuture<>();
+    pendingAsync.add(future);
+    future.whenComplete((response, failure) -> pendingAsync.remove(future));
     try {
       asyncExecutor.execute(
           () -> {
@@ -134,6 +140,10 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
     } catch (RejectedExecutionException e) {
       future.completeExceptionally(new IllegalStateException("platform client is closed", e));
     }
+    // close() fails every registered future; this catches one that ran before registration.
+    if (closed.get()) {
+      future.completeExceptionally(new IllegalStateException("platform client is closed"));
+    }
     return future;
   }
 
@@ -144,6 +154,9 @@ public final class OkHttpPlatformClient implements BiltPlatformClient {
     }
     tokenSource.close();
     asyncExecutor.shutdownNow();
+    for (CompletableFuture<PlatformResponse> future : pendingAsync) {
+      future.completeExceptionally(new IllegalStateException("platform client is closed"));
+    }
     if (ownsHttpClient) {
       httpClient.dispatcher().executorService().shutdown();
       httpClient.connectionPool().evictAll();

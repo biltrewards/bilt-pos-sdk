@@ -375,6 +375,41 @@ class OkHttpPlatformClientTest {
   }
 
   @Test
+  void closeReleasesCallersWaitingForAToken() throws Exception {
+    CountingDispatcher dispatcher = new CountingDispatcher();
+    dispatcher.tokenDelay = Duration.ofSeconds(2);
+    server.setDispatcher(dispatcher);
+    client = newClient(Duration.ofSeconds(60));
+
+    CompletableFuture<PlatformResponse> sync =
+        CompletableFuture.supplyAsync(
+            () -> {
+              try {
+                return client.execute(PlatformRequest.get("v1/sync").build());
+              } catch (PlatformException e) {
+                throw new RuntimeException(e);
+              }
+            });
+    CompletableFuture<PlatformResponse> async =
+        client.executeAsync(PlatformRequest.get("v1/async").build());
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+    while (dispatcher.tokenRequests.get() == 0 && System.nanoTime() < deadline) {
+      Thread.sleep(10);
+    }
+    assertEquals(1, dispatcher.tokenRequests.get());
+
+    client.close();
+
+    ExecutionException syncFailure =
+        assertThrows(ExecutionException.class, () -> sync.get(1, TimeUnit.SECONDS));
+    assertTrue(
+        syncFailure.getCause().getCause() instanceof PlatformException,
+        String.valueOf(syncFailure.getCause()));
+    assertThrows(ExecutionException.class, () -> async.get(1, TimeUnit.SECONDS));
+    assertEquals(0, dispatcher.apiRequests.get());
+  }
+
+  @Test
   void builderRequiresCredentialsAndEnvironment() {
     assertThrows(
         IllegalStateException.class,

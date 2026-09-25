@@ -47,7 +47,9 @@ public interface BiltPlatformClient extends AutoCloseable {
 
   /**
    * Releases background threads and, for connections the client created itself, the connection
-   * pool. Requests after {@code close()} fail with {@link IllegalStateException}. Closing twice is
+   * pool. Requests after {@code close()} fail with {@link IllegalStateException}. A request still
+   * waiting for an access token fails with {@link PlatformException}, and a pending {@link
+   * #executeAsync} future completes exceptionally; neither is left waiting. Closing twice is
    * harmless.
    */
   @Override

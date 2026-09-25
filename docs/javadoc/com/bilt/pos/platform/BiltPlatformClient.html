@@ -183,7 +183,8 @@ extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/ja
 <h3>close</h3>
 <div class="member-signature"><span class="return-type">void</span>&nbsp;<span class="element-name">close</span>()</div>
 <div class="block">Releases background threads and, for connections the client created itself, the connection
- pool. Requests after <code>close()</code> fail with <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link"><code>IllegalStateException</code></a>. Closing twice is
+ pool. Requests after <code>close()</code> fail with <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link"><code>IllegalStateException</code></a>. A request still
+ waiting for an access token fails with <a href="PlatformException.html" title="class in com.bilt.pos.platform"><code>PlatformException</code></a>, and a pending <a href="#executeAsync(com.bilt.pos.platform.PlatformRequest)"><code>executeAsync(com.bilt.pos.platform.PlatformRequest)</code></a> future completes exceptionally; neither is left waiting. Closing twice is
  harmless.</div>
 <dl class="notes">
 <dt>Specified by:</dt>
