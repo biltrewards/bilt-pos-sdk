@@ -94,7 +94,7 @@ loadScripts(document, 'script');</script>
 <div class="type-signature"><span class="modifiers">public interface </span><span class="element-name type-name-label">TerminalShopperSession</span><span class="extends-implements">
 extends <a href="ShopperSession.html" title="interface in com.bilt.pos.session">ShopperSession</a></span></div>
 <div class="block">A shopper session with a Bilt terminal attached: a <a href="ShopperSession.html" title="interface in com.bilt.pos.session"><code>ShopperSession</code></a> whose loyalty, prompts,
- customer display, and settlement run on the terminal over <a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client"><code>BiltNexoTerminalClient</code></a>.
+ customer display, and settlement run on the terminal over a <a href="../nexo/client/TerminalClient.html" title="interface in com.bilt.pos.nexo.client"><code>TerminalClient</code></a>.
 
  <p>On top of the basket and member every shopper session has, this one drives the terminal (or an
  external customer display) and orchestrates settlement — return allocations, rebate redemption,
@@ -191,7 +191,7 @@ extends <a href="ShopperSession.html" title="interface in com.bilt.pos.session">
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
 <div class="block">Irrevocably abandons this session and its in-memory recovery progress.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a></code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="../nexo/client/TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3"><code><a href="#getClient()" class="member-name-link">getClient</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab3">
 <div class="block">The underlying terminal client, for raw Nexo access.</div>
@@ -947,7 +947,7 @@ extends <a href="ShopperSession.html" title="interface in com.bilt.pos.session">
 <li>
 <section class="detail" id="getClient()">
 <h3>getClient</h3>
-<div class="member-signature"><span class="return-type"><a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a></span>&nbsp;<span class="element-name">getClient</span>()</div>
+<div class="member-signature"><span class="return-type"><a href="../nexo/client/TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a></span>&nbsp;<span class="element-name">getClient</span>()</div>
 <div class="block">The underlying terminal client, for raw Nexo access.</div>
 </section>
 </li>

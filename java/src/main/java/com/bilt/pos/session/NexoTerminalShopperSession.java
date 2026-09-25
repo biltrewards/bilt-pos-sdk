@@ -12,7 +12,7 @@ package com.bilt.pos.session;
 import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.display.DisplayPayloadHelper;
 import com.bilt.pos.nexo.client.BiltNexoClientException;
-import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.client.TerminalClient;
 import com.bilt.pos.nexo.model.DocumentQualifierEnum;
 import com.bilt.pos.nexo.model.ErrorConditionType;
 import com.bilt.pos.nexo.model.InputUpdate;
@@ -93,7 +93,7 @@ import java.util.logging.Logger;
 /**
  * The Nexo-backed {@link TerminalShopperSession}: the terminal-facing half of a shopper session on
  * top of the basket and member state {@link AbstractShopperSession} provides. Every operation maps
- * to Sale to POI 3.0 messages exchanged through the configured {@link BiltNexoTerminalClient}.
+ * to Sale to POI 3.0 messages exchanged through the configured {@link TerminalClient}.
  */
 final class NexoTerminalShopperSession extends AbstractShopperSession
     implements TerminalShopperSession {
@@ -110,7 +110,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     ENDED
   }
 
-  private final BiltNexoTerminalClient client;
+  private final TerminalClient client;
   private final NexoMessageFactory factory;
   private final NexoExchange exchange;
   private final DisplayRouter router;
@@ -1814,7 +1814,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   // ─── Escape hatch ───
 
   @Override
-  public BiltNexoTerminalClient getClient() {
+  public TerminalClient getClient() {
     return client;
   }
 
