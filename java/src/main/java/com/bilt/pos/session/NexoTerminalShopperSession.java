@@ -308,7 +308,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   private TransactionIdentificationType currentSaleTransaction() {
     lock.lock();
     try {
-      return basketEngine.getSaleTransaction();
+      return basketEngine().getSaleTransaction();
     } finally {
       lock.unlock();
     }
