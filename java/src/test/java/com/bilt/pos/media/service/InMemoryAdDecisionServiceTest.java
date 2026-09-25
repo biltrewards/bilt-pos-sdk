@@ -331,6 +331,26 @@ class InMemoryAdDecisionServiceTest {
   }
 
   @Test
+  void anOfferAnswersOnlyTapsOnItsOwnCreative() {
+    Offer forFirst = offer("crt_1");
+    InMemoryAdDecisionService service =
+        new InMemoryAdDecisionService()
+            .onPlacement(
+                BANNER, creative("crt_1").cta(APPLY).build(), creative("crt_2").cta(APPLY).build())
+            .offerFor("act_apply", forFirst);
+    SessionHandle handle = service.registerSession(snapshot("browsing"));
+    service.decide(handle, BANNER, FULL, TIMEOUT);
+    service.decide(handle, BANNER, FULL, TIMEOUT);
+
+    ActionOutcome crossed = service.validateAction(handle, APPLY, "crt_2");
+    assertFalse(crossed.isAccepted(), "crt_2 reuses the token but has no offer of its own");
+
+    Offer forSecond = offer("crt_2").toBuilder().id("off-2").build();
+    service.offerFor("act_apply", forSecond);
+    assertEquals(Optional.of(forSecond), service.validateAction(handle, APPLY, "crt_2").getOffer());
+  }
+
+  @Test
   void applyOfferWithoutARegisteredOfferIsRejected() {
     Rendering rendering = creative("crt_1").cta(APPLY).build();
     InMemoryAdDecisionService service =

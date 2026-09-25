@@ -55,11 +55,12 @@ import java.util.logging.Logger;
  *
  * <p>Tokens are the ones on the scripted renderings; the fake remembers which tokens it served to
  * which session for which creative and action, and {@link #validateAction} rejects anything else.
- * An {@code APPLY_OFFER} token validates only if {@link #offerFor} registered an offer for it. A
- * token is also rejected once its rendering's TTL has run out since it was served, and an offer
- * once its expiry has passed, both judged against {@link #clock}. A token is single-use: once
- * accepted it is rejected as already used until a later {@code decide} serves it again, because the
- * scripted renderings reuse their tokens where the platform would issue fresh ones.
+ * An {@code APPLY_OFFER} token validates only if {@link #offerFor} registered an offer for it on
+ * that creative. A token is also rejected once its rendering's TTL has run out since it was served,
+ * and an offer once its expiry has passed, both judged against {@link #clock}. A token is
+ * single-use: once accepted it is rejected as already used until a later {@code decide} serves it
+ * again, because the scripted renderings reuse their tokens where the platform would issue fresh
+ * ones.
  *
  * <p>Everything the fake sees is recorded: {@link #snapshots} (registration first, then every
  * update), {@link #served}, {@link #reports}. Events reach subscribers only when a test injects
@@ -75,7 +76,7 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
   private final Object lock = new Object();
   private final Map<Placement, Function<AdSessionSnapshot, Optional<Rendering>>> scripts =
       new HashMap<>();
-  private final Map<String, Offer> offersByToken = new HashMap<>();
+  private final Map<String, Map<String, Offer>> offersByToken = new HashMap<>();
   private final Map<SessionHandle, Session> sessions = new LinkedHashMap<>();
   private final List<AdInteraction> allReports = new ArrayList<>();
   private final List<RuntimeException> swallowedFailures = new ArrayList<>();
@@ -136,12 +137,14 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
 
   /**
    * Registers the offer an {@code APPLY_OFFER} tap carrying {@code token} will be answered with.
+   * The offer applies only to taps on its own {@link Offer#getCreativeId() creative}; a token
+   * reused by several creatives can carry a separate offer for each.
    */
   public InMemoryAdDecisionService offerFor(String token, Offer offer) {
     Objects.requireNonNull(token, "token");
     Objects.requireNonNull(offer, "offer");
     synchronized (lock) {
-      offersByToken.put(token, offer);
+      offersByToken.computeIfAbsent(token, t -> new HashMap<>()).put(offer.getCreativeId(), offer);
     }
     return this;
   }
@@ -358,9 +361,9 @@ public final class InMemoryAdDecisionService implements AdDecisionService {
       }
       Offer offer = null;
       if (cta.getAction() == Action.APPLY_OFFER) {
-        offer = offersByToken.get(cta.getToken());
+        offer = offersByToken.getOrDefault(cta.getToken(), Collections.emptyMap()).get(creativeId);
         if (offer == null) {
-          return ActionOutcome.rejected("no offer registered for token");
+          return ActionOutcome.rejected("no offer registered for token on this creative");
         }
         if (offer.getExpiry() != null && !now.isBefore(offer.getExpiry())) {
           return ActionOutcome.rejected("offer expired");

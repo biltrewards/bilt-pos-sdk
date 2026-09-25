@@ -114,11 +114,12 @@ implements <a href="AdDecisionService.html" title="interface in com.bilt.pos.med
 
  <p>Tokens are the ones on the scripted renderings; the fake remembers which tokens it served to
  which session for which creative and action, and <a href="#validateAction(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.widget.Cta,java.lang.String)"><code>validateAction(com.bilt.pos.media.service.SessionHandle, com.bilt.pos.widget.Cta, java.lang.String)</code></a> rejects anything else.
- An <code>APPLY_OFFER</code> token validates only if <a href="#offerFor(java.lang.String,com.bilt.pos.media.Offer)"><code>offerFor(java.lang.String, com.bilt.pos.media.Offer)</code></a> registered an offer for it. A
- token is also rejected once its rendering's TTL has run out since it was served, and an offer
- once its expiry has passed, both judged against <code>clock</code>. A token is single-use: once
- accepted it is rejected as already used until a later <code>decide</code> serves it again, because the
- scripted renderings reuse their tokens where the platform would issue fresh ones.
+ An <code>APPLY_OFFER</code> token validates only if <a href="#offerFor(java.lang.String,com.bilt.pos.media.Offer)"><code>offerFor(java.lang.String, com.bilt.pos.media.Offer)</code></a> registered an offer for it on
+ that creative. A token is also rejected once its rendering's TTL has run out since it was served,
+ and an offer once its expiry has passed, both judged against <code>clock</code>. A token is
+ single-use: once accepted it is rejected as already used until a later <code>decide</code> serves it
+ again, because the scripted renderings reuse their tokens where the platform would issue fresh
+ ones.
 
  <p>Everything the fake sees is recorded: <a href="#snapshots(com.bilt.pos.media.service.SessionHandle)"><code>snapshots(com.bilt.pos.media.service.SessionHandle)</code></a> (registration first, then every
  update), <a href="#served(com.bilt.pos.media.service.SessionHandle)"><code>served(com.bilt.pos.media.service.SessionHandle)</code></a>, <a href="#reports(com.bilt.pos.media.service.SessionHandle)"><code>reports(com.bilt.pos.media.service.SessionHandle)</code></a>. Events reach subscribers only when a test injects
@@ -325,7 +326,9 @@ implements <a href="AdDecisionService.html" title="interface in com.bilt.pos.med
 <h3>offerFor</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></span>&nbsp;<span class="element-name">offerFor</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;token,
  <a href="../Offer.html" title="class in com.bilt.pos.media">Offer</a>&nbsp;offer)</span></div>
-<div class="block">Registers the offer an <code>APPLY_OFFER</code> tap carrying <code>token</code> will be answered with.</div>
+<div class="block">Registers the offer an <code>APPLY_OFFER</code> tap carrying <code>token</code> will be answered with.
+ The offer applies only to taps on its own <a href="../Offer.html#getCreativeId()"><code>creative</code></a>; a token
+ reused by several creatives can carry a separate offer for each.</div>
 </section>
 </li>
 <li>
