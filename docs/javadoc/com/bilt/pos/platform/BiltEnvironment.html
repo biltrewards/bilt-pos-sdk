@@ -100,10 +100,8 @@ loadScripts(document, 'script');</script>
  environments; <a href="#custom(java.net.URI,java.net.URI)"><code>custom(URI, URI)</code></a> points a client at any other pair of endpoints, which is
  how tests and the emulator target a local mock server.
 
- <p>The hostnames on the shipped constants are <strong>placeholders</strong> pending the platform
- integration spec. They are syntactically valid so that clients can be built and unit-tested
- against them, but they do not resolve. They will be replaced before the first cloud-backed
- feature ships, without any change to the API of this class.</div>
+ <p>Tokens come from the <code>ENTERPRISE-POS</code> Keycloak realm and API calls go to the POS API
+ gateway under <code>/biltpos</code>, the same gateway that serves terminal configuration.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -143,7 +141,7 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/net/URI.html" title="class or interface in java.net" class="external-link">URI</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#apiBaseUrl()" class="member-name-link">apiBaseUrl</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">The edge gateway base URL that <a href="PlatformRequest.html#path()"><code>PlatformRequest.path()</code></a> is resolved against.</div>
+<div class="block">The POS API gateway base URL that <a href="PlatformRequest.html#path()"><code>PlatformRequest.path()</code></a> is resolved against.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="BiltEnvironment.html" title="class in com.bilt.pos.platform">BiltEnvironment</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#custom(java.net.URI,java.net.URI)" class="member-name-link">custom</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/net/URI.html" title="class or interface in java.net" class="external-link">URI</a>&nbsp;tokenEndpoint,
@@ -191,14 +189,14 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="PRODUCTION">
 <h3>PRODUCTION</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="BiltEnvironment.html" title="class in com.bilt.pos.platform">BiltEnvironment</a></span>&nbsp;<span class="element-name">PRODUCTION</span></div>
-<div class="block">The production platform. Endpoints are placeholders pending the platform spec.</div>
+<div class="block">The production platform.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="STAGING">
 <h3>STAGING</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="BiltEnvironment.html" title="class in com.bilt.pos.platform">BiltEnvironment</a></span>&nbsp;<span class="element-name">STAGING</span></div>
-<div class="block">The staging platform. Endpoints are placeholders pending the platform spec.</div>
+<div class="block">The staging platform.</div>
 </section>
 </li>
 </ul>
@@ -236,7 +234,7 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="apiBaseUrl()">
 <h3>apiBaseUrl</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/net/URI.html" title="class or interface in java.net" class="external-link">URI</a></span>&nbsp;<span class="element-name">apiBaseUrl</span>()</div>
-<div class="block">The edge gateway base URL that <a href="PlatformRequest.html#path()"><code>PlatformRequest.path()</code></a> is resolved against.</div>
+<div class="block">The POS API gateway base URL that <a href="PlatformRequest.html#path()"><code>PlatformRequest.path()</code></a> is resolved against.</div>
 </section>
 </li>
 <li>

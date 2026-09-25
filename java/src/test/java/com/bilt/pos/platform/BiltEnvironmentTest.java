@@ -8,20 +8,21 @@ import org.junit.jupiter.api.Test;
 class BiltEnvironmentTest {
 
   @Test
-  void shippedEnvironmentsHavePlaceholderEndpoints() {
+  void shippedEnvironmentsTargetPosEndpoints() {
     assertEquals("PRODUCTION", BiltEnvironment.PRODUCTION.name());
     assertEquals(
-        URI.create("https://auth.prod.bilt.example/oauth2/token"),
+        URI.create("https://www.bilt.com/realms/ENTERPRISE-POS/protocol/openid-connect/token"),
         BiltEnvironment.PRODUCTION.tokenEndpoint());
     assertEquals(
-        URI.create("https://api.prod.bilt.example"), BiltEnvironment.PRODUCTION.apiBaseUrl());
+        URI.create("https://api.bilt.com/biltpos"), BiltEnvironment.PRODUCTION.apiBaseUrl());
 
     assertEquals("STAGING", BiltEnvironment.STAGING.name());
     assertEquals(
-        URI.create("https://auth.staging.bilt.example/oauth2/token"),
+        URI.create(
+            "https://staging.biltrewards.com/realms/ENTERPRISE-POS/protocol/openid-connect/token"),
         BiltEnvironment.STAGING.tokenEndpoint());
     assertEquals(
-        URI.create("https://api.staging.bilt.example"), BiltEnvironment.STAGING.apiBaseUrl());
+        URI.create("https://api.staging.bilt.dev/biltpos"), BiltEnvironment.STAGING.apiBaseUrl());
     assertNotEquals(BiltEnvironment.PRODUCTION, BiltEnvironment.STAGING);
   }
 

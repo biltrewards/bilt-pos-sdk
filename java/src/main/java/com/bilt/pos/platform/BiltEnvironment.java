@@ -22,26 +22,25 @@ import java.util.Objects;
  * environments; {@link #custom(URI, URI)} points a client at any other pair of endpoints, which is
  * how tests and the emulator target a local mock server.
  *
- * <p>The hostnames on the shipped constants are <strong>placeholders</strong> pending the platform
- * integration spec. They are syntactically valid so that clients can be built and unit-tested
- * against them, but they do not resolve. They will be replaced before the first cloud-backed
- * feature ships, without any change to the API of this class.
+ * <p>Tokens come from the {@code ENTERPRISE-POS} Keycloak realm and API calls go to the POS API
+ * gateway under {@code /biltpos}, the same gateway that serves terminal configuration.
  */
 public final class BiltEnvironment {
 
-  /** The production platform. Endpoints are placeholders pending the platform spec. */
+  /** The production platform. */
   public static final BiltEnvironment PRODUCTION =
       new BiltEnvironment(
           "PRODUCTION",
-          URI.create("https://auth.prod.bilt.example/oauth2/token"),
-          URI.create("https://api.prod.bilt.example"));
+          URI.create("https://www.bilt.com/realms/ENTERPRISE-POS/protocol/openid-connect/token"),
+          URI.create("https://api.bilt.com/biltpos"));
 
-  /** The staging platform. Endpoints are placeholders pending the platform spec. */
+  /** The staging platform. */
   public static final BiltEnvironment STAGING =
       new BiltEnvironment(
           "STAGING",
-          URI.create("https://auth.staging.bilt.example/oauth2/token"),
-          URI.create("https://api.staging.bilt.example"));
+          URI.create(
+              "https://staging.biltrewards.com/realms/ENTERPRISE-POS/protocol/openid-connect/token"),
+          URI.create("https://api.staging.bilt.dev/biltpos"));
 
   private final String name;
   private final URI tokenEndpoint;
@@ -86,7 +85,7 @@ public final class BiltEnvironment {
     return tokenEndpoint;
   }
 
-  /** The edge gateway base URL that {@link PlatformRequest#path()} is resolved against. */
+  /** The POS API gateway base URL that {@link PlatformRequest#path()} is resolved against. */
   public URI apiBaseUrl() {
     return apiBaseUrl;
   }
