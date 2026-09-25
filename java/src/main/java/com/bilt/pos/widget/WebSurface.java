@@ -9,6 +9,7 @@
  */
 package com.bilt.pos.widget;
 
+import com.bilt.pos.media.SurfaceKind;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.ArrayDeque;
@@ -226,6 +227,12 @@ public abstract class WebSurface implements Surface {
     if (failure != null) {
       throw (RuntimeException) failure;
     }
+  }
+
+  /** A web surface draws through a browser control, so it is {@link SurfaceKind#WEB}. */
+  @Override
+  public SurfaceKind kind() {
+    return SurfaceKind.WEB;
   }
 
   /**
