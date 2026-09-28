@@ -2,6 +2,8 @@
   items:
     - name: Integration Guide
       url: /integration.html
+    - name: ShopperSession
+      url: /shopper-session-integration.html
     - name: TerminalShopperSession
       url: /checkout-session-integration.html
 

@@ -11,7 +11,7 @@ Java and Kotlin libraries for the nexo POS protocol.
 
 ## Usage
 
-For most integrations, start with the high-level [`TerminalShopperSession` API](docs/checkout-session-integration.md) — it manages the basket, terminal display, loyalty, and the full payment sequence over the raw client shown below:
+For most integrations, start with the high-level [`TerminalShopperSession` API](docs/checkout-session-integration.md) — it manages the basket, terminal display, loyalty, and the full payment sequence over the raw client shown below: For a lane without a Bilt terminal, or to run Bilt widgets such as retail media alongside a session, see the [`ShopperSession` guide](docs/shopper-session-integration.md).
 
 ```java
 try (TerminalShopperSession session = TerminalShopperSession.builder()
