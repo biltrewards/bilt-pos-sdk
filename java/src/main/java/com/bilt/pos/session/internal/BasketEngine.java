@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -374,7 +375,8 @@ public final class BasketEngine implements BasketMutation {
   }
 
   private void replaceWith(List<BasketItem> items, BigDecimal override) {
-    Basket previous = snapshot();
+    Map<String, String> previousIds = new HashMap<>();
+    lines.forEach((key, line) -> previousIds.put(key, line.itemId));
     mutateAtomically(
         ignored -> {
           lines.clear();
@@ -394,8 +396,7 @@ public final class BasketEngine implements BasketMutation {
             }
             // keep the id of the line this item stands for, so register
             // references into the basket survive the replacement
-            BasketLineItem counterpart = previous.getCounterpart(item);
-            addItem(item, counterpart == null ? null : counterpart.getItemId());
+            addItem(item, previousIds.get(key(item)));
           }
           setTaxTotal(override);
         });

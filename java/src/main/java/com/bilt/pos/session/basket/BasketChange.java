@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -128,14 +129,10 @@ public final class BasketChange {
     Objects.requireNonNull(previous, "previous");
     Objects.requireNonNull(current, "current");
     Objects.requireNonNull(source, "source");
-    // validate both sides up front, so an ambiguous line is reported
+    // indexing validates both sides up front, so an ambiguous line is reported
     // whether or not its SKU also occurs on the other side
-    for (BasketLineItem line : previous.getItems()) {
-      previous.getCounterpart(line);
-    }
-    for (BasketLineItem line : current.getItems()) {
-      current.getCounterpart(line);
-    }
+    Map<String, BasketLineItem> previousIndex = previous.counterpartIndex();
+    current.counterpartIndex();
     boolean sameCart = Objects.equals(previous.getCartId(), current.getCartId());
 
     List<BasketLineItem> added = new ArrayList<>();
@@ -147,7 +144,7 @@ public final class BasketChange {
     List<LineChange> detailsChanged = new ArrayList<>();
     Set<String> pairedPreviousIds = new HashSet<>();
     for (BasketLineItem after : current.getItems()) {
-      BasketLineItem before = sameCart ? previous.getCounterpart(after) : null;
+      BasketLineItem before = sameCart ? previousIndex.get(Basket.counterpartKey(after)) : null;
       if (before == null) {
         added.add(after);
         continue;

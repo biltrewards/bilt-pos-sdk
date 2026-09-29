@@ -17,7 +17,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -233,6 +235,32 @@ public final class Basket {
   public BasketLineItem getCounterpart(BasketItem item) {
     Objects.requireNonNull(item, "item");
     return getCounterpart(item.getReference(), item.getSku(), item.getType());
+  }
+
+  /**
+   * Every line under the key {@link #getCounterpart} matches it by, for diffing a whole basket in
+   * one pass instead of a scan per line.
+   *
+   * @throws IllegalArgumentException if two lines share a key
+   */
+  Map<String, BasketLineItem> counterpartIndex() {
+    Map<String, BasketLineItem> index = new HashMap<>();
+    for (BasketLineItem item : items) {
+      String reference = item.getReference();
+      if (index.put(counterpartKey(reference, item.getSku(), item.getType()), item) != null) {
+        throw reference != null ? ambiguousReference(reference) : ambiguousSku(item.getSku());
+      }
+    }
+    return index;
+  }
+
+  /** The index key {@link #getCounterpart} would find {@code line} under. */
+  static String counterpartKey(BasketLineItem line) {
+    return counterpartKey(line.getReference(), line.getSku(), line.getType());
+  }
+
+  private static String counterpartKey(String reference, String sku, BasketItemType type) {
+    return reference != null ? "reference\0" + reference : "sku\0" + sku + "\0" + type;
   }
 
   private BasketLineItem getCounterpart(String reference, String sku, BasketItemType type) {
