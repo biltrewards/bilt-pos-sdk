@@ -500,5 +500,5 @@ ShopperSession session = ShopperSession.builder()
 ## Next steps
 
 - [TerminalShopperSession guide](./checkout-session-integration.md) for settlement, refunds, voids, stored value and the customer display.
-- [API reference](./api-reference.html) for every type in this guide.
+- [SDK Javadoc](./javadoc/index.html) for every type in this guide.
 - The register emulator will carry the reference retail media integration once the native renderer lands (RET-6777).
