@@ -670,9 +670,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     BigDecimal returnTotal;
     BigDecimal refundAmount;
     boolean netSettlement;
-    // A failed or aborted settlement hands the checkout back to the
-    // phase it was in when settle() began, whatever the POS had set.
-    CheckoutPhase resumePhase = context().phase();
+    CheckoutPhase resumePhase = null;
     boolean tendering = false;
     boolean settled = false;
     lock.lock();
@@ -709,6 +707,10 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         throw invalidState("cashback requires a card charge in the settlement");
       }
       phase = SessionPhase.SETTLING;
+      // A failed or aborted settlement hands the checkout back to the
+      // phase it was in when this settlement was accepted, read under the
+      // same lock so a concurrent clear() cannot slip in between.
+      resumePhase = context().phase();
       context().phase(CheckoutPhase.TENDERING);
       tendering = true;
       // the abort flag is scoped to a single settlement run: a stale
