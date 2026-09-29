@@ -122,9 +122,9 @@ loadScripts(document, 'script');</script>
 <div class="block">Where asynchronously executed operations deliver their handlers — e.g.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#client(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">client</a><wbr>(<a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a>&nbsp;client)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#client(com.bilt.pos.nexo.client.TerminalClient)" class="member-name-link">client</a><wbr>(<a href="../nexo/client/TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a>&nbsp;client)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">The terminal client.</div>
+<div class="block">The transport to the terminal, typically a <a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client"><code>BiltNexoTerminalClient</code></a>.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#currency(java.lang.String)" class="member-name-link">currency</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;currency)</code></div>
@@ -137,7 +137,7 @@ loadScripts(document, 'script');</script>
 <div class="block">Custom rendering of basket snapshots for the customer display.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#externalDisplayClient(com.bilt.pos.nexo.client.BiltNexoTerminalClient)" class="member-name-link">externalDisplayClient</a><wbr>(<a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a>&nbsp;externalDisplayClient)</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#externalDisplayClient(com.bilt.pos.nexo.client.TerminalClient)" class="member-name-link">externalDisplayClient</a><wbr>(<a href="../nexo/client/TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a>&nbsp;externalDisplayClient)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">A second client for an external customer display device.</div>
 </div>
@@ -195,10 +195,10 @@ loadScripts(document, 'script');</script>
 <h2>Method Details</h2>
 <ul class="member-list">
 <li>
-<section class="detail" id="client(com.bilt.pos.nexo.client.BiltNexoTerminalClient)">
+<section class="detail" id="client(com.bilt.pos.nexo.client.TerminalClient)">
 <h3>client</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">client</span><wbr><span class="parameters">(<a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a>&nbsp;client)</span></div>
-<div class="block">The terminal client. Required.</div>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">client</span><wbr><span class="parameters">(<a href="../nexo/client/TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a>&nbsp;client)</span></div>
+<div class="block">The transport to the terminal, typically a <a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client"><code>BiltNexoTerminalClient</code></a>. Required.</div>
 </section>
 </li>
 <li>
@@ -239,9 +239,9 @@ loadScripts(document, 'script');</script>
 </section>
 </li>
 <li>
-<section class="detail" id="externalDisplayClient(com.bilt.pos.nexo.client.BiltNexoTerminalClient)">
+<section class="detail" id="externalDisplayClient(com.bilt.pos.nexo.client.TerminalClient)">
 <h3>externalDisplayClient</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">externalDisplayClient</span><wbr><span class="parameters">(<a href="../nexo/client/BiltNexoTerminalClient.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient</a>&nbsp;externalDisplayClient)</span></div>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></span>&nbsp;<span class="element-name">externalDisplayClient</span><wbr><span class="parameters">(<a href="../nexo/client/TerminalClient.html" title="interface in com.bilt.pos.nexo.client">TerminalClient</a>&nbsp;externalDisplayClient)</span></div>
 <div class="block">A second client for an external customer display device. When set, <code>Display</code> and <code>
  Input</code> messages are routed to it, while payment, card, and PIN operations stay on the
  terminal.</div>

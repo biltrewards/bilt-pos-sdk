@@ -12,7 +12,7 @@
 package com.bilt.pos.session.internal;
 
 import com.bilt.pos.nexo.client.BiltNexoClientException;
-import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.client.TerminalClient;
 import com.bilt.pos.nexo.model.AbortRequest;
 import com.bilt.pos.nexo.model.AdminRequest;
 import com.bilt.pos.nexo.model.AdminResponse;
@@ -54,9 +54,9 @@ public final class NexoExchange {
   public static final class InFlight {
     private final MessageCategoryType category;
     private final String serviceId;
-    private final BiltNexoTerminalClient client;
+    private final TerminalClient client;
 
-    InFlight(MessageCategoryType category, String serviceId, BiltNexoTerminalClient client) {
+    InFlight(MessageCategoryType category, String serviceId, TerminalClient client) {
       this.category = category;
       this.serviceId = serviceId;
       this.client = client;
@@ -70,7 +70,7 @@ public final class NexoExchange {
       return serviceId;
     }
 
-    public BiltNexoTerminalClient getClient() {
+    public TerminalClient getClient() {
       return client;
     }
   }
@@ -162,7 +162,7 @@ public final class NexoExchange {
   /** Like {@link #send} with an optional per-request read timeout override. */
   public SaleToPOIResponse send(
       MessageCategoryType category, SaleToPOIRequest request, java.time.Duration timeout) {
-    BiltNexoTerminalClient client = router.route(category);
+    TerminalClient client = router.route(category);
     String serviceId =
         request.getMessageHeader() != null ? request.getMessageHeader().getServiceID() : null;
     inFlight = new InFlight(category, serviceId, client);

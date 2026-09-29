@@ -4,12 +4,14 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.bilt.pos.display.DisplayPayloadHelper;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.session.basket.BasketItem;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -391,5 +393,39 @@ class TerminalShopperSessionLifecycleTest {
     server.enqueue(new MockResponse().setBody(ADMIN_FAILED));
 
     assertDoesNotThrow(session::close);
+  }
+
+  // ─── Transport ───
+
+  @Test
+  void bracketRunsOverAnyTerminalClient() throws Exception {
+    // the session reaches the terminal only through the TerminalClient seam:
+    // an in-memory transport carries the whole bracket with no wire at all
+    ScriptedTerminalClient transport =
+        new ScriptedTerminalClient()
+            .reply(MessageCategoryType.ADMIN, TerminalShopperSessionTest.ADMIN_OK);
+
+    TerminalShopperSession session =
+        TerminalShopperSession.builder()
+            .client(transport)
+            .saleId("POS-LANE-3")
+            .poiId("VictaLane-275839164")
+            .currency("USD")
+            .autoDisplay(false)
+            .start()
+            .get();
+    session.end().executeSync();
+
+    assertSame(transport, session.getClient());
+    assertEquals(0, server.getRequestCount(), "nothing may reach the mock terminal");
+    List<SaleToPOIRequest> sent = transport.requests();
+    assertEquals(2, sent.size());
+    assertEquals(
+        "BiltSession,Start,v1," + session.getSessionId(),
+        sent.get(0).getAdminRequest().getServiceIdentification());
+    assertEquals("VictaLane-275839164", sent.get(0).getMessageHeader().getPoiid());
+    assertEquals(
+        "BiltSession,End,v1," + session.getSessionId(),
+        sent.get(1).getAdminRequest().getServiceIdentification());
   }
 }
