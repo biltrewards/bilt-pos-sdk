@@ -175,7 +175,10 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         builder.currency,
         builder.storeLocation,
         builder.callbackExecutor,
-        builder.onBackgroundError);
+        builder.onBackgroundError,
+        builder.poiId,
+        builder.phase,
+        builder.attributes);
     this.client = builder.client;
     this.autoDisplay = builder.autoDisplay;
     this.displayRenderer =
@@ -249,11 +252,15 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     }
   }
 
-  /** A cleared basket also drops the stored-value tender selected for the previous one. */
+  /**
+   * A cleared basket also drops the stored-value tender selected for the previous one and returns
+   * the checkout to {@link CheckoutPhase#SCANNING} for the next transaction.
+   */
   @Override
   void basketCleared() {
     basketConsumed = false;
     storedValueCard = null;
+    context().phase(CheckoutPhase.SCANNING);
   }
 
   @Override
@@ -501,7 +508,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     }
   }
 
-  private boolean closingOrEnded() {
+  @Override
+  boolean closingOrEnded() {
     return phase == SessionPhase.ENDING || phase == SessionPhase.ENDED;
   }
 
@@ -663,6 +671,9 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     BigDecimal returnTotal;
     BigDecimal refundAmount;
     boolean netSettlement;
+    CheckoutPhase resumePhase = null;
+    boolean tendering = false;
+    boolean settled = false;
     lock.lock();
     try {
       requireOpen("settle");
@@ -697,6 +708,12 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         throw invalidState("cashback requires a card charge in the settlement");
       }
       phase = SessionPhase.SETTLING;
+      // A failed or aborted settlement hands the checkout back to the
+      // phase it was in when this settlement was accepted, read under the
+      // same lock so a concurrent clear() cannot slip in between.
+      resumePhase = context().phase();
+      context().phase(CheckoutPhase.TENDERING);
+      tendering = true;
       // the abort flag is scoped to a single settlement run: a stale
       // abort left over from an earlier operation must
       // not kill a legitimate retry at its first checkAbort
@@ -783,6 +800,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         // this settlement replaced the void target, so the guard on
         // the previous one and all of its resume progress lift.
         guards.reset();
+        context().phase(CheckoutPhase.COMPLETE);
+        settled = true;
       } finally {
         lock.unlock();
       }
@@ -796,6 +815,9 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       lock.lock();
       try {
         phase = SessionPhase.OPEN;
+        if (tendering && !settled) {
+          context().phase(resumePhase);
+        }
       } finally {
         lock.unlock();
       }
