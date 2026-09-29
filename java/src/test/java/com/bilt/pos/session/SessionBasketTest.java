@@ -6,6 +6,7 @@ import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketChange;
 import com.bilt.pos.session.basket.BasketChange.Source;
 import com.bilt.pos.session.basket.BasketItem;
+import com.bilt.pos.session.basket.BasketItemType;
 import com.bilt.pos.session.basket.BasketLineItem;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -267,6 +268,29 @@ class SessionBasketTest {
 
     assertEquals(new BigDecimal("5.76"), replaced.getTaxTotal());
     assertEquals(new BigDecimal("70.73"), replaced.getGrandTotal());
+  }
+
+  @Test
+  void replaceWithARateAndNoTaxAmountTaxesTheLineByTheRate() {
+    RecordingSession session = new RecordingSession();
+    BasketLineItem rated =
+        BasketLineItem.builder()
+            .itemId("9")
+            .sku("CNDL")
+            .description("Candle")
+            .quantity(1)
+            .unitPrice(new BigDecimal("10.00"))
+            .originalTotal(new BigDecimal("10.00"))
+            .taxRate(new BigDecimal("0.10"))
+            .type(BasketItemType.SALE)
+            .build();
+
+    Basket replaced =
+        session.basket().replace(Basket.builder().items(Arrays.asList(rated)).build());
+    Basket bumped = session.basket().updateItemQuantityBySku("CNDL", 2);
+
+    assertEquals(new BigDecimal("1.00"), replaced.getItemBySku("CNDL").getTaxAmount());
+    assertEquals(new BigDecimal("2.00"), bumped.getItemBySku("CNDL").getTaxAmount());
   }
 
   @Test

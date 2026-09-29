@@ -385,7 +385,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getTaxAmount()">
 <h3>getTaxAmount</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getTaxAmount</span>()</div>
-<div class="block">Tax amount, from the rate or an explicit override; zero if untaxed.</div>
+<div class="block">Tax amount, from the rate or an explicit override; zero if untaxed. A line built with a rate
+ and no amount carries the amount the rate implies.</div>
 </section>
 </li>
 <li>
