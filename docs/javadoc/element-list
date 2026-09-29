@@ -1,4 +1,6 @@
 com.bilt.pos.display
+com.bilt.pos.media
+com.bilt.pos.media.service
 com.bilt.pos.nexo.client
 com.bilt.pos.nexo.security
 com.bilt.pos.platform
