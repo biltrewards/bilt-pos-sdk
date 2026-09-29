@@ -328,7 +328,11 @@ public final class BasketEngine implements BasketMutation {
    * <p>Line tax follows the snapshot line: a {@code taxRate} makes the line rate-based, and a
    * {@code taxAmount} that disagrees with that rate (or a non-zero amount with no rate) becomes its
    * fixed amount. The snapshot's {@code taxTotal} becomes the basket-level override when it differs
-   * from the sum of its lines' tax amounts; otherwise tax is computed from the lines.
+   * from the sum of its lines' tax amounts; otherwise tax is computed from the lines. An override
+   * is a magnitude, negated only on an all-return basket, so a negative {@code taxTotal} that
+   * differs from the line sum is refused when any line is a sale.
+   *
+   * @throws IllegalArgumentException if the snapshot cannot be applied
    */
   public void replace(Basket snapshot) {
     Objects.requireNonNull(snapshot, "snapshot");
@@ -339,7 +343,19 @@ public final class BasketEngine implements BasketMutation {
       lineTaxSum = lineTaxSum.add(zeroIfNull(line.getTaxAmount()));
     }
     BigDecimal taxTotal = zeroIfNull(snapshot.getTaxTotal());
-    replaceWith(items, taxTotal.compareTo(lineTaxSum) == 0 ? null : taxTotal.abs());
+    if (taxTotal.compareTo(lineTaxSum) == 0) {
+      replaceWith(items, null);
+      return;
+    }
+    if (taxTotal.signum() < 0
+        && snapshot.getItems().stream().anyMatch(line -> line.getType() == BasketItemType.SALE)) {
+      // the override of a basket with a sale line is never negated, so its
+      // abs() would come back as tax owed instead of tax refunded
+      throw new IllegalArgumentException(
+          "a negative taxTotal that differs from the line taxes cannot be applied to a basket"
+              + " with a sale line");
+    }
+    replaceWith(items, taxTotal.abs());
   }
 
   /**

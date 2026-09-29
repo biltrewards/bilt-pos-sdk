@@ -394,7 +394,8 @@ loadScripts(document, 'script');</script>
  one, like a <a href="basket/BasketItem.html" title="class in com.bilt.pos.session.basket"><code>BasketItem</code></a>. Line tax follows the snapshot line (a <code>taxRate</code> makes it
  rate-based, a disagreeing or rate-less non-zero <code>taxAmount</code> fixes it), and the snapshot's
  <code>taxTotal</code> becomes a basket-level override only when it differs from the sum of its
- lines' tax amounts.
+ lines' tax amounts. An override is a magnitude, so a negative <code>taxTotal</code> that differs
+ from the line sum is accepted only on a basket of returns and credits.
 
  <p>On a terminal session whose basket has been consumed by a successful settlement, <code>
  replace</code> does not fail the way an incremental mutation does: it starts a fresh cart with a new
@@ -405,8 +406,9 @@ loadScripts(document, 'script');</script>
 <dd>the updated basket snapshot</dd>
 <dt>Throws:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link">IllegalArgumentException</a></code> - if the snapshot holds two unreferenced lines with the same SKU
-     and type or two lines with the same reference, or a line fails item validation; the basket
-     is left untouched</dd>
+     and type or two lines with the same reference, a line fails item validation, or the
+     snapshot has a sale line and a negative <code>taxTotal</code> that differs from its line taxes;
+     the basket is left untouched</dd>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - if the basket is frozen (payment in progress) or the session has
      ended, or, for a consumed basket, under the <a href="#clear()"><code>clear()</code></a> guards</dd>
 </dl>

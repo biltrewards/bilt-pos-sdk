@@ -294,6 +294,45 @@ class SessionBasketTest {
   }
 
   @Test
+  void replaceRefusesANegativeTaxTotalOverrideOnABasketWithASale() {
+    RecordingSession session = new RecordingSession();
+    session.basket().addItem(candle(2));
+    session.changes.clear();
+    Basket mixed =
+        Basket.builder()
+            .items(
+                Arrays.asList(
+                    lineFor(candle(1)),
+                    lineFor(BasketItem.returnItem("FRAME", "Frame", 1, new BigDecimal("14.99")))))
+            .taxTotal(new BigDecimal("-8.00"))
+            .build();
+
+    assertThrows(IllegalArgumentException.class, () -> session.basket().replace(mixed));
+    assertEquals(2, session.basket().snapshot().getItem("1").getQuantity());
+    assertTrue(session.changes.isEmpty());
+  }
+
+  @Test
+  void replaceKeepsANegativeTaxTotalOverrideOnAnAllReturnBasket() {
+    RecordingSession session = new RecordingSession();
+
+    Basket replaced =
+        session
+            .basket()
+            .replace(
+                Basket.builder()
+                    .items(
+                        Arrays.asList(
+                            lineFor(
+                                BasketItem.returnItem(
+                                    "FRAME", "Frame", 1, new BigDecimal("14.99")))))
+                    .taxTotal(new BigDecimal("-8.00"))
+                    .build());
+
+    assertEquals(new BigDecimal("-8.00"), replaced.getTaxTotal());
+  }
+
+  @Test
   void replaceIsAtomicWhenTheSnapshotIsAmbiguous() {
     RecordingSession session = new RecordingSession();
     session.basket().addItem(candle(2));

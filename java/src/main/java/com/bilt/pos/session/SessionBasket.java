@@ -206,7 +206,8 @@ public final class SessionBasket {
    * one, like a {@link BasketItem}. Line tax follows the snapshot line (a {@code taxRate} makes it
    * rate-based, a disagreeing or rate-less non-zero {@code taxAmount} fixes it), and the snapshot's
    * {@code taxTotal} becomes a basket-level override only when it differs from the sum of its
-   * lines' tax amounts.
+   * lines' tax amounts. An override is a magnitude, so a negative {@code taxTotal} that differs
+   * from the line sum is accepted only on a basket of returns and credits.
    *
    * <p>On a terminal session whose basket has been consumed by a successful settlement, {@code
    * replace} does not fail the way an incremental mutation does: it starts a fresh cart with a new
@@ -215,8 +216,9 @@ public final class SessionBasket {
    *
    * @return the updated basket snapshot
    * @throws IllegalArgumentException if the snapshot holds two unreferenced lines with the same SKU
-   *     and type or two lines with the same reference, or a line fails item validation; the basket
-   *     is left untouched
+   *     and type or two lines with the same reference, a line fails item validation, or the
+   *     snapshot has a sale line and a negative {@code taxTotal} that differs from its line taxes;
+   *     the basket is left untouched
    * @throws IllegalStateException if the basket is frozen (payment in progress) or the session has
    *     ended, or, for a consumed basket, under the {@link #clear()} guards
    */
