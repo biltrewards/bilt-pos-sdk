@@ -508,7 +508,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     }
   }
 
-  private boolean closingOrEnded() {
+  @Override
+  boolean closingOrEnded() {
     return phase == SessionPhase.ENDING || phase == SessionPhase.ENDED;
   }
 

@@ -169,4 +169,31 @@ class TerminalShopperSessionContextTest {
         IllegalStateException.class, () -> session.context().phase(CheckoutPhase.SCANNING));
     assertEquals(CheckoutPhase.TENDERING, session.context().phase());
   }
+
+  @Test
+  void contextWritesAreRefusedWhileTheEndSignalIsInFlight() throws Exception {
+    session.context().attribute("lane", "3");
+    List<Throwable> refusals = new ArrayList<>();
+    server.setDispatcher(
+        new Dispatcher() {
+          @Override
+          public MockResponse dispatch(RecordedRequest request) {
+            // end() has marked the session ENDING and dropped the lock to send this
+            refusals.add(
+                assertThrows(
+                    IllegalStateException.class,
+                    () -> session.context().phase(CheckoutPhase.SCANNING)));
+            refusals.add(
+                assertThrows(
+                    IllegalStateException.class, () -> session.context().attribute("lane", "4")));
+            return new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK);
+          }
+        });
+
+    session.end().executeSync();
+
+    assertEquals(2, refusals.size(), "both writes were attempted during the End signal");
+    assertEquals(CheckoutPhase.SCANNING, session.context().phase());
+    assertEquals(Map.of("lane", "3"), session.context().attributes());
+  }
 }

@@ -19,7 +19,7 @@ import java.util.Map;
  * <p>The context is mutable and can be updated at any time, from any thread: every call is pure
  * local compute under the session's lock, and nothing reaches a terminal or the platform because of
  * it. It is deliberately small — widget-specific tuning lives on the widget, not here. Writes are
- * refused with {@code IllegalStateException} once the session has ended, like basket changes.
+ * refused with {@code IllegalStateException} once {@code end()} has begun, like basket changes.
  *
  * <pre>{@code
  * session.context().phase(CheckoutPhase.TENDERING);
@@ -40,7 +40,7 @@ public interface SessionContext {
    * around settlement may later override it — see {@link CheckoutPhase}.
    *
    * @throws NullPointerException if {@code phase} is null
-   * @throws IllegalStateException if the session has ended
+   * @throws IllegalStateException if the session is ending or has ended
    */
   SessionContext phase(CheckoutPhase phase);
 
@@ -50,7 +50,7 @@ public interface SessionContext {
    * null} value removes the key, like {@link #removeAttribute(String)}.
    *
    * @throws NullPointerException if {@code key} is null
-   * @throws IllegalStateException if the session has ended
+   * @throws IllegalStateException if the session is ending or has ended
    */
   SessionContext attribute(String key, String value);
 
@@ -58,7 +58,7 @@ public interface SessionContext {
    * Removes an attribute; a key that is not set is left alone.
    *
    * @throws NullPointerException if {@code key} is null
-   * @throws IllegalStateException if the session has ended
+   * @throws IllegalStateException if the session is ending or has ended
    */
   SessionContext removeAttribute(String key);
 

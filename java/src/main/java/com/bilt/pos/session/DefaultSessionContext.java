@@ -31,7 +31,7 @@ final class DefaultSessionContext implements SessionContext {
   private final String currency;
   private final String storeLocation;
   private final String poiId;
-  private final BooleanSupplier ended;
+  private final BooleanSupplier closingOrEnded;
   private final Consumer<SessionContextSnapshot> onChanged;
   private CheckoutPhase phase;
   private final LinkedHashMap<String, String> attributes = new LinkedHashMap<>();
@@ -44,7 +44,7 @@ final class DefaultSessionContext implements SessionContext {
       String poiId,
       CheckoutPhase initialPhase,
       Map<String, String> initialAttributes,
-      BooleanSupplier ended,
+      BooleanSupplier closingOrEnded,
       Consumer<SessionContextSnapshot> onChanged) {
     this.lock = lock;
     this.saleId = saleId;
@@ -53,7 +53,7 @@ final class DefaultSessionContext implements SessionContext {
     this.poiId = poiId;
     this.phase = Objects.requireNonNull(initialPhase, "initialPhase");
     this.attributes.putAll(initialAttributes);
-    this.ended = ended;
+    this.closingOrEnded = closingOrEnded;
     this.onChanged = onChanged;
   }
 
@@ -164,8 +164,9 @@ final class DefaultSessionContext implements SessionContext {
   }
 
   private void requireMutable() {
-    if (ended.getAsBoolean()) {
-      throw new IllegalStateException("the session context cannot be modified after end()");
+    if (closingOrEnded.getAsBoolean()) {
+      throw new IllegalStateException(
+          "the session context cannot be modified once end() has begun");
     }
   }
 

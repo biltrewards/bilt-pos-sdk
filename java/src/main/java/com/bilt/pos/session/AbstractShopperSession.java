@@ -68,7 +68,7 @@ abstract class AbstractShopperSession implements ShopperSession {
             poiId,
             initialPhase,
             initialAttributes,
-            this::ended,
+            this::closingOrEnded,
             this::contextChanged);
     this.basket =
         new SessionBasket(
@@ -215,6 +215,14 @@ abstract class AbstractShopperSession implements ShopperSession {
 
   /** True once the session has ended and nothing can run on it any more. */
   abstract boolean ended();
+
+  /**
+   * True once {@code end()} has begun, even if it has not finished: a terminal session drops the
+   * lock while it sends the End signal, and context writes must not publish during that teardown.
+   */
+  boolean closingOrEnded() {
+    return ended();
+  }
 
   @Override
   public final void close() {
