@@ -334,4 +334,30 @@ class BasketChangeTest {
 
     assertThrows(UnsupportedOperationException.class, () -> change.added().clear());
   }
+
+  @Test
+  void referencedLineChangingTypeOrDescriptionIsADetailsChange() {
+    BasketLineItem sale = line("a", "REF-1", "CNDL", 1);
+    BasketLineItem returned =
+        BasketLineItem.builder()
+            .itemId("b")
+            .reference("REF-1")
+            .sku("CNDL")
+            .description("Candle (returned)")
+            .quantity(1)
+            .unitPrice(new BigDecimal("10.00"))
+            .originalTotal(new BigDecimal("10.00"))
+            .type(BasketItemType.RETURN)
+            .build();
+
+    BasketChange change =
+        BasketChange.between(
+            registerBasket("cart", sale), registerBasket("cart", returned), Source.REPLACE);
+
+    assertFalse(change.isEmpty());
+    assertEquals(1, change.detailsChanged().size());
+    assertTrue(change.added().isEmpty());
+    assertTrue(change.quantityChanged().isEmpty());
+    assertTrue(change.priceChanged().isEmpty());
+  }
 }

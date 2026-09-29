@@ -31,11 +31,11 @@ import java.util.Set;
  * <p>Lines are paired across the two snapshots by identity, the way the basket itself keys them: by
  * {@code reference} when a line has one, otherwise by {@code sku} and item type among the
  * unreferenced lines. A paired line reports as {@link #quantityChanged()}, {@link #priceChanged()},
- * {@link #discountsChanged()} or {@link #taxChanged()}, and can appear in several of those at once;
- * an unpaired line is {@link #added()} or {@link #removed()}. Lines are only paired within one
- * cart: when the two snapshots carry different cart ids (a {@code clear()}, or a {@code replace()}
- * that started a fresh cart after settlement) every previous line is removed and every current line
- * added. Description, category and metadata are not part of the diff.
+ * {@link #discountsChanged()}, {@link #taxChanged()} or {@link #detailsChanged()}, and can appear
+ * in several of those at once; an unpaired line is {@link #added()} or {@link #removed()}. Lines
+ * are only paired within one cart: when the two snapshots carry different cart ids (a {@code
+ * clear()}, or a {@code replace()} that started a fresh cart after settlement) every previous line
+ * is removed and every current line added.
  *
  * <p>Instances are immutable.
  */
@@ -89,6 +89,7 @@ public final class BasketChange {
   private final List<LineChange> priceChanged;
   private final List<LineChange> discountsChanged;
   private final List<LineChange> taxChanged;
+  private final List<LineChange> detailsChanged;
   private final boolean taxTotalChanged;
 
   private BasketChange(
@@ -101,6 +102,7 @@ public final class BasketChange {
       List<LineChange> priceChanged,
       List<LineChange> discountsChanged,
       List<LineChange> taxChanged,
+      List<LineChange> detailsChanged,
       boolean taxTotalChanged) {
     this.previous = previous;
     this.current = current;
@@ -111,6 +113,7 @@ public final class BasketChange {
     this.priceChanged = Collections.unmodifiableList(priceChanged);
     this.discountsChanged = Collections.unmodifiableList(discountsChanged);
     this.taxChanged = Collections.unmodifiableList(taxChanged);
+    this.detailsChanged = Collections.unmodifiableList(detailsChanged);
     this.taxTotalChanged = taxTotalChanged;
   }
 
@@ -141,6 +144,7 @@ public final class BasketChange {
     List<LineChange> priceChanged = new ArrayList<>();
     List<LineChange> discountsChanged = new ArrayList<>();
     List<LineChange> taxChanged = new ArrayList<>();
+    List<LineChange> detailsChanged = new ArrayList<>();
     Set<String> pairedPreviousIds = new HashSet<>();
     for (BasketLineItem after : current.getItems()) {
       BasketLineItem before = sameCart ? previous.getCounterpart(after) : null;
@@ -163,6 +167,13 @@ public final class BasketChange {
           || compare(before.getTaxRate(), after.getTaxRate()) != 0) {
         taxChanged.add(change);
       }
+      if (before.getType() != after.getType()
+          || !Objects.equals(before.getSku(), after.getSku())
+          || !Objects.equals(before.getDescription(), after.getDescription())
+          || !Objects.equals(before.getCategory(), after.getCategory())
+          || !Objects.equals(before.getMetadata(), after.getMetadata())) {
+        detailsChanged.add(change);
+      }
     }
     for (BasketLineItem before : previous.getItems()) {
       if (!pairedPreviousIds.contains(before.getItemId())) {
@@ -180,6 +191,7 @@ public final class BasketChange {
         priceChanged,
         discountsChanged,
         taxChanged,
+        detailsChanged,
         taxTotalChanged);
   }
 
@@ -239,6 +251,15 @@ public final class BasketChange {
     return taxChanged;
   }
 
+  /**
+   * Paired lines whose item type, SKU, description, category or metadata differs. Lines with a
+   * reference pair on it alone, so a register can turn a sale into a return, or reword a line, with
+   * everything else unchanged.
+   */
+  public List<LineChange> detailsChanged() {
+    return detailsChanged;
+  }
+
   /** Whether the basket-level tax total differs between the two snapshots. */
   public boolean taxTotalChanged() {
     return taxTotalChanged;
@@ -256,6 +277,7 @@ public final class BasketChange {
         && priceChanged.isEmpty()
         && discountsChanged.isEmpty()
         && taxChanged.isEmpty()
+        && detailsChanged.isEmpty()
         && !taxTotalChanged;
   }
 
@@ -275,6 +297,8 @@ public final class BasketChange {
         + discountsChanged.size()
         + ", taxChanged="
         + taxChanged.size()
+        + ", detailsChanged="
+        + detailsChanged.size()
         + ", taxTotalChanged="
         + taxTotalChanged
         + "}";
