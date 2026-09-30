@@ -63,7 +63,7 @@ public final class Basket {
                 .build()
             : builder.saleTransactionID;
     this.items = Collections.unmodifiableList(new ArrayList<>(builder.items));
-    this.taxTotal = builder.taxTotal;
+    this.taxTotal = builder.taxTotal != null ? builder.taxTotal : lineTaxTotal();
     this.originalTotal = builder.originalTotal;
     this.discountTotal = builder.discountTotal;
     this.subtotal =
@@ -107,7 +107,10 @@ public final class Basket {
     return items;
   }
 
-  /** Total tax across the basket. */
+  /**
+   * Total tax across the basket. A basket built without one carries the sum of its lines' tax
+   * amounts, so it is not read as an explicit zero override.
+   */
   public BigDecimal getTaxTotal() {
     return taxTotal;
   }
@@ -505,7 +508,7 @@ public final class Basket {
     private String cartId;
     private TransactionIdentificationType saleTransactionID;
     private List<BasketLineItem> items = new ArrayList<>();
-    private BigDecimal taxTotal = BigDecimal.ZERO;
+    private BigDecimal taxTotal;
     private BigDecimal originalTotal = BigDecimal.ZERO;
     private BigDecimal discountTotal = BigDecimal.ZERO;
     private BigDecimal subtotal;

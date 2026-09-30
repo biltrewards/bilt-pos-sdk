@@ -347,7 +347,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getTaxTotal()">
 <h3>getTaxTotal</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getTaxTotal</span>()</div>
-<div class="block">Total tax across the basket.</div>
+<div class="block">Total tax across the basket. A basket built without one carries the sum of its lines' tax
+ amounts, so it is not read as an explicit zero override.</div>
 </section>
 </li>
 <li>

@@ -291,6 +291,9 @@ class SessionBasketTest {
 
     assertEquals(new BigDecimal("1.00"), replaced.getItemBySku("CNDL").getTaxAmount());
     assertEquals(new BigDecimal("2.00"), bumped.getItemBySku("CNDL").getTaxAmount());
+    // a snapshot that names no taxTotal is not a zero override of the rate's tax
+    assertEquals(new BigDecimal("1.00"), replaced.getTaxTotal());
+    assertEquals(new BigDecimal("2.00"), bumped.getTaxTotal());
   }
 
   @Test
