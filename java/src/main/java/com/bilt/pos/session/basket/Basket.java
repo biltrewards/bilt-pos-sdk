@@ -17,7 +17,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -61,7 +63,7 @@ public final class Basket {
                 .build()
             : builder.saleTransactionID;
     this.items = Collections.unmodifiableList(new ArrayList<>(builder.items));
-    this.taxTotal = builder.taxTotal;
+    this.taxTotal = builder.taxTotal != null ? builder.taxTotal : lineTaxTotal();
     this.originalTotal = builder.originalTotal;
     this.discountTotal = builder.discountTotal;
     this.subtotal =
@@ -105,7 +107,10 @@ public final class Basket {
     return items;
   }
 
-  /** Total tax across the basket. */
+  /**
+   * Total tax across the basket. A basket built without one carries the sum of its lines' tax
+   * amounts, so it is not read as an explicit zero override.
+   */
   public BigDecimal getTaxTotal() {
     return taxTotal;
   }
@@ -215,11 +220,79 @@ public final class Basket {
     return nonSale;
   }
 
+  /**
+   * The line in this snapshot with the same identity as a line of another snapshot, or {@code
+   * null}: the line with the same reference when {@code line} has one, otherwise the unreferenced
+   * line with the same SKU and type. This is how the basket keys its lines, so it pairs lines
+   * across snapshots for {@link BasketChange} and {@code SessionBasket.replace}.
+   *
+   * @throws IllegalArgumentException if more than one line here matches, which a session basket
+   *     never produces but a register-built snapshot can
+   */
+  public BasketLineItem getCounterpart(BasketLineItem line) {
+    Objects.requireNonNull(line, "line");
+    return getCounterpart(line.getReference(), line.getSku(), line.getType());
+  }
+
+  /** The line a register item would upsert into under the {@link #getCounterpart} rules. */
+  public BasketLineItem getCounterpart(BasketItem item) {
+    Objects.requireNonNull(item, "item");
+    return getCounterpart(item.getReference(), item.getSku(), item.getType());
+  }
+
+  /**
+   * Every line under the key {@link #getCounterpart} matches it by, for diffing a whole basket in
+   * one pass instead of a scan per line.
+   *
+   * @throws IllegalArgumentException if two lines share a key
+   */
+  Map<String, BasketLineItem> counterpartIndex() {
+    Map<String, BasketLineItem> index = new HashMap<>();
+    for (BasketLineItem item : items) {
+      String reference = item.getReference();
+      if (index.put(counterpartKey(reference, item.getSku(), item.getType()), item) != null) {
+        throw reference != null ? ambiguousReference(reference) : ambiguousSku(item.getSku());
+      }
+    }
+    return index;
+  }
+
+  /** The index key {@link #getCounterpart} would find {@code line} under. */
+  static String counterpartKey(BasketLineItem line) {
+    return counterpartKey(line.getReference(), line.getSku(), line.getType());
+  }
+
+  private static String counterpartKey(String reference, String sku, BasketItemType type) {
+    return reference != null ? "reference\0" + reference : "sku\0" + sku + "\0" + type;
+  }
+
+  private BasketLineItem getCounterpart(String reference, String sku, BasketItemType type) {
+    BasketLineItem match = null;
+    for (BasketLineItem item : items) {
+      boolean matches =
+          reference != null
+              ? reference.equals(item.getReference())
+              : item.getReference() == null && item.getSku().equals(sku) && item.getType() == type;
+      if (!matches) {
+        continue;
+      }
+      if (match != null) {
+        throw reference != null ? ambiguousReference(reference) : ambiguousSku(sku);
+      }
+      match = item;
+    }
+    return match;
+  }
+
   private static IllegalArgumentException ambiguousSku(String sku) {
     return new IllegalArgumentException(
         "more than one basket item has SKU "
             + sku
             + "; use itemId or reference to address a specific line");
+  }
+
+  private static IllegalArgumentException ambiguousReference(String reference) {
+    return new IllegalArgumentException("more than one basket item has reference " + reference);
   }
 
   public boolean isEmpty() {
@@ -435,7 +508,7 @@ public final class Basket {
     private String cartId;
     private TransactionIdentificationType saleTransactionID;
     private List<BasketLineItem> items = new ArrayList<>();
-    private BigDecimal taxTotal = BigDecimal.ZERO;
+    private BigDecimal taxTotal;
     private BigDecimal originalTotal = BigDecimal.ZERO;
     private BigDecimal discountTotal = BigDecimal.ZERO;
     private BigDecimal subtotal;

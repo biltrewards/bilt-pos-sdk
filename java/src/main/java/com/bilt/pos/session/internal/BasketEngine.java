@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -206,7 +207,7 @@ public final class BasketEngine implements BasketMutation {
     }
     lines.put(key, new Line(itemId, item));
     // keep generated ids ahead of any explicit numeric id
-    nextItemId = Math.max(nextItemId, Integer.parseInt(itemId)) + 1;
+    nextItemId = Math.max(nextItemId, Integer.parseInt(itemId) + 1);
     return this;
   }
 
@@ -315,6 +316,128 @@ public final class BasketEngine implements BasketMutation {
   public void clear() {
     lines.clear();
     taxTotalOverride = null;
+  }
+
+  // ─── Replacement ───
+
+  /**
+   * Replaces the whole basket with a snapshot: its lines with their discounts and taxes, and its
+   * tax total. A snapshot line that pairs with a current line under {@link Basket#getCounterpart}
+   * keeps that line's item id; the rest get new ids. Atomic: a snapshot that cannot be applied
+   * leaves the basket untouched.
+   *
+   * <p>Line tax follows the snapshot line: a {@code taxRate} makes the line rate-based, and a
+   * {@code taxAmount} that disagrees with that rate (or a non-zero amount with no rate) becomes its
+   * fixed amount. The snapshot's {@code taxTotal} becomes the basket-level override when it differs
+   * from the sum of its lines' tax amounts; otherwise tax is computed from the lines. An override
+   * is a magnitude, negated only on an all-return basket, so a negative {@code taxTotal} that
+   * differs from the line sum is refused when any line is a sale.
+   *
+   * @throws IllegalArgumentException if the snapshot cannot be applied
+   */
+  public void replace(Basket snapshot) {
+    Objects.requireNonNull(snapshot, "snapshot");
+    List<BasketItem> items = new ArrayList<>(snapshot.getItems().size());
+    BigDecimal lineTaxSum = BigDecimal.ZERO;
+    for (BasketLineItem line : snapshot.getItems()) {
+      items.add(toBasketItem(line));
+      lineTaxSum = lineTaxSum.add(zeroIfNull(line.getTaxAmount()));
+    }
+    BigDecimal taxTotal = zeroIfNull(snapshot.getTaxTotal());
+    if (taxTotal.compareTo(lineTaxSum) == 0) {
+      replaceWith(items, null);
+      return;
+    }
+    if (taxTotal.signum() < 0
+        && snapshot.getItems().stream().anyMatch(line -> line.getType() == BasketItemType.SALE)) {
+      // the override of a basket with a sale line is never negated, so its
+      // abs() would come back as tax owed instead of tax refunded
+      throw new IllegalArgumentException(
+          "a negative taxTotal that differs from the line taxes cannot be applied to a basket"
+              + " with a sale line");
+    }
+    replaceWith(items, taxTotal.abs());
+  }
+
+  /**
+   * Replaces the whole basket with register items, pairing them with current lines like {@link
+   * #replace(Basket)}. Tax comes from the items' own rate or amount; a standing basket-level tax
+   * total override is kept when no item carries tax and dropped when any does.
+   */
+  public void replace(List<BasketItem> items) {
+    Objects.requireNonNull(items, "items");
+    boolean itemsCarryTax = false;
+    for (BasketItem item : items) {
+      Objects.requireNonNull(item, "item");
+      itemsCarryTax |= item.getTaxRate() != null || item.getTaxAmount() != null;
+    }
+    replaceWith(new ArrayList<>(items), itemsCarryTax ? null : taxTotalOverride);
+  }
+
+  private void replaceWith(List<BasketItem> items, BigDecimal override) {
+    Map<String, String> previousIds = new HashMap<>();
+    lines.forEach((key, line) -> previousIds.put(key, line.itemId));
+    mutateAtomically(
+        ignored -> {
+          lines.clear();
+          taxTotalOverride = null;
+          for (BasketItem item : items) {
+            if (lines.containsKey(key(item))) {
+              throw new IllegalArgumentException(
+                  item.getReference() != null
+                      ? "basket reference "
+                          + item.getReference()
+                          + " appears more than once in the replacement"
+                      : "more than one replacement item has SKU "
+                          + item.getSku()
+                          + " and type "
+                          + item.getType()
+                          + "; give them references to keep them distinct");
+            }
+            // keep the id of the line this item stands for, so register
+            // references into the basket survive the replacement
+            addItem(item, previousIds.get(key(item)));
+          }
+          setTaxTotal(override);
+        });
+  }
+
+  private static BasketItem toBasketItem(BasketLineItem line) {
+    Objects.requireNonNull(line.getUnitPrice(), "unitPrice is required");
+    BasketItem.Builder builder =
+        BasketItem.builder()
+            .reference(line.getReference())
+            .sku(line.getSku())
+            .description(line.getDescription())
+            .quantity(line.getQuantity())
+            .unitPrice(line.getUnitPrice())
+            .discounts(line.getDiscounts())
+            .type(line.getType())
+            .category(line.getCategory())
+            .metadata(line.getMetadata());
+    BigDecimal amount = zeroIfNull(line.getTaxAmount()).abs();
+    if (line.getTaxRate() != null) {
+      builder.taxRate(line.getTaxRate());
+      BigDecimal lineSubtotal =
+          line.getUnitPrice()
+              .multiply(BigDecimal.valueOf(line.getQuantity()))
+              .setScale(MONEY_SCALE, ROUNDING)
+              .subtract(
+                  BasketDiscountRules.discountTotal(line.getDiscounts())
+                      .setScale(MONEY_SCALE, ROUNDING));
+      BigDecimal fromRate =
+          lineSubtotal.multiply(line.getTaxRate()).setScale(MONEY_SCALE, ROUNDING);
+      if (amount.compareTo(fromRate) != 0) {
+        builder.taxAmount(amount);
+      }
+    } else if (amount.signum() != 0) {
+      builder.taxAmount(amount);
+    }
+    return builder.build();
+  }
+
+  private static BigDecimal zeroIfNull(BigDecimal value) {
+    return value == null ? BigDecimal.ZERO : value;
   }
 
   /** {@code null} clears the value; a present value must not be negative. */

@@ -10,6 +10,7 @@
 package com.bilt.pos.session.basket;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -71,11 +72,35 @@ public final class BasketLineItem {
     this.rebateLabel = builder.rebateLabel;
     this.adjustedTotal = builder.adjustedTotal;
     this.taxRate = builder.taxRate;
-    this.taxAmount = builder.taxAmount;
+    this.taxAmount = builder.taxAmount != null ? builder.taxAmount : taxFromRate(builder);
     this.metadata =
         builder.metadata == null
             ? Collections.emptyMap()
             : Collections.unmodifiableMap(new LinkedHashMap<>(builder.metadata));
+  }
+
+  /**
+   * The tax a rate implies when the builder was given a rate but no amount, so a line built from a
+   * rate alone is taxed by it instead of reading as an explicit zero; zero when there is no rate.
+   */
+  private static BigDecimal taxFromRate(Builder builder) {
+    if (builder.taxRate == null) {
+      return BigDecimal.ZERO;
+    }
+    BigDecimal base = builder.subtotal;
+    if (base == null && builder.originalTotal != null) {
+      base = builder.originalTotal.subtract(builder.discountTotal);
+    }
+    if (base == null && builder.unitPrice != null) {
+      base =
+          builder
+              .unitPrice
+              .multiply(BigDecimal.valueOf(builder.quantity))
+              .subtract(builder.discountTotal);
+    }
+    return base == null
+        ? BigDecimal.ZERO
+        : base.multiply(builder.taxRate).setScale(2, RoundingMode.HALF_UP);
   }
 
   /** Builder for SDK-internal construction of snapshots. */
@@ -172,7 +197,10 @@ public final class BasketLineItem {
     return taxRate;
   }
 
-  /** Tax amount, from the rate or an explicit override; zero if untaxed. */
+  /**
+   * Tax amount, from the rate or an explicit override; zero if untaxed. A line built with a rate
+   * and no amount carries the amount the rate implies.
+   */
   public BigDecimal getTaxAmount() {
     return taxAmount;
   }
@@ -201,7 +229,7 @@ public final class BasketLineItem {
     private String rebateLabel;
     private BigDecimal adjustedTotal;
     private BigDecimal taxRate;
-    private BigDecimal taxAmount = BigDecimal.ZERO;
+    private BigDecimal taxAmount;
     private Map<String, String> metadata;
 
     private Builder() {}
