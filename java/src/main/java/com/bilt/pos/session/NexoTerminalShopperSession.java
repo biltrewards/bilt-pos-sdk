@@ -562,6 +562,14 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     return phase == SessionPhase.ENDING || phase == SessionPhase.ENDED;
   }
 
+  @Override
+  void requireMemberChangeable() {
+    if (moneyMovementInFlight()) {
+      throw new IllegalStateException(
+          "the member cannot be changed while money movement is in flight");
+    }
+  }
+
   private boolean moneyMovementInFlight() {
     return phase == SessionPhase.SETTLING || phase == SessionPhase.VOIDING;
   }
@@ -767,10 +775,12 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       // abort left over from an earlier operation must
       // not kill a legitimate retry at its first checkAbort
       abortRequested = false;
+      // the member the settlement charges and records, frozen under the same lock that
+      // refuses member changes from here until it finishes
+      request.member = identifiedMember();
     } finally {
       lock.unlock();
     }
-    request.member = identifiedMember();
     request.storedValueCard = storedValueCard;
     request.options = options;
     request.basket = netSettlement ? fullBasket : chargePortion;

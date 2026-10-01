@@ -106,7 +106,9 @@ public interface ShopperSession extends AutoCloseable {
   /**
    * Attaches the member for this visit, or clears it with {@code null} (signed out). Allowed at any
    * time — before scanning, mid-basket, or after a failed settlement — and on both session types,
-   * but not once the session has ended: that throws {@link IllegalStateException}.
+   * but not once the session has ended, nor on a terminal session while a settlement or void is
+   * moving money: those throw {@link IllegalStateException}, so the member a settlement charges is
+   * the one it started with.
    *
    * <p>A resolved member ({@link Member#id(String)}) attaches immediately with no roundtrip. A
    * member pending resolution ({@link Member#idResolver()}) attaches as pending and is resolved in

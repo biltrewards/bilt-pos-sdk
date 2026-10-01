@@ -8,6 +8,7 @@ import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketItem;
+import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
 import com.bilt.pos.session.settlement.ExternalPayment;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
@@ -3996,6 +3997,35 @@ class TerminalShopperSessionPaymentTest {
 
     SessionException e = assertThrows(SessionException.class, flow::get);
     assertEquals(SessionErrorCode.ABORTED, e.getError().getCode());
+  }
+
+  @Test
+  void memberChangesAreRefusedWhileASettlementIsMovingMoney() throws Exception {
+    addHundredDollarItem();
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Aborted\"}}}}"));
+    AtomicReference<Throwable> refused = new AtomicReference<>();
+
+    SettlementFlow flow =
+        session
+            .settle()
+            .beforeStep(
+                ctx -> {
+                  try {
+                    session.member(Member.id("mbr_late"));
+                  } catch (IllegalStateException e) {
+                    refused.set(e);
+                  }
+                  return ctx.getDefaultTransactionId();
+                })
+            .onError(error -> SettlementRecovery.abort());
+    flow.getOrNull();
+
+    assertNotNull(refused.get(), "member(Member) must be refused while money is moving");
+    assertNull(session.member());
   }
 
   @Test

@@ -268,6 +268,7 @@ abstract class AbstractShopperSession implements ShopperSession {
       if (closingOrEnded()) {
         throw new IllegalStateException("the member cannot be changed after end()");
       }
+      requireMemberChangeable();
       memberState().set(member);
     } finally {
       lock.unlock();
@@ -284,6 +285,9 @@ abstract class AbstractShopperSession implements ShopperSession {
   IdentifyResult identifiedMember() {
     return memberState().identified();
   }
+
+  /** Throws {@link IllegalStateException} when the session cannot take a member change now. */
+  void requireMemberChangeable() {}
 
   // ─── Lifecycle ───
 
