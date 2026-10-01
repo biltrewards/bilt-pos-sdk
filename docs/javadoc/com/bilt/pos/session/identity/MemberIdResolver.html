@@ -95,8 +95,11 @@ loadScripts(document, 'script');</script>
 <div class="block">How a <a href="Member.html" title="class in com.bilt.pos.session.identity"><code>Member</code></a> that is not yet resolved is to be looked up: the kind of identifier the POS
  has on file, its value, and whether the cashier typed it in. Created through <a href="Member.html#idResolver()"><code>Member.idResolver()</code></a>; the session resolves it in the background when the member is attached.
 
- <p>The value is sensitive for <a href="MemberIdResolver.Type.html#PHONE"><code>MemberIdResolver.Type.PHONE</code></a> and <a href="MemberIdResolver.Type.html#EMAIL"><code>MemberIdResolver.Type.EMAIL</code></a>, so <a href="#toString()"><code>toString()</code></a>
- masks all but its last few characters.</div>
+ <p>The value is sensitive for <a href="MemberIdResolver.Type.html#PHONE"><code>MemberIdResolver.Type.PHONE</code></a>, <a href="MemberIdResolver.Type.html#EMAIL"><code>MemberIdResolver.Type.EMAIL</code></a> and <a href="MemberIdResolver.Type.html#CUSTOM"><code>MemberIdResolver.Type.CUSTOM</code></a> (a
+ retailer's own identifier, such as a loyalty card number), so <a href="#toString()"><code>toString()</code></a> masks all but
+ its last few characters. A <a href="MemberIdResolver.Type.html#ACCOUNT_ID"><code>MemberIdResolver.Type.ACCOUNT_ID</code></a> is printed in full, like the resolved member
+ id in <a href="Member.html#toString()"><code>Member.toString()</code></a>: it is the identifier the SDK already logs and reports, and is
+ the one that makes a failed lookup diagnosable.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">

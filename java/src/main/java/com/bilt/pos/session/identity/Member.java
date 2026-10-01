@@ -32,7 +32,8 @@ import java.util.Objects;
  * session.member(null);                                               // signed out
  * }</pre>
  *
- * <p>Immutable, with value semantics. {@link #toString()} masks phone numbers and email addresses.
+ * <p>Immutable, with value semantics. {@link #toString()} masks phone numbers, email addresses and
+ * custom identifiers.
  */
 public final class Member {
 

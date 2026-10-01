@@ -107,7 +107,7 @@ class MemberTest {
   }
 
   @Test
-  void toStringRedactsPhoneAndEmailButNotAccountIds() {
+  void toStringRedactsEverythingButAccountIds() {
     assertEquals(
         "Member{pending PHONE ********0123}", Member.idResolver().phone("+12015550123").toString());
     assertEquals(
@@ -120,7 +120,7 @@ class MemberTest {
     assertEquals(
         "Member{pending ACCOUNT_ID 4823}", Member.idResolver().accountId("4823").toString());
     assertEquals(
-        "Member{pending CUSTOM(retailer-card) 99-1234}",
+        "Member{pending CUSTOM(retailer-card) *****34}",
         Member.idResolver().custom("retailer-card", "99-1234").toString());
   }
 

@@ -16,8 +16,11 @@ import java.util.Objects;
  * has on file, its value, and whether the cashier typed it in. Created through {@link
  * Member#idResolver()}; the session resolves it in the background when the member is attached.
  *
- * <p>The value is sensitive for {@link Type#PHONE} and {@link Type#EMAIL}, so {@link #toString()}
- * masks all but its last few characters.
+ * <p>The value is sensitive for {@link Type#PHONE}, {@link Type#EMAIL} and {@link Type#CUSTOM} (a
+ * retailer's own identifier, such as a loyalty card number), so {@link #toString()} masks all but
+ * its last few characters. A {@link Type#ACCOUNT_ID} is printed in full, like the resolved member
+ * id in {@link Member#toString()}: it is the identifier the SDK already logs and reports, and is
+ * the one that makes a failed lookup diagnosable.
  */
 public final class MemberIdResolver {
 
@@ -112,7 +115,7 @@ public final class MemberIdResolver {
     if (customType != null) {
       text.append('(').append(customType).append(')');
     }
-    text.append(' ').append(type == Type.PHONE || type == Type.EMAIL ? redact(value) : value);
+    text.append(' ').append(type == Type.ACCOUNT_ID ? value : redact(value));
     if (keyedByCashier) {
       text.append(", keyed by cashier");
     }
