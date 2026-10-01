@@ -245,20 +245,24 @@ class ShopperSessionTest {
   }
 
   @Test
-  void aPendingMemberAttachedAfterEndReportsABackgroundError() {
-    List<SessionError> errors = new CopyOnWriteArrayList<>();
+  void memberChangesAreRefusedAfterEnd() {
+    List<Member> announced = new CopyOnWriteArrayList<>();
     ShopperSession session =
         ShopperSession.builder()
             .saleId("POS-LANE-3")
             .currency("USD")
-            .onBackgroundError(errors::add)
+            .member(Member.id("mbr_8f2a"))
+            .onMemberChanged(announced::add)
             .start();
     session.end().executeSync();
 
-    session.member(Member.idResolver().phone("+12015550123"));
+    assertThrows(
+        IllegalStateException.class,
+        () -> session.member(Member.idResolver().phone("+12015550123")));
+    assertThrows(IllegalStateException.class, () -> session.member(null));
 
-    assertEquals(1, errors.size());
-    assertEquals(SessionErrorCode.INVALID_STATE, errors.get(0).getCode());
+    assertEquals(Member.id("mbr_8f2a"), session.member());
+    assertTrue(announced.isEmpty());
   }
 
   @Test

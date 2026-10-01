@@ -315,7 +315,8 @@ extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/ja
 <h3>member</h3>
 <div class="member-signature"><span class="return-type">void</span>&nbsp;<span class="element-name">member</span><wbr><span class="parameters">(<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&nbsp;member)</span></div>
 <div class="block">Attaches the member for this visit, or clears it with <code>null</code> (signed out). Allowed at any
- time — before scanning, mid-basket, or after a failed settlement — and on both session types.
+ time — before scanning, mid-basket, or after a failed settlement — and on both session types,
+ but not once the session has ended: that throws <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link"><code>IllegalStateException</code></a>.
 
  <p>A resolved member (<a href="identity/Member.html#id(java.lang.String)"><code>Member.id(String)</code></a>) attaches immediately with no roundtrip. A
  member pending resolution (<a href="identity/Member.html#idResolver()"><code>Member.idResolver()</code></a>) attaches as pending and is resolved in
