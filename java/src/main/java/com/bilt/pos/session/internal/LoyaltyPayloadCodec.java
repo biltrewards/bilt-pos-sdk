@@ -32,6 +32,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 /**
  * Codec for the custom Bilt loyalty JSON riding Base64-encoded in Nexo {@code
@@ -111,16 +113,23 @@ public final class LoyaltyPayloadCodec {
     if (vas == null || !vas.isObject()) {
       return null;
     }
-    List<VasService> services = new ArrayList<>();
-    for (JsonNode node : vas.path("services")) {
-      services.add(
-          new VasService(
-              text(node, "serviceId"),
-              text(node, "serviceType"),
-              text(node, "statusWord"),
-              text(node, "encryptedData"),
-              text(node, "cipherTimestamp")));
+    JsonNode serviceNodes = vas.path("services");
+    if (!serviceNodes.isMissingNode() && !serviceNodes.isArray()) {
+      LOGGER.log(Level.WARNING, "VAS services is not an array; ignoring VAS data");
+      return null;
     }
+    List<VasService> services =
+        StreamSupport.stream(serviceNodes.spliterator(), false)
+            .filter(JsonNode::isObject)
+            .map(
+                node ->
+                    new VasService(
+                        text(node, "serviceId"),
+                        text(node, "serviceType"),
+                        text(node, "statusWord"),
+                        text(node, "encryptedData"),
+                        text(node, "cipherTimestamp")))
+            .collect(Collectors.toList());
     return new VasData(text(vas, "source"), text(vas, "merchantId"), services, text(vas, "raw"));
   }
 
