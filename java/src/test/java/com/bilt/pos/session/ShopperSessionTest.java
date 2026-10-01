@@ -302,6 +302,41 @@ class ShopperSessionTest {
   }
 
   @Test
+  void memberHandlerRunsOutsideTheSessionLock() throws Exception {
+    AtomicReference<ShopperSession> holder = new AtomicReference<>();
+    AtomicReference<Boolean> otherThreadGotIn = new AtomicReference<>(false);
+    ShopperSession session =
+        ShopperSession.builder()
+            .saleId("POS-LANE-3")
+            .currency("USD")
+            .onMemberChanged(
+                member -> {
+                  // a handler that waits on another thread's use of the session would deadlock
+                  // if it ran under the session lock
+                  Thread other =
+                      new Thread(
+                          () -> {
+                            holder.get().context().attribute("k", "v"); // takes the session lock
+                            otherThreadGotIn.set(true);
+                          });
+                  other.start();
+                  try {
+                    other.join(5_000);
+                  } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                  }
+                  if (other.isAlive()) {
+                    other.interrupt();
+                  }
+                })
+            .start();
+    holder.set(session);
+    session.member(Member.id("mbr_1"));
+
+    assertTrue(otherThreadGotIn.get(), "the handler must not hold the session lock");
+  }
+
+  @Test
   void builderRequiresSaleIdAndCurrency() {
     assertThrows(
         IllegalStateException.class, () -> ShopperSession.builder().currency("USD").start());

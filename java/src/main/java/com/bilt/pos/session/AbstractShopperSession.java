@@ -262,17 +262,16 @@ abstract class AbstractShopperSession implements ShopperSession {
 
   @Override
   public void member(Member member) {
-    // under the lock so a terminal end() that has begun cannot interleave with the check
-    lock.lock();
-    try {
-      if (closingOrEnded()) {
-        throw new IllegalStateException("the member cannot be changed after end()");
-      }
-      requireMemberChangeable();
-      memberState().set(member);
-    } finally {
-      lock.unlock();
-    }
+    // checked under the lock, so a terminal end() that has begun cannot interleave with it
+    memberState()
+        .set(
+            member,
+            () -> {
+              if (closingOrEnded()) {
+                throw new IllegalStateException("the member cannot be changed after end()");
+              }
+              requireMemberChangeable();
+            });
   }
 
   @Override

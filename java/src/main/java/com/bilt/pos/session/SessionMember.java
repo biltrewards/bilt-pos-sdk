@@ -100,11 +100,14 @@ final class SessionMember {
 
   /**
    * The public setter: installs {@code next} (null clears), announces the change, and starts the
-   * lookup when {@code next} is pending.
+   * lookup when {@code next} is pending. {@code precondition} runs first, under the lock, and
+   * refuses the change by throwing; the announcement and the lookup happen after the lock is
+   * released, so a handler never runs under it.
    */
-  void set(Member next) {
+  void set(Member next, Runnable precondition) {
     lock.lock();
     try {
+      precondition.run();
       attachments++;
       install(next);
     } finally {
