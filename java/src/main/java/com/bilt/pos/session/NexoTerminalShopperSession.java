@@ -374,21 +374,16 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
    * any, is announced once the lock is released.
    */
   private IdentifyResult completeIdentify(IdentifyResult result, int attachmentsAtStart) {
-    boolean changed;
-    Member now;
     lock.lock();
     try {
       if (phase == SessionPhase.ENDED) {
         throw discardedAfterEnd("identifyMember");
       }
-      changed = memberState.applyIdentification(result, attachmentsAtStart);
-      now = memberState.current();
+      memberState.applyIdentification(result, attachmentsAtStart);
     } finally {
       lock.unlock();
     }
-    if (changed) {
-      memberState.fireChanged(now);
-    }
+    memberState.flush();
     return result;
   }
 

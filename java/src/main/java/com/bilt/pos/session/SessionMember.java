@@ -12,7 +12,9 @@ package com.bilt.pos.session;
 import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
 import com.bilt.pos.session.identity.Member;
+import java.util.ArrayDeque;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
@@ -26,8 +28,11 @@ import java.util.logging.Logger;
  * setting it, a terminal prompt, a background lookup — lands here, so anything observing the member
  * sees one path.
  *
- * <p>Transitions take the session lock the owner hands in. Notifications are dispatched after the
- * lock is released, fire-and-forget on the callback executor, and a throwing handler is contained.
+ * <p>Transitions take the session lock the owner hands in. Each change queues its notification
+ * under that lock, so the queue holds the changes in the order they happened; {@link #flush()}
+ * delivers the queue after the lock is released, fire-and-forget on the callback executor, one
+ * thread at a time, so handler code never runs under the lock and notifications reach the executor
+ * in change order. A throwing handler is contained.
  *
  * <p>Latest attempt wins: a pending member is resolved on the session's operation lane, and the
  * outcome is applied only if that very pending member is still the session's member when it arrives
@@ -44,6 +49,8 @@ final class SessionMember {
   private final Consumer<Member> onMemberChanged;
   private volatile Member member;
   private volatile int attachments;
+  private final ArrayDeque<Optional<Member>> notifications = new ArrayDeque<>();
+  private boolean flushing;
 
   /**
    * {@code seed} is the builder's pre-seeded member, or null; it is installed silently, as initial
@@ -96,17 +103,14 @@ final class SessionMember {
    * lookup when {@code next} is pending.
    */
   void set(Member next) {
-    boolean changed;
     lock.lock();
     try {
       attachments++;
-      changed = install(next);
+      install(next);
     } finally {
       lock.unlock();
     }
-    if (changed) {
-      fireChanged(next);
-    }
+    flush();
     if (next != null && !next.isResolved()) {
       scheduleResolution(next);
     }
@@ -129,8 +133,8 @@ final class SessionMember {
    * whose lookup began before the POS last attached a member ({@code attachmentsAtStart} is stale)
    * is dropped: the later attachment wins.
    *
-   * <p>Must be called with the lock held; returns whether the member changed, in which case the
-   * caller announces it with {@link #fireChanged(Member)} once it has released the lock.
+   * <p>Must be called with the lock held; returns whether the member changed. The caller delivers
+   * the queued notification with {@link #flush()} once it has released the lock.
    */
   boolean applyIdentification(IdentifyResult result, int attachmentsAtStart) {
     if (attachmentsAtStart != attachments) {
@@ -148,29 +152,52 @@ final class SessionMember {
   /**
    * Replaces the member under the lock. Always installs the given instance, even one equal to the
    * current member, so a re-attached pending member is the instance its lookup then checks for;
-   * reports whether the value changed.
+   * reports whether the value changed, in which case the notification is queued.
    */
   private boolean install(Member next) {
     Member previous = member;
     member = next;
-    return !Objects.equals(previous, next);
+    boolean changed = !Objects.equals(previous, next);
+    if (changed && onMemberChanged != null) {
+      synchronized (notifications) {
+        notifications.add(Optional.ofNullable(next));
+      }
+    }
+    return changed;
   }
 
-  /** Delivers {@code onMemberChanged} on the callback executor, never throwing into the caller. */
-  void fireChanged(Member now) {
-    if (onMemberChanged == null) {
-      return;
+  /**
+   * Delivers the queued {@code onMemberChanged} notifications on the callback executor, never
+   * throwing into the caller. Call it after releasing the lock. Only one thread drains at a time; a
+   * thread that finds a drain under way leaves its notifications to it.
+   */
+  void flush() {
+    synchronized (notifications) {
+      if (flushing) {
+        return;
+      }
+      flushing = true;
     }
-    HandlerDispatch.fireAndForget(
-        operations.callback(),
-        "onMemberChanged",
-        () -> {
-          try {
-            onMemberChanged.accept(now);
-          } catch (RuntimeException handlerFailure) {
-            LOGGER.log(Level.SEVERE, "the onMemberChanged handler threw", handlerFailure);
-          }
-        });
+    while (true) {
+      Optional<Member> now;
+      synchronized (notifications) {
+        now = notifications.poll();
+        if (now == null) {
+          flushing = false;
+          return;
+        }
+      }
+      HandlerDispatch.fireAndForget(
+          operations.callback(),
+          "onMemberChanged",
+          () -> {
+            try {
+              onMemberChanged.accept(now.orElse(null));
+            } catch (RuntimeException handlerFailure) {
+              LOGGER.log(Level.SEVERE, "the onMemberChanged handler threw", handlerFailure);
+            }
+          });
+    }
   }
 
   private void scheduleResolution(Member pending) {
@@ -196,7 +223,6 @@ final class SessionMember {
       operations.backgroundError("resolving " + pending, e);
       return;
     }
-    boolean changed;
     lock.lock();
     try {
       if (member != pending) {
@@ -213,12 +239,10 @@ final class SessionMember {
         // nothing learned; the member stays pending
         return;
       }
-      changed = install(outcome);
+      install(outcome);
     } finally {
       lock.unlock();
     }
-    if (changed) {
-      fireChanged(outcome);
-    }
+    flush();
   }
 }

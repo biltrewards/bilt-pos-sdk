@@ -266,6 +266,42 @@ class ShopperSessionTest {
   }
 
   @Test
+  void memberNotificationsArriveInTheOrderTheMemberChanged() throws Exception {
+    List<Member> announced = new CopyOnWriteArrayList<>();
+    CountDownLatch firstHandlerEntered = new CountDownLatch(1);
+    CountDownLatch releaseFirstHandler = new CountDownLatch(1);
+    ShopperSession session =
+        ShopperSession.builder()
+            .saleId("POS-LANE-3")
+            .currency("USD")
+            .onMemberChanged(
+                member -> {
+                  if (announced.isEmpty()) {
+                    firstHandlerEntered.countDown();
+                    try {
+                      releaseFirstHandler.await(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                      Thread.currentThread().interrupt();
+                    }
+                  }
+                  announced.add(member);
+                })
+            .start();
+
+    Thread first = new Thread(() -> session.member(Member.id("mbr_1")));
+    first.start();
+    assertTrue(firstHandlerEntered.await(5, TimeUnit.SECONDS));
+
+    // a second change while the first notification is still being delivered
+    session.member(Member.id("mbr_2"));
+    releaseFirstHandler.countDown();
+    first.join(5_000);
+
+    assertEquals(List.of(Member.id("mbr_1"), Member.id("mbr_2")), announced);
+    assertEquals(Member.id("mbr_2"), session.member());
+  }
+
+  @Test
   void builderRequiresSaleIdAndCurrency() {
     assertThrows(
         IllegalStateException.class, () -> ShopperSession.builder().currency("USD").start());
