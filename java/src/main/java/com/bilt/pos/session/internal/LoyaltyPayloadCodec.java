@@ -114,7 +114,7 @@ public final class LoyaltyPayloadCodec {
       return null;
     }
     JsonNode serviceNodes = vas.path("services");
-    if (!serviceNodes.isMissingNode() && !serviceNodes.isArray()) {
+    if (!serviceNodes.isMissingNode() && !serviceNodes.isNull() && !serviceNodes.isArray()) {
       LOGGER.log(Level.WARNING, "VAS services is not an array; ignoring VAS data");
       return null;
     }
