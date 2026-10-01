@@ -100,6 +100,28 @@ When the member is found, your integration receives:
     - **`LoyaltyBrand`** *(optional)* — the loyalty program name (e.g. `K-Club`).
 - **`Response.AdditionalResponse`** — base64-encoded JSON containing the member's active rewards. Decode and parse to obtain a `rewards` array (each entry has `rewardRef`, `type`, `name`, `expirationDate`) and a `rewardCount`. Use these to show the member's available rewards at the register; rewards and coupons are applied to the sale via a [rebate](./loyalty-apply-rebates.md).
 
+  When the shopper tapped a mobile wallet pass (e.g. an Apple Wallet loyalty pass), the same JSON also carries a `vas` object with the Value Added Services data the terminal read. `LoyaltyAccountID.LoyaltyID` holds the pass value, `EntryMode` is `Mobile`, and `IdentificationType` is `AccountNumber`. To let the shopper tap a pass, omit `ForceEntryMode` (or leave `Keyed` out of it): `["Keyed"]` shows the on-screen identifier entry only.
+
+  ```json
+  {
+    "vas": {
+      "source": "ApplePay",
+      "merchantId": "VerifoneTestRix2",
+      "services": [
+        {
+          "serviceId": "pass.com.biltrewards.loyalty",
+          "serviceType": "Coupon1",
+          "statusWord": "9000",
+          "encryptedData": "8ff4b4de...",
+          "cipherTimestamp": "3006a261"
+        }
+      ]
+    }
+  }
+  ```
+
+  `encryptedData` stays encrypted with the merchant's VAS key. When the terminal could not break its VAS report into fields, `vas.raw` carries it unparsed instead. The SDK exposes this as `IdentifyResult.getVasData()`.
+
   Example response:
 
   ```json

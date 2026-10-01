@@ -26,25 +26,39 @@ public final class IdentifyResult {
   private final String loyaltyBrand;
   private final List<Reward> rewards;
   private final int pointBalance;
+  private final VasData vasData;
 
   private IdentifyResult(
       IdentifyStatus status,
       String memberId,
       String loyaltyBrand,
       List<Reward> rewards,
-      int pointBalance) {
+      int pointBalance,
+      VasData vasData) {
     this.status = status;
     this.memberId = memberId;
     this.loyaltyBrand = loyaltyBrand;
     this.rewards =
         rewards == null ? Collections.emptyList() : Collections.unmodifiableList(rewards);
     this.pointBalance = pointBalance;
+    this.vasData = vasData;
   }
 
   /** A member was found. */
   public static IdentifyResult found(
       String memberId, String loyaltyBrand, List<Reward> rewards, int pointBalance) {
-    return new IdentifyResult(IdentifyStatus.FOUND, memberId, loyaltyBrand, rewards, pointBalance);
+    return found(memberId, loyaltyBrand, rewards, pointBalance, null);
+  }
+
+  /** A member was found from a mobile wallet pass that carried {@code vasData}. */
+  public static IdentifyResult found(
+      String memberId,
+      String loyaltyBrand,
+      List<Reward> rewards,
+      int pointBalance,
+      VasData vasData) {
+    return new IdentifyResult(
+        IdentifyStatus.FOUND, memberId, loyaltyBrand, rewards, pointBalance, vasData);
   }
 
   /** No member is attached; {@code status} says why. */
@@ -52,7 +66,7 @@ public final class IdentifyResult {
     if (status == IdentifyStatus.FOUND) {
       throw new IllegalArgumentException("FOUND requires member data");
     }
-    return new IdentifyResult(status, null, null, null, 0);
+    return new IdentifyResult(status, null, null, null, 0, null);
   }
 
   public IdentifyStatus getStatus() {
@@ -77,5 +91,13 @@ public final class IdentifyResult {
   /** Available point balance; {@code 0} when not reported. */
   public int getPointBalance() {
     return pointBalance;
+  }
+
+  /**
+   * VAS data from a mobile wallet pass tapped during terminal-prompted identification, or {@code
+   * null} when the member was not identified from a pass.
+   */
+  public VasData getVasData() {
+    return vasData;
   }
 }

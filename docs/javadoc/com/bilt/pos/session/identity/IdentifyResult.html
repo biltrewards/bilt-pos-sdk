@@ -119,29 +119,44 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
 <div class="block">A member was found.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getLoyaltyBrand()" class="member-name-link">getLoyaltyBrand</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">The loyalty program name (e.g.</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#found(java.lang.String,java.lang.String,java.util.List,int,com.bilt.pos.session.identity.VasData)" class="member-name-link">found</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;memberId,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;loyaltyBrand,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="Reward.html" title="class in com.bilt.pos.session.identity">Reward</a>&gt;&nbsp;rewards,
+ int&nbsp;pointBalance,
+ <a href="VasData.html" title="class in com.bilt.pos.session.identity">VasData</a>&nbsp;vasData)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="block">A member was found from a mobile wallet pass that carried <code>vasData</code>.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getMemberId()" class="member-name-link">getMemberId</a>()</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getLoyaltyBrand()" class="member-name-link">getLoyaltyBrand</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The loyalty program name (e.g.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getMemberId()" class="member-name-link">getMemberId</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">The member's loyalty account ID, or <code>null</code> unless <code>FOUND</code>.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPointBalance()" class="member-name-link">getPointBalance</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPointBalance()" class="member-name-link">getPointBalance</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Available point balance; <code>0</code> when not reported.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="Reward.html" title="class in com.bilt.pos.session.identity">Reward</a>&gt;</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRewards()" class="member-name-link">getRewards</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="Reward.html" title="class in com.bilt.pos.session.identity">Reward</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRewards()" class="member-name-link">getRewards</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Active rewards and coupons.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="IdentifyStatus.html" title="enum class in com.bilt.pos.session.identity">IdentifyStatus</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getStatus()" class="member-name-link">getStatus</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="IdentifyStatus.html" title="enum class in com.bilt.pos.session.identity">IdentifyStatus</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getStatus()" class="member-name-link">getStatus</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="VasData.html" title="class in com.bilt.pos.session.identity">VasData</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getVasData()" class="member-name-link">getVasData</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">VAS data from a mobile wallet pass tapped during terminal-prompted identification, or <code>
+ null</code> when the member was not identified from a pass.</div>
+</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static <a href="IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#withoutMember(com.bilt.pos.session.identity.IdentifyStatus)" class="member-name-link">withoutMember</a><wbr>(<a href="IdentifyStatus.html" title="enum class in com.bilt.pos.session.identity">IdentifyStatus</a>&nbsp;status)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
@@ -172,6 +187,17 @@ loadScripts(document, 'script');</script>
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="Reward.html" title="class in com.bilt.pos.session.identity">Reward</a>&gt;&nbsp;rewards,
  int&nbsp;pointBalance)</span></div>
 <div class="block">A member was found.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="found(java.lang.String,java.lang.String,java.util.List,int,com.bilt.pos.session.identity.VasData)">
+<h3>found</h3>
+<div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></span>&nbsp;<span class="element-name">found</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;memberId,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;loyaltyBrand,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="Reward.html" title="class in com.bilt.pos.session.identity">Reward</a>&gt;&nbsp;rewards,
+ int&nbsp;pointBalance,
+ <a href="VasData.html" title="class in com.bilt.pos.session.identity">VasData</a>&nbsp;vasData)</span></div>
+<div class="block">A member was found from a mobile wallet pass that carried <code>vasData</code>.</div>
 </section>
 </li>
 <li>
@@ -213,6 +239,14 @@ loadScripts(document, 'script');</script>
 <h3>getPointBalance</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">int</span>&nbsp;<span class="element-name">getPointBalance</span>()</div>
 <div class="block">Available point balance; <code>0</code> when not reported.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getVasData()">
+<h3>getVasData</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="VasData.html" title="class in com.bilt.pos.session.identity">VasData</a></span>&nbsp;<span class="element-name">getVasData</span>()</div>
+<div class="block">VAS data from a mobile wallet pass tapped during terminal-prompted identification, or <code>
+ null</code> when the member was not identified from a pass.</div>
 </section>
 </li>
 </ul>

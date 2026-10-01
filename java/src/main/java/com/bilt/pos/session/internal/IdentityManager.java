@@ -41,6 +41,7 @@ import com.bilt.pos.session.identity.IdentifyOptions;
 import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
 import com.bilt.pos.session.identity.MemberIdentifier;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -107,11 +108,13 @@ public final class IdentityManager {
       }
       throw Wire.missing("LoyaltyAccount");
     }
+    JsonNode payload = LoyaltyPayloadCodec.decode(body.getResponse().getAdditionalResponse());
     return IdentifyResult.found(
         account.getLoyaltyAccountID().getLoyaltyID(),
         account.getLoyaltyBrand(),
-        LoyaltyPayloadCodec.parseRewards(body.getResponse().getAdditionalResponse()),
-        0);
+        LoyaltyPayloadCodec.parseRewards(payload),
+        0,
+        LoyaltyPayloadCodec.parseVas(payload));
   }
 
   /** POS-driven identification (Nexo {@code BalanceInquiry}). */

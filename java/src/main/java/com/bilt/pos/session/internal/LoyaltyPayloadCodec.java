@@ -13,6 +13,8 @@ package com.bilt.pos.session.internal;
 
 import com.bilt.pos.session.identity.Reward;
 import com.bilt.pos.session.identity.RewardType;
+import com.bilt.pos.session.identity.VasData;
+import com.bilt.pos.session.identity.VasService;
 import com.bilt.pos.session.payment.EarnedReward;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -30,6 +32,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 /**
  * Codec for the custom Bilt loyalty JSON riding Base64-encoded in Nexo {@code
@@ -52,7 +56,10 @@ public final class LoyaltyPayloadCodec {
    * Returns an empty list when the payload is missing or malformed.
    */
   public static List<Reward> parseRewards(String base64) {
-    JsonNode root = decode(base64);
+    return parseRewards(decode(base64));
+  }
+
+  static List<Reward> parseRewards(JsonNode root) {
     if (root == null || !root.has("rewards")) {
       return Collections.emptyList();
     }
@@ -97,6 +104,39 @@ public final class LoyaltyPayloadCodec {
               text(node, "rewardRef")));
     }
     return earned;
+  }
+
+  /**
+   * Parses the {@code {"vas":{...}}} object an identification response carries when the member
+   * tapped a mobile wallet pass. Returns {@code null} when there is none or it is malformed.
+   */
+  public static VasData parseVas(String base64) {
+    return parseVas(decode(base64));
+  }
+
+  static VasData parseVas(JsonNode root) {
+    JsonNode vas = root == null ? null : root.get("vas");
+    if (vas == null || !vas.isObject()) {
+      return null;
+    }
+    JsonNode serviceNodes = vas.path("services");
+    if (!serviceNodes.isMissingNode() && !serviceNodes.isNull() && !serviceNodes.isArray()) {
+      LOGGER.log(Level.WARNING, "VAS services is not an array; ignoring VAS data");
+      return null;
+    }
+    List<VasService> services =
+        StreamSupport.stream(serviceNodes.spliterator(), false)
+            .filter(JsonNode::isObject)
+            .map(
+                node ->
+                    new VasService(
+                        text(node, "serviceId"),
+                        text(node, "serviceType"),
+                        text(node, "statusWord"),
+                        text(node, "encryptedData"),
+                        text(node, "cipherTimestamp")))
+            .collect(Collectors.toList());
+    return new VasData(text(vas, "source"), text(vas, "merchantId"), services, text(vas, "raw"));
   }
 
   /** The {@code rewardRefs} payload for a member's rewards. */
@@ -156,7 +196,7 @@ public final class LoyaltyPayloadCodec {
     return root.get(field).asInt();
   }
 
-  private static JsonNode decode(String base64) {
+  static JsonNode decode(String base64) {
     if (base64 == null || base64.isEmpty() || !plausiblyBase64(base64)) {
       // AdditionalResponse also legitimately carries the form-encoded
       // convention (promotionalMessage=..., currentBalance=...); that

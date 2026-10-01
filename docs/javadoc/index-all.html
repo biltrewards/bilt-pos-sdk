@@ -1644,6 +1644,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">A member was found.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/identity/IdentifyResult.html#found(java.lang.String,java.lang.String,java.util.List,int,com.bilt.pos.session.identity.VasData)" class="member-name-link">found(String, String, List&lt;Reward&gt;, int, VasData)</a> - Static method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></dt>
+<dd>
+<div class="block">A member was found from a mobile wallet pass that carried <code>vasData</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/identity/IdentifyStatus.html#FOUND" class="member-name-link">FOUND</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyStatus.html" title="enum class in com.bilt.pos.session.identity">IdentifyStatus</a></dt>
 <dd>
 <div class="block">A member was identified; the result carries their data.</div>
@@ -1978,6 +1982,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getCause()" class="member-name-link">getCause()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/identity/VasService.html#getCipherTimestamp()" class="member-name-link">getCipherTimestamp()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasService.html" title="class in com.bilt.pos.session.identity">VasService</a></dt>
+<dd>
+<div class="block">Timestamp used in the pass encryption, as hex, or <code>null</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/Terminal.html#getClient()" class="member-name-link">getClient()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/Terminal.html" title="class in com.bilt.pos.session">Terminal</a></dt>
 <dd>
 <div class="block">The underlying terminal client, for raw Nexo access.</div>
@@ -2153,6 +2161,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getEarnedRewards()" class="member-name-link">getEarnedRewards()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/identity/VasService.html#getEncryptedData()" class="member-name-link">getEncryptedData()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasService.html" title="class in com.bilt.pos.session.identity">VasService</a></dt>
+<dd>
+<div class="block">Encrypted pass payload as hex, or <code>null</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getEncryptedKsn()" class="member-name-link">getEncryptedKsn()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Gets the value of the encryptedKsn property.</div>
@@ -2472,6 +2484,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getMerchantAddress4()" class="member-name-link">getMerchantAddress4()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
 <div class="block">Gets the value of the merchantAddress4 property.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/identity/VasData.html#getMerchantId()" class="member-name-link">getMerchantId()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasData.html" title="class in com.bilt.pos.session.identity">VasData</a></dt>
+<dd>
+<div class="block">VAS merchant ID the terminal requested the pass with, or <code>null</code>.</div>
 </dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getMerchantID()" class="member-name-link">getMerchantID()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
@@ -2795,6 +2811,10 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/payment/EarnedReward.html#getQuantity()" class="member-name-link">getQuantity()</a> - Method in class com.bilt.pos.session.payment.<a href="com/bilt/pos/session/payment/EarnedReward.html" title="class in com.bilt.pos.session.payment">EarnedReward</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/identity/VasData.html#getRaw()" class="member-name-link">getRaw()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasData.html" title="class in com.bilt.pos.session.identity">VasData</a></dt>
+<dd>
+<div class="block">The terminal's unparsed VAS report, or <code>null</code> when it was broken into fields.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/identity/CardAcquisitionResult.html#getRawPan()" class="member-name-link">getRawPan()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionResult.html" title="class in com.bilt.pos.session.identity">CardAcquisitionResult</a></dt>
 <dd>
 <div class="block">Full PAN; only returned for PLCC cards, otherwise <code>null</code>.</div>
@@ -2966,9 +2986,21 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/nexo/security/SaleToPOISecuredMessage.html#getSecurityTrailer()" class="member-name-link">getSecurityTrailer()</a> - Method in class com.bilt.pos.nexo.security.<a href="com/bilt/pos/nexo/security/SaleToPOISecuredMessage.html" title="class in com.bilt.pos.nexo.security">SaleToPOISecuredMessage</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/identity/VasService.html#getServiceId()" class="member-name-link">getServiceId()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasService.html" title="class in com.bilt.pos.session.identity">VasService</a></dt>
+<dd>
+<div class="block">Pass type identifier, e.g.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getServiceId()" class="member-name-link">getServiceId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
 <dd>
 <div class="block">Original request's Nexo <code>ServiceID</code>, when a request was sent.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/identity/VasData.html#getServices()" class="member-name-link">getServices()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasData.html" title="class in com.bilt.pos.session.identity">VasData</a></dt>
+<dd>
+<div class="block">One entry per pass returned.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/identity/VasService.html#getServiceType()" class="member-name-link">getServiceType()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasService.html" title="class in com.bilt.pos.session.identity">VasService</a></dt>
+<dd>
+<div class="block">Service type the terminal reports, e.g.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/ShopperSession.html#getSessionId()" class="member-name-link">getSessionId()</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.html" title="interface in com.bilt.pos.session">ShopperSession</a></dt>
 <dd>
@@ -3000,12 +3032,20 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">SKU of the rebated line, or <code>null</code> for cart-level.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/identity/VasData.html#getSource()" class="member-name-link">getSource()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasData.html" title="class in com.bilt.pos.session.identity">VasData</a></dt>
+<dd>
+<div class="block">Wallet that supplied the pass, e.g.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayload.html#getStandby()" class="member-name-link">getStandby()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a></dt>
 <dd>
 <div class="block">Gets the value of the standby property.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/identity/IdentifyResult.html#getStatus()" class="member-name-link">getStatus()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/identity/VasService.html#getStatusWord()" class="member-name-link">getStatusWord()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasService.html" title="class in com.bilt.pos.session.identity">VasService</a></dt>
+<dd>
+<div class="block">ISO 7816 status word of the pass read, e.g.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/ReversedMovement.html#getStep()" class="member-name-link">getStep()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversedMovement.html" title="class in com.bilt.pos.session">ReversedMovement</a></dt>
 <dd>
 <div class="block">The kind of sale movement that was reversed.</div>
@@ -3362,6 +3402,11 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/input/MenuSelection.html#getValues()" class="member-name-link">getValues()</a> - Method in class com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/MenuSelection.html" title="class in com.bilt.pos.session.input">MenuSelection</a></dt>
 <dd>
 <div class="block">All selected entry texts, for multi-select menus.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/identity/IdentifyResult.html#getVasData()" class="member-name-link">getVasData()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a></dt>
+<dd>
+<div class="block">VAS data from a mobile wallet pass tapped during terminal-prompted identification, or <code>
+ null</code> when the member was not identified from a pass.</div>
 </dd>
 <dt><a href="com/bilt/pos/display/DisplayPayload.html#getVersion()" class="member-name-link">getVersion()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a></dt>
 <dd>
@@ -6833,6 +6878,18 @@ the order they are declared.</div>
 <div class="block">Returns an array containing the constants of this enum class, in
 the order they are declared.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/identity/VasData.html" class="type-name-link" title="class in com.bilt.pos.session.identity">VasData</a> - Class in <a href="com/bilt/pos/session/identity/package-summary.html">com.bilt.pos.session.identity</a></dt>
+<dd>
+<div class="block">Value Added Services (VAS) data read from a mobile wallet pass (e.g.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/identity/VasData.html#%3Cinit%3E(java.lang.String,java.lang.String,java.util.List,java.lang.String)" class="member-name-link">VasData(String, String, List&lt;VasService&gt;, String)</a> - Constructor for class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasData.html" title="class in com.bilt.pos.session.identity">VasData</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/identity/VasService.html" class="type-name-link" title="class in com.bilt.pos.session.identity">VasService</a> - Class in <a href="com/bilt/pos/session/identity/package-summary.html">com.bilt.pos.session.identity</a></dt>
+<dd>
+<div class="block">One pass returned in a <a href="com/bilt/pos/session/identity/VasData.html" title="class in com.bilt.pos.session.identity"><code>VasData</code></a> read.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/identity/VasService.html#%3Cinit%3E(java.lang.String,java.lang.String,java.lang.String,java.lang.String,java.lang.String)" class="member-name-link">VasService(String, String, String, String, String)</a> - Constructor for class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasService.html" title="class in com.bilt.pos.session.identity">VasService</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.html#verified-tls-recommended--heading" class="search-tag-link">Verified TLS (recommended)</a> - Search tag in class com.bilt.pos.nexo.client.BiltNexoTerminalClient</dt>
 <dd>Section</dd>
 <dt><a href="com/bilt/pos/display/DisplayPayload.html#version" class="member-name-link">version</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a></dt>
