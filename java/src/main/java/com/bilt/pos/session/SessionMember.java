@@ -43,6 +43,7 @@ final class SessionMember {
   private final BooleanSupplier ended;
   private final Consumer<Member> onMemberChanged;
   private volatile Member member;
+  private volatile int attachments;
 
   /**
    * {@code seed} is the builder's pre-seeded member, or null; it is installed silently, as initial
@@ -81,6 +82,16 @@ final class SessionMember {
   }
 
   /**
+   * How many times the POS has attached a member through {@link #set(Member)}. A terminal
+   * identification reads it before it goes to the terminal and hands it back to {@link
+   * #applyIdentification(IdentifyResult, int)}, so a member attached while it was waiting is not
+   * overwritten by its older outcome.
+   */
+  int attachments() {
+    return attachments;
+  }
+
+  /**
    * The public setter: installs {@code next} (null clears), announces the change, and starts the
    * lookup when {@code next} is pending.
    */
@@ -88,6 +99,7 @@ final class SessionMember {
     boolean changed;
     lock.lock();
     try {
+      attachments++;
       changed = install(next);
     } finally {
       lock.unlock();
@@ -113,12 +125,17 @@ final class SessionMember {
    * wins: {@code FOUND} attaches the member; {@code NOT_FOUND} and {@code SUSPENDED} are
    * affirmative "no usable member" outcomes and detach any previously attached member (so a
    * re-identify cannot leave loyalty running against a stale account); {@code CANCELLED} only means
-   * the customer dismissed this prompt — a prior member, resolved or pending, stands.
+   * the customer dismissed this prompt — a prior member, resolved or pending, stands. An outcome
+   * whose lookup began before the POS last attached a member ({@code attachmentsAtStart} is stale)
+   * is dropped: the later attachment wins.
    *
    * <p>Must be called with the lock held; returns whether the member changed, in which case the
    * caller announces it with {@link #fireChanged(Member)} once it has released the lock.
    */
-  boolean applyIdentification(IdentifyResult result) {
+  boolean applyIdentification(IdentifyResult result, int attachmentsAtStart) {
+    if (attachmentsAtStart != attachments) {
+      return false;
+    }
     if (result.getStatus() == IdentifyStatus.FOUND) {
       return install(Member.resolved(result));
     }

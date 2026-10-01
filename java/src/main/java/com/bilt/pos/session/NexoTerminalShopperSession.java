@@ -304,10 +304,13 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     Objects.requireNonNull(options, "options");
     return operation(
         "identifyMember",
-        () ->
-            completeIdentify(
-                identifyStateChecked(
-                    () -> identityManager.identifyPrompted(options, currentSaleTransaction()))));
+        () -> {
+          int attachments = memberState.attachments();
+          return completeIdentify(
+              identifyStateChecked(
+                  () -> identityManager.identifyPrompted(options, currentSaleTransaction())),
+              attachments);
+        });
   }
 
   @Override
@@ -320,10 +323,12 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     }
     return operation(
         "identifyMember",
-        () ->
-            completeIdentify(
-                identifyStateChecked(
-                    () -> identityManager.identifyByIdentifier(pending.resolver()))));
+        () -> {
+          int attachments = memberState.attachments();
+          return completeIdentify(
+              identifyStateChecked(() -> identityManager.identifyByIdentifier(pending.resolver())),
+              attachments);
+        });
   }
 
   @Override
@@ -364,10 +369,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
 
   /**
    * Applies an identification outcome to the session unless the session ended while the lookup was
-   * on the wire, in which case the outcome is discarded like any other late prompt result. The
-   * member change, if any, is announced once the lock is released.
+   * on the wire, in which case the outcome is discarded like any other late prompt result, and
+   * leaves a member the POS attached while the lookup was on the wire alone. The member change, if
+   * any, is announced once the lock is released.
    */
-  private IdentifyResult completeIdentify(IdentifyResult result) {
+  private IdentifyResult completeIdentify(IdentifyResult result, int attachmentsAtStart) {
     boolean changed;
     Member now;
     lock.lock();
@@ -375,7 +381,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       if (phase == SessionPhase.ENDED) {
         throw discardedAfterEnd("identifyMember");
       }
-      changed = memberState.applyIdentification(result);
+      changed = memberState.applyIdentification(result, attachmentsAtStart);
       now = memberState.current();
     } finally {
       lock.unlock();

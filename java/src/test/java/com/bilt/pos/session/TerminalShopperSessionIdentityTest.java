@@ -141,6 +141,50 @@ class TerminalShopperSessionIdentityTest {
   }
 
   @Test
+  void memberAttachedWhileAnIdentifyIsOnTheWireIsNotOverwrittenByItsOutcome() throws Exception {
+    String found =
+        "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+            + "\"Response\":{\"Result\":\"Success\"},"
+            + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"},"
+            + "\"LoyaltyBrand\":\"K-Club\"}]}}}";
+    CountDownLatch identifyOnTheWire = new CountDownLatch(1);
+    CountDownLatch attached = new CountDownLatch(1);
+    server.setDispatcher(
+        new Dispatcher() {
+          @Override
+          public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+            identifyOnTheWire.countDown();
+            // hold the FOUND response until the POS has attached its own member
+            attached.await(5, TimeUnit.SECONDS);
+            return new MockResponse().setBody(found);
+          }
+        });
+
+    AtomicReference<IdentifyResult> delivered = new AtomicReference<>();
+    Thread register =
+        new Thread(
+            () -> {
+              try {
+                delivered.set(session.identifyMember().get());
+              } catch (SessionException ignored) {
+                // asserted through delivered below
+              }
+            });
+    register.start();
+    assertTrue(identifyOnTheWire.await(5, TimeUnit.SECONDS));
+
+    session.member(Member.id("mbr_pos"));
+    attached.countDown();
+    register.join(5_000);
+    assertFalse(register.isAlive());
+
+    // the caller still learns what the terminal found, but the member the POS attached later stands
+    assertNotNull(delivered.get());
+    assertEquals(IdentifyStatus.FOUND, delivered.get().getStatus());
+    assertEquals(Member.id("mbr_pos"), session.member());
+  }
+
+  @Test
   void identifyMemberFindsMemberAndTransitionsToIdentified() throws Exception {
     server.enqueue(
         new MockResponse()
