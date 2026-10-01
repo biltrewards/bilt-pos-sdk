@@ -9,6 +9,7 @@
  */
 package com.bilt.pos.session.identity;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -31,7 +32,9 @@ public final class VasData {
     this.source = source;
     this.merchantId = merchantId;
     this.services =
-        services == null ? Collections.emptyList() : Collections.unmodifiableList(services);
+        services == null
+            ? Collections.emptyList()
+            : Collections.unmodifiableList(new ArrayList<>(services));
     this.raw = raw;
   }
 
