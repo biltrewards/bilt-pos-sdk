@@ -56,7 +56,10 @@ public final class LoyaltyPayloadCodec {
    * Returns an empty list when the payload is missing or malformed.
    */
   public static List<Reward> parseRewards(String base64) {
-    JsonNode root = decode(base64);
+    return parseRewards(decode(base64));
+  }
+
+  static List<Reward> parseRewards(JsonNode root) {
     if (root == null || !root.has("rewards")) {
       return Collections.emptyList();
     }
@@ -108,7 +111,10 @@ public final class LoyaltyPayloadCodec {
    * tapped a mobile wallet pass. Returns {@code null} when there is none or it is malformed.
    */
   public static VasData parseVas(String base64) {
-    JsonNode root = decode(base64);
+    return parseVas(decode(base64));
+  }
+
+  static VasData parseVas(JsonNode root) {
     JsonNode vas = root == null ? null : root.get("vas");
     if (vas == null || !vas.isObject()) {
       return null;
@@ -190,7 +196,7 @@ public final class LoyaltyPayloadCodec {
     return root.get(field).asInt();
   }
 
-  private static JsonNode decode(String base64) {
+  static JsonNode decode(String base64) {
     if (base64 == null || base64.isEmpty() || !plausiblyBase64(base64)) {
       // AdditionalResponse also legitimately carries the form-encoded
       // convention (promotionalMessage=..., currentBalance=...); that
