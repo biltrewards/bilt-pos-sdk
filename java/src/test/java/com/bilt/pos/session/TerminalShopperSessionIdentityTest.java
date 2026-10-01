@@ -14,6 +14,8 @@ import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
 import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.session.identity.RewardType;
+import com.bilt.pos.session.identity.VasData;
+import com.bilt.pos.session.identity.VasService;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -208,6 +210,7 @@ class TerminalShopperSessionIdentityTest {
     assertEquals(RewardType.REWARD, result.getRewards().get(0).getType());
     assertNotNull(result.getRewards().get(0).getExpirationDate());
     assertEquals(RewardType.COUPON, result.getRewards().get(1).getType());
+    assertNull(result.getVasData());
 
     assertEquals("98234", session.getMember().getMemberId());
     assertEquals(Member.resolved(result), session.member());
@@ -223,6 +226,42 @@ class TerminalShopperSessionIdentityTest {
             .toValue());
     assertNotNull(
         sent.getCardAcquisitionRequest().getSaleData().getSaleTransactionID().getTransactionID());
+  }
+
+  @Test
+  void identifyMemberExposesWalletPassVasData() throws Exception {
+    String vasJson =
+        "{\"vas\":{\"source\":\"ApplePay\",\"merchantId\":\"M-1\",\"services\":[{"
+            + "\"serviceId\":\"pass.com.biltrewards.loyalty\",\"serviceType\":\"Coupon1\","
+            + "\"statusWord\":\"9000\",\"encryptedData\":\"8ff4\",\"cipherTimestamp\":\"3006a261\"}]}}";
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+                    + "\"Response\":{\"Result\":\"Success\",\"AdditionalResponse\":\""
+                    + Base64.getEncoder().encodeToString(vasJson.getBytes(StandardCharsets.UTF_8))
+                    + "\"},"
+                    + "\"LoyaltyAccount\":[{"
+                    + "\"LoyaltyAccountID\":{\"EntryMode\":[\"Mobile\"],"
+                    + "\"IdentificationType\":\"AccountNumber\","
+                    + "\"LoyaltyID\":\"19d6f8aa-51ce-484e-9e28-06949b1b8f90\"}}]}}}"));
+
+    IdentifyResult result = session.identifyMember().get();
+
+    assertEquals("19d6f8aa-51ce-484e-9e28-06949b1b8f90", result.getMemberId());
+    assertTrue(result.getRewards().isEmpty());
+    VasData vas = result.getVasData();
+    assertNotNull(vas);
+    assertEquals("ApplePay", vas.getSource());
+    assertEquals("M-1", vas.getMerchantId());
+    assertNull(vas.getRaw());
+    assertEquals(1, vas.getServices().size());
+    VasService pass = vas.getServices().get(0);
+    assertEquals("pass.com.biltrewards.loyalty", pass.getServiceId());
+    assertEquals("Coupon1", pass.getServiceType());
+    assertEquals("9000", pass.getStatusWord());
+    assertEquals("8ff4", pass.getEncryptedData());
+    assertEquals("3006a261", pass.getCipherTimestamp());
   }
 
   @Test

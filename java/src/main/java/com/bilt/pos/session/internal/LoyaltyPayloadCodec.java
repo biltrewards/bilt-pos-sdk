@@ -13,6 +13,8 @@ package com.bilt.pos.session.internal;
 
 import com.bilt.pos.session.identity.Reward;
 import com.bilt.pos.session.identity.RewardType;
+import com.bilt.pos.session.identity.VasData;
+import com.bilt.pos.session.identity.VasService;
 import com.bilt.pos.session.payment.EarnedReward;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -97,6 +99,29 @@ public final class LoyaltyPayloadCodec {
               text(node, "rewardRef")));
     }
     return earned;
+  }
+
+  /**
+   * Parses the {@code {"vas":{...}}} object an identification response carries when the member
+   * tapped a mobile wallet pass. Returns {@code null} when there is none or it is malformed.
+   */
+  public static VasData parseVas(String base64) {
+    JsonNode root = decode(base64);
+    JsonNode vas = root == null ? null : root.get("vas");
+    if (vas == null || !vas.isObject()) {
+      return null;
+    }
+    List<VasService> services = new ArrayList<>();
+    for (JsonNode node : vas.path("services")) {
+      services.add(
+          new VasService(
+              text(node, "serviceId"),
+              text(node, "serviceType"),
+              text(node, "statusWord"),
+              text(node, "encryptedData"),
+              text(node, "cipherTimestamp")));
+    }
+    return new VasData(text(vas, "source"), text(vas, "merchantId"), services, text(vas, "raw"));
   }
 
   /** The {@code rewardRefs} payload for a member's rewards. */

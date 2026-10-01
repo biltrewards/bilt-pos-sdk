@@ -109,11 +109,13 @@ public final class IdentityManager {
       }
       throw Wire.missing("LoyaltyAccount");
     }
+    String additionalResponse = body.getResponse().getAdditionalResponse();
     return IdentifyResult.found(
         account.getLoyaltyAccountID().getLoyaltyID(),
         account.getLoyaltyBrand(),
-        LoyaltyPayloadCodec.parseRewards(body.getResponse().getAdditionalResponse()),
-        0);
+        LoyaltyPayloadCodec.parseRewards(additionalResponse),
+        0,
+        LoyaltyPayloadCodec.parseVas(additionalResponse));
   }
 
   /**
