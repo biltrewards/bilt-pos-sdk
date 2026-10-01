@@ -148,4 +148,18 @@ class MemberTest {
     assertNotEquals(
         Member.resolved(found), Member.id("98234"), "terminal detail is part of the value");
   }
+
+  @Test
+  void resolvedMemberKeepsTheRewardsItWasCreatedWith() {
+    java.util.List<Reward> source = new java.util.ArrayList<>();
+    source.add(new Reward("rwd:R1", RewardType.REWARD, "Free coffee", null));
+    Member member = Member.resolved(IdentifyResult.found("mbr_1", "K-Club", source, 10));
+    Member before = Member.resolved(IdentifyResult.found("mbr_1", "K-Club", source, 10));
+
+    source.clear();
+
+    assertEquals(1, member.rewards().size());
+    assertEquals(before, member);
+    assertEquals(before.hashCode(), member.hashCode());
+  }
 }

@@ -9,6 +9,7 @@
  */
 package com.bilt.pos.session.identity;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -54,7 +55,7 @@ public final class Member {
     this.rewards =
         rewards == null || rewards.isEmpty()
             ? Collections.emptyList()
-            : Collections.unmodifiableList(rewards);
+            : Collections.unmodifiableList(new ArrayList<>(rewards));
     this.pointBalance = pointBalance;
     this.status = status;
     this.resolver = resolver;
