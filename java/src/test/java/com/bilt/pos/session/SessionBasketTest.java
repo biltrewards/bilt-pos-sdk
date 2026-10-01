@@ -40,6 +40,14 @@ class SessionBasketTest {
           Collections.emptyMap());
     }
 
+    private final SessionMember memberState =
+        new SessionMember(lock, operations, MemberResolver.NONE, this::ended, null, null);
+
+    @Override
+    SessionMember memberState() {
+      return memberState;
+    }
+
     @Override
     void requireBasketMutable() {
       if (consumed) {

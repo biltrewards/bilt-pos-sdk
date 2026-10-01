@@ -38,7 +38,8 @@ import com.bilt.pos.session.identity.CardAcquisitionOptions;
 import com.bilt.pos.session.identity.CardAcquisitionResult;
 import com.bilt.pos.session.identity.IdentifyOptions;
 import com.bilt.pos.session.identity.IdentifyResult;
-import com.bilt.pos.session.identity.MemberIdentifier;
+import com.bilt.pos.session.identity.IdentifyStatus;
+import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.session.input.ConfirmationOptions;
 import com.bilt.pos.session.input.InputOptions;
 import com.bilt.pos.session.input.MenuOptions;
@@ -122,6 +123,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   private final boolean autoDisplay;
 
   private final IdentityManager identityManager;
+  private final SessionMember memberState;
   private final InputManager inputManager;
   private final ReversalManager reversalManager;
   private final PaymentOrchestrator paymentOrchestrator;
@@ -189,6 +191,14 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     this.router = new DisplayRouter(builder.client, builder.externalDisplayClient);
     this.exchange = new NexoExchange(router, factory);
     this.identityManager = new IdentityManager(exchange);
+    this.memberState =
+        new SessionMember(
+            lock,
+            operations,
+            this::resolveOnTerminal,
+            this::ended,
+            builder.onMemberChanged,
+            builder.member);
     this.inputManager = new InputManager(exchange);
     this.storedValueManager = new StoredValueManager(exchange, builder.currency);
     this.reversalManager = new ReversalManager(exchange, builder.currency, storedValueManager);
@@ -294,20 +304,50 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     Objects.requireNonNull(options, "options");
     return operation(
         "identifyMember",
-        () ->
-            completeIdentify(
-                identifyStateChecked(
-                    () -> identityManager.identifyPrompted(options, currentSaleTransaction()))));
+        () -> {
+          int attachments = memberState.attachments();
+          return completeIdentify(
+              identifyStateChecked(
+                  () -> identityManager.identifyPrompted(options, currentSaleTransaction())),
+              attachments);
+        });
   }
 
   @Override
-  public SessionResult<IdentifyResult> identifyMember(MemberIdentifier identifier) {
-    Objects.requireNonNull(identifier, "identifier");
+  public SessionResult<IdentifyResult> identifyMember(Member pending) {
+    Objects.requireNonNull(pending, "pending");
+    if (pending.isResolved()) {
+      throw new IllegalArgumentException(
+          "identifyMember(Member) looks up a member pending resolution "
+              + "(Member.idResolver()...); a resolved member attaches through member(Member)");
+    }
     return operation(
         "identifyMember",
-        () ->
-            completeIdentify(
-                identifyStateChecked(() -> identityManager.identifyByIdentifier(identifier))));
+        () -> {
+          int attachments = memberState.attachments();
+          return completeIdentify(
+              identifyStateChecked(() -> identityManager.identifyByIdentifier(pending.resolver())),
+              attachments);
+        });
+  }
+
+  @Override
+  SessionMember memberState() {
+    return memberState;
+  }
+
+  /**
+   * The {@link MemberResolver} behind {@link #member(Member)}: the same terminal lookup as {@link
+   * #identifyMember(Member)}, mapped to the resolver contract — found attaches, not found and
+   * suspended clear, a cancelled (aborted) lookup learns nothing and leaves the member pending.
+   */
+  private Member resolveOnTerminal(Member pending) {
+    requireOpen("member");
+    IdentifyResult result = identityManager.identifyByIdentifier(pending.resolver());
+    if (result.getStatus() == IdentifyStatus.FOUND) {
+      return Member.resolved(result);
+    }
+    return result.getStatus() == IdentifyStatus.CANCELLED ? pending : null;
   }
 
   private IdentifyResult identifyStateChecked(Supplier<IdentifyResult> lookup) {
@@ -329,18 +369,21 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
 
   /**
    * Applies an identification outcome to the session unless the session ended while the lookup was
-   * on the wire, in which case the outcome is discarded like any other late prompt result.
+   * on the wire, in which case the outcome is discarded like any other late prompt result, and
+   * leaves a member the POS attached while the lookup was on the wire alone. The member change, if
+   * any, is announced once the lock is released.
    */
-  private IdentifyResult completeIdentify(IdentifyResult result) {
+  private IdentifyResult completeIdentify(IdentifyResult result, int attachmentsAtStart) {
     lock.lock();
     try {
       if (phase == SessionPhase.ENDED) {
         throw discardedAfterEnd("identifyMember");
       }
-      applyIdentification(result);
+      memberState.applyIdentification(result, attachmentsAtStart);
     } finally {
       lock.unlock();
     }
+    memberState.flush();
     return result;
   }
 
@@ -517,6 +560,14 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   @Override
   boolean closingOrEnded() {
     return phase == SessionPhase.ENDING || phase == SessionPhase.ENDED;
+  }
+
+  @Override
+  void requireMemberChangeable() {
+    if (moneyMovementInFlight()) {
+      throw new IllegalStateException(
+          "the member cannot be changed while money movement is in flight");
+    }
   }
 
   private boolean moneyMovementInFlight() {
@@ -724,10 +775,12 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       // abort left over from an earlier operation must
       // not kill a legitimate retry at its first checkAbort
       abortRequested = false;
+      // the member the settlement charges and records, frozen under the same lock that
+      // refuses member changes from here until it finishes
+      request.member = identifiedMember();
     } finally {
       lock.unlock();
     }
-    request.member = getMember();
     request.storedValueCard = storedValueCard;
     request.options = options;
     request.basket = netSettlement ? fullBasket : chargePortion;
@@ -1652,6 +1705,9 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
 
   private TerminalShopperSession started() {
     exchange.sendSessionSignal(SessionSignalCodec.start(getSessionId()));
+    // a pre-seeded member pending resolution is looked up only now that
+    // the bracket exists; queued behind this start on the operation lane
+    memberState.resolveSeed();
     return this;
   }
 
