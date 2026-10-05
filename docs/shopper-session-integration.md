@@ -320,6 +320,9 @@ void applyOffer(Offer offer) {   // session: the field set from start()
             .multiply(offer.getPercentage())
             .movePointLeft(2)
             .setScale(2, RoundingMode.HALF_UP);
+    if (off.signum() <= 0) {
+        return; // a small percentage can round to 0.00; BasketDiscount rejects zero
+    }
     List<BasketDiscount> discounts = new ArrayList<>(line.getDiscounts());
     discounts.add(BasketDiscount.offer(offer.getId(), "Bilt offer", off));
     session.basket().setDiscounts(line.getItemId(), discounts);
