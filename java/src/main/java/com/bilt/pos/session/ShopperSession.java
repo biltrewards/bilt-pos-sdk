@@ -300,8 +300,9 @@ public interface ShopperSession extends AutoCloseable {
      * Adds one shopper-facing widget to the session; repeatable, each call adds one, in the order
      * they are called. Widgets follow the session's basket, member and context and render on the
      * surfaces they were configured with; the session attaches them when it starts and detaches
-     * them when it ends. A widget instance belongs to one session and cannot be registered twice.
-     * At runtime a widget is reached through {@link ShopperSession#widget(Class)}.
+     * them when it ends. A widget instance belongs to one session and cannot be registered twice,
+     * nor attached to a second session while the first still holds it. At runtime a widget is
+     * reached through {@link ShopperSession#widget(Class)}.
      *
      * <p>A session with widgets but no {@link #credentials(BiltCredentials) credentials} is allowed
      * — a widget backed by a fake or a local source needs none — but a platform-backed widget

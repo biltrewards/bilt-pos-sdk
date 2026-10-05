@@ -359,17 +359,25 @@ abstract class AbstractShopperSession implements ShopperSession {
    * widget on the operation lane — waiting for it, so the widgets are bound before {@code start()}
    * yields the session — then queues {@code started} and, when the session begins with a member
    * attached, {@code memberChanged} with that member. A widget whose {@code attach} throws is
-   * reported through {@code onBackgroundError} and dropped from delivery; the session goes on
-   * without it.
+   * reported through {@code onBackgroundError} and dropped from delivery, as is a widget another
+   * session still holds; the session goes on without it.
    */
   void announceStarted() {
     if (!widgets.isEmpty()) {
       operations.callOrdered(
           () -> {
             for (Widget widget : widgets) {
+              if (!WidgetOwnership.claim(widget)) {
+                observers.remove(widget);
+                operations.backgroundError(
+                    "attaching the " + widget.getClass().getSimpleName() + " widget",
+                    invalidState("the widget is already attached to another session"));
+                continue;
+              }
               try {
                 widget.attach(widgetHost);
               } catch (RuntimeException e) {
+                WidgetOwnership.release(widget);
                 observers.remove(widget);
                 operations.backgroundError(
                     "attaching the " + widget.getClass().getSimpleName() + " widget", e);
@@ -403,6 +411,8 @@ abstract class AbstractShopperSession implements ShopperSession {
             } catch (RuntimeException e) {
               operations.backgroundError(
                   "detaching the " + widget.getClass().getSimpleName() + " widget", e);
+            } finally {
+              WidgetOwnership.release(widget);
             }
           }
           widgetHost.close();

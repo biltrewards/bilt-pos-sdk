@@ -22,11 +22,12 @@ package com.bilt.pos.widget;
  *
  * <p>One widget instance belongs to one session. The session {@linkplain #attach(WidgetHost)
  * attaches} it once when the session starts and {@linkplain #detach() detaches} it once when the
- * session ends; registering the same instance on a second session is refused. Between those two
- * calls the widget receives the {@link SessionObserver} callbacks, all of them — like {@code
- * attach} and {@code detach} — on the session's operation lane, one at a time and in order. {@link
- * #pause()} and {@link #resume()} are the register's, and may be called from any thread at any time
- * while the session is open.
+ * session ends. A second session that starts while the instance is still attached elsewhere reports
+ * the failure through {@code onBackgroundError} and runs without it. Between those two calls the
+ * widget receives the {@link SessionObserver} callbacks, all of them — like {@code attach} and
+ * {@code detach} — on the session's operation lane, one at a time and in order. {@link #pause()}
+ * and {@link #resume()} are the register's, and may be called from any thread at any time while the
+ * session is open.
  */
 public interface Widget extends SessionObserver {
 

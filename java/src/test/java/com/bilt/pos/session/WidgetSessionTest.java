@@ -484,6 +484,35 @@ class WidgetSessionTest {
   }
 
   @Test
+  void aWidgetAttachedToOneSessionIsRefusedByASecondUntilTheFirstEnds() throws Exception {
+    RecordingWidget shared = new RecordingWidget();
+    ShopperSession first =
+        ShopperSession.builder().saleId("POS-LANE-3").currency("USD").widget(shared).start();
+
+    List<SessionError> refused = new CopyOnWriteArrayList<>();
+    ShopperSession second =
+        ShopperSession.builder()
+            .saleId("POS-LANE-4")
+            .currency("USD")
+            .widget(shared)
+            .onBackgroundError(refused::add)
+            .start();
+    second.basket().addItem(item("SKU-1"));
+    second.end().executeSync();
+
+    assertEquals(1, refused.size());
+    assertEquals(Arrays.asList("attach", "started"), shared.names());
+
+    first.end().executeSync();
+    assertTrue(shared.detached.await(5, TimeUnit.SECONDS));
+
+    ShopperSession third =
+        ShopperSession.builder().saleId("POS-LANE-5").currency("USD").widget(shared).start();
+    third.end().executeSync();
+    assertEquals(2, shared.names().stream().filter("attach"::equals).count());
+  }
+
+  @Test
   void widgetsCollectionRegistersEachInOrderAndDuplicatesAreRefused() {
     RecordingWidget first = new RecordingWidget();
     OtherWidget second = new OtherWidget();

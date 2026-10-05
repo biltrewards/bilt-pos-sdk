@@ -104,10 +104,12 @@ extends <a href="SessionObserver.html" title="interface in com.bilt.pos.widget">
  the SDK's own widgets, and a test double, can be written against it.
 
  <p>One widget instance belongs to one session. The session <a href="#attach(com.bilt.pos.widget.WidgetHost)">attaches</a> it once when the session starts and <a href="#detach()">detaches</a> it once when the
- session ends; registering the same instance on a second session is refused. Between those two
- calls the widget receives the <a href="SessionObserver.html" title="interface in com.bilt.pos.widget"><code>SessionObserver</code></a> callbacks, all of them — like <code>
- attach</code> and <code>detach</code> — on the session's operation lane, one at a time and in order. <a href="#pause()"><code>pause()</code></a> and <a href="#resume()"><code>resume()</code></a> are the register's, and may be called from any thread at any time
- while the session is open.</div>
+ session ends. A second session that starts while the instance is still attached elsewhere reports
+ the failure through <code>onBackgroundError</code> and runs without it. Between those two calls the
+ widget receives the <a href="SessionObserver.html" title="interface in com.bilt.pos.widget"><code>SessionObserver</code></a> callbacks, all of them — like <code>attach</code> and
+ <code>detach</code> — on the session's operation lane, one at a time and in order. <a href="#pause()"><code>pause()</code></a>
+ and <a href="#resume()"><code>resume()</code></a> are the register's, and may be called from any thread at any time while the
+ session is open.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">

@@ -665,9 +665,10 @@ public interface TerminalShopperSession extends ShopperSession {
      * they are called. Widgets follow the session's basket, member and context and render on the
      * surfaces they were configured with — a companion display beside the terminal, say. The
      * session attaches them once the terminal has acknowledged the start and detaches them when it
-     * ends. A widget instance belongs to one session and cannot be registered twice. At runtime a
-     * widget is reached through {@link ShopperSession#widget(Class)}. With no widget the session
-     * behaves exactly as before; the terminal's own customer display is not a widget.
+     * ends. A widget instance belongs to one session and cannot be registered twice, nor attached
+     * to a second session while the first still holds it. At runtime a widget is reached through
+     * {@link ShopperSession#widget(Class)}. With no widget the session behaves exactly as before;
+     * the terminal's own customer display is not a widget.
      *
      * <p>A session with widgets but no {@link #credentials(BiltCredentials) credentials} is allowed
      * — a widget backed by a fake or a local source needs none — but a platform-backed widget
