@@ -127,7 +127,8 @@ loadScripts(document, 'script');</script>
  <p><a href="#started(com.bilt.pos.session.SessionContextSnapshot)"><code>started(SessionContextSnapshot)</code></a> is the first callback and <a href="#ended()"><code>ended()</code></a> the last;
  nothing is delivered before or after them. When the session starts with a member already
  attached, <a href="#memberChanged(com.bilt.pos.session.identity.Member)"><code>memberChanged(Member)</code></a> follows <code>started</code> with that member, so an observer
- can rely on member callbacks alone for the member state.</div>
+ can rely on member callbacks alone for the member state. Both are delivered before the session's
+ start completes, so a register handler never sees a session its observers have not heard of.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">

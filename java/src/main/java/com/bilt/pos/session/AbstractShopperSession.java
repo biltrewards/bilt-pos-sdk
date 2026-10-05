@@ -357,40 +357,39 @@ abstract class AbstractShopperSession implements ShopperSession {
   /**
    * The start of the observers' world, for the subclass's {@code start()} path: attaches every
    * widget on the operation lane — waiting for it, so the widgets are bound before {@code start()}
-   * yields the session — then queues {@code started} and, when the session begins with a member
-   * attached, {@code memberChanged} with that member. A widget whose {@code attach} throws is
-   * reported through {@code onBackgroundError} and dropped from delivery, as is a widget another
-   * session still holds; the session goes on without it.
+   * yields the session — then delivers {@code started} and, when the session begins with a member
+   * attached, {@code memberChanged} with that member, in the same lane task. The observers have
+   * therefore heard both before the start result completes and any handler sees the session. A
+   * widget whose {@code attach} throws is reported through {@code onBackgroundError} and dropped
+   * from delivery, as is a widget another session still holds; the session goes on without it.
    */
   void announceStarted() {
-    if (!widgets.isEmpty()) {
-      operations.callOrdered(
-          () -> {
-            for (Widget widget : widgets) {
-              if (!WidgetOwnership.claim(widget)) {
-                observers.remove(widget);
-                operations.backgroundError(
-                    "attaching the " + widget.getClass().getSimpleName() + " widget",
-                    invalidState("the widget is already attached to another session"));
-                continue;
-              }
-              try {
-                widget.attach(widgetHost);
-              } catch (RuntimeException e) {
-                WidgetOwnership.release(widget);
-                observers.remove(widget);
-                operations.backgroundError(
-                    "attaching the " + widget.getClass().getSimpleName() + " widget", e);
-              }
+    operations.callOrdered(
+        () -> {
+          for (Widget widget : widgets) {
+            if (!WidgetOwnership.claim(widget)) {
+              observers.remove(widget);
+              operations.backgroundError(
+                  "attaching the " + widget.getClass().getSimpleName() + " widget",
+                  invalidState("the widget is already attached to another session"));
+              continue;
             }
-            return null;
-          });
-    }
-    observers.started(context().snapshot());
-    Member seed = member();
-    if (seed != null) {
-      observers.memberChanged(seed);
-    }
+            try {
+              widget.attach(widgetHost);
+            } catch (RuntimeException e) {
+              WidgetOwnership.release(widget);
+              observers.remove(widget);
+              operations.backgroundError(
+                  "attaching the " + widget.getClass().getSimpleName() + " widget", e);
+            }
+          }
+          observers.startedNow(context().snapshot());
+          Member seed = member();
+          if (seed != null) {
+            observers.memberChangedNow(seed);
+          }
+          return null;
+        });
   }
 
   /**

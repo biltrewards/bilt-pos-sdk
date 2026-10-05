@@ -180,6 +180,21 @@ class WidgetSessionTest {
   }
 
   @Test
+  void observersHaveHeardStartedWhenStartReturns() {
+    RecordingWidget widget = new RecordingWidget();
+    ShopperSession session =
+        ShopperSession.builder()
+            .saleId("POS-LANE-3")
+            .currency("USD")
+            .member(Member.id("mbr_seed"))
+            .widget(widget)
+            .start();
+
+    assertEquals(Arrays.asList("attach", "started", "memberChanged"), widget.names());
+    session.end().executeSync();
+  }
+
+  @Test
   void aSeededMemberFollowsStarted() throws Exception {
     RecordingWidget widget = new RecordingWidget();
     ShopperSession session =

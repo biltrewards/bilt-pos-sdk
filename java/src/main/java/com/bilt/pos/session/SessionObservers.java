@@ -78,8 +78,19 @@ final class SessionObservers {
     }
   }
 
-  void started(SessionContextSnapshot snapshot) {
-    enqueue(new StartedEvent(snapshot));
+  /**
+   * Delivers {@code started} to every observer right now, on the calling thread, which must be the
+   * operation lane. The session's start uses it so that the observers have heard {@code started}
+   * before the start result completes; queued behind the running start it would reach them after
+   * the register's handlers had already seen the session.
+   */
+  void startedNow(SessionContextSnapshot snapshot) {
+    deliver(new StartedEvent(snapshot));
+  }
+
+  /** {@link #startedNow}'s counterpart for the member a session begins with. */
+  void memberChangedNow(Member member) {
+    deliver(new MemberEvent(member));
   }
 
   void memberChanged(Member member) {
@@ -150,6 +161,18 @@ final class SessionObservers {
     if (event == null) {
       return;
     }
+    deliver(event, targets);
+  }
+
+  private void deliver(Event event) {
+    List<SessionObserver> targets;
+    synchronized (queue) {
+      targets = new ArrayList<>(observers);
+    }
+    deliver(event, targets);
+  }
+
+  private void deliver(Event event, List<SessionObserver> targets) {
     for (SessionObserver observer : targets) {
       try {
         event.deliver(observer);

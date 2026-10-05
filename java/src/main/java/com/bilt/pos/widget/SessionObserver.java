@@ -51,7 +51,8 @@ import com.bilt.pos.session.identity.Member;
  * <p>{@link #started(SessionContextSnapshot)} is the first callback and {@link #ended()} the last;
  * nothing is delivered before or after them. When the session starts with a member already
  * attached, {@link #memberChanged(Member)} follows {@code started} with that member, so an observer
- * can rely on member callbacks alone for the member state.
+ * can rely on member callbacks alone for the member state. Both are delivered before the session's
+ * start completes, so a register handler never sees a session its observers have not heard of.
  */
 public interface SessionObserver {
 
