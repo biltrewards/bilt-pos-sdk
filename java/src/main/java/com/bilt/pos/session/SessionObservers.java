@@ -130,7 +130,9 @@ final class SessionObservers {
     // rejected append (the session ended) is withdrawn before anyone can
     // merge into it
     synchronized (queue) {
-      if (observers.isEmpty()) {
+      // ended is the last callback: a change announced after it — a member change whose
+      // notification was drained after the session began to end — is dropped
+      if (observers.isEmpty() || (ended.get() && !(event instanceof EndedEvent))) {
         return;
       }
       Event tail = queue.peekLast();
