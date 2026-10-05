@@ -8,6 +8,7 @@ import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketItem;
+import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
 import com.bilt.pos.session.settlement.ExternalPayment;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
@@ -3734,7 +3735,7 @@ class TerminalShopperSessionPaymentTest {
     // the register attaches the member after the failed settlement, then
     // retries the payment with the loyalty steps enabled
     identifyMember();
-    assertNotNull(session.getMember());
+    assertNotNull(session.member());
 
     server.enqueue(new MockResponse().setBody(REBATE_OK));
     server.enqueue(new MockResponse().setBody(REDEEM_OK));
@@ -3999,6 +4000,35 @@ class TerminalShopperSessionPaymentTest {
   }
 
   @Test
+  void memberChangesAreRefusedWhileASettlementIsMovingMoney() throws Exception {
+    addHundredDollarItem();
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Aborted\"}}}}"));
+    AtomicReference<Throwable> refused = new AtomicReference<>();
+
+    SettlementFlow flow =
+        session
+            .settle()
+            .beforeStep(
+                ctx -> {
+                  try {
+                    session.member(Member.id("mbr_late"));
+                  } catch (IllegalStateException e) {
+                    refused.set(e);
+                  }
+                  return ctx.getDefaultTransactionId();
+                })
+            .onError(error -> SettlementRecovery.abort());
+    flow.getOrNull();
+
+    assertNotNull(refused.get(), "member(Member) must be refused while money is moving");
+    assertNull(session.member());
+  }
+
+  @Test
   void terminalInitiatedAbortStillReachesOnError() throws Exception {
     addHundredDollarItem();
     // no abort() from us: the terminal aborted the payment on its own
@@ -4067,7 +4097,7 @@ class TerminalShopperSessionPaymentTest {
 
     session.basket().clear();
     identifyMember("56789");
-    assertEquals("56789", session.getMember().getMemberId());
+    assertEquals("56789", session.member().memberId());
 
     server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(25.00)));
     server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
@@ -4388,7 +4418,7 @@ class TerminalShopperSessionPaymentTest {
 
     session.basket().clear();
     identifyMember("56789");
-    assertEquals("56789", session.getMember().getMemberId());
+    assertEquals("56789", session.member().memberId());
 
     server.enqueue(new MockResponse().setBody(REVERSAL_OK));
     server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));

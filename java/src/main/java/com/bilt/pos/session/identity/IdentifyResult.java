@@ -9,6 +9,7 @@
  */
 package com.bilt.pos.session.identity;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -37,7 +38,9 @@ public final class IdentifyResult {
     this.memberId = memberId;
     this.loyaltyBrand = loyaltyBrand;
     this.rewards =
-        rewards == null ? Collections.emptyList() : Collections.unmodifiableList(rewards);
+        rewards == null
+            ? Collections.emptyList()
+            : Collections.unmodifiableList(new ArrayList<>(rewards));
     this.pointBalance = pointBalance;
   }
 
