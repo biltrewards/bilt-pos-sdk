@@ -68,6 +68,10 @@ final class RetailMediaActionSink implements ActionSink {
   }
 
   private void validate(Cta cta) {
+    if (!isCurrent()) {
+      reject("creative " + creativeId() + " is no longer showing");
+      return;
+    }
     SessionHandle handle = widget.handle();
     if (handle == null) {
       reject("the session is not registered with the ad platform");
@@ -84,6 +88,11 @@ final class RetailMediaActionSink implements ActionSink {
       reject(
           SessionErrorCode.DECLINED,
           "the ad platform refused " + cta.getAction() + ": " + outcome.getReason());
+      return;
+    }
+    // the platform round-trip can outlast the rendering: a pause, replacement or end clears it
+    if (!isCurrent()) {
+      reject("creative " + creativeId() + " stopped showing while the tap was being validated");
       return;
     }
     if (cta.getAction() == Action.APPLY_OFFER) {

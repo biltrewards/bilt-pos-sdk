@@ -38,6 +38,7 @@ public final class Capabilities {
   private final Set<MediaSpec.MediaType> formats;
   private final Set<Action> actions;
   private final Map<Placement, SurfaceKind> surfaces;
+  private final Map<Placement, Set<MediaSpec.MediaType>> placementFormats;
 
   private Capabilities(Builder builder) {
     this.sdkVersion = Objects.requireNonNull(builder.sdkVersion, "sdkVersion");
@@ -48,6 +49,14 @@ public final class Capabilities {
     this.formats = Collections.unmodifiableSet(formats);
     this.actions = Collections.unmodifiableSet(actions);
     this.surfaces = Collections.unmodifiableMap(new LinkedHashMap<>(builder.surfaces));
+    Map<Placement, Set<MediaSpec.MediaType>> perPlacement = new LinkedHashMap<>();
+    builder.placementFormats.forEach(
+        (placement, types) -> {
+          EnumSet<MediaSpec.MediaType> copy = EnumSet.noneOf(MediaSpec.MediaType.class);
+          copy.addAll(types);
+          perPlacement.put(placement, Collections.unmodifiableSet(copy));
+        });
+    this.placementFormats = Collections.unmodifiableMap(perPlacement);
   }
 
   public static Builder builder() {
@@ -62,6 +71,15 @@ public final class Capabilities {
   /** Media formats at least one declared surface can play. Never {@code null}. */
   public Set<MediaSpec.MediaType> getFormats() {
     return formats;
+  }
+
+  /**
+   * Media formats the surface behind {@code placement} can play: the formats declared for that
+   * placement, else {@link #getFormats()} when it declared none of its own. Never {@code null}.
+   */
+  public Set<MediaSpec.MediaType> getFormats(Placement placement) {
+    Set<MediaSpec.MediaType> own = placementFormats.get(placement);
+    return own != null ? own : formats;
   }
 
   /** Calls to action the register handles. Never {@code null}. */
@@ -80,13 +98,15 @@ public final class Capabilities {
   }
 
   /**
-   * Whether a rendering's placement is declared here, along with every format and action it needs.
+   * Whether a rendering's placement is declared here, along with every format the surface behind
+   * that placement can play and every action it needs.
    */
   public boolean supports(com.bilt.pos.widget.Rendering rendering) {
-    if (!surfaces.containsKey(Placement.of(rendering.getPlacement()))) {
+    Placement placement = Placement.of(rendering.getPlacement());
+    if (!surfaces.containsKey(placement)) {
       return false;
     }
-    if (!formats.contains(rendering.getMedia().getType())) {
+    if (!getFormats(placement).contains(rendering.getMedia().getType())) {
       return false;
     }
     if (rendering.getCta() != null && !actions.contains(rendering.getCta().getAction())) {
@@ -99,6 +119,7 @@ public final class Capabilities {
   public Builder toBuilder() {
     Builder builder = builder().sdkVersion(sdkVersion).formats(formats).actions(actions);
     surfaces.forEach(builder::placement);
+    placementFormats.forEach(builder::placementFormats);
     return builder;
   }
 
@@ -114,12 +135,13 @@ public final class Capabilities {
     return sdkVersion.equals(other.sdkVersion)
         && formats.equals(other.formats)
         && actions.equals(other.actions)
-        && surfaces.equals(other.surfaces);
+        && surfaces.equals(other.surfaces)
+        && placementFormats.equals(other.placementFormats);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(sdkVersion, formats, actions, surfaces);
+    return Objects.hash(sdkVersion, formats, actions, surfaces, placementFormats);
   }
 
   @Override
@@ -142,6 +164,7 @@ public final class Capabilities {
     private final Set<MediaSpec.MediaType> formats = new LinkedHashSet<>();
     private final Set<Action> actions = new LinkedHashSet<>();
     private final Map<Placement, SurfaceKind> surfaces = new LinkedHashMap<>();
+    private final Map<Placement, Set<MediaSpec.MediaType>> placementFormats = new LinkedHashMap<>();
 
     private Builder() {}
 
@@ -180,6 +203,22 @@ public final class Capabilities {
     public Builder placement(Placement placement, SurfaceKind kind) {
       surfaces.put(
           Objects.requireNonNull(placement, "placement"), Objects.requireNonNull(kind, "kind"));
+      return this;
+    }
+
+    /**
+     * Declares a placement together with the formats its own surface can play, so a creative is
+     * only matched to a placement that can draw it. The overall {@link #formats(Set)} is separate
+     * and normally the union of these.
+     */
+    public Builder placement(
+        Placement placement, SurfaceKind kind, Set<MediaSpec.MediaType> placementFormats) {
+      placement(placement, kind);
+      return placementFormats(placement, placementFormats);
+    }
+
+    private Builder placementFormats(Placement placement, Set<MediaSpec.MediaType> types) {
+      placementFormats.put(placement, new LinkedHashSet<>(Objects.requireNonNull(types, "formats")));
       return this;
     }
 

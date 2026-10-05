@@ -303,6 +303,34 @@ class RetailMediaTest {
     assertEquals("9.9.9-wrapper", widget.capabilities().getSdkVersion());
   }
 
+  @Test
+  void formatsStayConstrainedPerPlacement() {
+    Surface imagesOnly =
+        new FakeSurface() {
+          @Override
+          public java.util.Set<MediaSpec.MediaType> supportedFormats() {
+            return EnumSet.of(MediaSpec.MediaType.IMAGE);
+          }
+        };
+    Capabilities capabilities =
+        RetailMedia.builder()
+            .surface(BANNER, imagesOnly)
+            .surface(INTERSTITIAL, new FakeWebSurface())
+            .build()
+            .capabilities();
+
+    assertEquals(EnumSet.of(MediaSpec.MediaType.IMAGE), capabilities.getFormats(BANNER));
+    assertEquals(EnumSet.allOf(MediaSpec.MediaType.class), capabilities.getFormats(INTERSTITIAL));
+    Rendering.Builder video =
+        Rendering.builder()
+            .creativeId("crt_v")
+            .media(MediaSpec.video(URI.create("https://cdn.bilt.test/v.mp4"), Duration.ofSeconds(6)))
+            .headline("Watch")
+            .ttl(Duration.ofSeconds(30));
+    assertFalse(capabilities.supports(video.placement(BANNER.getId()).build()));
+    assertTrue(capabilities.supports(video.placement(INTERSTITIAL.getId()).build()));
+  }
+
   // ─── Attach ───
 
   @Test

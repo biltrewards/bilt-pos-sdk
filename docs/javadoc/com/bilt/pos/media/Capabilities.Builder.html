@@ -133,8 +133,16 @@ loadScripts(document, 'script');</script>
 <div class="block">Declares a placement and the kind of surface the register draws it with.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#sdkVersion(java.lang.String)" class="member-name-link">sdkVersion</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sdkVersion)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#placement(com.bilt.pos.media.Placement,com.bilt.pos.media.SurfaceKind,java.util.Set)" class="member-name-link">placement</a><wbr>(<a href="Placement.html" title="class in com.bilt.pos.media">Placement</a>&nbsp;placement,
+ <a href="SurfaceKind.html" title="enum class in com.bilt.pos.media">SurfaceKind</a>&nbsp;kind,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/Set.html" title="class or interface in java.util" class="external-link">Set</a>&lt;<a href="../widget/MediaSpec.MediaType.html" title="enum class in com.bilt.pos.widget">MediaSpec.MediaType</a>&gt;&nbsp;placementFormats)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Declares a placement together with the formats its own surface can play, so a creative is
+ only matched to a placement that can draw it.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#sdkVersion(java.lang.String)" class="member-name-link">sdkVersion</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;sdkVersion)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 </div>
 </div>
 </div>
@@ -188,6 +196,17 @@ loadScripts(document, 'script');</script>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></span>&nbsp;<span class="element-name">placement</span><wbr><span class="parameters">(<a href="Placement.html" title="class in com.bilt.pos.media">Placement</a>&nbsp;placement,
  <a href="SurfaceKind.html" title="enum class in com.bilt.pos.media">SurfaceKind</a>&nbsp;kind)</span></div>
 <div class="block">Declares a placement and the kind of surface the register draws it with.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="placement(com.bilt.pos.media.Placement,com.bilt.pos.media.SurfaceKind,java.util.Set)">
+<h3>placement</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></span>&nbsp;<span class="element-name">placement</span><wbr><span class="parameters">(<a href="Placement.html" title="class in com.bilt.pos.media">Placement</a>&nbsp;placement,
+ <a href="SurfaceKind.html" title="enum class in com.bilt.pos.media">SurfaceKind</a>&nbsp;kind,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/Set.html" title="class or interface in java.util" class="external-link">Set</a>&lt;<a href="../widget/MediaSpec.MediaType.html" title="enum class in com.bilt.pos.widget">MediaSpec.MediaType</a>&gt;&nbsp;placementFormats)</span></div>
+<div class="block">Declares a placement together with the formats its own surface can play, so a creative is
+ only matched to a placement that can draw it. The overall <a href="#formats(java.util.Set)"><code>formats(Set)</code></a> is separate
+ and normally the union of these.</div>
 </section>
 </li>
 <li>

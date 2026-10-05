@@ -189,7 +189,7 @@ public final class RetailMedia implements Widget {
     for (Map.Entry<Placement, Surface> entry : surfaces.entrySet()) {
       Surface surface = entry.getValue();
       formats.addAll(surface.supportedFormats());
-      capabilities.placement(entry.getKey(), surface.kind());
+      capabilities.placement(entry.getKey(), surface.kind(), surface.supportedFormats());
     }
     return capabilities.formats(formats).build();
   }
@@ -398,9 +398,11 @@ public final class RetailMedia implements Widget {
     if (registered == null) {
       return;
     }
+    // advance before the call: a failed push must not leave later pushes built on stale state, since
+    // every update carries the whole snapshot and the next one then repairs the service's view
+    snapshot = next;
     try {
       adService.updateSession(registered, next);
-      snapshot = next;
     } catch (RuntimeException e) {
       report("updating the ad platform's view of the session", e);
       return;
@@ -463,10 +465,12 @@ public final class RetailMedia implements Widget {
     Objects.requireNonNull(rendering, "rendering");
     onWidgetThread(
         () -> {
-          if (paused.get() || detached) {
-            return;
-          }
           synchronized (lock) {
+            // checked under the lock so a concurrent pause() or ended(), which clears current under
+            // the same lock after setting its flag, either sees this rendering or stops it
+            if (paused.get() || detached) {
+              return;
+            }
             current.put(placement, rendering);
           }
           surface.show(rendering, new RetailMediaActionSink(this, placement, rendering));
@@ -519,7 +523,7 @@ public final class RetailMedia implements Widget {
     return handle;
   }
 
-  /** The service's view of the session as last pushed, or {@code null} before registration. */
+  /** The session as the widget last tried to push it, or {@code null} before registration. */
   AdSessionSnapshot snapshot() {
     return snapshot;
   }
@@ -565,16 +569,20 @@ public final class RetailMedia implements Widget {
     if (handler == null || owner == null) {
       return;
     }
-    owner
-        .callbackExecutor()
-        .execute(
-            () -> {
-              try {
-                handler.accept(value);
-              } catch (RuntimeException e) {
-                report("delivering " + name, e);
-              }
-            });
+    try {
+      owner
+          .callbackExecutor()
+          .execute(
+              () -> {
+                try {
+                  handler.accept(value);
+                } catch (RuntimeException e) {
+                  report("delivering " + name, e);
+                }
+              });
+    } catch (RuntimeException e) {
+      report("scheduling " + name, e);
+    }
   }
 
   void report(String what, RuntimeException failure) {

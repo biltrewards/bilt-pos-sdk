@@ -2387,6 +2387,11 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Media formats at least one declared surface can play.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/Capabilities.html#getFormats(com.bilt.pos.media.Placement)" class="member-name-link">getFormats(Placement)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
+<dd>
+<div class="block">Media formats the surface behind <code>placement</code> can play: the formats declared for that
+ placement, else <a href="com/bilt/pos/media/Capabilities.html#getFormats()"><code>Capabilities.getFormats()</code></a> when it declared none of its own.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementOptions.html#getFulfillments()" class="member-name-link">getFulfillments()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></dt>
 <dd>
 <div class="block">Stored value operations fulfilling referenced basket lines.</div>
@@ -4651,6 +4656,11 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Declares a placement and the kind of surface the register draws it with.</div>
 </dd>
+<dt><a href="com/bilt/pos/media/Capabilities.Builder.html#placement(com.bilt.pos.media.Placement,com.bilt.pos.media.SurfaceKind,java.util.Set)" class="member-name-link">placement(Placement, SurfaceKind, Set&lt;MediaSpec.MediaType&gt;)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.Builder.html" title="class in com.bilt.pos.media">Capabilities.Builder</a></dt>
+<dd>
+<div class="block">Declares a placement together with the formats its own surface can play, so a creative is
+ only matched to a placement that can draw it.</div>
+</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.Builder.html#placement(java.lang.String)" class="member-name-link">placement(String)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.Builder.html" title="class in com.bilt.pos.widget">Rendering.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/media/Placement.html" class="type-name-link" title="class in com.bilt.pos.media">Placement</a> - Class in <a href="com/bilt/pos/media/package-summary.html">com.bilt.pos.media</a></dt>
@@ -6446,7 +6456,8 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/media/Capabilities.html#supports(com.bilt.pos.widget.Rendering)" class="member-name-link">supports(Rendering)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/Capabilities.html" title="class in com.bilt.pos.media">Capabilities</a></dt>
 <dd>
-<div class="block">Whether a rendering's placement is declared here, along with every format and action it needs.</div>
+<div class="block">Whether a rendering's placement is declared here, along with every format the surface behind
+ that placement can play and every action it needs.</div>
 </dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#surchargeAmount" class="member-name-link">surchargeAmount</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
