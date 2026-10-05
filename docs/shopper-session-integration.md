@@ -304,10 +304,15 @@ void applyOffer(Offer offer) {   // session: the field set from start()
         pos.applyOrderDiscount(offer.getId(), offer.getAmount(), offer.getPercentage());
         return;
     }
-    BasketLineItem line = session.basket().snapshot().getItemBySku(offer.getSku());
-    if (line == null) {
-        return; // the product left the basket since the offer was shown
+    // A SKU can appear on several lines, and on return or credit lines, so pick the sale line
+    // explicitly instead of getItemBySku(), which throws when the SKU is ambiguous.
+    List<BasketLineItem> saleLines = session.basket().snapshot().getItems().stream()
+        .filter(item -> item.isSale() && item.getSku().equals(offer.getSku()))
+        .collect(Collectors.toList());
+    if (saleLines.size() != 1) {
+        return; // the product left the basket, or the offer cannot name one line
     }
+    BasketLineItem line = saleLines.get(0);
     BigDecimal off = offer.getAmount() != null
         ? offer.getAmount()
         : line.getUnitPrice()
@@ -317,11 +322,11 @@ void applyOffer(Offer offer) {   // session: the field set from start()
             .setScale(2, RoundingMode.HALF_UP);
     List<BasketDiscount> discounts = new ArrayList<>(line.getDiscounts());
     discounts.add(BasketDiscount.offer(offer.getId(), "Bilt offer", off));
-    session.basket().setDiscountsBySku(offer.getSku(), discounts);
+    session.basket().setDiscounts(line.getItemId(), discounts);
 }
 ```
 
-If the POS owns the cart and calls `replace(...)` on every change, apply the offer to the POS cart instead; the next `replace` carries the discount into the session. Otherwise the next snapshot, which lacks the discount, would remove it.
+When the SKU matches no single sale line, skip the offer or resolve the line in your own cart; don't guess. If the POS owns the cart and calls `replace(...)` on every change, apply the offer to the POS cart instead; the next `replace` carries the discount into the session. Otherwise the next snapshot, which lacks the discount, would remove it.
 
 ### Interactions
 
