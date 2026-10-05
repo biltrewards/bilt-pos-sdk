@@ -269,6 +269,7 @@ public final class RetailMedia implements Widget {
       // a widget instance outlives sessions: start each one from a clean slate
       detached = false;
       inert = false;
+      paused.set(false);
       handle = null;
       snapshot = null;
       phase = null;

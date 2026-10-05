@@ -531,6 +531,7 @@ class RetailMediaTest {
     widget.attach(first);
     widget.started(first.context());
     assertNull(widget.handle(), "the first session went inert");
+    widget.pause();
     widget.ended();
     widget.detach();
 
@@ -539,6 +540,7 @@ class RetailMediaTest {
     widget.started(second.context());
 
     assertNotNull(widget.handle(), "the second session registers from a clean slate");
+    assertFalse(widget.isPaused(), "a pause belongs to the session it was made in");
     assertTrue(second.errors.isEmpty(), second.errors.toString());
     widget.ended();
     widget.detach();
