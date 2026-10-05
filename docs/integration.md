@@ -314,6 +314,7 @@ Each message category has a dedicated request and response type set on the `Sale
 ## Next steps
 
 - [TerminalShopperSession Integration Guide](./checkout-session-integration.md) — the high-level session API over this client: basket, loyalty, split tender, and payment orchestration, with a complete register integration example.
+- [ShopperSession Integration Guide](./shopper-session-integration.md) — the basket, member, context, and widget API shared by both session types, including a register-only session with no terminal and the RetailMedia widget.
 - [Make a payment](./make-payment.md) — full payment request/response details.
 - [Cancel, reverse, or refund a payment](./undo-payment.md) — overview of all options for undoing a payment.
 - [Cancel a payment](./cancel-payment.md) — abort an in-progress transaction.

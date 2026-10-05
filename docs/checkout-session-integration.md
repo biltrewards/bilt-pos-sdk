@@ -7,6 +7,8 @@
 
 You keep working with one object for the whole transaction instead of hand-assembling nexo messages. The raw nexo client is still available via `session.getClient()` as an escape hatch.
 
+`TerminalShopperSession` extends `ShopperSession`. The basket, member, context, and widget API that both session types share, and the `RetailMedia` widget, are covered in the [ShopperSession Integration Guide](./shopper-session-integration.md).
+
 ---
 
 ## Before you begin
@@ -813,6 +815,7 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 ## Next steps
 
 - [Integration Guide](./integration.md) — the underlying client, certificates, and raw nexo messages.
+- [ShopperSession Integration Guide](./shopper-session-integration.md) — the basket, member, context, and widget API shared with `ShopperSession`, and the RetailMedia widget.
 - [Make a payment](./make-payment.md) — the wire-level payment exchange the session drives for you.
 - [Identify a loyalty member](./loyalty-identify-member.md) — wire-level identification details.
 - [Receipt helpers](./receipt-helpers.md) — working with the structured receipt data on results.
