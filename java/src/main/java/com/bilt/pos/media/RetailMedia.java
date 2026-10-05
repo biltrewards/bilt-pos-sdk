@@ -398,7 +398,8 @@ public final class RetailMedia implements Widget {
     if (registered == null) {
       return;
     }
-    // advance before the call: a failed push must not leave later pushes built on stale state, since
+    // advance before the call: a failed push must not leave later pushes built on stale state,
+    // since
     // every update carries the whole snapshot and the next one then repairs the service's view
     snapshot = next;
     try {

@@ -324,7 +324,8 @@ class RetailMediaTest {
     Rendering.Builder video =
         Rendering.builder()
             .creativeId("crt_v")
-            .media(MediaSpec.video(URI.create("https://cdn.bilt.test/v.mp4"), Duration.ofSeconds(6)))
+            .media(
+                MediaSpec.video(URI.create("https://cdn.bilt.test/v.mp4"), Duration.ofSeconds(6)))
             .headline("Watch")
             .ttl(Duration.ofSeconds(30));
     assertFalse(capabilities.supports(video.placement(BANNER.getId()).build()));

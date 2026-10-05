@@ -218,7 +218,8 @@ public final class Capabilities {
     }
 
     private Builder placementFormats(Placement placement, Set<MediaSpec.MediaType> types) {
-      placementFormats.put(placement, new LinkedHashSet<>(Objects.requireNonNull(types, "formats")));
+      placementFormats.put(
+          placement, new LinkedHashSet<>(Objects.requireNonNull(types, "formats")));
       return this;
     }
 
