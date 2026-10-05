@@ -76,6 +76,8 @@ Use `ShopperSession` for lanes without a Bilt terminal, or for a register that o
 | `MemberIdentifier.accountNumber("...")` | `Member.idResolver().accountId("...")` |
 | `session.getMember()` | `session.member()` (`getMember()` is deprecated) |
 
+`member()` is not a drop-in for `getMember()`. `getMember()` returned an `IdentifyResult`, and was `null` for a guest *and* while a member was still pending resolution. `member()` returns a `Member`, which is `null` only when nothing is attached and otherwise also covers a member the POS attached or one still pending. Read the fields through the `Member` accessors (`memberId()`, `status()`, `loyaltyBrand()`, `rewards()`, `pointBalance()`), and where you tested `getMember() != null` for "a member is identified", test `member() != null && member().isResolved()`. Skipping the `isResolved()` check would treat a pending member as identified, though settlement still treats the visit as a guest's until it resolves.
+
 Code that only uses the basket, the member and the session ids can take a `ShopperSession` parameter and run against either type.
 
 ---
