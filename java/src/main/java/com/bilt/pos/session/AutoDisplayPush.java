@@ -9,35 +9,28 @@
  */
 package com.bilt.pos.session;
 
-import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.basket.BasketChange;
 import com.bilt.pos.session.internal.BasketDisplay;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.atomic.AtomicReference;
+import com.bilt.pos.widget.SessionObserver;
 import java.util.function.BooleanSupplier;
 
 /**
- * The asynchronous customer-display push behind {@code autoDisplay}, shared by the session types
- * that own a basket.
+ * The customer-display push behind {@code autoDisplay}: a {@link SessionObserver} the terminal
+ * session registers, which sends every basket change it is handed to the terminal's display.
  *
- * <p>Sends run on the session's operation lane — not the unordered one — so pushes cannot race
- * their snapshots out of order and never land mid-payment over the terminal's payment screen.
- * Pushes are conflated: since mutations return without waiting, a fast ring-up outruns the terminal
- * roundtrips, and an uncapped queue would grow with stale sends that a {@code settle()} must wait
- * behind. Conflation bounds this to at most one send queued plus one in flight, whichever runs
- * sending the newest snapshot.
+ * <p>Sends run where observer callbacks run — on the session's operation lane, not the unordered
+ * one — so pushes cannot race their snapshots out of order and never land mid-payment over the
+ * terminal's payment screen: a {@code settle()} queued after a mutation waits for that mutation's
+ * push first. Conflation is the observer queue's: since mutations return without waiting, a fast
+ * ring-up outruns the terminal roundtrips, and the queue merges the changes that pile up behind an
+ * in-flight send into one, so at most one send is queued behind the one in flight and it carries
+ * the newest snapshot.
  *
- * <p>Failures are best-effort — logged and reported through {@link
- * SessionOperations#backgroundError}, never interrupting the checkout.
+ * <p>Failures are best-effort — the exception leaves this callback and the observer queue logs it
+ * and reports it through {@code onBackgroundError}, never interrupting the checkout.
  */
-final class AutoDisplayPush {
+final class AutoDisplayPush implements SessionObserver {
 
-  /**
-   * Non-null while a send task is queued but has not yet claimed its snapshot. Writers are
-   * serialized by the owning session (a checkout pushes under its basket lock).
-   */
-  private final AtomicReference<Basket> pending = new AtomicReference<>();
-
-  private final SessionOperations operations;
   private final BasketDisplay display;
   private final BooleanSupplier current;
 
@@ -46,37 +39,15 @@ final class AutoDisplayPush {
    *     basket or session sends nothing because the settlement display or End bracket supersedes
    *     it.
    */
-  AutoDisplayPush(SessionOperations operations, BasketDisplay display, BooleanSupplier current) {
-    this.operations = operations;
+  AutoDisplayPush(BasketDisplay display, BooleanSupplier current) {
     this.display = display;
     this.current = current;
   }
 
-  void push(Basket snapshot) {
-    if (pending.getAndSet(snapshot) != null) {
-      // conflated: the already-queued task sends this newer snapshot
-      return;
-    }
-    try {
-      operations.executor().execute(this::send);
-    } catch (RejectedExecutionException e) {
-      // the session ended; the push is pointless, not an error
-      pending.set(null);
-    }
-  }
-
-  private void send() {
-    Basket snapshot = pending.getAndSet(null);
-    if (snapshot == null) {
-      return;
-    }
-    if (!current.getAsBoolean()) {
-      return;
-    }
-    try {
-      display.show(snapshot);
-    } catch (RuntimeException e) {
-      operations.backgroundError("the automatic display push", e);
+  @Override
+  public void basketChanged(BasketChange change) {
+    if (current.getAsBoolean()) {
+      display.show(change.current());
     }
   }
 }

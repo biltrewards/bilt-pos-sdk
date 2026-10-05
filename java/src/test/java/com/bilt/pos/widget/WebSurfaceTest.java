@@ -701,4 +701,42 @@ class WebSurfaceTest {
 
     assertDoesNotThrow(() -> surface.onBridgeError("test", "{}"));
   }
+
+  @Test
+  void defaultBridgeErrorHookLogsTheReasonWithoutTheTokenBearingPayload() {
+    WebSurface surface =
+        new WebSurface(PAGE) {
+          @Override
+          protected void loadUrl(String url) {}
+
+          @Override
+          protected void evaluateJavascript(String script) {}
+        };
+    java.util.logging.Logger logger =
+        java.util.logging.Logger.getLogger(WebSurface.class.getName());
+    List<String> logged = new java.util.concurrent.CopyOnWriteArrayList<>();
+    java.util.logging.Handler capture =
+        new java.util.logging.Handler() {
+          @Override
+          public void publish(java.util.logging.LogRecord record) {
+            logged.add(record.getMessage());
+          }
+
+          @Override
+          public void flush() {}
+
+          @Override
+          public void close() {}
+        };
+    logger.addHandler(capture);
+    try {
+      surface.onBridgeError("token mismatch", "{\"token\":\"live-secret-token\"}");
+    } finally {
+      logger.removeHandler(capture);
+    }
+
+    assertEquals(1, logged.size());
+    assertTrue(logged.get(0).contains("token mismatch"));
+    assertFalse(logged.get(0).contains("live-secret-token"));
+  }
 }

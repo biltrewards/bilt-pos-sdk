@@ -305,6 +305,10 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#atc" class="member-name-link">atc</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/widget/Widget.html#attach(com.bilt.pos.widget.WidgetHost)" class="member-name-link">attach(WidgetHost)</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a></dt>
+<dd>
+<div class="block">Binds the widget to the session that owns it, before any other callback.</div>
+</dd>
 <dt><a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html#attribute(java.lang.String,java.lang.String)" class="member-name-link">attribute(String, String)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/AdSessionSnapshot.Builder.html" title="class in com.bilt.pos.media.service">AdSessionSnapshot.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SessionContext.html#attribute(java.lang.String,java.lang.String)" class="member-name-link">attribute(String, String)</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/SessionContext.html" title="interface in com.bilt.pos.session">SessionContext</a></dt>
@@ -418,6 +422,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/basket/BasketChange.Source.html" class="type-name-link" title="enum class in com.bilt.pos.session.basket">BasketChange.Source</a> - Enum Class in <a href="com/bilt/pos/session/basket/package-summary.html">com.bilt.pos.session.basket</a></dt>
 <dd>
 <div class="block">Which updater produced a change.</div>
+</dd>
+<dt><a href="com/bilt/pos/widget/SessionObserver.html#basketChanged(com.bilt.pos.session.basket.BasketChange)" class="member-name-link">basketChanged(BasketChange)</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/SessionObserver.html" title="interface in com.bilt.pos.widget">SessionObserver</a></dt>
+<dd>
+<div class="block">The basket changed.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/basket/BasketDiscount.html" class="type-name-link" title="class in com.bilt.pos.session.basket">BasketDiscount</a> - Class in <a href="com/bilt/pos/session/basket/package-summary.html">com.bilt.pos.session.basket</a></dt>
 <dd>
@@ -692,6 +700,11 @@ loadScripts(document, 'script');</script>
 </dl>
 <h2 class="title" id="I:C">C</h2>
 <dl class="index">
+<dt><a href="com/bilt/pos/widget/WidgetHost.html#callbackExecutor()" class="member-name-link">callbackExecutor()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/WidgetHost.html" title="interface in com.bilt.pos.widget">WidgetHost</a></dt>
+<dd>
+<div class="block">Where the session delivers its handlers to the register — the builder's <code>
+ callbackExecutor</code>, or an executor that runs on the calling thread when none was configured.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/ShopperSession.Builder.html#callbackExecutor(java.util.concurrent.Executor)" class="member-name-link">callbackExecutor(Executor)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.Builder.html" title="class in com.bilt.pos.session">ShopperSession.Builder</a></dt>
 <dd>
 <div class="block">Where asynchronously executed operations deliver their handlers — e.g.</div>
@@ -989,6 +1002,14 @@ loadScripts(document, 'script');</script>
 <div class="block">The session's context: the <a href="com/bilt/pos/session/CheckoutPhase.html" title="enum class in com.bilt.pos.session"><code>CheckoutPhase</code></a> and free-form attributes a widget may use,
  plus the lane identifiers.</div>
 </dd>
+<dt><a href="com/bilt/pos/widget/WidgetHost.html#context()" class="member-name-link">context()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/WidgetHost.html" title="interface in com.bilt.pos.widget">WidgetHost</a></dt>
+<dd>
+<div class="block">The session's context as of now: phase, attributes and lane identifiers.</div>
+</dd>
+<dt><a href="com/bilt/pos/widget/SessionObserver.html#contextChanged(com.bilt.pos.session.SessionContextSnapshot)" class="member-name-link">contextChanged(SessionContextSnapshot)</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/SessionObserver.html" title="interface in com.bilt.pos.widget">SessionObserver</a></dt>
+<dd>
+<div class="block">The session's context changed; <code>context</code> is the whole context after the change.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#countsTowardRefundTotal()" class="member-name-link">countsTowardRefundTotal()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
 <dd>
 <div class="block">Whether this allocation counts toward the monetary value of return items.</div>
@@ -1103,9 +1124,23 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.Builder.html#creativeId(java.lang.String)" class="member-name-link">creativeId(String)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.Builder.html" title="class in com.bilt.pos.widget">Rendering.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/widget/WidgetHost.html#credentials()" class="member-name-link">credentials()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/WidgetHost.html" title="interface in com.bilt.pos.widget">WidgetHost</a></dt>
+<dd>
+<div class="block">The credentials the session was built with, or <code>null</code> when it has none.</div>
+</dd>
 <dt><a href="com/bilt/pos/platform/OkHttpPlatformClient.Builder.html#credentials(com.bilt.pos.platform.BiltCredentials)" class="member-name-link">credentials(BiltCredentials)</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/OkHttpPlatformClient.Builder.html" title="class in com.bilt.pos.platform">OkHttpPlatformClient.Builder</a></dt>
 <dd>
 <div class="block">The credentials to exchange for access tokens.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ShopperSession.Builder.html#credentials(com.bilt.pos.platform.BiltCredentials)" class="member-name-link">credentials(BiltCredentials)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.Builder.html" title="class in com.bilt.pos.session">ShopperSession.Builder</a></dt>
+<dd>
+<div class="block">The credentials the session's widgets use to reach the Bilt platform, exchanged for access
+ tokens against the <a href="com/bilt/pos/session/ShopperSession.Builder.html#environment(com.bilt.pos.platform.BiltEnvironment)"><code>environment</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#credentials(com.bilt.pos.platform.BiltCredentials)" class="member-name-link">credentials(BiltCredentials)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></dt>
+<dd>
+<div class="block">The credentials the session's widgets use to reach the Bilt platform, exchanged for access
+ tokens against the <a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#environment(com.bilt.pos.platform.BiltEnvironment)"><code>environment</code></a>.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/basket/BasketItem.html#credit(java.lang.String,java.lang.String,int,java.math.BigDecimal)" class="member-name-link">credit(String, String, int, BigDecimal)</a> - Static method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketItem.html" title="class in com.bilt.pos.session.basket">BasketItem</a></dt>
 <dd>
@@ -1246,6 +1281,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The terminal outcome is known, including an authoritative not-found result.</div>
 </dd>
+<dt><a href="com/bilt/pos/widget/SessionObserver.html#delivery-heading" class="search-tag-link">Delivery</a> - Search tag in interface com.bilt.pos.widget.SessionObserver</dt>
+<dd>Section</dd>
 <dt><a href="com/bilt/pos/display/LabeledAmountType.html#description" class="member-name-link">description</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LabeledAmountType.html" title="class in com.bilt.pos.display">LabeledAmountType</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#description" class="member-name-link">description</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
@@ -1258,6 +1295,11 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html#description(java.lang.String)" class="member-name-link">description(String)</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.Builder.html" title="class in com.bilt.pos.session.basket">BasketLineItem.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/widget/Widget.html#detach()" class="member-name-link">detach()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a></dt>
+<dd>
+<div class="block">Releases whatever <a href="com/bilt/pos/widget/Widget.html#attach(com.bilt.pos.widget.WidgetHost)"><code>Widget.attach(WidgetHost)</code></a> acquired: clears the widget's surfaces, stops its
+ background work, drops the host.</div>
+</dd>
 <dt><a href="com/bilt/pos/widget/Action.html#DETAILS" class="member-name-link">DETAILS</a> - Enum constant in enum class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Action.html" title="enum class in com.bilt.pos.widget">Action</a></dt>
 <dd>
 <div class="block">Show more about the product or offer, typically a second screen or a QR code on the same
@@ -1428,6 +1470,10 @@ loadScripts(document, 'script');</script>
 <div class="block">Ends the session: tells the terminal to discard the session-scoped data it accumulated (Nexo
  <code>Admin</code> session end signal).</div>
 </dd>
+<dt><a href="com/bilt/pos/widget/SessionObserver.html#ended()" class="member-name-link">ended()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/SessionObserver.html" title="interface in com.bilt.pos.widget">SessionObserver</a></dt>
+<dd>
+<div class="block">The session has ended, normally or forcibly.</div>
+</dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html#endpoint(java.lang.String)" class="member-name-link">endpoint(String)</a> - Method in class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient.Builder</a></dt>
 <dd>
 <div class="block">Set the full terminal endpoint URL (e.g.</div>
@@ -1438,6 +1484,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">How an identifier or card was actually captured.</div>
 </dd>
+<dt><a href="com/bilt/pos/widget/WidgetHost.html#environment()" class="member-name-link">environment()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/WidgetHost.html" title="interface in com.bilt.pos.widget">WidgetHost</a></dt>
+<dd>
+<div class="block">The platform deployment the session was built for; never <code>null</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html#environment(com.bilt.pos.nexo.client.BiltTerminalEnvironment)" class="member-name-link">environment(BiltTerminalEnvironment)</a> - Method in class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/BiltNexoTerminalClient.Builder.html" title="class in com.bilt.pos.nexo.client">BiltNexoTerminalClient.Builder</a></dt>
 <dd>
 <div class="block">Verify the terminal's identity against the standard hostname pattern for the given Bilt
@@ -1446,6 +1496,14 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/platform/OkHttpPlatformClient.Builder.html#environment(com.bilt.pos.platform.BiltEnvironment)" class="member-name-link">environment(BiltEnvironment)</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/OkHttpPlatformClient.Builder.html" title="class in com.bilt.pos.platform">OkHttpPlatformClient.Builder</a></dt>
 <dd>
 <div class="block">The platform deployment to talk to.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ShopperSession.Builder.html#environment(com.bilt.pos.platform.BiltEnvironment)" class="member-name-link">environment(BiltEnvironment)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.Builder.html" title="class in com.bilt.pos.session">ShopperSession.Builder</a></dt>
+<dd>
+<div class="block">The platform deployment the session's widgets talk to.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#environment(com.bilt.pos.platform.BiltEnvironment)" class="member-name-link">environment(BiltEnvironment)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></dt>
+<dd>
+<div class="block">The platform deployment the session's widgets talk to.</div>
 </dd>
 <dt><a href="com/bilt/pos/media/AdInteraction.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.media.<a href="com/bilt/pos/media/AdInteraction.html" title="class in com.bilt.pos.media">AdInteraction</a></dt>
 <dd>&nbsp;</dd>
@@ -3727,6 +3785,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Whether <code>handle</code> was issued and has not been closed.</div>
 </dd>
+<dt><a href="com/bilt/pos/widget/Widget.html#isPaused()" class="member-name-link">isPaused()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a></dt>
+<dd>
+<div class="block">Whether <a href="com/bilt/pos/widget/Widget.html#pause()"><code>Widget.pause()</code></a> is in effect.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/TransactionStatusOptions.html#isReceiptReprint()" class="member-name-link">isReceiptReprint()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TransactionStatusOptions.html" title="class in com.bilt.pos.session">TransactionStatusOptions</a></dt>
 <dd>
 <div class="block">Whether the terminal should include receipt data in the response.</div>
@@ -3845,6 +3907,8 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/WebSurface.html#lifecycle-heading" class="search-tag-link">Lifecycle</a> - Search tag in class com.bilt.pos.widget.WebSurface</dt>
 <dd>Section</dd>
+<dt><a href="com/bilt/pos/widget/SessionObserver.html#lifecycle-heading" class="search-tag-link">Lifecycle</a> - Search tag in interface com.bilt.pos.widget.SessionObserver</dt>
+<dd>Section</dd>
 <dt><a href="com/bilt/pos/media/Offer.Scope.html#LINE_ITEM" class="member-name-link">LINE_ITEM</a> - Enum constant in enum class com.bilt.pos.media.<a href="com/bilt/pos/media/Offer.Scope.html" title="enum class in com.bilt.pos.media">Offer.Scope</a></dt>
 <dd>
 <div class="block">One SKU; <a href="com/bilt/pos/media/Offer.html#getSku()"><code>Offer.getSku()</code></a> says which.</div>
@@ -3962,6 +4026,12 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/identity/Member.IdResolver.html" class="type-name-link" title="class in com.bilt.pos.session.identity">Member.IdResolver</a> - Class in <a href="com/bilt/pos/session/identity/package-summary.html">com.bilt.pos.session.identity</a></dt>
 <dd>
 <div class="block">The factories behind <a href="com/bilt/pos/session/identity/Member.html#idResolver()"><code>Member.idResolver()</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/widget/SessionObserver.html#memberChanged(com.bilt.pos.session.identity.Member)" class="member-name-link">memberChanged(Member)</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/SessionObserver.html" title="interface in com.bilt.pos.widget">SessionObserver</a></dt>
+<dd>
+<div class="block">The session's member changed: attached by the register, found by a terminal prompt, resolved by
+ a background lookup, or cleared — <code>member</code> is <code>null</code> when the shopper signed out
+ and may be <a href="com/bilt/pos/session/identity/Member.html#isResolved()">pending</a> when a lookup is still under way.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/identity/Member.html#memberId()" class="member-name-link">memberId()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a></dt>
 <dd>
@@ -4359,6 +4429,11 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Registers a handler invoked with the result when the operation succeeds.</div>
 </dd>
+<dt><a href="com/bilt/pos/widget/WidgetHost.html#operationExecutor()" class="member-name-link">operationExecutor()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/WidgetHost.html" title="interface in com.bilt.pos.widget">WidgetHost</a></dt>
+<dd>
+<div class="block">The session's operation lane: the single thread its operations, and every observer callback,
+ run on.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html#options(com.bilt.pos.session.settlement.SettlementOptions)" class="member-name-link">options(SettlementOptions)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.Builder.html" title="class in com.bilt.pos.session.settlement">AbandonedSettlementRecord.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/display/LineItemType.html#originalAmount" class="member-name-link">originalAmount</a> - Variable in class com.bilt.pos.display.<a href="com/bilt/pos/display/LineItemType.html" title="class in com.bilt.pos.display">LineItemType</a></dt>
@@ -4398,6 +4473,11 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/platform/PlatformRequest.Builder.html#path(java.lang.String)" class="member-name-link">path(String)</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/PlatformRequest.Builder.html" title="class in com.bilt.pos.platform">PlatformRequest.Builder</a></dt>
 <dd>
 <div class="block">The path relative to the API base.</div>
+</dd>
+<dt><a href="com/bilt/pos/widget/Widget.html#pause()" class="member-name-link">pause()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a></dt>
+<dd>
+<div class="block">Stops the widget showing anything until <a href="com/bilt/pos/widget/Widget.html#resume()"><code>Widget.resume()</code></a>: its surfaces are cleared and stay
+ clear, and it makes no requests on the shopper's behalf.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/identity/CardAcquisitionResult.Builder.html#paymentBrand(java.lang.String)" class="member-name-link">paymentBrand(String)</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/CardAcquisitionResult.Builder.html" title="class in com.bilt.pos.session.identity">CardAcquisitionResult.Builder</a></dt>
 <dd>&nbsp;</dd>
@@ -4514,6 +4594,11 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/platform/PlatformAuthException.html#%3Cinit%3E(java.lang.String,java.lang.Throwable)" class="member-name-link">PlatformAuthException(String, Throwable)</a> - Constructor for exception class com.bilt.pos.platform.<a href="com/bilt/pos/platform/PlatformAuthException.html" title="class in com.bilt.pos.platform">PlatformAuthException</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/widget/WidgetHost.html#platformClient()" class="member-name-link">platformClient()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/WidgetHost.html" title="interface in com.bilt.pos.widget">WidgetHost</a></dt>
+<dd>
+<div class="block">A client for the Bilt platform, authenticated with the session's credentials against its
+ environment.</div>
+</dd>
 <dt><a href="com/bilt/pos/platform/PlatformException.html" class="type-name-link" title="class in com.bilt.pos.platform">PlatformException</a> - Exception Class in <a href="com/bilt/pos/platform/package-summary.html">com.bilt.pos.platform</a></dt>
 <dd>
 <div class="block">A call to the Bilt platform could not produce a response.</div>
@@ -4986,6 +5071,12 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#report(com.bilt.pos.media.service.SessionHandle,com.bilt.pos.media.AdInteraction)" class="member-name-link">report(SessionHandle, AdInteraction)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/widget/WidgetHost.html#reportBackgroundError(com.bilt.pos.session.SessionError)" class="member-name-link">reportBackgroundError(SessionError)</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/WidgetHost.html" title="interface in com.bilt.pos.widget">WidgetHost</a></dt>
+<dd>
+<div class="block">Reports a failure of the widget's background work — a decision request that failed, a surface
+ that could not render — through the session's <code>onBackgroundError</code> handler, the one place
+ a register hears about failures that have no result object to carry them.</div>
+</dd>
 <dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#reports()" class="member-name-link">reports()</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
 <dd>
 <div class="block">Every interaction reported for any session, in order.</div>
@@ -5094,6 +5185,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html#RESPONSE" class="member-name-link">RESPONSE</a> - Enum constant in enum class com.bilt.pos.nexo.client.<a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html" title="enum class in com.bilt.pos.nexo.client">NexoMessageListener.Direction</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/widget/Widget.html#resume()" class="member-name-link">resume()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/Widget.html" title="interface in com.bilt.pos.widget">Widget</a></dt>
+<dd>
+<div class="block">Lets a <a href="com/bilt/pos/widget/Widget.html#pause()">paused</a> widget show content again.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#retry()" class="member-name-link">retry()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
 <dd>
 <div class="block">Retry only the failed step, preserving every earlier committed step.</div>
@@ -5337,6 +5432,15 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/media/service/SessionHandle.html" class="type-name-link" title="class in com.bilt.pos.media.service">SessionHandle</a> - Class in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
 <dd>
 <div class="block">An opaque reference to a shopper session registered with an <a href="com/bilt/pos/media/service/AdDecisionService.html" title="interface in com.bilt.pos.media.service"><code>AdDecisionService</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/widget/WidgetHost.html#sessionId()" class="member-name-link">sessionId()</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/WidgetHost.html" title="interface in com.bilt.pos.widget">WidgetHost</a></dt>
+<dd>
+<div class="block">The identifier of the owning session, as <code>ShopperSession.getSessionId()</code> reports it.</div>
+</dd>
+<dt><a href="com/bilt/pos/widget/SessionObserver.html" class="type-name-link" title="interface in com.bilt.pos.widget">SessionObserver</a> - Interface in <a href="com/bilt/pos/widget/package-summary.html">com.bilt.pos.widget</a></dt>
+<dd>
+<div class="block">The seam between a shopper session and whatever reacts to its state: the terminal's customer
+ display push inside the SDK, and every <a href="com/bilt/pos/widget/Widget.html" title="interface in com.bilt.pos.widget"><code>Widget</code></a>.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SessionResult.html" class="type-name-link" title="class in com.bilt.pos.session">SessionResult&lt;T&gt;</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
@@ -6032,6 +6136,10 @@ loadScripts(document, 'script');</script>
  terminal (Nexo <code>Admin</code> session start signal) and yields it once the terminal
  acknowledged — an unstarted session never exists, so no operation can reach the terminal
  before the start.</div>
+</dd>
+<dt><a href="com/bilt/pos/widget/SessionObserver.html#started(com.bilt.pos.session.SessionContextSnapshot)" class="member-name-link">started(SessionContextSnapshot)</a> - Method in interface com.bilt.pos.widget.<a href="com/bilt/pos/widget/SessionObserver.html" title="interface in com.bilt.pos.widget">SessionObserver</a></dt>
+<dd>
+<div class="block">The session has started; <code>context</code> is its context at that moment.</div>
 </dd>
 <dt><a href="com/bilt/pos/platform/PlatformAuthException.html#status()" class="member-name-link">status()</a> - Method in exception class com.bilt.pos.platform.<a href="com/bilt/pos/platform/PlatformAuthException.html" title="class in com.bilt.pos.platform">PlatformAuthException</a></dt>
 <dd>
@@ -7036,6 +7144,45 @@ the order they are declared.</div>
 <dt><a href="com/bilt/pos/widget/WebSurface.html#%3Cinit%3E(java.lang.String)" class="member-name-link">WebSurface(String)</a> - Constructor for class com.bilt.pos.widget.<a href="com/bilt/pos/widget/WebSurface.html" title="class in com.bilt.pos.widget">WebSurface</a></dt>
 <dd>
 <div class="block">Creates a surface that will show <code>rendererPageUrl</code> in the host's browser control.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ShopperSession.Builder.html#widget(com.bilt.pos.widget.Widget)" class="member-name-link">widget(Widget)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.Builder.html" title="class in com.bilt.pos.session">ShopperSession.Builder</a></dt>
+<dd>
+<div class="block">Adds one shopper-facing widget to the session; repeatable, each call adds one, in the order
+ they are called.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#widget(com.bilt.pos.widget.Widget)" class="member-name-link">widget(Widget)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></dt>
+<dd>
+<div class="block">Adds one shopper-facing widget to the session; repeatable, each call adds one, in the order
+ they are called.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ShopperSession.html#widget(java.lang.Class)" class="member-name-link">widget(Class&lt;W&gt;)</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.html" title="interface in com.bilt.pos.session">ShopperSession</a></dt>
+<dd>
+<div class="block">The registered widget of the given type — the runtime handle for pausing, resuming or otherwise
+ driving a widget configured with <code>widget(..)</code> on the builder, e.g.</div>
+</dd>
+<dt><a href="com/bilt/pos/widget/Widget.html" class="type-name-link" title="interface in com.bilt.pos.widget">Widget</a> - Interface in <a href="com/bilt/pos/widget/package-summary.html">com.bilt.pos.widget</a></dt>
+<dd>
+<div class="block">A shopper-facing capability the SDK runs alongside a session and renders on a <a href="com/bilt/pos/widget/Surface.html" title="interface in com.bilt.pos.widget"><code>Surface</code></a> the
+ register hands over: the retail-media banner first, member identity and wallet later on the same
+ mechanism.</div>
+</dd>
+<dt><a href="com/bilt/pos/widget/WidgetHost.html" class="type-name-link" title="interface in com.bilt.pos.widget">WidgetHost</a> - Interface in <a href="com/bilt/pos/widget/package-summary.html">com.bilt.pos.widget</a></dt>
+<dd>
+<div class="block">What a <a href="com/bilt/pos/widget/Widget.html" title="interface in com.bilt.pos.widget"><code>Widget</code></a> may use of the session that owns it, handed over in <a href="com/bilt/pos/widget/Widget.html#attach(com.bilt.pos.widget.WidgetHost)"><code>Widget.attach(WidgetHost)</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ShopperSession.html#widgets()" class="member-name-link">widgets()</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.html" title="interface in com.bilt.pos.session">ShopperSession</a></dt>
+<dd>
+<div class="block">Every registered widget, in registration order; empty for a session without widgets.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ShopperSession.Builder.html#widgets(java.util.Collection)" class="member-name-link">widgets(Collection&lt;? extends Widget&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ShopperSession.Builder.html" title="class in com.bilt.pos.session">ShopperSession.Builder</a></dt>
+<dd>
+<div class="block">Adds every widget of the collection, in iteration order — <a href="com/bilt/pos/session/ShopperSession.Builder.html#widget(com.bilt.pos.widget.Widget)"><code>ShopperSession.Builder.widget(Widget)</code></a> for callers
+ that assemble the list elsewhere.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#widgets(java.util.Collection)" class="member-name-link">widgets(Collection&lt;? extends Widget&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></dt>
+<dd>
+<div class="block">Adds every widget of the collection, in iteration order — <a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#widget(com.bilt.pos.widget.Widget)"><code>TerminalShopperSession.Builder.widget(Widget)</code></a> for callers
+ that assemble the list elsewhere.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html#withAccountType(com.bilt.pos.nexo.model.StoredValueAccountTypeEnum)" class="member-name-link">withAccountType(StoredValueAccountTypeEnum)</a> - Method in class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></dt>
 <dd>

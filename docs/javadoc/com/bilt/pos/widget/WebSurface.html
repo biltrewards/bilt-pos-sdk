@@ -284,8 +284,10 @@ implements <a href="Surface.html" title="interface in com.bilt.pos.widget">Surfa
  for a creative that is not on display, a foreign token, a CTA past its TTL, a repeated view, or
  a sink that threw. <code>rawJson</code> is the message as received (possibly <code>null</code>). Called
  with no lock held, on the thread that delivered the message, so a subclass may hand the error
- to the widget synchronously. The default logs a <code>java.util.logging</code> warning; a subclass
- may route it to the register's own error channel. Must not throw.</div>
+ to the widget synchronously. The default logs the reason as a <code>java.util.logging</code> warning
+ and leaves <code>rawJson</code> out, because a message dropped for a mismatched action or an expired
+ CTA can still carry a live CTA token; a subclass that logs or forwards <code>rawJson</code> must
+ treat it as sensitive. Must not throw.</div>
 </section>
 </li>
 <li>

@@ -47,6 +47,7 @@ final class SessionMember {
   private final MemberResolver resolver;
   private final BooleanSupplier ended;
   private final Consumer<Member> onMemberChanged;
+  private final Consumer<Member> observers;
   private volatile Member member;
   private volatile int attachments;
   private final ArrayDeque<Optional<Member>> notifications = new ArrayDeque<>();
@@ -55,7 +56,8 @@ final class SessionMember {
   /**
    * {@code seed} is the builder's pre-seeded member, or null; it is installed silently, as initial
    * state rather than a change. A pending seed is resolved once the owner calls {@link
-   * #resolveSeed()}.
+   * #resolveSeed()}. {@code observers} is the session's internal fan-out to its observers, told of
+   * every change before the register's {@code onMemberChanged} handler is dispatched.
    */
   SessionMember(
       ReentrantLock lock,
@@ -63,12 +65,14 @@ final class SessionMember {
       MemberResolver resolver,
       BooleanSupplier ended,
       Consumer<Member> onMemberChanged,
+      Consumer<Member> observers,
       Member seed) {
     this.lock = lock;
     this.operations = operations;
     this.resolver = Objects.requireNonNull(resolver, "resolver");
     this.ended = ended;
     this.onMemberChanged = onMemberChanged;
+    this.observers = Objects.requireNonNull(observers, "observers");
     this.member = seed;
   }
 
@@ -161,7 +165,7 @@ final class SessionMember {
     Member previous = member;
     member = next;
     boolean changed = !Objects.equals(previous, next);
-    if (changed && onMemberChanged != null) {
+    if (changed) {
       synchronized (notifications) {
         notifications.add(Optional.ofNullable(next));
       }
@@ -170,9 +174,10 @@ final class SessionMember {
   }
 
   /**
-   * Delivers the queued {@code onMemberChanged} notifications on the callback executor, never
-   * throwing into the caller. Call it after releasing the lock. Only one thread drains at a time; a
-   * thread that finds a drain under way leaves its notifications to it.
+   * Delivers the queued change notifications, never throwing into the caller: to the session's
+   * observers first, then {@code onMemberChanged} on the callback executor. Call it after releasing
+   * the lock. Only one thread drains at a time; a thread that finds a drain under way leaves its
+   * notifications to it.
    */
   void flush() {
     synchronized (notifications) {
@@ -189,6 +194,10 @@ final class SessionMember {
           flushing = false;
           return;
         }
+      }
+      observers.accept(now.orElse(null));
+      if (onMemberChanged == null) {
+        continue;
       }
       HandlerDispatch.fireAndForget(
           operations.callback(),

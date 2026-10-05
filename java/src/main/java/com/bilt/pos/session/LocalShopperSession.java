@@ -35,11 +35,31 @@ final class LocalShopperSession extends AbstractShopperSession {
         builder.onBackgroundError,
         null,
         builder.phase,
-        builder.attributes);
+        builder.attributes,
+        builder.widgets,
+        builder.credentials,
+        builder.environment);
     this.memberState =
         new SessionMember(
-            lock, operations, memberResolver, this::ended, builder.onMemberChanged, builder.member);
+            lock,
+            operations,
+            memberResolver,
+            this::ended,
+            builder.onMemberChanged,
+            this::memberChanged,
+            builder.member);
+  }
+
+  /**
+   * The start behind {@link ShopperSession.Builder#start()}: binds the widgets and announces the
+   * start to the observers before the session is handed out, then begins resolving a pre-seeded
+   * member pending resolution — queued behind the start announcement on the operation lane, so
+   * observers see {@code started} before any {@code memberChanged} the lookup produces.
+   */
+  ShopperSession start() {
+    announceStarted();
     memberState.resolveSeed();
+    return this;
   }
 
   @Override
@@ -80,6 +100,7 @@ final class LocalShopperSession extends AbstractShopperSession {
           } finally {
             lock.unlock();
           }
+          announceEnded();
           // no further operations may run; asynchronous submissions after
           // this fail into their handlers instead of queueing forever
           operations.shutdown();
