@@ -131,11 +131,13 @@ public abstract class WebSurface implements Surface {
    * for a creative that is not on display, a foreign token, a CTA past its TTL, a repeated view, or
    * a sink that threw. {@code rawJson} is the message as received (possibly {@code null}). Called
    * with no lock held, on the thread that delivered the message, so a subclass may hand the error
-   * to the widget synchronously. The default logs a {@code java.util.logging} warning; a subclass
-   * may route it to the register's own error channel. Must not throw.
+   * to the widget synchronously. The default logs the reason as a {@code java.util.logging} warning
+   * and leaves {@code rawJson} out, because a message dropped for a mismatched action or an expired
+   * CTA can still carry a live CTA token; a subclass that logs or forwards {@code rawJson} must
+   * treat it as sensitive. Must not throw.
    */
   protected void onBridgeError(String reason, String rawJson) {
-    LOGGER.warning("WebSurface dropped a bridge message: " + reason + " -- " + rawJson);
+    LOGGER.warning("WebSurface dropped a bridge message: " + reason);
   }
 
   @Override
