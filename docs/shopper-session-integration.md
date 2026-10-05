@@ -133,11 +133,14 @@ Credentials are optional. A session without them works normally; a platform-back
 
 ```java
 session.end()
-    .onComplete(() -> screen.showWelcome())
+    .onSuccess(ended -> screen.showWelcome())
+    .onError(error -> screen.showEndFailed(error.getMessage()))
     .execute();
 ```
 
-`ShopperSession` is `AutoCloseable`. `close()` is a best-effort, *blocking* `end()` that logs failures instead of throwing, which suits try-with-resources. Don't call `close()` from the callback executor's own thread while operations are in flight; use `end().execute()` with `onComplete` for UI teardown.
+`onComplete` runs on failure too, so it suits cleanup but not the move to the welcome screen. A refused `end()` leaves the session open; show the failure and retry `end()`.
+
+`ShopperSession` is `AutoCloseable`. `close()` is a best-effort, *blocking* `end()` that logs failures instead of throwing, which suits try-with-resources. Don't call `close()` from the callback executor's own thread while operations are in flight; use `end().execute()` with `onSuccess` and `onError` instead.
 
 ---
 
