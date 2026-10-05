@@ -78,9 +78,14 @@ loadScripts(document, 'script');</script>
  ActionSink</code> — lives in <code>com.bilt.pos.widget</code>; the service contract that produces renderings
  and validates actions lives in <a href="service/package-summary.html"><code>com.bilt.pos.media.service</code></a>.
 
- <p>Nothing here depends on the checkout session types. The service layer works from its own
- <code>AdSessionSnapshot</code> so the ad platform integration can evolve independently of the session
- API.</div>
+ <p><a href="RetailMedia.html" title="class in com.bilt.pos.media"><code>RetailMedia</code></a> is the widget itself. Registered on a session builder,
+ it follows the session's basket, member and context, decides through an <a href="service/AdDecisionService.html" title="interface in com.bilt.pos.media.service"><code>AdDecisionService</code></a> what to show on the surfaces the register bound to
+ its placements, and hands the register validated offers (<code>onOffer</code>) and an informational
+ interaction stream (<code>onInteraction</code>).
+
+ <p>The service layer works from its own <code>AdSessionSnapshot</code> rather than the session types,
+ so the ad platform integration can evolve independently of the session API; the widget is the one
+ place that translates between the two.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -141,6 +146,15 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color class-summary class-summary-tab2"><a href="Placement.html" title="class in com.bilt.pos.media">Placement</a></div>
 <div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">A named zone on the register where an ad may be shown.</div>
+</div>
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="RetailMedia.html" title="class in com.bilt.pos.media">RetailMedia</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="block">Sponsored media on a shopper-facing display, decided by the Bilt ad platform and rendered by the
+ SDK on <a href="../widget/Surface.html" title="interface in com.bilt.pos.widget"><code>Surface</code></a>s the register hands over.</div>
+</div>
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="RetailMedia.Builder.html" title="class in com.bilt.pos.media">RetailMedia.Builder</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="block">Builder for <a href="RetailMedia.html" title="class in com.bilt.pos.media"><code>RetailMedia</code></a>; obtained from <a href="RetailMedia.html#builder()"><code>RetailMedia.builder()</code></a>.</div>
 </div>
 <div class="col-first odd-row-color class-summary class-summary-tab3"><a href="SurfaceKind.html" title="enum class in com.bilt.pos.media">SurfaceKind</a></div>
 <div class="col-last odd-row-color class-summary class-summary-tab3">
