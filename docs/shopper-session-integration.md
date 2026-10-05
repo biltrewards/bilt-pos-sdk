@@ -369,7 +369,7 @@ Registers differ in what they can host, so there are five ways to get a renderin
 
 #### A WebView surface
 
-Subclass `WebSurface` and wire two outbound calls and one inbound message. The base class loads Bilt's hosted renderer page lazily, waits for its `ready` signal, pushes renderings to it and checks every inbound message against the rendering on screen.
+Subclass `WebSurface` and wire two outbound calls and one inbound message. A default Android `WebView` has JavaScript disabled, so the example enables it before installing the bridge; construct the surface on the UI thread, since both calls touch the `WebView`. The base class loads Bilt's hosted renderer page lazily, waits for its `ready` signal, pushes renderings to it and checks every inbound message against the rendering on screen.
 
 ```java
 final class AndroidWebViewSurface extends WebSurface {
@@ -378,6 +378,8 @@ final class AndroidWebViewSurface extends WebSurface {
     AndroidWebViewSurface(WebView webView, String rendererPageUrl) {
         super(rendererPageUrl);
         this.webView = webView;
+        // Off by default; without it the renderer page can neither send `ready` nor draw.
+        webView.getSettings().setJavaScriptEnabled(true);
         webView.addJavascriptInterface(new Object() {
             @JavascriptInterface
             public void postMessage(String json) {
