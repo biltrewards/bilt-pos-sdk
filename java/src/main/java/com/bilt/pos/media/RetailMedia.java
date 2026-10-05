@@ -235,7 +235,16 @@ public final class RetailMedia implements Widget {
   @Override
   public void resume() {
     if (paused.compareAndSet(true, false)) {
-      evaluateAll();
+      WidgetHost owner = host;
+      if (owner == null) {
+        return;
+      }
+      // evaluate runs on the session's operation lane, in order with the snapshot callbacks
+      try {
+        owner.operationExecutor().execute(this::evaluateAll);
+      } catch (RuntimeException e) {
+        report("scheduling the re-evaluation after resume", e);
+      }
     }
   }
 
@@ -257,6 +266,13 @@ public final class RetailMedia implements Widget {
                 + "; one widget instance belongs to one session");
       }
       this.host = host;
+      // a widget instance outlives sessions: start each one from a clean slate
+      detached = false;
+      inert = false;
+      handle = null;
+      snapshot = null;
+      phase = null;
+      current.clear();
     }
     if (adService == null) {
       inert = true;
@@ -295,8 +311,12 @@ public final class RetailMedia implements Widget {
     clearSurfaces();
     closeSession();
     ExecutorService thread = widgetThread;
+    widgetThread = null;
     if (thread != null) {
       thread.shutdown();
+    }
+    synchronized (lock) {
+      host = null;
     }
   }
 

@@ -521,6 +521,29 @@ class RetailMediaTest {
     assertEquals(1, host.errors.size());
   }
 
+  @Test
+  void aDetachedWidgetCanServeTheNextSession() {
+    InMemoryAdDecisionService service = new InMemoryAdDecisionService();
+    service.failNext(new IllegalStateException("edge down"));
+    RetailMedia widget =
+        RetailMedia.builder().surface(BANNER, new FakeSurface()).adService(service).build();
+    FakeHost first = new FakeHost(context(CheckoutPhase.SCANNING));
+    widget.attach(first);
+    widget.started(first.context());
+    assertNull(widget.handle(), "the first session went inert");
+    widget.ended();
+    widget.detach();
+
+    FakeHost second = new FakeHost(context(CheckoutPhase.SCANNING));
+    widget.attach(second);
+    widget.started(second.context());
+
+    assertNotNull(widget.handle(), "the second session registers from a clean slate");
+    assertTrue(second.errors.isEmpty(), second.errors.toString());
+    widget.ended();
+    widget.detach();
+  }
+
   // ─── Pause, resume, phases ───
 
   @Test
