@@ -270,38 +270,142 @@ ReplaceBasketRequest:
         $ref: '#/BasketItem'
   oneOf:
     - required: [snapshot]
+      properties:
+        snapshot:
+          $ref: '#/Basket'
     - required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/BasketItem'
+
+BasketLineAddress:
+  description: Addresses a basket line by exactly one of `itemId` or `sku` (the `BySku` variants in Java).
+  type: object
+  oneOf:
+    - required: [itemId]
+      properties:
+        itemId:
+          type: string
+          description: The line to address.
+    - required: [sku]
+      properties:
+        sku:
+          type: string
+          description: The line to address by SKU.
 
 BasketMutation:
-  type: object
   description: |
-    One step of a `mutations` batch, mirroring a `BasketMutation` method. Line-addressed ops
-    take exactly one of `itemId` or `sku` (the `BySku` variants in Java).
-  required: [op]
+    One step of a `mutations` batch, mirroring a `BasketMutation` method and discriminated by
+    `op` so each operation carries exactly its own arguments. Line-addressed ops take exactly
+    one of `itemId` or `sku` (the `BySku` variants in Java).
+  oneOf:
+    - $ref: '#/AddItemMutation'
+    - $ref: '#/RemoveItemMutation'
+    - $ref: '#/UpdateItemQuantityMutation'
+    - $ref: '#/SetDiscountsMutation'
+    - $ref: '#/SetTaxRateMutation'
+    - $ref: '#/SetTaxAmountMutation'
+    - $ref: '#/SetTaxTotalMutation'
+  discriminator:
+    propertyName: op
+    mapping:
+      ADD_ITEM: '#/AddItemMutation'
+      REMOVE_ITEM: '#/RemoveItemMutation'
+      UPDATE_ITEM_QUANTITY: '#/UpdateItemQuantityMutation'
+      SET_DISCOUNTS: '#/SetDiscountsMutation'
+      SET_TAX_RATE: '#/SetTaxRateMutation'
+      SET_TAX_AMOUNT: '#/SetTaxAmountMutation'
+      SET_TAX_TOTAL: '#/SetTaxTotalMutation'
+
+AddItemMutation:
+  type: object
+  required: [op, item]
   properties:
     op:
       type: string
-      enum: [ADD_ITEM, REMOVE_ITEM, UPDATE_ITEM_QUANTITY, SET_DISCOUNTS, SET_TAX_RATE, SET_TAX_AMOUNT, SET_TAX_TOTAL]
+      enum: [ADD_ITEM]
     item:
-      description: For `ADD_ITEM`.
       $ref: '#/BasketItem'
     itemId:
       type: string
-      description: The line to address, or for `ADD_ITEM` an explicit id for a new SKU.
-    sku:
+      description: An explicit line id for a new SKU, mirroring `addItem(item, itemId)`.
+
+RemoveItemMutation:
+  allOf:
+    - $ref: '#/BasketLineAddress'
+    - type: object
+      required: [op]
+      properties:
+        op:
+          type: string
+          enum: [REMOVE_ITEM]
+
+UpdateItemQuantityMutation:
+  allOf:
+    - $ref: '#/BasketLineAddress'
+    - type: object
+      required: [op, quantity]
+      properties:
+        op:
+          type: string
+          enum: [UPDATE_ITEM_QUANTITY]
+        quantity:
+          type: integer
+          minimum: 0
+          description: Absolute quantity; `0` removes the line.
+
+SetDiscountsMutation:
+  allOf:
+    - $ref: '#/BasketLineAddress'
+    - type: object
+      required: [op, discounts]
+      properties:
+        op:
+          type: string
+          enum: [SET_DISCOUNTS]
+        discounts:
+          type: array
+          description: Replaces the register-applied discounts; an empty list clears them.
+          items:
+            $ref: '#/BasketDiscount'
+
+SetTaxRateMutation:
+  allOf:
+    - $ref: '#/BasketLineAddress'
+    - type: object
+      required: [op, amount]
+      properties:
+        op:
+          type: string
+          enum: [SET_TAX_RATE]
+        amount:
+          description: The tax rate; clears a fixed amount on the line.
+          $ref: './common.yaml#/Money'
+
+SetTaxAmountMutation:
+  allOf:
+    - $ref: '#/BasketLineAddress'
+    - type: object
+      required: [op, amount]
+      properties:
+        op:
+          type: string
+          enum: [SET_TAX_AMOUNT]
+        amount:
+          description: The fixed tax amount; clears a rate on the line.
+          $ref: './common.yaml#/Money'
+
+SetTaxTotalMutation:
+  type: object
+  required: [op, amount]
+  properties:
+    op:
       type: string
-      description: The line to address by SKU.
-    quantity:
-      type: integer
-      minimum: 0
-      description: For `UPDATE_ITEM_QUANTITY`; `0` removes the line.
-    discounts:
-      type: array
-      description: For `SET_DISCOUNTS`.
-      items:
-        $ref: '#/BasketDiscount'
+      enum: [SET_TAX_TOTAL]
     amount:
-      description: For `SET_TAX_RATE` (the rate), `SET_TAX_AMOUNT`, and `SET_TAX_TOTAL` (`null` restores item-level tax).
+      description: The basket-level tax override, or `null` to restore item-level computation.
       oneOf:
         - $ref: './common.yaml#/Money'
         - type: 'null'

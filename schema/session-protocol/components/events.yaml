@@ -52,7 +52,7 @@ SessionStartedEvent:
     - $ref: '#/EventBase'
     - type: object
       required: [type, payload]
-      description: Always the first event. When the session started with a member attached, `member.changed` follows with it.
+      description: "Always the first event. It does not carry the member: an initial member given at creation is not announced through `member.changed` (only a pending one's resolution is), so a client reads it with `getMember`."
       properties:
         type:
           type: string

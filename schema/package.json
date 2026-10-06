@@ -7,7 +7,7 @@
     "generate:api-reference": "node generate-openapi.js && npx @redocly/cli build-docs ../docs/openapi.yaml -o ../docs/api-reference.html --theme.openapi.schemaDefinitionsTagName=Schemas --theme.openapi.hideDownloadButton=true",
     "lint:session-protocol": "npx @redocly/cli lint session-protocol/openapi.yaml --config session-protocol/redocly.yaml",
     "bundle:session-protocol": "npx @redocly/cli bundle session-protocol/openapi.yaml --config session-protocol/redocly.yaml -o session-protocol/dist/openapi.bundled.yaml",
-    "generate:session-protocol-reference": "npx @redocly/cli build-docs session-protocol/openapi.yaml --config session-protocol/redocly.yaml -o ../docs/session-protocol-reference.html --theme.openapi.schemaDefinitionsTagName=Schemas --theme.openapi.hideDownloadButton=true"
+    "generate:session-protocol-reference": "pnpm --dir ../js generate:reference"
   },
   "devDependencies": {
     "@openapi-contrib/json-schema-to-openapi-schema": "^4.3.1",

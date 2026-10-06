@@ -1090,25 +1090,11 @@ export interface components {
             taxTotalChanged: boolean;
         };
         /**
-         * @description One step of a `mutations` batch, mirroring a `BasketMutation` method. Line-addressed ops
-         *     take exactly one of `itemId` or `sku` (the `BySku` variants in Java).
+         * @description One step of a `mutations` batch, mirroring a `BasketMutation` method and discriminated by
+         *     `op` so each operation carries exactly its own arguments. Line-addressed ops take exactly
+         *     one of `itemId` or `sku` (the `BySku` variants in Java).
          */
-        BasketMutation: {
-            /** @enum {string} */
-            op: "ADD_ITEM" | "REMOVE_ITEM" | "UPDATE_ITEM_QUANTITY" | "SET_DISCOUNTS" | "SET_TAX_RATE" | "SET_TAX_AMOUNT" | "SET_TAX_TOTAL";
-            /** @description For `ADD_ITEM`. */
-            item?: components["schemas"]["BasketItem"];
-            /** @description The line to address, or for `ADD_ITEM` an explicit id for a new SKU. */
-            itemId?: string;
-            /** @description The line to address by SKU. */
-            sku?: string;
-            /** @description For `UPDATE_ITEM_QUANTITY`; `0` removes the line. */
-            quantity?: number;
-            /** @description For `SET_DISCOUNTS`. */
-            discounts?: components["schemas"]["BasketDiscount"][];
-            /** @description For `SET_TAX_RATE` (the rate), `SET_TAX_AMOUNT`, and `SET_TAX_TOTAL` (`null` restores item-level tax). */
-            amount?: components["schemas"]["Money"] | null;
-        };
+        BasketMutation: components["schemas"]["AddItemMutation"] | components["schemas"]["RemoveItemMutation"] | components["schemas"]["UpdateItemQuantityMutation"] | components["schemas"]["SetDiscountsMutation"] | components["schemas"]["SetTaxRateMutation"] | components["schemas"]["SetTaxAmountMutation"] | components["schemas"]["SetTaxTotalMutation"];
         AddBasketItemRequest: components["schemas"]["BasketItem"] & {
             /** @description An explicit line id for a new SKU, mirroring `addItem(item, itemId)`. */
             itemId?: string;
@@ -1126,7 +1112,11 @@ export interface components {
         ReplaceBasketRequest: {
             snapshot?: components["schemas"]["Basket"];
             items?: components["schemas"]["BasketItem"][];
-        } & (unknown | unknown);
+        } & ({
+            snapshot: components["schemas"]["Basket"];
+        } | {
+            items: components["schemas"]["BasketItem"][];
+        });
         BasketMutationsRequest: {
             mutations: components["schemas"]["BasketMutation"][];
         };
@@ -1157,7 +1147,11 @@ export interface components {
         MemberInput: {
             id?: string;
             resolver?: components["schemas"]["MemberIdResolver"];
-        } & (unknown | unknown);
+        } & ({
+            id: string;
+        } | {
+            resolver: components["schemas"]["MemberIdResolver"];
+        });
         /**
          * @description How a member that is not yet resolved is to be looked up: the kind of identifier the POS
          *     has on file, its value, and whether the cashier typed it in (a terminal lookup then sends
@@ -1898,6 +1892,13 @@ export interface components {
             error?: components["schemas"]["SessionError"];
             /** @description The step awaiting a reply while `awaitingReply`. */
             pendingStep?: components["schemas"]["OperationStep"];
+            /**
+             * @description The Nexo `ServiceID` the host sent the terminal request with, once it has been sent;
+             *     absent for operations that send none. Keep it for an operation whose outcome is
+             *     uncertain (the connection dropped, or it ended `failed` without a reply), then pass
+             *     it as `originalServiceId` of a `getTransactionStatus` operation.
+             */
+            serviceId?: string;
         };
         IdentifyMemberOperation: components["schemas"]["OperationBase"] & {
             /** @enum {string} */
@@ -2198,6 +2199,91 @@ export interface components {
              */
             type: "setStoredValueCard" | "updateDisplay" | "updateInputDisplay" | "end" | "forceEnd";
         };
+        AddItemMutation: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "ADD_ITEM";
+            item: components["schemas"]["BasketItem"];
+            /** @description An explicit line id for a new SKU, mirroring `addItem(item, itemId)`. */
+            itemId?: string;
+        };
+        /** @description Addresses a basket line by exactly one of `itemId` or `sku` (the `BySku` variants in Java). */
+        BasketLineAddress: {
+            /** @description The line to address. */
+            itemId: string;
+        } | {
+            /** @description The line to address by SKU. */
+            sku: string;
+        };
+        RemoveItemMutation: components["schemas"]["BasketLineAddress"] & {
+            /** @enum {string} */
+            op: "REMOVE_ITEM";
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "REMOVE_ITEM";
+        };
+        UpdateItemQuantityMutation: components["schemas"]["BasketLineAddress"] & {
+            /** @enum {string} */
+            op: "UPDATE_ITEM_QUANTITY";
+            /** @description Absolute quantity; `0` removes the line. */
+            quantity: number;
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "UPDATE_ITEM_QUANTITY";
+        };
+        SetDiscountsMutation: components["schemas"]["BasketLineAddress"] & {
+            /** @enum {string} */
+            op: "SET_DISCOUNTS";
+            /** @description Replaces the register-applied discounts; an empty list clears them. */
+            discounts: components["schemas"]["BasketDiscount"][];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "SET_DISCOUNTS";
+        };
+        SetTaxRateMutation: components["schemas"]["BasketLineAddress"] & {
+            /** @enum {string} */
+            op: "SET_TAX_RATE";
+            /** @description The tax rate; clears a fixed amount on the line. */
+            amount: components["schemas"]["Money"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "SET_TAX_RATE";
+        };
+        SetTaxAmountMutation: components["schemas"]["BasketLineAddress"] & {
+            /** @enum {string} */
+            op: "SET_TAX_AMOUNT";
+            /** @description The fixed tax amount; clears a rate on the line. */
+            amount: components["schemas"]["Money"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "SET_TAX_AMOUNT";
+        };
+        SetTaxTotalMutation: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "SET_TAX_TOTAL";
+            /** @description The basket-level tax override, or `null` to restore item-level computation. */
+            amount: components["schemas"]["Money"] | null;
+        };
         /**
          * @description Restricts how the terminal captures an identifier or card; `KEYED` for typed entry, `SCANNED` for a barcode.
          * @enum {string}
@@ -2414,6 +2500,7 @@ export interface components {
              * @enum {string}
              */
             type: "getTransactionStatus";
+            /** @description The `serviceId` of the operation to check, as reported on its operation resource, or of a failed settlement step (`SettlementFailure.serviceId`). */
             originalServiceId: string;
             options?: components["schemas"]["TransactionStatusOptions"];
         };

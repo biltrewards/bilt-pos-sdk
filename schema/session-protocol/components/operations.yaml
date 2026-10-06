@@ -316,6 +316,7 @@ TransactionStatusRequest:
       enum: [getTransactionStatus]
     originalServiceId:
       type: string
+      description: The `serviceId` of the operation to check, as reported on its operation resource, or of a failed settlement step (`SettlementFailure.serviceId`).
     options:
       $ref: './reversal.yaml#/TransactionStatusOptions'
 
@@ -504,6 +505,13 @@ OperationBase:
     pendingStep:
       description: The step awaiting a reply while `awaitingReply`.
       $ref: '#/OperationStep'
+    serviceId:
+      type: string
+      description: |
+        The Nexo `ServiceID` the host sent the terminal request with, once it has been sent;
+        absent for operations that send none. Keep it for an operation whose outcome is
+        uncertain (the connection dropped, or it ended `failed` without a reply), then pass
+        it as `originalServiceId` of a `getTransactionStatus` operation.
 
 Operation:
   description: |

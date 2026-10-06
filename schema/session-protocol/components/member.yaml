@@ -38,7 +38,14 @@ MemberInput:
       $ref: '#/MemberIdResolver'
   oneOf:
     - required: [id]
+      properties:
+        id:
+          type: string
+          minLength: 1
     - required: [resolver]
+      properties:
+        resolver:
+          $ref: '#/MemberIdResolver'
 
 Member:
   type: object

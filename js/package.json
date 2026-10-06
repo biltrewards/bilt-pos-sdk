@@ -10,8 +10,9 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "generate": "pnpm -r generate",
-    "generate:check": "pnpm generate && git diff --exit-code -- packages/*/src/generated",
+    "generate": "pnpm -r generate && pnpm generate:reference",
+    "generate:reference": "redocly build-docs ../schema/session-protocol/openapi.yaml --config ../schema/session-protocol/redocly.yaml -o ../docs/session-protocol-reference.html --theme.openapi.schemaDefinitionsTagName=Schemas --theme.openapi.hideDownloadButton=true",
+    "generate:check": "pnpm generate && git diff --exit-code -- packages/*/src/generated ../docs/session-protocol-reference.html",
     "lint": "eslint . && prettier --check .",
     "lint:spec": "redocly lint ../schema/session-protocol/openapi.yaml --config ../schema/session-protocol/redocly.yaml",
     "format": "prettier --write . && eslint . --fix"

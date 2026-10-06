@@ -39,7 +39,8 @@ jobs:
       - name: Lint and check formatting
         run: pnpm lint
 
-      - name: Check generated code is up to date
+      # Covers the generated TypeScript and the published docs/session-protocol-reference.html.
+      - name: Check generated code and reference is up to date
         run: pnpm generate:check
 
       # Build first: a workspace package resolves its siblings through their built dist/.
