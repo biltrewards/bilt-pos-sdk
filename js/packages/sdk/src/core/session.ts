@@ -157,15 +157,20 @@ export class ShopperSessionImpl implements ShopperSession {
       externalPaymentTotal: '0',
       updatedAt: '',
     });
-    this.member = new SessionMemberImpl(this.engine, this.id, null);
-    this.context = new SessionContextImpl(this.engine, this.id, {
-      phase: options.phase ?? 'SCANNING',
-      attributes: { ...(options.attributes ?? {}) },
-      saleId: session.saleId,
-      currency: session.currency,
-      ...(session.storeLocation !== undefined ? { storeLocation: session.storeLocation } : {}),
-      ...(session.poiId !== undefined ? { poiId: session.poiId } : {}),
-    });
+    this.member = new SessionMemberImpl(this.engine, this.id, null, () => this.versions.member);
+    this.context = new SessionContextImpl(
+      this.engine,
+      this.id,
+      {
+        phase: options.phase ?? 'SCANNING',
+        attributes: { ...(options.attributes ?? {}) },
+        saleId: session.saleId,
+        currency: session.currency,
+        ...(session.storeLocation !== undefined ? { storeLocation: session.storeLocation } : {}),
+        ...(session.poiId !== undefined ? { poiId: session.poiId } : {}),
+      },
+      () => this.versions.context,
+    );
     this.endedPromise = new Promise((resolve) => {
       this.resolveEnded = resolve;
     });

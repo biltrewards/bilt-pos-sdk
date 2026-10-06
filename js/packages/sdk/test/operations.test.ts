@@ -228,6 +228,50 @@ describe('starting an operation', () => {
     expect((error as SessionError).code).toBe('INVALID_STATE');
   });
 
+  it('reconciles the member mirror when member.changed lands while a write is in flight', async () => {
+    const { engine, session } = await lane();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fresh = { resolved: true, memberId: 'mbr_new', rewards: [], pointBalance: 0 };
+    const stale = { ...fresh, memberId: 'mbr_old' };
+    engine.member = (async (_id: string, command: { kind: string }) => {
+      if (command.kind === 'get') return fresh;
+      await gate;
+      return stale;
+    }) as typeof engine.member;
+    const write = session.member.set({ id: 'mbr_old' });
+    await new Promise((r) => setTimeout(r, 10));
+    engine.pushEvent(session.id, 'member.changed', { member: fresh } as never);
+    await vi.waitFor(() => expect(session.member.current?.memberId).toBe('mbr_new'));
+    release();
+    await expect(write).resolves.toMatchObject({ memberId: 'mbr_old' });
+    expect(session.member.current?.memberId).toBe('mbr_new');
+  });
+
+  it('reconciles the context mirror when context.changed lands while a write is in flight', async () => {
+    const { engine, session } = await lane();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fresh = { ...session.context.snapshot(), phase: 'COMPLETE' as const };
+    const stale = { ...fresh, phase: 'TENDERING' as const };
+    engine.context = (async (_id: string, patch?: unknown) => {
+      if (patch === undefined) return fresh;
+      await gate;
+      return stale;
+    }) as typeof engine.context;
+    const write = session.context.setPhase('TENDERING');
+    await new Promise((r) => setTimeout(r, 10));
+    engine.pushEvent(session.id, 'context.changed', fresh as never);
+    await vi.waitFor(() => expect(session.context.phase()).toBe('COMPLETE'));
+    release();
+    await write;
+    expect(session.context.phase()).toBe('COMPLETE');
+  });
+
   it('rejects with the SessionError of a failed operation and marks aborted ones', async () => {
     const { engine, session } = await lane();
     const op = session.settle();
