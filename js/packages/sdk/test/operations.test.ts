@@ -108,6 +108,29 @@ describe('starting an operation', () => {
     await expect(op).resolves.toMatchObject({ cardAmountCharged: '80.00' });
   });
 
+  it('still delivers held movements when the acceptance response already carries the result', async () => {
+    const engine = new ScriptedEngine();
+    let release!: () => void;
+    engine.acceptanceDelay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { session } = await lane(engine);
+    const onMovement = vi.fn();
+    const op = session.settle({ onMovement });
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    const id = engine.lastOperation(session.id).id;
+    engine.movement(session.id, id, {
+      step: 'CARD_CHARGE',
+      target: { type: 'SALES' },
+      amount: '1',
+    });
+    engine.complete(session.id, id, { result: { cardAmountCharged: '1' } } as never);
+    await new Promise((r) => setTimeout(r, 10)); // the pump delivers both events while acceptance is pending
+    release();
+    await expect(op).resolves.toMatchObject({ cardAmountCharged: '1' });
+    expect(onMovement).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects with the SessionError of a failed operation and marks aborted ones', async () => {
     const { engine, session } = await lane();
     const op = session.settle();

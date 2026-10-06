@@ -257,13 +257,15 @@ export class ShopperSessionImpl implements ShopperSession {
 
   private accepted(operation: PendingOperation<unknown>, resource: OperationResource): void {
     operation.accept(resource);
-    if (operation.done) return;
+    // Held events replay even when accepting already settled the operation: its movements still
+    // belong to the register's handlers, which must hear them before the result resolves.
     this.pending.set(resource.id, operation);
     const held = this.unclaimed.get(resource.id);
     if (held) {
       this.unclaimed.delete(resource.id);
       for (const event of held) this.routeOperationEvent(event);
     }
+    if (operation.done) this.pending.delete(resource.id);
   }
 
   private reply(operationId: string, reply: StepReply): Promise<unknown> {

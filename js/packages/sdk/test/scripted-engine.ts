@@ -79,7 +79,9 @@ export class ScriptedEngine extends MockEngine {
       this.complete(sessionId, resource.id, patch);
     }
     if (this.acceptanceDelay) await this.acceptanceDelay;
-    return { ...resource };
+    // The response reflects the resource as it stands when the host answers, so an operation that
+    // finished while acceptance was delayed is accepted already complete.
+    return { ...(state.operations.find((o) => o.id === resource.id) ?? resource) };
   }
 
   override async reply(
