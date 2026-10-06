@@ -63,7 +63,7 @@ curl http://127.0.0.1:48333/health
 ```
 
 ```json
-{"kind":"bridge","hostVersion":"0.30.0","sdkVersion":"0.30.0","protocolVersions":["1"],"terminals":1,"sessions":0}
+{"host":"bridge","hostVersion":"0.30.0","sdkVersion":"0.30.0","protocolVersions":["1"],"terminals":[{"poiId":"VictaLane-275839164"}]}
 ```
 
 `GET /v1/terminals` lists the configured `poiId`s. If the default port was taken, the bridge log (and the tray's status line) names the port that was bound; `curl http://127.0.0.1:48334/health` and so on finds it, and the SDK probes the same range on its own.
@@ -190,7 +190,6 @@ The Session Host alone, without the tray, runs from `./gradlew :host:run --args=
 - **No CORS response headers** until the Session Host exposes a CORS option (see above); `allowedOrigins` is enforced server-side in the meantime.
 - **Sessions do not reattach.** The bridge keeps a session alive when its page goes away, but this iteration of the JavaScript SDK has no call to pick an existing session up again; a reloaded page starts a new one and the old one must be ended (see [troubleshooting](#troubleshooting)).
 - **No retail media creatives.** Widgets attach when the embedding host has an ad decision service; the development host wires an in-memory one with no creatives, so placements stay empty.
-- The tray's *Sessions active* count is read from the host's own `/health`, since the host does not expose it programmatically yet.
 - No update feed, no cloud configuration.
 
 ---
