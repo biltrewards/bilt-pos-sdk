@@ -87,7 +87,13 @@ export class MockEngine implements Engine {
       eventsUrl: `/v1/sessions/${id}/events`,
     };
     if (request.poiId !== undefined) session.poiId = request.poiId;
-    const context = fx.context({ saleId: request.saleId, currency: request.currency });
+    if (request.storeLocation !== undefined) session.storeLocation = request.storeLocation;
+    const context = fx.context({
+      saleId: request.saleId,
+      currency: request.currency,
+      phase: request.context?.phase ?? 'SCANNING',
+      attributes: { ...(request.context?.attributes ?? {}) },
+    });
     const state: State = {
       session,
       basket: fx.basket([]),
