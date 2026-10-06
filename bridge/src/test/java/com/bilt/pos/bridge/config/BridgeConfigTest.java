@@ -230,4 +230,14 @@ class BridgeConfigTest {
         assertThrows(BridgeConfigException.class, () -> BridgeConfig.parse("{ port: 1 "));
     assertTrue(e.getMessage().startsWith("config is not valid JSON"), e.getMessage());
   }
+
+  @Test
+  void repeatedOriginsAreCollapsed() throws Exception {
+    assertEquals(
+        List.of("https://a.example", "https://b.example"),
+        BridgeConfig.parse(
+                "{\"allowedOrigins\": [\"https://a.example\", \"https://b.example\","
+                    + " \"https://a.example\"]}")
+            .allowedOrigins());
+  }
 }

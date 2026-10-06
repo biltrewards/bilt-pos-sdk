@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -183,7 +184,8 @@ public record BridgeConfig(
     if (!node.isArray()) {
       throw new BridgeConfigException("allowedOrigins must be an array of origins");
     }
-    List<String> origins = new ArrayList<>();
+    // a copy-pasted list may repeat an origin; keep the first and drop the rest
+    Set<String> origins = new LinkedHashSet<>();
     for (JsonNode item : node) {
       if (!item.isTextual() || item.asText().isBlank()) {
         throw new BridgeConfigException("allowedOrigins entries must be non-empty strings");
@@ -200,7 +202,7 @@ public record BridgeConfig(
     if (origins.isEmpty()) {
       throw new BridgeConfigException("allowedOrigins must list at least one origin or \"*\"");
     }
-    return origins;
+    return List.copyOf(origins);
   }
 
   private static List<TerminalConfig> parseTerminals(JsonNode node) throws BridgeConfigException {
