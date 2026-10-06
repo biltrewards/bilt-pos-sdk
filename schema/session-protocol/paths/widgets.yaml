@@ -1,0 +1,106 @@
+widgets:
+  get:
+    tags: [Widgets]
+    operationId: listWidgets
+    summary: The session's widgets
+    description: Mirrors `ShopperSession.widgets()`, in registration order; empty for a session without widgets.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+    responses:
+      '200':
+        description: The widgets and their state.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../components/widgets.yaml#/WidgetState'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+
+pause:
+  post:
+    tags: [Widgets]
+    operationId: pauseWidget
+    summary: Pause a widget
+    description: |
+      Mirrors `session.widget(RetailMedia.class).pause()`: the widget's placements are cleared
+      (`widget.clear` events) and stay clear, and it makes no requests on the shopper's behalf
+      until resumed. The session's state keeps flowing to it so it picks up where the session is
+      when resumed. Idempotent. For a companion display shared with PIN entry or signature
+      capture.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '#/widgetType'
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    responses:
+      '200':
+        description: The widget is paused.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/widgets.yaml#/WidgetState'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+
+resume:
+  post:
+    tags: [Widgets]
+    operationId: resumeWidget
+    summary: Resume a paused widget
+    description: Mirrors `resume()`. Idempotent.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '#/widgetType'
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    responses:
+      '200':
+        description: The widget is showing content again.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/widgets.yaml#/WidgetState'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+
+retailMediaActions:
+  post:
+    tags: [Widgets]
+    operationId: reportRetailMediaAction
+    summary: Report what the shopper did with a rendering
+    description: |
+      The client renders; the host owns validation and reporting. This is the wire form of the
+      `ActionSink` the Java widget hands a surface with each rendering: `perform` for a tapped
+      call to action (the CTA's `token` must be one the rendering carried and the rendering must
+      still be the one on display), `viewed` once the rendering counted as seen, `dismissed`
+      when the shopper closed it from the surface, `completed` when its video played to the
+      end. The request is accepted without waiting for validation; what follows arrives as
+      events — `widget.offer` for an accepted `APPLY_OFFER`, `widget.interaction` for every
+      measured event, `widget.clear` after a dismiss, and `background.error` for a rejected
+      token (foreign, stale or tampered). A rejection is never an HTTP error, so a renderer
+      cannot break the checkout by sending the wrong thing.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/widgets.yaml#/WidgetAction'
+    responses:
+      '202':
+        description: Accepted for validation.
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+
+widgetType:
+  name: widgetType
+  in: path
+  required: true
+  description: The widget type, as `WidgetConfig.type` named it; `retail-media` is the only type today.
+  schema:
+    type: string
+    enum: [retail-media]
