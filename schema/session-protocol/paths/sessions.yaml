@@ -1,0 +1,150 @@
+sessions:
+  post:
+    tags: [Sessions]
+    operationId: createSession
+    summary: Start a shopper session
+    description: |
+      Mirrors `ShopperSession.builder()...start()` for `kind: local` and
+      `TerminalShopperSession.builder()...start().get()` for `kind: terminal`. A terminal
+      session is announced to the terminal (Nexo `Admin` session start) and only exists once the
+      terminal acknowledged, so this request blocks for that round trip; a refused start creates
+      no session. Each attempt is a new session with a new id.
+
+      Widgets are attached once the session exists; a widget that cannot run (no ad decision
+      service, missing store location) is reported through a `background.error` event and the
+      session continues without it, exactly as in Java. A pending initial member is resolved in
+      the background and announced through `member.changed`.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/session.yaml#/CreateSessionRequest'
+    responses:
+      '201':
+        description: The session is open. `eventsUrl` is where to subscribe.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/session.yaml#/Session'
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        description: Unknown `poiId`.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/common.yaml#/SessionError'
+      '503':
+        $ref: '../openapi.yaml#/components/responses/TerminalUnreachable'
+
+session:
+  parameters:
+    - $ref: '../openapi.yaml#/components/parameters/sessionId'
+  get:
+    tags: [Sessions]
+    operationId: getSession
+    summary: Read a session
+    responses:
+      '200':
+        description: The session.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/session.yaml#/Session'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+  delete:
+    tags: [Sessions]
+    operationId: endSession
+    summary: End the session
+    description: |
+      Mirrors `end()`. The end is itself an operation on the session's lane: it queues behind
+      anything in flight, tells a terminal to discard its session-scoped data (Nexo `Admin`
+      session end), and completes through `operation.completed` followed by `session.ended`.
+      Once ended, no session operation is allowed and the basket is frozen; start a new session
+      for the next shopper.
+
+      Refused with 409 under the same guards as Java: while money is in flight, while a failed
+      payment's rollback is incomplete, while a same-session or prior-sale void is partially
+      complete, or while refund allocations from a failed settlement have committed. Finish the
+      unwind with `voidTransaction` or retry `settle` first, or use `force-end`. If the end
+      signal fails the operation fails and the session remains open so the call can be retried.
+      An abort never cancels an in-flight end.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    responses:
+      '202':
+        description: The end operation was queued.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/operations.yaml#/Operation'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+
+forceEnd:
+  post:
+    tags: [Sessions]
+    operationId: forceEndSession
+    summary: Irrevocably abandon the session
+    description: |
+      Mirrors `forceEnd(reason)`. Bypasses the unresolved-recovery guards that make `DELETE`
+      refuse, for when an incomplete settlement rollback, refund allocation or void cannot be
+      recovered and the register has recorded the incident for reconciliation. Still refused
+      (409) while a settlement, void or recovery drain is actively moving money. The terminal
+      end signal is best-effort: if it fails the operation reports the failure, but the session
+      is sealed either way and cannot be retried; its duplicate-movement protection is discarded.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/session.yaml#/ForceEndRequest'
+    responses:
+      '202':
+        description: The force-end operation was queued.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/operations.yaml#/Operation'
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+
+abort:
+  post:
+    tags: [Sessions]
+    operationId: abortSession
+    summary: Abort whatever operation is in flight
+    description: |
+      Mirrors `TerminalShopperSession.abort()`: targets the operation currently holding the
+      lane, whichever it is, and is a no-op when nothing is in flight. Unordered — it overtakes
+      the lane rather than queueing on it. See `POST .../operations/{operationId}/abort` for the
+      per-operation form and the full abort semantics.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    responses:
+      '202':
+        description: The abort was issued (or there was nothing to abort).
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operation:
+                  description: The operation the abort targeted; absent when nothing was in flight.
+                  $ref: '../components/operations.yaml#/Operation'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
