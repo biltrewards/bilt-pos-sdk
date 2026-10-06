@@ -115,7 +115,11 @@ public final class OperationRunner {
     }
     TerminalShopperSession terminal = hosted.terminal();
     if (terminal != null && operation.ordered()) {
-      terminal.abort().execute();
+      // execute() only queues the abort; the step is released below, so wait for the flag to be
+      // raised first or the settlement can run on and charge the card
+      SessionResult<Void> terminalAbort = terminal.abort();
+      terminalAbort.execute();
+      terminalAbort.isSuccess();
     }
     PendingStep<?> step = operation.pendingStep();
     if (step != null) {
