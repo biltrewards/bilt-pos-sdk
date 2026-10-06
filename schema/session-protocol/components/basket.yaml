@@ -1,0 +1,327 @@
+BasketItemType:
+  type: string
+  description: Settlement treatment of a basket line. `RETURN` and `CREDIT` totals subtract from the basket.
+  enum: [SALE, RETURN, CREDIT]
+
+BasketDiscount:
+  type: object
+  description: A register-applied discount on one line. `reference` names a register-known offer; a manual discount has none.
+  required: [label, amount]
+  properties:
+    reference:
+      type: string
+      minLength: 1
+    label:
+      type: string
+      minLength: 1
+    amount:
+      description: Positive discount magnitude.
+      $ref: './common.yaml#/Money'
+
+BasketItem:
+  type: object
+  description: |
+    An item as the register adds it (`BasketItem`). Unreferenced items are upserted by SKU and
+    type; a referenced item stays a distinct line and can be targeted by settlement-time
+    fulfillment.
+  required: [sku, description, unitPrice]
+  properties:
+    reference:
+      type: string
+      minLength: 1
+      description: Register-stable reference for settlement-time fulfillment.
+    sku:
+      type: string
+      minLength: 1
+    description:
+      type: string
+    quantity:
+      type: integer
+      minimum: 1
+      default: 1
+    unitPrice:
+      description: Non-negative catalog price.
+      $ref: './common.yaml#/Money'
+    discounts:
+      type: array
+      items:
+        $ref: '#/BasketDiscount'
+    type:
+      $ref: '#/BasketItemType'
+      default: SALE
+    category:
+      type: string
+      description: Optional product category; aids terminal-side offer matching.
+    taxRate:
+      description: Optional tax rate, e.g. `"0.08875"`.
+      $ref: './common.yaml#/Money'
+    taxAmount:
+      description: Optional fixed tax amount; overrides `taxRate`.
+      $ref: './common.yaml#/Money'
+    metadata:
+      type: object
+      additionalProperties:
+        type: string
+
+BasketLineItem:
+  type: object
+  description: |
+    A line of a basket snapshot. On a return or credit line `originalTotal`, `subtotal`,
+    `adjustedTotal` and `taxAmount` are negative; quantity and unit price stay positive.
+    `rebateAmount` and `rebateLabel` are populated only on snapshots produced during payment.
+  required: [itemId, sku, description, quantity, unitPrice, discounts, discountTotal, subtotal, type, originalTotal, rebateAmount, adjustedTotal, taxAmount, metadata]
+  properties:
+    itemId:
+      type: string
+      description: Session-assigned line id (`"1"`, `"2"`, ...).
+    reference:
+      type: string
+    sku:
+      type: string
+    description:
+      type: string
+    category:
+      type: string
+    quantity:
+      type: integer
+    unitPrice:
+      $ref: './common.yaml#/Money'
+    discounts:
+      type: array
+      items:
+        $ref: '#/BasketDiscount'
+    discountTotal:
+      $ref: './common.yaml#/Money'
+    subtotal:
+      description: Signed line value after register discounts and before terminal rebates.
+      $ref: './common.yaml#/Money'
+    type:
+      $ref: '#/BasketItemType'
+    originalTotal:
+      description: '`unitPrice × quantity`, negated on a return or credit line.'
+      $ref: './common.yaml#/Money'
+    rebateAmount:
+      $ref: './common.yaml#/Money'
+    rebateLabel:
+      type: string
+    adjustedTotal:
+      description: '`subtotal − rebateAmount`.'
+      $ref: './common.yaml#/Money'
+    taxRate:
+      $ref: './common.yaml#/Money'
+    taxAmount:
+      $ref: './common.yaml#/Money'
+    metadata:
+      type: object
+      additionalProperties:
+        type: string
+
+TransactionIdentification:
+  type: object
+  description: The sale transaction identity every wire request of a basket's checkout carries.
+  required: [transactionId, timestamp]
+  properties:
+    transactionId:
+      type: string
+    timestamp:
+      type: string
+      format: date-time
+
+Basket:
+  type: object
+  description: |
+    An immutable snapshot of the session's basket. The payment breakdown totals
+    (`rebateTotal`, `pointDiscountTotal`, `storedValueTotal`, `cardPaymentTotal`,
+    `externalPaymentTotal`) are zero while the cart is being built and populated on the
+    snapshots produced during and after settlement.
+  required: [cartId, saleTransactionId, items, taxTotal, originalTotal, discountTotal, subtotal, grandTotal, rebateTotal, pointDiscountTotal, storedValueTotal, cardPaymentTotal, externalPaymentTotal, updatedAt]
+  properties:
+    cartId:
+      type: string
+      description: Stable identifier of this cart within the session; a new one per `clear`.
+    saleTransactionId:
+      $ref: '#/TransactionIdentification'
+    items:
+      type: array
+      items:
+        $ref: '#/BasketLineItem'
+    taxTotal:
+      description: Total tax; the sum of the lines' tax unless overridden.
+      $ref: './common.yaml#/Money'
+    originalTotal:
+      $ref: './common.yaml#/Money'
+    discountTotal:
+      $ref: './common.yaml#/Money'
+    subtotal:
+      $ref: './common.yaml#/Money'
+    grandTotal:
+      description: '`subtotal + taxTotal`.'
+      $ref: './common.yaml#/Money'
+    rebateTotal:
+      $ref: './common.yaml#/Money'
+    pointDiscountTotal:
+      $ref: './common.yaml#/Money'
+    storedValueTotal:
+      $ref: './common.yaml#/Money'
+    cardPaymentTotal:
+      $ref: './common.yaml#/Money'
+    externalPaymentTotal:
+      $ref: './common.yaml#/Money'
+    updatedAt:
+      type: string
+      format: date-time
+
+LineChange:
+  type: object
+  description: A line paired across the two snapshots of a change; `after` keeps the same item id.
+  required: [before, after]
+  properties:
+    before:
+      $ref: '#/BasketLineItem'
+    after:
+      $ref: '#/BasketLineItem'
+
+BasketChange:
+  type: object
+  description: |
+    One change to the basket: the snapshots before and after, which updater produced it, and
+    the line-level diff. Lines are paired by `reference` when present, otherwise by SKU and
+    type, and only within one cart: across a `clear` every previous line is removed and every
+    current line added. A paired line may appear in several of the changed lists at once.
+  required: [previous, current, source, added, removed, quantityChanged, priceChanged, discountsChanged, taxChanged, detailsChanged, taxTotalChanged]
+  properties:
+    previous:
+      $ref: '#/Basket'
+    current:
+      $ref: '#/Basket'
+    source:
+      type: string
+      enum: [INCREMENTAL, BATCH, REPLACE, CLEAR]
+    added:
+      type: array
+      items:
+        $ref: '#/BasketLineItem'
+    removed:
+      type: array
+      items:
+        $ref: '#/BasketLineItem'
+    quantityChanged:
+      type: array
+      items:
+        $ref: '#/LineChange'
+    priceChanged:
+      type: array
+      items:
+        $ref: '#/LineChange'
+    discountsChanged:
+      type: array
+      items:
+        $ref: '#/LineChange'
+    taxChanged:
+      type: array
+      items:
+        $ref: '#/LineChange'
+    detailsChanged:
+      type: array
+      description: Paired lines whose type, SKU, description, category or metadata differs.
+      items:
+        $ref: '#/LineChange'
+    taxTotalChanged:
+      type: boolean
+
+AddBasketItemRequest:
+  allOf:
+    - $ref: '#/BasketItem'
+    - type: object
+      properties:
+        itemId:
+          type: string
+          pattern: '^[0-9]+$'
+          description: An explicit line id for a new SKU, mirroring `addItem(item, itemId)`.
+
+BasketItemPatch:
+  type: object
+  description: '`taxRate` and `taxAmount` are mutually exclusive; a rate clears a fixed amount and vice versa.'
+  minProperties: 1
+  properties:
+    quantity:
+      type: integer
+      minimum: 0
+      description: Absolute quantity; `0` removes the line.
+    discounts:
+      type: array
+      description: Replaces the register-applied discounts; an empty list clears them.
+      items:
+        $ref: '#/BasketDiscount'
+    taxRate:
+      $ref: './common.yaml#/Money'
+    taxAmount:
+      $ref: './common.yaml#/Money'
+
+ReplaceBasketRequest:
+  type: object
+  description: Exactly one of `snapshot` (a whole `Basket`) or `items` (a register-owned cart as `BasketItem`s).
+  properties:
+    snapshot:
+      $ref: '#/Basket'
+    items:
+      type: array
+      items:
+        $ref: '#/BasketItem'
+  oneOf:
+    - required: [snapshot]
+    - required: [items]
+
+BasketMutation:
+  type: object
+  description: |
+    One step of a `mutations` batch, mirroring a `BasketMutation` method. Line-addressed ops
+    take exactly one of `itemId` or `sku` (the `BySku` variants in Java).
+  required: [op]
+  properties:
+    op:
+      type: string
+      enum: [ADD_ITEM, REMOVE_ITEM, UPDATE_ITEM_QUANTITY, SET_DISCOUNTS, SET_TAX_RATE, SET_TAX_AMOUNT, SET_TAX_TOTAL]
+    item:
+      description: For `ADD_ITEM`.
+      $ref: '#/BasketItem'
+    itemId:
+      type: string
+      description: The line to address, or for `ADD_ITEM` an explicit id for a new SKU.
+    sku:
+      type: string
+      description: The line to address by SKU.
+    quantity:
+      type: integer
+      minimum: 0
+      description: For `UPDATE_ITEM_QUANTITY`; `0` removes the line.
+    discounts:
+      type: array
+      description: For `SET_DISCOUNTS`.
+      items:
+        $ref: '#/BasketDiscount'
+    amount:
+      description: For `SET_TAX_RATE` (the rate), `SET_TAX_AMOUNT`, and `SET_TAX_TOTAL` (`null` restores item-level tax).
+      oneOf:
+        - $ref: './common.yaml#/Money'
+        - type: 'null'
+
+BasketMutationsRequest:
+  type: object
+  required: [mutations]
+  properties:
+    mutations:
+      type: array
+      minItems: 1
+      items:
+        $ref: '#/BasketMutation'
+
+TaxTotalRequest:
+  type: object
+  required: [amount]
+  properties:
+    amount:
+      description: The override, or `null` to restore item-level computation.
+      oneOf:
+        - $ref: './common.yaml#/Money'
+        - type: 'null'
