@@ -15,13 +15,22 @@ public interface BridgeConfigSource {
   /** Reads the current configuration, creating a starter one where that makes sense. */
   BridgeConfig load() throws BridgeConfigException;
 
+  /**
+   * Re-reads the configuration while the bridge is running. Unlike {@link #load()} it never creates
+   * a starter configuration: a source that has gone missing is an error, so the configuration in
+   * force is kept rather than replaced by development defaults.
+   */
+  default BridgeConfig reload() throws BridgeConfigException {
+    return load();
+  }
+
   /** A human-readable location the tray can open, when the source has one. */
   Optional<String> location();
 
   /**
    * Starts notifying {@code onChange} whenever the configuration may have changed. The callback
-   * reloads through {@link #load()}; it is never given the new configuration directly, so a failed
-   * reload leaves the previous configuration in force. Closing the returned handle stops the
+   * reloads through {@link #reload()}; it is never given the new configuration directly, so a
+   * failed reload leaves the previous configuration in force. Closing the returned handle stops the
    * notifications. Sources that cannot detect changes return a no-op handle.
    */
   default Closeable watch(Runnable onChange) {

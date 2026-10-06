@@ -54,6 +54,14 @@ public final class FileBridgeConfigSource implements BridgeConfigSource {
   }
 
   @Override
+  public BridgeConfig reload() throws BridgeConfigException {
+    if (!Files.exists(file)) {
+      throw new BridgeConfigException("config file " + file + " is missing");
+    }
+    return load();
+  }
+
+  @Override
   public Optional<String> location() {
     return Optional.of(file.toString());
   }

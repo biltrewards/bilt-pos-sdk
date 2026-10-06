@@ -81,7 +81,7 @@ public final class Bridge implements Closeable {
   public synchronized void reload() {
     BridgeConfig previous = config;
     try {
-      BridgeConfig next = source.load();
+      BridgeConfig next = source.reload();
       apply(next);
       if (previous != null
           && (next.port() != previous.port()

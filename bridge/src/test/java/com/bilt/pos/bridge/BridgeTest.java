@@ -1,6 +1,7 @@
 package com.bilt.pos.bridge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -78,6 +79,32 @@ class BridgeTest {
     assertEquals(BridgeConfig.DEFAULT_PORT, config.port());
     assertEquals(1, config.terminals().size());
     assertTrue(Files.readString(file).contains("\"_comment\""));
+  }
+
+  @Test
+  void reloadKeepsConfigWhenTheFileGoesMissing(@TempDir Path dir) throws Exception {
+    Path file = dir.resolve("config.json");
+    int free;
+    try (java.net.ServerSocket s = new java.net.ServerSocket(0)) {
+      free = s.getLocalPort();
+    }
+    Files.writeString(
+        file,
+        "{\"port\": "
+            + free
+            + ", \"allowedOrigins\": [\"https://a.example\"],"
+            + " \"terminals\": [{\"poiId\": \"T1\", \"host\": \"10.0.0.1\", \"trustAll\": true}]}");
+
+    try (Bridge bridge = new Bridge(new FileBridgeConfigSource(file))) {
+      bridge.start();
+      Files.delete(file);
+      bridge.reload();
+
+      assertFalse(Files.exists(file), "reload must not recreate the starter file");
+      assertTrue(bridge.lastConfigError().isPresent());
+      assertEquals(List.of("T1"), bridge.terminalIds());
+      assertEquals(List.of("https://a.example"), bridge.config().allowedOrigins());
+    }
   }
 
   @Test
