@@ -1,4 +1,5 @@
 import type { Health } from '@bilt/pos-protocol';
+import { BiltPosImpl } from './core/pos';
 import type { Engine } from './internal';
 import type { ShopperSession, ShopperSessionOptions, TerminalSessionOptions } from './session';
 import type { Terminal, TerminalInfo } from './terminal';
@@ -101,3 +102,11 @@ export interface BiltPos {
 export interface BiltPosStatic {
   connect(engine: EngineFactory): Promise<BiltPos>;
 }
+
+/**
+ * The SDK's `BiltPos`: `BiltPos.connect(localBridge())` runs the core over the engine the
+ * factory builds. Shares its name with the interface, as a class would.
+ */
+export const BiltPos: BiltPosStatic = {
+  connect: (engine) => BiltPosImpl.connect(engine),
+};

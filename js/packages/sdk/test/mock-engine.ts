@@ -9,6 +9,7 @@ import type {
   Session,
   SessionContext,
   SessionEvent,
+  StepReply,
   WidgetState,
 } from '@bilt/pos-protocol';
 import { SessionError, type EngineCapabilities } from '../src/index';
@@ -17,18 +18,21 @@ import type {
   Engine,
   EngineOperationRequest,
   MemberCommand,
+  RequestOptions,
   TerminalCommand,
   TerminalCommandResult,
 } from '../src/internal';
 import * as fx from './fixtures';
 
-interface State {
+export interface State {
   session: Session;
   basket: Basket;
   member: Member | null;
   context: SessionContext;
   operations: Operation[];
   events: SessionEvent[];
+  /** The last sequence number handed out; events may be forgotten, the numbering never restarts. */
+  lastSeq: number;
   waiters: Array<() => void>;
 }
 
@@ -42,8 +46,8 @@ export class MockEngine implements Engine {
     supportsLocalSessions: true,
   };
 
-  private readonly sessions = new Map<string, State>();
-  private counter = 0;
+  protected readonly sessions = new Map<string, State>();
+  protected counter = 0;
 
   async health() {
     return {
@@ -87,7 +91,13 @@ export class MockEngine implements Engine {
       eventsUrl: `/v1/sessions/${id}/events`,
     };
     if (request.poiId !== undefined) session.poiId = request.poiId;
-    const context = fx.context({ saleId: request.saleId, currency: request.currency });
+    if (request.storeLocation !== undefined) session.storeLocation = request.storeLocation;
+    const context = fx.context({
+      saleId: request.saleId,
+      currency: request.currency,
+      phase: request.context?.phase ?? 'SCANNING',
+      attributes: { ...(request.context?.attributes ?? {}) },
+    });
     const state: State = {
       session,
       basket: fx.basket([]),
@@ -95,6 +105,7 @@ export class MockEngine implements Engine {
       context,
       operations: [],
       events: [],
+      lastSeq: 0,
       waiters: [],
     };
     this.sessions.set(id, state);
@@ -198,11 +209,20 @@ export class MockEngine implements Engine {
     return found;
   }
 
-  async reply(sessionId: string, operationId: string): Promise<Operation> {
+  async reply(
+    sessionId: string,
+    operationId: string,
+    _reply?: StepReply,
+    _options?: RequestOptions,
+  ): Promise<Operation> {
     return this.operation(sessionId, operationId);
   }
 
-  async abort(): Promise<void> {}
+  async abort(
+    _sessionId?: string,
+    _operationId?: string,
+    _options?: RequestOptions,
+  ): Promise<void> {}
 
   async widgets(): Promise<readonly WidgetState[]> {
     return [];
@@ -231,19 +251,19 @@ export class MockEngine implements Engine {
 
   async close(): Promise<void> {}
 
-  private state(sessionId: string): State {
+  protected state(sessionId: string): State {
     const state = this.sessions.get(sessionId);
     if (!state) throw new SessionError({ code: 'NOT_FOUND', message: `no session ${sessionId}` });
     return state;
   }
 
-  private push<T extends SessionEvent['type']>(
+  protected push<T extends SessionEvent['type']>(
     state: State,
     type: T,
     payload: Extract<SessionEvent, { type: T }>['payload'],
   ): void {
     const event = {
-      seq: state.events.length + 1,
+      seq: ++state.lastSeq,
       at: new Date().toISOString(),
       type,
       payload,

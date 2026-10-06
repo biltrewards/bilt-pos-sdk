@@ -178,6 +178,9 @@ export interface BiltPos {
 }
 
 // @public
+export const BiltPos: BiltPosStatic;
+
+// @public
 export interface BiltPosStatic {
     // (undocumented)
     connect(engine: EngineFactory): Promise<BiltPos>;

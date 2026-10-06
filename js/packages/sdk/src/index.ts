@@ -4,17 +4,17 @@
  * Protocol to a host — the Terminal Bridge on the register machine, or the Cloud Session
  * Service. React bindings live in `@bilt/pos-react`.
  *
- * This release defines the public contract; the core and the engines follow.
+ * ```ts
+ * import { BiltPos } from '@bilt/pos-sdk';
+ * import { localBridge } from '@bilt/pos-sdk/bridge';
+ *
+ * const pos = await BiltPos.connect(localBridge());
+ * ```
  *
  * @packageDocumentation
  */
-export type {
-  BiltPos,
-  BiltPosStatic,
-  EngineCapabilities,
-  EngineContext,
-  EngineFactory,
-} from './pos';
+export { BiltPos } from './pos';
+export type { BiltPosStatic, EngineCapabilities, EngineContext, EngineFactory } from './pos';
 export type {
   BasketMutationBuilder,
   RenderingCapabilities,
