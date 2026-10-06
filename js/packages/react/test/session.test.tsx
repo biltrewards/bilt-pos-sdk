@@ -93,6 +93,28 @@ describe('useTerminalSession', () => {
     expect(pos.sessions).toHaveLength(2);
   });
 
+  it('starts the replacement of a remounted lane only after the old session has ended', async () => {
+    const pos = new MockBiltPos();
+    const view = renderWithPos(pos, <Lane key="a" />);
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('open'));
+    const first = pos.sessions[0]!;
+    const dispose = first[Symbol.asyncDispose].bind(first);
+    let release: () => void = () => undefined;
+    first[Symbol.asyncDispose] = () =>
+      new Promise<void>((resolve) => {
+        release = () => void dispose().then(resolve);
+      });
+
+    view.rerender(<Lane key="b" />);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(pos.sessions).toHaveLength(1);
+
+    release();
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('open'));
+    expect(first.state).toBe('ended');
+    expect(pos.sessions).toHaveLength(2);
+  });
+
   it('surfaces a refused start as an error', async () => {
     const pos = new MockBiltPos();
     vi.spyOn(pos, 'startTerminalSession').mockRejectedValue(

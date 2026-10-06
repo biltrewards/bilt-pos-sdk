@@ -1,9 +1,9 @@
 ---
 ---
 
-# Terminal Bridge (development preview)
+# Terminal Bridge — Setup Guide
 
-The Terminal Bridge is a small menu-bar application that runs on the register machine, embeds the Java SDK and the Session Host (`:host`), and serves them on `127.0.0.1` so a browser-based POS page can drive a Bilt terminal on the store LAN. The page never sees the terminal's address, certificate or payload passphrase; it talks the Session Protocol (HTTP, Server-Sent Events and WebSocket) to the bridge, and the bridge speaks Nexo over HTTPS to the terminal.
+The Terminal Bridge is a small menu-bar application that runs on the register machine, embeds the Java SDK and the Session Host (`:host`), and serves them on `127.0.0.1` so a browser-based POS page can drive a Bilt terminal on the store LAN. The page never sees the terminal's address, certificate or payload passphrase; it talks the Session Protocol (HTTP, Server-Sent Events and WebSocket) to the bridge, and the bridge speaks Nexo over HTTPS to the terminal. The page side is the [JavaScript SDK](./javascript-sdk-integration.md); the wire contract is the [Session Protocol reference](./session-protocol-reference.html).
 
 The design is in Notion: *Bilt POS SDK — Terminal Bridge, Session Protocol & JavaScript SDK (Design)*. This page covers the **development-mode** bridge in this repository: configuration from a local file, no pairing, no authentication, macOS packaging only.
 
@@ -42,6 +42,20 @@ A bridge icon appears in the menu bar; there is no Dock icon. To start it at log
 
 Requirements for building: JDK 21 with `jlink` and `jpackage` (Temurin works), Xcode command-line tools for `codesign` and `hdiutil`.
 
+### First run
+
+On the first start the bridge
+
+1. creates its configuration file (see [Configuration file](#configuration-file)) with a commented example and no usable terminal, and its log folder;
+2. binds `127.0.0.1:48333`, or the next free port up to `48343`, and writes the port it chose to the log and the menu's status line;
+3. starts serving `/health` at once. There are no terminals until the config file lists them, but `local` sessions (basket, member, context and widgets without a terminal) already work, which is enough to bring a register page up.
+
+Then:
+
+1. Open the config file from the menu (**Open config**), replace the example terminal with yours (`poiId`, LAN `host` and `port`, and either `trustAll: true` for a lab device or the Bilt CA and environment), save, and choose **Reload config** or wait for the file watcher. The menu shows the number of terminals it now knows.
+2. Run [Verify](#verify) below.
+3. Open the register page. The JavaScript SDK finds the bridge on its own: `BiltPos.connect(localBridge())`, or `BridgeGate` in React, which shows an install prompt while nothing answers on loopback and lets the page through once the bridge is up. The first time a page from an `https://` origin reaches `127.0.0.1`, Chrome asks once whether the page may connect to software on this computer; choose *Allow*. See [Bridge detection and install](./javascript-sdk-integration.md#bridge-detection-and-install) in the SDK guide.
+
 ### Verify
 
 ```bash
@@ -49,10 +63,18 @@ curl http://127.0.0.1:48333/health
 ```
 
 ```json
-{"kind":"bridge","hostVersion":"0.30.0","sdkVersion":"0.30.0","protocolVersions":["1"],"terminals":1,"sessions":0}
+{"host":"bridge","hostVersion":"0.30.0","sdkVersion":"0.30.0","protocolVersions":["1"],"terminals":[{"poiId":"VictaLane-275839164"}]}
 ```
 
-`GET /v1/terminals` lists the configured `poiId`s. If the default port was taken, the bridge log (and the tray's status line) names the port that was bound.
+`GET /v1/terminals` lists the configured `poiId`s. If the default port was taken, the bridge log (and the tray's status line) names the port that was bound; `curl http://127.0.0.1:48334/health` and so on finds it, and the SDK probes the same range on its own.
+
+To check that a terminal is reachable through the bridge without a session:
+
+```bash
+curl -X POST http://127.0.0.1:48333/v1/terminals/VictaLane-275839164/diagnose
+```
+
+A terminal that cannot be reached answers with a `SessionError` whose `code` is `NETWORK` or `TIMEOUT`; the [troubleshooting](#troubleshooting) section says what to check.
 
 ---
 
@@ -80,7 +102,7 @@ The file is created on first start with a commented example (JSON has no comment
       "keyId": null,
       "trustAll": true,
       "caCertificatePath": null,
-      "environment": null
+      "environment": "STAGING"
     }
   ]
 }
@@ -101,7 +123,7 @@ Passphrases never appear in logs, in `toString()` output or in the diagnostics s
 
 ### Pointing a browser page at the bridge
 
-Until the JavaScript SDK ships, a page can probe the bridge directly:
+The JavaScript SDK does the probing: `localBridge()` tries `GET /health` on port 48333 and the ten ports above it, 400 ms each, and `BiltPos.connect` rejects with `BridgeMissingError` or `BridgeOutdatedError` when nothing suitable answers. A page can also probe by hand:
 
 ```javascript
 const res = await fetch("http://127.0.0.1:48333/health", { signal: AbortSignal.timeout(400) });
@@ -110,10 +132,30 @@ const health = await res.json();   // health.protocolVersions tells the SDK what
 
 Two browser-side caveats in this iteration:
 
-- **CORS response headers are not sent yet.** The Session Host owns the HTTP layer and does not expose a CORS option, so a page on another origin can reach the bridge only where the browser does not enforce CORS for it: a page served from `http://127.0.0.1`/`http://localhost` itself (same-origin), a browser launched with web security disabled for development, or an Electron/WebView host. Adding an `allowedOrigins` CORS option to the host is the follow-up that lifts this.
+- **CORS response headers are not sent yet.** The Session Host owns the HTTP layer and does not expose a CORS option, so a page on another origin can reach the bridge only where the browser does not enforce CORS for it: a page served from `http://127.0.0.1`/`http://localhost` itself (same-origin), a page whose dev server proxies `/health` and `/v1` to the bridge (what the [browser POS example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) does), a browser launched with web security disabled for development, or an Electron/WebView host. Adding an `allowedOrigins` CORS option to the host is the follow-up that lifts this.
 - Chrome asks once per origin for permission to reach loopback (its Local Network Access check); that preflight needs `Access-Control-Allow-Private-Network: true`, which lands with the same host follow-up.
 
-The JS SDK's `localBridge()` transport will wrap the probe, the install prompt and reconnection.
+---
+
+## Troubleshooting
+
+**Nothing answers on 48333 (`BridgeMissingError`, the install prompt stays up).** Check the menu-bar icon is there; if it is not, launch the app (and clear the quarantine flag on an ad-hoc build, see [Install](#install-on-macos)). If it is, read the status line: the bridge may have bound a fallback port because 48333 was taken, which the SDK finds on its own but a hand-written probe or a dev-server proxy pointed at 48333 does not. `lsof -nP -iTCP:48333 -sTCP:LISTEN` names the process holding the port; quit it or set `"port"` to another value and restart the bridge. A bridge that cannot bind any port of its range logs the failure and shows it in the menu.
+
+**Chrome never asks for permission, or the page cannot reach loopback.** Chrome 142+ gates requests from a public page to `127.0.0.1` behind a one-time *allow this site to connect to software on your computer* prompt, remembered per origin. If it was dismissed, open the site settings (the icon left of the address bar) and reset the local-network permission, then reload. Managed fleets can pre-grant it by policy. A page served from `http://localhost` or `http://127.0.0.1` is itself loopback and needs no permission. Firefox does not ask; Safari behaviour is unconfirmed.
+
+**`401` from the bridge, `UNAUTHORIZED` in the page.** The page's `Origin` is not in `allowedOrigins`. Add the exact origin (`https://pos.example.com`, scheme and port included) or, for development, `"*"`, and reload the config. Requests without an `Origin` header (curl, server-side tools) always pass.
+
+**The request succeeds in curl but fails in the browser with a CORS error.** The bridge does not send CORS headers in this iteration (see above). Serve the page same-origin, proxy `/health` and `/v1` through the page's own dev server, or wait for the host's CORS option.
+
+**Starting a terminal session fails with `TIMEOUT` or `NETWORK`.** The bridge is up but cannot reach the terminal: `POST /v1/terminals/{poiId}/diagnose` fails the same way. Check the `host` and `port` in the config against the terminal's network screen, that the register machine is on the same LAN or routed to it, and that a firewall is not dropping 8443. A TLS failure shows as `NETWORK` with a certificate message in the bridge log: for a lab device set `"trustAll": true`; for a boarded one give `caCertificatePath` and the right `environment`. A mismatch between `encryption` and the terminal's own setting fails the first exchange with a `TERMINAL_ERROR` or a decode failure in the log. The admin exchange that opens a session times out after about two minutes, so a wrong address looks like a hang before it fails.
+
+**`NOT_FOUND` for the `poiId`.** The id in the page's session options is not in `terminals[]`; `GET /v1/terminals` lists what the bridge knows. The id is case-sensitive.
+
+**A terminal session cannot be started because one is already open on the terminal (`INVALID_STATE`).** A session the register did not end is still alive on the bridge: a page that was closed or reloaded without `end()`, or a crashed register. Sessions outlive the page by design (the bridge is where settlement runs). End the stale one through the bridge, `curl -X DELETE http://127.0.0.1:48333/v1/sessions/<id>`, and if it refuses because money is unresolved, finish the unwind or force-end it as the SDK guide's [session section](./javascript-sdk-integration.md#start-and-end-a-session) describes. Restarting the bridge drops its sessions and tells the terminal to discard its session data on the next start.
+
+**`BridgeOutdatedError` / the update prompt.** The bridge's `protocolVersions` does not include the version the SDK was generated from. Install the newer bridge; there is no update feed in the development build, so download the `.dmg` and reinstall.
+
+**Where are the logs?** `~/Library/Logs/Bilt Terminal Bridge/` on macOS (**Open logs** in the menu); the diagnostics summary from the menu is safe to paste into a ticket, it redacts passphrases.
 
 ---
 
@@ -127,6 +169,8 @@ The JS SDK's `localBridge()` transport will wrap the probe, the install prompt a
 
 `-Dbilt.bridge.dir=/some/dir` pins both the config and the log directory, which keeps a development instance away from the installed one.
 
+The Session Host alone, without the tray, runs from `./gradlew :host:run --args=dev-host.json`; its config format is the host's own and documented on the [Session Host](./session-host.html) page.
+
 ### Packaging details
 
 - `org.beryx.runtime` builds a jlink image and a jpackage app image from the non-modular classpath. Modules: `java.base, java.logging, java.net.http, java.xml, java.desktop, java.instrument, java.management, java.naming, java.security.jgss, java.sql, jdk.crypto.ec, jdk.unsupported` (the `instrument`/`management`/`naming`/`jgss` ones are Jetty's). Re-check after dependency changes with `./gradlew :bridge:installDist && jdeps --multi-release 21 --print-module-deps --ignore-missing-deps bridge/build/install/bridge/lib/*.jar`.
@@ -138,11 +182,20 @@ The JS SDK's `localBridge()` transport will wrap the probe, the install prompt a
 
 ---
 
-## Known limitations
+## Limitations of the development build
 
 - **Development mode only**: no pairing, no per-origin tokens, `allowedOrigins: ["*"]` by default, secrets stored in a plain JSON file.
 - **macOS packaging only** so far; the application code is platform-neutral (`AppDirs` already knows the Windows and Linux locations) but there is no MSI, deb or rpm, and *Start at login* is implemented for macOS only.
 - **Ad-hoc signed, not notarized**; Gatekeeper needs the one-time override above.
 - **No CORS response headers** until the Session Host exposes a CORS option (see above); `allowedOrigins` is enforced server-side in the meantime.
-- The tray's *Sessions active* count is read from the host's own `/health`, since the host does not expose it programmatically yet.
+- **Sessions do not reattach.** The bridge keeps a session alive when its page goes away, but this iteration of the JavaScript SDK has no call to pick an existing session up again; a reloaded page starts a new one and the old one must be ended (see [troubleshooting](#troubleshooting)).
+- **No retail media creatives.** Widgets attach when the embedding host has an ad decision service; the development host wires an in-memory one with no creatives, so placements stay empty.
 - No update feed, no cloud configuration.
+
+---
+
+## Next steps
+
+- [JavaScript SDK Integration Guide](./javascript-sdk-integration.md) — the page side: sessions, basket, settlement, widgets and the React hooks.
+- [Session Protocol Reference](./session-protocol-reference.html) — every request and event the bridge serves.
+- [TerminalShopperSession Integration Guide](./checkout-session-integration.md) — the Java engine the bridge embeds, for what each operation does on the terminal.

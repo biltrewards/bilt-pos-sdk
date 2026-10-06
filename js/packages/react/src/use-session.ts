@@ -50,6 +50,10 @@ function toError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
 }
 
+// Per connection, the previous session's start and disposal. Kept outside the component so a
+// remount (a changed `key`) still waits for the old session to end before the next one starts.
+const pendingSessions = new WeakMap<BiltPos, Promise<void>>();
+
 function useManagedSession<S extends ShopperSession>(
   start: (pos: BiltPos) => Promise<S>,
   enabled: boolean,
@@ -58,9 +62,6 @@ function useManagedSession<S extends ShopperSession>(
   const startRef = useRef(start);
   startRef.current = start;
   const [generation, setGeneration] = useState(0);
-  // The previous session's start and disposal; the next start waits on it so a terminal never
-  // sees the replacement arrive while the old session is still open or ending.
-  const previous = useRef<Promise<void>>(Promise.resolve());
   const [state, setState] = useState<{
     session: S | null;
     status: SessionStatus;
@@ -76,7 +77,7 @@ function useManagedSession<S extends ShopperSession>(
     let started: S | null = null;
     let unsubscribe: (() => void) | null = null;
     setState({ session: null, status: 'starting', error: null });
-    const lifecycle = previous.current
+    const lifecycle = (pendingSessions.get(pos) ?? Promise.resolve())
       .then(() => (cancelled ? undefined : startRef.current(pos)))
       .then(
         (session) => {
@@ -102,11 +103,14 @@ function useManagedSession<S extends ShopperSession>(
     return () => {
       cancelled = true;
       unsubscribe?.();
-      previous.current = lifecycle
-        .then(() =>
-          started && started.state === 'open' ? started[Symbol.asyncDispose]() : undefined,
-        )
-        .catch(() => undefined);
+      pendingSessions.set(
+        pos,
+        lifecycle
+          .then(() =>
+            started && started.state === 'open' ? started[Symbol.asyncDispose]() : undefined,
+          )
+          .catch(() => undefined),
+      );
     };
   }, [pos, enabled, generation]);
 
