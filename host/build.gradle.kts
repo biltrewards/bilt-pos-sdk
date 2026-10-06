@@ -14,6 +14,18 @@ java {
 dependencies {
     api(projects.java)
     implementation(libs.javalin)
+    // SpecConformanceTest validates every response and event against the Session Protocol's
+    // OpenAPI document, read straight from the multi-file YAML source.
+    testImplementation(libs.json.schema.validator)
+    testImplementation(libs.jackson.dataformat.yaml)
+}
+
+// The tests read schema/session-protocol as the wire contract; a spec change reruns them.
+val sessionProtocolDir = rootProject.layout.projectDirectory.dir("schema/session-protocol")
+
+tasks.test {
+    inputs.dir(sessionProtocolDir).withPathSensitivity(PathSensitivity.RELATIVE)
+    systemProperty("bilt.sessionProtocolDir", sessionProtocolDir.asFile.absolutePath)
 }
 
 // DevMain starts the host from a small JSON terminal config so the protocol can

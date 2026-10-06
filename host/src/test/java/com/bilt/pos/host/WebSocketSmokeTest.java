@@ -62,23 +62,30 @@ class WebSocketSmokeTest {
                   })
               .get(5, TimeUnit.SECONDS);
 
-      JsonNode replayed = received.poll(5, TimeUnit.SECONDS);
+      JsonNode replayed = next(received);
       assertEquals("basket.changed", replayed.path("type").asText());
       assertEquals(2, replayed.path("seq").asLong());
 
       client.patch("/v1/sessions/" + id + "/context", json("{'phase':'TENDERING'}")).expect(200);
-      JsonNode live = received.poll(5, TimeUnit.SECONDS);
+      JsonNode live = next(received);
       assertEquals("context.changed", live.path("type").asText());
       assertEquals("TENDERING", live.path("payload").path("phase").asText());
 
       client.delete("/v1/sessions/" + id).expect(202);
-      JsonNode completed = received.poll(5, TimeUnit.SECONDS);
+      JsonNode completed = next(received);
       assertEquals("operation.completed", completed.path("type").asText());
       assertEquals("end", completed.path("payload").path("type").asText());
-      JsonNode ended = received.poll(5, TimeUnit.SECONDS);
+      JsonNode ended = next(received);
       assertEquals("session.ended", ended.path("type").asText());
       assertTrue(socket.isInputClosed() || waitClosed(socket));
     }
+  }
+
+  /** The next frame, checked against the spec's {@code Event} schema like the SSE ones are. */
+  private static JsonNode next(LinkedBlockingQueue<JsonNode> received) throws InterruptedException {
+    JsonNode event = received.poll(5, TimeUnit.SECONDS);
+    SpecValidator.shared().event(event);
+    return event;
   }
 
   private static boolean waitClosed(WebSocket socket) throws InterruptedException {

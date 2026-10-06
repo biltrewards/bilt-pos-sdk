@@ -20,7 +20,11 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
-/** A small JSON client for the tests: every call returns status and parsed body. */
+/**
+ * A small JSON client for the tests: every call returns status and parsed body, and every response
+ * and event is checked against the Session Protocol spec on the way through, so any test that
+ * drives the host also proves it conforms.
+ */
 final class HostClient {
 
   static final class Response {
@@ -45,6 +49,7 @@ final class HostClient {
   }
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final SpecValidator SPEC = SpecValidator.shared();
   private final HttpClient http =
       HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
   private final String base;
@@ -58,7 +63,7 @@ final class HostClient {
   }
 
   Response get(String path) throws Exception {
-    return send(HttpRequest.newBuilder(URI.create(base + path)).GET(), null);
+    return send("GET", path, HttpRequest.newBuilder(URI.create(base + path)).GET(), null);
   }
 
   Response post(String path, String json) throws Exception {
@@ -67,6 +72,8 @@ final class HostClient {
 
   Response post(String path, String json, String idempotencyKey) throws Exception {
     return send(
+        "POST",
+        path,
         HttpRequest.newBuilder(URI.create(base + path))
             .POST(HttpRequest.BodyPublishers.ofString(json == null ? "" : json)),
         idempotencyKey);
@@ -74,6 +81,8 @@ final class HostClient {
 
   Response put(String path, String json) throws Exception {
     return send(
+        "PUT",
+        path,
         HttpRequest.newBuilder(URI.create(base + path))
             .PUT(HttpRequest.BodyPublishers.ofString(json)),
         UUID.randomUUID().toString());
@@ -81,6 +90,8 @@ final class HostClient {
 
   Response patch(String path, String json) throws Exception {
     return send(
+        "PATCH",
+        path,
         HttpRequest.newBuilder(URI.create(base + path))
             .method("PATCH", HttpRequest.BodyPublishers.ofString(json)),
         UUID.randomUUID().toString());
@@ -88,7 +99,10 @@ final class HostClient {
 
   Response delete(String path) throws Exception {
     return send(
-        HttpRequest.newBuilder(URI.create(base + path)).DELETE(), UUID.randomUUID().toString());
+        "DELETE",
+        path,
+        HttpRequest.newBuilder(URI.create(base + path)).DELETE(),
+        UUID.randomUUID().toString());
   }
 
   /** A CORS preflight from {@code origin}, as a browser would send before a POST. */
@@ -108,12 +122,16 @@ final class HostClient {
   /** Sends without any Idempotency-Key, to check the requirement. */
   Response postUnkeyed(String path, String json) throws Exception {
     return send(
+        "POST",
+        path,
         HttpRequest.newBuilder(URI.create(base + path))
             .POST(HttpRequest.BodyPublishers.ofString(json)),
         null);
   }
 
-  private Response send(HttpRequest.Builder request, String idempotencyKey) throws Exception {
+  private Response send(
+      String method, String path, HttpRequest.Builder request, String idempotencyKey)
+      throws Exception {
     request.header("Content-Type", "application/json").timeout(Duration.ofSeconds(30));
     if (idempotencyKey != null) {
       request.header("Idempotency-Key", idempotencyKey);
@@ -124,6 +142,7 @@ final class HostClient {
         response.body() == null || response.body().isEmpty()
             ? MAPPER.nullNode()
             : MAPPER.readTree(response.body());
+    SPEC.response(method, path, response.statusCode(), body);
     return new Response(response.statusCode(), body, response.headers());
   }
 
@@ -173,6 +192,7 @@ final class HostClient {
         } else if (line.isEmpty() && data.length() > 0) {
           JsonNode event = MAPPER.readTree(data.toString());
           data.setLength(0);
+          SPEC.event(event);
           events.add(event);
           if (until.test(event)) {
             return events;
