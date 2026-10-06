@@ -91,6 +91,11 @@ export type SettlementContext = Schemas['SettlementContext'];
 export type AbandonedSettlementRecord = Schemas['AbandonedSettlementRecord'];
 export type OriginalSaleRecord = Schemas['OriginalSaleRecord'];
 
+export type RebateRedemptionResult = Schemas['RebateRedemptionResult'];
+export type PointRedemptionResult = Schemas['PointRedemptionResult'];
+export type GiftCardPaymentResult = Schemas['GiftCardPaymentResult'];
+export type ReversedMovement = Schemas['ReversedMovement'];
+
 export type RefundResult = Schemas['RefundResult'];
 export type VoidResult = Schemas['VoidResult'];
 export type ReversalDecision = Schemas['ReversalDecision'];
@@ -111,6 +116,13 @@ export type WidgetAction = Schemas['WidgetAction'];
 export type Rendering = Schemas['Rendering'];
 export type Offer = Schemas['Offer'];
 export type AdInteraction = Schemas['AdInteraction'];
+export type Cta = Schemas['Cta'];
+export type MediaSpec = Schemas['MediaSpec'];
+export type MediaType = Schemas['MediaType'];
+export type SurfaceKind = Schemas['SurfaceKind'];
+export type Action = Schemas['Action'];
+export type ClientCapabilities = Schemas['ClientCapabilities'];
+export type PlacementConfig = Schemas['PlacementConfig'];
 
 /** Every operation `type`, the request types plus the lifecycle signals `end` and `forceEnd`. */
 export type OperationType = Operation['type'];
