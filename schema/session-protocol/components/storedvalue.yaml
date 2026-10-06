@@ -1,0 +1,66 @@
+StoredValueCard:
+  type: object
+  description: |
+    Identifies a stored value (gift) card. The Java factories map as follows:
+    `StoredValueCard.number(n)` is `{ storedValueId: n, identificationType: PAN, entryMode: KEYED }`,
+    `scanned(b)` is `{ storedValueId: b, identificationType: BAR_CODE, entryMode: SCANNED }`,
+    `swiped()` is `{ identificationType: PAN, entryMode: MAG_STRIPE }` with no id (the terminal
+    prompts for the swipe).
+  required: [identificationType, entryMode]
+  properties:
+    storedValueId:
+      type: string
+      description: Card number or barcode; absent for a swiped card.
+    identificationType:
+      type: string
+      description: The Nexo `IdentificationTypeEnum`.
+      enum: [ACCOUNT_NUMBER, BAR_CODE, ISO_TRACK2, PAN, PHONE_NUMBER]
+    entryMode:
+      $ref: './member.yaml#/EntryMode'
+    accountType:
+      type: string
+      description: The Nexo `StoredValueAccountTypeEnum`.
+      enum: [GIFT_CARD, OTHER, PHONE_CARD]
+      default: GIFT_CARD
+    provider:
+      type: string
+      description: Stored value provider, e.g. `"givex"`; the terminal default when absent.
+    expiryDate:
+      type: string
+      description: '`MMYY`.'
+
+StoredValueBalance:
+  type: object
+  required: [balance, currency]
+  properties:
+    balance:
+      $ref: './common.yaml#/Money'
+    currency:
+      type: string
+
+StoredValueOperationResult:
+  type: object
+  description: Outcome of a stored value operation (activate, load, unload, reserve, reverse, duplicate).
+  required: [transactionType]
+  properties:
+    transactionType:
+      type: string
+      description: The operation the terminal performed (Nexo `StoredValueTransactionTypeEnum`).
+      enum: [ACTIVATE, DUPLICATE, LOAD, RESERVE, REVERSE, UNLOAD]
+    amount:
+      description: Amount moved; absent when not echoed.
+      $ref: './common.yaml#/Money'
+    currentBalance:
+      description: Balance on the card after the operation, when reported.
+      $ref: './common.yaml#/Money'
+    currency:
+      type: string
+    poiTransactionId:
+      type: string
+      description: Terminal reference, needed for `storedValueReverse`.
+    poiTransactionTimestamp:
+      type: string
+      format: date-time
+    hostTransactionId:
+      type: string
+      description: The stored value provider's transaction reference.
