@@ -151,7 +151,8 @@ export function Register({ settings }: RegisterProps): ReactNode {
   const nextShopper = () => {
     settlement.reset();
     setVoidOp(null);
-    run(basketApi.clear());
+    // The basket and the member are both the previous shopper's; the session itself carries on.
+    run(basketApi.clear().then(() => session?.member.clear()));
   };
 
   if (connection.status === 'connecting') {
