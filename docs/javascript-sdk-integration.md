@@ -723,7 +723,11 @@ export function ExplainedGate(): ReactNode {
   const bridge = useBridge({ autoDetect: false, pollIntervalMs: 2000 });
   if (bridge.status !== 'ready')
     return <InstallBridgePrompt bridge={bridge} downloadUrl={GUIDE_URL} />;
-  return <Lane />;
+  return (
+    <BiltPosProvider connect={() => BiltPos.connect(localBridge())}>
+      <Lane />
+    </BiltPosProvider>
+  );
 }
 ```
 
