@@ -56,7 +56,10 @@ export interface ResolvedBridgeOptions {
   readonly eventSource: typeof globalThis.EventSource | undefined;
 }
 
+// Called as a free function: `window.fetch` invoked as a method of another object throws
+// "Illegal invocation" in browsers, and that is exactly how a stored reference would be called.
 export function resolveOptions(options: LocalBridgeOptions = {}): ResolvedBridgeOptions {
+  const fetchImpl = options.fetch ?? globalThis.fetch;
   return {
     host: options.host ?? '127.0.0.1',
     port: options.port ?? BRIDGE_DEFAULT_PORT,
@@ -64,7 +67,7 @@ export function resolveOptions(options: LocalBridgeOptions = {}): ResolvedBridge
     healthTimeoutMs: options.healthTimeoutMs ?? BRIDGE_DEFAULT_HEALTH_TIMEOUT_MS,
     bearerToken: options.bearerToken,
     retries: options.retries ?? 2,
-    fetch: options.fetch ?? globalThis.fetch,
+    fetch: (input, init) => fetchImpl(input, init),
     webSocket:
       options.webSocket ?? (typeof WebSocket === 'undefined' ? undefined : globalThis.WebSocket),
     eventSource:
