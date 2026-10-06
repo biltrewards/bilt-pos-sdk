@@ -143,5 +143,7 @@
       url: /payment-brands.html
     - name: API Reference
       url: /api-reference.html
+    - name: Session Protocol Reference
+      url: /session-protocol-reference.html
     - name: SDK Javadoc
       url: /javadoc/index.html

@@ -22,6 +22,10 @@ defaults:
     values:
       layout: none
   - scope:
+      path: "session-protocol-reference.html"
+    values:
+      layout: none
+  - scope:
       path: "index.markdown"
     values:
       layout: "home"
