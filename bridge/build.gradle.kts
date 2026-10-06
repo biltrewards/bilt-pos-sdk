@@ -148,37 +148,38 @@ if (OperatingSystem.current().isMacOsX) {
         }
     }
 
-    val packageDmg by tasks.registering {
-        group = "distribution"
-        description = "Wraps the signed app image in a compressed dmg with an Applications link"
-        dependsOn("jpackageImage")
-        val app = layout.buildDirectory.dir("jpackage/$appName.app")
-        val staging = layout.buildDirectory.dir("dmg-staging")
-        val dmg = layout.buildDirectory.file("jpackage/$appName-${bridgeVersion.get()}.dmg")
-        inputs.dir(app)
-        outputs.file(dmg)
-        doLast {
-            val root = staging.get().asFile
-            root.deleteRecursively()
-            root.mkdirs()
-            run("cp", "-R", app.get().asFile.path, root.path)
-            run("ln", "-s", "/Applications", "${root.path}/Applications")
-            run(
-                "hdiutil",
-                "create",
-                "-volname",
-                appName,
-                "-srcfolder",
-                root.path,
-                "-ov",
-                "-format",
-                "UDZO",
-                "-fs",
-                "HFS+",
-                dmg.get().asFile.path,
-            )
+    val packageDmg =
+        tasks.register("packageDmg") {
+            group = "distribution"
+            description = "Wraps the signed app image in a compressed dmg with an Applications link"
+            dependsOn("jpackageImage")
+            val app = layout.buildDirectory.dir("jpackage/$appName.app")
+            val staging = layout.buildDirectory.dir("dmg-staging")
+            val dmg = layout.buildDirectory.file("jpackage/$appName-${bridgeVersion.get()}.dmg")
+            inputs.dir(app)
+            outputs.file(dmg)
+            doLast {
+                val root = staging.get().asFile
+                root.deleteRecursively()
+                root.mkdirs()
+                run("cp", "-R", app.get().asFile.path, root.path)
+                run("ln", "-s", "/Applications", "${root.path}/Applications")
+                run(
+                    "hdiutil",
+                    "create",
+                    "-volname",
+                    appName,
+                    "-srcfolder",
+                    root.path,
+                    "-ov",
+                    "-format",
+                    "UDZO",
+                    "-fs",
+                    "HFS+",
+                    dmg.get().asFile.path,
+                )
+            }
         }
-    }
 
     tasks.named("jpackage") { finalizedBy(packageDmg) }
 }
