@@ -147,8 +147,45 @@ public final class OperationRunner {
 
   // ─── Launch construction ───
 
+  /** The {@code OperationRequest} discriminator values, in the spec's order. */
+  private static final Set<String> REQUEST_TYPES =
+      Set.of(
+          "identifyMember",
+          "acquireCard",
+          "requestDigitString",
+          "requestDecimalString",
+          "requestTextString",
+          "requestConfirmation",
+          "requestMenuEntry",
+          "requestSignature",
+          "requestAmountConfirmation",
+          "requestPinEntry",
+          "requestPinVerify",
+          "requestPinVerifyOnly",
+          "storedValueBalance",
+          "storedValueDeactivate",
+          "storedValueDuplicate",
+          "storedValueActivate",
+          "storedValueLoad",
+          "storedValueUnload",
+          "storedValueReserve",
+          "storedValueReverse",
+          "setStoredValueCard",
+          "settle",
+          "refund",
+          "refundUnlinked",
+          "voidTransaction",
+          "getTransactionStatus",
+          "updateDisplay",
+          "updateInputDisplay");
+
   private Runnable launch(
       HostedSession hosted, HostedOperation operation, String type, ObjectNode body) {
+    // a request that does not validate is a 400 on every session kind; only a valid one a
+    // local session cannot run is the 409 UNSUPPORTED the spec promises
+    if (!REQUEST_TYPES.contains(type)) {
+      throw HostError.badRequest("unknown operation type '" + type + "'");
+    }
     TerminalShopperSession terminal = hosted.terminal();
     if (terminal == null) {
       throw HostError.unsupported(
