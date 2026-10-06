@@ -1,0 +1,388 @@
+openapi: 3.1.0
+info:
+  title: Bilt POS Session Protocol
+  version: 1.0.0-draft
+  summary: The wire form of the Bilt POS SDK's ShopperSession API.
+  description: |
+    The Session Protocol is how a register that cannot embed the Java SDK — a browser page, a
+    React Native app, any non-JVM language — drives a Bilt terminal. A **host** runs the Java SDK's
+    settlement engine and exposes it over HTTP and a per-session event stream; the register is a
+    thin client. Two hosts speak it: the **Terminal Bridge** (a desktop application on the register
+    machine, loopback only) and, later, the **Cloud Session Service**. This revision describes the
+    bridge in development mode: no pairing, no authentication, no cloud configuration.
+
+    The protocol speaks the SDK's `ShopperSession` vocabulary and nothing else. Nothing from the
+    Nexo Sale to POI protocol leaks except where the Java API itself hands back a Nexo structure
+    (transaction status replays, diagnosis status, PIN blocks); those cross as opaque JSON.
+
+    ## Principles
+
+    * **A session is a resource.** Create it, mutate its basket, member and context, run
+      operations against it, end it.
+    * **Lazy operations become requests.** Everything that is a `SessionResult`,
+      `SettlementFlow` or `ReversalFlow` in Java is `POST /v1/sessions/{id}/operations`,
+      returning an operation resource with a status. Clients normally watch the event stream and
+      may poll.
+    * **Register callbacks become steps.** Where Java blocks the settlement thread on a register
+      handler (the running total after rebates, the recovery decision after a failed charge), the
+      host emits an `operation.step` event with a deadline and a default; the client answers with
+      `POST .../operations/{id}/reply`. No reply by the deadline means the default applies, which
+      is the Java SDK's own default.
+    * **One ordered operation lane per session.** Operations run one at a time in submission
+      order, exactly as on the Java session's operation thread. `updateInputDisplay` and abort are
+      unordered: they overtake the lane because they act on the very operation holding it.
+    * **Idempotency.** Every state-changing request under `/v1/sessions` carries an
+      `Idempotency-Key`; a replay returns the original response.
+    * **Events are the source of truth for state changes.** Each session has an ordered,
+      sequence-numbered event stream; a reconnecting client passes `since` and the host replays.
+
+    ## Conventions
+
+    * Money is a decimal string (`"12.34"`, `"-4.00"`), never a float. Timestamps are RFC 3339.
+      Durations are ISO 8601 (`PT30S`).
+    * Enumerations that mirror a Java enum use the Java constant names (`UPPER_SNAKE`).
+      Protocol-level discriminators that have no Java counterpart — session `kind`, host kind,
+      operation `type` and `status`, event `type`, widget action `kind` — are lowerCamel or dotted
+      lowercase.
+    * Errors are a `SessionError` body: a `SessionErrorCode` and a message, plus the Nexo error
+      condition and reversal progress when the Java SDK carries them. Three codes exist only on
+      the wire (`VALIDATION`, `NOT_FOUND`, `UNAUTHORIZED`); the Java SDK never produces them.
+
+    ## HTTP status mapping
+
+    | Status | Meaning | `code` |
+    |---|---|---|
+    | 400 | Request validation failed | `VALIDATION` |
+    | 401 | Missing or invalid bearer token (reserved; not enforced in development mode) | `UNAUTHORIZED` |
+    | 404 | Unknown session, operation, item, terminal or widget | `NOT_FOUND` |
+    | 409 | Lifecycle refusal: the same guards the Java SDK throws `IllegalStateException` for | `INVALID_STATE` |
+    | 410 | Event replay position no longer buffered | `NOT_FOUND` |
+    | 422 | Step reply does not match the pending step, or an `Idempotency-Key` reused with a different body | `INVALID_STATE` / `VALIDATION` |
+    | 503 | Terminal unreachable | `NETWORK` |
+
+    ## Authentication
+
+    Development-mode hosts accept unauthenticated requests on loopback. `Authorization: Bearer`
+    is reserved: a host that requires it answers 401 with a `SessionError`. Pairing endpoints
+    (`/v1/pairing/*`) are reserved for a later revision and are not part of this document.
+
+    ## Versioning
+
+    Hosts advertise the protocol major versions they implement in `GET /health`; this document
+    is version `1`. Clients refuse to run against a host that does not list the version they were
+    generated from.
+  contact:
+    name: Bilt POS SDK
+    url: https://github.com/biltrewards/bilt-pos-sdk
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://127.0.0.1:48333
+    description: Terminal Bridge in development mode (loopback)
+tags:
+  - name: Health
+    description: Host discovery, unauthenticated.
+  - name: Terminals
+    description: Session-less device operations, mirroring the Java `Terminal` facade.
+  - name: Sessions
+    description: Session lifecycle, mirroring `ShopperSession` and `TerminalShopperSession`.
+  - name: Basket
+    description: The session basket, mirroring `SessionBasket`. Pure local compute on the host.
+  - name: Member
+    description: The member attached to the visit, mirroring `ShopperSession.member(..)`.
+  - name: Context
+    description: Checkout phase and attributes, mirroring `SessionContext`.
+  - name: Operations
+    description: Lazy session operations, their steps, replies and aborts.
+  - name: Widgets
+    description: Shopper-facing widgets the host runs and the client renders.
+  - name: Events
+    description: The per-session event stream.
+x-tagGroups:
+  - name: Host
+    tags: [Health, Terminals]
+  - name: Session
+    tags: [Sessions, Basket, Member, Context]
+  - name: Operations
+    tags: [Operations, Widgets, Events]
+security: []
+paths:
+  /health:
+    $ref: './paths/health.yaml#/health'
+  /v1/terminals:
+    $ref: './paths/terminals.yaml#/terminals'
+  /v1/terminals/{poiId}/diagnose:
+    $ref: './paths/terminals.yaml#/diagnose'
+  /v1/terminals/{poiId}/totals:
+    $ref: './paths/terminals.yaml#/totals'
+  /v1/terminals/{poiId}/reconcile:
+    $ref: './paths/terminals.yaml#/reconcile'
+  /v1/terminals/{poiId}/print:
+    $ref: './paths/terminals.yaml#/print'
+  /v1/terminals/{poiId}/sound:
+    $ref: './paths/terminals.yaml#/sound'
+  /v1/sessions:
+    $ref: './paths/sessions.yaml#/sessions'
+  /v1/sessions/{sessionId}:
+    $ref: './paths/sessions.yaml#/session'
+  /v1/sessions/{sessionId}/force-end:
+    $ref: './paths/sessions.yaml#/forceEnd'
+  /v1/sessions/{sessionId}/abort:
+    $ref: './paths/sessions.yaml#/abort'
+  /v1/sessions/{sessionId}/basket:
+    $ref: './paths/basket.yaml#/basket'
+  /v1/sessions/{sessionId}/basket/items:
+    $ref: './paths/basket.yaml#/items'
+  /v1/sessions/{sessionId}/basket/items/{itemId}:
+    $ref: './paths/basket.yaml#/item'
+  /v1/sessions/{sessionId}/basket/mutations:
+    $ref: './paths/basket.yaml#/mutations'
+  /v1/sessions/{sessionId}/basket/tax-total:
+    $ref: './paths/basket.yaml#/taxTotal'
+  /v1/sessions/{sessionId}/basket/clear:
+    $ref: './paths/basket.yaml#/clear'
+  /v1/sessions/{sessionId}/member:
+    $ref: './paths/member-context.yaml#/member'
+  /v1/sessions/{sessionId}/context:
+    $ref: './paths/member-context.yaml#/context'
+  /v1/sessions/{sessionId}/operations:
+    $ref: './paths/operations.yaml#/operations'
+  /v1/sessions/{sessionId}/operations/{operationId}:
+    $ref: './paths/operations.yaml#/operation'
+  /v1/sessions/{sessionId}/operations/{operationId}/reply:
+    $ref: './paths/operations.yaml#/reply'
+  /v1/sessions/{sessionId}/operations/{operationId}/abort:
+    $ref: './paths/operations.yaml#/abort'
+  /v1/sessions/{sessionId}/widgets:
+    $ref: './paths/widgets.yaml#/widgets'
+  /v1/sessions/{sessionId}/widgets/{widgetType}/pause:
+    $ref: './paths/widgets.yaml#/pause'
+  /v1/sessions/{sessionId}/widgets/{widgetType}/resume:
+    $ref: './paths/widgets.yaml#/resume'
+  /v1/sessions/{sessionId}/widgets/retail-media/actions:
+    $ref: './paths/widgets.yaml#/retailMediaActions'
+  /v1/sessions/{sessionId}/events:
+    $ref: './paths/events.yaml#/events'
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: Reserved for paired-origin tokens; not enforced by development-mode hosts.
+  parameters:
+    sessionId:
+      name: sessionId
+      in: path
+      required: true
+      description: The session's identifier, as `Session.id` reports it.
+      schema:
+        type: string
+    operationId:
+      name: operationId
+      in: path
+      required: true
+      description: The operation's identifier, as `Operation.id` reports it.
+      schema:
+        type: string
+    poiId:
+      name: poiId
+      in: path
+      required: true
+      description: The terminal identifier, sent as Nexo `POIID`.
+      schema:
+        type: string
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        A client-generated key, unique per intended request (a UUID). The host remembers the
+        key for the life of the session and answers a replay with the original response. The
+        same key with a different body is refused with 422 (`VALIDATION`). Required on every
+        POST, PUT, PATCH and DELETE under `/v1/sessions`, because a browser may retry after a
+        dropped connection and money may have moved.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+  responses:
+    BadRequest:
+      description: The request did not validate.
+      content:
+        application/json:
+          schema:
+            $ref: './components/common.yaml#/SessionError'
+    NotFound:
+      description: No such session, operation, item, terminal or widget.
+      content:
+        application/json:
+          schema:
+            $ref: './components/common.yaml#/SessionError'
+    Conflict:
+      description: Refused by a lifecycle guard; the body says which.
+      content:
+        application/json:
+          schema:
+            $ref: './components/common.yaml#/SessionError'
+    TerminalUnreachable:
+      description: The host could not reach the terminal.
+      content:
+        application/json:
+          schema:
+            $ref: './components/common.yaml#/SessionError'
+  schemas:
+    SessionError:
+      $ref: './components/common.yaml#/SessionError'
+    SessionErrorCode:
+      $ref: './components/common.yaml#/SessionErrorCode'
+    Money:
+      $ref: './components/common.yaml#/Money'
+    Duration:
+      $ref: './components/common.yaml#/Duration'
+    Health:
+      $ref: './components/common.yaml#/Health'
+    TerminalInfo:
+      $ref: './components/common.yaml#/TerminalInfo'
+    DiagnosisResult:
+      $ref: './components/common.yaml#/DiagnosisResult'
+    ReconciliationResult:
+      $ref: './components/common.yaml#/ReconciliationResult'
+    PrintPayload:
+      $ref: './components/common.yaml#/PrintPayload'
+    SoundRequest:
+      $ref: './components/common.yaml#/SoundRequest'
+    NexoObject:
+      $ref: './components/common.yaml#/NexoObject'
+    Receipt:
+      $ref: './components/common.yaml#/Receipt'
+    DisplayPayload:
+      $ref: './components/display.yaml#/DisplayPayload'
+    Session:
+      $ref: './components/session.yaml#/Session'
+    CreateSessionRequest:
+      $ref: './components/session.yaml#/CreateSessionRequest'
+    SessionContext:
+      $ref: './components/session.yaml#/SessionContext'
+    SessionContextPatch:
+      $ref: './components/session.yaml#/SessionContextPatch'
+    CheckoutPhase:
+      $ref: './components/session.yaml#/CheckoutPhase'
+    ForceEndRequest:
+      $ref: './components/session.yaml#/ForceEndRequest'
+    Basket:
+      $ref: './components/basket.yaml#/Basket'
+    BasketLineItem:
+      $ref: './components/basket.yaml#/BasketLineItem'
+    BasketItem:
+      $ref: './components/basket.yaml#/BasketItem'
+    BasketDiscount:
+      $ref: './components/basket.yaml#/BasketDiscount'
+    BasketItemType:
+      $ref: './components/basket.yaml#/BasketItemType'
+    BasketChange:
+      $ref: './components/basket.yaml#/BasketChange'
+    BasketMutation:
+      $ref: './components/basket.yaml#/BasketMutation'
+    AddBasketItemRequest:
+      $ref: './components/basket.yaml#/AddBasketItemRequest'
+    BasketItemPatch:
+      $ref: './components/basket.yaml#/BasketItemPatch'
+    ReplaceBasketRequest:
+      $ref: './components/basket.yaml#/ReplaceBasketRequest'
+    BasketMutationsRequest:
+      $ref: './components/basket.yaml#/BasketMutationsRequest'
+    TaxTotalRequest:
+      $ref: './components/basket.yaml#/TaxTotalRequest'
+    Member:
+      $ref: './components/member.yaml#/Member'
+    MemberInput:
+      $ref: './components/member.yaml#/MemberInput'
+    MemberIdResolver:
+      $ref: './components/member.yaml#/MemberIdResolver'
+    IdentifyStatus:
+      $ref: './components/member.yaml#/IdentifyStatus'
+    IdentifyResult:
+      $ref: './components/member.yaml#/IdentifyResult'
+    IdentifyOptions:
+      $ref: './components/member.yaml#/IdentifyOptions'
+    Reward:
+      $ref: './components/member.yaml#/Reward'
+    CardAcquisitionOptions:
+      $ref: './components/member.yaml#/CardAcquisitionOptions'
+    CardAcquisitionResult:
+      $ref: './components/member.yaml#/CardAcquisitionResult'
+    InputOptions:
+      $ref: './components/input.yaml#/InputOptions'
+    ConfirmationOptions:
+      $ref: './components/input.yaml#/ConfirmationOptions'
+    MenuOptions:
+      $ref: './components/input.yaml#/MenuOptions'
+    MenuSelection:
+      $ref: './components/input.yaml#/MenuSelection'
+    PinOptions:
+      $ref: './components/input.yaml#/PinOptions'
+    PinResult:
+      $ref: './components/input.yaml#/PinResult'
+    Signature:
+      $ref: './components/input.yaml#/Signature'
+    StoredValueCard:
+      $ref: './components/storedvalue.yaml#/StoredValueCard'
+    StoredValueBalance:
+      $ref: './components/storedvalue.yaml#/StoredValueBalance'
+    StoredValueOperationResult:
+      $ref: './components/storedvalue.yaml#/StoredValueOperationResult'
+    SettlementOptions:
+      $ref: './components/settlement.yaml#/SettlementOptions'
+    SettlementResult:
+      $ref: './components/settlement.yaml#/SettlementResult'
+    SettlementMovement:
+      $ref: './components/settlement.yaml#/SettlementMovement'
+    SettlementFailure:
+      $ref: './components/settlement.yaml#/SettlementFailure'
+    SettlementRecovery:
+      $ref: './components/settlement.yaml#/SettlementRecovery'
+    SettlementContext:
+      $ref: './components/settlement.yaml#/SettlementContext'
+    AbandonedSettlementRecord:
+      $ref: './components/settlement.yaml#/AbandonedSettlementRecord'
+    OriginalSaleRecord:
+      $ref: './components/settlement.yaml#/OriginalSaleRecord'
+    RefundResult:
+      $ref: './components/reversal.yaml#/RefundResult'
+    VoidResult:
+      $ref: './components/reversal.yaml#/VoidResult'
+    ReversalDecision:
+      $ref: './components/reversal.yaml#/ReversalDecision'
+    ReversalStep:
+      $ref: './components/reversal.yaml#/ReversalStep'
+    TransactionStatusOptions:
+      $ref: './components/reversal.yaml#/TransactionStatusOptions'
+    TransactionStatusResult:
+      $ref: './components/reversal.yaml#/TransactionStatusResult'
+    OperationRequest:
+      $ref: './components/operations.yaml#/OperationRequest'
+    Operation:
+      $ref: './components/operations.yaml#/Operation'
+    OperationStatus:
+      $ref: './components/operations.yaml#/OperationStatus'
+    OperationStep:
+      $ref: './components/operations.yaml#/OperationStep'
+    StepKind:
+      $ref: './components/operations.yaml#/StepKind'
+    StepReply:
+      $ref: './components/operations.yaml#/StepReply'
+    WidgetConfig:
+      $ref: './components/widgets.yaml#/WidgetConfig'
+    WidgetState:
+      $ref: './components/widgets.yaml#/WidgetState'
+    WidgetAction:
+      $ref: './components/widgets.yaml#/WidgetAction'
+    Rendering:
+      $ref: './components/widgets.yaml#/Rendering'
+    Offer:
+      $ref: './components/widgets.yaml#/Offer'
+    AdInteraction:
+      $ref: './components/widgets.yaml#/AdInteraction'
+    Event:
+      $ref: './components/events.yaml#/Event'
