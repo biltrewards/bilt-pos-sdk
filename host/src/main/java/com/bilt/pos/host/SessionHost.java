@@ -40,6 +40,8 @@ import io.javalin.http.Context;
 import io.javalin.http.sse.SseClient;
 import io.javalin.websocket.WsContext;
 import java.time.Duration;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -738,7 +740,11 @@ public final class SessionHost implements AutoCloseable {
 
       @Override
       public String remoteAddress() {
-        return ctx.host();
+        // the peer's socket address, as ctx.ip() is for HTTP; host() would be the Host header
+        SocketAddress peer = ctx.session.getRemoteSocketAddress();
+        return peer instanceof InetSocketAddress
+            ? ((InetSocketAddress) peer).getAddress().getHostAddress()
+            : String.valueOf(peer);
       }
     };
   }

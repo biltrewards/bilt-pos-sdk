@@ -87,4 +87,33 @@ class WebSocketSmokeTest {
     }
     return socket.isInputClosed();
   }
+
+  @Test
+  void theUpgradeIsAuthorizedAgainstTheRealPathAndPeerAddress() throws Exception {
+    java.util.List<String> seen = new java.util.concurrent.CopyOnWriteArrayList<>();
+    HostAuth recording =
+        request -> {
+          if (request.path().endsWith("/events")) {
+            seen.add(request.path() + " from " + request.remoteAddress());
+          }
+          return true;
+        };
+    try (SessionHost host = SessionHost.builder().port(0).auth(recording).build()) {
+      host.start();
+      HostClient client = new HostClient(host.port());
+      String id =
+          client
+              .post("/v1/sessions", json("{'kind':'local','saleId':'LANE-1','currency':'USD'}"))
+              .expect(201)
+              .text("id");
+      HttpClient.newHttpClient()
+          .newWebSocketBuilder()
+          .buildAsync(
+              URI.create("ws://localhost:" + host.port() + "/v1/sessions/" + id + "/events"),
+              new WebSocket.Listener() {})
+          .get(5, TimeUnit.SECONDS);
+      assertEquals(
+          java.util.List.of("/v1/sessions/" + id + "/events from 127.0.0.1"), seen);
+    }
+  }
 }
