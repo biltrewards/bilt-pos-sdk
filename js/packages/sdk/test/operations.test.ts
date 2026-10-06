@@ -156,7 +156,9 @@ describe('starting an operation', () => {
         storeLocation: 'STR-0142',
       }),
     ).rejects.toThrow('context read failed');
-    // No session reached the caller, so nothing but initialize() can stop the pump: a dropped
+    // No session reached the caller, so initialize() must also release the host's session.
+    expect(engine.requests.map((r) => r.operation.type)).toContain('end');
+    // Nothing but initialize() can stop the pump either: a dropped
     // stream must not be resubscribed.
     const subscriptions = engine.eventSubscriptions.length;
     const sessionId = engine.requests[0]?.sessionId ?? engine.eventSubscriptions[0]!.sessionId;

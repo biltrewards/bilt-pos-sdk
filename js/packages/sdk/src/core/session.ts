@@ -186,8 +186,16 @@ export class ShopperSessionImpl implements ShopperSession {
       ]);
       this.widgetHandles = buildWidgets(this.engine, this.id, this.options.widgets ?? [], widgets);
     } catch (error) {
-      // The caller never receives the session, so `BiltPos.close()` could not stop its pump.
-      await this.detach();
+      // The caller never receives the session, so nothing else can release the terminal or stop
+      // the pump. No money has moved yet, so a plain `end` is enough; if even that fails, the
+      // original error is the one worth surfacing.
+      try {
+        await this.end();
+      } catch (endError) {
+        this.report(`ending session ${this.id} after a failed start`, endError);
+      } finally {
+        await this.detach();
+      }
       throw error;
     }
     return this;
