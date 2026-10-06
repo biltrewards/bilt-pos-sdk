@@ -58,7 +58,10 @@ export function useOperation<T>(
 ): UseOperationResult<T> {
   const source = operation ?? null;
   const [settled, setSettled] = useState<Settled<T> | null>(null);
-  const [observed, setObserved] = useState<OperationStatus | null>(null);
+  const [observed, setObserved] = useState<{
+    source: PromiseLike<T>;
+    status: OperationStatus;
+  } | null>(null);
 
   useEffect(() => {
     if (!source) return;
@@ -80,8 +83,9 @@ export function useOperation<T>(
   // pending watch it and re-render on a transition (`running` to `awaitingReply`).
   useEffect(() => {
     if (!source || !isOperation(source)) return;
-    setObserved(source.status);
-    const timer = setInterval(() => setObserved(source.status), STATUS_POLL_MS);
+    const observe = () => setObserved({ source, status: source.status });
+    observe();
+    const timer = setInterval(observe, STATUS_POLL_MS);
     return () => clearInterval(timer);
   }, [source]);
 
@@ -93,7 +97,11 @@ export function useOperation<T>(
     if (!source) return { status: 'idle', result: undefined, error: null, pending: false, abort };
     const outcome = settled?.source === source ? settled.outcome : null;
     if (!outcome) {
-      const status: TrackedOperationStatus = isOperation(source) ? source.status : 'running';
+      const status: TrackedOperationStatus = isOperation(source)
+        ? observed?.source === source
+          ? observed.status
+          : source.status
+        : 'running';
       const pending = status === 'queued' || status === 'running' || status === 'awaitingReply';
       return { status, result: undefined, error: null, pending, abort };
     }
@@ -108,6 +116,5 @@ export function useOperation<T>(
       pending: false,
       abort,
     };
-    // `observed` is not read here: it only makes the render that re-reads `source.status` happen.
   }, [source, settled, abort, observed]);
 }
