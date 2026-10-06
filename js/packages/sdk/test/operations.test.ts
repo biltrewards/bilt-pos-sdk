@@ -250,6 +250,28 @@ describe('starting an operation', () => {
     expect(session.member.current?.memberId).toBe('mbr_new');
   });
 
+  it('returns the reconciled member from get() when member.changed lands mid-read', async () => {
+    const { engine, session } = await lane();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fresh = { resolved: true, memberId: 'mbr_new', rewards: [], pointBalance: 0 };
+    const stale = { ...fresh, memberId: 'mbr_old' };
+    let reads = 0;
+    engine.member = (async () => {
+      if (++reads > 1) return fresh; // the reconciling re-read
+      await gate;
+      return stale;
+    }) as typeof engine.member;
+    const read = session.member.get();
+    await new Promise((r) => setTimeout(r, 10));
+    engine.pushEvent(session.id, 'member.changed', { member: fresh } as never);
+    await vi.waitFor(() => expect(session.member.current?.memberId).toBe('mbr_new'));
+    release();
+    await expect(read).resolves.toMatchObject({ memberId: 'mbr_new' });
+  });
+
   it('reconciles the context mirror when context.changed lands while a write is in flight', async () => {
     const { engine, session } = await lane();
     let release!: () => void;

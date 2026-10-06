@@ -27,8 +27,10 @@ export class SessionMemberImpl implements SessionMember {
   async get(): Promise<Member | null> {
     const seen = this.version();
     const member = await this.engine.member(this.sessionId, { kind: 'get' });
+    // A re-read is only worth returning if it is the freshest view, so hand back what the mirror
+    // holds once any interleaved event has been reconciled.
     await this.install(member, seen);
-    return member;
+    return this.current;
   }
 
   async set(member: MemberInput): Promise<Member> {
