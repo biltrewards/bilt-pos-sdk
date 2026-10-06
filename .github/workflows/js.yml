@@ -42,11 +42,12 @@ jobs:
       - name: Check generated code is up to date
         run: pnpm generate:check
 
-      - name: Typecheck
-        run: pnpm typecheck
-
+      # Build first: a workspace package resolves its siblings through their built dist/.
       - name: Build
         run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
 
       - name: Test
         run: pnpm test
