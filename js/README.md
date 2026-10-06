@@ -5,9 +5,9 @@ terminal itself, so these packages speak the [Session Protocol](../schema/sessio
 to a host that embeds the Java SDK — the Terminal Bridge on the register machine today, the
 Cloud Session Service later.
 
-| Package                         | Contents                                                                                                     |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `@bilt/pos-protocol`            | Types and a typed `fetch` client generated from `schema/session-protocol/openapi.yaml`; the TypeScript domain model. |
+| Package              | Contents                                                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `@bilt/pos-protocol` | Types and a typed `fetch` client generated from `schema/session-protocol/openapi.yaml`; the TypeScript domain model. |
 
 ## Working in the workspace
 
