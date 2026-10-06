@@ -118,6 +118,8 @@ export class PendingOperation<T> {
   fail(error: unknown): void {
     if (this.settled) return;
     this.settled = true;
+    // An abort waiting for the engine id must not wait for an acceptance that will never matter.
+    this.resolveAcceptance(undefined);
     this.currentStatus =
       error instanceof SessionError && error.code === 'ABORTED' ? 'aborted' : 'failed';
     this.rejectPromise(error);

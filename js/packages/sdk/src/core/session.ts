@@ -116,6 +116,8 @@ export class ShopperSessionImpl implements ShopperSession {
 
   private widgetHandles: RetailMediaWidgetImpl[] = [];
   private readonly pending = new Map<string, PendingOperation<unknown>>();
+  /** Operations whose request has not been answered yet, so they have no engine id to key `pending` by. */
+  private readonly requesting = new Set<PendingOperation<unknown>>();
   private readonly unclaimed = new Map<string, OperationEvent[]>();
   private lastSeq = 0;
   private stopped = false;
@@ -254,9 +256,18 @@ export class ShopperSessionImpl implements ShopperSession {
       );
       return operation.handle;
     }
+    const inFlight = operation as PendingOperation<unknown>;
+    this.requesting.add(inFlight);
     this.engine.request(this.id, request, { idempotencyKey: key }).then(
-      (resource) => this.accepted(operation as PendingOperation<unknown>, resource),
-      (error: unknown) => operation.refuse(error),
+      (resource) => {
+        // Gone from `requesting` means `detach()` already failed it; registering it now would
+        // leave it in `pending` with nothing left to settle it.
+        if (this.requesting.delete(inFlight)) this.accepted(inFlight, resource);
+      },
+      (error: unknown) => {
+        this.requesting.delete(inFlight);
+        operation.refuse(error);
+      },
     );
     return operation.handle;
   }
@@ -324,6 +335,17 @@ export class ShopperSessionImpl implements ShopperSession {
       );
     }
     this.pending.clear();
+    if (why === 'detached') {
+      for (const operation of this.requesting) {
+        operation.fail(
+          new SessionError({
+            code: 'INVALID_STATE',
+            message: `session ${this.id} detached before the host answered the request`,
+          }),
+        );
+      }
+      this.requesting.clear();
+    }
   }
 
   // ─── The event pump ───

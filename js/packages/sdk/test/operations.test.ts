@@ -189,6 +189,25 @@ describe('starting an operation', () => {
     await op;
   });
 
+  it('rejects an operation whose request is still unanswered when BiltPos.close() detaches', async () => {
+    const engine = new ScriptedEngine();
+    let release!: () => void;
+    engine.acceptanceDelay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { pos, session } = await lane(engine);
+    const op = session.settle();
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    const aborted = op.abort();
+    await pos.close();
+    const error = await op.catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SessionError);
+    expect((error as SessionError).code).toBe('INVALID_STATE');
+    release(); // the late acceptance must not bring it back
+    await aborted; // and a concurrent abort must not wait for an acceptance that is moot
+    expect(op.status).toBe('failed');
+  });
+
   it('rejects with the SessionError of a failed operation and marks aborted ones', async () => {
     const { engine, session } = await lane();
     const op = session.settle();
