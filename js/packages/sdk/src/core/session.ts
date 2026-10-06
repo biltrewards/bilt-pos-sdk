@@ -290,6 +290,21 @@ export class ShopperSessionImpl implements ShopperSession {
       this.unclaimed.delete(resource.id);
       for (const event of held) this.routeOperationEvent(event);
     }
+    // The pump is gone once the session ended, so an operation still open now would never hear
+    // from the host again. `end` itself is exempt: it is how the session got here.
+    if (
+      !operation.done &&
+      this.currentState === 'ended' &&
+      operation.type !== 'end' &&
+      operation.type !== 'forceEnd'
+    ) {
+      operation.fail(
+        new SessionError({
+          code: 'INVALID_STATE',
+          message: `session ${this.id} ended before operation ${resource.id} completed`,
+        }),
+      );
+    }
     if (operation.done) this.pending.delete(resource.id);
   }
 

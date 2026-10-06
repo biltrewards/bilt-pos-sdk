@@ -210,6 +210,24 @@ describe('starting an operation', () => {
     expect(op.status).toBe('failed');
   });
 
+  it('rejects an operation whose acceptance arrives after the session ended', async () => {
+    const engine = new ScriptedEngine();
+    let release!: () => void;
+    engine.acceptanceDelay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { session } = await lane(engine);
+    const op = session.settle();
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    const ended = new Promise<void>((resolve) => session.on('session.ended', () => resolve()));
+    engine.pushEvent(session.id, 'session.ended', {} as never);
+    await ended;
+    release();
+    const error = await op.catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SessionError);
+    expect((error as SessionError).code).toBe('INVALID_STATE');
+  });
+
   it('rejects with the SessionError of a failed operation and marks aborted ones', async () => {
     const { engine, session } = await lane();
     const op = session.settle();
