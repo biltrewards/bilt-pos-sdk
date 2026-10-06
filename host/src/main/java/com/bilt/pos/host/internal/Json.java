@@ -126,10 +126,10 @@ public final class Json {
     if (value == null || value.isNull()) {
       return null;
     }
-    return decimal(value, field);
+    return decimalOf(value, field);
   }
 
-  public static BigDecimal decimal(JsonNode value, String field) {
+  public static BigDecimal decimalOf(JsonNode value, String field) {
     if (value.isNumber()) {
       return value.decimalValue();
     }

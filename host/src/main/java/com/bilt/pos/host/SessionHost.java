@@ -1,0 +1,751 @@
+/*
+ *    ____  _ _ _
+ *   | __ )(_) | |_
+ *   |  _ \| | | __|
+ *   | |_) | | | |_
+ *   |____/|_|_|\__|
+ *
+ *   Bilt POS SDK
+ */
+package com.bilt.pos.host;
+
+import com.bilt.pos.host.internal.HostError;
+import com.bilt.pos.host.internal.HostVersion;
+import com.bilt.pos.host.internal.HostedOperation;
+import com.bilt.pos.host.internal.HostedSession;
+import com.bilt.pos.host.internal.Json;
+import com.bilt.pos.host.internal.OperationRunner;
+import com.bilt.pos.host.internal.SessionRegistry;
+import com.bilt.pos.host.internal.Views;
+import com.bilt.pos.internal.SdkVersion;
+import com.bilt.pos.media.service.AdDecisionService;
+import com.bilt.pos.nexo.client.TerminalClient;
+import com.bilt.pos.session.SessionContext;
+import com.bilt.pos.session.SessionResult;
+import com.bilt.pos.session.Terminal;
+import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.basket.BasketMutation;
+import com.bilt.pos.session.identity.Member;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.javalin.Javalin;
+import io.javalin.http.Context;
+import io.javalin.http.sse.SseClient;
+import io.javalin.websocket.WsContext;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/**
+ * The Session Host: an HTTP, Server-Sent Events and WebSocket server that exposes the SDK's shopper
+ * sessions as the Session Protocol.
+ *
+ * <p>Embed it, point it at a {@link TerminalClientProvider}, start it:
+ *
+ * <pre>{@code
+ * SessionHost host = SessionHost.builder()
+ *     .bindAddress("127.0.0.1")
+ *     .port(48333)
+ *     .terminalClients(myProvider)
+ *     .build();
+ * host.start();
+ * }</pre>
+ *
+ * <p>A browser then creates a session with {@code POST /v1/sessions}, edits its basket, member and
+ * context, runs terminal operations through {@code POST .../operations} and watches {@code GET
+ * .../events}. The host keeps the SDK's rules — one ordered operation in flight per session, end
+ * refused while money is unresolved — because it is the SDK; what it adds is the resource shape,
+ * idempotent retries, a replayable event log and steps in place of blocking callbacks.
+ *
+ * <p>This iteration is a development-mode host: {@link HostAuth#permitAll()} is the default, there
+ * is no pairing, and the embedding application supplies the terminal configuration.
+ */
+public final class SessionHost implements AutoCloseable {
+
+  private static final Logger LOGGER = Logger.getLogger(SessionHost.class.getName());
+  private static final String PROTOCOL_VERSION = "1";
+  private static final AtomicInteger WORKER_COUNTER = new AtomicInteger();
+
+  private final Builder config;
+  private final SessionRegistry registry;
+  private final OperationRunner runner;
+  private final ExecutorService workers;
+  private final Javalin app;
+  private volatile boolean started;
+
+  private SessionHost(Builder builder) {
+    this.config = builder;
+    this.workers =
+        Executors.newCachedThreadPool(
+            runnable -> {
+              Thread thread =
+                  new Thread(runnable, "bilt-host-worker-" + WORKER_COUNTER.incrementAndGet());
+              thread.setDaemon(true);
+              return thread;
+            });
+    this.registry =
+        new SessionRegistry(
+            builder.sessionFactory,
+            builder.terminalClients,
+            builder.adDecisionService,
+            builder.eventReplayCapacity,
+            builder.eventReplayWindow,
+            builder.idempotencyCapacity,
+            workers);
+    this.runner = new OperationRunner(builder.stepDeadlines);
+    this.app =
+        Javalin.create(
+            javalin -> {
+              javalin.showJavalinBanner = false;
+              javalin.http.defaultContentType = "application/json";
+              javalin.useVirtualThreads = false;
+            });
+    routes();
+  }
+
+  public static Builder builder() {
+    return new Builder();
+  }
+
+  /** Binds and starts serving; {@link #port()} is known afterwards. */
+  public synchronized void start() {
+    if (started) {
+      return;
+    }
+    app.start(config.bindAddress, config.port);
+    started = true;
+    LOGGER.info("Session Host listening on " + config.bindAddress + ":" + port());
+  }
+
+  /** Stops serving and ends every open session. */
+  public synchronized void stop() {
+    if (!started) {
+      return;
+    }
+    started = false;
+    try {
+      app.stop();
+    } finally {
+      registry.closeAll();
+      workers.shutdownNow();
+    }
+  }
+
+  @Override
+  public void close() {
+    stop();
+  }
+
+  /** The bound port; the one the builder asked for, or the ephemeral one assigned for port 0. */
+  public int port() {
+    return app.port();
+  }
+
+  // ─── Routes ───
+
+  private void routes() {
+    app.before(this::authorize);
+    app.before(this::idempotencyLookup);
+    app.exception(HostError.class, (error, ctx) -> respond(ctx, error.status(), error.toJson()));
+    app.exception(
+        Exception.class,
+        (failure, ctx) -> {
+          HostError error = HostError.from(failure);
+          if (error.status() >= 500) {
+            LOGGER.log(Level.WARNING, "request failed: " + ctx.method() + " " + ctx.path(), failure);
+          }
+          respond(ctx, error.status(), error.toJson());
+        });
+
+    app.get("/health", ctx -> respond(ctx, 200, health()));
+
+    app.get("/v1/terminals", ctx -> respond(ctx, 200, terminals()));
+    app.post("/v1/terminals/{poiId}/diagnose", ctx -> device(ctx, Terminal::diagnose, Views::diagnosis));
+    app.post("/v1/terminals/{poiId}/totals", ctx -> device(ctx, Terminal::getTotals, Views::reconciliation));
+    app.post(
+        "/v1/terminals/{poiId}/reconcile", ctx -> device(ctx, Terminal::reconcile, Views::reconciliation));
+    app.post(
+        "/v1/terminals/{poiId}/print",
+        ctx -> {
+          var payload = com.bilt.pos.host.internal.Parsers.printPayload(Json.body(ctx.body()));
+          device(ctx, terminal -> terminal.print(payload), v -> Json.object());
+        });
+    app.post(
+        "/v1/terminals/{poiId}/sound",
+        ctx -> {
+          ObjectNode body = Json.body(ctx.body());
+          String action = Json.text(body, "action");
+          if ("stop".equalsIgnoreCase(action)) {
+            device(ctx, Terminal::stopSound, v -> Json.object());
+            return;
+          }
+          String reference = Json.requireText(body, "soundReferenceId");
+          Integer volume = Json.integer(body, "volumePercent");
+          device(ctx, terminal -> terminal.playSound(reference, volume), v -> Json.object());
+        });
+
+    app.post("/v1/sessions", ctx -> respond(ctx, 201, registry.create(Json.body(ctx.body())).view()));
+    app.get("/v1/sessions", ctx -> respond(ctx, 200, sessions()));
+    app.get("/v1/sessions/{id}", ctx -> respond(ctx, 200, session(ctx).view()));
+    app.delete("/v1/sessions/{id}", ctx -> end(ctx, false));
+    app.post("/v1/sessions/{id}/force-end", ctx -> end(ctx, true));
+
+    app.get("/v1/sessions/{id}/basket", ctx -> basket(ctx, s -> s.basket().snapshot()));
+    app.put(
+        "/v1/sessions/{id}/basket",
+        ctx -> {
+          ArrayNode items = Json.array(Json.body(ctx.body()), "items");
+          if (items == null) {
+            throw HostError.badRequest("items is required");
+          }
+          var parsed = com.bilt.pos.host.internal.Parsers.basketItems(items);
+          basket(ctx, s -> s.basket().replace(parsed));
+        });
+    app.post(
+        "/v1/sessions/{id}/basket/items",
+        ctx -> {
+          ObjectNode body = Json.body(ctx.body());
+          var item = com.bilt.pos.host.internal.Parsers.basketItem(body);
+          String itemId = Json.text(body, "itemId");
+          basket(
+              ctx,
+              s -> itemId == null ? s.basket().addItem(item) : s.basket().addItem(item, itemId));
+        });
+    app.patch(
+        "/v1/sessions/{id}/basket/items/{itemId}",
+        ctx -> {
+          String itemId = ctx.pathParam("itemId");
+          Consumer<BasketMutation> patch =
+              com.bilt.pos.host.internal.Parsers.itemPatch(itemId, Json.body(ctx.body()));
+          basket(
+              ctx,
+              s -> {
+                requireItem(s, itemId);
+                return s.basket().mutate(patch);
+              });
+        });
+    app.delete(
+        "/v1/sessions/{id}/basket/items/{itemId}",
+        ctx -> {
+          String itemId = ctx.pathParam("itemId");
+          basket(
+              ctx,
+              s -> {
+                requireItem(s, itemId);
+                return s.basket().removeItem(itemId);
+              });
+        });
+    app.post(
+        "/v1/sessions/{id}/basket/mutations",
+        ctx -> {
+          ArrayNode mutations = Json.array(Json.body(ctx.body()), "mutations");
+          if (mutations == null || mutations.isEmpty()) {
+            throw HostError.badRequest("mutations must not be empty");
+          }
+          List<Consumer<BasketMutation>> steps = new java.util.ArrayList<>();
+          for (JsonNode node : mutations) {
+            steps.add(com.bilt.pos.host.internal.Parsers.mutation(node));
+          }
+          basket(ctx, s -> s.basket().mutate(m -> steps.forEach(step -> step.accept(m))));
+        });
+    app.post(
+        "/v1/sessions/{id}/basket/tax-total",
+        ctx -> {
+          var amount = Json.decimal(Json.body(ctx.body()), "amount");
+          basket(ctx, s -> s.basket().setTaxTotal(amount));
+        });
+    app.post("/v1/sessions/{id}/basket/clear", ctx -> basket(ctx, s -> s.basket().clear()));
+
+    app.get("/v1/sessions/{id}/member", ctx -> respond(ctx, 200, Views.member(session(ctx).session().member())));
+    app.put(
+        "/v1/sessions/{id}/member",
+        ctx -> {
+          Member member = com.bilt.pos.host.internal.Parsers.member(Json.body(ctx.body()));
+          if (member == null) {
+            throw HostError.badRequest("member requires id or resolver; use DELETE to clear");
+          }
+          HostedSession hosted = session(ctx);
+          hosted.session().member(member);
+          respond(ctx, 200, Views.member(hosted.session().member()));
+        });
+    app.delete(
+        "/v1/sessions/{id}/member",
+        ctx -> {
+          HostedSession hosted = session(ctx);
+          hosted.session().member(null);
+          respond(ctx, 200, Views.member(null));
+        });
+
+    app.get("/v1/sessions/{id}/context", ctx -> respond(ctx, 200, Views.context(session(ctx).session().context().snapshot())));
+    app.patch(
+        "/v1/sessions/{id}/context",
+        ctx -> {
+          ObjectNode body = Json.body(ctx.body());
+          var phase = com.bilt.pos.host.internal.Parsers.phase(body);
+          Map<String, String> attributes = Json.stringMap(body, "attributes");
+          if (phase == null && attributes == null) {
+            throw HostError.badRequest("the patch must set phase or attributes");
+          }
+          SessionContext context = session(ctx).session().context();
+          if (phase != null) {
+            context.phase(phase);
+          }
+          if (attributes != null) {
+            attributes.forEach(context::attribute);
+          }
+          respond(ctx, 200, Views.context(context.snapshot()));
+        });
+
+    app.post(
+        "/v1/sessions/{id}/operations",
+        ctx -> {
+          HostedSession hosted = session(ctx);
+          HostedOperation operation = runner.submit(hosted, Json.body(ctx.body()));
+          respond(ctx, 202, operation.toJson());
+        });
+    app.get("/v1/sessions/{id}/operations", ctx -> respond(ctx, 200, operations(session(ctx))));
+    app.get("/v1/sessions/{id}/operations/{operationId}", ctx -> respond(ctx, 200, operation(ctx).toJson()));
+    app.post(
+        "/v1/sessions/{id}/operations/{operationId}/reply",
+        ctx -> {
+          HostedOperation operation = operation(ctx);
+          runner.reply(operation, Json.body(ctx.body()));
+          respond(ctx, 200, operation.toJson());
+        });
+    app.post(
+        "/v1/sessions/{id}/operations/{operationId}/abort",
+        ctx -> {
+          HostedSession hosted = session(ctx);
+          HostedOperation operation = hosted.operation(ctx.pathParam("operationId"));
+          runner.abort(hosted, operation);
+          respond(ctx, 202, operation.toJson());
+        });
+
+    app.get("/v1/sessions/{id}/widgets", ctx -> respond(ctx, 200, session(ctx).widgets().view()));
+    app.post(
+        "/v1/sessions/{id}/widgets/{type}/pause",
+        ctx -> {
+          HostedSession hosted = session(ctx);
+          hosted.widgets().widget(ctx.pathParam("type")).pause();
+          respond(ctx, 200, hosted.widgets().view());
+        });
+    app.post(
+        "/v1/sessions/{id}/widgets/{type}/resume",
+        ctx -> {
+          HostedSession hosted = session(ctx);
+          hosted.widgets().widget(ctx.pathParam("type")).resume();
+          respond(ctx, 200, hosted.widgets().view());
+        });
+    app.post(
+        "/v1/sessions/{id}/widgets/retail-media/actions",
+        ctx -> {
+          session(ctx).widgets().action(Json.body(ctx.body()));
+          respond(ctx, 202, Json.object());
+        });
+
+    app.sse("/v1/sessions/{id}/events", this::sse);
+    app.ws(
+        "/v1/sessions/{id}/events",
+        ws -> {
+          Map<String, AutoCloseable> subscriptions = new ConcurrentHashMap<>();
+          ws.onConnect(
+              ctx -> {
+                if (!config.auth.permits(request(ctx))) {
+                  ctx.closeSession(4401, "unauthorized");
+                  return;
+                }
+                HostedSession hosted = registry.find(ctx.pathParam("id"));
+                if (hosted == null) {
+                  ctx.closeSession(4404, "session not found");
+                  return;
+                }
+                ctx.enableAutomaticPings();
+                long since = since(ctx.queryParam("since"));
+                var subscription =
+                    hosted
+                        .events()
+                        .subscribe(
+                            since,
+                            new com.bilt.pos.host.internal.EventBuffer.Subscriber() {
+                              @Override
+                              public void onEvent(com.bilt.pos.host.internal.Event event) {
+                                if (ctx.session.isOpen()) {
+                                  ctx.send(event.json());
+                                }
+                              }
+
+                              @Override
+                              public void onClosed() {
+                                if (ctx.session.isOpen()) {
+                                  ctx.closeSession(1000, "session ended");
+                                }
+                              }
+                            });
+                subscriptions.put(ctx.sessionId(), subscription);
+              });
+          ws.onClose(ctx -> unsubscribe(subscriptions, ctx));
+          ws.onError(ctx -> unsubscribe(subscriptions, ctx));
+          ws.onMessage(ctx -> {});
+        });
+  }
+
+  private static void unsubscribe(Map<String, AutoCloseable> subscriptions, WsContext ctx) {
+    AutoCloseable subscription = subscriptions.remove(ctx.sessionId());
+    if (subscription != null) {
+      try {
+        subscription.close();
+      } catch (Exception e) {
+        LOGGER.log(Level.FINE, "closing a WebSocket subscription failed", e);
+      }
+    }
+  }
+
+  private void sse(SseClient client) {
+    HostedSession hosted = registry.find(client.ctx().pathParam("id"));
+    if (hosted == null) {
+      client.sendEvent("error", HostError.notFound("session").toJson().toString(), null);
+      client.close();
+      return;
+    }
+    long since = since(client.ctx().queryParam("since"));
+    client.keepAlive();
+    var subscription =
+        hosted
+            .events()
+            .subscribe(
+                since,
+                new com.bilt.pos.host.internal.EventBuffer.Subscriber() {
+                  @Override
+                  public void onEvent(com.bilt.pos.host.internal.Event event) {
+                    client.sendEvent(event.type(), event.json(), Long.toString(event.seq()));
+                  }
+
+                  @Override
+                  public void onClosed() {
+                    client.close();
+                  }
+                });
+    client.onClose(subscription::close);
+  }
+
+  private static long since(String raw) {
+    if (raw == null || raw.isEmpty()) {
+      return 0;
+    }
+    try {
+      return Long.parseLong(raw);
+    } catch (NumberFormatException e) {
+      throw HostError.badRequest("since must be an event sequence number");
+    }
+  }
+
+  // ─── Handlers' shared pieces ───
+
+  private ObjectNode health() {
+    ObjectNode node = Json.object();
+    node.put("kind", config.hostKind);
+    node.put("hostVersion", HostVersion.current());
+    node.put("sdkVersion", SdkVersion.current());
+    ArrayNode versions = node.putArray("protocolVersions");
+    versions.add(PROTOCOL_VERSION);
+    node.put("terminals", config.terminalClients.terminals().size());
+    node.put("sessions", registry.openCount());
+    return node;
+  }
+
+  private ArrayNode terminals() {
+    ArrayNode array = Json.array();
+    for (TerminalInfo terminal : config.terminalClients.terminals()) {
+      array.add(Views.terminal(terminal));
+    }
+    return array;
+  }
+
+  private ArrayNode sessions() {
+    ArrayNode array = Json.array();
+    for (HostedSession hosted : registry.all()) {
+      array.add(hosted.view());
+    }
+    return array;
+  }
+
+  private static ArrayNode operations(HostedSession hosted) {
+    ArrayNode array = Json.array();
+    for (HostedOperation operation : hosted.operations()) {
+      array.add(operation.toJson());
+    }
+    return array;
+  }
+
+  /** A session-less device operation, run synchronously against a short-lived {@link Terminal}. */
+  private <T> void device(
+      Context ctx, Function<Terminal, SessionResult<T>> call, Function<T, JsonNode> view) {
+    String poiId = ctx.pathParam("poiId");
+    TerminalClient client = config.terminalClients.forPoi(poiId);
+    if (client == null) {
+      throw HostError.notFound("terminal " + poiId);
+    }
+    String saleId = ctx.queryParam("saleId");
+    try (Terminal terminal =
+        Terminal.builder()
+            .client(client)
+            .poiId(poiId)
+            .saleId(saleId == null || saleId.isEmpty() ? "bilt-session-host" : saleId)
+            .storeLocation(ctx.queryParam("storeLocation"))
+            .build()) {
+      respond(ctx, 200, view.apply(call.apply(terminal).get()));
+    }
+  }
+
+  private HostedSession session(Context ctx) {
+    return registry.require(ctx.pathParam("id"));
+  }
+
+  private HostedOperation operation(Context ctx) {
+    return session(ctx).operation(ctx.pathParam("operationId"));
+  }
+
+  private void basket(Context ctx, Function<com.bilt.pos.session.ShopperSession, Basket> change) {
+    respond(ctx, 200, Views.basket(change.apply(session(ctx).session())));
+  }
+
+  private static void requireItem(com.bilt.pos.session.ShopperSession session, String itemId) {
+    if (session.basket().snapshot().getItem(itemId) == null) {
+      throw HostError.notFound("basket item " + itemId);
+    }
+  }
+
+  private void end(Context ctx, boolean forced) {
+    HostedSession hosted = session(ctx);
+    HostedOperation running = hosted.running();
+    if (running != null) {
+      throw HostError.conflict(
+          "operation " + running.id() + " (" + running.type() + ") is still in flight");
+    }
+    if (forced) {
+      String reason = Json.text(Json.body(ctx.body()), "reason");
+      registry.forceEnd(hosted, reason == null || reason.isBlank() ? "forced by the register" : reason);
+    } else {
+      registry.end(hosted);
+    }
+    respond(ctx, 200, hosted.view());
+  }
+
+  // ─── Cross-cutting ───
+
+  private void authorize(Context ctx) {
+    if (ctx.path().equals("/health")) {
+      return;
+    }
+    if (!config.auth.permits(request(ctx))) {
+      throw HostError.unauthorized();
+    }
+  }
+
+  private static HostRequest request(Context ctx) {
+    return new HostRequest() {
+      @Override
+      public String method() {
+        return ctx.method().name();
+      }
+
+      @Override
+      public String path() {
+        return ctx.path();
+      }
+
+      @Override
+      public String header(String name) {
+        return ctx.header(name);
+      }
+
+      @Override
+      public String remoteAddress() {
+        return ctx.ip();
+      }
+    };
+  }
+
+  private static HostRequest request(WsContext ctx) {
+    return new HostRequest() {
+      @Override
+      public String method() {
+        return "GET";
+      }
+
+      @Override
+      public String path() {
+        return ctx.matchedPath();
+      }
+
+      @Override
+      public String header(String name) {
+        return ctx.header(name);
+      }
+
+      @Override
+      public String remoteAddress() {
+        return ctx.host();
+      }
+    };
+  }
+
+  private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
+  private static final String IDEMPOTENCY_STORE = "bilt.idempotency.store";
+
+  /**
+   * Every state-changing request under {@code /v1/sessions} must carry an {@code Idempotency-Key};
+   * a key seen before replays the stored response and skips the handler.
+   */
+  private void idempotencyLookup(Context ctx) {
+    if (!ctx.path().startsWith("/v1/sessions")) {
+      return;
+    }
+    switch (ctx.method()) {
+      case POST:
+      case PUT:
+      case PATCH:
+      case DELETE:
+        break;
+      default:
+        return;
+    }
+    String key = ctx.header(IDEMPOTENCY_HEADER);
+    if (key == null || key.isBlank()) {
+      throw HostError.badRequest("the " + IDEMPOTENCY_HEADER + " header is required");
+    }
+    String fingerprint =
+        com.bilt.pos.host.internal.IdempotencyCache.fingerprint(
+            ctx.method().name(), ctx.path(), ctx.body());
+    com.bilt.pos.host.internal.IdempotencyCache cache = cacheFor(ctx);
+    if (cache == null) {
+      return;
+    }
+    var stored = cache.lookup(key, fingerprint);
+    if (stored != null) {
+      ctx.status(stored.status()).result(stored.body()).header("Idempotent-Replayed", "true");
+      ctx.skipRemainingHandlers();
+      return;
+    }
+    ctx.attribute(
+        IDEMPOTENCY_STORE,
+        (java.util.function.BiConsumer<Integer, String>)
+            (status, body) -> cache.store(key, fingerprint, status, body));
+  }
+
+  private com.bilt.pos.host.internal.IdempotencyCache cacheFor(Context ctx) {
+    if (ctx.path().equals("/v1/sessions")) {
+      return registry.creationCache();
+    }
+    // before-handlers run without the matched route's path params, so the id comes from the path
+    String rest = ctx.path().substring("/v1/sessions/".length());
+    int slash = rest.indexOf('/');
+    String id = slash < 0 ? rest : rest.substring(0, slash);
+    HostedSession hosted = id.isEmpty() ? null : registry.find(id);
+    return hosted == null ? null : hosted.idempotency();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void respond(Context ctx, int status, JsonNode body) {
+    String json = Json.write(body);
+    ctx.status(status).result(json).contentType("application/json");
+    Object store = ctx.attribute(IDEMPOTENCY_STORE);
+    if (store != null) {
+      ((java.util.function.BiConsumer<Integer, String>) store).accept(status, json);
+      ctx.attribute(IDEMPOTENCY_STORE, null);
+    }
+  }
+
+  // ─── Builder ───
+
+  /** Configuration for a host; everything has a development-mode default except the terminals. */
+  public static final class Builder {
+    private int port;
+    private String bindAddress = "127.0.0.1";
+    private TerminalClientProvider terminalClients = TerminalClientProvider.none();
+    private SessionFactory sessionFactory = SessionFactory.defaults();
+    private StepDeadlines stepDeadlines = StepDeadlines.defaults();
+    private HostAuth auth = HostAuth.permitAll();
+    private AdDecisionService adDecisionService;
+    private String hostKind = "bridge";
+    private int eventReplayCapacity = 1000;
+    private Duration eventReplayWindow = Duration.ofMinutes(10);
+    private int idempotencyCapacity = 256;
+
+    private Builder() {}
+
+    /** The port to listen on; 0 picks an ephemeral one, which tests read back with {@code port()}. */
+    public Builder port(int port) {
+      if (port < 0 || port > 65535) {
+        throw new IllegalArgumentException("port must be between 0 and 65535");
+      }
+      this.port = port;
+      return this;
+    }
+
+    /** The interface to bind; loopback by default, and the bridge never binds anything else. */
+    public Builder bindAddress(String bindAddress) {
+      this.bindAddress = Objects.requireNonNull(bindAddress, "bindAddress");
+      return this;
+    }
+
+    public Builder terminalClients(TerminalClientProvider terminalClients) {
+      this.terminalClients = Objects.requireNonNull(terminalClients, "terminalClients");
+      return this;
+    }
+
+    public Builder sessionFactory(SessionFactory sessionFactory) {
+      this.sessionFactory = Objects.requireNonNull(sessionFactory, "sessionFactory");
+      return this;
+    }
+
+    public Builder stepDeadlines(StepDeadlines stepDeadlines) {
+      this.stepDeadlines = Objects.requireNonNull(stepDeadlines, "stepDeadlines");
+      return this;
+    }
+
+    public Builder auth(HostAuth auth) {
+      this.auth = Objects.requireNonNull(auth, "auth");
+      return this;
+    }
+
+    /**
+     * The ad decision service behind {@code retail-media} widgets. Without one, a session that asks
+     * for the widget is refused with 422, since the SDK ships no platform-backed default yet.
+     */
+    public Builder adDecisionService(AdDecisionService adDecisionService) {
+      this.adDecisionService = adDecisionService;
+      return this;
+    }
+
+    /** What {@code /health} reports as {@code kind}: {@code bridge} by default, {@code cloud} later. */
+    public Builder hostKind(String hostKind) {
+      this.hostKind = Objects.requireNonNull(hostKind, "hostKind");
+      return this;
+    }
+
+    /** How many events, and how old, a session keeps for {@code ?since} replay. */
+    public Builder eventReplay(int capacity, Duration window) {
+      if (capacity < 1) {
+        throw new IllegalArgumentException("capacity must be positive");
+      }
+      this.eventReplayCapacity = capacity;
+      this.eventReplayWindow = Objects.requireNonNull(window, "window");
+      return this;
+    }
+
+    public SessionHost build() {
+      return new SessionHost(this);
+    }
+  }
+}
