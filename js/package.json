@@ -15,7 +15,9 @@
     "generate:check": "pnpm generate && git diff --exit-code -- packages/*/src/generated ../docs/session-protocol-reference.html",
     "lint": "eslint . && prettier --check .",
     "lint:spec": "redocly lint ../schema/session-protocol/openapi.yaml --config ../schema/session-protocol/redocly.yaml",
-    "format": "prettier --write . && eslint . --fix"
+    "format": "prettier --write . && eslint . --fix",
+    "api:check": "pnpm -r api:check",
+    "api:update": "pnpm -r api:update"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

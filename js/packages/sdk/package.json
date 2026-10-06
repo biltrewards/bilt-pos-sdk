@@ -1,0 +1,46 @@
+{
+  "name": "@bilt/pos-sdk",
+  "version": "0.0.0",
+  "description": "The Bilt POS SDK for JavaScript: shopper sessions, settlement and widgets over a Session Protocol host.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/biltrewards/bilt-pos-sdk.git",
+    "directory": "js/packages/sdk"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "import": "./dist/internal.js",
+      "require": "./dist/internal.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --typecheck",
+    "api:check": "api-extractor run -c api-extractor.json && api-extractor run -c api-extractor.internal.json",
+    "api:update": "api-extractor run --local -c api-extractor.json && api-extractor run --local -c api-extractor.internal.json"
+  },
+  "dependencies": {
+    "@bilt/pos-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "^7.59.3",
+    "@types/node": "^20.19.0"
+  }
+}
