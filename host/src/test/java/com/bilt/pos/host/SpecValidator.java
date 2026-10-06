@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
@@ -97,9 +96,11 @@ final class SpecValidator {
 
   private final Path dir;
   private final ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
+  /** The status for reusing an idempotency key with a different body. */
+  private static final int IDEMPOTENCY_REUSE = 422;
+
   private final Map<URI, JsonNode> documents = new ConcurrentHashMap<>();
   private final Map<String, JsonSchema> schemas = new ConcurrentHashMap<>();
-  private final Set<String> undocumented = ConcurrentHashMap.newKeySet();
   private final JsonSchemaFactory factory;
   private final SchemaValidatorsConfig config;
   private final URI openapi;
@@ -153,11 +154,6 @@ final class SpecValidator {
     return dir.resolve("examples");
   }
 
-  /** Routes whose error statuses the host used without the spec listing them; for reporting. */
-  Set<String> undocumentedStatuses() {
-    return new TreeSet<>(undocumented);
-  }
-
   // ─── What tests call ───
 
   /** Validates a value against a named entry of {@code components.schemas}. */
@@ -195,9 +191,9 @@ final class SpecValidator {
   }
 
   /**
-   * Validates a response: the status must be one the route documents (any error status is accepted
-   * as a {@code SessionError}, the protocol's global error body) and the body must match that
-   * status's schema, or be empty when it has none.
+   * Validates a response: the status must be one the route documents (bar the idempotency-key
+   * reuse refusal, which the spec documents once for every keyed route), and the body must match
+   * that status's schema, or be empty when it has none.
    */
   void response(String method, String path, int status, JsonNode body) {
     Route route = route(method, path);
@@ -206,8 +202,8 @@ final class SpecValidator {
     Located responses = child(operation, "responses");
     Located response = responses == null ? null : child(responses, Integer.toString(status));
     if (response == null) {
-      if (status >= 400) {
-        undocumented.add(label);
+      if (status == IDEMPOTENCY_REUSE) {
+        // the spec describes this refusal in the Idempotency-Key parameter, not per route
         schema("SessionError", body);
         return;
       }
@@ -228,6 +224,8 @@ final class SpecValidator {
   private Route route(String method, String path) {
     int query = path.indexOf('?');
     String plain = query < 0 ? path : path.substring(0, query);
+    // a templated path can match another's literal one (a {sessionId} segment matches "nope"), so
+    // the template with the most literal characters is the one the request meant
     Route best = null;
     for (Route route : routes) {
       if (route.pattern.matcher(plain).matches()

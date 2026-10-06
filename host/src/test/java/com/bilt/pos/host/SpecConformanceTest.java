@@ -16,7 +16,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +40,20 @@ class SpecConformanceTest {
           + "\"LoyaltyAccountStatus\":{\"LoyaltyAccount\":{\"LoyaltyAccountID\":{"
           + "\"LoyaltyID\":\"98234\"},\"LoyaltyBrand\":\"Bilt\"},\"CurrentBalance\":1200}}}}";
 
+  private static final String TOTALS_OK =
+      "{\"SaleToPOIResponse\":{\"GetTotalsResponse\":{"
+          + "\"Response\":{\"Result\":\"Success\"},\"POIReconciliationID\":\"REC-1\","
+          + "\"TransactionTotals\":[{\"PaymentInstrument\":\"Card\",\"AcquirerID\":\"ACQ\"}]}}}";
+
+  private static final String RECONCILIATION_OK =
+      "{\"SaleToPOIResponse\":{\"ReconciliationResponse\":{"
+          + "\"Response\":{\"Result\":\"Success\"},\"ReconciliationType\":\"SaleReconciliation\","
+          + "\"POIReconciliationID\":\"REC-2\"}}}";
+
+  private static final String PRINT_OK =
+      "{\"SaleToPOIResponse\":{\"PrintResponse\":{"
+          + "\"Response\":{\"Result\":\"Success\"},\"DocumentQualifier\":\"CustomerReceipt\"}}}";
+
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final SpecValidator SPEC = SpecValidator.shared();
 
@@ -55,6 +68,9 @@ class SpecConformanceTest {
             .reply(MessageCategoryType.ADMIN, ScriptedTerminalClient.ADMIN_OK)
             .reply(MessageCategoryType.ABORT, ScriptedTerminalClient.ADMIN_OK)
             .reply(MessageCategoryType.DIAGNOSIS, DIAGNOSIS_OK)
+            .reply(MessageCategoryType.GET_TOTALS, TOTALS_OK)
+            .reply(MessageCategoryType.RECONCILIATION, RECONCILIATION_OK)
+            .reply(MessageCategoryType.PRINT, PRINT_OK)
             .reply(MessageCategoryType.BALANCE_INQUIRY, BALANCE_FOUND)
             .reply(MessageCategoryType.INPUT, ScriptedTerminalClient.INPUT_CONFIRMED)
             .reply(
@@ -87,16 +103,6 @@ class SpecConformanceTest {
   void stop() {
     terminal.release();
     host.stop();
-  }
-
-  @AfterAll
-  static void report() {
-    if (!SPEC.undocumentedStatuses().isEmpty()) {
-      System.out.println(
-          "Error statuses the host answered that the spec does not list for the route (bodies"
-              + " were valid SessionErrors): "
-              + SPEC.undocumentedStatuses());
-    }
   }
 
   private static JsonNode example(String file) throws Exception {
@@ -140,6 +146,22 @@ class SpecConformanceTest {
     JsonNode diagnosis = client.post("/v1/terminals/" + POI + "/diagnose", "{}").expect(200).body;
     assertTrue(diagnosis.path("hostStatuses").isArray());
     client.post("/v1/terminals/nope/diagnose", "{}").expect(404);
+
+    JsonNode totals =
+        client.post("/v1/terminals/" + POI + "/totals?storeLocation=STR-1", "{}").expect(200).body;
+    assertEquals("REC-1", totals.path("poiReconciliationId").asText());
+    assertEquals(1, totals.path("transactionTotals").size());
+    JsonNode reconciliation =
+        client.post("/v1/terminals/" + POI + "/reconcile", "{}").expect(200).body;
+    assertEquals("REC-2", reconciliation.path("poiReconciliationId").asText());
+    client.post("/v1/terminals/nope/totals", "{}").expect(404);
+    client.post("/v1/terminals/nope/reconcile", "{}").expect(404);
+
+    String print = json("{'format':'TEXT','content':'Thank you','documentQualifier':'JOURNAL'}");
+    SPEC.request("POST", "/v1/terminals/" + POI + "/print", MAPPER.readTree(print));
+    client.post("/v1/terminals/" + POI + "/print", print).expect(204);
+    client.post("/v1/terminals/" + POI + "/print", json("{'format':'TEXT'}")).expect(400);
+    client.post("/v1/terminals/nope/print", print).expect(404);
     client.post("/v1/terminals/" + POI + "/sound", json("{'action':'NOPE'}")).expect(400);
   }
 
@@ -202,6 +224,37 @@ class SpecConformanceTest {
     assertEquals("lane-banner", placement.path("id").asText());
     assertEquals("WEB", placement.path("surfaceKind").asText());
     client.delete("/v1/sessions/" + created.text("id")).expect(202);
+  }
+
+  @Test
+  void retailMediaActionsAreAcceptedAndRejectionsSurfaceAsEvents() throws Exception {
+    String id =
+        client
+            .post(
+                "/v1/sessions",
+                json(
+                    "{'kind':'local','saleId':'LANE-1','currency':'USD','storeLocation':'STR-1',"
+                        + "'widgets':[{'type':'retail-media','placements':[{'id':'lane-banner'}]}],"
+                        + "'clientCapabilities':{'formats':['IMAGE'],'surfaceKind':'WEB'}}"))
+            .expect(201)
+            .text("id");
+    String path = "/v1/sessions/" + id + "/widgets/retail-media/actions";
+
+    // nothing is on display, so the report is accepted and the rejection arrives as an event
+    String stale = json("{'kind':'viewed','creativeId':'gone','placement':'lane-banner'}");
+    SPEC.request("POST", path, MAPPER.readTree(stale));
+    client.post(path, stale).expect(202);
+    client
+        .post(path, json("{'kind':'viewed','creativeId':'gone','placement':'nowhere'}"))
+        .expect(404);
+    client
+        .post(path, json("{'kind':'nope','creativeId':'gone','placement':'lane-banner'}"))
+        .expect(400);
+    client.post(path, json("{'kind':'viewed'}")).expect(400);
+
+    client.delete("/v1/sessions/" + id).expect(202);
+    List<String> types = types(eventsUntilEnded(id));
+    assertTrue(types.contains("background.error"), types.toString());
   }
 
   @Test

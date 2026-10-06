@@ -182,15 +182,26 @@ public final class OperationRunner {
   private Runnable launch(
       HostedSession hosted, HostedOperation operation, String type, ObjectNode body) {
     // a request that does not validate is a 400 on every session kind; only a valid one a
-    // local session cannot run is the 409 UNSUPPORTED the spec promises
+    // local session cannot run is the 409 UNSUPPORTED the spec promises. The SDK calls sit inside
+    // the returned runnable, so building it validates the body without touching the terminal
     if (!REQUEST_TYPES.contains(type)) {
       throw HostError.badRequest("unknown operation type '" + type + "'");
     }
     TerminalShopperSession terminal = hosted.terminal();
+    Runnable launch = build(hosted, operation, type, body, terminal);
     if (terminal == null) {
       throw HostError.unsupported(
           "operation '" + type + "' needs a terminal session; this session is local");
     }
+    return launch;
+  }
+
+  private Runnable build(
+      HostedSession hosted,
+      HostedOperation operation,
+      String type,
+      ObjectNode body,
+      TerminalShopperSession terminal) {
     JsonNode options = body.get("options");
     switch (type) {
       case "identifyMember":
