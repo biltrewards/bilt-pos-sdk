@@ -11,6 +11,8 @@ type AnyHandler = SessionEventHandler<SessionEventType>;
  */
 export class SessionEmitter {
   private readonly handlers = new Map<SessionEventType, Set<AnyHandler>>();
+  /** The handler a `once` wrapper stands for, so `off(type, handler)` finds it. */
+  private readonly originals = new WeakMap<AnyHandler, AnyHandler>();
 
   constructor(private readonly report: Reporter) {}
 
@@ -25,15 +27,21 @@ export class SessionEmitter {
   }
 
   once<T extends SessionEventType>(type: T, handler: SessionEventHandler<T>): Unsubscribe {
-    const off = this.on(type, (payload) => {
-      off();
+    const wrapper = ((payload) => {
+      this.off(type, wrapper as SessionEventHandler<T>);
       handler(payload);
-    });
-    return off;
+    }) as SessionEventHandler<T>;
+    this.originals.set(wrapper as AnyHandler, handler as AnyHandler);
+    return this.on(type, wrapper);
   }
 
   off<T extends SessionEventType>(type: T, handler: SessionEventHandler<T>): void {
-    this.handlers.get(type)?.delete(handler as AnyHandler);
+    const set = this.handlers.get(type);
+    if (!set) return;
+    set.delete(handler as AnyHandler);
+    for (const registered of set) {
+      if (this.originals.get(registered) === (handler as AnyHandler)) set.delete(registered);
+    }
   }
 
   emit<T extends SessionEventType>(type: T, payload: SessionEventPayload<T>): void {
