@@ -1,5 +1,5 @@
 import { SessionError } from '@bilt/pos-sdk';
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 export type ToastTone = 'info' | 'success' | 'warning';
 
@@ -21,17 +21,30 @@ const TOAST_MS = 6000;
 export function useToasts(): ToastApi {
   const [items, setItems] = useState<readonly Toast[]>([]);
   const counter = useRef(0);
+  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const dismiss = useCallback((id: number) => {
+    clearTimeout(timers.current.get(id));
+    timers.current.delete(id);
     setItems((previous) => previous.filter((toast) => toast.id !== id));
   }, []);
   const push = useCallback(
     (tone: ToastTone, text: string) => {
       const id = ++counter.current;
       setItems((previous) => [...previous, { id, tone, text }]);
-      setTimeout(() => dismiss(id), TOAST_MS);
+      timers.current.set(
+        id,
+        setTimeout(() => dismiss(id), TOAST_MS),
+      );
     },
     [dismiss],
   );
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      pending.forEach(clearTimeout);
+      pending.clear();
+    };
+  }, []);
   return useMemo(() => ({ items, push, dismiss }), [items, push, dismiss]);
 }
 
