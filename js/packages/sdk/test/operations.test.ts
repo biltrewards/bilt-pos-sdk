@@ -272,6 +272,25 @@ describe('starting an operation', () => {
     expect(session.context.phase()).toBe('COMPLETE');
   });
 
+  it('resolves an operation the host completed and ended before the queued acceptance arrived', async () => {
+    const engine = new ScriptedEngine();
+    engine.staleAcceptance = true;
+    let release!: () => void;
+    engine.acceptanceDelay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { session } = await lane(engine);
+    const op = session.settle();
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    const id = engine.lastOperation(session.id).id;
+    const ended = new Promise<void>((resolve) => session.on('session.ended', () => resolve()));
+    engine.complete(session.id, id, { result: { cardAmountCharged: '5.00' } } as never);
+    engine.pushEvent(session.id, 'session.ended', {} as never);
+    await ended;
+    release();
+    await expect(op).resolves.toMatchObject({ cardAmountCharged: '5.00' });
+  });
+
   it('rejects with the SessionError of a failed operation and marks aborted ones', async () => {
     const { engine, session } = await lane();
     const op = session.settle();

@@ -350,7 +350,8 @@ export class ShopperSessionImpl implements ShopperSession {
     this.currentState = 'ended';
     this.resolveEnded();
     this.failPending('ended');
-    this.unclaimed.clear();
+    // `unclaimed` stays: an operation whose request is still unanswered finds its held events,
+    // a completion among them, when the acceptance arrives. It is bounded by UNCLAIMED_LIMIT.
   }
 
   private failPending(why: 'ended' | 'detached'): void {

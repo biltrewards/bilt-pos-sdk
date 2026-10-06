@@ -47,6 +47,9 @@ export class ScriptedEngine extends MockEngine {
   /** Delays the acceptance response so events can arrive before the core learns the id. */
   acceptanceDelay: Promise<void> | undefined;
 
+  /** Answers with the resource as it was accepted (still `queued`), as the protocol's 202 body does. */
+  staleAcceptance = false;
+
   private dropped = new Map<string, number>();
 
   override async request(
@@ -81,6 +84,7 @@ export class ScriptedEngine extends MockEngine {
     if (this.acceptanceDelay) await this.acceptanceDelay;
     // The response reflects the resource as it stands when the host answers, so an operation that
     // finished while acceptance was delayed is accepted already complete.
+    if (this.staleAcceptance) return { ...resource };
     return { ...(state.operations.find((o) => o.id === resource.id) ?? resource) };
   }
 
