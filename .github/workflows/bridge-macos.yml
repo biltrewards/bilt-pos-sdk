@@ -1,0 +1,56 @@
+name: Terminal Bridge (macOS)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'bridge/**'
+      - 'java/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'settings.gradle.kts'
+      - '.github/workflows/bridge-macos.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'bridge/**'
+      - 'java/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'settings.gradle.kts'
+      - '.github/workflows/bridge-macos.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    # arm64 runner; an x64 build needs a second job on macos-13 once there is a signing story
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test
+        run: ./gradlew :bridge:test
+
+      # Ad-hoc signed only: no Developer ID or notarization secrets are used here.
+      - name: Package
+        run: ./gradlew :bridge:jpackage
+
+      - name: Upload dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: bilt-terminal-bridge-macos-arm64
+          path: bridge/build/jpackage/*.dmg
+          if-no-files-found: error
+          retention-days: 14
