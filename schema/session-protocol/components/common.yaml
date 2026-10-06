@@ -1,0 +1,188 @@
+Money:
+  type: string
+  pattern: '^-?\d+(\.\d+)?$'
+  description: A decimal amount as a string, in the session currency; never a float.
+  examples: ['12.34', '-4.00', '0']
+
+Duration:
+  type: string
+  format: duration
+  description: An ISO 8601 duration, e.g. `PT30S`.
+  examples: ['PT30S']
+
+SessionErrorCode:
+  type: string
+  description: |
+    Why a session operation failed. The first twelve values are the Java `SessionErrorCode`
+    constants; `VALIDATION`, `NOT_FOUND` and `UNAUTHORIZED` exist only on the wire.
+  enum:
+    - NETWORK
+    - TIMEOUT
+    - DECLINED
+    - CANCELLED
+    - ABORTED
+    - ABANDONED
+    - LOYALTY_UNAVAILABLE
+    - STORED_VALUE_INSUFFICIENT
+    - INVALID_STATE
+    - UNSUPPORTED
+    - TERMINAL_ERROR
+    - UNKNOWN
+    - VALIDATION
+    - NOT_FOUND
+    - UNAUTHORIZED
+
+SessionError:
+  type: object
+  description: |
+    Describes why something failed: the body of every error response, the `error` of a failed
+    operation, and the payload of `background.error`. Mirrors the Java `SessionError`.
+  required: [code, message]
+  properties:
+    code:
+      $ref: '#/SessionErrorCode'
+    message:
+      type: string
+      description: Human-readable description of the failure.
+    nexoErrorCondition:
+      type: string
+      description: The raw Nexo `ErrorCondition` from the terminal reply, when the failure originated there.
+    reversedMovements:
+      type: array
+      description: |
+        Movements that completed before a whole-sale void stopped. Present on a failed void so
+        the register can persist the progress and omit those references from a later
+        `OriginalSaleRecord`.
+      items:
+        $ref: './reversal.yaml#/ReversedMovement'
+    details:
+      type: object
+      description: Protocol-level detail, e.g. which field failed validation or the oldest buffered `seq`.
+      additionalProperties: true
+
+NexoObject:
+  type: object
+  description: |
+    A Nexo Sale to POI 3.0 structure carried through unchanged, serialised as the SDK's JSON
+    model (the schema is `schema/nexo_sale_to_poi_v3_0_schema.json`). The protocol otherwise
+    speaks no Nexo; these appear only where the Java API itself returns a Nexo type.
+  additionalProperties: true
+
+Health:
+  type: object
+  required: [host, hostVersion, sdkVersion, protocolVersions, terminals]
+  properties:
+    host:
+      type: string
+      enum: [bridge, cloud]
+      description: What kind of host answered.
+    hostVersion:
+      type: string
+      description: The host application's version.
+    sdkVersion:
+      type: string
+      description: The embedded Java SDK's version.
+    protocolVersions:
+      type: array
+      description: Protocol major versions the host implements; this document is `"1"`.
+      items:
+        type: string
+      minItems: 1
+    terminals:
+      type: array
+      items:
+        $ref: '#/TerminalInfo'
+
+TerminalInfo:
+  type: object
+  required: [poiId]
+  properties:
+    poiId:
+      type: string
+      description: The terminal identifier, sent as Nexo `POIID`.
+    model:
+      type: string
+      description: The terminal model, when the host's configuration names it.
+    reachable:
+      type: boolean
+      description: The host's last known reachability; a cached view, not a live probe.
+
+DiagnosisResult:
+  type: object
+  description: Outcome of `Terminal.diagnose()`.
+  required: [hostStatuses]
+  properties:
+    poiStatus:
+      description: Terminal device status (card reader, printer, security) as the Nexo `POIStatus`.
+      $ref: '#/NexoObject'
+    hostStatuses:
+      type: array
+      description: Reachability of the acquirer and loyalty hosts as Nexo `HostStatus` entries; empty if not reported.
+      items:
+        $ref: '#/NexoObject'
+
+ReconciliationResult:
+  type: object
+  description: Outcome of `Terminal.reconcile()` and `Terminal.getTotals()`.
+  required: [transactionTotals]
+  properties:
+    poiReconciliationId:
+      type: string
+      description: Terminal-assigned identifier of the reconciliation period.
+    transactionTotals:
+      type: array
+      description: Totals per payment instrument or card brand as Nexo `TransactionTotals`; empty if not reported.
+      items:
+        $ref: '#/NexoObject'
+
+PrintPayload:
+  type: object
+  description: Content for `Terminal.print(..)`.
+  required: [format, content]
+  properties:
+    format:
+      type: string
+      enum: [TEXT, XHTML]
+      description: '`TEXT` is plain text; `XHTML` is a Base64-encoded XHTML document.'
+    content:
+      type: string
+    documentQualifier:
+      $ref: '#/DocumentQualifier'
+      default: CUSTOMER_RECEIPT
+
+DocumentQualifier:
+  type: string
+  description: The Nexo `DocumentQualifierEnum`.
+  enum: [CASHIER_RECEIPT, CUSTOMER_RECEIPT, DOCUMENT, JOURNAL, SALE_RECEIPT, VOUCHER]
+
+SoundRequest:
+  type: object
+  description: '`PLAY` mirrors `playSound(soundReferenceId, volumePercent)`; `STOP` mirrors `stopSound()`.'
+  required: [action]
+  properties:
+    action:
+      type: string
+      enum: [PLAY, STOP]
+    soundReferenceId:
+      type: string
+      description: Reference of a pre-provisioned sound; required for `PLAY`.
+    volumePercent:
+      type: integer
+      minimum: 0
+      maximum: 100
+      description: Volume for `PLAY`; the terminal default when absent.
+
+Receipt:
+  type: object
+  description: A rendered receipt from a payment, refund or void, decoded from the Nexo `PaymentReceipt` content.
+  properties:
+    html:
+      type: string
+      description: The rendered HTML receipt.
+    plainText:
+      type: string
+      description: The plain-text receipt.
+    receiptData:
+      description: Structured receipt fields (merchant identity, amounts, card data, EMV tags) per `receipt.xsd`, as JSON.
+      type: object
+      additionalProperties: true
