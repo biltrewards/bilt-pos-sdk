@@ -108,6 +108,29 @@ class BridgeTest {
   }
 
   @Test
+  void statusReportsTheAddressTheHostIsBoundTo(@TempDir Path dir) throws Exception {
+    Path file = dir.resolve("config.json");
+    int free;
+    try (java.net.ServerSocket s = new java.net.ServerSocket(0)) {
+      free = s.getLocalPort();
+    }
+    Files.writeString(file, "{\"port\": " + free + "}");
+
+    try (Bridge bridge = new Bridge(new FileBridgeConfigSource(file))) {
+      bridge.start();
+      String bound = bridge.status().bindAddress();
+
+      Files.writeString(file, "{\"port\": " + free + ", \"bindAddress\": \"::1\"}");
+      bridge.reload();
+
+      assertTrue(bridge.lastConfigError().isEmpty());
+      assertFalse(bound.equals(bridge.config().bindAddress().getHostAddress()));
+      assertEquals(
+          bound, bridge.status().bindAddress(), "listener keeps its address until restart");
+    }
+  }
+
+  @Test
   void starterFileIsOwnerOnly(@TempDir Path dir) throws Exception {
     assumeTrue(dir.getFileSystem().supportedFileAttributeViews().contains("posix"));
     Path file = dir.resolve("config.json");

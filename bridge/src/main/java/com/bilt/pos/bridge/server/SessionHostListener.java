@@ -83,6 +83,11 @@ public final class SessionHostListener implements Closeable {
     return false;
   }
 
+  /** The address the host listens on; fixed at construction, whatever the config says later. */
+  public InetAddress bindAddress() {
+    return bindAddress;
+  }
+
   /** The bound port, or {@code -1} before {@link #start()}. */
   public synchronized int port() {
     return host == null ? -1 : host.port();

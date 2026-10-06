@@ -168,7 +168,9 @@ public final class Bridge implements Closeable {
     return new BridgeStatus(
         BridgeVersion.get(),
         SdkVersion.get(),
-        c == null ? "127.0.0.1" : c.bindAddress().getHostAddress(),
+        h != null
+            ? h.bindAddress().getHostAddress()
+            : c == null ? "127.0.0.1" : c.bindAddress().getHostAddress(),
         h == null ? -1 : h.port(),
         terminals.size(),
         h == null ? 0 : h.sessionCount(),
