@@ -80,7 +80,7 @@ The file is created on first start with a commented example (JSON has no comment
       "keyId": null,
       "trustAll": true,
       "caCertificatePath": null,
-      "environment": "STAGING"
+      "environment": null
     }
   ]
 }
