@@ -185,6 +185,7 @@ public final class SessionHost implements AutoCloseable {
     routes.options("/*", ctx -> respond(ctx, 204, null));
     routes.before(this::authorize);
     routes.before(this::idempotencyLookup);
+    routes.after(this::idempotencyRelease);
     routes.exception(HostError.class, (error, ctx) -> respond(ctx, error.status(), error.toJson()));
     routes.exception(
         Exception.class,
@@ -744,6 +745,7 @@ public final class SessionHost implements AutoCloseable {
 
   private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
   private static final String IDEMPOTENCY_STORE = "bilt.idempotency.store";
+  private static final String IDEMPOTENCY_RELEASE = "bilt.idempotency.release";
 
   /**
    * Every state-changing request under {@code /v1/sessions} must carry an {@code Idempotency-Key};
@@ -782,6 +784,16 @@ public final class SessionHost implements AutoCloseable {
         IDEMPOTENCY_STORE,
         (BiConsumer<Integer, String>)
             (status, body) -> cache.store(key, fingerprint, status, body));
+    ctx.attribute(IDEMPOTENCY_RELEASE, (Runnable) () -> cache.release(key));
+  }
+
+  /** Frees the key of a request that ended without {@code respond}, so a retry is not stuck on it. */
+  private void idempotencyRelease(Context ctx) {
+    Runnable release = ctx.attribute(IDEMPOTENCY_RELEASE);
+    if (release != null) {
+      ctx.attribute(IDEMPOTENCY_RELEASE, null);
+      release.run();
+    }
   }
 
   private IdempotencyCache cacheFor(Context ctx) {
@@ -809,6 +821,7 @@ public final class SessionHost implements AutoCloseable {
     if (store != null) {
       ((BiConsumer<Integer, String>) store).accept(status, json);
       ctx.attribute(IDEMPOTENCY_STORE, null);
+      ctx.attribute(IDEMPOTENCY_RELEASE, null);
     }
   }
 

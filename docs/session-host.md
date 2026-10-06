@@ -27,7 +27,8 @@ The short version:
 - `GET .../events` is the ordered, replayable event stream (SSE, or WebSocket on
   the same path), reconnectable with `?since=<seq>`;
 - every state-changing request under `/v1/sessions` carries an `Idempotency-Key`;
-  a replayed key returns the stored response.
+  a replayed key returns the stored response, and a duplicate that arrives while the
+  first request is still running is refused with 409 so it can be retried.
 
 ## Embedding
 

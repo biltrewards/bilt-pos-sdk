@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -22,6 +23,9 @@ import java.util.Map;
  * ordered: the oldest keys fall out first. A key reused for a different request — different method,
  * path or body — is refused rather than replayed, since replaying would silently answer the wrong
  * question.
+ *
+ * <p>A first sighting reserves the key until its response is stored or the reservation is released,
+ * so a concurrent duplicate is refused with a 409 instead of running the handler a second time.
  */
 public final class IdempotencyCache {
 
@@ -57,28 +61,49 @@ public final class IdempotencyCache {
         }
       };
 
+  /** Keys whose first request is still running, with the fingerprint it was admitted under. */
+  private final Map<String, String> inFlight = new HashMap<>();
+
   public IdempotencyCache(int capacity) {
     this.capacity = capacity;
   }
 
   /**
-   * The stored response for the key, or {@code null} if the key is new. Throws a 422 when the key
-   * was used for a different request.
+   * The stored response for the key, or {@code null} if the key is new, in which case the caller
+   * now owns it and must {@link #store} the response or {@link #release} the key. Throws a 422 when
+   * the key was used for a different request and a 409 when its first request is still running.
    */
   public synchronized Entry lookup(String key, String fingerprint) {
     Entry entry = entries.get(key);
-    if (entry == null) {
-      return null;
+    if (entry != null) {
+      requireSameRequest(key, entry.fingerprint, fingerprint);
+      return entry;
     }
-    if (!entry.fingerprint.equals(fingerprint)) {
-      throw HostError.unprocessable(
-          "Idempotency-Key '" + key + "' was already used for a different request");
+    String running = inFlight.get(key);
+    if (running != null) {
+      requireSameRequest(key, running, fingerprint);
+      throw HostError.conflict(
+          "a request with Idempotency-Key '" + key + "' is still in progress; retry shortly");
     }
-    return entry;
+    inFlight.put(key, fingerprint);
+    return null;
   }
 
   public synchronized void store(String key, String fingerprint, int status, String body) {
+    inFlight.remove(key);
     entries.put(key, new Entry(fingerprint, status, body));
+  }
+
+  /** Gives up a reservation whose request ended without a stored response, so a retry can run. */
+  public synchronized void release(String key) {
+    inFlight.remove(key);
+  }
+
+  private static void requireSameRequest(String key, String admitted, String fingerprint) {
+    if (!admitted.equals(fingerprint)) {
+      throw HostError.unprocessable(
+          "Idempotency-Key '" + key + "' was already used for a different request");
+    }
   }
 
   /** A stable digest of method, path and body. */
