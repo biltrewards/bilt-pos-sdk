@@ -96,6 +96,7 @@ final class SpecValidator {
 
   private final Path dir;
   private final ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
+
   /** The status for reusing an idempotency key with a different body. */
   private static final int IDEMPOTENCY_REUSE = 422;
 
@@ -191,9 +192,9 @@ final class SpecValidator {
   }
 
   /**
-   * Validates a response: the status must be one the route documents (bar the idempotency-key
-   * reuse refusal, which the spec documents once for every keyed route), and the body must match
-   * that status's schema, or be empty when it has none.
+   * Validates a response: the status must be one the route documents (bar the idempotency-key reuse
+   * refusal, which the spec documents once for every keyed route), and the body must match that
+   * status's schema, or be empty when it has none.
    */
   void response(String method, String path, int status, JsonNode body) {
     Route route = route(method, path);
