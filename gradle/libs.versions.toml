@@ -14,7 +14,7 @@ jaxb-api = "4.0.2"
 jaxb-runtime = "4.0.5"
 google-java-format = "1.36.1"
 ktfmt = "0.64"
-javalin = "6.7.0"
+javalin = "7.2.3"
 
 [libraries]
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }

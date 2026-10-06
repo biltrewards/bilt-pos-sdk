@@ -35,6 +35,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.javalin.Javalin;
+import io.javalin.config.RoutesConfig;
 import io.javalin.http.Context;
 import io.javalin.http.sse.SseClient;
 import io.javalin.websocket.WsContext;
@@ -125,12 +126,12 @@ public final class SessionHost implements AutoCloseable {
     this.runner = new OperationRunner(builder.stepDeadlines);
     this.app =
         Javalin.create(
-            javalin -> {
-              javalin.showJavalinBanner = false;
-              javalin.http.defaultContentType = "application/json";
-              javalin.useVirtualThreads = false;
+            config -> {
+              config.startup.showJavalinBanner = false;
+              config.http.defaultContentType = "application/json";
+              config.concurrency.useVirtualThreads = false;
+              routes(config.routes);
             });
-    routes();
   }
 
   public static Builder builder() {
@@ -179,13 +180,13 @@ public final class SessionHost implements AutoCloseable {
 
   // ─── Routes ───
 
-  private void routes() {
-    app.before(this::cors);
-    app.options("/*", ctx -> respond(ctx, 204, null));
-    app.before(this::authorize);
-    app.before(this::idempotencyLookup);
-    app.exception(HostError.class, (error, ctx) -> respond(ctx, error.status(), error.toJson()));
-    app.exception(
+  private void routes(RoutesConfig routes) {
+    routes.before(this::cors);
+    routes.options("/*", ctx -> respond(ctx, 204, null));
+    routes.before(this::authorize);
+    routes.before(this::idempotencyLookup);
+    routes.exception(HostError.class, (error, ctx) -> respond(ctx, error.status(), error.toJson()));
+    routes.exception(
         Exception.class,
         (failure, ctx) -> {
           HostError error = HostError.from(failure);
@@ -196,24 +197,24 @@ public final class SessionHost implements AutoCloseable {
           respond(ctx, error.status(), error.toJson());
         });
 
-    app.get("/health", ctx -> respond(ctx, 200, health()));
+    routes.get("/health", ctx -> respond(ctx, 200, health()));
 
-    app.get("/v1/terminals", ctx -> respond(ctx, 200, terminals()));
-    app.post(
+    routes.get("/v1/terminals", ctx -> respond(ctx, 200, terminals()));
+    routes.post(
         "/v1/terminals/{poiId}/diagnose", ctx -> device(ctx, Terminal::diagnose, Views::diagnosis));
-    app.post(
+    routes.post(
         "/v1/terminals/{poiId}/totals",
         ctx -> device(ctx, Terminal::getTotals, Views::reconciliation));
-    app.post(
+    routes.post(
         "/v1/terminals/{poiId}/reconcile",
         ctx -> device(ctx, Terminal::reconcile, Views::reconciliation));
-    app.post(
+    routes.post(
         "/v1/terminals/{poiId}/print",
         ctx -> {
           var payload = Parsers.printPayload(Json.body(ctx.body()));
           device(ctx, terminal -> terminal.print(payload), v -> null);
         });
-    app.post(
+    routes.post(
         "/v1/terminals/{poiId}/sound",
         ctx -> {
           ObjectNode body = Json.body(ctx.body());
@@ -230,14 +231,14 @@ public final class SessionHost implements AutoCloseable {
           device(ctx, terminal -> terminal.playSound(reference, volume), v -> null);
         });
 
-    app.post(
+    routes.post(
         "/v1/sessions", ctx -> respond(ctx, 201, registry.create(Json.body(ctx.body())).view()));
-    app.get("/v1/sessions", ctx -> respond(ctx, 200, sessions()));
-    app.get("/v1/sessions/{id}", ctx -> respond(ctx, 200, session(ctx).view()));
-    app.delete(
+    routes.get("/v1/sessions", ctx -> respond(ctx, 200, sessions()));
+    routes.get("/v1/sessions/{id}", ctx -> respond(ctx, 200, session(ctx).view()));
+    routes.delete(
         "/v1/sessions/{id}",
         ctx -> respond(ctx, 202, registry.end(session(ctx), false, null).toJson()));
-    app.post(
+    routes.post(
         "/v1/sessions/{id}/force-end",
         ctx -> {
           String reason = Json.text(Json.body(ctx.body()), "reason");
@@ -246,7 +247,7 @@ public final class SessionHost implements AutoCloseable {
           }
           respond(ctx, 202, registry.end(session(ctx), true, reason.strip()).toJson());
         });
-    app.post(
+    routes.post(
         "/v1/sessions/{id}/abort",
         ctx -> {
           HostedSession hosted = session(ctx);
@@ -259,8 +260,8 @@ public final class SessionHost implements AutoCloseable {
           respond(ctx, 202, body);
         });
 
-    app.get("/v1/sessions/{id}/basket", ctx -> basket(ctx, s -> s.basket().snapshot()));
-    app.put(
+    routes.get("/v1/sessions/{id}/basket", ctx -> basket(ctx, s -> s.basket().snapshot()));
+    routes.put(
         "/v1/sessions/{id}/basket",
         ctx -> {
           ObjectNode body = Json.body(ctx.body());
@@ -277,7 +278,7 @@ public final class SessionHost implements AutoCloseable {
             basket(ctx, s -> s.basket().replace(parsed));
           }
         });
-    app.post(
+    routes.post(
         "/v1/sessions/{id}/basket/items",
         ctx -> {
           ObjectNode body = Json.body(ctx.body());
@@ -290,7 +291,7 @@ public final class SessionHost implements AutoCloseable {
               ctx,
               s -> itemId == null ? s.basket().addItem(item) : s.basket().addItem(item, itemId));
         });
-    app.patch(
+    routes.patch(
         "/v1/sessions/{id}/basket/items/{itemId}",
         ctx -> {
           String itemId = ctx.pathParam("itemId");
@@ -302,7 +303,7 @@ public final class SessionHost implements AutoCloseable {
                 return s.basket().mutate(patch);
               });
         });
-    app.delete(
+    routes.delete(
         "/v1/sessions/{id}/basket/items/{itemId}",
         ctx -> {
           String itemId = ctx.pathParam("itemId");
@@ -313,7 +314,7 @@ public final class SessionHost implements AutoCloseable {
                 return s.basket().removeItem(itemId);
               });
         });
-    app.post(
+    routes.post(
         "/v1/sessions/{id}/basket/mutations",
         ctx -> {
           ArrayNode mutations = Json.array(Json.body(ctx.body()), "mutations");
@@ -326,7 +327,7 @@ public final class SessionHost implements AutoCloseable {
           }
           basket(ctx, s -> s.basket().mutate(m -> steps.forEach(step -> step.accept(m))));
         });
-    app.post(
+    routes.post(
         "/v1/sessions/{id}/basket/tax-total",
         ctx -> {
           ObjectNode body = Json.body(ctx.body());
@@ -336,10 +337,10 @@ public final class SessionHost implements AutoCloseable {
           var amount = Json.decimal(body, "amount");
           basket(ctx, s -> s.basket().setTaxTotal(amount));
         });
-    app.post("/v1/sessions/{id}/basket/clear", ctx -> basket(ctx, s -> s.basket().clear()));
+    routes.post("/v1/sessions/{id}/basket/clear", ctx -> basket(ctx, s -> s.basket().clear()));
 
-    app.get("/v1/sessions/{id}/member", ctx -> member(ctx, session(ctx).session().member()));
-    app.put(
+    routes.get("/v1/sessions/{id}/member", ctx -> member(ctx, session(ctx).session().member()));
+    routes.put(
         "/v1/sessions/{id}/member",
         ctx -> {
           Member member = Parsers.member(Json.body(ctx.body()));
@@ -350,17 +351,17 @@ public final class SessionHost implements AutoCloseable {
           hosted.session().member(member);
           respond(ctx, 200, Views.member(hosted.session().member()));
         });
-    app.delete(
+    routes.delete(
         "/v1/sessions/{id}/member",
         ctx -> {
           session(ctx).session().member(null);
           respond(ctx, 204, null);
         });
 
-    app.get(
+    routes.get(
         "/v1/sessions/{id}/context",
         ctx -> respond(ctx, 200, Views.context(session(ctx).session().context().snapshot())));
-    app.patch(
+    routes.patch(
         "/v1/sessions/{id}/context",
         ctx -> {
           ObjectNode body = Json.body(ctx.body());
@@ -379,23 +380,23 @@ public final class SessionHost implements AutoCloseable {
           respond(ctx, 200, Views.context(context.snapshot()));
         });
 
-    app.post(
+    routes.post(
         "/v1/sessions/{id}/operations",
         ctx -> respond(ctx, 202, runner.submit(session(ctx), Json.body(ctx.body())).toJson()));
-    app.get(
+    routes.get(
         "/v1/sessions/{id}/operations",
         ctx -> respond(ctx, 200, operations(session(ctx), ctx.queryParam("status"))));
-    app.get(
+    routes.get(
         "/v1/sessions/{id}/operations/{operationId}",
         ctx -> respond(ctx, 200, operation(ctx).toJson()));
-    app.post(
+    routes.post(
         "/v1/sessions/{id}/operations/{operationId}/reply",
         ctx -> {
           HostedOperation operation = operation(ctx);
           runner.reply(operation, Json.body(ctx.body()));
           respond(ctx, 200, operation.toJson());
         });
-    app.post(
+    routes.post(
         "/v1/sessions/{id}/operations/{operationId}/abort",
         ctx -> {
           HostedSession hosted = session(ctx);
@@ -404,8 +405,8 @@ public final class SessionHost implements AutoCloseable {
           respond(ctx, issued ? 202 : 200, operation.toJson());
         });
 
-    app.get("/v1/sessions/{id}/widgets", ctx -> respond(ctx, 200, session(ctx).widgets().view()));
-    app.post(
+    routes.get("/v1/sessions/{id}/widgets", ctx -> respond(ctx, 200, session(ctx).widgets().view()));
+    routes.post(
         "/v1/sessions/{id}/widgets/{type}/pause",
         ctx -> {
           HostedSession hosted = session(ctx);
@@ -413,7 +414,7 @@ public final class SessionHost implements AutoCloseable {
           hosted.widgets().widget(type).pause();
           respond(ctx, 200, hosted.widgets().state(type));
         });
-    app.post(
+    routes.post(
         "/v1/sessions/{id}/widgets/{type}/resume",
         ctx -> {
           HostedSession hosted = session(ctx);
@@ -421,15 +422,15 @@ public final class SessionHost implements AutoCloseable {
           hosted.widgets().widget(type).resume();
           respond(ctx, 200, hosted.widgets().state(type));
         });
-    app.post(
+    routes.post(
         "/v1/sessions/{id}/widgets/retail-media/actions",
         ctx -> {
           session(ctx).widgets().action(Json.body(ctx.body()));
           respond(ctx, 202, null);
         });
 
-    app.sse("/v1/sessions/{id}/events", this::sse);
-    app.ws(
+    routes.sse("/v1/sessions/{id}/events", this::sse);
+    routes.ws(
         "/v1/sessions/{id}/events",
         ws -> {
           Map<String, AutoCloseable> subscriptions = new ConcurrentHashMap<>();
@@ -726,7 +727,7 @@ public final class SessionHost implements AutoCloseable {
 
       @Override
       public String path() {
-        return ctx.matchedPath();
+        return ctx.session.getUpgradeRequest().getRequestURI().getPath();
       }
 
       @Override
@@ -752,14 +753,9 @@ public final class SessionHost implements AutoCloseable {
     if (!ctx.path().startsWith("/v1/sessions")) {
       return;
     }
-    switch (ctx.method()) {
-      case POST:
-      case PUT:
-      case PATCH:
-      case DELETE:
-        break;
-      default:
-        return;
+    String method = ctx.method().name();
+    if (!List.of("POST", "PUT", "PATCH", "DELETE").contains(method)) {
+      return;
     }
     String key = ctx.header(IDEMPOTENCY_HEADER);
     if (key == null || key.isBlank()) {

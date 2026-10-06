@@ -4,7 +4,7 @@ plugins {
 }
 
 // The convention plugin pins the SDK to Java 11 so it still runs on the oldest
-// registers. The host embeds Javalin 6 on Jetty 12, which needs 17, and only
+// registers. The host embeds Javalin 7 on Jetty 12, which needs 17, and only
 // ever runs where a modern browser runs, so it raises the level for itself.
 java {
     sourceCompatibility = JavaVersion.VERSION_17
