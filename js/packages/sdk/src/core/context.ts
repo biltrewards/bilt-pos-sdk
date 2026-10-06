@@ -2,6 +2,7 @@ import type { CheckoutPhase, SessionContext, SessionContextPatch } from '@bilt/p
 import type { Engine } from '../internal';
 import type { SessionContextApi } from '../session';
 import { newIdempotencyKey } from './ids';
+import { readStable } from './reconcile';
 
 /**
  * The context facade: reads are from the mirror, writes are `PATCH .../context`. The protocol
@@ -31,11 +32,8 @@ export class SessionContextImpl implements SessionContextApi {
       this.state = response;
       return;
     }
-    try {
-      this.state = await this.engine.context(this.sessionId);
-    } catch {
-      // The event already applied is the best the mirror has; the write itself succeeded.
-    }
+    const fresh = await readStable(() => this.engine.context(this.sessionId), this.version);
+    if (fresh) this.state = fresh.value;
   }
 
   phase(): CheckoutPhase {

@@ -3,6 +3,7 @@ import { SessionError } from '../errors';
 import type { Engine } from '../internal';
 import type { SessionMember } from '../session';
 import { newIdempotencyKey } from './ids';
+import { readStable } from './reconcile';
 
 /**
  * The member facade: `current` follows `member.changed`; writes go to the engine and install
@@ -62,10 +63,12 @@ export class SessionMemberImpl implements SessionMember {
       this.current = response;
       return;
     }
-    try {
-      this.current = await this.engine.member(this.sessionId, { kind: 'get' });
-    } catch {
-      // The event already applied is the best the mirror has; the write itself succeeded.
-    }
+    // The event already applied is the best the mirror has if the re-read fails or never settles;
+    // the write itself succeeded either way.
+    const fresh = await readStable(
+      () => this.engine.member(this.sessionId, { kind: 'get' }),
+      this.version,
+    );
+    if (fresh) this.current = fresh.value;
   }
 }

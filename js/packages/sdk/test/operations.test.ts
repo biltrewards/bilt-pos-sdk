@@ -272,6 +272,47 @@ describe('starting an operation', () => {
     await expect(read).resolves.toMatchObject({ memberId: 'mbr_new' });
   });
 
+  it('re-reads again when another member.changed lands during the reconciling read', async () => {
+    const { engine, session } = await lane();
+    const member = (memberId: string) => ({
+      resolved: true,
+      memberId,
+      rewards: [],
+      pointBalance: 0,
+    });
+    let releaseWrite!: () => void;
+    const writeGate = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let reads = 0;
+    engine.member = (async (_id: string, command: { kind: string }) => {
+      if (command.kind !== 'get') {
+        await writeGate;
+        return member('mbr_written');
+      }
+      if (++reads === 1) {
+        await readGate; // the reconciling read is overtaken by a newer event
+        return member('mbr_mid');
+      }
+      return member('mbr_newest');
+    }) as typeof engine.member;
+    const write = session.member.set({ id: 'mbr_written' });
+    await new Promise((r) => setTimeout(r, 10));
+    engine.pushEvent(session.id, 'member.changed', { member: member('mbr_mid') } as never);
+    await vi.waitFor(() => expect(session.member.current?.memberId).toBe('mbr_mid'));
+    releaseWrite();
+    await vi.waitFor(() => expect(reads).toBe(1));
+    engine.pushEvent(session.id, 'member.changed', { member: member('mbr_newest') } as never);
+    await vi.waitFor(() => expect(session.member.current?.memberId).toBe('mbr_newest'));
+    releaseRead();
+    await write;
+    expect(session.member.current?.memberId).toBe('mbr_newest');
+  });
+
   it('reconciles the context mirror when context.changed lands while a write is in flight', async () => {
     const { engine, session } = await lane();
     let release!: () => void;
