@@ -6,6 +6,8 @@
       url: /shopper-session-integration.html
     - name: TerminalShopperSession
       url: /checkout-session-integration.html
+    - name: Terminal Bridge
+      url: /terminal-bridge.html
 
 - title: Session
   items:
