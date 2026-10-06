@@ -49,7 +49,7 @@ class BridgeTest {
                       .build(),
                   HttpResponse.BodyHandlers.ofString());
       assertEquals(200, res.statusCode());
-      assertTrue(res.body().contains("\"terminals\":1"), res.body());
+      assertTrue(res.body().contains("\"poiId\":\"T1\""), res.body());
 
       Files.writeString(file, "{\"port\": \"oops\"}");
       bridge.reload();

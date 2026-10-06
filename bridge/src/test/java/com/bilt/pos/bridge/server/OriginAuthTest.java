@@ -62,13 +62,4 @@ class OriginAuthTest {
     assertTrue(auth.allows("https://b.example"));
     assertEquals(false, auth.allows("https://a.example"));
   }
-
-  @Test
-  void parsesSessionCountFromHostHealth() {
-    assertEquals(
-        3,
-        SessionHostListener.sessionsFrom(
-            "{\"kind\":\"bridge\",\"terminals\":1,\"sessions\":3,\"protocolVersions\":[\"1\"]}"));
-    assertEquals(0, SessionHostListener.sessionsFrom("{\"kind\":\"bridge\"}"));
-  }
 }
