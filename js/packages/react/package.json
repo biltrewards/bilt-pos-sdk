@@ -1,0 +1,56 @@
+{
+  "name": "@bilt/pos-react",
+  "version": "0.0.0",
+  "description": "React bindings for the Bilt POS SDK: provider, session hooks, the retail-media surface and the Terminal Bridge install prompt.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/biltrewards/bilt-pos-sdk.git",
+    "directory": "js/packages/react"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./bridge": {
+      "types": "./dist/bridge.d.ts",
+      "import": "./dist/bridge.js",
+      "require": "./dist/bridge.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --typecheck",
+    "api:check": "api-extractor run -c api-extractor.json && api-extractor run -c api-extractor.bridge.json",
+    "api:update": "api-extractor run --local -c api-extractor.json && api-extractor run --local -c api-extractor.bridge.json"
+  },
+  "peerDependencies": {
+    "@bilt/pos-protocol": "workspace:*",
+    "@bilt/pos-sdk": "workspace:*",
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@bilt/pos-protocol": "workspace:*",
+    "@bilt/pos-sdk": "workspace:*",
+    "@microsoft/api-extractor": "^7.59.3",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^20.19.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "jsdom": "^26.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}
