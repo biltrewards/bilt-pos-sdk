@@ -33,9 +33,7 @@ describe('the browser POS page', () => {
       expect(screen.getByRole('alert').getAttribute('data-status')).toBe('missing'),
     );
     expect(screen.getByText(/Install the Bilt Terminal Bridge/)).toBeTruthy();
-    expect(screen.getByText(/Download for/).getAttribute('href')).toContain(
-      'terminal-bridge.html',
-    );
+    expect(screen.getByText(/Download for/).getAttribute('href')).toContain('terminal-bridge.html');
   });
 
   it('starts a terminal session and rings an item once the bridge is ready', async () => {
