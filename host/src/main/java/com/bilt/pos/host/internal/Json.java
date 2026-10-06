@@ -129,18 +129,38 @@ public final class Json {
     return decimalOf(value, field);
   }
 
+  /**
+   * Most integer digits and fractional digits a request amount may carry. A decimal's text is tiny
+   * whatever its exponent ({@code 1E+99999999}), but the SDK later rescales it to cents, which
+   * would expand it digit by digit; no real amount or rate comes near these bounds.
+   */
+  private static final int MAX_INTEGER_DIGITS = 15;
+
+  private static final int MAX_FRACTION_DIGITS = 12;
+
   public static BigDecimal decimalOf(JsonNode value, String field) {
+    BigDecimal amount;
     if (value.isNumber()) {
-      return value.decimalValue();
-    }
-    if (value.isTextual()) {
       try {
-        return new BigDecimal(value.asText().trim());
+        amount = value.decimalValue();
+      } catch (NumberFormatException e) {
+        throw HostError.badRequest(field + " is out of range for a decimal amount");
+      }
+    } else if (value.isTextual()) {
+      try {
+        amount = new BigDecimal(value.asText().trim());
       } catch (NumberFormatException e) {
         throw HostError.badRequest(field + " is not a decimal amount: " + value.asText());
       }
+    } else {
+      throw HostError.badRequest(field + " must be a decimal amount");
     }
-    throw HostError.badRequest(field + " must be a decimal amount");
+    if (amount.scale() > MAX_FRACTION_DIGITS
+        || amount.precision() - amount.scale() > MAX_INTEGER_DIGITS
+        || amount.scale() < -MAX_INTEGER_DIGITS) {
+      throw HostError.badRequest(field + " is out of range for a decimal amount");
+    }
+    return amount;
   }
 
   public static BigDecimal requireDecimal(JsonNode node, String field) {
