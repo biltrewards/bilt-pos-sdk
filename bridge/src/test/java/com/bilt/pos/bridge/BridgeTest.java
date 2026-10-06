@@ -2,6 +2,7 @@ package com.bilt.pos.bridge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.bilt.pos.bridge.config.BridgeConfig;
 import com.bilt.pos.bridge.config.FileBridgeConfigSource;
@@ -11,6 +12,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -76,5 +78,27 @@ class BridgeTest {
     assertEquals(BridgeConfig.DEFAULT_PORT, config.port());
     assertEquals(1, config.terminals().size());
     assertTrue(Files.readString(file).contains("\"_comment\""));
+  }
+
+  @Test
+  void starterFileIsOwnerOnly(@TempDir Path dir) throws Exception {
+    assumeTrue(dir.getFileSystem().supportedFileAttributeViews().contains("posix"));
+    Path file = dir.resolve("config.json");
+
+    new FileBridgeConfigSource(file).load();
+
+    assertEquals(PosixFilePermissions.fromString("rw-------"), Files.getPosixFilePermissions(file));
+  }
+
+  @Test
+  void tightensAnExistingWorldReadableFile(@TempDir Path dir) throws Exception {
+    assumeTrue(dir.getFileSystem().supportedFileAttributeViews().contains("posix"));
+    Path file = dir.resolve("config.json");
+    Files.writeString(file, "{\"terminals\": []}");
+    Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-r--r--"));
+
+    new FileBridgeConfigSource(file).load();
+
+    assertEquals(PosixFilePermissions.fromString("rw-------"), Files.getPosixFilePermissions(file));
   }
 }

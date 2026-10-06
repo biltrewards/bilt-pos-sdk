@@ -5,9 +5,14 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -42,6 +47,8 @@ public final class FileBridgeConfigSource implements BridgeConfigSource {
   public BridgeConfig load() throws BridgeConfigException {
     if (!Files.exists(file)) {
       writeExample();
+    } else {
+      restrictToOwner();
     }
     return BridgeConfig.read(file);
   }
@@ -91,10 +98,43 @@ public final class FileBridgeConfigSource implements BridgeConfigSource {
   private void writeExample() throws BridgeConfigException {
     try {
       Files.createDirectories(file.getParent());
-      Files.writeString(file, exampleJson(), StandardCharsets.UTF_8);
+      // The file ends up holding terminal passphrases, so it is owner-only from the first byte
+      // rather than chmod-ed after a window under the process umask.
+      if (posix()) {
+        FileAttribute<Set<PosixFilePermission>> ownerOnly =
+            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------"));
+        Files.createFile(file, ownerOnly);
+      }
+      Files.writeString(
+          file,
+          exampleJson(),
+          StandardCharsets.UTF_8,
+          StandardOpenOption.CREATE,
+          StandardOpenOption.WRITE);
       LOG.info("Wrote starter config to " + file);
     } catch (IOException e) {
       throw new BridgeConfigException("cannot create " + file + ": " + e.getMessage(), e);
+    }
+  }
+
+  private boolean posix() {
+    return file.getFileSystem().supportedFileAttributeViews().contains("posix");
+  }
+
+  /** Tightens a file that earlier versions, or an editor's rename-and-replace, left readable. */
+  private void restrictToOwner() {
+    if (!posix()) {
+      return;
+    }
+    try {
+      Set<PosixFilePermission> current = Files.getPosixFilePermissions(file);
+      Set<PosixFilePermission> ownerOnly = PosixFilePermissions.fromString("rw-------");
+      if (!current.equals(ownerOnly)) {
+        Files.setPosixFilePermissions(file, ownerOnly);
+        LOG.info("Restricted " + file + " to the owner: it can hold terminal passphrases");
+      }
+    } catch (IOException | RuntimeException e) {
+      LOG.log(Level.WARNING, "Could not restrict permissions on " + file, e);
     }
   }
 
