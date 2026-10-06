@@ -51,6 +51,7 @@ SessionStartedEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: Always the first event. When the session started with a member attached, `member.changed` follows with it.
       properties:
         type:
@@ -69,6 +70,7 @@ BasketChangedEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: One per basket updater call that changed something; the payload is the `BasketChange` diff.
       properties:
         type:
@@ -81,6 +83,7 @@ MemberChangedEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: The member was attached, found by a prompt or lookup, resolved, or cleared (`member` is `null`).
       properties:
         type:
@@ -99,6 +102,7 @@ ContextChangedEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: The phase or attributes changed, by the client or by the session itself around settlement; the payload is the whole context.
       properties:
         type:
@@ -111,6 +115,7 @@ OperationStepEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: The host is waiting on the register; see `OperationStep` for the step kinds, replies, deadlines and defaults.
       properties:
         type:
@@ -123,6 +128,7 @@ OperationMovementEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: |
         A money or loyalty movement committed during a settlement (`onMovement` and the
         per-step callbacks). Provisional: an abort or a same-run recovery may reverse
@@ -145,6 +151,7 @@ OperationCompletedEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: The operation reached `succeeded`, `failed` or `aborted`; the payload is the final resource.
       properties:
         type:
@@ -157,6 +164,7 @@ WidgetRenderingEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: A widget decided to show a rendering on a placement; it replaces whatever the placement shows.
       properties:
         type:
@@ -178,6 +186,7 @@ WidgetClearEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: The placement must be cleared; idempotent. The client stops reporting interactions for the rendering it was showing.
       properties:
         type:
@@ -197,6 +206,7 @@ WidgetOfferEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: The one widget event the register must act on; a validated offer to apply to its own pricing.
       properties:
         type:
@@ -216,6 +226,7 @@ WidgetInteractionEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: Informational; every shopper-visible ad event.
       properties:
         type:
@@ -235,6 +246,7 @@ BackgroundErrorEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: |
         A failure of work the session performed on its own behalf, with no operation to carry
         it: the automatic display push after a basket change, a pending member's lookup, a
@@ -251,6 +263,7 @@ SessionEndedEvent:
   allOf:
     - $ref: '#/EventBase'
     - type: object
+      required: [type, payload]
       description: Always the last event; the host closes the stream after it.
       properties:
         type:

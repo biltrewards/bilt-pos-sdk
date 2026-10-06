@@ -563,6 +563,7 @@ IdentifyMemberOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -574,6 +575,7 @@ AcquireCardOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -585,6 +587,7 @@ StringOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -596,6 +599,7 @@ DecimalOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -607,6 +611,7 @@ BooleanOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -618,6 +623,7 @@ MenuEntryOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -629,6 +635,7 @@ SignatureOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -640,6 +647,7 @@ PinOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -651,6 +659,7 @@ StoredValueBalanceOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -662,6 +671,7 @@ StoredValueOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -673,6 +683,7 @@ SettleOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -687,6 +698,7 @@ RefundOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -698,6 +710,7 @@ VoidTransactionOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -709,6 +722,7 @@ TransactionStatusOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       properties:
         type:
           type: string
@@ -720,6 +734,7 @@ VoidResultOperation:
   allOf:
     - $ref: '#/OperationBase'
     - type: object
+      required: [type]
       description: Operations with no result value; `end` and `forceEnd` are the session lifecycle signals.
       properties:
         type:
