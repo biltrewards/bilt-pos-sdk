@@ -10,6 +10,7 @@ import type {
   SessionError,
   SettleOptions,
   ShopperSession,
+  SettlementRecoveryAction,
   StepInfo,
   TerminalShopperSession,
 } from '../src/index';
@@ -74,8 +75,10 @@ describe('the public surface', () => {
       .parameter(1)
       .toEqualTypeOf<StepInfo>();
     expectTypeOf<NonNullable<SettleOptions['onError']>>().returns.resolves.toMatchTypeOf<
-      { action: string } | 'RETRY' | 'SKIP' | 'EXTERNAL' | 'ABORT' | 'ABANDON'
+      { action: string } | 'RETRY' | 'SKIP' | 'ABORT' | 'ABANDON'
     >();
+    // External recovery must carry the payment that records the tender, so it has no short form.
+    expectTypeOf<SettlementRecoveryAction>().toEqualTypeOf<'RETRY' | 'SKIP' | 'ABORT' | 'ABANDON'>();
     expectTypeOf<SettleOptions['settlementType']>().toEqualTypeOf<
       'REFUND_THEN_CHARGE' | 'NET' | undefined
     >();

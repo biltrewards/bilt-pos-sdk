@@ -55,8 +55,11 @@ export interface StepInfo {
   readonly signal: AbortSignal;
 }
 
-/** The short form of a recovery decision; `"RETRY"` is `{ action: "RETRY" }`. */
-export type SettlementRecoveryAction = SettlementRecovery['action'];
+/**
+ * The short form of a recovery decision; `"RETRY"` is `{ action: "RETRY" }`. `EXTERNAL` has no
+ * short form because it must carry the `externalPayment` that records the tender.
+ */
+export type SettlementRecoveryAction = Exclude<SettlementRecovery['action'], 'EXTERNAL'>;
 
 /**
  * The register's handlers for a settlement — the `SettlementFlow` handlers in Java. Each is

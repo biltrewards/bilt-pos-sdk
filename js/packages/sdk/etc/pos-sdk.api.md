@@ -553,7 +553,7 @@ export { SettlementOptions }
 export { SettlementRecovery }
 
 // @public
-export type SettlementRecoveryAction = SettlementRecovery['action'];
+export type SettlementRecoveryAction = Exclude<SettlementRecovery['action'], 'EXTERNAL'>;
 
 export { SettlementResult }
 

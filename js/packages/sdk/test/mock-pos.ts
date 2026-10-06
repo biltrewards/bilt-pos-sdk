@@ -200,17 +200,13 @@ class MockBasket implements SessionBasket {
         return builder;
       },
       removeItem: (itemId) => {
-        items.splice(
-          items.findIndex((l) => l.itemId === itemId),
-          1,
-        );
+        const index = items.findIndex((l) => l.itemId === itemId);
+        if (index >= 0) items.splice(index, 1);
         return builder;
       },
       removeItemBySku: (sku) => {
-        items.splice(
-          items.findIndex((l) => l.sku === sku),
-          1,
-        );
+        const index = items.findIndex((l) => l.sku === sku);
+        if (index >= 0) items.splice(index, 1);
         return builder;
       },
       updateItemQuantity: () => builder,
