@@ -85,6 +85,8 @@ interface Probe {
   attempts: number;
 }
 
+const MANIFEST_RETRY_MS = 5000;
+
 /**
  * Detects the Terminal Bridge on loopback and keeps watching for it: one `detectBridge()` probe
  * on mount (port 48333 and its fallback range, 400 ms each), then one every `pollIntervalMs`
@@ -121,13 +123,18 @@ export function useBridge(options: UseBridgeOptions = {}): BridgeState {
 
   const [probe, setProbe] = useState<Probe>({ detection: null, attempts: 0 });
   const [manifest, setManifest] = useState<BridgeManifest | null>(null);
+  const [manifestFailures, setManifestFailures] = useState(0);
   const [requested, setRequested] = useState(autoDetect ? 1 : 0);
   const latestProbe = useRef(0);
   const platform = useMemo(() => detectPlatform(), []);
 
   const run = useCallback(async () => {
     const token = ++latestProbe.current;
-    const detection = await detect(probeOptions);
+    // A custom detector that throws counts as a probe that found nothing, so polling goes on.
+    const detection = await detect(probeOptions).catch((): BridgeDetection => ({
+      status: 'missing',
+      probed: [],
+    }));
     if (token !== latestProbe.current) return;
     setProbe((previous) => ({ detection, attempts: previous.attempts + 1 }));
   }, [detect, probeOptions]);
@@ -155,14 +162,22 @@ export function useBridge(options: UseBridgeOptions = {}): BridgeState {
     const fetchOptions = fetchImpl
       ? { fetch: fetchImpl, signal: controller.signal }
       : { signal: controller.signal };
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     fetchBridgeManifest(manifestUrl, fetchOptions).then(
       (loaded) => {
         if (!controller.signal.aborted) setManifest(loaded);
       },
-      () => undefined,
+      () => {
+        // A transient failure should not leave the prompt without an installer link for good.
+        if (controller.signal.aborted) return;
+        retryTimer = setTimeout(() => setManifestFailures((n) => n + 1), MANIFEST_RETRY_MS);
+      },
     );
-    return () => controller.abort();
-  }, [manifestUrl, manifest, status, fetchImpl]);
+    return () => {
+      controller.abort();
+      if (retryTimer !== null) clearTimeout(retryTimer);
+    };
+  }, [manifestUrl, manifest, status, fetchImpl, manifestFailures]);
 
   useEffect(
     () => () => {

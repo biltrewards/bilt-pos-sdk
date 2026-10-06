@@ -37,8 +37,11 @@ function bindActions(session: ShopperSession | null): BasketActions {
   const bound: Partial<Record<keyof BasketActions, unknown>> = {};
   for (const name of ACTIONS) {
     bound[name] = session
-      ? (...args: unknown[]) =>
-          (session.basket[name] as (...a: unknown[]) => Promise<unknown>)(...args)
+      ? (...args: unknown[]) => {
+          // Called with the basket as receiver: a class-based SessionBasket reads `this`.
+          const { basket } = session;
+          return (basket[name] as (...a: unknown[]) => Promise<unknown>).apply(basket, args);
+        }
       : () => Promise.reject(new Error(`basket.${name}() called without an open session`));
   }
   return bound as BasketActions;

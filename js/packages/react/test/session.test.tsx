@@ -1,5 +1,5 @@
 import { SessionError } from '@bilt/pos-sdk';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, renderHook, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -10,16 +10,17 @@ import {
   useShopperSession,
   useTerminalSession,
 } from '../src/index';
-import { LANE, MockBiltPos, fx, renderWithPos } from './harness';
+import { LANE, MockBiltPos, fx, renderWithPos, startLane } from './harness';
 
 function Lane({ enabled = true }: { enabled?: boolean }) {
-  const { session, status, error, end } = useTerminalSession(LANE, { enabled });
+  const { session, status, error, end, restart } = useTerminalSession(LANE, { enabled });
   return (
     <div>
       <span data-testid="status">{status}</span>
       <span data-testid="id">{session?.id ?? ''}</span>
       <span data-testid="error">{error?.message ?? ''}</span>
       <button onClick={() => void end().catch(() => undefined)}>end</button>
+      <button onClick={restart}>restart</button>
     </div>
   );
 }
@@ -57,6 +58,39 @@ describe('useTerminalSession', () => {
     act(() => screen.getByText('end').click());
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ended'));
     expect(pos.sessions[0]!.state).toBe('ended');
+    expect(screen.getByTestId('id').textContent).toBe('');
+  });
+
+  it('drops the session when the host ends it', async () => {
+    const pos = new MockBiltPos();
+    renderWithPos(pos, <Lane />);
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('open'));
+    await act(() => pos.sessions[0]!.end());
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('ended'));
+    expect(screen.getByTestId('id').textContent).toBe('');
+  });
+
+  it('starts the replacement only after the previous session has ended', async () => {
+    const pos = new MockBiltPos();
+    renderWithPos(pos, <Lane />);
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('open'));
+    const first = pos.sessions[0]!;
+    const dispose = first[Symbol.asyncDispose].bind(first);
+    let release: () => void = () => undefined;
+    first[Symbol.asyncDispose] = () =>
+      new Promise<void>((resolve) => {
+        release = () => void dispose().then(resolve);
+      });
+
+    act(() => screen.getByText('restart').click());
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('starting'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(pos.sessions).toHaveLength(1);
+
+    release();
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('open'));
+    expect(first.state).toBe('ended');
+    expect(pos.sessions).toHaveLength(2);
   });
 
   it('surfaces a refused start as an error', async () => {
@@ -134,6 +168,19 @@ function Checkout() {
 }
 
 describe('useBasket, useMember and useSessionContext', () => {
+  it('calls the basket updaters with the basket as receiver', async () => {
+    const session = await startLane();
+    const receivers: unknown[] = [];
+    const original = session.basket.clear;
+    session.basket.clear = function (this: unknown, ...args: Parameters<typeof original>) {
+      receivers.push(this);
+      return original.apply(session.basket, args);
+    };
+    const { result } = renderHook(() => useBasket(session));
+    await act(() => result.current.clear());
+    expect(receivers).toEqual([session.basket]);
+  });
+
   it('follow basket.changed, member.changed and context.changed', async () => {
     const pos = new MockBiltPos();
     renderWithPos(pos, <Checkout />);

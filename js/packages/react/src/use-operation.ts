@@ -29,6 +29,8 @@ interface Settled<T> {
   outcome: { ok: true; value: T } | { ok: false; error: Error };
 }
 
+const STATUS_POLL_MS = 100;
+
 function isOperation<T>(value: PromiseLike<T>): value is Operation<T> {
   return typeof (value as Partial<Operation<T>>).abort === 'function' && 'status' in value;
 }
@@ -49,13 +51,14 @@ function toError(value: unknown): Error {
  * ```
  *
  * For an SDK `Operation`, `status` reflects the handle's own `status` (so `awaitingReply` shows
- * while the host waits on the register) as read at render time, and `abort()` forwards to it.
+ * while the host waits on the register) re-read every 100 ms while pending, and `abort()` forwards to it.
  */
 export function useOperation<T>(
   operation: PromiseLike<T> | null | undefined,
 ): UseOperationResult<T> {
   const source = operation ?? null;
   const [settled, setSettled] = useState<Settled<T> | null>(null);
+  const [observed, setObserved] = useState<OperationStatus | null>(null);
 
   useEffect(() => {
     if (!source) return;
@@ -71,6 +74,15 @@ export function useOperation<T>(
     return () => {
       cancelled = true;
     };
+  }, [source]);
+
+  // The handle's `status` is a plain getter with no change event, so while the operation is
+  // pending watch it and re-render on a transition (`running` to `awaitingReply`).
+  useEffect(() => {
+    if (!source || !isOperation(source)) return;
+    setObserved(source.status);
+    const timer = setInterval(() => setObserved(source.status), STATUS_POLL_MS);
+    return () => clearInterval(timer);
   }, [source]);
 
   const abort = useCallback(async () => {
@@ -96,5 +108,6 @@ export function useOperation<T>(
       pending: false,
       abort,
     };
-  }, [source, settled, abort]);
+    // `observed` is not read here: it only makes the render that re-reads `source.status` happen.
+  }, [source, settled, abort, observed]);
 }

@@ -110,10 +110,13 @@ export interface UseSettlementResult {
   /** The `Operation` handle of the running or last settlement. */
   readonly operation: Operation<SettlementResult> | null;
 
-  /** Aborts the running settlement; a pending step is answered with its default so the abort can proceed. */
+  /** Aborts the running settlement; a pending step is released with its default only after the abort has been sent. */
   abort(): Promise<void>;
 
-  /** Back to `idle`, dropping the last result or error; the next shopper. */
+  /**
+   * Back to `idle`, dropping the last result or error; the next shopper. Throws while a
+   * settlement is running, so a live operation is never detached from `abort()`; `abort()` it first.
+   */
   reset(): void;
 }
 
@@ -178,12 +181,27 @@ export function useSettlement(
   interactiveRef.current = interactive;
   const [state, setState] = useState<State>(IDLE);
   const waiting = useRef<Waiting<unknown> | null>(null);
+  const live = useRef<{ operation?: Operation<SettlementResult> } | null>(null);
   const current = session ?? null;
 
+  // A settlement belongs to the session it started on: when that session changes or the hook
+  // unmounts, abort the operation and drop its state, finished results included, so the new
+  // session starts clean and the last shopper's receipt never shows on the next one. The open
+  // step is answered only once the abort has been sent: its default (the suggested total) would
+  // otherwise let the host carry on to the charge.
   useEffect(() => {
     return () => {
-      waiting.current?.resolve(waiting.current.fallback());
+      const pending = waiting.current;
       waiting.current = null;
+      const run = live.current;
+      live.current = null;
+      setState(IDLE);
+      const answer = () => pending?.resolve(pending.fallback());
+      if (run?.operation) {
+        run.operation.abort().then(answer, answer);
+      } else {
+        answer();
+      }
     };
   }, [current]);
 
@@ -224,14 +242,24 @@ export function useSettlement(
   const settle = useCallback(
     (settleOptions: SettleOptions = {}): Operation<SettlementResult> => {
       if (!current) throw new Error('settle() called without an open terminal session');
-      if (waiting.current || state.status === 'running' || state.status === 'awaitingReply') {
+      // `live` is a ref so two calls in one turn, before any render, cannot both pass.
+      if (
+        live.current ||
+        waiting.current ||
+        state.status === 'running' ||
+        state.status === 'awaitingReply'
+      ) {
         throw new Error('a settlement is already running on this hook');
       }
       const wants = (kind: InteractiveStepKind) => interactiveRef.current.includes(kind);
       const wrapped: SettleOptions = { ...settleOptions };
 
+      const run: { operation?: Operation<SettlementResult> } = {};
+      live.current = run;
+
       wrapped.onMovement = (movement) => {
-        setState((previous) => ({ ...previous, movements: [...previous.movements, movement] }));
+        if (live.current === run)
+          setState((previous) => ({ ...previous, movements: [...previous.movements, movement] }));
         settleOptions.onMovement?.(movement);
       };
 
@@ -306,11 +334,21 @@ export function useSettlement(
           );
       }
 
-      const operation = current.settle(wrapped);
+      let operation: Operation<SettlementResult>;
+      try {
+        operation = current.settle(wrapped);
+      } catch (error) {
+        if (live.current === run) live.current = null;
+        throw error;
+      }
+      run.operation = operation;
       setState({ ...IDLE, status: 'running', operation });
       operation.then(
         (result) => {
-          waiting.current = null;
+          if (live.current === run) {
+            live.current = null;
+            waiting.current = null;
+          }
           setState((previous) =>
             previous.operation === operation
               ? { ...previous, status: 'succeeded', pendingStep: null, result }
@@ -318,7 +356,10 @@ export function useSettlement(
           );
         },
         (cause: unknown) => {
-          waiting.current = null;
+          if (live.current === run) {
+            live.current = null;
+            waiting.current = null;
+          }
           const error = toError(cause);
           const aborted = error instanceof SessionError && error.code === 'ABORTED';
           setState((previous) =>
@@ -344,14 +385,21 @@ export function useSettlement(
   const abort = useCallback(async () => {
     const operation = state.operation;
     if (!operation) return;
-    settleWaiting();
-    await operation.abort();
+    // Abort first: the step's default would otherwise let the host go on to charge before the
+    // abort lands. A refused abort still frees the held step.
+    try {
+      await operation.abort();
+    } finally {
+      settleWaiting();
+    }
   }, [state.operation, settleWaiting]);
 
   const reset = useCallback(() => {
-    if (waiting.current) throw new Error('reset() called while a step is pending');
+    if (waiting.current || state.status === 'running' || state.status === 'awaitingReply') {
+      throw new Error('reset() called while a settlement is running; abort() it first');
+    }
     setState(IDLE);
-  }, []);
+  }, [state.status]);
 
   return useMemo(
     () => ({ settle, reply, abort, reset, ...state }),

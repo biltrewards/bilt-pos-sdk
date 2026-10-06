@@ -178,6 +178,35 @@ describe('InstallBridgePrompt', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
+  it('retries a failed manifest fetch while the bridge stays missing', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new Error('download service down'))
+      .mockResolvedValue(
+        json({
+          version: '1.2.0',
+          downloads: { windows: { url: 'https://dl.example/bridge.msi' } },
+        }),
+      );
+    render(
+      <InstallBridgePrompt
+        detect={scripted('missing')}
+        pollIntervalMs={60_000}
+        manifestUrl="https://dl.example/manifest.json"
+        fetch={fetchMock}
+      />,
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(
+      () =>
+        expect(screen.getByText('Download for Windows').getAttribute('href')).toBe(
+          'https://dl.example/bridge.msi',
+        ),
+      { timeout: 8000 },
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  }, 10_000);
+
   it('links the installer from the manifest for this platform and falls back to downloadUrl', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       json({
@@ -298,6 +327,23 @@ describe('the Register() sketch', () => {
     await waitFor(() => expect(screen.getByText('missing')).toBeTruthy());
     await waitFor(() => expect(screen.getByText('lane')).toBeTruthy());
     expect(detect.calls).toBe(2);
+  });
+
+  it('keeps polling when a custom detector rejects', async () => {
+    const ready = scripted('ready');
+    let calls = 0;
+    const detect: BridgeDetect = (options) => {
+      calls += 1;
+      return calls === 1 ? Promise.reject(new Error('detector blew up')) : ready(options);
+    };
+    function Polling() {
+      const bridge = useBridge({ detect, pollIntervalMs: 10 });
+      return <span>{bridge.status}</span>;
+    }
+    render(<Polling />);
+    await waitFor(() => expect(screen.getByText('missing')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('ready')).toBeTruthy());
+    expect(calls).toBe(2);
   });
 
   it('BridgeGate renders the prompt, then its children', async () => {

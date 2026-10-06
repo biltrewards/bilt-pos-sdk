@@ -58,6 +58,9 @@ function useManagedSession<S extends ShopperSession>(
   const startRef = useRef(start);
   startRef.current = start;
   const [generation, setGeneration] = useState(0);
+  // The previous session's start and disposal; the next start waits on it so a terminal never
+  // sees the replacement arrive while the old session is still open or ending.
+  const previous = useRef<Promise<void>>(Promise.resolve());
   const [state, setState] = useState<{
     session: S | null;
     status: SessionStatus;
@@ -73,28 +76,37 @@ function useManagedSession<S extends ShopperSession>(
     let started: S | null = null;
     let unsubscribe: (() => void) | null = null;
     setState({ session: null, status: 'starting', error: null });
-    startRef.current(pos).then(
-      (session) => {
-        if (cancelled) {
-          void session[Symbol.asyncDispose]();
-          return;
-        }
-        started = session;
-        unsubscribe = session.on('session.ended', () => {
-          setState((previous) =>
-            previous.session === session ? { ...previous, status: 'ended' } : previous,
-          );
-        });
-        setState({ session, status: 'open', error: null });
-      },
-      (cause: unknown) => {
-        if (!cancelled) setState({ session: null, status: 'error', error: toError(cause) });
-      },
-    );
+    const lifecycle = previous.current
+      .then(() => (cancelled ? undefined : startRef.current(pos)))
+      .then(
+        (session) => {
+          if (!session) return;
+          if (cancelled) {
+            void session[Symbol.asyncDispose]();
+            return;
+          }
+          started = session;
+          unsubscribe = session.on('session.ended', () => {
+            setState((previous) =>
+              previous.session === session
+                ? { ...previous, session: null, status: 'ended' }
+                : previous,
+            );
+          });
+          setState({ session, status: 'open', error: null });
+        },
+        (cause: unknown) => {
+          if (!cancelled) setState({ session: null, status: 'error', error: toError(cause) });
+        },
+      );
     return () => {
       cancelled = true;
       unsubscribe?.();
-      if (started && started.state === 'open') void started[Symbol.asyncDispose]();
+      previous.current = lifecycle
+        .then(() =>
+          started && started.state === 'open' ? started[Symbol.asyncDispose]() : undefined,
+        )
+        .catch(() => undefined);
     };
   }, [pos, enabled, generation]);
 
@@ -105,7 +117,7 @@ function useManagedSession<S extends ShopperSession>(
     try {
       await session.end();
       setState((previous) =>
-        previous.session === session ? { ...previous, status: 'ended' } : previous,
+        previous.session === session ? { ...previous, session: null, status: 'ended' } : previous,
       );
     } catch (cause: unknown) {
       setState((previous) =>

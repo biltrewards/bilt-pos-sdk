@@ -147,6 +147,19 @@ describe('RetailMediaSurface', () => {
     expect(viewed).toHaveBeenCalledTimes(1);
   });
 
+  it('reports viewed again when the same creative is displayed after a clear', () => {
+    const viewed = vi.spyOn(session.widget('retail-media'), 'viewed');
+    render(<RetailMediaSurface session={session} placement="lane-banner" viewabilityMs={500} />);
+    act(() => void showRendering(session, 'lane-banner'));
+    act(() => void vi.advanceTimersByTime(500));
+    expect(viewed).toHaveBeenCalledTimes(1);
+
+    act(() => void clearPlacement(session, 'lane-banner'));
+    act(() => void showRendering(session, 'lane-banner'));
+    act(() => void vi.advanceTimersByTime(500));
+    expect(viewed).toHaveBeenCalledTimes(2);
+  });
+
   it('counts viewability only while intersecting when an IntersectionObserver exists', () => {
     const observers = installIntersectionObserver();
     const viewed = vi.spyOn(session.widget('retail-media'), 'viewed');
@@ -196,5 +209,27 @@ describe('RetailMediaSurface', () => {
     expect((container.firstElementChild as HTMLElement).dataset.state).toBe('empty');
     rerender(<RetailMediaSurface session={null} placement="lane-banner" />);
     expect((container.firstElementChild as HTMLElement).dataset.state).toBe('empty');
+  });
+
+  it('tells onRendering when the session ends or changes, once per display', async () => {
+    const other = await startLane();
+    const onRendering = vi.fn();
+    const { rerender } = render(
+      <RetailMediaSurface session={session} placement="lane-banner" onRendering={onRendering} />,
+    );
+    expect(onRendering).not.toHaveBeenCalled();
+    act(() => void showRendering(session, 'lane-banner'));
+    act(() => void session.end());
+    expect(onRendering).toHaveBeenLastCalledWith(null);
+    expect(onRendering).toHaveBeenCalledTimes(2);
+
+    act(() => void showRendering(other, 'lane-banner'));
+    rerender(
+      <RetailMediaSurface session={other} placement="lane-banner" onRendering={onRendering} />,
+    );
+    rerender(
+      <RetailMediaSurface session={session} placement="lane-banner" onRendering={onRendering} />,
+    );
+    expect(onRendering).toHaveBeenCalledTimes(2);
   });
 });

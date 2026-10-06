@@ -104,27 +104,47 @@ export function RetailMediaSurface(props: RetailMediaSurfaceProps): ReactNode {
   const [rendering, setRendering] = useState<Rendering | null>(null);
   const container = useRef<HTMLDivElement | null>(null);
   const viewedKeys = useRef(new Set<string>());
+  const notified = useRef(false);
 
+  // Tells `onRendering` the display is gone, once, however it ended.
+  const announce = useCallback(
+    (next: Rendering | null) => {
+      if (next === null && !notified.current) return;
+      notified.current = next !== null;
+      onRendering.current?.(next);
+    },
+    [onRendering],
+  );
+
+  // A view is reported once per display: the dedup set ends with the display, so the host showing
+  // the same creative again after a clear, a dismissal or a session change is viewed afresh.
   useEffect(() => {
     setRendering(null);
+    viewedKeys.current.clear();
     if (!current) return;
     const unsubscribes = [
       current.on('widget.rendering', (payload) => {
         if (payload.placement !== placement) return;
         setRendering(payload.rendering);
-        onRendering.current?.(payload.rendering);
+        announce(payload.rendering);
       }),
       current.on('widget.clear', (payload) => {
         if (payload.placement !== placement) return;
+        viewedKeys.current.clear();
         setRendering(null);
-        onRendering.current?.(null);
+        announce(null);
       }),
-      current.on('session.ended', () => setRendering(null)),
+      current.on('session.ended', () => {
+        viewedKeys.current.clear();
+        setRendering(null);
+        announce(null);
+      }),
     ];
     return () => {
       for (const unsubscribe of unsubscribes) unsubscribe();
+      announce(null);
     };
-  }, [current, placement, onRendering]);
+  }, [current, placement, announce]);
 
   const post = useCallback(
     (action: Promise<void>) => {
@@ -182,10 +202,11 @@ export function RetailMediaSurface(props: RetailMediaSurfaceProps): ReactNode {
   const dismiss = useCallback(() => {
     if (rendering && widget) {
       post(widget.dismissed(rendering));
+      viewedKeys.current.clear();
       setRendering(null);
-      onRendering.current?.(null);
+      announce(null);
     }
-  }, [rendering, widget, post, onRendering]);
+  }, [rendering, widget, post, announce]);
   const completed = useCallback(() => {
     if (rendering && widget) post(widget.completed(rendering));
   }, [rendering, widget, post]);

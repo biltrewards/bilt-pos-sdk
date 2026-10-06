@@ -1,8 +1,8 @@
 import type { IdentifyResult } from '@bilt/pos-protocol';
 import { SessionError, type Operation } from '@bilt/pos-sdk';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, renderHook, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useOperation, useSettlement, type InteractiveStepKind } from '../src/index';
 import { MockBiltPos, type MockTerminalSession, renderWithPos, startLane } from './harness';
 
@@ -46,7 +46,17 @@ function Pay({
       <button onClick={() => settlement.reply({ recovery: 'RETRY' })}>retry</button>
       <button onClick={() => settlement.reply({ recovery: 'ABORT' })}>give up</button>
       <button onClick={() => step?.useDefault()}>default</button>
-      <button onClick={() => settlement.reset()}>reset</button>
+      <button
+        onClick={() => {
+          try {
+            settlement.reset();
+          } catch (error: unknown) {
+            setMismatch(error instanceof Error ? error.message : String(error));
+          }
+        }}
+      >
+        reset
+      </button>
     </div>
   );
 }
@@ -124,6 +134,118 @@ describe('useSettlement', () => {
     expect(screen.getByTestId('status').textContent).toBe('idle');
   });
 
+  it('refuses to reset while a settlement is running', async () => {
+    const session = await laneWithItem();
+    renderWithPos(new MockBiltPos(), <Pay session={session} interactive={['TOTAL_REQUIRED']} />);
+    act(() => screen.getByText('pay').click());
+    await waitFor(() => expect(screen.getByTestId('step').textContent).toBe('TOTAL_REQUIRED'));
+    act(() => screen.getByText('reset').click());
+    expect(screen.getByTestId('mismatch').textContent).toMatch(
+      /reset\(\) called while a settlement is running/,
+    );
+    expect(screen.getByTestId('status').textContent).toBe('awaitingReply');
+  });
+
+  it('drops a pending settlement when the session changes', async () => {
+    const first = await laneWithItem();
+    const second = await laneWithItem();
+    const pos = new MockBiltPos();
+    const view = renderWithPos(pos, <Pay session={first} interactive={['TOTAL_REQUIRED']} />);
+    act(() => screen.getByText('pay').click());
+    await waitFor(() => expect(screen.getByTestId('step').textContent).toBe('TOTAL_REQUIRED'));
+
+    view.rerender(<Pay session={second} interactive={['TOTAL_REQUIRED']} />);
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('idle'));
+    expect(screen.getByTestId('step').textContent).toBe('');
+
+    act(() => screen.getByText('pay').click());
+    await waitFor(() => expect(screen.getByTestId('step').textContent).toBe('TOTAL_REQUIRED'));
+    act(() => screen.getByText('reply total').click());
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('succeeded'));
+  });
+
+  it('clears a finished settlement when the session changes', async () => {
+    const first = await laneWithItem();
+    const second = await laneWithItem();
+    const view = renderWithPos(new MockBiltPos(), <Pay session={first} interactive={[]} />);
+    act(() => screen.getByText('pay').click());
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('succeeded'));
+    expect(screen.getByTestId('charged').textContent).not.toBe('');
+
+    view.rerender(<Pay session={second} interactive={[]} />);
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('idle'));
+    expect(screen.getByTestId('charged').textContent).toBe('');
+  });
+
+  it('aborts before answering the open step when the session changes', async () => {
+    const first = await laneWithItem();
+    const second = await laneWithItem();
+    const settle = first.settle.bind(first);
+    let releaseAbort: () => void = () => undefined;
+    let aborted = false;
+    let finished = false;
+    first.settle = (options) => {
+      const operation = settle(options);
+      void operation.then(
+        () => (finished = true),
+        () => (finished = true),
+      );
+      return Object.defineProperties(operation.then(), {
+        id: { value: operation.id },
+        type: { value: operation.type },
+        status: { get: () => operation.status },
+        abort: {
+          value: () => {
+            aborted = true;
+            return new Promise<void>((resolve) => (releaseAbort = resolve));
+          },
+        },
+      }) as typeof operation;
+    };
+    const view = renderWithPos(
+      new MockBiltPos(),
+      <Pay session={first} interactive={['TOTAL_REQUIRED']} />,
+    );
+    act(() => screen.getByText('pay').click());
+    await waitFor(() => expect(screen.getByTestId('step').textContent).toBe('TOTAL_REQUIRED'));
+
+    view.rerender(<Pay session={second} interactive={['TOTAL_REQUIRED']} />);
+    await waitFor(() => expect(aborted).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The default total must not reach the host while the abort is still on its way.
+    expect(finished).toBe(false);
+
+    releaseAbort();
+    await waitFor(() => expect(finished).toBe(true));
+  });
+
+  it('refuses a second settle() in the same turn', async () => {
+    const session = await laneWithItem();
+    const settle = vi.spyOn(session, 'settle');
+    let second = '';
+    function Double() {
+      const settlement = useSettlement(session);
+      return (
+        <button
+          onClick={() => {
+            void settlement.settle().catch(() => undefined);
+            try {
+              void settlement.settle();
+            } catch (error: unknown) {
+              second = error instanceof Error ? error.message : String(error);
+            }
+          }}
+        >
+          pay twice
+        </button>
+      );
+    }
+    renderWithPos(new MockBiltPos(), <Double />);
+    act(() => screen.getByText('pay twice').click());
+    expect(second).toBe('a settlement is already running on this hook');
+    expect(settle).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects a reply that does not fit the step', async () => {
     const session = await laneWithItem();
     renderWithPos(new MockBiltPos(), <Pay session={session} interactive={['TOTAL_REQUIRED']} />);
@@ -154,6 +276,20 @@ function Identify({ session }: { session: MockTerminalSession }) {
 }
 
 describe('useOperation', () => {
+  it('follows the handle status through intermediate transitions', async () => {
+    let status: Operation<string>['status'] = 'running';
+    const handle = Object.defineProperties(new Promise<string>(() => undefined), {
+      status: { get: () => status, enumerable: true },
+      abort: { value: () => Promise.resolve(), enumerable: true },
+    }) as Operation<string>;
+    const { result } = renderHook(() => useOperation(handle));
+    expect(result.current.status).toBe('running');
+
+    status = 'awaitingReply';
+    await waitFor(() => expect(result.current.status).toBe('awaitingReply'));
+    expect(result.current.pending).toBe(true);
+  });
+
   it('tracks an operation from running to succeeded', async () => {
     const session = await startLane();
     renderWithPos(new MockBiltPos(), <Identify session={session} />);
