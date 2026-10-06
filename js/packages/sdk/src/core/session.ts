@@ -304,16 +304,20 @@ export class ShopperSessionImpl implements ShopperSession {
     if (this.currentState === 'ended') return;
     this.currentState = 'ended';
     this.resolveEnded();
+    this.failPending('ended');
+    this.unclaimed.clear();
+  }
+
+  private failPending(why: 'ended' | 'detached'): void {
     for (const [id, operation] of this.pending) {
       operation.fail(
         new SessionError({
           code: 'INVALID_STATE',
-          message: `session ${this.id} ended before operation ${id} completed`,
+          message: `session ${this.id} ${why} before operation ${id} completed`,
         }),
       );
     }
     this.pending.clear();
-    this.unclaimed.clear();
   }
 
   // ─── The event pump ───
@@ -479,6 +483,8 @@ export class ShopperSessionImpl implements ShopperSession {
     this.stopped = true;
     this.resolveEndedEventSeen();
     await Promise.race([this.pumpDone, sleep(0)]);
+    // With the pump stopped nothing would ever settle these, so callers awaiting them would hang.
+    this.failPending('detached');
   }
 
   /** Resolves once the session has ended, however that happened. */

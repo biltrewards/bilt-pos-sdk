@@ -131,6 +131,17 @@ describe('starting an operation', () => {
     expect(onMovement).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects an in-flight operation when BiltPos.close() detaches the session', async () => {
+    const { engine, pos, session } = await lane();
+    const op = session.settle();
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    await vi.waitFor(() => expect(op.id).toBeDefined());
+    await pos.close();
+    const error = await op.catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SessionError);
+    expect((error as SessionError).code).toBe('INVALID_STATE');
+  });
+
   it('rejects with the SessionError of a failed operation and marks aborted ones', async () => {
     const { engine, session } = await lane();
     const op = session.settle();
