@@ -9,6 +9,15 @@
     - name: Terminal Bridge
       url: /terminal-bridge.html
 
+- title: Browser & JavaScript
+  items:
+    - name: JavaScript SDK Integration
+      url: /javascript-sdk-integration.html
+    - name: Terminal Bridge
+      url: /terminal-bridge.html
+    - name: Session Protocol Reference
+      url: /session-protocol-reference.html
+
 - title: Session
   items:
     - name: Start & End
