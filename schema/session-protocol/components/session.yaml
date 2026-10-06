@@ -29,7 +29,7 @@ CreateSessionRequest:
       description: The register's identifier for this lane, sent as Nexo `SaleID`.
     poiId:
       type: string
-      description: The terminal to bracket the session on. Required for `kind: terminal`, ignored for `local`.
+      description: "The terminal to bracket the session on. Required for `kind: terminal`, ignored for `local`."
     currency:
       type: string
       pattern: '^[A-Z]{3}$'

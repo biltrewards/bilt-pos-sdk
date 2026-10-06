@@ -1,0 +1,12 @@
+{
+  "type": "settle",
+  "options": {
+    "disableRebates": false,
+    "disablePoints": false,
+    "disableAward": false,
+    "refunds": [],
+    "fulfillments": [],
+    "settlementType": "REFUND_THEN_CHARGE"
+  },
+  "handledSteps": ["TOTAL_REQUIRED", "RECOVERY_REQUIRED"]
+}

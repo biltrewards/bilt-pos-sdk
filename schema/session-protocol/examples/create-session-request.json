@@ -1,0 +1,17 @@
+{
+  "kind": "terminal",
+  "saleId": "LANE-3",
+  "poiId": "VictaLane-275839164",
+  "currency": "USD",
+  "storeLocation": "STR-0142",
+  "autoDisplay": true,
+  "member": { "resolver": { "type": "PHONE", "value": "+12015550123", "keyedByCashier": false } },
+  "context": { "phase": "SCANNING", "attributes": { "lane-type": "pharmacy" } },
+  "widgets": [
+    {
+      "type": "retail-media",
+      "placements": [{ "id": "lane-banner", "surfaceKind": "HANDOFF", "formats": ["IMAGE"] }]
+    }
+  ],
+  "clientCapabilities": { "formats": ["IMAGE", "VIDEO"], "surfaceKind": "WEB" }
+}

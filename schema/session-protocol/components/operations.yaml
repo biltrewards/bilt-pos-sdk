@@ -333,7 +333,13 @@ UpdateDisplayRequest:
       $ref: './display.yaml#/DisplayPayload'
   oneOf:
     - required: [basket]
+      properties:
+        basket:
+          $ref: './basket.yaml#/Basket'
     - required: [display]
+      properties:
+        display:
+          $ref: './display.yaml#/DisplayPayload'
 
 UpdateInputDisplayRequest:
   type: object
