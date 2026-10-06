@@ -571,6 +571,8 @@ public final class SessionHost implements AutoCloseable {
     node.put("sdkVersion", SdkVersion.current());
     node.putArray("protocolVersions").add(PROTOCOL_VERSION);
     node.set("terminals", terminals());
+    // beyond the spec's Health, which allows additional properties: the bridge's tray reads it
+    node.put("sessions", registry.openCount());
     return node;
   }
 
