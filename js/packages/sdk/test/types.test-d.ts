@@ -78,7 +78,9 @@ describe('the public surface', () => {
       { action: string } | 'RETRY' | 'SKIP' | 'ABORT' | 'ABANDON'
     >();
     // External recovery must carry the payment that records the tender, so it has no short form.
-    expectTypeOf<SettlementRecoveryAction>().toEqualTypeOf<'RETRY' | 'SKIP' | 'ABORT' | 'ABANDON'>();
+    expectTypeOf<SettlementRecoveryAction>().toEqualTypeOf<
+      'RETRY' | 'SKIP' | 'ABORT' | 'ABANDON'
+    >();
     expectTypeOf<SettleOptions['settlementType']>().toEqualTypeOf<
       'REFUND_THEN_CHARGE' | 'NET' | undefined
     >();
