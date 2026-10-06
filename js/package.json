@@ -1,0 +1,31 @@
+{
+  "name": "bilt-pos-js",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.6",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "generate": "pnpm -r generate",
+    "generate:check": "pnpm generate && git diff --exit-code -- packages/*/src/generated",
+    "lint": "eslint . && prettier --check .",
+    "lint:spec": "redocly lint ../schema/session-protocol/openapi.yaml --config ../schema/session-protocol/redocly.yaml",
+    "format": "prettier --write . && eslint . --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@redocly/cli": "^2.58.1",
+    "eslint": "^9.39.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.4.0",
+    "prettier": "^3.9.9",
+    "tsup": "^8.5.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^4.0.0"
+  }
+}
