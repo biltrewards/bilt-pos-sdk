@@ -18,7 +18,7 @@ declare const cashier: {
   chooseRecovery(
     failure: SettlementFailure,
     signal: AbortSignal,
-  ): Promise<SettlementRecoveryAction>;
+  ): Promise<SettlementRecoveryAction | 'EXTERNAL'>;
 };
 declare const ledger: {
   record(movement: SettlementMovement): void;
