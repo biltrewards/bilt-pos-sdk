@@ -175,13 +175,19 @@ export class ShopperSessionImpl implements ShopperSession {
   /** Starts the event pump and loads the initial mirrors; the session is usable once this resolves. */
   async initialize(): Promise<this> {
     this.pumpDone = this.pump();
-    const [widgets] = await Promise.all([
-      this.options.widgets && this.options.widgets.length > 0
-        ? this.engine.widgets(this.id)
-        : Promise.resolve([]),
-      this.resync(),
-    ]);
-    this.widgetHandles = buildWidgets(this.engine, this.id, this.options.widgets ?? [], widgets);
+    try {
+      const [widgets] = await Promise.all([
+        this.options.widgets && this.options.widgets.length > 0
+          ? this.engine.widgets(this.id)
+          : Promise.resolve([]),
+        this.resync(),
+      ]);
+      this.widgetHandles = buildWidgets(this.engine, this.id, this.options.widgets ?? [], widgets);
+    } catch (error) {
+      // The caller never receives the session, so `BiltPos.close()` could not stop its pump.
+      await this.detach();
+      throw error;
+    }
     return this;
   }
 

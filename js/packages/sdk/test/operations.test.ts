@@ -142,6 +142,29 @@ describe('starting an operation', () => {
     expect((error as SessionError).code).toBe('INVALID_STATE');
   });
 
+  it('stops the event pump when the initial reads fail', async () => {
+    const engine = new ScriptedEngine();
+    engine.context = async () => {
+      throw new Error('context read failed');
+    };
+    const pos = await BiltPos.connect(() => engine);
+    await expect(
+      pos.startTerminalSession({
+        saleId: 'LANE-3',
+        poiId: 'VictaLane-275839164',
+        currency: 'USD',
+        storeLocation: 'STR-0142',
+      }),
+    ).rejects.toThrow('context read failed');
+    // No session reached the caller, so nothing but initialize() can stop the pump: a dropped
+    // stream must not be resubscribed.
+    const subscriptions = engine.eventSubscriptions.length;
+    const sessionId = engine.requests[0]?.sessionId ?? engine.eventSubscriptions[0]!.sessionId;
+    engine.dropStream(sessionId);
+    await new Promise((r) => setTimeout(r, 600));
+    expect(engine.eventSubscriptions).toHaveLength(subscriptions);
+  });
+
   it('rejects with the SessionError of a failed operation and marks aborted ones', async () => {
     const { engine, session } = await lane();
     const op = session.settle();
