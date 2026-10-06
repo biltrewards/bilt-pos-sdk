@@ -165,6 +165,30 @@ describe('starting an operation', () => {
     expect(engine.eventSubscriptions).toHaveLength(subscriptions);
   });
 
+  it('still calls the step handler when onMovement throws, and reports it', async () => {
+    const { engine, session } = await lane();
+    const errors: unknown[] = [];
+    session.on('background.error', (e) => errors.push(e));
+    const onCardCharged = vi.fn();
+    const op = session.settle({
+      onMovement: () => {
+        throw new Error('observer broke');
+      },
+      onCardCharged,
+    });
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    const id = engine.lastOperation(session.id).id;
+    engine.movement(session.id, id, {
+      step: 'CARD_CHARGE',
+      target: { type: 'SALES' },
+      amount: '1',
+    });
+    await vi.waitFor(() => expect(onCardCharged).toHaveBeenCalledTimes(1));
+    expect(errors).toHaveLength(1);
+    engine.complete(session.id, id, { result: { cardAmountCharged: '1' } } as never);
+    await op;
+  });
+
   it('rejects with the SessionError of a failed operation and marks aborted ones', async () => {
     const { engine, session } = await lane();
     const op = session.settle();

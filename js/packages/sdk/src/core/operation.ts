@@ -132,11 +132,7 @@ export class PendingOperation<T> {
   }
 
   movement(movement: SettlementMovement): void {
-    try {
-      fanOutMovement(this.steps, movement);
-    } catch (error) {
-      this.links.reportStep('a movement handler threw', error);
-    }
+    fanOutMovement(this.steps, movement, (context, error) => this.links.reportStep(context, error));
   }
 
   private async answer(step: OperationStep): Promise<void> {

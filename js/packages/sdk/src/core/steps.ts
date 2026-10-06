@@ -40,47 +40,39 @@ export function normalizeRecovery(
   return typeof answer === 'string' ? { action: answer } : answer;
 }
 
-/** Hands an `operation.movement` to `onMovement` and to the handler named after its step. */
+/**
+ * Hands an `operation.movement` to `onMovement` and to the handler named after its step. Each
+ * runs on its own, so a handler that throws is reported through `onError` without keeping the
+ * other from hearing about a movement that has already been committed.
+ */
 export function fanOutMovement(
   steps: StepHandlers | undefined,
   movement: SettlementMovement,
+  onError: (context: string, error: unknown) => void,
 ): void {
   if (!steps || steps.kind !== 'settlement') return;
   const h = steps.handlers;
-  h.onMovement?.(movement);
-  switch (movement.step) {
-    case 'CARD_CHARGE':
-      h.onCardCharged?.(movement);
-      break;
-    case 'EXTERNAL_PAYMENT':
-      h.onExternallyPaid?.(movement);
-      break;
-    case 'AWARD':
-      h.onAwarded?.(movement);
-      break;
-    case 'STORED_VALUE_LOAD':
-      h.onStoredValueLoaded?.(movement);
-      break;
-    case 'CARD_REFUND':
-      h.onCardRefunded?.(movement);
-      break;
-    case 'STORED_VALUE_REFUND':
-      h.onGiftCardRefunded?.(movement);
-      break;
-    case 'EXTERNAL_REFUND':
-      h.onExternalRefunded?.(movement);
-      break;
-    case 'POINT_REDEMPTION_REFUND':
-      h.onPointsRefunded?.(movement);
-      break;
-    case 'REBATE_REFUND':
-      h.onRebateRefunded?.(movement);
-      break;
-    case 'AWARD_REFUND':
-      h.onAwardRefunded?.(movement);
-      break;
-    default:
-      break;
+  const specific = {
+    CARD_CHARGE: h.onCardCharged,
+    EXTERNAL_PAYMENT: h.onExternallyPaid,
+    AWARD: h.onAwarded,
+    STORED_VALUE_LOAD: h.onStoredValueLoaded,
+    CARD_REFUND: h.onCardRefunded,
+    STORED_VALUE_REFUND: h.onGiftCardRefunded,
+    EXTERNAL_REFUND: h.onExternalRefunded,
+    POINT_REDEMPTION_REFUND: h.onPointsRefunded,
+    REBATE_REFUND: h.onRebateRefunded,
+    AWARD_REFUND: h.onAwardRefunded,
+  }[movement.step as string];
+  for (const [context, handler] of [
+    ['onMovement threw', h.onMovement],
+    [`the ${movement.step} movement handler threw`, specific],
+  ] as const) {
+    try {
+      handler?.(movement);
+    } catch (error) {
+      onError(context, error);
+    }
   }
 }
 
