@@ -210,35 +210,7 @@ public final class SessionRegistry {
     TerminalShopperSession terminal = hosted.terminal();
     Supplier<SessionResult<Void>> call =
         forced && terminal != null ? () -> terminal.forceEnd(reason) : () -> hosted.session().end();
-    if (hosted.laneIdle()) {
-      hosted.ending(forced, reason, operation);
-      hosted.register(operation);
-      operation.started();
-      try {
-        call.get().get();
-        operation.succeeded(null);
-      } catch (SessionException e) {
-        hosted.endFailed();
-        if (e.getError().getCode() == SessionErrorCode.INVALID_STATE) {
-          hosted.unregister(operation);
-          throw HostError.of(e.getError());
-        }
-        operation.failed(HostError.of(e.getError()), false);
-      } catch (RuntimeException e) {
-        hosted.endFailed();
-        HostError error = HostError.from(e);
-        if (error.status() == 409) {
-          hosted.unregister(operation);
-          throw error;
-        }
-        operation.failed(error, false);
-      }
-      hosted.publishCompletion(operation);
-      return operation;
-    }
-    hosted.ending(forced, reason, operation);
-    hosted.submit(
-        operation,
+    Runnable queuedLaunch =
         () -> {
           try {
             SessionResult<Void> end = call.get();
@@ -251,7 +223,34 @@ public final class SessionRegistry {
           } finally {
             hosted.completed(operation);
           }
-        });
+        };
+    if (!hosted.beginEnd(forced, reason, operation, queuedLaunch)) {
+      return operation;
+    }
+    // the lane is idle and now this end's: it runs here, so an SDK guard refusal is a 409
+    operation.started();
+    try {
+      call.get().get();
+      operation.succeeded(null);
+    } catch (SessionException e) {
+      hosted.endFailed();
+      if (e.getError().getCode() == SessionErrorCode.INVALID_STATE) {
+        hosted.unregister(operation);
+        hosted.releaseLane(operation);
+        throw HostError.of(e.getError());
+      }
+      operation.failed(HostError.of(e.getError()), false);
+    } catch (RuntimeException e) {
+      hosted.endFailed();
+      HostError error = HostError.from(e);
+      if (error.status() == 409) {
+        hosted.unregister(operation);
+        hosted.releaseLane(operation);
+        throw error;
+      }
+      operation.failed(error, false);
+    }
+    hosted.completed(operation);
     return operation;
   }
 

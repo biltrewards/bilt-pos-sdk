@@ -211,18 +211,6 @@ public final class HostedSession {
     return running;
   }
 
-  /** True when no ordered operation is running or queued. */
-  boolean laneIdle() {
-    synchronized (lane) {
-      return running == null && lane.isEmpty();
-    }
-  }
-
-  /** Lists an operation the registry runs itself, outside the lane. */
-  void register(HostedOperation operation) {
-    operations.put(operation.id(), operation);
-  }
-
   /** Drops an operation registered with {@link #register} whose request was refused outright. */
   void unregister(HostedOperation operation) {
     operations.remove(operation.id());
@@ -245,19 +233,54 @@ public final class HostedSession {
    * #completed}.
    */
   void submit(HostedOperation operation, Runnable launch) {
-    operations.put(operation.id(), operation);
-    if (!operation.ordered()) {
-      start(operation, launch);
-      return;
-    }
     synchronized (lane) {
-      if (running != null) {
-        lane.addLast(new QueuedOperation(operation, launch));
-        return;
+      // decided under the same lock that end() claims the lane under, so an operation is either
+      // ahead of the end or refused, never accepted behind it to fail when it later executes
+      if (!"open".equals(state) && operation != endOperation) {
+        throw HostError.conflict("the session is ending or has ended; no further operations");
       }
-      running = operation;
+      operations.put(operation.id(), operation);
+      if (operation.ordered()) {
+        if (running != null) {
+          lane.addLast(new QueuedOperation(operation, launch));
+          return;
+        }
+        running = operation;
+      }
     }
     start(operation, launch);
+  }
+
+  /**
+   * Accepts an {@code end}/{@code forceEnd}: marks the session ending and either claims the idle
+   * lane for the caller to run it (true) or queues {@code queuedLaunch} behind the operation in
+   * flight (false). The ending state and the lane are settled in one step, so nothing can start
+   * while an idle end tears the session down and nothing is accepted after it.
+   */
+  boolean beginEnd(
+      boolean forced, String reason, HostedOperation operation, Runnable queuedLaunch) {
+    synchronized (lane) {
+      if (!"open".equals(state)) {
+        throw HostError.conflict("the session has already ended");
+      }
+      ending(forced, reason, operation);
+      operations.put(operation.id(), operation);
+      if (running == null && lane.isEmpty()) {
+        running = operation;
+        return true;
+      }
+      lane.addLast(new QueuedOperation(operation, queuedLaunch));
+      return false;
+    }
+  }
+
+  /** Frees the lane an idle end claimed when the SDK refused it and the session stays open. */
+  void releaseLane(HostedOperation operation) {
+    synchronized (lane) {
+      if (running == operation) {
+        running = null;
+      }
+    }
   }
 
   private void start(HostedOperation operation, Runnable launch) {

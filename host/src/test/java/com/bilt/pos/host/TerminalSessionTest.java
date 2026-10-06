@@ -244,6 +244,30 @@ class TerminalSessionTest {
   }
 
   @Test
+  void noOperationIsAcceptedOnceAnEndHasBeenAccepted() throws Exception {
+    String id = createWithMemberAndItem();
+    terminal.hold(MessageCategoryType.INPUT);
+    String first =
+        submit(id, json("{'type':'requestConfirmation','prompt':'Receipt?'}")).path("id").asText();
+    assertTrue(terminal.awaitHeld(Duration.ofSeconds(5)));
+    JsonNode end = client.delete("/v1/sessions/" + id).expect(202).body;
+    assertEquals("queued", end.path("status").asText());
+
+    // the end is queued behind the running operation: later work must be refused up front, not
+    // accepted to fail when it reaches the head of the lane after the session has gone
+    client
+        .post(
+            "/v1/sessions/" + id + "/operations",
+            json("{'type':'requestConfirmation','prompt':'Bag?'}"))
+        .expect(409);
+
+    terminal.release();
+    client.awaitOperation(id, first, "succeeded", Duration.ofSeconds(10));
+    client.awaitOperation(id, end.path("id").asText(), "succeeded", Duration.ofSeconds(10));
+    assertEquals(2, client.get("/v1/sessions/" + id + "/operations").expect(200).body.size());
+  }
+
+  @Test
   void abortDuringAPendingStepAbortsTheSettlement() throws Exception {
     String id = createWithMemberAndItem();
     String operationId = submit(id, SETTLE_WITH_TOTALS).path("id").asText();
