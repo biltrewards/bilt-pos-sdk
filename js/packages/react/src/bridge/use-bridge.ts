@@ -130,11 +130,14 @@ export function useBridge(options: UseBridgeOptions = {}): BridgeState {
 
   const run = useCallback(async () => {
     const token = ++latestProbe.current;
-    // A custom detector that throws counts as a probe that found nothing, so polling goes on.
-    const detection = await detect(probeOptions).catch((): BridgeDetection => ({
-      status: 'missing',
-      probed: [],
-    }));
+    // A custom detector that throws or rejects counts as a probe that found nothing, so polling
+    // goes on.
+    let detection: BridgeDetection;
+    try {
+      detection = await detect(probeOptions);
+    } catch {
+      detection = { status: 'missing', probed: [] };
+    }
     if (token !== latestProbe.current) return;
     setProbe((previous) => ({ detection, attempts: previous.attempts + 1 }));
   }, [detect, probeOptions]);

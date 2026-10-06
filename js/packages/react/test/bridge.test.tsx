@@ -329,12 +329,13 @@ describe('the Register() sketch', () => {
     expect(detect.calls).toBe(2);
   });
 
-  it('keeps polling when a custom detector rejects', async () => {
+  it('keeps polling when a custom detector throws', async () => {
     const ready = scripted('ready');
     let calls = 0;
     const detect: BridgeDetect = (options) => {
       calls += 1;
-      return calls === 1 ? Promise.reject(new Error('detector blew up')) : ready(options);
+      if (calls === 1) throw new Error('detector blew up');
+      return ready(options);
     };
     function Polling() {
       const bridge = useBridge({ detect, pollIntervalMs: 10 });
