@@ -1,6 +1,4 @@
 ---
-layout: default
-title: Session Host
 ---
 
 # Session Host
