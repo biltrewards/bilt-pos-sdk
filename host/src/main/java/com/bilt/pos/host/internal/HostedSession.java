@@ -223,6 +223,11 @@ public final class HostedSession {
     operations.put(operation.id(), operation);
   }
 
+  /** Drops an operation registered with {@link #register} whose request was refused outright. */
+  void unregister(HostedOperation operation) {
+    operations.remove(operation.id());
+  }
+
   /** Publishes {@code operation.completed} once, however many paths reach the end. */
   void publishCompletion(HostedOperation operation) {
     // claiming and publishing are one step: the thread that loses the claim must not be able

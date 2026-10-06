@@ -220,6 +220,7 @@ public final class SessionRegistry {
       } catch (SessionException e) {
         hosted.endFailed();
         if (e.getError().getCode() == SessionErrorCode.INVALID_STATE) {
+          hosted.unregister(operation);
           throw HostError.of(e.getError());
         }
         operation.failed(HostError.of(e.getError()), false);
@@ -227,6 +228,7 @@ public final class SessionRegistry {
         hosted.endFailed();
         HostError error = HostError.from(e);
         if (error.status() == 409) {
+          hosted.unregister(operation);
           throw error;
         }
         operation.failed(error, false);

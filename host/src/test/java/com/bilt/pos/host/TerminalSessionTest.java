@@ -11,6 +11,7 @@ import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.List;
+import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -253,6 +254,33 @@ class TerminalSessionTest {
     assertEquals("ABORTED", done.path("error").path("code").asText());
     assertTrue(done.path("pendingStep").isMissingNode());
     assertTrue(client.post("/v1/sessions/" + id + "/abort", "{}").expect(202).body.isEmpty());
+  }
+
+  @Test
+  void anIdleEndTheSdkRefusesLeavesNoOperationBehind() throws Exception {
+    String id = createWithMemberAndItem();
+    // the terminal authorises 89.50 of the 90.00 asked and has no REVERSAL scripted, so the
+    // unwind fails and the standing charge makes the SDK refuse a plain end()
+    String operationId = submit(id, SETTLE_WITH_TOTALS).path("id").asText();
+    JsonNode waiting =
+        client.awaitOperation(id, operationId, "awaitingReply", Duration.ofSeconds(10));
+    client
+        .post(
+            "/v1/sessions/" + id + "/operations/" + operationId + "/reply",
+            json(
+                "{'stepId':'"
+                    + waiting.path("pendingStep").path("stepId").asText()
+                    + "','total':'90.00'}"))
+        .expect(200);
+    client.awaitOperation(id, operationId, "failed", Duration.ofSeconds(10));
+
+    client.delete("/v1/sessions/" + id).expect(409);
+
+    assertEquals("open", client.get("/v1/sessions/" + id).expect(200).text("state"));
+    JsonNode operations = client.get("/v1/sessions/" + id + "/operations").expect(200).body;
+    assertTrue(
+        StreamSupport.stream(operations.spliterator(), false)
+            .noneMatch(o -> o.path("type").asText().equals("end")));
   }
 
   @Test
