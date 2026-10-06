@@ -76,17 +76,16 @@ public final class EventBuffer {
     this.clock = clock;
   }
 
-  /** Appends an event and fans it out. */
-  public Event publish(String type, JsonNode payload) {
-    List<Delivery> targets;
-    Event event;
-    synchronized (this) {
-      event = new Event(nextSeq++, Instant.now(clock), type, payload);
-      events.addLast(event);
-      trim(event.at());
-      targets = new ArrayList<>(deliveries);
-    }
-    for (Delivery delivery : targets) {
+  /**
+   * Appends an event and fans it out. Offering stays inside the lock: it only enqueues on each
+   * subscriber's own thread, and doing it here fixes the delivery order to the sequence order and
+   * keeps a joining subscriber from getting the event through both its replay and the live feed.
+   */
+  public synchronized Event publish(String type, JsonNode payload) {
+    Event event = new Event(nextSeq++, Instant.now(clock), type, payload);
+    events.addLast(event);
+    trim(event.at());
+    for (Delivery delivery : deliveries) {
       delivery.offer(event);
     }
     return event;
@@ -140,19 +139,15 @@ public final class EventBuffer {
   }
 
   /** Ends the stream: live subscribers are told and no further events are expected. */
-  public void close() {
-    List<Delivery> targets;
-    synchronized (this) {
-      if (closed) {
-        return;
-      }
-      closed = true;
-      targets = new ArrayList<>(deliveries);
-      deliveries.clear();
+  public synchronized void close() {
+    if (closed) {
+      return;
     }
-    for (Delivery delivery : targets) {
+    closed = true;
+    for (Delivery delivery : deliveries) {
       delivery.offerClose();
     }
+    deliveries.clear();
   }
 
   public synchronized boolean isClosed() {
