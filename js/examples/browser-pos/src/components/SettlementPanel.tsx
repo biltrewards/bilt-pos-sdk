@@ -223,7 +223,7 @@ export function SettlementPanel(props: SettlementPanelProps): ReactNode {
           <ReceiptView title="Customer receipt" receipt={settlement.result.customerReceipt} />
           <ReceiptView title="Merchant receipt" receipt={settlement.result.merchantReceipt} />
           <div className="actions">
-            <button type="button" onClick={props.onNextShopper}>
+            <button type="button" disabled={voiding.pending} onClick={props.onNextShopper}>
               Next shopper
             </button>
             <button

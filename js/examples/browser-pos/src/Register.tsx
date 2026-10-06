@@ -149,10 +149,18 @@ export function Register({ settings }: RegisterProps): ReactNode {
   };
 
   const nextShopper = () => {
-    settlement.reset();
-    setVoidOp(null);
     // The basket and the member are both the previous shopper's; the session itself carries on.
-    run(basketApi.clear().then(() => session?.member.clear()));
+    // The register resets only once the session accepted the clear: it refuses it while money
+    // is still moving, and the result stays on screen then.
+    run(
+      basketApi
+        .clear()
+        .then(() => session?.member.clear())
+        .then(() => {
+          settlement.reset();
+          setVoidOp(null);
+        }),
+    );
   };
 
   if (connection.status === 'connecting') {
