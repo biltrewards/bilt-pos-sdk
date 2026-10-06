@@ -23,6 +23,11 @@
       "types": "./dist/internal.d.ts",
       "import": "./dist/internal.js",
       "require": "./dist/internal.cjs"
+    },
+    "./bridge": {
+      "types": "./dist/bridge.d.ts",
+      "import": "./dist/bridge.js",
+      "require": "./dist/bridge.cjs"
     }
   },
   "files": [
@@ -33,14 +38,17 @@
     "build": "tsup && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --typecheck",
-    "api:check": "api-extractor run -c api-extractor.json && api-extractor run -c api-extractor.internal.json",
-    "api:update": "api-extractor run --local -c api-extractor.json && api-extractor run --local -c api-extractor.internal.json"
+    "test:contract": "vitest run -c vitest.contract.config.ts",
+    "api:check": "api-extractor run -c api-extractor.json && api-extractor run -c api-extractor.internal.json && api-extractor run -c api-extractor.bridge.json",
+    "api:update": "api-extractor run --local -c api-extractor.json && api-extractor run --local -c api-extractor.internal.json && api-extractor run --local -c api-extractor.bridge.json"
   },
   "dependencies": {
     "@bilt/pos-protocol": "workspace:*"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.59.3",
-    "@types/node": "^20.19.0"
+    "@types/node": "^20.19.0",
+    "@types/ws": "^8.18.2",
+    "ws": "^8.22.0"
   }
 }
