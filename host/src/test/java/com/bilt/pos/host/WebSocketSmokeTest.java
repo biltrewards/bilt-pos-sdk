@@ -112,8 +112,7 @@ class WebSocketSmokeTest {
               URI.create("ws://localhost:" + host.port() + "/v1/sessions/" + id + "/events"),
               new WebSocket.Listener() {})
           .get(5, TimeUnit.SECONDS);
-      assertEquals(
-          java.util.List.of("/v1/sessions/" + id + "/events from 127.0.0.1"), seen);
+      assertEquals(java.util.List.of("/v1/sessions/" + id + "/events from 127.0.0.1"), seen);
     }
   }
 }

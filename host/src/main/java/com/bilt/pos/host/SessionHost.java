@@ -39,9 +39,9 @@ import io.javalin.config.RoutesConfig;
 import io.javalin.http.Context;
 import io.javalin.http.sse.SseClient;
 import io.javalin.websocket.WsContext;
-import java.time.Duration;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -408,7 +408,8 @@ public final class SessionHost implements AutoCloseable {
           respond(ctx, issued ? 202 : 200, operation.toJson());
         });
 
-    routes.get("/v1/sessions/{id}/widgets", ctx -> respond(ctx, 200, session(ctx).widgets().view()));
+    routes.get(
+        "/v1/sessions/{id}/widgets", ctx -> respond(ctx, 200, session(ctx).widgets().view()));
     routes.post(
         "/v1/sessions/{id}/widgets/{type}/pause",
         ctx -> {
@@ -793,7 +794,9 @@ public final class SessionHost implements AutoCloseable {
     ctx.attribute(IDEMPOTENCY_RELEASE, (Runnable) () -> cache.release(key));
   }
 
-  /** Frees the key of a request that ended without {@code respond}, so a retry is not stuck on it. */
+  /**
+   * Frees the key of a request that ended without {@code respond}, so a retry is not stuck on it.
+   */
   private void idempotencyRelease(Context ctx) {
     Runnable release = ctx.attribute(IDEMPOTENCY_RELEASE);
     if (release != null) {

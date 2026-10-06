@@ -20,6 +20,7 @@ class DevMainTest {
   void theConfigFileCanNarrowTheOrigins() throws Exception {
     assertEquals(
         List.of("https://pos.example.com"),
-        DevMain.allowedOrigins(MAPPER.readTree("{\"allowedOrigins\":[\"https://pos.example.com\"]}")));
+        DevMain.allowedOrigins(
+            MAPPER.readTree("{\"allowedOrigins\":[\"https://pos.example.com\"]}")));
   }
 }
