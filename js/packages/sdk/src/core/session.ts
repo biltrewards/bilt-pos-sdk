@@ -45,6 +45,8 @@ type OperationEvent = Extract<
 const UNCLAIMED_LIMIT = 64;
 const RECONNECT_BASE_MS = 250;
 const RECONNECT_MAX_MS = 10_000;
+/** How long `end()` waits for the `session.ended` event once the end operation succeeded. */
+const ENDED_EVENT_GRACE_MS = 3_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -121,6 +123,8 @@ export class ShopperSessionImpl implements ShopperSession {
   private readonly versions = { basket: 0, member: 0, context: 0 };
   private endedPromise: Promise<void>;
   private resolveEnded!: () => void;
+  private endedEventSeen: Promise<void>;
+  private resolveEndedEventSeen!: () => void;
 
   constructor(
     runtime: SessionRuntime,
@@ -162,6 +166,9 @@ export class ShopperSessionImpl implements ShopperSession {
     });
     this.endedPromise = new Promise((resolve) => {
       this.resolveEnded = resolve;
+    });
+    this.endedEventSeen = new Promise((resolve) => {
+      this.resolveEndedEventSeen = resolve;
     });
   }
 
@@ -272,6 +279,11 @@ export class ShopperSessionImpl implements ShopperSession {
     });
   }
 
+  /**
+   * Runs the `end` or `forceEnd` operation. Once it succeeded the session waits briefly for the
+   * `session.ended` event, so handlers registered for it have run by the time `end()` resolves;
+   * a stream that is down does not hold the register up for longer than the grace period.
+   */
   protected async endWith(request: EngineOperationRequest): Promise<void> {
     if (this.currentState === 'ended') return;
     const previous = this.currentState;
@@ -282,6 +294,7 @@ export class ShopperSessionImpl implements ShopperSession {
       if (this.currentState === 'ending') this.currentState = previous;
       throw error;
     }
+    await Promise.race([this.endedEventSeen, sleep(ENDED_EVENT_GRACE_MS)]);
     this.markEnded();
   }
 
@@ -400,6 +413,7 @@ export class ShopperSessionImpl implements ShopperSession {
         this.markEnded();
         this.emitter.emit(event.type, event.payload);
         this.emitter.clear();
+        this.resolveEndedEventSeen();
         return;
       default:
         this.emitter.emit(event.type, event.payload);
@@ -435,12 +449,6 @@ export class ShopperSessionImpl implements ShopperSession {
         break;
       case 'operation.completed':
         this.emitter.emit(event.type, event.payload);
-        if (
-          (event.payload.type === 'end' || event.payload.type === 'forceEnd') &&
-          event.payload.status === 'succeeded'
-        ) {
-          this.markEnded();
-        }
         break;
     }
   }
@@ -462,6 +470,7 @@ export class ShopperSessionImpl implements ShopperSession {
   /** Stops the pump without ending the session on the host; for `BiltPos.close()`. */
   async detach(): Promise<void> {
     this.stopped = true;
+    this.resolveEndedEventSeen();
     await Promise.race([this.pumpDone, sleep(0)]);
   }
 

@@ -240,7 +240,15 @@ export class BridgeEventStream implements AsyncIterable<SessionEvent> {
       };
       socket.onmessage = (message: MessageEvent) => {
         const text = decodeFrame(message.data);
-        if (text !== undefined && this.deliver(text)) ended = true;
+        if (text !== undefined && this.deliver(text)) {
+          ended = true;
+          try {
+            socket.close(WS_NORMAL, 'session ended');
+          } catch {
+            // the host closes it too
+          }
+          done('ended');
+        }
       };
       socket.onerror = () => {
         // the close event that follows carries the verdict
