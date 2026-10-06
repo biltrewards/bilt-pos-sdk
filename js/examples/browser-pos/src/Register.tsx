@@ -184,7 +184,9 @@ export function Register({ settings }: RegisterProps): ReactNode {
       </p>
     );
   }
-  if (lane.status === 'error') {
+  // A refused `end()` also lands in `error` but leaves the session open (a settlement may still be
+  // moving money), so only a lane without a session is a start failure.
+  if (lane.status === 'error' && !session) {
     return (
       <div className="notice error">
         <p>
@@ -240,7 +242,7 @@ export function Register({ settings }: RegisterProps): ReactNode {
             type="button"
             className="secondary"
             onClick={() => lane.end().catch(report)}
-            disabled={lane.status !== 'open'}
+            disabled={lane.status !== 'open' && lane.status !== 'error'}
           >
             End session
           </button>
