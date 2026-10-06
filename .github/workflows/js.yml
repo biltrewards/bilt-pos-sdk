@@ -55,3 +55,63 @@ jobs:
 
       - name: Check the API reports are up to date
         run: pnpm api:check
+
+  # The SDK runtime against the real Session Host (`:host`). The host module lands on its own
+  # branch, so on a checkout without it this job skips rather than fails.
+  contract:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: js
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Look for the host module
+        id: host
+        working-directory: .
+        run: |
+          if [ -f host/build.gradle.kts ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::host/ is absent on this branch; the contract tests are skipped"
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.host.outputs.present == 'true'
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.host.outputs.present == 'true'
+
+      - name: Build the Session Host
+        if: steps.host.outputs.present == 'true'
+        working-directory: .
+        run: ./gradlew :host:installDist -q --console=plain
+
+      - uses: pnpm/action-setup@v4
+        if: steps.host.outputs.present == 'true'
+        with:
+          package_json_file: js/package.json
+
+      - uses: actions/setup-node@v4
+        if: steps.host.outputs.present == 'true'
+        with:
+          node-version-file: js/.nvmrc
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install
+        if: steps.host.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the protocol package
+        if: steps.host.outputs.present == 'true'
+        run: pnpm --filter @bilt/pos-protocol build
+
+      - name: Contract tests against the Session Host
+        if: steps.host.outputs.present == 'true'
+        run: pnpm --filter @bilt/pos-sdk test:contract
