@@ -13,16 +13,8 @@
  *
  * @packageDocumentation
  */
-import { BiltPos as BiltPosValue } from './core/pos';
-import type { BiltPos as BiltPosInterface, BiltPosStatic } from './pos';
-
+export { BiltPos } from './pos';
 export type { BiltPosStatic, EngineCapabilities, EngineContext, EngineFactory } from './pos';
-
-/** The connection to one host; see the `BiltPos` interface. */
-export type BiltPos = BiltPosInterface;
-
-/** The entry point: `BiltPos.connect(engineFactory)` runs the SDK core over the engine the factory builds. */
-export const BiltPos: BiltPosStatic = BiltPosValue;
 export type {
   BasketMutationBuilder,
   RenderingCapabilities,

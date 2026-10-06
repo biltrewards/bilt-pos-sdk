@@ -1,12 +1,7 @@
 import { PROTOCOL_VERSION, type Health } from '@bilt/pos-protocol';
 import { EngineOutdatedError } from '../errors';
 import type { Engine } from '../internal';
-import type {
-  BiltPos as BiltPosInterface,
-  BiltPosStatic,
-  EngineCapabilities,
-  EngineFactory,
-} from '../pos';
+import type { BiltPos as BiltPosInterface, EngineCapabilities, EngineFactory } from '../pos';
 import type { ShopperSession, ShopperSessionOptions, TerminalSessionOptions } from '../session';
 import type { Terminal, TerminalInfo } from '../terminal';
 import type { TerminalShopperSession } from '../terminal-session';
@@ -104,8 +99,3 @@ export class BiltPosImpl implements BiltPosInterface {
     return this.close();
   }
 }
-
-/** The value behind `import { BiltPos } from '@bilt/pos-sdk'`. */
-export const BiltPos: BiltPosStatic = {
-  connect: (factory) => BiltPosImpl.connect(factory),
-};
