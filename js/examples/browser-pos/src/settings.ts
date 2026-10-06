@@ -95,14 +95,13 @@ export function useSettings(): readonly [Settings, (next: Settings) => void] {
 /**
  * The `localBridge()` options for a route. `direct` takes every default (port 48333 and its
  * fallback range on 127.0.0.1). `proxy` probes the page's own origin, one port, so the Vite
- * proxy carries the traffic.
+ * proxy carries the traffic. The SDK builds `http://` and `ws://` URLs only, so the proxy route
+ * is for the plain-HTTP dev server; a page served over HTTPS takes the direct route, which
+ * Chrome allows to loopback after its one-time permission prompt.
  */
 export function bridgeOptions(route: BridgeRoute): LocalBridgeOptions {
   if (route === 'direct' || typeof window === 'undefined') return {};
   const { hostname, port, protocol } = window.location;
-  return {
-    host: hostname,
-    port: Number(port || (protocol === 'https:' ? 443 : 80)),
-    fallbackPorts: 0,
-  };
+  if (protocol !== 'http:') return {};
+  return { host: hostname, port: Number(port || 80), fallbackPorts: 0 };
 }
