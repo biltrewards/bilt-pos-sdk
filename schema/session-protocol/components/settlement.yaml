@@ -1,0 +1,474 @@
+SettlementType:
+  type: string
+  description: |
+    How a settlement containing sale, credit and return lines moves money.
+    `REFUND_THEN_CHARGE` (the default) executes return refund allocations first, then charges
+    sales less credits. `NET` moves only the signed difference: a positive total is charged, a
+    negative one refunded, zero sends no monetary movement.
+  enum: [REFUND_THEN_CHARGE, NET]
+
+SettlementStep:
+  type: string
+  description: A step of the settlement sequence.
+  enum: [REBATE_REDEMPTION, POINT_REDEMPTION, STORED_VALUE_CHARGE, CARD_CHARGE, EXTERNAL_PAYMENT, STORED_VALUE_LOAD, AWARD, CARD_REFUND, STORED_VALUE_REFUND, EXTERNAL_REFUND, POINT_REDEMPTION_REFUND, REBATE_REFUND, AWARD_REFUND]
+
+SettlementTarget:
+  type: object
+  description: The basket obligation a settlement instruction or movement resolves.
+  required: [type]
+  properties:
+    type:
+      type: string
+      enum: [SALES, REFUNDS, BASKET_LINE]
+    basketReference:
+      type: string
+      description: The register reference of the line, for `BASKET_LINE`.
+
+RefundAllocationType:
+  type: string
+  enum: [CARD, STORED_VALUE, STORE_CREDIT, EXTERNAL, POINT_REDEMPTION, REBATE, AWARD]
+
+RefundAllocation:
+  type: object
+  description: |
+    A register-selected refund or restoration movement for a settlement with returns; one per
+    movement the register wants recorded or executed. `CARD` without an original reference is
+    an unlinked card refund. `STORED_VALUE`, `POINT_REDEMPTION`, `REBATE` and `AWARD` require
+    `originalPoiTransactionId`; the loyalty types also `memberId`; `STORE_CREDIT` requires
+    `storedValueCard`. `amount` is positive except for `AWARD`, which is bookkeeping and uses
+    zero. `EXTERNAL` counts toward the return total but sends no terminal movement.
+  required: [type]
+  properties:
+    type:
+      $ref: '#/RefundAllocationType'
+    amount:
+      $ref: './common.yaml#/Money'
+      default: '0'
+    originalPoiTransactionId:
+      type: string
+    originalPoiTransactionTimestamp:
+      type: string
+      format: date-time
+    storedValueCard:
+      $ref: './storedvalue.yaml#/StoredValueCard'
+    memberId:
+      type: string
+
+StoredValueLoad:
+  type: object
+  description: Settlement-time stored value fulfillment of a referenced sale line; the card is loaded with the line's pre-discount value.
+  required: [basketReference, type, card]
+  properties:
+    basketReference:
+      type: string
+      minLength: 1
+    type:
+      type: string
+      enum: [ACTIVATE, RELOAD]
+    card:
+      $ref: './storedvalue.yaml#/StoredValueCard'
+
+StoredValueLoadRecord:
+  type: object
+  description: Persistable reference for reversing one fulfilled stored value basket line.
+  required: [basketReference, amount, poiTransactionId]
+  properties:
+    basketReference:
+      type: string
+    amount:
+      $ref: './common.yaml#/Money'
+    poiTransactionId:
+      type: string
+    poiTransactionTimestamp:
+      type: string
+      format: date-time
+
+ExternalPayment:
+  type: object
+  description: A payment collected and owned by the register, accepted only as a replacement for a failed final card tender; its amount must equal the outstanding balance.
+  required: [tenderType, amount]
+  properties:
+    tenderType:
+      type: string
+      minLength: 1
+      description: '`"CASH"` or an integrator-defined tender name.'
+    amount:
+      $ref: './common.yaml#/Money'
+    reference:
+      type: string
+      description: A register transaction reference.
+
+SettlementOptions:
+  type: object
+  description: The register's plan for resolving a basket, mirroring `SettlementOptions`; all fields optional.
+  properties:
+    disableRebates:
+      type: boolean
+      default: false
+    disablePoints:
+      type: boolean
+      default: false
+    disableAward:
+      type: boolean
+      default: false
+    cashback:
+      description: Positive cashback requested with the card payment.
+      $ref: './common.yaml#/Money'
+    paymentProcessingDisplay:
+      description: Overrides the display shown while the card payment is processing.
+      $ref: './display.yaml#/DisplayPayload'
+    refunds:
+      type: array
+      items:
+        $ref: '#/RefundAllocation'
+    fulfillments:
+      type: array
+      items:
+        $ref: '#/StoredValueLoad'
+    settlementType:
+      $ref: '#/SettlementType'
+      default: REFUND_THEN_CHARGE
+
+SettlementMovement:
+  type: object
+  description: One money or loyalty movement committed as part of a settlement.
+  required: [step, target, amount]
+  properties:
+    step:
+      $ref: '#/SettlementStep'
+    target:
+      $ref: '#/SettlementTarget'
+    amount:
+      $ref: './common.yaml#/Money'
+    saleTransactionId:
+      type: string
+    poiTransactionId:
+      type: string
+    poiTransactionTimestamp:
+      type: string
+      format: date-time
+    memberId:
+      type: string
+    points:
+      type: integer
+    pointBalance:
+      type: integer
+    externalTenderType:
+      type: string
+    externalReference:
+      type: string
+
+CommittedStep:
+  type: object
+  required: [step, success]
+  properties:
+    step:
+      $ref: '#/SettlementStep'
+    saleTransactionId:
+      type: string
+    poiTransactionId:
+      type: string
+    poiTransactionTimestamp:
+      type: string
+      format: date-time
+    success:
+      type: boolean
+
+SettlementContext:
+  type: object
+  description: What the `beforeStep` handler sees before each payment step.
+  required: [step, currentBasket, currentTotal, defaultTransactionId, priorSteps]
+  properties:
+    step:
+      $ref: '#/SettlementStep'
+    currentBasket:
+      $ref: './basket.yaml#/Basket'
+    currentTotal:
+      $ref: './common.yaml#/Money'
+    defaultTransactionId:
+      type: string
+      description: The basket's shared sale transaction id, used when the reply names nothing else.
+    priorSteps:
+      type: array
+      items:
+        $ref: '#/CommittedStep'
+
+SettlementFailure:
+  type: object
+  description: What the `onError` handler sees when a charge-side step failed.
+  required: [error, amountDue, committedMovements, outcomeCertainty]
+  properties:
+    step:
+      description: Absent when the failure did not occur inside a specific step (a pre-sequence rejection or refused recovery).
+      $ref: '#/SettlementStep'
+    error:
+      $ref: './common.yaml#/SessionError'
+    amountDue:
+      description: The amount the failed step was responsible for resolving.
+      $ref: './common.yaml#/Money'
+    committedMovements:
+      type: array
+      items:
+        $ref: '#/SettlementMovement'
+    outcomeCertainty:
+      type: string
+      description: '`INDETERMINATE` when TransactionStatus could not establish the terminal outcome; skip and external replacement are then invalid.'
+      enum: [DEFINITIVE, INDETERMINATE]
+    messageCategory:
+      type: string
+    serviceId:
+      type: string
+
+SettlementRecovery:
+  type: object
+  description: |
+    The register's answer to a `RECOVERY_REQUIRED` step. `RETRY` retries only the failed step
+    (for an indeterminate failure it checks TransactionStatus again and never resends);
+    `SKIP` skips an optional step (never the final card tender or a fulfillment); `EXTERNAL`
+    records `externalPayment` for the outstanding balance and continues; `ABORT` unwinds the
+    committed charge-side steps and fails the settlement; `ABANDON` stops recovery and hands
+    the partial settlement to the register as an `AbandonedSettlementRecord`.
+  required: [action]
+  properties:
+    action:
+      type: string
+      enum: [RETRY, SKIP, EXTERNAL, ABORT, ABANDON]
+    externalPayment:
+      description: Required for `EXTERNAL`.
+      $ref: '#/ExternalPayment'
+
+AbandonedSettlementRecord:
+  type: object
+  description: The manual-takeover record produced when the register abandons recovery; every committed movement becomes its reconciliation responsibility.
+  required: [settlementId, abandonedAt, basket, options, failure, outstandingAmount, committedMovements]
+  properties:
+    settlementId:
+      type: string
+    abandonedAt:
+      type: string
+      format: date-time
+    basket:
+      $ref: './basket.yaml#/Basket'
+    options:
+      $ref: '#/SettlementOptions'
+    memberId:
+      type: string
+    failure:
+      $ref: '#/SettlementFailure'
+    outstandingAmount:
+      $ref: './common.yaml#/Money'
+    committedMovements:
+      type: array
+      items:
+        $ref: '#/SettlementMovement'
+
+OriginalSaleRecord:
+  type: object
+  description: References from a completed sale that a later session uses to void the whole transaction or allocate return settlement.
+  properties:
+    cardPoiTransactionId:
+      type: string
+    cardPoiTransactionTimestamp:
+      type: string
+      format: date-time
+    storedValuePoiTransactionId:
+      type: string
+    storedValuePoiTransactionTimestamp:
+      type: string
+      format: date-time
+    storedValueLoads:
+      type: array
+      items:
+        $ref: '#/StoredValueLoadRecord'
+    rebatePoiTransactionId:
+      type: string
+    rebatePoiTransactionTimestamp:
+      type: string
+      format: date-time
+    redemptionPoiTransactionId:
+      type: string
+    redemptionPoiTransactionTimestamp:
+      type: string
+      format: date-time
+    awardPoiTransactionId:
+      type: string
+    awardPoiTransactionTimestamp:
+      type: string
+      format: date-time
+    memberId:
+      type: string
+
+RedeemedRebate:
+  type: object
+  required: [amount]
+  properties:
+    itemId:
+      type: string
+      description: The basket line the rebate applies to; absent for cart-level.
+    sku:
+      type: string
+    amount:
+      $ref: './common.yaml#/Money'
+    label:
+      type: string
+    promotionRef:
+      type: string
+
+EarnedReward:
+  type: object
+  required: [quantity]
+  properties:
+    type:
+      type: string
+      enum: [REWARD, COUPON, POINT]
+    description:
+      type: string
+    quantity:
+      type: integer
+    rewardRef:
+      type: string
+
+RebateRedemptionResult:
+  type: object
+  description: What `onRebatesRedeemed` sees; the reply's `total` is the running total for the next step, typically `suggestedTotal`.
+  required: [rebates, totalRebateAmount, previousTotal, suggestedTotal, updatedBasket]
+  properties:
+    rebates:
+      type: array
+      items:
+        $ref: '#/RedeemedRebate'
+    totalRebateAmount:
+      $ref: './common.yaml#/Money'
+    previousTotal:
+      $ref: './common.yaml#/Money'
+    suggestedTotal:
+      description: '`previousTotal − totalRebateAmount`.'
+      $ref: './common.yaml#/Money'
+    updatedBasket:
+      $ref: './basket.yaml#/Basket'
+
+PointRedemptionResult:
+  type: object
+  required: [pointsUsed, monetaryValue, previousTotal, suggestedTotal, remainingPointBalance]
+  properties:
+    pointsUsed:
+      type: integer
+    monetaryValue:
+      $ref: './common.yaml#/Money'
+    previousTotal:
+      $ref: './common.yaml#/Money'
+    suggestedTotal:
+      $ref: './common.yaml#/Money'
+    remainingPointBalance:
+      type: integer
+
+GiftCardPaymentResult:
+  type: object
+  description: What `onGiftCardPayment` sees. With an insufficient balance the charge is partial and `suggestedTotal` carries the remainder for the card step.
+  required: [amountCharged, previousTotal, suggestedTotal]
+  properties:
+    amountCharged:
+      $ref: './common.yaml#/Money'
+    remainingCardBalance:
+      $ref: './common.yaml#/Money'
+    previousTotal:
+      $ref: './common.yaml#/Money'
+    suggestedTotal:
+      $ref: './common.yaml#/Money'
+
+SettlementResult:
+  type: object
+  description: |
+    Final outcome of a successful settlement. `movements` is the authoritative ledger of what
+    remained committed; movement events during the run are provisional. The loyalty award is
+    best-effort: a failed award does not fail the checkout and is reported in `warnings`.
+  required: [success, finalBasket, authorizedAmount, storedValueAmountUsed, storedValueLoadedAmount, cardAmountCharged, externalPaymentAmount, redeemedRebates, totalRebateAmount, pointsRedeemed, pointsMonetaryValue, earnedRewards, totalPointsEarned, pointsBalance, promotionMessages, cardRefundedAmount, storedValueRefundedAmount, externalRefundedAmount, loyaltyRefundedAmount, movements, warnings]
+  properties:
+    success:
+      type: boolean
+    finalBasket:
+      $ref: './basket.yaml#/Basket'
+    authorizedAmount:
+      $ref: './common.yaml#/Money'
+    storedValueAmountUsed:
+      $ref: './common.yaml#/Money'
+    storedValueLoadedAmount:
+      $ref: './common.yaml#/Money'
+    cardAmountCharged:
+      $ref: './common.yaml#/Money'
+    externalPaymentAmount:
+      $ref: './common.yaml#/Money'
+    approvalCode:
+      type: string
+    acquirerTransactionId:
+      type: string
+    paymentBrand:
+      type: string
+    redeemedRebates:
+      type: array
+      items:
+        $ref: '#/RedeemedRebate'
+    totalRebateAmount:
+      $ref: './common.yaml#/Money'
+    pointsRedeemed:
+      type: integer
+    pointsMonetaryValue:
+      $ref: './common.yaml#/Money'
+    earnedRewards:
+      type: array
+      items:
+        $ref: '#/EarnedReward'
+    totalPointsEarned:
+      type: integer
+    pointsBalance:
+      type: integer
+    promotionMessages:
+      type: array
+      items:
+        type: string
+    customerReceipt:
+      $ref: './common.yaml#/Receipt'
+    merchantReceipt:
+      $ref: './common.yaml#/Receipt'
+    poiTransactionId:
+      type: string
+      description: Terminal reference of the card payment, for void and refund.
+    poiTransactionTimestamp:
+      type: string
+      format: date-time
+    storedValuePoiTransactionId:
+      type: string
+    storedValuePoiTransactionTimestamp:
+      type: string
+      format: date-time
+    awardPoiTransactionId:
+      type: string
+    awardPoiTransactionTimestamp:
+      type: string
+      format: date-time
+    rebatePoiTransactionId:
+      type: string
+    rebatePoiTransactionTimestamp:
+      type: string
+      format: date-time
+    redemptionPoiTransactionId:
+      type: string
+    redemptionPoiTransactionTimestamp:
+      type: string
+      format: date-time
+    cardRefundedAmount:
+      $ref: './common.yaml#/Money'
+    storedValueRefundedAmount:
+      $ref: './common.yaml#/Money'
+    externalRefundedAmount:
+      $ref: './common.yaml#/Money'
+    loyaltyRefundedAmount:
+      $ref: './common.yaml#/Money'
+    movements:
+      type: array
+      items:
+        $ref: '#/SettlementMovement'
+    warnings:
+      type: array
+      items:
+        type: string

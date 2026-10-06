@@ -1,0 +1,123 @@
+ReversalStep:
+  type: string
+  description: |
+    One reversible leg of a sale. A void reverses the known legs in this order:
+    `STORED_VALUE_LOAD`, `CARD`, `STORED_VALUE`, `REDEMPTION`, `REBATE`, `AWARD`. A refund flow
+    has at most `CARD` (the tender refund) and `AWARD`.
+  enum: [STORED_VALUE_LOAD, CARD, STORED_VALUE, REDEMPTION, REBATE, AWARD]
+
+ReversalDecision:
+  type: string
+  description: |
+    How a reversal proceeds after a step failed. `RETRY` re-sends the step; `SKIP` leaves the
+    movement standing and continues (a void then fails as incomplete when a money leg was
+    skipped; a refund's tender step may be skipped outright and the sale stays voidable);
+    `ABORT` stops, with already-reversed steps standing so the operation can be retried.
+  enum: [RETRY, SKIP, ABORT]
+
+ReversedMovement:
+  type: object
+  description: A movement that completed before a whole-sale void stopped.
+  required: [step, poiTransactionId]
+  properties:
+    step:
+      $ref: '#/ReversalStep'
+    poiTransactionId:
+      type: string
+
+RefundResult:
+  type: object
+  description: Outcome of a refund. A linked refund also reverses loyalty points awarded on the original transaction, best-effort.
+  required: [success, pointsReversed, remainingPointBalance]
+  properties:
+    success:
+      type: boolean
+    refundedAmount:
+      description: Absent when the terminal did not echo it.
+      $ref: './common.yaml#/Money'
+    approvalCode:
+      type: string
+    poiTransactionId:
+      type: string
+    poiTransactionTimestamp:
+      type: string
+      format: date-time
+    customerReceipt:
+      $ref: './common.yaml#/Receipt'
+    merchantReceipt:
+      $ref: './common.yaml#/Receipt'
+    pointsReversed:
+      type: integer
+      description: '`0` for unlinked.'
+    remainingPointBalance:
+      type: integer
+
+VoidResult:
+  type: object
+  description: |
+    Outcome of `voidTransaction`: the movements *this call* reversed. A resumed void after a
+    partial abort does not restate what earlier attempts reversed; its amount, reference and
+    receipts cover only the legs sent this time and may all be absent.
+  required: [success, pointsReversed, remainingPointBalance]
+  properties:
+    success:
+      type: boolean
+    reversedAmount:
+      $ref: './common.yaml#/Money'
+    poiTransactionId:
+      type: string
+    poiTransactionTimestamp:
+      type: string
+      format: date-time
+    customerReceipt:
+      $ref: './common.yaml#/Receipt'
+    merchantReceipt:
+      $ref: './common.yaml#/Receipt'
+    pointsReversed:
+      type: integer
+    remainingPointBalance:
+      type: integer
+
+MessageCategory:
+  type: string
+  description: The Nexo `MessageCategoryType`.
+  enum: [ABORT, ADMIN, BALANCE_INQUIRY, BATCH, CARD_ACQUISITION, CARD_READER_APDU, CARD_READER_INIT, CARD_READER_POWER_OFF, DIAGNOSIS, DISPLAY, ENABLE_SERVICE, EVENT, GET_TOTALS, INPUT, INPUT_UPDATE, LOGIN, LOGOUT, LOYALTY, PAYMENT, PIN, PRINT, RECONCILIATION, REVERSAL, SOUND, STORED_VALUE, TRANSACTION_STATUS, TRANSMIT]
+
+TransactionStatusOptions:
+  type: object
+  description: By default the referenced request is assumed to be a payment and no receipt data is requested.
+  properties:
+    originalCategory:
+      $ref: '#/MessageCategory'
+      default: PAYMENT
+    receiptReprint:
+      type: boolean
+      default: false
+      description: Whether the terminal should include the original receipts, to reprint after a crash or connection loss.
+    documentQualifiers:
+      type: array
+      description: Receipt kinds to include when reprinting; defaults to customer and cashier receipts.
+      items:
+        $ref: './common.yaml#/DocumentQualifier'
+
+TransactionStatusResult:
+  type: object
+  description: |
+    When the original transaction was found the terminal repeats its response; exactly one of
+    the typed responses is present, as `messageCategory` indicates. The responses are Nexo
+    structures carried through unchanged.
+  required: [found]
+  properties:
+    found:
+      type: boolean
+    messageCategory:
+      type: string
+      description: '`"Payment"`, `"Loyalty"`, `"StoredValue"` or `"Reversal"`.'
+    paymentResponse:
+      $ref: './common.yaml#/NexoObject'
+    loyaltyResponse:
+      $ref: './common.yaml#/NexoObject'
+    storedValueResponse:
+      $ref: './common.yaml#/NexoObject'
+    reversalResponse:
+      $ref: './common.yaml#/NexoObject'
