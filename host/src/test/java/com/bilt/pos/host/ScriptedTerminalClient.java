@@ -21,10 +21,10 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * A terminal that answers from a script. Responses are keyed by message category, and for loyalty
- * requests by the loyalty transaction type too ({@code Loyalty/Rebate}, {@code Loyalty/Award}),
- * so one client can carry a whole settlement. A category with no script fails the request the
- * way an unreachable terminal would. {@link #hold(MessageCategoryType)} parks the next request of
- * a category until {@link #release()} so a test can observe an operation mid-flight.
+ * requests by the loyalty transaction type too ({@code Loyalty/Rebate}, {@code Loyalty/Award}), so
+ * one client can carry a whole settlement. A category with no script fails the request the way an
+ * unreachable terminal would. {@link #hold(MessageCategoryType)} parks the next request of a
+ * category until {@link #release()} so a test can observe an operation mid-flight.
  */
 final class ScriptedTerminalClient implements TerminalClient {
 
@@ -153,7 +153,9 @@ final class ScriptedTerminalClient implements TerminalClient {
         && loyalty != null
         && loyalty.getLoyaltyTransaction() != null
         && loyalty.getLoyaltyTransaction().getLoyaltyTransactionType() != null) {
-      return category.name() + "/" + loyalty.getLoyaltyTransaction().getLoyaltyTransactionType().toValue();
+      return category.name()
+          + "/"
+          + loyalty.getLoyaltyTransaction().getLoyaltyTransactionType().toValue();
     }
     return category.name();
   }

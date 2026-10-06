@@ -31,7 +31,8 @@ class TerminalSessionTest {
             .reply(MessageCategoryType.ADMIN, ScriptedTerminalClient.ADMIN_OK)
             .reply(MessageCategoryType.ABORT, ScriptedTerminalClient.ADMIN_OK)
             .reply(MessageCategoryType.INPUT, ScriptedTerminalClient.INPUT_CONFIRMED)
-            .reply(MessageCategoryType.PAYMENT, ScriptedTerminalClient.paymentOk("POI-PAY-1", "89.50"))
+            .reply(
+                MessageCategoryType.PAYMENT, ScriptedTerminalClient.paymentOk("POI-PAY-1", "89.50"))
             .reply(MessageCategoryType.LOYALTY, ScriptedTerminalClient.AWARD_OK)
             .replyLoyalty("Rebate", ScriptedTerminalClient.REBATE_OK)
             .replyLoyalty("Award", ScriptedTerminalClient.AWARD_OK);
@@ -53,7 +54,7 @@ class TerminalSessionTest {
 
               @Override
               public List<TerminalInfo> terminals() {
-                return List.of(TerminalInfo.of(POI, "Lane 1", "VictaLane"));
+                return List.of(TerminalInfo.of(POI, "VictaLane").withReachable(true));
               }
             })
         .build();
@@ -89,12 +90,16 @@ class TerminalSessionTest {
     return client.post("/v1/sessions/" + id + "/operations", body).expect(202).body;
   }
 
+  private static final String SETTLE_WITH_TOTALS =
+      json("{'type':'settle','handledSteps':['TOTAL_REQUIRED']}");
+
   @Test
   void terminalsAreListedAndSessionCarriesPoiId() throws Exception {
     JsonNode terminals = client.get("/v1/terminals").expect(200).body;
     assertEquals(POI, terminals.get(0).path("poiId").asText());
-    assertEquals("Lane 1", terminals.get(0).path("label").asText());
-    assertEquals(1, client.get("/health").expect(200).body.path("terminals").asInt());
+    assertEquals("VictaLane", terminals.get(0).path("model").asText());
+    assertTrue(terminals.get(0).path("reachable").asBoolean());
+    assertEquals(1, client.get("/health").expect(200).body.path("terminals").size());
     client.post("/v1/terminals/unknown/diagnose", "{}").expect(404);
 
     String id = createWithMemberAndItem();
@@ -102,22 +107,25 @@ class TerminalSessionTest {
     assertEquals("terminal", session.path("kind").asText());
     assertEquals(POI, session.path("poiId").asText());
     assertTrue(client.get("/v1/sessions/" + id + "/widgets").expect(200).body.isEmpty());
-    client.delete("/v1/sessions/" + id).expect(200);
+    assertEquals("succeeded", client.delete("/v1/sessions/" + id).expect(202).text("status"));
   }
 
   @Test
   void settleRaisesTotalRequiredAndTakesTheReply() throws Exception {
     String id = createWithMemberAndItem();
-    JsonNode operation = submit(id, json("{'type':'settle'}"));
+    JsonNode operation = submit(id, SETTLE_WITH_TOTALS);
     String operationId = operation.path("id").asText();
     assertEquals("settle", operation.path("type").asText());
 
-    JsonNode waiting = client.awaitOperation(id, operationId, "awaitingReply", Duration.ofSeconds(10));
+    JsonNode waiting =
+        client.awaitOperation(id, operationId, "awaitingReply", Duration.ofSeconds(10));
     JsonNode step = waiting.path("pendingStep");
     assertEquals("TOTAL_REQUIRED", step.path("kind").asText());
-    assertEquals("REBATE_REDEMPTION", step.path("settlementStep").asText());
-    assertEquals("90.00", step.path("suggestedTotal").asText());
+    assertEquals(operationId, step.path("operationId").asText());
+    assertEquals("REBATE_REDEMPTION", step.path("step").asText());
+    assertEquals("90.00", step.path("rebates").path("suggestedTotal").asText());
     assertEquals("90.00", step.path("default").path("total").asText());
+    assertEquals(step.path("stepId").asText(), step.path("default").path("stepId").asText());
     assertNotNull(step.path("deadlineAt").asText(null));
 
     client
@@ -125,11 +133,14 @@ class TerminalSessionTest {
             "/v1/sessions/" + id + "/operations/" + operationId + "/reply",
             json("{'stepId':'" + step.path("stepId").asText() + "','total':'89.50'}"))
         .expect(200);
-    client
-        .post(
-            "/v1/sessions/" + id + "/operations/" + operationId + "/reply",
-            json("{'stepId':'" + step.path("stepId").asText() + "','total':'1.00'}"))
-        .expect(409);
+    JsonNode stale =
+        client
+            .post(
+                "/v1/sessions/" + id + "/operations/" + operationId + "/reply",
+                json("{'stepId':'" + step.path("stepId").asText() + "','total':'1.00'}"))
+            .expect(422)
+            .body;
+    assertEquals("INVALID_STATE", stale.path("code").asText());
 
     JsonNode done = client.awaitOperation(id, operationId, "succeeded", Duration.ofSeconds(10));
     assertEquals("89.50", done.path("result").path("cardAmountCharged").asText());
@@ -149,10 +160,14 @@ class TerminalSessionTest {
     assertTrue(types.contains("operation.movement"), types.toString());
     assertTrue(types.contains("context.changed"), types.toString());
     JsonNode stepEvent =
-        events.stream().filter(e -> e.path("type").asText().equals("operation.step")).findFirst().get();
+        events.stream()
+            .filter(e -> e.path("type").asText().equals("operation.step"))
+            .findFirst()
+            .get();
     assertEquals(operationId, stepEvent.path("payload").path("operationId").asText());
-    assertEquals("TOTAL_REQUIRED", stepEvent.path("payload").path("step").path("kind").asText());
-    assertEquals("succeeded", events.get(events.size() - 1).path("payload").path("status").asText());
+    assertEquals("TOTAL_REQUIRED", stepEvent.path("payload").path("kind").asText());
+    assertEquals(
+        "succeeded", events.get(events.size() - 1).path("payload").path("status").asText());
   }
 
   @Test
@@ -163,54 +178,81 @@ class TerminalSessionTest {
     client = new HostClient(host.port());
 
     String id = createWithMemberAndItem();
-    terminal.reply(MessageCategoryType.PAYMENT, ScriptedTerminalClient.paymentOk("POI-PAY-2", "90.00"));
+    terminal.reply(
+        MessageCategoryType.PAYMENT, ScriptedTerminalClient.paymentOk("POI-PAY-2", "90.00"));
+    String operationId = submit(id, SETTLE_WITH_TOTALS).path("id").asText();
+    JsonNode done = client.awaitOperation(id, operationId, "succeeded", Duration.ofSeconds(10));
+    assertEquals("90.00", done.path("result").path("cardAmountCharged").asText());
+  }
+
+  @Test
+  void undeclaredStepsTakeTheDefaultWithoutAsking() throws Exception {
+    String id = createWithMemberAndItem();
+    terminal.reply(
+        MessageCategoryType.PAYMENT, ScriptedTerminalClient.paymentOk("POI-PAY-3", "90.00"));
     String operationId = submit(id, json("{'type':'settle'}")).path("id").asText();
     JsonNode done = client.awaitOperation(id, operationId, "succeeded", Duration.ofSeconds(10));
     assertEquals("90.00", done.path("result").path("cardAmountCharged").asText());
+    List<JsonNode> events =
+        client.sseUntil(
+            id,
+            0,
+            e -> e.path("type").asText().equals("operation.completed"),
+            Duration.ofSeconds(10));
+    assertTrue(events.stream().noneMatch(e -> e.path("type").asText().equals("operation.step")));
   }
 
   @Test
-  void stepsCanBeDeclinedUpFront() throws Exception {
-    String id = createWithMemberAndItem();
-    terminal.reply(MessageCategoryType.PAYMENT, ScriptedTerminalClient.paymentOk("POI-PAY-3", "90.00"));
-    String operationId = submit(id, json("{'type':'settle','steps':[]}")).path("id").asText();
-    JsonNode done = client.awaitOperation(id, operationId, "succeeded", Duration.ofSeconds(10));
-    assertEquals("90.00", done.path("result").path("cardAmountCharged").asText());
-  }
-
-  @Test
-  void queuedOperationsFollowTheLaneAndCanBeAborted() throws Exception {
+  void queuedOperationsFollowTheLaneAndEndQueuesBehindThem() throws Exception {
     String id = createWithMemberAndItem();
     terminal.hold(MessageCategoryType.INPUT);
-    String first = submit(id, json("{'type':'requestConfirmation','prompt':'Receipt?'}")).path("id").asText();
+    String first =
+        submit(id, json("{'type':'requestConfirmation','prompt':'Receipt?'}")).path("id").asText();
     JsonNode second = submit(id, json("{'type':'requestConfirmation','prompt':'Bag?'}"));
     assertEquals("queued", second.path("status").asText());
     assertTrue(terminal.awaitHeld(Duration.ofSeconds(5)));
-    assertEquals("running", client.get("/v1/sessions/" + id + "/operations/" + first).body.path("status").asText());
+    assertEquals(
+        "running",
+        client.get("/v1/sessions/" + id + "/operations/" + first).body.path("status").asText());
 
+    String secondId = second.path("id").asText();
     JsonNode aborted =
-        client.post("/v1/sessions/" + id + "/operations/" + second.path("id").asText() + "/abort", "{}").expect(202).body;
+        client
+            .post("/v1/sessions/" + id + "/operations/" + secondId + "/abort", "{}")
+            .expect(202)
+            .body;
     assertEquals("aborted", aborted.path("status").asText());
     assertEquals("ABORTED", aborted.path("error").path("code").asText());
-    client.post("/v1/sessions/" + id + "/operations/" + second.path("id").asText() + "/abort", "{}").expect(409);
+    client.post("/v1/sessions/" + id + "/operations/" + secondId + "/abort", "{}").expect(200);
 
+    JsonNode end = client.delete("/v1/sessions/" + id).expect(202).body;
+    assertEquals("end", end.path("type").asText());
+    assertEquals("queued", end.path("status").asText());
+    assertEquals("ending", client.get("/v1/sessions/" + id).expect(200).text("state"));
     client.delete("/v1/sessions/" + id).expect(409);
 
     terminal.release();
     JsonNode done = client.awaitOperation(id, first, "succeeded", Duration.ofSeconds(10));
-    assertTrue(done.path("result").path("confirmed").asBoolean());
-    client.delete("/v1/sessions/" + id).expect(200);
+    assertTrue(done.path("result").asBoolean());
+    client.awaitOperation(id, end.path("id").asText(), "succeeded", Duration.ofSeconds(10));
+    assertEquals("ended", client.get("/v1/sessions/" + id).expect(200).text("state"));
+    JsonNode listed =
+        client.get("/v1/sessions/" + id + "/operations?status=aborted").expect(200).body;
+    assertEquals(1, listed.size());
+    assertEquals(secondId, listed.get(0).path("id").asText());
   }
 
   @Test
   void abortDuringAPendingStepAbortsTheSettlement() throws Exception {
     String id = createWithMemberAndItem();
-    String operationId = submit(id, json("{'type':'settle'}")).path("id").asText();
+    String operationId = submit(id, SETTLE_WITH_TOTALS).path("id").asText();
     client.awaitOperation(id, operationId, "awaitingReply", Duration.ofSeconds(10));
-    client.post("/v1/sessions/" + id + "/operations/" + operationId + "/abort", "{}").expect(202);
+    JsonNode aborted = client.post("/v1/sessions/" + id + "/abort", "{}").expect(202).body;
+    assertEquals(operationId, aborted.path("operation").path("id").asText());
     JsonNode done = client.awaitOperation(id, operationId, "aborted", Duration.ofSeconds(10));
     assertEquals("ABORTED", done.path("error").path("code").asText());
-    assertTrue(client.get("/v1/sessions/" + id + "/operations/" + operationId).body.path("pendingStep").isMissingNode());
+    assertTrue(done.path("pendingStep").isMissingNode());
+    assertTrue(client.post("/v1/sessions/" + id + "/abort", "{}").expect(202).body.isEmpty());
   }
 
   @Test
@@ -218,10 +260,13 @@ class TerminalSessionTest {
     String id = createWithMemberAndItem();
     terminal.hold(MessageCategoryType.INPUT);
     String body = json("{'type':'requestConfirmation','prompt':'Receipt?'}");
-    JsonNode first = client.post("/v1/sessions/" + id + "/operations", body, "op-key").expect(202).body;
-    JsonNode replay = client.post("/v1/sessions/" + id + "/operations", body, "op-key").expect(202).body;
+    JsonNode first =
+        client.post("/v1/sessions/" + id + "/operations", body, "op-key").expect(202).body;
+    JsonNode replay =
+        client.post("/v1/sessions/" + id + "/operations", body, "op-key").expect(202).body;
     assertEquals(first.path("id").asText(), replay.path("id").asText());
-    JsonNode fresh = client.post("/v1/sessions/" + id + "/operations", body, "op-key-2").expect(202).body;
+    JsonNode fresh =
+        client.post("/v1/sessions/" + id + "/operations", body, "op-key-2").expect(202).body;
     assertNotEquals(first.path("id").asText(), fresh.path("id").asText());
     assertEquals(2, client.get("/v1/sessions/" + id + "/operations").expect(200).body.size());
     terminal.release();

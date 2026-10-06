@@ -20,7 +20,9 @@ import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.SessionResult;
 import com.bilt.pos.session.SettlementFlow;
 import com.bilt.pos.session.TerminalShopperSession;
+import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.identity.Member;
+import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementOptions;
@@ -29,7 +31,6 @@ import com.bilt.pos.session.storedvalue.StoredValueCard;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -48,16 +49,11 @@ import java.util.function.Supplier;
  *
  * <p>Step handlers run on the SDK's flow thread (the session has no callback executor, so the SDK
  * dispatches inline). They publish {@code operation.step}, park on a {@link PendingStep} and return
- * whatever {@code /reply}, an abort or the deadline resolved. A client that does not want to be
- * asked a step kind leaves it out of the request's {@code steps} list and the SDK default applies
- * immediately.
+ * whatever {@code /reply}, an abort or the deadline resolved. Only the step kinds the request
+ * declared in {@code handledSteps} are asked; the rest take the SDK default at once, which is what
+ * Java does when no handler is registered.
  */
 public final class OperationRunner {
-
-  private static final Set<PendingStep.Kind> DEFAULT_SETTLEMENT_STEPS =
-      EnumSet.of(PendingStep.Kind.TOTAL_REQUIRED, PendingStep.Kind.RECOVERY_REQUIRED);
-  private static final Set<PendingStep.Kind> DEFAULT_REVERSAL_STEPS =
-      EnumSet.of(PendingStep.Kind.REVERSAL_DECISION_REQUIRED);
 
   private final StepDeadlines deadlines;
 
@@ -65,9 +61,12 @@ public final class OperationRunner {
     this.deadlines = deadlines;
   }
 
-  /** Parses the body, registers the operation on the session and returns it (status queued). */
+  /** Parses the body, registers the operation on the session and returns it. */
   public HostedOperation submit(HostedSession hosted, ObjectNode body) {
     String type = Json.requireText(body, "type");
+    if ("end".equals(type) || "forceEnd".equals(type)) {
+      throw HostError.badRequest(type + " has its own endpoint and is not an operation request");
+    }
     boolean ordered = !"updateInputDisplay".equals(type);
     HostedOperation operation = new HostedOperation(type, ordered);
     Runnable launch = launch(hosted, operation, type, body);
@@ -76,39 +75,43 @@ public final class OperationRunner {
   }
 
   /**
-   * Answers a parked step. 409 when the operation is not waiting or the step ID is stale, 400/422
-   * when the answer does not fit the step kind.
+   * Answers a parked step. 422 when the operation is not waiting, the step ID is stale or the step
+   * was already answered; 400 when the answer does not fit the step kind.
    */
   public void reply(HostedOperation operation, ObjectNode body) {
     String stepId = Json.requireText(body, "stepId");
     PendingStep<?> step = operation.pendingStep();
     if (step == null || operation.status() != HostedOperation.Status.AWAITING_REPLY) {
-      throw HostError.conflict("operation " + operation.id() + " is not awaiting a reply");
+      throw HostError.notPending("operation " + operation.id() + " is not awaiting a reply");
     }
     if (!step.stepId().equals(stepId)) {
-      throw HostError.conflict("step " + stepId + " is not the pending step of this operation");
+      throw HostError.notPending("step " + stepId + " is not the pending step of this operation");
     }
     if (!step.reply(body)) {
-      throw HostError.conflict("step " + stepId + " was already answered");
+      throw HostError.notPending("step " + stepId + " was already answered");
     }
   }
 
   /**
-   * Aborts an operation: a queued one is dropped, a parked step is answered the way an abort
-   * would, and a terminal session's in-flight exchange is cancelled through the SDK's unordered
-   * {@code abort()}.
+   * Aborts an operation: a queued one is dropped, a parked step is answered the way an abort would,
+   * and a terminal session's in-flight exchange is cancelled through the SDK's unordered {@code
+   * abort()}. Returns false when the operation had already completed and nothing was done.
    */
-  public void abort(HostedSession hosted, HostedOperation operation) {
+  public boolean abort(HostedSession hosted, HostedOperation operation) {
     if (operation.isTerminal()) {
-      throw HostError.conflict("operation " + operation.id() + " has already completed");
+      return false;
+    }
+    if (!operation.isAbortable()) {
+      throw HostError.conflict(operation.type() + " is never the abort's target");
     }
     if (operation.status() == HostedOperation.Status.QUEUED && hosted.dequeue(operation)) {
       operation.failed(
           HostError.of(
-              new SessionError(SessionErrorCode.ABORTED, "the operation was aborted before it started")),
+              new SessionError(
+                  SessionErrorCode.ABORTED, "the operation was aborted before it started")),
           true);
       hosted.completed(operation);
-      return;
+      return true;
     }
     TerminalShopperSession terminal = hosted.terminal();
     if (terminal != null && operation.ordered()) {
@@ -118,6 +121,7 @@ public final class OperationRunner {
     if (step != null) {
       step.abort();
     }
+    return true;
   }
 
   // ─── Launch construction ───
@@ -133,12 +137,8 @@ public final class OperationRunner {
     switch (type) {
       case "identifyMember":
         {
-          Member pending = Parsers.member(body.get("member"));
-          if (pending != null && pending.isResolved()) {
-            throw HostError.badRequest(
-                "identifyMember looks up a member by resolver; a resolved member is set with PUT"
-                    + " .../member");
-          }
+          Member pending =
+              Json.has(body, "resolver") ? Parsers.pendingMember(body.get("resolver")) : null;
           var identifyOptions = Parsers.identifyOptions(options);
           return result(
               hosted,
@@ -153,14 +153,20 @@ public final class OperationRunner {
         {
           var acquisitionOptions = Parsers.cardAcquisitionOptions(options);
           return result(
-              hosted, operation, () -> terminal.acquireCard(acquisitionOptions), Views::cardAcquisition);
+              hosted,
+              operation,
+              () -> terminal.acquireCard(acquisitionOptions),
+              Views::cardAcquisition);
         }
       case "requestDigitString":
         {
           String prompt = Json.requireText(body, "prompt");
           var inputOptions = Parsers.inputOptions(options);
           return result(
-              hosted, operation, () -> terminal.requestDigitString(prompt, inputOptions), Views::value);
+              hosted,
+              operation,
+              () -> terminal.requestDigitString(prompt, inputOptions),
+              Views::text);
         }
       case "requestDecimalString":
         {
@@ -170,14 +176,17 @@ public final class OperationRunner {
               hosted,
               operation,
               () -> terminal.requestDecimalString(prompt, inputOptions),
-              Views::decimalValue);
+              Views::money);
         }
       case "requestTextString":
         {
           String prompt = Json.requireText(body, "prompt");
           var inputOptions = Parsers.inputOptions(options);
           return result(
-              hosted, operation, () -> terminal.requestTextString(prompt, inputOptions), Views::value);
+              hosted,
+              operation,
+              () -> terminal.requestTextString(prompt, inputOptions),
+              Views::text);
         }
       case "requestConfirmation":
         {
@@ -187,7 +196,7 @@ public final class OperationRunner {
               hosted,
               operation,
               () -> terminal.requestConfirmation(prompt, confirmationOptions),
-              Views::confirmed);
+              Views::bool);
         }
       case "requestMenuEntry":
         {
@@ -206,7 +215,8 @@ public final class OperationRunner {
       case "requestSignature":
         {
           String prompt = Json.requireText(body, "prompt");
-          return result(hosted, operation, () -> terminal.requestSignature(prompt), Views::signature);
+          return result(
+              hosted, operation, () -> terminal.requestSignature(prompt), Views::signature);
         }
       case "requestAmountConfirmation":
         {
@@ -216,12 +226,13 @@ public final class OperationRunner {
               hosted,
               operation,
               () -> terminal.requestAmountConfirmation(amount, prompt),
-              Views::confirmed);
+              Views::bool);
         }
       case "requestPinEntry":
         {
           var pinOptions = Parsers.pinOptions(options);
-          return result(hosted, operation, () -> terminal.requestPinEntry(pinOptions), Views::pinResult);
+          return result(
+              hosted, operation, () -> terminal.requestPinEntry(pinOptions), Views::pinResult);
         }
       case "requestPinVerify":
         {
@@ -237,26 +248,26 @@ public final class OperationRunner {
         }
       case "setStoredValueCard":
         {
+          if (!body.has("card")) {
+            throw HostError.badRequest("card is required (null clears the tender)");
+          }
           StoredValueCard card =
-              Json.has(body, "card") ? Parsers.storedValueCard(body.get("card"), "card") : null;
-          return immediate(
-              hosted,
-              operation,
-              () -> {
-                terminal.setStoredValueCard(card);
-                return Json.object();
-              });
+              body.get("card").isNull() ? null : Parsers.storedValueCard(body.get("card"), "card");
+          return immediate(hosted, operation, () -> terminal.setStoredValueCard(card));
         }
       case "storedValueBalance":
         {
           StoredValueCard card = Parsers.storedValueCard(body.get("card"), "card");
           return result(
-              hosted, operation, () -> terminal.storedValueBalance(card), Views::storedValueBalance);
+              hosted,
+              operation,
+              () -> terminal.storedValueBalance(card),
+              Views::storedValueBalance);
         }
       case "storedValueActivate":
         {
           StoredValueCard card = Parsers.storedValueCard(body.get("card"), "card");
-          BigDecimal amount = Json.requireDecimal(body, "initialAmount");
+          BigDecimal amount = Json.requireDecimal(body, "amount");
           return result(
               hosted,
               operation,
@@ -283,6 +294,16 @@ public final class OperationRunner {
               () -> terminal.storedValueUnload(card, amount),
               Views::storedValueOperation);
         }
+      case "storedValueReserve":
+        {
+          StoredValueCard card = Parsers.storedValueCard(body.get("card"), "card");
+          BigDecimal amount = Json.requireDecimal(body, "amount");
+          return result(
+              hosted,
+              operation,
+              () -> terminal.storedValueReserve(card, amount),
+              Views::storedValueOperation);
+        }
       case "storedValueDeactivate":
         {
           StoredValueCard card = Parsers.storedValueCard(body.get("card"), "card");
@@ -292,14 +313,13 @@ public final class OperationRunner {
               () -> terminal.storedValueDeactivate(card),
               Views::storedValueOperation);
         }
-      case "storedValueReserve":
+      case "storedValueDuplicate":
         {
           StoredValueCard card = Parsers.storedValueCard(body.get("card"), "card");
-          BigDecimal amount = Json.requireDecimal(body, "amount");
           return result(
               hosted,
               operation,
-              () -> terminal.storedValueReserve(card, amount),
+              () -> terminal.storedValueDuplicate(card),
               Views::storedValueOperation);
         }
       case "storedValueReverse":
@@ -312,44 +332,43 @@ public final class OperationRunner {
               () -> terminal.storedValueReverse(poiTransactionId, timestamp),
               Views::storedValueOperation);
         }
-      case "storedValueDuplicate":
-        {
-          StoredValueCard card = Parsers.storedValueCard(body.get("card"), "card");
-          return result(
-              hosted,
-              operation,
-              () -> terminal.storedValueDuplicate(card),
-              Views::storedValueOperation);
-        }
       case "settle":
         {
           SettlementOptions settlementOptions = Parsers.settlementOptions(options);
-          Set<PendingStep.Kind> steps = steps(body, DEFAULT_SETTLEMENT_STEPS);
+          Set<PendingStep.Kind> steps = handledSteps(body);
           return settlement(hosted, operation, () -> terminal.settle(settlementOptions), steps);
         }
       case "refund":
         {
           BigDecimal amount = Json.decimal(body, "amount");
-          Set<PendingStep.Kind> steps = steps(body, DEFAULT_REVERSAL_STEPS);
+          Set<PendingStep.Kind> steps = handledSteps(body);
           return reversal(
               hosted,
               operation,
               () -> amount == null ? terminal.refund() : terminal.refund(amount),
               Views::refundResult,
-              steps);
+              steps,
+              true);
         }
       case "refundUnlinked":
         {
           BigDecimal amount = Json.requireDecimal(body, "amount");
-          Set<PendingStep.Kind> steps = steps(body, DEFAULT_REVERSAL_STEPS);
+          Set<PendingStep.Kind> steps = handledSteps(body);
           return reversal(
-              hosted, operation, () -> terminal.refundUnlinked(amount), Views::refundResult, steps);
+              hosted,
+              operation,
+              () -> terminal.refundUnlinked(amount),
+              Views::refundResult,
+              steps,
+              true);
         }
       case "voidTransaction":
         {
-          var originalSale =
-              Json.has(body, "originalSale") ? Parsers.originalSale(body.get("originalSale")) : null;
-          Set<PendingStep.Kind> steps = steps(body, DEFAULT_REVERSAL_STEPS);
+          OriginalSaleRecord originalSale =
+              Json.has(body, "originalSale")
+                  ? Parsers.originalSale(body.get("originalSale"))
+                  : null;
+          Set<PendingStep.Kind> steps = handledSteps(body);
           return reversal(
               hosted,
               operation,
@@ -358,7 +377,8 @@ public final class OperationRunner {
                       ? terminal.voidTransaction()
                       : terminal.voidTransaction(originalSale),
               Views::voidResult,
-              steps);
+              steps,
+              moneyAnchored(originalSale));
         }
       case "getTransactionStatus":
         {
@@ -372,55 +392,51 @@ public final class OperationRunner {
         }
       case "updateDisplay":
         {
-          DisplayPayload payload = displayPayload(body);
-          return result(
-              hosted,
-              operation,
-              () ->
-                  payload == null
-                      ? terminal.updateDisplay(terminal.basket().snapshot())
-                      : terminal.updateDisplay(payload),
-              v -> Json.object());
+          boolean hasBasket = Json.has(body, "basket");
+          boolean hasDisplay = Json.has(body, "display");
+          if (hasBasket == hasDisplay) {
+            throw HostError.badRequest("updateDisplay takes exactly one of basket or display");
+          }
+          if (hasBasket) {
+            Basket basket = Parsers.basket(body.get("basket"));
+            return result(hosted, operation, () -> terminal.updateDisplay(basket), v -> null);
+          }
+          DisplayPayload display = Parsers.displayPayload(body.get("display"), "display");
+          return result(hosted, operation, () -> terminal.updateDisplay(display), v -> null);
         }
       case "updateInputDisplay":
         {
-          DisplayPayload payload = displayPayload(body);
-          if (payload == null) {
-            throw HostError.badRequest("updateInputDisplay requires a payload");
-          }
-          return result(hosted, operation, () -> terminal.updateInputDisplay(payload), v -> Json.object());
+          DisplayPayload display = Parsers.displayPayload(body.get("display"), "display");
+          return result(hosted, operation, () -> terminal.updateInputDisplay(display), v -> null);
         }
       default:
         throw HostError.badRequest("unknown operation type '" + type + "'");
     }
   }
 
-  /**
-   * The structured display model, read with Jackson's bean conventions from the same field names
-   * the XML schema uses; there is no richer protocol vocabulary for it yet.
-   */
-  private static DisplayPayload displayPayload(ObjectNode body) {
-    JsonNode payload = body.get("payload");
-    if (payload == null || payload.isNull()) {
-      return null;
-    }
-    try {
-      return Json.MAPPER.treeToValue(payload, DisplayPayload.class);
-    } catch (RuntimeException | com.fasterxml.jackson.core.JsonProcessingException e) {
-      throw HostError.badRequest("payload is not a display payload: " + e.getMessage());
-    }
-  }
-
-  private static Set<PendingStep.Kind> steps(ObjectNode body, Set<PendingStep.Kind> defaults) {
-    List<String> names = Json.strings(body, "steps");
-    if (names == null) {
-      return defaults;
-    }
+  private static Set<PendingStep.Kind> handledSteps(ObjectNode body) {
+    List<String> names = Json.strings(body, "handledSteps");
     EnumSet<PendingStep.Kind> steps = EnumSet.noneOf(PendingStep.Kind.class);
-    for (String name : names) {
-      steps.add(Json.enumValue(name, "steps", PendingStep.Kind.class));
+    if (names != null) {
+      for (String name : names) {
+        steps.add(Json.enumValue(name, "handledSteps", PendingStep.Kind.class));
+      }
     }
     return steps;
+  }
+
+  /**
+   * Whether a void's loyalty legs ride along with a money leg, which is what decides the SDK's
+   * default reversal decision. A prior-sale record says so itself; a same-session void is taken to
+   * be money-anchored, which is the common case.
+   */
+  private static boolean moneyAnchored(OriginalSaleRecord originalSale) {
+    if (originalSale == null) {
+      return true;
+    }
+    return originalSale.getCardPoiTransactionId() != null
+        || originalSale.getStoredValuePoiTransactionId() != null
+        || !originalSale.getStoredValueLoads().isEmpty();
   }
 
   // ─── Launches ───
@@ -445,11 +461,11 @@ public final class OperationRunner {
   }
 
   /** An SDK call that is synchronous in Java but still an operation on the wire. */
-  private Runnable immediate(
-      HostedSession hosted, HostedOperation operation, Supplier<JsonNode> work) {
+  private Runnable immediate(HostedSession hosted, HostedOperation operation, Runnable work) {
     return () -> {
       try {
-        operation.succeeded(work.get());
+        work.run();
+        operation.succeeded(null);
       } catch (Throwable failure) {
         fail(operation, failure);
       } finally {
@@ -467,7 +483,7 @@ public final class OperationRunner {
       try {
         SettlementFlow flow = factory.get();
         if (steps.contains(PendingStep.Kind.BEFORE_STEP)) {
-          flow.beforeStep(context -> ask(hosted, operation, beforeStep(context)));
+          flow.beforeStep(context -> ask(hosted, operation, beforeStep(operation, context)));
         }
         if (steps.contains(PendingStep.Kind.TOTAL_REQUIRED)) {
           flow.onRebatesRedeemed(
@@ -475,19 +491,34 @@ public final class OperationRunner {
                   ask(
                       hosted,
                       operation,
-                      totalStep(Views.rebatesRedeemed(rebates), rebates.getSuggestedTotal())));
+                      totalStep(
+                          operation,
+                          "REBATE_REDEMPTION",
+                          "rebates",
+                          Views.rebatesRedeemed(rebates),
+                          rebates.getSuggestedTotal())));
           flow.onPointsRedeemed(
               points ->
                   ask(
                       hosted,
                       operation,
-                      totalStep(Views.pointsRedeemed(points), points.getSuggestedTotal())));
+                      totalStep(
+                          operation,
+                          "POINT_REDEMPTION",
+                          "points",
+                          Views.pointsRedeemed(points),
+                          points.getSuggestedTotal())));
           flow.onGiftCardPayment(
               giftCard ->
                   ask(
                       hosted,
                       operation,
-                      totalStep(Views.giftCardPayment(giftCard), giftCard.getSuggestedTotal())));
+                      totalStep(
+                          operation,
+                          "STORED_VALUE_CHARGE",
+                          "giftCard",
+                          Views.giftCardPayment(giftCard),
+                          giftCard.getSuggestedTotal())));
         }
         flow.onMovement(
             movement -> {
@@ -503,8 +534,9 @@ public final class OperationRunner {
               failure ->
                   failure.getStep() == null
                       ? SettlementRecovery.abort()
-                      : ask(hosted, operation, recoveryStep(failure)));
+                      : ask(hosted, operation, recoveryStep(operation, failure)));
         }
+        flow.onAbandoned(record -> operation.abandoned(Views.abandonedSettlement(record)));
         flow.execute();
         operation.succeeded(Views.settlementResult(flow.get()));
       } catch (Throwable failure) {
@@ -520,16 +552,20 @@ public final class OperationRunner {
       HostedOperation operation,
       Supplier<ReversalFlow<T>> factory,
       Function<T, JsonNode> view,
-      Set<PendingStep.Kind> steps) {
+      Set<PendingStep.Kind> steps,
+      boolean moneyAnchored) {
     return () -> {
       try {
         ReversalFlow<T> flow = factory.get();
         if (steps.contains(PendingStep.Kind.REVERSAL_DECISION_REQUIRED)) {
+          // a null step is the SDK's final notification, where the decision is ignored; the
+          // flow is not held up for an answer nobody acts on
           flow.onError(
               (step, error) ->
                   step == null
                       ? ReversalDecision.ABORT
-                      : ask(hosted, operation, reversalStep(step, error)));
+                      : ask(
+                          hosted, operation, reversalStep(operation, step, error, moneyAnchored)));
         }
         flow.execute();
         operation.succeeded(view.apply(flow.get()));
@@ -545,11 +581,8 @@ public final class OperationRunner {
     HostError error = HostError.from(failure);
     if (failure instanceof SessionException
         && ((SessionException) failure).getAbandonedSettlement() != null) {
-      ObjectNode details = error.details() instanceof ObjectNode ? (ObjectNode) error.details() : Json.object();
-      details.set(
-          "abandonedSettlement",
+      operation.abandoned(
           Views.abandonedSettlement(((SessionException) failure).getAbandonedSettlement()));
-      error = new HostError(error.status(), error.code(), error.getMessage(), details, failure);
     }
     boolean aborted = SessionErrorCode.ABORTED.name().equals(error.code());
     operation.failed(error, aborted);
@@ -559,10 +592,7 @@ public final class OperationRunner {
 
   private <T> T ask(HostedSession hosted, HostedOperation operation, PendingStep<T> step) {
     operation.awaiting(step);
-    ObjectNode payload = Json.object();
-    payload.put("operationId", operation.id());
-    payload.set("step", step.toJson());
-    hosted.publish("operation.step", payload);
+    hosted.publish("operation.step", step.toJson());
     try {
       return step.await();
     } finally {
@@ -570,26 +600,38 @@ public final class OperationRunner {
     }
   }
 
-  private PendingStep<String> beforeStep(SettlementContext context) {
+  private PendingStep<String> beforeStep(HostedOperation operation, SettlementContext context) {
+    ObjectNode payload = Json.object();
+    payload.set("context", Views.settlementContext(context));
     ObjectNode defaults = Json.object();
     defaults.put("saleTransactionId", context.getDefaultTransactionId());
     return new PendingStep<>(
+        operation.id(),
         PendingStep.Kind.BEFORE_STEP,
-        Views.settlementContext(context),
+        payload,
         defaults,
-        defaults,
+        defaults.deepCopy(),
         deadlines.beforeStep(),
         answer -> Json.text(answer, "saleTransactionId"));
   }
 
-  private PendingStep<BigDecimal> totalStep(ObjectNode payload, BigDecimal suggested) {
+  private PendingStep<BigDecimal> totalStep(
+      HostedOperation operation,
+      String settlementStep,
+      String field,
+      ObjectNode result,
+      BigDecimal suggested) {
+    ObjectNode payload = Json.object();
+    payload.put("step", settlementStep);
+    payload.set(field, result);
     ObjectNode defaults = Json.object();
-    defaults.put("total", Json.money(suggested));
+    defaults.put("total", suggested == null ? "0" : suggested.toPlainString());
     return new PendingStep<>(
+        operation.id(),
         PendingStep.Kind.TOTAL_REQUIRED,
         payload,
         defaults,
-        defaults,
+        defaults.deepCopy(),
         deadlines.total(),
         answer -> {
           BigDecimal total = Json.decimal(answer, "total");
@@ -597,66 +639,55 @@ public final class OperationRunner {
             throw HostError.badRequest("a TOTAL_REQUIRED reply needs total");
           }
           if (total.signum() < 0) {
-            throw HostError.unprocessable("total must not be negative");
+            throw HostError.badRequest("total must not be negative");
           }
           return total;
         });
   }
 
-  private PendingStep<SettlementRecovery> recoveryStep(SettlementFailure failure) {
+  private PendingStep<SettlementRecovery> recoveryStep(
+      HostedOperation operation, SettlementFailure failure) {
     ObjectNode payload = Json.object();
     payload.set("failure", Views.settlementFailure(failure));
     ObjectNode defaults = Json.object();
-    defaults.put("recovery", "ABORT");
+    defaults.putObject("recovery").put("action", "ABORT");
     return new PendingStep<>(
+        operation.id(),
         PendingStep.Kind.RECOVERY_REQUIRED,
         payload,
         defaults,
-        defaults,
+        defaults.deepCopy(),
         deadlines.recovery(),
-        OperationRunner::recovery);
+        answer -> {
+          JsonNode recovery = answer.get("recovery");
+          if (recovery == null || recovery.isNull()) {
+            throw HostError.badRequest("a RECOVERY_REQUIRED reply needs recovery");
+          }
+          return Parsers.recovery(recovery);
+        });
   }
 
-  /** {@code "RETRY" | "SKIP" | "ABORT" | "ABANDON" | { "external": {...} }}. */
-  private static SettlementRecovery recovery(JsonNode answer) {
-    JsonNode recovery = answer.get("recovery");
-    if (recovery == null || recovery.isNull()) {
-      throw HostError.badRequest("a RECOVERY_REQUIRED reply needs recovery");
-    }
-    if (recovery.isObject()) {
-      return SettlementRecovery.external(Parsers.externalPayment(recovery.get("external")));
-    }
-    if (!recovery.isTextual()) {
-      throw HostError.badRequest("recovery must be a string or { external }");
-    }
-    switch (recovery.asText().toUpperCase(java.util.Locale.ROOT)) {
-      case "RETRY":
-        return SettlementRecovery.retry();
-      case "SKIP":
-        return SettlementRecovery.skip();
-      case "ABORT":
-        return SettlementRecovery.abort();
-      case "ABANDON":
-        return SettlementRecovery.abandon();
-      default:
-        throw HostError.badRequest(
-            "recovery must be RETRY, SKIP, ABORT, ABANDON or { external }, not '"
-                + recovery.asText()
-                + "'");
-    }
-  }
-
-  private PendingStep<ReversalDecision> reversalStep(ReversalStep step, SessionError error) {
+  private PendingStep<ReversalDecision> reversalStep(
+      HostedOperation operation, ReversalStep step, SessionError error, boolean moneyAnchored) {
     ObjectNode payload = Json.object();
-    payload.put("reversalStep", step.name());
+    payload.put("step", step.name());
     payload.set("error", Views.error(error));
+    boolean loyalty =
+        step == ReversalStep.REDEMPTION
+            || step == ReversalStep.REBATE
+            || step == ReversalStep.AWARD;
+    ReversalDecision policy =
+        loyalty && moneyAnchored ? ReversalDecision.SKIP : ReversalDecision.ABORT;
     ObjectNode defaults = Json.object();
-    defaults.put("decision", "ABORT");
+    defaults.put("decision", policy.name());
+    ObjectNode onAbort = Json.object();
+    onAbort.put("decision", ReversalDecision.ABORT.name());
     return new PendingStep<>(
+        operation.id(),
         PendingStep.Kind.REVERSAL_DECISION_REQUIRED,
         payload,
         defaults,
-        defaults,
+        onAbort,
         deadlines.reversalDecision(),
         answer -> {
           ReversalDecision decision = Json.enumValue(answer, "decision", ReversalDecision.class);
@@ -665,14 +696,5 @@ public final class OperationRunner {
           }
           return decision;
         });
-  }
-
-  /** How long the host waits on each step kind; exposed for the health report. */
-  public StepDeadlines deadlines() {
-    return deadlines;
-  }
-
-  static Duration never() {
-    return Duration.ofDays(365);
   }
 }

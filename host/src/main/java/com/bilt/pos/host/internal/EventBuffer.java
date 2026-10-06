@@ -20,19 +20,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * A session's event log and fan-out.
  *
- * <p>Every event gets the next sequence number and is kept for replay inside a bounded window —
- * at most {@code capacity} events and no older than {@code window} — so a client that reconnects
- * with {@code ?since=<seq>} picks up where it left off. Subscribers receive events in order on a
- * thread of their own, so a slow Server-Sent Events socket never stalls the session thread that
- * published the event, and publication under the lock guarantees a subscriber never sees an event
- * twice or misses one between its replay and its live feed.
+ * <p>Every event gets the next sequence number and is kept for replay inside a bounded window — at
+ * most {@code capacity} events and no older than {@code window} — so a client that reconnects with
+ * {@code ?since=<seq>} picks up where it left off. Subscribers receive events in order on a thread
+ * of their own, so a slow Server-Sent Events socket never stalls the session thread that published
+ * the event, and publication under the lock guarantees a subscriber never sees an event twice or
+ * misses one between its replay and its live feed.
  *
  * <p>{@link #close()} marks the stream finished after {@code session.ended}: live subscribers are
  * told so they can hang up, and a later subscriber still gets the replay before being told the
@@ -119,6 +118,20 @@ public final class EventBuffer {
   /** The sequence number of the latest event, or 0 before the first. */
   public synchronized long lastSeq() {
     return nextSeq - 1;
+  }
+
+  /** The oldest sequence number still buffered, or the next one when nothing is buffered. */
+  public synchronized long oldestSeq() {
+    Event oldest = events.peekFirst();
+    return oldest == null ? nextSeq : oldest.seq();
+  }
+
+  /**
+   * Whether a client that last saw {@code since} can be brought up to date from the buffer: the
+   * first event it has not seen must still be here (or not exist yet).
+   */
+  public synchronized boolean canReplayFrom(long since) {
+    return since + 1 >= oldestSeq();
   }
 
   /** The events currently replayable, oldest first. */

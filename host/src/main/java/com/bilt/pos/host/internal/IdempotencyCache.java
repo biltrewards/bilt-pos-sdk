@@ -19,9 +19,9 @@ import java.util.Map;
 /**
  * Remembers the response to each {@code Idempotency-Key} so a browser that retries after a dropped
  * connection gets the original outcome rather than a second settlement. Bounded and insertion
- * ordered: the oldest keys fall out first. A key reused for a different request — different
- * method, path or body — is refused rather than replayed, since replaying would silently answer
- * the wrong question.
+ * ordered: the oldest keys fall out first. A key reused for a different request — different method,
+ * path or body — is refused rather than replayed, since replaying would silently answer the wrong
+ * question.
  */
 public final class IdempotencyCache {
 

@@ -40,8 +40,8 @@ import java.util.logging.Logger;
  * one thing. Unordered operations ({@code updateInputDisplay}) bypass the lane, as they do in the
  * SDK.
  *
- * <p>The session's own observer seam is used for state events: {@link Observer} is registered as
- * a widget on the builder (a {@code Widget} is a {@code SessionObserver} with lifecycle hooks) and
+ * <p>The session's own observer seam is used for state events: {@link Observer} is registered as a
+ * widget on the builder (a {@code Widget} is a {@code SessionObserver} with lifecycle hooks) and
  * turns the SDK's callbacks into {@code session.started}, {@code basket.changed}, {@code
  * member.changed}, {@code context.changed} and {@code session.ended}.
  */
@@ -49,7 +49,32 @@ public final class HostedSession {
 
   private static final Logger LOGGER = Logger.getLogger(HostedSession.class.getName());
 
-  private final String kind;
+  /** The creation parameters the session view reports back. */
+  public static final class Spec {
+    final String kind;
+    final String saleId;
+    final String poiId;
+    final String currency;
+    final String storeLocation;
+    final boolean autoDisplay;
+
+    public Spec(
+        String kind,
+        String saleId,
+        String poiId,
+        String currency,
+        String storeLocation,
+        boolean autoDisplay) {
+      this.kind = kind;
+      this.saleId = saleId;
+      this.poiId = poiId;
+      this.currency = currency;
+      this.storeLocation = storeLocation;
+      this.autoDisplay = autoDisplay;
+    }
+  }
+
+  private final Spec spec;
   private final EventBuffer events;
   private final IdempotencyCache idempotency;
   private final Observer observer = new Observer();
@@ -57,11 +82,16 @@ public final class HostedSession {
   private final Map<String, HostedOperation> operations = new ConcurrentHashMap<>();
   private final ArrayDeque<QueuedOperation> lane = new ArrayDeque<>();
   private final Instant createdAt = Instant.now();
+  private volatile String sessionId;
   private volatile ShopperSession session;
   private volatile TerminalShopperSession terminal;
   private volatile WidgetBridge widgets;
   private volatile HostedOperation running;
-  private volatile boolean ended;
+  private volatile String state = "open";
+  private volatile Instant endedAt;
+  private volatile boolean endForced;
+  private volatile String endReason;
+  private volatile HostedOperation endOperation;
 
   private static final class QueuedOperation {
     final HostedOperation operation;
@@ -74,12 +104,12 @@ public final class HostedSession {
   }
 
   HostedSession(
-      String kind,
+      Spec spec,
       int replayCapacity,
       Duration replayWindow,
       int idempotencyCapacity,
       Executor workers) {
-    this.kind = kind;
+    this.spec = spec;
     this.events = new EventBuffer(replayCapacity, replayWindow);
     this.idempotency = new IdempotencyCache(idempotencyCapacity);
     this.workers = workers;
@@ -90,19 +120,21 @@ public final class HostedSession {
     return observer;
   }
 
-  /** Binds the started SDK session; the observer may already have published {@code session.started}. */
+  /** Binds the started SDK session; the observer has already published {@code session.started}. */
   void attach(ShopperSession started, WidgetBridge widgetBridge) {
+    this.sessionId = started.getSessionId();
     this.session = started;
-    this.terminal = started instanceof TerminalShopperSession ? (TerminalShopperSession) started : null;
+    this.terminal =
+        started instanceof TerminalShopperSession ? (TerminalShopperSession) started : null;
     this.widgets = widgetBridge;
   }
 
   public String id() {
-    return session.getSessionId();
+    return sessionId;
   }
 
   public String kind() {
-    return kind;
+    return spec.kind;
   }
 
   public ShopperSession session() {
@@ -127,7 +159,11 @@ public final class HostedSession {
   }
 
   public boolean isEnded() {
-    return ended;
+    return "ended".equals(state);
+  }
+
+  public boolean isEndingOrEnded() {
+    return !"open".equals(state);
   }
 
   public Event publish(String type, JsonNode payload) {
@@ -136,26 +172,20 @@ public final class HostedSession {
 
   // ─── Views ───
 
+  /** The {@code Session} resource. */
   public ObjectNode view() {
     ObjectNode node = Json.object();
-    node.put("id", id());
-    node.put("kind", kind);
-    node.put("saleId", session.getSaleId());
-    if (terminal != null) {
-      node.put("poiId", terminal.getPoiId());
-    }
-    node.put("currency", session.getCurrency());
-    Json.putText(node, "storeLocation", session.getStoreLocation());
-    node.put("state", ended ? "ended" : "open");
+    node.put("id", sessionId);
+    node.put("kind", spec.kind);
+    node.put("saleId", spec.saleId);
+    Json.putText(node, "poiId", spec.poiId);
+    node.put("currency", spec.currency);
+    Json.putText(node, "storeLocation", spec.storeLocation);
+    node.put("autoDisplay", spec.autoDisplay);
+    node.put("state", state);
     node.put("createdAt", createdAt.toString());
-    node.set("basket", Views.basket(session.basket().snapshot()));
-    node.set("member", Views.member(session.member()));
-    node.set("context", Views.context(session.context().snapshot()));
-    node.put("eventsUrl", "/v1/sessions/" + id() + "/events");
-    HostedOperation current = running;
-    if (current != null) {
-      node.put("runningOperationId", current.id());
-    }
+    Json.putInstant(node, "endedAt", endedAt);
+    node.put("eventsUrl", "/v1/sessions/" + sessionId + "/events");
     return node;
   }
 
@@ -169,13 +199,39 @@ public final class HostedSession {
     return operation;
   }
 
+  /** Every operation, newest first. */
   public List<HostedOperation> operations() {
-    return new ArrayList<>(operations.values());
+    List<HostedOperation> all = new ArrayList<>(operations.values());
+    all.sort((a, b) -> b.createdAt().compareTo(a.createdAt()));
+    return all;
   }
 
   /** The ordered operation currently in flight, or {@code null}. */
   public HostedOperation running() {
     return running;
+  }
+
+  /** True when no ordered operation is running or queued. */
+  boolean laneIdle() {
+    synchronized (lane) {
+      return running == null && lane.isEmpty();
+    }
+  }
+
+  /** Lists an operation the registry runs itself, outside the lane. */
+  void register(HostedOperation operation) {
+    operations.put(operation.id(), operation);
+  }
+
+  /** Publishes {@code operation.completed} once, however many paths reach the end. */
+  void publishCompletion(HostedOperation operation) {
+    // claiming and publishing are one step: the thread that loses the claim must not be able
+    // to publish a later event before the winner's operation.completed has its seq
+    synchronized (operation) {
+      if (operation.markCompletionPublished()) {
+        publish("operation.completed", operation.toJson());
+      }
+    }
   }
 
   /**
@@ -206,7 +262,7 @@ public final class HostedSession {
 
   /** Called by every launch when its operation reaches a terminal status. */
   void completed(HostedOperation operation) {
-    publish("operation.completed", operation.toJson());
+    publishCompletion(operation);
     if (!operation.ordered()) {
       return;
     }
@@ -232,8 +288,22 @@ public final class HostedSession {
 
   // ─── Lifecycle ───
 
-  void markEnded() {
-    ended = true;
+  /**
+   * Marks the session as ending on behalf of an {@code end} or {@code forceEnd} operation; the
+   * observer completes that operation and flips the state to ended when the SDK confirms.
+   */
+  void ending(boolean forced, String reason, HostedOperation operation) {
+    endForced = forced;
+    endReason = reason;
+    endOperation = operation;
+    state = "ending";
+  }
+
+  /** The end did not go through; the session stays open. */
+  void endFailed() {
+    if (!"ended".equals(state)) {
+      state = "open";
+    }
   }
 
   // ─── Observer ───
@@ -243,7 +313,6 @@ public final class HostedSession {
    * invisible to clients: {@code GET .../widgets} filters it out.
    */
   final class Observer implements Widget {
-    private volatile String sessionId;
 
     @Override
     public void attach(WidgetHost host) {
@@ -267,8 +336,7 @@ public final class HostedSession {
     @Override
     public void started(SessionContextSnapshot context) {
       ObjectNode payload = Json.object();
-      payload.put("sessionId", sessionId);
-      payload.put("kind", kind);
+      payload.set("session", view());
       payload.set("context", Views.context(context));
       publish("session.started", payload);
     }
@@ -292,9 +360,21 @@ public final class HostedSession {
 
     @Override
     public void ended() {
-      markEnded();
+      endedAt = Instant.now();
+      state = "ended";
+      // the end operation completes before the session does, so a client that watches the
+      // stream sees operation.completed and then session.ended, as the protocol promises
+      HostedOperation end = endOperation;
+      if (end != null) {
+        if (!end.isTerminal()) {
+          end.succeeded(null);
+        }
+        publishCompletion(end);
+      }
       ObjectNode payload = Json.object();
       payload.put("sessionId", sessionId);
+      payload.put("forced", endForced);
+      Json.putText(payload, "reason", endForced ? endReason : null);
       publish("session.ended", payload);
       events.close();
     }
@@ -302,7 +382,7 @@ public final class HostedSession {
 
   /** The {@code onBackgroundError} hook: the SDK's background failures as events. */
   void backgroundError(SessionError error) {
-    LOGGER.log(Level.FINE, "background error on session {0}: {1}", new Object[] {id(), error});
+    LOGGER.log(Level.FINE, "background error on session {0}: {1}", new Object[] {sessionId, error});
     publish("background.error", Views.error(error));
   }
 }

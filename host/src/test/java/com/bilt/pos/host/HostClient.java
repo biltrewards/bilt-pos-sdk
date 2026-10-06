@@ -45,7 +45,8 @@ final class HostClient {
   }
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
-  private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+  private final HttpClient http =
+      HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
   private final String base;
 
   HostClient(int port) {
@@ -88,6 +89,20 @@ final class HostClient {
   Response delete(String path) throws Exception {
     return send(
         HttpRequest.newBuilder(URI.create(base + path)).DELETE(), UUID.randomUUID().toString());
+  }
+
+  /** A CORS preflight from {@code origin}, as a browser would send before a POST. */
+  Response preflight(String path, String origin) throws Exception {
+    HttpRequest request =
+        HttpRequest.newBuilder(URI.create(base + path))
+            .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+            .header("Origin", origin)
+            .header("Access-Control-Request-Method", "POST")
+            .header("Access-Control-Request-Headers", "content-type,idempotency-key")
+            .header("Access-Control-Request-Private-Network", "true")
+            .build();
+    HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+    return new Response(response.statusCode(), MAPPER.nullNode(), response.headers());
   }
 
   /** Sends without any Idempotency-Key, to check the requirement. */

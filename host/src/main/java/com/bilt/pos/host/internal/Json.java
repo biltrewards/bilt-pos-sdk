@@ -26,8 +26,8 @@ import java.util.Map;
 
 /**
  * The one {@link ObjectMapper} the host uses, plus the small reading helpers every parser needs.
- * Request bodies are read as trees and picked apart by hand so the wire shapes are explicit in
- * code rather than implied by bean conventions; money crosses as decimal strings and timestamps as
+ * Request bodies are read as trees and picked apart by hand so the wire shapes are explicit in code
+ * rather than implied by bean conventions; money crosses as decimal strings and timestamps as
  * ISO-8601 instants.
  */
 public final class Json {
@@ -234,7 +234,8 @@ public final class Json {
       return null;
     }
     Map<String, String> result = new LinkedHashMap<>();
-    value.fields()
+    value
+        .fields()
         .forEachRemaining(
             entry -> {
               JsonNode v = entry.getValue();

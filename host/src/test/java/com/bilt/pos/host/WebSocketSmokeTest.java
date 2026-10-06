@@ -39,12 +39,14 @@ class WebSocketSmokeTest {
           HttpClient.newHttpClient()
               .newWebSocketBuilder()
               .buildAsync(
-                  URI.create("ws://127.0.0.1:" + host.port() + "/v1/sessions/" + id + "/events?since=1"),
+                  URI.create(
+                      "ws://127.0.0.1:" + host.port() + "/v1/sessions/" + id + "/events?since=1"),
                   new WebSocket.Listener() {
                     private final StringBuilder partial = new StringBuilder();
 
                     @Override
-                    public CompletionStage<?> onText(WebSocket ws, CharSequence data, boolean last) {
+                    public CompletionStage<?> onText(
+                        WebSocket ws, CharSequence data, boolean last) {
                       partial.append(data);
                       if (last) {
                         try {
@@ -69,7 +71,10 @@ class WebSocketSmokeTest {
       assertEquals("context.changed", live.path("type").asText());
       assertEquals("TENDERING", live.path("payload").path("phase").asText());
 
-      client.delete("/v1/sessions/" + id).expect(200);
+      client.delete("/v1/sessions/" + id).expect(202);
+      JsonNode completed = received.poll(5, TimeUnit.SECONDS);
+      assertEquals("operation.completed", completed.path("type").asText());
+      assertEquals("end", completed.path("payload").path("type").asText());
       JsonNode ended = received.poll(5, TimeUnit.SECONDS);
       assertEquals("session.ended", ended.path("type").asText());
       assertTrue(socket.isInputClosed() || waitClosed(socket));

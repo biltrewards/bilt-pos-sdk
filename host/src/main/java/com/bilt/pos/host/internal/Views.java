@@ -40,12 +40,16 @@ import com.bilt.pos.session.payment.RebateRedemptionResult;
 import com.bilt.pos.session.payment.RedeemedRebate;
 import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
 import com.bilt.pos.session.settlement.CommittedStep;
+import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementMovement;
+import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementResult;
+import com.bilt.pos.session.settlement.StoredValueLoad;
 import com.bilt.pos.session.settlement.StoredValueLoadRecord;
 import com.bilt.pos.session.storedvalue.StoredValueBalance;
+import com.bilt.pos.session.storedvalue.StoredValueCard;
 import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
 import com.bilt.pos.widget.Cta;
 import com.bilt.pos.widget.MediaSpec;
@@ -54,16 +58,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.net.URI;
-import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
- * The SDK's value types in their wire form. Money is a decimal string, instants are ISO-8601,
- * enums are their Java names, and anything the page has no business seeing — a raw PAN, a
- * cardholder PIN block, an unmasked phone number — is left out or masked here and nowhere else.
+ * The SDK's value types in their wire form, as the Session Protocol's component schemas define
+ * them. Money is a decimal string, instants are RFC 3339, durations ISO 8601, enums their Java
+ * names. Anything the page has no business seeing — a raw PAN, an unmasked phone number — is left
+ * out or masked here and nowhere else.
  */
 public final class Views {
 
@@ -74,7 +77,9 @@ public final class Views {
   public static ObjectNode basket(Basket basket) {
     ObjectNode node = Json.object();
     Json.putText(node, "cartId", basket.getCartId());
-    node.put("saleTransactionId", basket.getSaleTransactionID().getTransactionID());
+    ObjectNode transaction = node.putObject("saleTransactionId");
+    transaction.put("transactionId", basket.getSaleTransactionID().getTransactionID());
+    transaction.put("timestamp", basket.getSaleTransactionID().getTimeStamp());
     ArrayNode items = node.putArray("items");
     for (BasketLineItem line : basket.getItems()) {
       items.add(line(line));
@@ -98,7 +103,7 @@ public final class Views {
     node.put("itemId", line.getItemId());
     Json.putText(node, "reference", line.getReference());
     node.put("sku", line.getSku());
-    Json.putText(node, "description", line.getDescription());
+    node.put("description", line.getDescription() == null ? "" : line.getDescription());
     Json.putText(node, "category", line.getCategory());
     node.put("quantity", line.getQuantity());
     Json.putMoney(node, "unitPrice", line.getUnitPrice());
@@ -129,8 +134,9 @@ public final class Views {
 
   public static ObjectNode basketChange(BasketChange change) {
     ObjectNode node = Json.object();
+    node.set("previous", basket(change.previous()));
+    node.set("current", basket(change.current()));
     node.put("source", change.source().name());
-    node.set("basket", basket(change.current()));
     node.set("added", lines(change.added()));
     node.set("removed", lines(change.removed()));
     node.set("quantityChanged", lineChanges(change.quantityChanged()));
@@ -170,16 +176,16 @@ public final class Views {
     ObjectNode node = Json.object();
     node.put("resolved", member.isResolved());
     if (member.isResolved()) {
-      node.put("id", member.memberId());
-      Json.putText(node, "loyaltyBrand", member.loyaltyBrand());
-      node.put("pointBalance", member.pointBalance());
-      node.set("rewards", rewards(member.rewards()));
+      node.put("memberId", member.memberId());
       if (member.status() != null) {
         node.put("status", member.status().name());
       }
+      Json.putText(node, "loyaltyBrand", member.loyaltyBrand());
     } else {
       node.set("resolver", resolver(member.resolver()));
     }
+    node.set("rewards", rewards(member.rewards()));
+    node.put("pointBalance", member.pointBalance());
     return node;
   }
 
@@ -196,9 +202,9 @@ public final class Views {
     return node;
   }
 
-  /** Keeps the last four characters of a long identifier, two of a short one, none otherwise. */
+  /** All but the last four characters, as the protocol masks identifiers. */
   static String mask(String value) {
-    int visible = value.length() >= 8 ? 4 : value.length() >= 4 ? 2 : 0;
+    int visible = Math.min(4, value.length());
     StringBuilder masked = new StringBuilder(value.length());
     for (int i = 0; i < value.length() - visible; i++) {
       masked.append('*');
@@ -211,8 +217,8 @@ public final class Views {
     node.put("status", result.getStatus().name());
     Json.putText(node, "memberId", result.getMemberId());
     Json.putText(node, "loyaltyBrand", result.getLoyaltyBrand());
-    node.put("pointBalance", result.getPointBalance());
     node.set("rewards", rewards(result.getRewards()));
+    node.put("pointBalance", result.getPointBalance());
     return node;
   }
 
@@ -220,7 +226,7 @@ public final class Views {
     ArrayNode array = Json.array();
     for (Reward reward : rewards) {
       ObjectNode node = array.addObject();
-      Json.putText(node, "rewardRef", reward.getRewardRef());
+      node.put("rewardRef", reward.getRewardRef() == null ? "" : reward.getRewardRef());
       if (reward.getType() != null) {
         node.put("type", reward.getType().name());
       }
@@ -253,25 +259,16 @@ public final class Views {
     ObjectNode node = Json.object();
     node.put("code", error.getCode().name());
     node.put("message", error.getMessage() == null ? error.getCode().name() : error.getMessage());
-    ObjectNode details = errorDetails(error);
-    if (!details.isEmpty()) {
-      node.set("details", details);
-    }
-    return node;
-  }
-
-  static ObjectNode errorDetails(SessionError error) {
-    ObjectNode details = Json.object();
-    Json.putText(details, "nexoErrorCondition", error.getNexoErrorCondition());
+    Json.putText(node, "nexoErrorCondition", error.getNexoErrorCondition());
     if (!error.getReversedMovements().isEmpty()) {
-      ArrayNode reversed = details.putArray("reversedMovements");
+      ArrayNode reversed = node.putArray("reversedMovements");
       for (ReversedMovement movement : error.getReversedMovements()) {
-        ObjectNode node = reversed.addObject();
-        node.put("step", movement.getStep().name());
-        Json.putText(node, "poiTransactionId", movement.getPoiTransactionId());
+        ObjectNode m = reversed.addObject();
+        m.put("step", movement.getStep().name());
+        Json.putText(m, "poiTransactionId", movement.getPoiTransactionId());
       }
     }
-    return details;
+    return node;
   }
 
   // ─── Settlement ───
@@ -280,18 +277,18 @@ public final class Views {
     ObjectNode node = Json.object();
     node.put("success", result.isSuccess());
     node.set("finalBasket", basket(result.getFinalBasket()));
-    Json.putMoney(node, "authorizedAmount", result.getAuthorizedAmount());
-    Json.putMoney(node, "storedValueAmountUsed", result.getStoredValueAmountUsed());
-    Json.putMoney(node, "storedValueLoadedAmount", result.getStoredValueLoadedAmount());
-    Json.putMoney(node, "cardAmountCharged", result.getCardAmountCharged());
-    Json.putMoney(node, "externalPaymentAmount", result.getExternalPaymentAmount());
+    node.put("authorizedAmount", moneyOrZero(result.getAuthorizedAmount()));
+    node.put("storedValueAmountUsed", moneyOrZero(result.getStoredValueAmountUsed()));
+    node.put("storedValueLoadedAmount", moneyOrZero(result.getStoredValueLoadedAmount()));
+    node.put("cardAmountCharged", moneyOrZero(result.getCardAmountCharged()));
+    node.put("externalPaymentAmount", moneyOrZero(result.getExternalPaymentAmount()));
     Json.putText(node, "approvalCode", result.getApprovalCode());
     Json.putText(node, "acquirerTransactionId", result.getAcquirerTransactionId());
     Json.putText(node, "paymentBrand", result.getPaymentBrand());
     node.set("redeemedRebates", redeemedRebates(result.getRedeemedRebates()));
-    Json.putMoney(node, "totalRebateAmount", result.getTotalRebateAmount());
+    node.put("totalRebateAmount", moneyOrZero(result.getTotalRebateAmount()));
     node.put("pointsRedeemed", result.getPointsRedeemed());
-    Json.putMoney(node, "pointsMonetaryValue", result.getPointsMonetaryValue());
+    node.put("pointsMonetaryValue", moneyOrZero(result.getPointsMonetaryValue()));
     ArrayNode earned = node.putArray("earnedRewards");
     for (EarnedReward reward : result.getEarnedRewards()) {
       ObjectNode r = earned.addObject();
@@ -313,14 +310,6 @@ public final class Views {
     Json.putText(node, "storedValuePoiTransactionId", result.getStoredValuePoiTransactionId());
     Json.putInstant(
         node, "storedValuePoiTransactionTimestamp", result.getStoredValuePoiTransactionTimestamp());
-    ArrayNode loads = node.putArray("storedValueLoads");
-    for (StoredValueLoadRecord load : result.getStoredValueLoads()) {
-      ObjectNode l = loads.addObject();
-      Json.putText(l, "basketReference", load.getBasketReference());
-      Json.putMoney(l, "amount", load.getAmount());
-      Json.putText(l, "poiTransactionId", load.getPoiTransactionId());
-      Json.putInstant(l, "poiTransactionTimestamp", load.getPoiTransactionTimestamp());
-    }
     Json.putText(node, "awardPoiTransactionId", result.getAwardPoiTransactionId());
     Json.putInstant(node, "awardPoiTransactionTimestamp", result.getAwardPoiTransactionTimestamp());
     Json.putText(node, "rebatePoiTransactionId", result.getRebatePoiTransactionId());
@@ -329,14 +318,18 @@ public final class Views {
     Json.putText(node, "redemptionPoiTransactionId", result.getRedemptionPoiTransactionId());
     Json.putInstant(
         node, "redemptionPoiTransactionTimestamp", result.getRedemptionPoiTransactionTimestamp());
-    Json.putMoney(node, "cardRefundedAmount", result.getCardRefundedAmount());
-    Json.putMoney(node, "storedValueRefundedAmount", result.getStoredValueRefundedAmount());
-    Json.putMoney(node, "externalRefundedAmount", result.getExternalRefundedAmount());
-    Json.putMoney(node, "loyaltyRefundedAmount", result.getLoyaltyRefundedAmount());
+    node.put("cardRefundedAmount", moneyOrZero(result.getCardRefundedAmount()));
+    node.put("storedValueRefundedAmount", moneyOrZero(result.getStoredValueRefundedAmount()));
+    node.put("externalRefundedAmount", moneyOrZero(result.getExternalRefundedAmount()));
+    node.put("loyaltyRefundedAmount", moneyOrZero(result.getLoyaltyRefundedAmount()));
     node.set("movements", movements(result.getMovements()));
     ArrayNode warnings = node.putArray("warnings");
     result.getWarnings().forEach(warnings::add);
     return node;
+  }
+
+  private static String moneyOrZero(java.math.BigDecimal amount) {
+    return amount == null ? "0" : amount.toPlainString();
   }
 
   private static ArrayNode redeemedRebates(List<RedeemedRebate> rebates) {
@@ -345,7 +338,7 @@ public final class Views {
       ObjectNode node = array.addObject();
       Json.putText(node, "itemId", rebate.getItemId());
       Json.putText(node, "sku", rebate.getSku());
-      Json.putMoney(node, "amount", rebate.getAmount());
+      node.put("amount", moneyOrZero(rebate.getAmount()));
       Json.putText(node, "label", rebate.getLabel());
       Json.putText(node, "promotionRef", rebate.getPromotionRef());
     }
@@ -363,12 +356,14 @@ public final class Views {
   public static ObjectNode movement(SettlementMovement movement) {
     ObjectNode node = Json.object();
     node.put("step", movement.getStep().name());
+    ObjectNode target = node.putObject("target");
     if (movement.getTarget() != null) {
-      ObjectNode target = node.putObject("target");
       target.put("type", movement.getTarget().getType().name());
       Json.putText(target, "basketReference", movement.getTarget().getBasketReference());
+    } else {
+      target.put("type", "SALES");
     }
-    Json.putMoney(node, "amount", movement.getAmount());
+    node.put("amount", moneyOrZero(movement.getAmount()));
     Json.putText(node, "saleTransactionId", movement.getSaleTransactionId());
     Json.putText(node, "poiTransactionId", movement.getPoiTransactionId());
     Json.putInstant(node, "poiTransactionTimestamp", movement.getPoiTransactionTimestamp());
@@ -390,11 +385,63 @@ public final class Views {
       node.put("step", failure.getStep().name());
     }
     node.set("error", error(failure.getError()));
-    Json.putMoney(node, "amountDue", failure.getAmountDue());
+    node.put("amountDue", moneyOrZero(failure.getAmountDue()));
     node.set("committedMovements", movements(failure.getCommittedMovements()));
     node.put("outcomeCertainty", failure.getOutcomeCertainty().name());
     Json.putText(node, "messageCategory", failure.getMessageCategory());
     Json.putText(node, "serviceId", failure.getServiceId());
+    return node;
+  }
+
+  public static ObjectNode settlementOptions(SettlementOptions options) {
+    ObjectNode node = Json.object();
+    node.put("disableRebates", options.isDisableRebates());
+    node.put("disablePoints", options.isDisablePoints());
+    node.put("disableAward", options.isDisableAward());
+    Json.putMoney(node, "cashback", options.getCashback());
+    if (options.getPaymentProcessingDisplay() != null) {
+      node.set(
+          "paymentProcessingDisplay",
+          Json.MAPPER.valueToTree(options.getPaymentProcessingDisplay()));
+    }
+    ArrayNode refunds = node.putArray("refunds");
+    for (RefundAllocation allocation : options.getRefunds()) {
+      ObjectNode r = refunds.addObject();
+      r.put("type", allocation.getType().name());
+      r.put("amount", moneyOrZero(allocation.getAmount()));
+      Json.putText(r, "originalPoiTransactionId", allocation.getOriginalPoiTransactionId());
+      Json.putInstant(
+          r, "originalPoiTransactionTimestamp", allocation.getOriginalPoiTransactionTimestamp());
+      if (allocation.getStoredValueCard() != null) {
+        r.set("storedValueCard", storedValueCard(allocation.getStoredValueCard()));
+      }
+      Json.putText(r, "memberId", allocation.getMemberId());
+    }
+    ArrayNode fulfillments = node.putArray("fulfillments");
+    for (StoredValueLoad load : options.getFulfillments()) {
+      ObjectNode f = fulfillments.addObject();
+      f.put("basketReference", load.getBasketReference());
+      f.put("type", load.getType().name());
+      f.set("card", storedValueCard(load.getCard()));
+    }
+    node.put("settlementType", options.getSettlementType().name());
+    return node;
+  }
+
+  public static ObjectNode storedValueCard(StoredValueCard card) {
+    ObjectNode node = Json.object();
+    Json.putText(node, "storedValueId", card.getStoredValueId());
+    if (card.getIdentificationType() != null) {
+      node.put("identificationType", card.getIdentificationType().name());
+    }
+    if (card.getEntryMode() != null) {
+      node.put("entryMode", card.getEntryMode().name());
+    }
+    if (card.getAccountType() != null) {
+      node.put("accountType", card.getAccountType().name());
+    }
+    Json.putText(node, "provider", card.getProvider());
+    Json.putText(node, "expiryDate", card.getExpiryDate());
     return node;
   }
 
@@ -403,19 +450,20 @@ public final class Views {
     node.put("settlementId", record.getSettlementId());
     node.put("abandonedAt", record.getAbandonedAt().toString());
     node.set("basket", basket(record.getBasket()));
+    node.set("options", settlementOptions(record.getOptions()));
     Json.putText(node, "memberId", record.getMemberId());
     node.set("failure", settlementFailure(record.getFailure()));
-    Json.putMoney(node, "outstandingAmount", record.getOutstandingAmount());
+    node.put("outstandingAmount", moneyOrZero(record.getOutstandingAmount()));
     node.set("committedMovements", movements(record.getCommittedMovements()));
     return node;
   }
 
   public static ObjectNode settlementContext(SettlementContext context) {
     ObjectNode node = Json.object();
-    node.put("settlementStep", context.getStep().name());
+    node.put("step", context.getStep().name());
     node.set("currentBasket", basket(context.getCurrentBasket()));
-    Json.putMoney(node, "currentTotal", context.getCurrentTotal());
-    node.put("defaultSaleTransactionId", context.getDefaultTransactionId());
+    node.put("currentTotal", moneyOrZero(context.getCurrentTotal()));
+    node.put("defaultTransactionId", context.getDefaultTransactionId());
     ArrayNode prior = node.putArray("priorSteps");
     for (CommittedStep step : context.getPriorSteps()) {
       ObjectNode s = prior.addObject();
@@ -430,36 +478,30 @@ public final class Views {
 
   public static ObjectNode rebatesRedeemed(RebateRedemptionResult result) {
     ObjectNode node = Json.object();
-    node.put("settlementStep", "REBATE_REDEMPTION");
     node.set("rebates", redeemedRebates(result.getRebates()));
-    Json.putMoney(node, "amount", result.getTotalRebateAmount());
-    Json.putMoney(node, "totalRebateAmount", result.getTotalRebateAmount());
-    Json.putMoney(node, "previousTotal", result.getPreviousTotal());
-    Json.putMoney(node, "suggestedTotal", result.getSuggestedTotal());
+    node.put("totalRebateAmount", moneyOrZero(result.getTotalRebateAmount()));
+    node.put("previousTotal", moneyOrZero(result.getPreviousTotal()));
+    node.put("suggestedTotal", moneyOrZero(result.getSuggestedTotal()));
     node.set("updatedBasket", basket(result.getUpdatedBasket()));
     return node;
   }
 
   public static ObjectNode pointsRedeemed(PointRedemptionResult result) {
     ObjectNode node = Json.object();
-    node.put("settlementStep", "POINT_REDEMPTION");
     node.put("pointsUsed", result.getPointsUsed());
-    Json.putMoney(node, "amount", result.getMonetaryValue());
-    Json.putMoney(node, "monetaryValue", result.getMonetaryValue());
-    Json.putMoney(node, "previousTotal", result.getPreviousTotal());
-    Json.putMoney(node, "suggestedTotal", result.getSuggestedTotal());
+    node.put("monetaryValue", moneyOrZero(result.getMonetaryValue()));
+    node.put("previousTotal", moneyOrZero(result.getPreviousTotal()));
+    node.put("suggestedTotal", moneyOrZero(result.getSuggestedTotal()));
     node.put("remainingPointBalance", result.getRemainingPointBalance());
     return node;
   }
 
   public static ObjectNode giftCardPayment(GiftCardPaymentResult result) {
     ObjectNode node = Json.object();
-    node.put("settlementStep", "STORED_VALUE_CHARGE");
-    Json.putMoney(node, "amount", result.getAmountCharged());
-    Json.putMoney(node, "amountCharged", result.getAmountCharged());
+    node.put("amountCharged", moneyOrZero(result.getAmountCharged()));
     Json.putMoney(node, "remainingCardBalance", result.getRemainingCardBalance());
-    Json.putMoney(node, "previousTotal", result.getPreviousTotal());
-    Json.putMoney(node, "suggestedTotal", result.getSuggestedTotal());
+    node.put("previousTotal", moneyOrZero(result.getPreviousTotal()));
+    node.put("suggestedTotal", moneyOrZero(result.getSuggestedTotal()));
     return node;
   }
 
@@ -499,6 +541,7 @@ public final class Views {
     ObjectNode r = node.putObject(field);
     Json.putText(r, "html", receipt.getHtml());
     Json.putText(r, "plainText", receipt.getPlainText());
+    putNexo(r, "receiptData", receipt.getReceiptData());
   }
 
   public static ObjectNode storedValueOperation(StoredValueOperationResult result) {
@@ -517,7 +560,7 @@ public final class Views {
 
   public static ObjectNode storedValueBalance(StoredValueBalance balance) {
     ObjectNode node = Json.object();
-    Json.putMoney(node, "balance", balance.getBalance());
+    node.put("balance", moneyOrZero(balance.getBalance()));
     Json.putText(node, "currency", balance.getCurrency());
     return node;
   }
@@ -537,22 +580,18 @@ public final class Views {
     return node;
   }
 
-  public static ObjectNode value(String value) {
-    ObjectNode node = Json.object();
-    Json.putText(node, "value", value);
-    return node;
+  public static JsonNode text(String value) {
+    return value == null ? Json.nullNode() : Json.MAPPER.getNodeFactory().textNode(value);
   }
 
-  public static ObjectNode decimalValue(java.math.BigDecimal value) {
-    ObjectNode node = Json.object();
-    Json.putMoney(node, "value", value);
-    return node;
+  public static JsonNode money(java.math.BigDecimal value) {
+    return value == null
+        ? Json.nullNode()
+        : Json.MAPPER.getNodeFactory().textNode(value.toPlainString());
   }
 
-  public static ObjectNode confirmed(Boolean confirmed) {
-    ObjectNode node = Json.object();
-    node.put("confirmed", Boolean.TRUE.equals(confirmed));
-    return node;
+  public static JsonNode bool(Boolean value) {
+    return Json.MAPPER.getNodeFactory().booleanNode(Boolean.TRUE.equals(value));
   }
 
   public static ObjectNode menuSelection(MenuSelection selection) {
@@ -566,23 +605,23 @@ public final class Views {
 
   public static ObjectNode signature(Signature signature) {
     ObjectNode node = Json.object();
-    Json.putText(node, "format", signature.getFormat());
+    node.put(
+        "imageData",
+        signature.getImageData() == null
+            ? ""
+            : Base64.getEncoder().encodeToString(signature.getImageData()));
+    node.put("format", signature.getFormat() == null ? "" : signature.getFormat());
     node.put("width", signature.getWidth());
     node.put("height", signature.getHeight());
     Json.putInstant(node, "capturedAt", signature.getCapturedAt());
-    if (signature.getImageData() != null) {
-      node.put("imageBase64", Base64.getEncoder().encodeToString(signature.getImageData()));
-    }
     return node;
   }
 
-  /** The PIN outcome without the PIN block itself. */
   public static ObjectNode pinResult(PinResult result) {
     ObjectNode node = Json.object();
-    if (result.getMode() != null) {
-      node.put("mode", result.getMode().name());
-    }
+    node.put("mode", result.getMode() == null ? "PIN_ENTER" : result.getMode().name());
     node.put("verified", result.isVerified());
+    putNexo(node, "cardholderPin", result.getCardholderPin());
     return node;
   }
 
@@ -617,11 +656,7 @@ public final class Views {
     return node;
   }
 
-  /**
-   * The structured Nexo models that the SDK's own results still carry (transaction status, device
-   * diagnostics) are serialized as they are rather than re-modelled; the protocol has no richer
-   * vocabulary for them yet.
-   */
+  /** Nexo structures the SDK's own results carry cross as the SDK's JSON model, unchanged. */
   private static void putNexo(ObjectNode node, String field, Object model) {
     if (model != null) {
       node.set(field, Json.MAPPER.valueToTree(model));
@@ -631,8 +666,10 @@ public final class Views {
   public static ObjectNode terminal(TerminalInfo terminal) {
     ObjectNode node = Json.object();
     node.put("poiId", terminal.poiId());
-    Json.putText(node, "label", terminal.label());
     Json.putText(node, "model", terminal.model());
+    if (terminal.reachable() != null) {
+      node.put("reachable", terminal.reachable());
+    }
     return node;
   }
 
@@ -651,7 +688,7 @@ public final class Views {
     if (rendering.getSecondary() != null) {
       node.set("secondary", cta(rendering.getSecondary()));
     }
-    node.put("ttlMs", millis(rendering.getTtl()));
+    node.put("ttl", rendering.getTtl().toString());
     ObjectNode tracking = node.putObject("tracking");
     for (Map.Entry<String, URI> beacon : rendering.getTracking().entrySet()) {
       tracking.put(beacon.getKey(), beacon.getValue().toString());
@@ -661,20 +698,15 @@ public final class Views {
 
   private static ObjectNode media(MediaSpec media) {
     ObjectNode node = Json.object();
-    node.put("type", media.getType().name().toLowerCase(Locale.ROOT));
+    node.put("type", media.getType().name());
     node.put("url", media.getUrl().toString());
     if (media.getDuration() != null) {
-      node.put("durationMs", millis(media.getDuration()));
+      node.put("duration", media.getDuration().toString());
     }
     if (media.getPoster() != null) {
       node.put("poster", media.getPoster().toString());
     }
     return node;
-  }
-
-  private static long millis(Duration duration) {
-    long millis = duration.toMillis();
-    return duration.equals(Duration.ofMillis(millis)) ? millis : millis + 1;
   }
 
   private static ObjectNode cta(Cta cta) {
@@ -707,5 +739,18 @@ public final class Views {
       node.put("action", interaction.getAction().name());
     }
     return node;
+  }
+
+  /** The {@code StoredValueLoadRecord} rows of a settlement result or original sale. */
+  static ArrayNode storedValueLoads(List<StoredValueLoadRecord> loads) {
+    ArrayNode array = Json.array();
+    for (StoredValueLoadRecord load : loads) {
+      ObjectNode l = array.addObject();
+      Json.putText(l, "basketReference", load.getBasketReference());
+      l.put("amount", moneyOrZero(load.getAmount()));
+      Json.putText(l, "poiTransactionId", load.getPoiTransactionId());
+      Json.putInstant(l, "poiTransactionTimestamp", load.getPoiTransactionTimestamp());
+    }
+    return array;
   }
 }

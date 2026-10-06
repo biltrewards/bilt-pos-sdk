@@ -12,16 +12,18 @@ engine inside the Terminal Bridge and, later, the Cloud Session Service; it has
 no tray, packaging, pairing or authentication of its own. Design:
 [Terminal Bridge, Session Protocol & JavaScript SDK](https://app.notion.com/p/3f0e1baadc2881088783ff86972c57c4).
 
-The wire contract is the Session Protocol (`schema/session-protocol/openapi.yaml`
-once it lands). The short version:
+The wire contract is the Session Protocol in `schema/session-protocol/openapi.yaml`.
+The short version:
 
 - a session is a resource under `/v1/sessions/{id}` with a basket, a member and a
   context;
 - every lazy SDK operation is `POST .../operations` returning an operation
   resource that moves through `queued`, `running`, `awaitingReply` and a terminal
-  status;
+  status; ending the session is itself an `end` operation (`DELETE` answers 202);
 - register callbacks become **steps**: `operation.step` events with a deadline
-  and a default, answered with `POST .../operations/{id}/reply`;
+  and a default, answered with `POST .../operations/{id}/reply`; a client declares
+  the step kinds it will answer in the request's `handledSteps`, and the rest take
+  the SDK default at once;
 - `GET .../events` is the ordered, replayable event stream (SSE, or WebSocket on
   the same path), reconnectable with `?since=<seq>`;
 - every state-changing request under `/v1/sessions` carries an `Idempotency-Key`;
@@ -33,11 +35,13 @@ once it lands). The short version:
 SessionHost host = SessionHost.builder()
     .bindAddress("127.0.0.1")
     .port(48333)
-    .terminalClients(myTerminals)          // TerminalClientProvider
-    .auth(HostAuth.permitAll())            // default; the bridge will plug pairing in here
+    .terminalClients(myTerminals)            // TerminalClientProvider
+    .allowedOrigins(List.of("https://pos.example.com")) // CORS; "*" for a dev host
+    .auth(HostAuth.permitAll())              // default; the bridge plugs pairing in here
     .stepDeadlines(StepDeadlines.defaults()) // 30 s totals, 120 s recovery decisions
     .build();
 host.start();
+int open = host.activeSessions();            // for a tray icon
 // ...
 host.stop();
 ```
@@ -65,7 +69,6 @@ bridge exists:
       "port": 8443,
       "encryption": false,
       "trustAll": true,
-      "label": "Lane 3",
       "model": "VictaLane"
     }
   ]
@@ -78,7 +81,8 @@ bridge exists:
 
 Per terminal: `tls` (default true), `encryption` (default true; needs
 `passphrase` and `keyIdentifier`), `trustAll` or `caFile`. Without a file the
-host starts with no terminals and still serves `local` sessions.
+host starts with no terminals and still serves `local` sessions. The dev host
+answers CORS for every origin.
 
 ## A local session with curl
 
@@ -103,16 +107,16 @@ curl -s -X PUT -H "$H" -H 'Idempotency-Key: m1' \
 
 curl -s -X PATCH -H "$H" -H 'Idempotency-Key: x1' -d '{"phase":"TENDERING"}' $B/v1/sessions/$SID/context
 
-curl -s -X DELETE -H 'Idempotency-Key: e1' $B/v1/sessions/$SID
+curl -s -X DELETE -H 'Idempotency-Key: e1' $B/v1/sessions/$SID   # 202, the end operation
 ```
 
 A `terminal` session adds `"poiId"` to the creation body and unlocks
-`POST .../operations` with `{"type":"settle"}`, `identifyMember`,
-`requestConfirmation`, `refund`, `voidTransaction` and the rest. A settlement
-that redeems rebates publishes an `operation.step` of kind `TOTAL_REQUIRED`;
-answer it with `{"stepId":"...","total":"89.50"}` or let the deadline apply the
-suggested total. Pass `"steps": []` on the operation to take every default
-without being asked.
+`POST .../operations` with `{"type":"settle","handledSteps":["TOTAL_REQUIRED"]}`,
+`identifyMember`, `requestConfirmation`, `refund`, `voidTransaction` and the
+rest. A settlement that redeems rebates then publishes an `operation.step` of
+kind `TOTAL_REQUIRED`; answer it with `{"stepId":"...","total":"89.50"}` or let
+the deadline apply the suggested total. Leave `handledSteps` out to take every
+default without being asked.
 
 ## What this iteration leaves out
 
@@ -120,6 +124,5 @@ without being asked.
   `Authorization` is accepted and ignored.
 - Rendering: `retail-media` widgets need an `AdDecisionService` from the
   embedding application; `DevMain` wires the in-memory one with no creatives.
-- The structured display payload (`updateDisplay` / `updateInputDisplay`) and the
-  Nexo bodies inside transaction status and diagnostics cross as Jackson's view of
-  the SDK models; the protocol has no richer vocabulary for them yet.
+- `TerminalInfo.reachable` is whatever the provider reports; the host does not
+  probe terminals on its own.

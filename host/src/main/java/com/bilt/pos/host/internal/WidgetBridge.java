@@ -13,6 +13,9 @@ import com.bilt.pos.media.Placement;
 import com.bilt.pos.media.RetailMedia;
 import com.bilt.pos.media.SurfaceKind;
 import com.bilt.pos.media.service.AdDecisionService;
+import com.bilt.pos.session.CheckoutPhase;
+import com.bilt.pos.session.SessionError;
+import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.widget.ActionSink;
 import com.bilt.pos.widget.Cta;
 import com.bilt.pos.widget.MediaSpec;
@@ -22,6 +25,7 @@ import com.bilt.pos.widget.Widget;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -34,11 +38,12 @@ import java.util.function.BiConsumer;
 
 /**
  * Widgets over the wire. The host runs the SDK's widget engine; the browser only renders. Each
- * placement the client asked for gets an {@link EventSurface} that turns {@code show(rendering)}
+ * placement the client configured gets an {@link EventSurface} that turns {@code show(rendering)}
  * into a {@code widget.rendering} event and {@code clear()} into {@code widget.clear}, and
- * remembers the rendering's {@link ActionSink} so {@code POST .../widgets/retail-media/actions}
- * can report what the shopper did. Token validation stays in the SDK: an action names a creative
- * and a token, and the sink refuses anything that was not issued.
+ * remembers the rendering's {@link ActionSink} so {@code POST .../widgets/retail-media/actions} can
+ * report what the shopper did. Token validation stays in the SDK; a report the surface cannot
+ * honour (a creative no longer on display, a foreign token) becomes a {@code background.error}
+ * rather than an HTTP error, so a renderer cannot break the checkout by sending the wrong thing.
  */
 public final class WidgetBridge {
 
@@ -53,9 +58,8 @@ public final class WidgetBridge {
   }
 
   /**
-   * Builds the widgets a session creation asked for. {@code widgets} is the request's array, {@code
-   * clientCapabilities} its declared rendering formats; the returned bridge's {@link #widgets()}
-   * go on the SDK builder.
+   * Builds the widgets a session creation asked for from its {@code widgets} array and {@code
+   * clientCapabilities}; the returned bridge's {@link #widgets()} go on the SDK builder.
    */
   public static WidgetBridge from(
       ArrayNode widgets,
@@ -66,11 +70,18 @@ public final class WidgetBridge {
     if (widgets == null) {
       return bridge;
     }
-    Set<MediaSpec.MediaType> formats = formats(clientCapabilities);
+    Set<MediaSpec.MediaType> defaultFormats = formats(clientCapabilities, "clientCapabilities");
+    SurfaceKind defaultKind =
+        clientCapabilities == null
+            ? SurfaceKind.WEB
+            : Json.enumValue(clientCapabilities, "surfaceKind", SurfaceKind.class);
+    if (defaultKind == null) {
+      defaultKind = SurfaceKind.WEB;
+    }
     for (JsonNode spec : widgets) {
       String type = Json.requireText(spec, "type");
       if (!RETAIL_MEDIA.equals(type)) {
-        throw HostError.unsupported("unknown widget type '" + type + "'");
+        throw HostError.badRequest("unknown widget type '" + type + "'");
       }
       if (bridge.widgets.containsKey(type)) {
         throw HostError.badRequest("widget '" + type + "' is listed twice");
@@ -79,40 +90,78 @@ public final class WidgetBridge {
         throw HostError.unsupported(
             "this host has no ad decision service, so retail-media widgets are unavailable");
       }
-      List<String> placements = Json.strings(spec, "placements");
+      ArrayNode placements = Json.array(spec, "placements");
       if (placements == null || placements.isEmpty()) {
         throw HostError.badRequest("retail-media needs at least one placement");
       }
       RetailMedia.Builder builder =
           RetailMedia.builder()
               .adService(adService)
-              .onOffer(offer -> publish.accept("widget.offer", Views.offer(offer)))
+              .onOffer(
+                  offer -> {
+                    ObjectNode payload = Json.object();
+                    payload.put("widget", RETAIL_MEDIA);
+                    payload.set("offer", Views.offer(offer));
+                    publish.accept("widget.offer", payload);
+                  })
               .onInteraction(
-                  interaction ->
-                      publish.accept("widget.interaction", Views.interaction(interaction)));
-      for (String id : placements) {
-        Placement placement = Placement.of(id);
-        EventSurface surface = new EventSurface(placement, formats, publish);
-        bridge.surfaces.put(placement, surface);
+                  interaction -> {
+                    ObjectNode payload = Json.object();
+                    payload.put("widget", RETAIL_MEDIA);
+                    payload.set("interaction", Views.interaction(interaction));
+                    publish.accept("widget.interaction", payload);
+                  });
+      for (JsonNode placementSpec : placements) {
+        Placement placement = Placement.of(Json.requireText(placementSpec, "id"));
+        Set<MediaSpec.MediaType> formats =
+            placementSpec.has("formats") ? formats(placementSpec, "placements") : defaultFormats;
+        SurfaceKind kind = Json.enumValue(placementSpec, "surfaceKind", SurfaceKind.class);
+        EventSurface surface =
+            new EventSurface(placement, formats, kind == null ? defaultKind : kind, publish);
+        if (bridge.surfaces.put(placement, surface) != null) {
+          throw HostError.badRequest("placement '" + placement.getId() + "' is listed twice");
+        }
         builder.surface(placement, surface);
       }
-      bridge.widgets.put(type, builder.build());
+      List<String> phases = Json.strings(spec, "eligiblePhases");
+      if (phases != null) {
+        EnumSet<CheckoutPhase> eligible = EnumSet.noneOf(CheckoutPhase.class);
+        for (String phase : phases) {
+          eligible.add(Json.enumValue(phase, "eligiblePhases", CheckoutPhase.class));
+        }
+        if (eligible.isEmpty()) {
+          throw HostError.badRequest("eligiblePhases must not be empty");
+        }
+        builder.eligiblePhases(eligible);
+      }
+      Duration decisionTimeout = Parsers.duration(spec, "decisionTimeout");
+      if (decisionTimeout != null) {
+        builder.decisionTimeout(decisionTimeout);
+      }
+      Duration renderingTtl = Parsers.duration(spec, "renderingTtl");
+      if (renderingTtl != null) {
+        builder.renderingTtl(renderingTtl);
+      }
+      try {
+        bridge.widgets.put(type, builder.build());
+      } catch (IllegalArgumentException e) {
+        throw HostError.badRequest("invalid retail-media configuration: " + e.getMessage());
+      }
     }
     return bridge;
   }
 
-  private static Set<MediaSpec.MediaType> formats(JsonNode clientCapabilities) {
-    List<String> names =
-        clientCapabilities == null ? null : Json.strings(clientCapabilities, "formats");
+  private static Set<MediaSpec.MediaType> formats(JsonNode node, String field) {
+    List<String> names = node == null ? null : Json.strings(node, "formats");
     if (names == null) {
       return Collections.unmodifiableSet(EnumSet.allOf(MediaSpec.MediaType.class));
     }
     EnumSet<MediaSpec.MediaType> formats = EnumSet.noneOf(MediaSpec.MediaType.class);
     for (String name : names) {
-      formats.add(Json.enumValue(name, "clientCapabilities.formats", MediaSpec.MediaType.class));
+      formats.add(Json.enumValue(name, field + ".formats", MediaSpec.MediaType.class));
     }
     if (formats.isEmpty()) {
-      throw HostError.badRequest("clientCapabilities.formats must not be empty");
+      throw HostError.badRequest(field + ".formats must not be empty");
     }
     return Collections.unmodifiableSet(formats);
   }
@@ -122,17 +171,31 @@ public final class WidgetBridge {
     return new ArrayList<>(widgets.values());
   }
 
+  /** The {@code WidgetState} list. */
   public ArrayNode view() {
     ArrayNode array = Json.array();
-    widgets.forEach(
-        (type, widget) -> {
-          ObjectNode node = array.addObject();
-          node.put("type", type);
-          node.put("paused", widget.isPaused());
-          ArrayNode placements = node.putArray("placements");
-          surfaces.keySet().forEach(placement -> placements.add(placement.getId()));
-        });
+    widgets.forEach((type, widget) -> array.add(state(type, widget)));
     return array;
+  }
+
+  public ObjectNode state(String type) {
+    return state(type, widget(type));
+  }
+
+  private ObjectNode state(String type, Widget widget) {
+    ObjectNode node = Json.object();
+    node.put("type", type);
+    node.put("paused", widget.isPaused());
+    ArrayNode placements = node.putArray("placements");
+    surfaces.forEach(
+        (placement, surface) -> {
+          ObjectNode p = placements.addObject();
+          p.put("id", placement.getId());
+          p.put("surfaceKind", surface.kind().name());
+          ArrayNode formats = p.putArray("formats");
+          surface.supportedFormats().forEach(format -> formats.add(format.name()));
+        });
+    return node;
   }
 
   public Widget widget(String type) {
@@ -143,35 +206,46 @@ public final class WidgetBridge {
     return widget;
   }
 
-  /**
-   * {@code { placement, creativeId, action, token? }} where {@code action} is {@code perform},
-   * {@code viewed}, {@code dismissed} or {@code completed}; {@code perform} needs the CTA token.
-   */
+  /** A {@code WidgetAction}: {@code { kind, creativeId, placement, action?, token? }}. */
   public void action(JsonNode body) {
     widget(RETAIL_MEDIA);
+    String kind = Json.requireText(body, "kind");
+    String creativeId = Json.requireText(body, "creativeId");
     Placement placement = Placement.of(Json.requireText(body, "placement"));
     EventSurface surface = surfaces.get(placement);
     if (surface == null) {
       throw HostError.notFound("placement " + placement.getId());
     }
-    surface.action(
-        Json.requireText(body, "creativeId"),
-        Json.requireText(body, "action"),
-        Json.text(body, "token"));
+    switch (kind.toLowerCase(Locale.ROOT)) {
+      case "perform":
+      case "viewed":
+      case "dismissed":
+      case "completed":
+        break;
+      default:
+        throw HostError.badRequest(
+            "kind must be perform, viewed, dismissed or completed, not '" + kind + "'");
+    }
+    surface.action(kind.toLowerCase(Locale.ROOT), creativeId, Json.text(body, "token"));
   }
 
   /** A rendering surface whose display is a browser on the other end of the event stream. */
   static final class EventSurface implements Surface {
     private final Placement placement;
     private final Set<MediaSpec.MediaType> formats;
+    private final SurfaceKind kind;
     private final BiConsumer<String, JsonNode> publish;
     private Rendering current;
     private ActionSink sink;
 
     EventSurface(
-        Placement placement, Set<MediaSpec.MediaType> formats, BiConsumer<String, JsonNode> publish) {
+        Placement placement,
+        Set<MediaSpec.MediaType> formats,
+        SurfaceKind kind,
+        BiConsumer<String, JsonNode> publish) {
       this.placement = placement;
       this.formats = formats;
+      this.kind = kind;
       this.publish = publish;
     }
 
@@ -182,7 +256,7 @@ public final class WidgetBridge {
 
     @Override
     public SurfaceKind kind() {
-      return SurfaceKind.WEB;
+      return kind;
     }
 
     @Override
@@ -190,6 +264,7 @@ public final class WidgetBridge {
       current = rendering;
       sink = actions;
       ObjectNode payload = Json.object();
+      payload.put("widget", RETAIL_MEDIA);
       payload.put("placement", placement.getId());
       payload.set("rendering", Views.rendering(rendering));
       publish.accept("widget.rendering", payload);
@@ -203,11 +278,12 @@ public final class WidgetBridge {
       current = null;
       sink = null;
       ObjectNode payload = Json.object();
+      payload.put("widget", RETAIL_MEDIA);
       payload.put("placement", placement.getId());
       publish.accept("widget.clear", payload);
     }
 
-    void action(String creativeId, String action, String token) {
+    void action(String kind, String creativeId, String token) {
       Rendering rendering;
       ActionSink target;
       synchronized (this) {
@@ -215,14 +291,15 @@ public final class WidgetBridge {
         target = sink;
       }
       if (rendering == null || !rendering.getCreativeId().equals(creativeId)) {
-        throw HostError.conflict(
-            "creative '" + creativeId + "' is not on display at " + placement.getId());
+        reject("creative '" + creativeId + "' is not on display at " + placement.getId());
+        return;
       }
-      switch (action.toLowerCase(Locale.ROOT)) {
+      switch (kind) {
         case "perform":
           Cta cta = rendering.ctaForToken(token);
           if (cta == null) {
-            throw HostError.unprocessable("token does not belong to creative '" + creativeId + "'");
+            reject("token does not belong to creative '" + creativeId + "'");
+            return;
           }
           target.perform(cta);
           return;
@@ -232,13 +309,18 @@ public final class WidgetBridge {
         case "dismissed":
           target.dismissed(rendering);
           return;
-        case "completed":
-          target.completed(rendering);
-          return;
         default:
-          throw HostError.badRequest(
-              "action must be perform, viewed, dismissed or completed, not '" + action + "'");
+          target.completed(rendering);
       }
+    }
+
+    private void reject(String reason) {
+      publish.accept(
+          "background.error",
+          Views.error(
+              new SessionError(
+                  SessionErrorCode.INVALID_STATE,
+                  "RetailMedia ignored an action on " + placement.getId() + ": " + reason)));
     }
   }
 }

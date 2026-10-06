@@ -22,7 +22,10 @@ public interface HostRequest {
   /** The request path without query string, for example {@code /v1/sessions/abc/basket}. */
   String path();
 
-  /** A request header, or {@code null} when absent. {@code Authorization} and {@code Origin} live here. */
+  /**
+   * A request header, or {@code null} when absent. {@code Authorization} and {@code Origin} live
+   * here.
+   */
   String header(String name);
 
   /** The peer address as the server saw it. */

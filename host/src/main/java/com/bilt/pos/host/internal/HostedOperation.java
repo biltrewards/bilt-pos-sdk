@@ -12,6 +12,7 @@ package com.bilt.pos.host.internal;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -31,12 +32,16 @@ public final class HostedOperation {
 
     /** The wire spelling: lower camel case. */
     public String wire() {
-      switch (this) {
-        case AWAITING_REPLY:
-          return "awaitingReply";
-        default:
-          return name().toLowerCase(java.util.Locale.ROOT);
+      return this == AWAITING_REPLY ? "awaitingReply" : name().toLowerCase(Locale.ROOT);
+    }
+
+    public static Status fromWire(String wire) {
+      for (Status status : values()) {
+        if (status.wire().equals(wire)) {
+          return status;
+        }
       }
+      throw HostError.badRequest("unknown operation status '" + wire + "'");
     }
   }
 
@@ -49,6 +54,15 @@ public final class HostedOperation {
   private volatile Instant completedAt;
   private volatile JsonNode result;
   private volatile ObjectNode error;
+  private volatile ObjectNode abandonedSettlement;
+  private final java.util.concurrent.atomic.AtomicBoolean completionPublished =
+      new java.util.concurrent.atomic.AtomicBoolean();
+
+  /** True the first time only, so {@code operation.completed} is published exactly once. */
+  boolean markCompletionPublished() {
+    return completionPublished.compareAndSet(false, true);
+  }
+
   private volatile PendingStep<?> pendingStep;
 
   HostedOperation(String type, boolean ordered) {
@@ -73,9 +87,18 @@ public final class HostedOperation {
     return status;
   }
 
+  public Instant createdAt() {
+    return createdAt;
+  }
+
   public boolean isTerminal() {
     Status now = status;
     return now == Status.SUCCEEDED || now == Status.FAILED || now == Status.ABORTED;
+  }
+
+  /** Voids and the lifecycle signals are never an abort's target. */
+  public boolean isAbortable() {
+    return !"voidTransaction".equals(type) && !"end".equals(type) && !"forceEnd".equals(type);
   }
 
   public PendingStep<?> pendingStep() {
@@ -111,6 +134,10 @@ public final class HostedOperation {
     status = aborted ? Status.ABORTED : Status.FAILED;
   }
 
+  void abandoned(ObjectNode record) {
+    abandonedSettlement = record;
+  }
+
   public ObjectNode toJson() {
     ObjectNode node = Json.object();
     node.put("id", id);
@@ -119,11 +146,14 @@ public final class HostedOperation {
     node.put("createdAt", createdAt.toString());
     Json.putInstant(node, "startedAt", startedAt);
     Json.putInstant(node, "completedAt", completedAt);
-    if (result != null) {
+    if (result != null && !result.isNull()) {
       node.set("result", result);
     }
     if (error != null) {
       node.set("error", error);
+    }
+    if (abandonedSettlement != null) {
+      node.set("abandonedSettlement", abandonedSettlement);
     }
     PendingStep<?> step = pendingStep;
     if (step != null && !step.isSettled()) {

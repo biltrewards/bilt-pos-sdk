@@ -12,23 +12,23 @@ package com.bilt.pos.host;
 import java.util.Objects;
 
 /**
- * What a client is told about a terminal: its {@code poiId}, and optionally a human label and the
- * device model. Deliberately not the address, certificate or passphrase — the page that drives a
- * checkout never sees how the terminal is reached.
+ * What a client is told about a terminal: its {@code poiId}, optionally the device model and the
+ * host's last known reachability. Deliberately not the address, certificate or passphrase — the
+ * page that drives a checkout never sees how the terminal is reached.
  */
 public final class TerminalInfo {
 
   private final String poiId;
-  private final String label;
   private final String model;
+  private final Boolean reachable;
 
-  private TerminalInfo(String poiId, String label, String model) {
+  private TerminalInfo(String poiId, String model, Boolean reachable) {
     this.poiId = Objects.requireNonNull(poiId, "poiId");
     if (poiId.isEmpty()) {
       throw new IllegalArgumentException("poiId must not be empty");
     }
-    this.label = label;
     this.model = model;
+    this.reachable = reachable;
   }
 
   /** A terminal known only by its {@code poiId}. */
@@ -36,21 +36,29 @@ public final class TerminalInfo {
     return new TerminalInfo(poiId, null, null);
   }
 
-  /** A terminal with a label and model for display in the register's terminal picker. */
-  public static TerminalInfo of(String poiId, String label, String model) {
-    return new TerminalInfo(poiId, label, model);
+  /** A terminal with its model for the register's terminal picker. */
+  public static TerminalInfo of(String poiId, String model) {
+    return new TerminalInfo(poiId, model, null);
+  }
+
+  /** The same terminal with a cached reachability verdict; {@code null} means unknown. */
+  public TerminalInfo withReachable(Boolean reachable) {
+    return new TerminalInfo(poiId, model, reachable);
   }
 
   public String poiId() {
     return poiId;
   }
 
-  public String label() {
-    return label;
-  }
-
   public String model() {
     return model;
+  }
+
+  /**
+   * The host's last known reachability, a cached view rather than a probe; {@code null} if unknown.
+   */
+  public Boolean reachable() {
+    return reachable;
   }
 
   @Override
@@ -63,17 +71,17 @@ public final class TerminalInfo {
     }
     TerminalInfo that = (TerminalInfo) other;
     return poiId.equals(that.poiId)
-        && Objects.equals(label, that.label)
-        && Objects.equals(model, that.model);
+        && Objects.equals(model, that.model)
+        && Objects.equals(reachable, that.reachable);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(poiId, label, model);
+    return Objects.hash(poiId, model, reachable);
   }
 
   @Override
   public String toString() {
-    return "TerminalInfo{" + poiId + (label == null ? "" : ", " + label) + "}";
+    return "TerminalInfo{" + poiId + (model == null ? "" : ", " + model) + "}";
   }
 }

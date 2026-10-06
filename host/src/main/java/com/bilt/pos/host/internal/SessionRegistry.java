@@ -14,6 +14,9 @@ import com.bilt.pos.host.TerminalClientProvider;
 import com.bilt.pos.media.service.AdDecisionService;
 import com.bilt.pos.nexo.client.TerminalClient;
 import com.bilt.pos.session.CheckoutPhase;
+import com.bilt.pos.session.SessionErrorCode;
+import com.bilt.pos.session.SessionException;
+import com.bilt.pos.session.SessionResult;
 import com.bilt.pos.session.ShopperSession;
 import com.bilt.pos.session.TerminalShopperSession;
 import com.bilt.pos.session.identity.Member;
@@ -25,15 +28,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * Session ID to live session. Creation builds the SDK session from the request through the {@link
- * SessionFactory}, registering the host's observer and widgets on the builder; ending hands the
- * SDK's {@code end()} refusals back as 409s. Ended sessions stay listed for a while so a client
- * reconnecting to the event stream can still replay {@code session.ended}; the oldest are evicted
- * once a bounded number have piled up.
+ * SessionFactory}, registering the host's observer and widgets on the builder. Ending is itself an
+ * operation on the lane: when the lane is idle it runs on the calling thread so the SDK's refusals
+ * come back as the 409 the protocol promises; otherwise it queues and a refusal fails the
+ * operation. Ended sessions stay listed for a while so a client reconnecting to the event stream
+ * can still replay {@code session.ended}; the oldest are evicted once a bounded number pile up.
  */
 public final class SessionRegistry {
 
@@ -74,20 +79,30 @@ public final class SessionRegistry {
   }
 
   public HostedSession create(ObjectNode body) {
-    String kind = Json.text(body, "kind");
-    if (kind == null) {
-      kind = Json.has(body, "poiId") ? "terminal" : "local";
+    String kind = Json.requireText(body, "kind");
+    if (!kind.equals("local") && !kind.equals("terminal")) {
+      throw HostError.badRequest("kind must be local or terminal, not '" + kind + "'");
     }
     String saleId = Json.requireText(body, "saleId");
     String currency = Json.requireText(body, "currency");
+    if (!currency.matches("[A-Z]{3}")) {
+      throw HostError.badRequest("currency must be an ISO 4217 code");
+    }
     String storeLocation = Json.text(body, "storeLocation");
+    String poiId = kind.equals("terminal") ? Json.requireText(body, "poiId") : null;
+    boolean autoDisplay = Json.bool(body, "autoDisplay", true);
     Member member = Parsers.member(body.get("member"));
     ObjectNode context = Json.objectField(body, "context");
     CheckoutPhase phase = Parsers.phase(context);
     Map<String, String> attributes = Json.stringMap(context, "attributes");
 
     HostedSession hosted =
-        new HostedSession(kind, replayCapacity, replayWindow, idempotencyCapacity, workers);
+        new HostedSession(
+            new HostedSession.Spec(kind, saleId, poiId, currency, storeLocation, autoDisplay),
+            replayCapacity,
+            replayWindow,
+            idempotencyCapacity,
+            workers);
     WidgetBridge widgets =
         WidgetBridge.from(
             Json.array(body, "widgets"),
@@ -96,63 +111,53 @@ public final class SessionRegistry {
             hosted::publish);
 
     ShopperSession started;
-    switch (kind) {
-      case "local":
-        {
-          ShopperSession.Builder builder =
-              factory
-                  .newLocalSession()
-                  .saleId(saleId)
-                  .currency(currency)
-                  .storeLocation(storeLocation)
-                  .onBackgroundError(hosted::backgroundError)
-                  .widget(hosted.observer())
-                  .widgets(widgets.widgets());
-          if (member != null) {
-            builder.member(member);
-          }
-          if (phase != null) {
-            builder.phase(phase);
-          }
-          if (attributes != null) {
-            attributes.forEach(builder::attribute);
-          }
-          started = builder.start();
-          break;
-        }
-      case "terminal":
-        {
-          String poiId = Json.requireText(body, "poiId");
-          TerminalClient client = terminals.forPoi(poiId);
-          if (client == null) {
-            throw HostError.notFound("terminal " + poiId);
-          }
-          TerminalShopperSession.Builder builder =
-              factory
-                  .newTerminalSession()
-                  .client(client)
-                  .saleId(saleId)
-                  .poiId(poiId)
-                  .currency(currency)
-                  .storeLocation(storeLocation)
-                  .autoDisplay(Json.bool(body, "autoDisplay", true))
-                  .onBackgroundError(hosted::backgroundError)
-                  .widget(hosted.observer())
-                  .widgets(widgets.widgets());
-          if (member != null) {
-            builder.member(member);
-          }
-          if (phase != null) {
-            builder.phase(phase);
-          }
-          if (attributes != null) {
-            attributes.forEach(builder::attribute);
-          }
-          started = builder.start().get();
-          break;
-        }
-      default:
-        throw HostError.badRequest("kind must be local or terminal, not '" + kind + "'");
+    if (kind.equals("local")) {
+      ShopperSession.Builder builder =
+          factory
+              .newLocalSession()
+              .saleId(saleId)
+              .currency(currency)
+              .storeLocation(storeLocation)
+              .onBackgroundError(hosted::backgroundError)
+              .widget(hosted.observer())
+              .widgets(widgets.widgets());
+      if (member != null) {
+        builder.member(member);
+      }
+      if (phase != null) {
+        builder.phase(phase);
+      }
+      if (attributes != null) {
+        attributes.forEach(builder::attribute);
+      }
+      started = builder.start();
+    } else {
+      TerminalClient client = terminals.forPoi(poiId);
+      if (client == null) {
+        throw HostError.notFound("terminal " + poiId);
+      }
+      TerminalShopperSession.Builder builder =
+          factory
+              .newTerminalSession()
+              .client(client)
+              .saleId(saleId)
+              .poiId(poiId)
+              .currency(currency)
+              .storeLocation(storeLocation)
+              .autoDisplay(autoDisplay)
+              .onBackgroundError(hosted::backgroundError)
+              .widget(hosted.observer())
+              .widgets(widgets.widgets());
+      if (member != null) {
+        builder.member(member);
+      }
+      if (phase != null) {
+        builder.phase(phase);
+      }
+      if (attributes != null) {
+        attributes.forEach(builder::attribute);
+      }
+      started = builder.start().get();
     }
     hosted.attach(started, widgets);
     synchronized (sessions) {
@@ -192,26 +197,60 @@ public final class SessionRegistry {
     return open;
   }
 
-  /** {@code end()} with the SDK's guards; a refusal surfaces as a 409 with the SDK's message. */
-  public void end(HostedSession hosted) {
-    if (hosted.isEnded()) {
+  /**
+   * {@code end()} or {@code forceEnd(reason)} as the {@code end}/{@code forceEnd} operation. With
+   * an idle lane it runs now, so an SDK guard refusal is a 409 and nothing is recorded; with a busy
+   * lane it queues behind the operation in flight and a refusal fails the operation.
+   */
+  public HostedOperation end(HostedSession hosted, boolean forced, String reason) {
+    if (hosted.isEndingOrEnded()) {
       throw HostError.conflict("the session has already ended");
     }
-    hosted.session().end().get();
-    hosted.markEnded();
-  }
-
-  public void forceEnd(HostedSession hosted, String reason) {
-    if (hosted.isEnded()) {
-      throw HostError.conflict("the session has already ended");
-    }
+    HostedOperation operation = new HostedOperation(forced ? "forceEnd" : "end", true);
     TerminalShopperSession terminal = hosted.terminal();
-    if (terminal == null) {
-      hosted.session().end().get();
-    } else {
-      terminal.forceEnd(reason).get();
+    Supplier<SessionResult<Void>> call =
+        forced && terminal != null ? () -> terminal.forceEnd(reason) : () -> hosted.session().end();
+    if (hosted.laneIdle()) {
+      hosted.ending(forced, reason, operation);
+      hosted.register(operation);
+      operation.started();
+      try {
+        call.get().get();
+        operation.succeeded(null);
+      } catch (SessionException e) {
+        hosted.endFailed();
+        if (e.getError().getCode() == SessionErrorCode.INVALID_STATE) {
+          throw HostError.of(e.getError());
+        }
+        operation.failed(HostError.of(e.getError()), false);
+      } catch (RuntimeException e) {
+        hosted.endFailed();
+        HostError error = HostError.from(e);
+        if (error.status() == 409) {
+          throw error;
+        }
+        operation.failed(error, false);
+      }
+      hosted.publishCompletion(operation);
+      return operation;
     }
-    hosted.markEnded();
+    hosted.ending(forced, reason, operation);
+    hosted.submit(
+        operation,
+        () -> {
+          try {
+            SessionResult<Void> end = call.get();
+            end.execute();
+            end.get();
+            operation.succeeded(null);
+          } catch (Throwable failure) {
+            hosted.endFailed();
+            operation.failed(HostError.from(failure), false);
+          } finally {
+            hosted.completed(operation);
+          }
+        });
+    return operation;
   }
 
   /** Best-effort teardown on {@code stop()}: ends what it can, closes every event stream. */

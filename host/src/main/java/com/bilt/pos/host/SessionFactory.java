@@ -17,9 +17,9 @@ import com.bilt.pos.session.TerminalShopperSession;
  *
  * <p>The host fills in everything the request carries — sale ID, currency, store location, the
  * terminal client, the initial member and context, widgets — and keeps the callback executor and
- * background-error hook for itself. What the embedding application owns is the rest of the
- * builder: Bilt platform credentials and environment for widgets, a display renderer, an external
- * display client. Return a fresh builder on each call; the SDK's builders are not reusable.
+ * background-error hook for itself. What the embedding application owns is the rest of the builder:
+ * Bilt platform credentials and environment for widgets, a display renderer, an external display
+ * client. Return a fresh builder on each call; the SDK's builders are not reusable.
  *
  * <p>{@link #defaults()} returns the plain SDK builders, which is all a development host needs.
  */

@@ -9,12 +9,16 @@
  */
 package com.bilt.pos.host;
 
+import com.bilt.pos.host.internal.Event;
+import com.bilt.pos.host.internal.EventBuffer;
 import com.bilt.pos.host.internal.HostError;
 import com.bilt.pos.host.internal.HostVersion;
 import com.bilt.pos.host.internal.HostedOperation;
 import com.bilt.pos.host.internal.HostedSession;
+import com.bilt.pos.host.internal.IdempotencyCache;
 import com.bilt.pos.host.internal.Json;
 import com.bilt.pos.host.internal.OperationRunner;
+import com.bilt.pos.host.internal.Parsers;
 import com.bilt.pos.host.internal.SessionRegistry;
 import com.bilt.pos.host.internal.Views;
 import com.bilt.pos.internal.SdkVersion;
@@ -22,6 +26,7 @@ import com.bilt.pos.media.service.AdDecisionService;
 import com.bilt.pos.nexo.client.TerminalClient;
 import com.bilt.pos.session.SessionContext;
 import com.bilt.pos.session.SessionResult;
+import com.bilt.pos.session.ShopperSession;
 import com.bilt.pos.session.Terminal;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketMutation;
@@ -34,13 +39,19 @@ import io.javalin.http.Context;
 import io.javalin.http.sse.SseClient;
 import io.javalin.websocket.WsContext;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Level;
@@ -74,12 +85,14 @@ public final class SessionHost implements AutoCloseable {
 
   private static final Logger LOGGER = Logger.getLogger(SessionHost.class.getName());
   private static final String PROTOCOL_VERSION = "1";
+  private static final Duration SSE_PING = Duration.ofSeconds(15);
   private static final AtomicInteger WORKER_COUNTER = new AtomicInteger();
 
   private final Builder config;
   private final SessionRegistry registry;
   private final OperationRunner runner;
   private final ExecutorService workers;
+  private final ScheduledExecutorService pinger;
   private final Javalin app;
   private volatile boolean started;
 
@@ -90,6 +103,13 @@ public final class SessionHost implements AutoCloseable {
             runnable -> {
               Thread thread =
                   new Thread(runnable, "bilt-host-worker-" + WORKER_COUNTER.incrementAndGet());
+              thread.setDaemon(true);
+              return thread;
+            });
+    this.pinger =
+        Executors.newSingleThreadScheduledExecutor(
+            runnable -> {
+              Thread thread = new Thread(runnable, "bilt-host-sse-ping");
               thread.setDaemon(true);
               return thread;
             });
@@ -137,6 +157,7 @@ public final class SessionHost implements AutoCloseable {
       app.stop();
     } finally {
       registry.closeAll();
+      pinger.shutdownNow();
       workers.shutdownNow();
     }
   }
@@ -151,9 +172,16 @@ public final class SessionHost implements AutoCloseable {
     return app.port();
   }
 
+  /** How many sessions are open right now; for a tray icon or a health dashboard. */
+  public int activeSessions() {
+    return registry.openCount();
+  }
+
   // ─── Routes ───
 
   private void routes() {
+    app.before(this::cors);
+    app.options("/*", ctx -> respond(ctx, 204, null));
     app.before(this::authorize);
     app.before(this::idempotencyLookup);
     app.exception(HostError.class, (error, ctx) -> respond(ctx, error.status(), error.toJson()));
@@ -162,7 +190,8 @@ public final class SessionHost implements AutoCloseable {
         (failure, ctx) -> {
           HostError error = HostError.from(failure);
           if (error.status() >= 500) {
-            LOGGER.log(Level.WARNING, "request failed: " + ctx.method() + " " + ctx.path(), failure);
+            LOGGER.log(
+                Level.WARNING, "request failed: " + ctx.method() + " " + ctx.path(), failure);
           }
           respond(ctx, error.status(), error.toJson());
         });
@@ -170,53 +199,93 @@ public final class SessionHost implements AutoCloseable {
     app.get("/health", ctx -> respond(ctx, 200, health()));
 
     app.get("/v1/terminals", ctx -> respond(ctx, 200, terminals()));
-    app.post("/v1/terminals/{poiId}/diagnose", ctx -> device(ctx, Terminal::diagnose, Views::diagnosis));
-    app.post("/v1/terminals/{poiId}/totals", ctx -> device(ctx, Terminal::getTotals, Views::reconciliation));
     app.post(
-        "/v1/terminals/{poiId}/reconcile", ctx -> device(ctx, Terminal::reconcile, Views::reconciliation));
+        "/v1/terminals/{poiId}/diagnose", ctx -> device(ctx, Terminal::diagnose, Views::diagnosis));
+    app.post(
+        "/v1/terminals/{poiId}/totals",
+        ctx -> device(ctx, Terminal::getTotals, Views::reconciliation));
+    app.post(
+        "/v1/terminals/{poiId}/reconcile",
+        ctx -> device(ctx, Terminal::reconcile, Views::reconciliation));
     app.post(
         "/v1/terminals/{poiId}/print",
         ctx -> {
-          var payload = com.bilt.pos.host.internal.Parsers.printPayload(Json.body(ctx.body()));
-          device(ctx, terminal -> terminal.print(payload), v -> Json.object());
+          var payload = Parsers.printPayload(Json.body(ctx.body()));
+          device(ctx, terminal -> terminal.print(payload), v -> null);
         });
     app.post(
         "/v1/terminals/{poiId}/sound",
         ctx -> {
           ObjectNode body = Json.body(ctx.body());
-          String action = Json.text(body, "action");
-          if ("stop".equalsIgnoreCase(action)) {
-            device(ctx, Terminal::stopSound, v -> Json.object());
+          String action = Json.requireText(body, "action");
+          if (action.equalsIgnoreCase("STOP")) {
+            device(ctx, Terminal::stopSound, v -> null);
             return;
+          }
+          if (!action.equalsIgnoreCase("PLAY")) {
+            throw HostError.badRequest("action must be PLAY or STOP");
           }
           String reference = Json.requireText(body, "soundReferenceId");
           Integer volume = Json.integer(body, "volumePercent");
-          device(ctx, terminal -> terminal.playSound(reference, volume), v -> Json.object());
+          device(ctx, terminal -> terminal.playSound(reference, volume), v -> null);
         });
 
-    app.post("/v1/sessions", ctx -> respond(ctx, 201, registry.create(Json.body(ctx.body())).view()));
+    app.post(
+        "/v1/sessions", ctx -> respond(ctx, 201, registry.create(Json.body(ctx.body())).view()));
     app.get("/v1/sessions", ctx -> respond(ctx, 200, sessions()));
     app.get("/v1/sessions/{id}", ctx -> respond(ctx, 200, session(ctx).view()));
-    app.delete("/v1/sessions/{id}", ctx -> end(ctx, false));
-    app.post("/v1/sessions/{id}/force-end", ctx -> end(ctx, true));
+    app.delete(
+        "/v1/sessions/{id}",
+        ctx -> respond(ctx, 202, registry.end(session(ctx), false, null).toJson()));
+    app.post(
+        "/v1/sessions/{id}/force-end",
+        ctx -> {
+          String reason = Json.text(Json.body(ctx.body()), "reason");
+          if (reason == null || reason.isBlank()) {
+            throw HostError.badRequest("reason is required");
+          }
+          respond(ctx, 202, registry.end(session(ctx), true, reason.strip()).toJson());
+        });
+    app.post(
+        "/v1/sessions/{id}/abort",
+        ctx -> {
+          HostedSession hosted = session(ctx);
+          HostedOperation running = hosted.running();
+          ObjectNode body = Json.object();
+          if (running != null && running.isAbortable()) {
+            runner.abort(hosted, running);
+            body.set("operation", running.toJson());
+          }
+          respond(ctx, 202, body);
+        });
 
     app.get("/v1/sessions/{id}/basket", ctx -> basket(ctx, s -> s.basket().snapshot()));
     app.put(
         "/v1/sessions/{id}/basket",
         ctx -> {
-          ArrayNode items = Json.array(Json.body(ctx.body()), "items");
-          if (items == null) {
-            throw HostError.badRequest("items is required");
+          ObjectNode body = Json.body(ctx.body());
+          boolean hasSnapshot = Json.has(body, "snapshot");
+          ArrayNode items = Json.array(body, "items");
+          if (hasSnapshot == (items != null)) {
+            throw HostError.badRequest("exactly one of snapshot or items is required");
           }
-          var parsed = com.bilt.pos.host.internal.Parsers.basketItems(items);
-          basket(ctx, s -> s.basket().replace(parsed));
+          if (hasSnapshot) {
+            Basket snapshot = Parsers.basket(body.get("snapshot"));
+            basket(ctx, s -> s.basket().replace(snapshot));
+          } else {
+            var parsed = Parsers.basketItems(items);
+            basket(ctx, s -> s.basket().replace(parsed));
+          }
         });
     app.post(
         "/v1/sessions/{id}/basket/items",
         ctx -> {
           ObjectNode body = Json.body(ctx.body());
-          var item = com.bilt.pos.host.internal.Parsers.basketItem(body);
+          var item = Parsers.basketItem(body);
           String itemId = Json.text(body, "itemId");
+          if (itemId != null && !itemId.matches("[0-9]+")) {
+            throw HostError.badRequest("itemId must be numeric");
+          }
           basket(
               ctx,
               s -> itemId == null ? s.basket().addItem(item) : s.basket().addItem(item, itemId));
@@ -225,8 +294,7 @@ public final class SessionHost implements AutoCloseable {
         "/v1/sessions/{id}/basket/items/{itemId}",
         ctx -> {
           String itemId = ctx.pathParam("itemId");
-          Consumer<BasketMutation> patch =
-              com.bilt.pos.host.internal.Parsers.itemPatch(itemId, Json.body(ctx.body()));
+          Consumer<BasketMutation> patch = Parsers.itemPatch(itemId, Json.body(ctx.body()));
           basket(
               ctx,
               s -> {
@@ -252,25 +320,29 @@ public final class SessionHost implements AutoCloseable {
           if (mutations == null || mutations.isEmpty()) {
             throw HostError.badRequest("mutations must not be empty");
           }
-          List<Consumer<BasketMutation>> steps = new java.util.ArrayList<>();
+          List<Consumer<BasketMutation>> steps = new ArrayList<>();
           for (JsonNode node : mutations) {
-            steps.add(com.bilt.pos.host.internal.Parsers.mutation(node));
+            steps.add(Parsers.mutation(node));
           }
           basket(ctx, s -> s.basket().mutate(m -> steps.forEach(step -> step.accept(m))));
         });
     app.post(
         "/v1/sessions/{id}/basket/tax-total",
         ctx -> {
-          var amount = Json.decimal(Json.body(ctx.body()), "amount");
+          ObjectNode body = Json.body(ctx.body());
+          if (!body.has("amount")) {
+            throw HostError.badRequest("amount is required (null restores item-level tax)");
+          }
+          var amount = Json.decimal(body, "amount");
           basket(ctx, s -> s.basket().setTaxTotal(amount));
         });
     app.post("/v1/sessions/{id}/basket/clear", ctx -> basket(ctx, s -> s.basket().clear()));
 
-    app.get("/v1/sessions/{id}/member", ctx -> respond(ctx, 200, Views.member(session(ctx).session().member())));
+    app.get("/v1/sessions/{id}/member", ctx -> member(ctx, session(ctx).session().member()));
     app.put(
         "/v1/sessions/{id}/member",
         ctx -> {
-          Member member = com.bilt.pos.host.internal.Parsers.member(Json.body(ctx.body()));
+          Member member = Parsers.member(Json.body(ctx.body()));
           if (member == null) {
             throw HostError.badRequest("member requires id or resolver; use DELETE to clear");
           }
@@ -281,17 +353,18 @@ public final class SessionHost implements AutoCloseable {
     app.delete(
         "/v1/sessions/{id}/member",
         ctx -> {
-          HostedSession hosted = session(ctx);
-          hosted.session().member(null);
-          respond(ctx, 200, Views.member(null));
+          session(ctx).session().member(null);
+          respond(ctx, 204, null);
         });
 
-    app.get("/v1/sessions/{id}/context", ctx -> respond(ctx, 200, Views.context(session(ctx).session().context().snapshot())));
+    app.get(
+        "/v1/sessions/{id}/context",
+        ctx -> respond(ctx, 200, Views.context(session(ctx).session().context().snapshot())));
     app.patch(
         "/v1/sessions/{id}/context",
         ctx -> {
           ObjectNode body = Json.body(ctx.body());
-          var phase = com.bilt.pos.host.internal.Parsers.phase(body);
+          var phase = Parsers.phase(body);
           Map<String, String> attributes = Json.stringMap(body, "attributes");
           if (phase == null && attributes == null) {
             throw HostError.badRequest("the patch must set phase or attributes");
@@ -308,13 +381,13 @@ public final class SessionHost implements AutoCloseable {
 
     app.post(
         "/v1/sessions/{id}/operations",
-        ctx -> {
-          HostedSession hosted = session(ctx);
-          HostedOperation operation = runner.submit(hosted, Json.body(ctx.body()));
-          respond(ctx, 202, operation.toJson());
-        });
-    app.get("/v1/sessions/{id}/operations", ctx -> respond(ctx, 200, operations(session(ctx))));
-    app.get("/v1/sessions/{id}/operations/{operationId}", ctx -> respond(ctx, 200, operation(ctx).toJson()));
+        ctx -> respond(ctx, 202, runner.submit(session(ctx), Json.body(ctx.body())).toJson()));
+    app.get(
+        "/v1/sessions/{id}/operations",
+        ctx -> respond(ctx, 200, operations(session(ctx), ctx.queryParam("status"))));
+    app.get(
+        "/v1/sessions/{id}/operations/{operationId}",
+        ctx -> respond(ctx, 200, operation(ctx).toJson()));
     app.post(
         "/v1/sessions/{id}/operations/{operationId}/reply",
         ctx -> {
@@ -327,8 +400,8 @@ public final class SessionHost implements AutoCloseable {
         ctx -> {
           HostedSession hosted = session(ctx);
           HostedOperation operation = hosted.operation(ctx.pathParam("operationId"));
-          runner.abort(hosted, operation);
-          respond(ctx, 202, operation.toJson());
+          boolean issued = runner.abort(hosted, operation);
+          respond(ctx, issued ? 202 : 200, operation.toJson());
         });
 
     app.get("/v1/sessions/{id}/widgets", ctx -> respond(ctx, 200, session(ctx).widgets().view()));
@@ -336,21 +409,23 @@ public final class SessionHost implements AutoCloseable {
         "/v1/sessions/{id}/widgets/{type}/pause",
         ctx -> {
           HostedSession hosted = session(ctx);
-          hosted.widgets().widget(ctx.pathParam("type")).pause();
-          respond(ctx, 200, hosted.widgets().view());
+          String type = ctx.pathParam("type");
+          hosted.widgets().widget(type).pause();
+          respond(ctx, 200, hosted.widgets().state(type));
         });
     app.post(
         "/v1/sessions/{id}/widgets/{type}/resume",
         ctx -> {
           HostedSession hosted = session(ctx);
-          hosted.widgets().widget(ctx.pathParam("type")).resume();
-          respond(ctx, 200, hosted.widgets().view());
+          String type = ctx.pathParam("type");
+          hosted.widgets().widget(type).resume();
+          respond(ctx, 200, hosted.widgets().state(type));
         });
     app.post(
         "/v1/sessions/{id}/widgets/retail-media/actions",
         ctx -> {
           session(ctx).widgets().action(Json.body(ctx.body()));
-          respond(ctx, 202, Json.object());
+          respond(ctx, 202, null);
         });
 
     app.sse("/v1/sessions/{id}/events", this::sse);
@@ -369,16 +444,26 @@ public final class SessionHost implements AutoCloseable {
                   ctx.closeSession(4404, "session not found");
                   return;
                 }
+                long since;
+                try {
+                  since = since(ctx.queryParam("since"));
+                } catch (HostError e) {
+                  ctx.closeSession(4400, e.getMessage());
+                  return;
+                }
+                if (!hosted.events().canReplayFrom(since)) {
+                  ctx.closeSession(4410, "since is no longer buffered");
+                  return;
+                }
                 ctx.enableAutomaticPings();
-                long since = since(ctx.queryParam("since"));
                 var subscription =
                     hosted
                         .events()
                         .subscribe(
                             since,
-                            new com.bilt.pos.host.internal.EventBuffer.Subscriber() {
+                            new EventBuffer.Subscriber() {
                               @Override
-                              public void onEvent(com.bilt.pos.host.internal.Event event) {
+                              public void onEvent(Event event) {
                                 if (ctx.session.isOpen()) {
                                   ctx.send(event.json());
                                 }
@@ -413,20 +498,35 @@ public final class SessionHost implements AutoCloseable {
   private void sse(SseClient client) {
     HostedSession hosted = registry.find(client.ctx().pathParam("id"));
     if (hosted == null) {
-      client.sendEvent("error", HostError.notFound("session").toJson().toString(), null);
+      client.sendEvent("error", Json.write(HostError.notFound("session").toJson()), null);
       client.close();
       return;
     }
     long since = since(client.ctx().queryParam("since"));
+    if (!hosted.events().canReplayFrom(since)) {
+      throw HostError.gone(hosted.events().oldestSeq());
+    }
     client.keepAlive();
+    ScheduledFuture<?> ping =
+        pinger.scheduleAtFixedRate(
+            () -> {
+              try {
+                client.sendComment("ping");
+              } catch (RuntimeException e) {
+                client.close();
+              }
+            },
+            SSE_PING.toMillis(),
+            SSE_PING.toMillis(),
+            TimeUnit.MILLISECONDS);
     var subscription =
         hosted
             .events()
             .subscribe(
                 since,
-                new com.bilt.pos.host.internal.EventBuffer.Subscriber() {
+                new EventBuffer.Subscriber() {
                   @Override
-                  public void onEvent(com.bilt.pos.host.internal.Event event) {
+                  public void onEvent(Event event) {
                     client.sendEvent(event.type(), event.json(), Long.toString(event.seq()));
                   }
 
@@ -435,7 +535,11 @@ public final class SessionHost implements AutoCloseable {
                     client.close();
                   }
                 });
-    client.onClose(subscription::close);
+    client.onClose(
+        () -> {
+          ping.cancel(false);
+          subscription.close();
+        });
   }
 
   private static long since(String raw) {
@@ -443,7 +547,11 @@ public final class SessionHost implements AutoCloseable {
       return 0;
     }
     try {
-      return Long.parseLong(raw);
+      long since = Long.parseLong(raw);
+      if (since < 0) {
+        throw HostError.badRequest("since must not be negative");
+      }
+      return since;
     } catch (NumberFormatException e) {
       throw HostError.badRequest("since must be an event sequence number");
     }
@@ -453,13 +561,11 @@ public final class SessionHost implements AutoCloseable {
 
   private ObjectNode health() {
     ObjectNode node = Json.object();
-    node.put("kind", config.hostKind);
+    node.put("host", config.hostKind);
     node.put("hostVersion", HostVersion.current());
     node.put("sdkVersion", SdkVersion.current());
-    ArrayNode versions = node.putArray("protocolVersions");
-    versions.add(PROTOCOL_VERSION);
-    node.put("terminals", config.terminalClients.terminals().size());
-    node.put("sessions", registry.openCount());
+    node.putArray("protocolVersions").add(PROTOCOL_VERSION);
+    node.set("terminals", terminals());
     return node;
   }
 
@@ -479,10 +585,19 @@ public final class SessionHost implements AutoCloseable {
     return array;
   }
 
-  private static ArrayNode operations(HostedSession hosted) {
+  private static ArrayNode operations(HostedSession hosted, String statusFilter) {
+    Set<HostedOperation.Status> statuses = null;
+    if (statusFilter != null && !statusFilter.isEmpty()) {
+      statuses = java.util.EnumSet.noneOf(HostedOperation.Status.class);
+      for (String wire : statusFilter.split(",")) {
+        statuses.add(HostedOperation.Status.fromWire(wire.trim()));
+      }
+    }
     ArrayNode array = Json.array();
     for (HostedOperation operation : hosted.operations()) {
-      array.add(operation.toJson());
+      if (statuses == null || statuses.contains(operation.status())) {
+        array.add(operation.toJson());
+      }
     }
     return array;
   }
@@ -500,10 +615,11 @@ public final class SessionHost implements AutoCloseable {
         Terminal.builder()
             .client(client)
             .poiId(poiId)
-            .saleId(saleId == null || saleId.isEmpty() ? "bilt-session-host" : saleId)
+            .saleId(saleId == null || saleId.isEmpty() ? config.deviceSaleId : saleId)
             .storeLocation(ctx.queryParam("storeLocation"))
             .build()) {
-      respond(ctx, 200, view.apply(call.apply(terminal).get()));
+      JsonNode body = view.apply(call.apply(terminal).get());
+      respond(ctx, body == null ? 204 : 200, body);
     }
   }
 
@@ -515,33 +631,58 @@ public final class SessionHost implements AutoCloseable {
     return session(ctx).operation(ctx.pathParam("operationId"));
   }
 
-  private void basket(Context ctx, Function<com.bilt.pos.session.ShopperSession, Basket> change) {
+  private void basket(Context ctx, Function<ShopperSession, Basket> change) {
     respond(ctx, 200, Views.basket(change.apply(session(ctx).session())));
   }
 
-  private static void requireItem(com.bilt.pos.session.ShopperSession session, String itemId) {
+  private static void member(Context ctx, Member member) {
+    if (member == null) {
+      respond(ctx, 204, null);
+    } else {
+      respond(ctx, 200, Views.member(member));
+    }
+  }
+
+  private static void requireItem(ShopperSession session, String itemId) {
     if (session.basket().snapshot().getItem(itemId) == null) {
       throw HostError.notFound("basket item " + itemId);
     }
   }
 
-  private void end(Context ctx, boolean forced) {
-    HostedSession hosted = session(ctx);
-    HostedOperation running = hosted.running();
-    if (running != null) {
-      throw HostError.conflict(
-          "operation " + running.id() + " (" + running.type() + ") is still in flight");
+  // ─── Cross-cutting ───
+
+  /**
+   * Answers CORS for the configured origins so a page served from elsewhere can call the host: the
+   * preflight gets the allowed methods and headers, every response the allow-origin, and Chrome's
+   * local-network-access preflight its private-network consent.
+   */
+  private void cors(Context ctx) {
+    String origin = ctx.header("Origin");
+    if (origin == null || !originAllowed(origin)) {
+      if (ctx.method() == io.javalin.http.HandlerType.OPTIONS) {
+        ctx.status(204).result("");
+        ctx.skipRemainingHandlers();
+      }
+      return;
     }
-    if (forced) {
-      String reason = Json.text(Json.body(ctx.body()), "reason");
-      registry.forceEnd(hosted, reason == null || reason.isBlank() ? "forced by the register" : reason);
-    } else {
-      registry.end(hosted);
+    ctx.header("Access-Control-Allow-Origin", origin);
+    ctx.header("Vary", "Origin");
+    ctx.header("Access-Control-Expose-Headers", "Idempotent-Replayed");
+    if ("true".equalsIgnoreCase(ctx.header("Access-Control-Request-Private-Network"))) {
+      ctx.header("Access-Control-Allow-Private-Network", "true");
     }
-    respond(ctx, 200, hosted.view());
+    if (ctx.method() == io.javalin.http.HandlerType.OPTIONS) {
+      ctx.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+      ctx.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key");
+      ctx.header("Access-Control-Max-Age", "600");
+      ctx.status(204).result("");
+      ctx.skipRemainingHandlers();
+    }
   }
 
-  // ─── Cross-cutting ───
+  private boolean originAllowed(String origin) {
+    return config.allowedOrigins.contains("*") || config.allowedOrigins.contains(origin);
+  }
 
   private void authorize(Context ctx) {
     if (ctx.path().equals("/health")) {
@@ -624,26 +765,30 @@ public final class SessionHost implements AutoCloseable {
     if (key == null || key.isBlank()) {
       throw HostError.badRequest("the " + IDEMPOTENCY_HEADER + " header is required");
     }
-    String fingerprint =
-        com.bilt.pos.host.internal.IdempotencyCache.fingerprint(
-            ctx.method().name(), ctx.path(), ctx.body());
-    com.bilt.pos.host.internal.IdempotencyCache cache = cacheFor(ctx);
+    if (key.length() > 128) {
+      throw HostError.badRequest(IDEMPOTENCY_HEADER + " must be at most 128 characters");
+    }
+    String fingerprint = IdempotencyCache.fingerprint(ctx.method().name(), ctx.path(), ctx.body());
+    IdempotencyCache cache = cacheFor(ctx);
     if (cache == null) {
       return;
     }
     var stored = cache.lookup(key, fingerprint);
     if (stored != null) {
-      ctx.status(stored.status()).result(stored.body()).header("Idempotent-Replayed", "true");
+      ctx.status(stored.status()).header("Idempotent-Replayed", "true");
+      if (stored.body() != null) {
+        ctx.result(stored.body()).contentType("application/json");
+      }
       ctx.skipRemainingHandlers();
       return;
     }
     ctx.attribute(
         IDEMPOTENCY_STORE,
-        (java.util.function.BiConsumer<Integer, String>)
+        (BiConsumer<Integer, String>)
             (status, body) -> cache.store(key, fingerprint, status, body));
   }
 
-  private com.bilt.pos.host.internal.IdempotencyCache cacheFor(Context ctx) {
+  private IdempotencyCache cacheFor(Context ctx) {
     if (ctx.path().equals("/v1/sessions")) {
       return registry.creationCache();
     }
@@ -657,11 +802,16 @@ public final class SessionHost implements AutoCloseable {
 
   @SuppressWarnings("unchecked")
   private static void respond(Context ctx, int status, JsonNode body) {
-    String json = Json.write(body);
-    ctx.status(status).result(json).contentType("application/json");
+    String json = body == null ? null : Json.write(body);
+    ctx.status(status);
+    if (json != null) {
+      ctx.result(json).contentType("application/json");
+    } else {
+      ctx.result("");
+    }
     Object store = ctx.attribute(IDEMPOTENCY_STORE);
     if (store != null) {
-      ((java.util.function.BiConsumer<Integer, String>) store).accept(status, json);
+      ((BiConsumer<Integer, String>) store).accept(status, json);
       ctx.attribute(IDEMPOTENCY_STORE, null);
     }
   }
@@ -678,13 +828,28 @@ public final class SessionHost implements AutoCloseable {
     private HostAuth auth = HostAuth.permitAll();
     private AdDecisionService adDecisionService;
     private String hostKind = "bridge";
+    private String deviceSaleId = "bilt-session-host";
     private int eventReplayCapacity = 1000;
     private Duration eventReplayWindow = Duration.ofMinutes(10);
     private int idempotencyCapacity = 256;
+    private Set<String> allowedOrigins = Set.of();
 
     private Builder() {}
 
-    /** The port to listen on; 0 picks an ephemeral one, which tests read back with {@code port()}. */
+    /**
+     * Browser origins the host answers CORS for, for example {@code https://pos.example.com};
+     * {@code "*"} allows any origin, which is fine for a development host on loopback. Without any,
+     * cross-origin pages are blocked by their own browser's preflight even though the host would
+     * permit the request.
+     */
+    public Builder allowedOrigins(java.util.Collection<String> origins) {
+      this.allowedOrigins = Set.copyOf(Objects.requireNonNull(origins, "origins"));
+      return this;
+    }
+
+    /**
+     * The port to listen on; 0 picks an ephemeral one, which tests read back with {@code port()}.
+     */
     public Builder port(int port) {
       if (port < 0 || port > 65535) {
         throw new IllegalArgumentException("port must be between 0 and 65535");
@@ -721,16 +886,24 @@ public final class SessionHost implements AutoCloseable {
 
     /**
      * The ad decision service behind {@code retail-media} widgets. Without one, a session that asks
-     * for the widget is refused with 422, since the SDK ships no platform-backed default yet.
+     * for the widget is refused, since the SDK ships no platform-backed default yet.
      */
     public Builder adDecisionService(AdDecisionService adDecisionService) {
       this.adDecisionService = adDecisionService;
       return this;
     }
 
-    /** What {@code /health} reports as {@code kind}: {@code bridge} by default, {@code cloud} later. */
+    /**
+     * What {@code /health} reports as {@code host}: {@code bridge} by default, {@code cloud} later.
+     */
     public Builder hostKind(String hostKind) {
       this.hostKind = Objects.requireNonNull(hostKind, "hostKind");
+      return this;
+    }
+
+    /** The Nexo {@code SaleID} for session-less device operations that name none. */
+    public Builder deviceSaleId(String deviceSaleId) {
+      this.deviceSaleId = Objects.requireNonNull(deviceSaleId, "deviceSaleId");
       return this;
     }
 

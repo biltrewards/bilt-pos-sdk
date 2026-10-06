@@ -37,12 +37,12 @@ import java.util.Map;
  * }
  * }</pre>
  *
- * <p>Each terminal becomes a {@code BiltNexoTerminalClient} on {@code https://host:port/nexo}
- * (or {@code http://} when {@code "tls": false}). {@code "passphrase"} turns on payload encryption
- * with a key derived from it; {@code "encryption": false} leaves it off for lab devices. {@code
+ * <p>Each terminal becomes a {@code BiltNexoTerminalClient} on {@code https://host:port/nexo} (or
+ * {@code http://} when {@code "tls": false}). {@code "passphrase"} turns on payload encryption with
+ * a key derived from it; {@code "encryption": false} leaves it off for lab devices. {@code
  * "trustAll": true} skips certificate validation, {@code "caFile"} trusts one PEM instead. Without
- * any terminals the host still serves {@code local} sessions. Retail-media widgets are backed by
- * an {@code InMemoryAdDecisionService} with no creatives, so they attach but render nothing.
+ * any terminals the host still serves {@code local} sessions. Retail-media widgets are backed by an
+ * {@code InMemoryAdDecisionService} with no creatives, so they attach but render nothing.
  *
  * <p>Run with {@code ./gradlew :host:run --args="dev-host.json"}; the file argument is optional and
  * defaults to a terminal-less host on port 48333.
@@ -101,27 +101,33 @@ public final class DevMain {
     public List<TerminalInfo> terminals() {
       List<TerminalInfo> infos = new ArrayList<>();
       specs.forEach(
-          (poiId, spec) ->
-              infos.add(
-                  TerminalInfo.of(
-                      poiId, spec.path("label").asText(null), spec.path("model").asText(null))));
+          (poiId, spec) -> infos.add(TerminalInfo.of(poiId, spec.path("model").asText(null))));
       return infos;
     }
 
     private static TerminalClient build(JsonNode spec) {
       String scheme = spec.path("tls").asBoolean(true) ? "https" : "http";
       String endpoint =
-          scheme + "://" + spec.path("host").asText() + ":" + spec.path("port").asInt(8443) + "/nexo";
+          scheme
+              + "://"
+              + spec.path("host").asText()
+              + ":"
+              + spec.path("port").asInt(8443)
+              + "/nexo";
       BiltNexoTerminalClient.Builder builder = BiltNexoTerminalClient.builder().endpoint(endpoint);
       if (spec.path("encryption").asBoolean(true)) {
         String passphrase = spec.path("passphrase").asText(null);
         if (passphrase == null) {
           throw new IllegalArgumentException(
-              "terminal " + spec.path("poiId").asText() + " needs a passphrase or encryption:false");
+              "terminal "
+                  + spec.path("poiId").asText()
+                  + " needs a passphrase or encryption:false");
         }
         if (!spec.hasNonNull("keyIdentifier")) {
           throw new IllegalArgumentException(
-              "terminal " + spec.path("poiId").asText() + " needs the keyIdentifier its passphrase"
+              "terminal "
+                  + spec.path("poiId").asText()
+                  + " needs the keyIdentifier its passphrase"
                   + " was provisioned under");
         }
         SecurityKey.Builder key =
