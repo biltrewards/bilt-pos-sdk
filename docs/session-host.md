@@ -81,7 +81,8 @@ bridge exists:
 Per terminal: `tls` (default true), `encryption` (default true; needs
 `passphrase` and `keyIdentifier`), `trustAll` or `caFile`. Without a file the
 host starts with no terminals and still serves `local` sessions. The dev host
-answers CORS for every origin.
+answers CORS for every origin unless the file narrows it with
+`"allowedOrigins": ["https://pos.example.com"]`.
 
 ## A local session with curl
 

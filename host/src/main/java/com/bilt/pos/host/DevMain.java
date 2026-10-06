@@ -37,6 +37,8 @@ import java.util.Map;
  * }
  * }</pre>
  *
+ * <p>CORS answers every origin; {@code "allowedOrigins": ["https://pos.example.com"]} narrows it.
+ *
  * <p>Each terminal becomes a {@code BiltNexoTerminalClient} on {@code https://host:port/nexo} (or
  * {@code http://} when {@code "tls": false}). {@code "passphrase"} turns on payload encryption with
  * a key derived from it; {@code "encryption": false} leaves it off for lab devices. {@code
@@ -63,6 +65,7 @@ public final class DevMain {
         SessionHost.builder()
             .port(port)
             .bindAddress(bindAddress)
+            .allowedOrigins(allowedOrigins(config))
             .terminalClients(new FileTerminals(config.path("terminals")))
             .adDecisionService(new InMemoryAdDecisionService())
             .build();
@@ -71,6 +74,17 @@ public final class DevMain {
     System.out.println("  GET /health, GET /v1/terminals, POST /v1/sessions ... Ctrl-C to stop");
     Runtime.getRuntime().addShutdownHook(new Thread(host::stop, "bilt-host-shutdown"));
     Thread.currentThread().join();
+  }
+
+  /** Every origin unless the config file narrows it with {@code "allowedOrigins": [...]}. */
+  static List<String> allowedOrigins(JsonNode config) {
+    JsonNode configured = config.path("allowedOrigins");
+    if (!configured.isArray()) {
+      return List.of("*");
+    }
+    List<String> origins = new ArrayList<>();
+    configured.forEach(origin -> origins.add(origin.asText()));
+    return origins;
   }
 
   /** Terminals from the config file, each with a lazily built Nexo client. */
