@@ -98,8 +98,9 @@ public final class PendingStep<T> {
     try {
       answer = reply.get(deadline.toMillis(), TimeUnit.MILLISECONDS);
     } catch (TimeoutException e) {
+      // a reply or abort can land on the deadline; complete() then loses and the winner stands
       reply.complete(defaultReply);
-      answer = defaultReply;
+      answer = reply.getNow(defaultReply);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       answer = abortReply;
