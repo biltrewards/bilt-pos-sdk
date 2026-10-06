@@ -3,8 +3,8 @@ name: JS
 on:
   push:
     branches: [main]
+  # Every pull request, whatever its base, so a PR stacked on a feature branch is checked too.
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
