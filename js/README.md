@@ -5,10 +5,10 @@ terminal itself, so these packages speak the [Session Protocol](../schema/sessio
 to a host that embeds the Java SDK — the Terminal Bridge on the register machine today, the
 Cloud Session Service later.
 
-| Package              | Contents                                                                                                                                                               |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@bilt/pos-protocol` | Types and a typed `fetch` client generated from `schema/session-protocol/openapi.yaml`; the TypeScript domain model.                                                   |
-| `@bilt/pos-sdk`      | The public SDK contract: `BiltPos`, `ShopperSession`, `TerminalShopperSession`, settlement handlers, `Operation`, errors; `@bilt/pos-sdk/internal` is the engine seam. |
+| Package              | Contents                                                                                                                                                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@bilt/pos-protocol` | Types and a typed `fetch` client generated from `schema/session-protocol/openapi.yaml`; the TypeScript domain model.                                                                                      |
+| `@bilt/pos-sdk`      | The SDK: `BiltPos`, `ShopperSession`, `TerminalShopperSession`, settlement handlers, `Operation`, errors; `@bilt/pos-sdk/bridge` is the Terminal Bridge engine, `@bilt/pos-sdk/internal` the engine seam. |
 
 ## Working in the workspace
 
@@ -23,6 +23,7 @@ pnpm lint:spec       # redocly lint of the Session Protocol spec
 pnpm typecheck
 pnpm build
 pnpm test            # vitest, including type tests and the spec examples validated with Ajv
+pnpm --filter @bilt/pos-sdk test:contract   # the SDK runtime against the real Session Host (needs a JDK and host/)
 ```
 
 CI runs the same steps in `.github/workflows/js.yml` and fails when the generated code is out
