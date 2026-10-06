@@ -404,4 +404,51 @@ describe('the bridge event stream', () => {
     await done;
     expect(received.map((ev) => ev.type)).toEqual(['member.changed', 'session.ended']);
   });
+
+  it('resubscribes over EventSource from the oldest event when the replay position is refused', async () => {
+    FakeSocket.failToOpen = true;
+    const sources: RefusableSource[] = [];
+    class RefusableSource {
+      static readonly CLOSED = 2;
+      readonly listeners = new Map<string, (e: MessageEvent) => void>();
+      onopen: ((e: Event) => void) | null = null;
+      onerror: ((e: Event) => void) | null = null;
+      readyState = 0;
+      constructor(readonly url: string) {
+        sources.push(this);
+        // The first connection is refused with a 410, which EventSource reports as a bare error.
+        queueMicrotask(() => {
+          if (sources.length === 1) {
+            this.readyState = 2;
+            this.onerror?.(new Event('error'));
+          } else this.onopen?.(new Event('open'));
+        });
+      }
+      addEventListener(type: string, listener: (e: MessageEvent) => void) {
+        this.listeners.set(type, listener);
+      }
+      close() {
+        this.readyState = 2;
+      }
+      emit(type: string, event: object) {
+        this.listeners.get(type)?.({ data: JSON.stringify(event) } as MessageEvent);
+      }
+    }
+    const options = resolveOptions({
+      fetch: fakeFetch(() => undefined).fetch,
+      webSocket: FakeSocket as unknown as typeof WebSocket,
+      eventSource: RefusableSource as unknown as typeof EventSource,
+    });
+    const e = new BridgeEngine('http://127.0.0.1:48333', options);
+    const received: SessionEvent[] = [];
+    const done = (async () => {
+      for await (const event of e.events('s1', 5)) received.push(event);
+    })();
+    await vi.waitFor(() => expect(sources).toHaveLength(2));
+    expect(sources[0]!.url).toMatch(/since=5/);
+    expect(sources[1]!.url).not.toMatch(/since=/);
+    sources[1]!.emit('session.ended', { seq: 9, type: 'session.ended', at: 'now', payload: {} });
+    await done;
+    expect(received.map((ev) => ev.seq)).toEqual([9]);
+  });
 });

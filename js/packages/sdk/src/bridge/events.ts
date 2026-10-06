@@ -65,7 +65,7 @@ function decodeFrame(data: unknown): string | undefined {
  * `session.ended` reconnects with the last `seq` it saw, backing off exponentially from 250 ms
  * to 10 s. When a WebSocket cannot be opened at all and an `EventSource` is available, the same
  * URL is read as Server-Sent Events. A 4410 / 410 (the `since` fell out of the host's replay
- * window) resubscribes from the oldest buffered event; the resulting jump in `seq` is the
+ * window; over SSE, any refusal before the first frame) resubscribes from the oldest buffered event; the resulting jump in `seq` is the
  * core's cue to re-read state. The iteration ends after `session.ended`, when the session is
  * unknown to the host (4404), or when the engine closes.
  */
@@ -328,7 +328,10 @@ export class BridgeEventStream implements AsyncIterable<SessionEvent> {
       });
       source.onerror = () => {
         if (source.readyState === EventSourceImpl.CLOSED) {
-          done(opened ? 'retry' : 'unsupported');
+          // EventSource hides the HTTP status, so a refusal before any frame while we hold a
+          // position is treated like a 410: resubscribe from the host's oldest event. A plain
+          // outage costs nothing, as the core drops the events it has already seen.
+          done(opened ? 'retry' : this.lastSeq > 0 ? 'gap' : 'unsupported');
         }
         // CONNECTING: the EventSource is retrying on its own with Last-Event-ID; let it.
       };
