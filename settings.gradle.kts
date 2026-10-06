@@ -47,6 +47,8 @@ include(":schema")
 
 include(":cli")
 
+include(":host")
+
 include(":emulator:shared")
 
 include(":emulator:android")

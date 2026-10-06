@@ -14,6 +14,7 @@ jaxb-api = "4.0.2"
 jaxb-runtime = "4.0.5"
 google-java-format = "1.36.1"
 ktfmt = "0.64"
+javalin = "7.2.3"
 
 [libraries]
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
@@ -33,6 +34,7 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
+javalin = { module = "io.javalin:javalin", version.ref = "javalin" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
