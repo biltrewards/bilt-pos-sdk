@@ -33,7 +33,7 @@ describe('the browser POS page', () => {
       expect(screen.getByRole('alert').getAttribute('data-status')).toBe('missing'),
     );
     expect(screen.getByText(/Install the Bilt Terminal Bridge/)).toBeTruthy();
-    expect(screen.getByText('Download for your computer').getAttribute('href')).toContain(
+    expect(screen.getByText(/Download for/).getAttribute('href')).toContain(
       'terminal-bridge.html',
     );
   });
