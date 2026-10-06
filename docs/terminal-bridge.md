@@ -3,7 +3,7 @@
 
 # Terminal Bridge (development preview)
 
-The Terminal Bridge is a small menu-bar application that runs on the register machine, embeds the Java SDK, and serves it on `127.0.0.1` so a browser-based POS page can drive a Bilt terminal on the store LAN. The page never sees the terminal's address, certificate or payload passphrase; it talks HTTP (and, once the Session Host is embedded, WebSocket) to the bridge, and the bridge speaks Nexo over HTTPS to the terminal.
+The Terminal Bridge is a small menu-bar application that runs on the register machine, embeds the Java SDK and the Session Host (`:host`), and serves them on `127.0.0.1` so a browser-based POS page can drive a Bilt terminal on the store LAN. The page never sees the terminal's address, certificate or payload passphrase; it talks the Session Protocol (HTTP, Server-Sent Events and WebSocket) to the bridge, and the bridge speaks Nexo over HTTPS to the terminal.
 
 The design is in Notion: *Bilt POS SDK — Terminal Bridge, Session Protocol & JavaScript SDK (Design)*. This page covers the **development-mode** bridge in this repository: configuration from a local file, no pairing, no authentication, macOS packaging only.
 
@@ -13,8 +13,9 @@ The design is in Notion: *Bilt POS SDK — Terminal Bridge, Session Protocol & J
 
 ## What it does
 
-- Listens on `http://127.0.0.1:48333`. If that port is taken it tries the next ten (`48334`…`48343`) and logs the one it chose. It never binds a LAN interface, even if the config file asks it to.
-- Builds a `BiltNexoTerminalClient` per terminal in the config file, using the same builder options documented in the [Integration Guide](integration.html), [Certificate Validation](certificate-validation-setup.html) and [Terminal Security](terminal-security.html).
+- Runs the Session Host on `http://127.0.0.1:48333`: `GET /health`, `GET /v1/terminals`, `POST /v1/sessions` and the rest of the Session Protocol. If that port is taken it tries the next ten (`48334`…`48343`) and logs the one it chose. It never binds a LAN interface, even if the config file asks it to.
+- Builds a `BiltNexoTerminalClient` per terminal in the config file, using the same builder options documented in the [Integration Guide](integration.html), [Certificate Validation](certificate-validation-setup.html) and [Terminal Security](terminal-security.html), and hands them to the host by `poiId`.
+- Admits browser requests only from the origins in `allowedOrigins` (requests without an `Origin` header, such as curl, always pass).
 - Shows a menu-bar icon with the listener status, the number of terminals configured and sessions active, and actions to open the config file, reload it, open the logs folder, copy a redacted diagnostics summary, toggle *Start at login*, and quit.
 - Reloads the config file when it changes or when *Reload config* is chosen. A broken file keeps the previous configuration in force (or the defaults on first start) and the error shows in the menu.
 - Logs to rotating files and to stderr.
@@ -48,11 +49,10 @@ curl http://127.0.0.1:48333/health
 ```
 
 ```json
-{"kind":"bridge","mode":"development","version":"0.30.0","sdkVersion":"0.30.0",
- "protocolVersions":[],"port":48333,"terminals":1,"sessions":0,"sessionHost":false}
+{"kind":"bridge","hostVersion":"0.30.0","sdkVersion":"0.30.0","protocolVersions":["1"],"terminals":1,"sessions":0}
 ```
 
-`port` is the port actually bound, which matters when the default was taken.
+`GET /v1/terminals` lists the configured `poiId`s. If the default port was taken, the bridge log (and the tray's status line) names the port that was bound.
 
 ---
 
@@ -90,7 +90,7 @@ The file is created on first start with a commented example (JSON has no comment
 |-----|---------|---------|
 | `bindAddress` | `127.0.0.1` | Must be a loopback address; anything else is refused at load time. |
 | `port` | `48333` | First port to try; the next ten are fallbacks. Changing it takes effect after a restart. |
-| `allowedOrigins` | `["*"]` | Browser origins allowed by CORS, e.g. `https://pos.example.com`. `*` is development-only and logs a warning at start. |
+| `allowedOrigins` | `["*"]` | Browser origins admitted, e.g. `https://pos.example.com`; a request whose `Origin` is not listed gets `401`. `*` is development-only and logs a warning at start. |
 | `terminals[].poiId` | required | The terminal id sessions refer to. Must be unique. |
 | `terminals[].host`, `port` | required, `8443` | The terminal's LAN address. |
 | `terminals[].encryption` | `false` | Nexo payload encryption. When `true`, `passphrase` and `keyId` are required; `keyVersion` defaults to `0`. |
@@ -105,10 +105,15 @@ Until the JavaScript SDK ships, a page can probe the bridge directly:
 
 ```javascript
 const res = await fetch("http://127.0.0.1:48333/health", { signal: AbortSignal.timeout(400) });
-const health = await res.json();   // health.port is the port to keep using
+const health = await res.json();   // health.protocolVersions tells the SDK what it can speak
 ```
 
-Chrome asks once per origin for permission to reach loopback (its Local Network Access check); the bridge answers that preflight with `Access-Control-Allow-Private-Network: true`. The JS SDK's `localBridge()` transport will wrap this probe, the install prompt and reconnection.
+Two browser-side caveats in this iteration:
+
+- **CORS response headers are not sent yet.** The Session Host owns the HTTP layer and does not expose a CORS option, so a page on another origin can reach the bridge only where the browser does not enforce CORS for it: a page served from `http://127.0.0.1`/`http://localhost` itself (same-origin), a browser launched with web security disabled for development, or an Electron/WebView host. Adding an `allowedOrigins` CORS option to the host is the follow-up that lifts this.
+- Chrome asks once per origin for permission to reach loopback (its Local Network Access check); that preflight needs `Access-Control-Allow-Private-Network: true`, which lands with the same host follow-up.
+
+The JS SDK's `localBridge()` transport will wrap the probe, the install prompt and reconnection.
 
 ---
 
@@ -124,7 +129,7 @@ Chrome asks once per origin for permission to reach loopback (its Local Network 
 
 ### Packaging details
 
-- `org.beryx.runtime` builds a jlink image and a jpackage app image from the non-modular classpath. Modules: `java.base, java.logging, java.net.http, java.xml, java.desktop, java.naming, java.management, java.sql, jdk.httpserver, jdk.crypto.ec, jdk.unsupported`. Re-check after dependency changes with `./gradlew :bridge:installDist && jdeps --multi-release 21 --print-module-deps --ignore-missing-deps bridge/build/install/bridge/lib/*.jar`.
+- `org.beryx.runtime` builds a jlink image and a jpackage app image from the non-modular classpath. Modules: `java.base, java.logging, java.net.http, java.xml, java.desktop, java.instrument, java.management, java.naming, java.security.jgss, java.sql, jdk.crypto.ec, jdk.unsupported` (the `instrument`/`management`/`naming`/`jgss` ones are Jetty's). Re-check after dependency changes with `./gradlew :bridge:installDist && jdeps --multi-release 21 --print-module-deps --ignore-missing-deps bridge/build/install/bridge/lib/*.jar`.
 - The dmg is produced by `hdiutil create` (task `packageDmg`) rather than jpackage's installer step, whose Finder AppleScript hangs in non-interactive sessions. Both the `.app` and the `.dmg` land in `bridge/build/jpackage/`.
 - macOS refuses a bundle version whose first number is zero, so a `0.x.y` SDK version becomes `CFBundleVersion x.y` while `CFBundleShortVersionString` keeps the real version.
 - The app is ad-hoc signed (`codesign --force --deep -s -`). Developer ID signing and notarization are a follow-up.
@@ -138,5 +143,6 @@ Chrome asks once per origin for permission to reach loopback (its Local Network 
 - **Development mode only**: no pairing, no per-origin tokens, `allowedOrigins: ["*"]` by default, secrets stored in a plain JSON file.
 - **macOS packaging only** so far; the application code is platform-neutral (`AppDirs` already knows the Windows and Linux locations) but there is no MSI, deb or rpm, and *Start at login* is implemented for macOS only.
 - **Ad-hoc signed, not notarized**; Gatekeeper needs the one-time override above.
-- **Session Host integration pending**: the bridge serves `GET /health` only until the `:host` library lands; `sessionHost: false` in the health response says so, and `protocolVersions` is empty.
+- **No CORS response headers** until the Session Host exposes a CORS option (see above); `allowedOrigins` is enforced server-side in the meantime.
+- The tray's *Sessions active* count is read from the host's own `/health`, since the host does not expose it programmatically yet.
 - No update feed, no cloud configuration.

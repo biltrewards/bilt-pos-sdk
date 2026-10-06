@@ -5,8 +5,9 @@ import com.bilt.pos.bridge.config.BridgeConfigException;
 import com.bilt.pos.bridge.config.BridgeConfigSource;
 import com.bilt.pos.bridge.config.TerminalClientFactory;
 import com.bilt.pos.bridge.config.TerminalConfig;
-import com.bilt.pos.bridge.server.HealthHandler;
-import com.bilt.pos.bridge.server.LoopbackServer;
+import com.bilt.pos.bridge.server.OriginAuth;
+import com.bilt.pos.bridge.server.PortSelector;
+import com.bilt.pos.bridge.server.SessionHostListener;
 import com.bilt.pos.nexo.client.TerminalClient;
 import java.io.Closeable;
 import java.io.IOException;
@@ -15,17 +16,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.IntSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * The running bridge: configuration, the terminal clients built from it, and the loopback listener.
- * Reloading swaps the configuration and the terminal clients in place; the listener keeps its port,
- * since clients that already found the bridge would otherwise lose it.
+ * The running bridge: configuration, the terminal clients built from it, and the Session Host
+ * serving them on loopback. Reloading swaps the configuration and the terminal clients in place;
+ * the host keeps its port, since clients that already found the bridge would otherwise lose it.
  *
- * <p>Terminal clients are exposed through {@link #terminalClient(String)}, which is the seam the
- * Session Host's {@code TerminalClientProvider} plugs into once that library is embedded.
+ * <p>The host sees the terminals through {@link BridgeTerminalProvider}, which reads {@link
+ * #terminalClient(String)} on every call, so a reload reaches the next session without a restart.
  */
 public final class Bridge implements Closeable {
 
@@ -38,24 +38,18 @@ public final class Bridge implements Closeable {
 
   private final BridgeConfigSource source;
   private final List<Listener> listeners = new CopyOnWriteArrayList<>();
-  private final IntSupplier activeSessions;
 
   private volatile BridgeConfig config;
   private volatile Map<String, TerminalClient> terminals = Map.of();
   private volatile Optional<String> lastConfigError = Optional.empty();
-  private LoopbackServer server;
+  private SessionHostListener host;
   private Closeable watch = () -> {};
 
-  /**
-   * @param activeSessions reports in-flight sessions; the skeleton has none, the Session Host
-   *     supplies the real count
-   */
-  public Bridge(BridgeConfigSource source, IntSupplier activeSessions) {
+  public Bridge(BridgeConfigSource source) {
     this.source = source;
-    this.activeSessions = activeSessions;
   }
 
-  /** Loads the configuration, binds the listener and starts watching for config changes. */
+  /** Loads the configuration, starts the Session Host and begins watching for config changes. */
   public synchronized void start() throws IOException {
     try {
       apply(source.load());
@@ -72,14 +66,14 @@ public final class Bridge implements Closeable {
           "allowedOrigins is [\"*\"]: any web page on this machine may drive the terminals."
               + " This is for development only; list your POS origins before going live.");
     }
-    server =
-        new LoopbackServer(
+    host =
+        new SessionHostListener(
             config.bindAddress(),
             config.port(),
-            LoopbackServer.DEFAULT_FALLBACK_PORTS,
-            () -> config.allowedOrigins(),
-            new HealthHandler(this::status));
-    server.start();
+            PortSelector.DEFAULT_FALLBACK_PORTS,
+            new BridgeTerminalProvider(this),
+            new OriginAuth(() -> config.allowedOrigins()));
+    host.start();
     watch = source.watch(this::reload);
   }
 
@@ -167,18 +161,18 @@ public final class Bridge implements Closeable {
     return List.copyOf(terminals.keySet());
   }
 
-  /** A snapshot for the tray and {@code /health}. */
+  /** A snapshot for the tray and diagnostics. */
   public BridgeStatus status() {
     BridgeConfig c = config;
-    LoopbackServer s = server;
+    SessionHostListener h = host;
     return new BridgeStatus(
         BridgeVersion.get(),
         SdkVersion.get(),
         c == null ? "127.0.0.1" : c.bindAddress().getHostAddress(),
-        s == null ? -1 : s.port(),
+        h == null ? -1 : h.port(),
         terminals.size(),
-        activeSessions.getAsInt(),
-        false);
+        h == null ? 0 : h.sessionCount(),
+        true);
   }
 
   @Override
@@ -188,9 +182,9 @@ public final class Bridge implements Closeable {
     } catch (IOException ignored) {
       // the watcher is a daemon poller; nothing to recover
     }
-    if (server != null) {
-      server.close();
-      server = null;
+    if (host != null) {
+      host.close();
+      host = null;
     }
   }
 }

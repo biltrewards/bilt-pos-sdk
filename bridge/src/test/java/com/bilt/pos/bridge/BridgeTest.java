@@ -34,7 +34,7 @@ class BridgeTest {
             + free
             + ", \"terminals\": [{\"poiId\": \"T1\", \"host\": \"10.0.0.1\", \"trustAll\": true}]}");
 
-    try (Bridge bridge = new Bridge(new FileBridgeConfigSource(file), () -> 0)) {
+    try (Bridge bridge = new Bridge(new FileBridgeConfigSource(file))) {
       bridge.start();
       BridgeStatus status = bridge.status();
       assertEquals(free, status.port());

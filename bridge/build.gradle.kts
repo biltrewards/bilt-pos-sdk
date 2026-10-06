@@ -17,6 +17,7 @@ java {
 
 dependencies {
     implementation(projects.java)
+    implementation(projects.host)
 
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
@@ -59,10 +60,11 @@ runtime {
         listOf("--strip-debug", "--compress", "zip-6", "--no-header-files", "--no-man-pages")
     )
     // Checked against `jdeps --print-module-deps` over the runtime classpath
-    // (see docs/terminal-bridge.md): java.desktop is the tray, jdk.httpserver
-    // the skeleton listener, java.sql Jackson's optional date types,
-    // jdk.crypto.ec the terminal TLS handshake, jdk.unsupported the
-    // sun.misc.Unsafe fast paths Okio and Jackson probe for.
+    // (see docs/terminal-bridge.md): java.desktop is the tray; java.instrument,
+    // java.management, java.naming and java.security.jgss are Jetty's; java.sql
+    // is Jackson's optional date types; jdk.crypto.ec the terminal TLS
+    // handshake; jdk.unsupported the sun.misc.Unsafe fast paths Okio and
+    // Jackson probe for.
     modules.set(
         listOf(
             "java.base",
@@ -70,10 +72,11 @@ runtime {
             "java.net.http",
             "java.xml",
             "java.desktop",
-            "java.naming",
+            "java.instrument",
             "java.management",
+            "java.naming",
+            "java.security.jgss",
             "java.sql",
-            "jdk.httpserver",
             "jdk.crypto.ec",
             "jdk.unsupported",
         )

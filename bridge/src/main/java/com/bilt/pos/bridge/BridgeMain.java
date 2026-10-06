@@ -33,7 +33,7 @@ public final class BridgeMain {
 
     Path configFile = configFileFrom(args).orElse(dirs.configFile());
     FileBridgeConfigSource source = new FileBridgeConfigSource(configFile);
-    Bridge bridge = new Bridge(source, () -> 0);
+    Bridge bridge = new Bridge(source);
     try {
       bridge.start();
     } catch (IOException e) {
