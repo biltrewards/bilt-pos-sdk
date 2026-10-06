@@ -16,7 +16,7 @@ pnpm add @bilt/pos-react @bilt/pos-sdk @bilt/pos-protocol
 | Entry point              | Contents                                                                                                                                                                                            |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@bilt/pos-react`        | `BiltPosProvider`, `useBiltPos`, `useShopperSession`, `useTerminalSession`, `useBasket`, `useMember`, `useSessionContext`, `useSettlement`, `useOperation`, `useSessionEvent`, `RetailMediaSurface` |
-| `@bilt/pos-react/bridge` | `useBridge`, `InstallBridgePrompt`, `BridgeGate`, `bridgeDetector`, `detectPlatform`, the manifest helpers                                                                                          |
+| `@bilt/pos-react/bridge` | `useBridge`, `InstallBridgePrompt`, `BridgeGate`, `detectPlatform`, the manifest helpers                                                                                                            |
 
 Nothing in the core entry point knows the bridge exists. A register that connects over the
 Cloud Session Service uses `@bilt/pos-react` alone; one that runs over the Terminal Bridge wraps
@@ -202,13 +202,15 @@ function Register() {
 }
 ```
 
-`useBridge({ port?, manifestUrl?, pollIntervalMs?, timeoutMs?, autoDetect?, detector? })`
-probes `http://127.0.0.1:48333/health` with a 400 ms timeout and returns
-`{ status, error, health, baseUrl, attempts, platform, manifest, download, retry }`, where
-`status` is `detecting`, `missing`, `outdated` or `ready`. While `missing` or `outdated` it
-probes again every two seconds, so a cashier who installs or updates the bridge is let through
-without a reload; `retry()` probes at once. `error` is an `EngineUnavailableError` when missing
-and an `EngineOutdatedError` (with `required` and `available` protocol versions) when outdated.
+`useBridge({ port?, host?, fallbackPorts?, healthTimeoutMs?, manifestUrl?, pollIntervalMs?, autoDetect?, detect? })`
+runs `detectBridge()` from `@bilt/pos-sdk/bridge`, the probe behind `localBridge()`: `GET /health`
+on port 48333 and its fallback range, 400 ms each. It returns
+`{ status, error, health, baseUrl, probed, attempts, platform, manifest, download, retry }`,
+where `status` is `detecting`, `missing`, `outdated` or `ready`. While `missing` or `outdated`
+it probes again every two seconds, so a cashier who installs or updates the bridge is let
+through without a reload; `retry()` probes at once. `error` is the same `BridgeMissingError` or
+`BridgeOutdatedError` (with `required` and `available` protocol versions) that
+`BiltPos.connect(localBridge())` would reject with, so a prompt and a failed connect look alike.
 
 `InstallBridgePrompt` renders the install or update copy for the state, the installer link for
 this platform (read off the update manifest at `manifestUrl`, else the `downloadUrl` prop), and

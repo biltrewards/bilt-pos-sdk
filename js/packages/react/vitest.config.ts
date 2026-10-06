@@ -7,10 +7,11 @@ export default defineConfig({
   // The tests run the hooks against the SDK's in-memory doubles, which import the SDK from its
   // sources; aliasing the packages to those sources keeps one copy of `SessionError` in play.
   resolve: {
-    alias: {
-      '@bilt/pos-sdk': sibling('../sdk/src/index.ts'),
-      '@bilt/pos-protocol': sibling('../protocol/src/index.ts'),
-    },
+    alias: [
+      { find: /^@bilt\/pos-sdk\/bridge$/, replacement: sibling('../sdk/src/bridge/index.ts') },
+      { find: /^@bilt\/pos-sdk$/, replacement: sibling('../sdk/src/index.ts') },
+      { find: /^@bilt\/pos-protocol$/, replacement: sibling('../protocol/src/index.ts') },
+    ],
   },
   test: {
     environment: 'jsdom',

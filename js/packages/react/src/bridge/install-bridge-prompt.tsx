@@ -1,4 +1,4 @@
-import { EngineOutdatedError } from '@bilt/pos-sdk';
+import { BridgeOutdatedError } from '@bilt/pos-sdk/bridge';
 import type { CSSProperties, ReactNode } from 'react';
 import { PLATFORM_NAMES } from './platform';
 import { useBridge, type BridgeState, type UseBridgeOptions } from './use-bridge';
@@ -156,7 +156,7 @@ export function InstallBridgePrompt(props: InstallBridgePromptProps): ReactNode 
 
   const outdated = bridge.status === 'outdated';
   const versions =
-    outdated && bridge.error instanceof EngineOutdatedError
+    outdated && bridge.error instanceof BridgeOutdatedError
       ? `${bridge.error.available.join(', ') || 'none'} → ${bridge.error.required}`
       : null;
   return (
@@ -167,7 +167,7 @@ export function InstallBridgePrompt(props: InstallBridgePromptProps): ReactNode 
         <p
           className={`${prefix}-versions`}
           data-required={
-            bridge.error instanceof EngineOutdatedError ? bridge.error.required : undefined
+            bridge.error instanceof BridgeOutdatedError ? bridge.error.required : undefined
           }
         >
           {versions}

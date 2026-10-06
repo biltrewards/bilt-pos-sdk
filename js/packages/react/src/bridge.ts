@@ -1,20 +1,19 @@
 /**
  * `@bilt/pos-react/bridge`: the Terminal Bridge pieces of the React bindings. Detecting the
- * bridge on loopback, prompting for its installation or update, and gating the register on it.
- * Kept out of `@bilt/pos-react` on purpose: nothing in the core entry point knows the bridge
- * exists, so the same register runs over the Cloud Session Service with these components left
- * out.
+ * bridge on loopback (over `detectBridge` from `@bilt/pos-sdk/bridge`), prompting for its
+ * installation or update, and gating the register on it. Kept out of `@bilt/pos-react` on
+ * purpose: nothing in the core entry point knows the bridge exists, so the same register runs
+ * over the Cloud Session Service with these components left out.
  *
  * @packageDocumentation
  */
 export {
-  bridgeDetector,
-  DEFAULT_BRIDGE_PORT,
-  DEFAULT_DETECT_TIMEOUT_MS,
+  detectionError,
+  type BridgeDetect,
   type BridgeDetection,
-  type BridgeDetector,
-  type BridgeDetectorOptions,
-} from './bridge/detector';
+  type BridgeProbeOptions,
+  type LocalBridgeOptions,
+} from './bridge/detect';
 export { detectPlatform, PLATFORM_NAMES, type BridgePlatform } from './bridge/platform';
 export {
   downloadFor,

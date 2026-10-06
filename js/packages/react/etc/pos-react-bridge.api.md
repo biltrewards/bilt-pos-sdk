@@ -4,45 +4,18 @@
 
 ```ts
 
+import { BridgeDetection } from '@bilt/pos-sdk/bridge';
+import { BridgeMissingError } from '@bilt/pos-sdk/bridge';
+import { BridgeOutdatedError } from '@bilt/pos-sdk/bridge';
 import type { CSSProperties } from 'react';
-import { EngineOutdatedError } from '@bilt/pos-sdk';
-import { EngineUnavailableError } from '@bilt/pos-sdk';
-import { Health } from '@bilt/pos-protocol';
+import type { Health } from '@bilt/pos-protocol';
+import { LocalBridgeOptions } from '@bilt/pos-sdk/bridge';
 import type { ReactNode } from 'react';
 
 // @public
-export type BridgeDetection = {
-    readonly status: 'ready';
-    readonly baseUrl: string;
-    readonly health: Health;
-} | {
-    readonly status: 'outdated';
-    readonly baseUrl: string;
-    readonly health: Health;
-    readonly error: EngineOutdatedError;
-} | {
-    readonly status: 'missing';
-    readonly baseUrl: string;
-    readonly error: EngineUnavailableError;
-};
+export type BridgeDetect = (options: LocalBridgeOptions) => Promise<BridgeDetection>;
 
-// @public
-export interface BridgeDetector {
-    readonly baseUrl: string;
-    detect(signal?: AbortSignal): Promise<BridgeDetection>;
-}
-
-// @public
-export function bridgeDetector(options?: BridgeDetectorOptions): BridgeDetector;
-
-// @public
-export interface BridgeDetectorOptions {
-    readonly fetch?: typeof fetch;
-    readonly host?: string;
-    readonly port?: number;
-    readonly protocolVersion?: string;
-    readonly timeoutMs?: number;
-}
+export { BridgeDetection }
 
 // @public
 export interface BridgeDownload {
@@ -79,14 +52,18 @@ export interface BridgeManifest {
 export type BridgePlatform = 'windows' | 'macos' | 'linux' | 'unknown';
 
 // @public
+export type BridgeProbeOptions = Pick<LocalBridgeOptions, 'host' | 'port' | 'fallbackPorts' | 'healthTimeoutMs' | 'fetch'>;
+
+// @public
 export interface BridgeState {
     readonly attempts: number;
-    readonly baseUrl: string;
+    readonly baseUrl?: string;
     readonly download?: BridgeDownload;
-    readonly error?: Error;
+    readonly error?: BridgeMissingError | BridgeOutdatedError;
     readonly health?: Health;
     readonly manifest?: BridgeManifest;
     readonly platform: BridgePlatform;
+    readonly probed?: readonly string[];
     retry(): void;
     // (undocumented)
     readonly status: BridgeStatus;
@@ -96,10 +73,7 @@ export interface BridgeState {
 export type BridgeStatus = 'detecting' | 'missing' | 'outdated' | 'ready';
 
 // @public
-export const DEFAULT_BRIDGE_PORT = 48333;
-
-// @public
-export const DEFAULT_DETECT_TIMEOUT_MS = 400;
+export function detectionError(detection: BridgeDetection): BridgeMissingError | BridgeOutdatedError | undefined;
 
 // @public
 export function detectPlatform(userAgent?: string): BridgePlatform;
@@ -160,6 +134,8 @@ export interface InstallBridgePromptProps extends UseBridgeOptions {
     readonly style?: CSSProperties;
 }
 
+export { LocalBridgeOptions }
+
 // @public
 export function parseBridgeManifest(document: unknown): BridgeManifest;
 
@@ -170,14 +146,11 @@ export const PLATFORM_NAMES: Readonly<Record<BridgePlatform, string>>;
 export function useBridge(options?: UseBridgeOptions): BridgeState;
 
 // @public
-export interface UseBridgeOptions {
+export interface UseBridgeOptions extends BridgeProbeOptions {
     readonly autoDetect?: boolean;
-    readonly detector?: BridgeDetector;
-    readonly fetch?: typeof fetch;
+    readonly detect?: BridgeDetect;
     readonly manifestUrl?: string;
     readonly pollIntervalMs?: number;
-    readonly port?: number;
-    readonly timeoutMs?: number;
 }
 
 ```
