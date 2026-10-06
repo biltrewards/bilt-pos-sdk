@@ -290,6 +290,25 @@ describe('useOperation', () => {
     expect(result.current.pending).toBe(true);
   });
 
+  it('stops polling the handle once it has settled', async () => {
+    let reads = 0;
+    const handle = Object.defineProperties(Promise.resolve('done'), {
+      status: {
+        get: () => {
+          reads += 1;
+          return 'succeeded' as const;
+        },
+        enumerable: true,
+      },
+      abort: { value: () => Promise.resolve(), enumerable: true },
+    }) as Operation<string>;
+    renderHook(() => useOperation(handle));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const settled = reads;
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(reads).toBe(settled);
+  });
+
   it('tracks an operation from running to succeeded', async () => {
     const session = await startLane();
     renderWithPos(new MockBiltPos(), <Identify session={session} />);

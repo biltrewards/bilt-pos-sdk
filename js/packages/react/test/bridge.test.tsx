@@ -347,6 +347,23 @@ describe('the Register() sketch', () => {
     expect(calls).toBe(2);
   });
 
+  it('stays ready when detect and fetch are new on every render', async () => {
+    const probe = scripted('ready');
+    function Inline() {
+      const bridge = useBridge({
+        detect: (options) => probe(options),
+        fetch: async () => json({}),
+      });
+      return <span>{bridge.status}</span>;
+    }
+    const view = render(<Inline />);
+    await waitFor(() => expect(screen.getByText('ready')).toBeTruthy());
+    view.rerender(<Inline />);
+    view.rerender(<Inline />);
+    expect(screen.getByText('ready')).toBeTruthy();
+    expect(probe.calls).toBe(1);
+  });
+
   it('BridgeGate renders the prompt, then its children', async () => {
     render(
       <BridgeGate detect={scripted('missing', 'ready')} pollIntervalMs={10}>

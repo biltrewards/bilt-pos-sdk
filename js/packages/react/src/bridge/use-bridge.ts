@@ -120,6 +120,11 @@ export function useBridge(options: UseBridgeOptions = {}): BridgeState {
     }),
     [host, port, fallbackPorts, healthTimeoutMs, fetchImpl],
   );
+  // The probe restarts when where it looks changes, not when an inline `detect`, `fetch` or
+  // `fallbackPorts` array gets a new identity on every render; those are read through a ref.
+  const probeKey = JSON.stringify([host, port, fallbackPorts, healthTimeoutMs]);
+  const latest = useRef({ detect, probeOptions });
+  latest.current = { detect, probeOptions };
 
   const [probe, setProbe] = useState<Probe>({ detection: null, attempts: 0 });
   const [manifest, setManifest] = useState<BridgeManifest | null>(null);
@@ -134,22 +139,22 @@ export function useBridge(options: UseBridgeOptions = {}): BridgeState {
     // goes on.
     let detection: BridgeDetection;
     try {
-      detection = await detect(probeOptions);
+      detection = await latest.current.detect(latest.current.probeOptions);
     } catch {
       detection = { status: 'missing', probed: [] };
     }
     if (token !== latestProbe.current) return;
     setProbe((previous) => ({ detection, attempts: previous.attempts + 1 }));
-  }, [detect, probeOptions]);
+  }, []);
 
   useEffect(() => {
     setProbe({ detection: null, attempts: 0 });
-  }, [run]);
+  }, [probeKey]);
 
   useEffect(() => {
     if (requested === 0) return;
     void run();
-  }, [requested, run]);
+  }, [requested, run, probeKey]);
 
   const status: BridgeStatus = probe.detection?.status ?? 'detecting';
 

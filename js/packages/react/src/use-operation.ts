@@ -83,9 +83,18 @@ export function useOperation<T>(
   // pending watch it and re-render on a transition (`running` to `awaitingReply`).
   useEffect(() => {
     if (!source || !isOperation(source)) return;
-    const observe = () => setObserved({ source, status: source.status });
-    observe();
+    const observe = () => {
+      const status = source.status;
+      // Keep the previous object when nothing moved, so an idle tick does not re-render.
+      setObserved((previous) =>
+        previous?.source === source && previous.status === status ? previous : { source, status },
+      );
+      if (status === 'succeeded' || status === 'failed' || status === 'aborted') {
+        clearInterval(timer);
+      }
+    };
     const timer = setInterval(observe, STATUS_POLL_MS);
+    observe();
     return () => clearInterval(timer);
   }, [source]);
 
