@@ -790,7 +790,15 @@ public final class SessionHost implements AutoCloseable {
     ctx.attribute(
         IDEMPOTENCY_STORE,
         (BiConsumer<Integer, String>)
-            (status, body) -> cache.store(key, fingerprint, status, body));
+            (status, body) -> {
+              // a 409 says the request met the session in the wrong state and had no effect; the
+              // state can change (a refused end reopens it), so a retry must run, not replay it
+              if (status == 409) {
+                cache.release(key);
+              } else {
+                cache.store(key, fingerprint, status, body);
+              }
+            });
     ctx.attribute(IDEMPOTENCY_RELEASE, (Runnable) () -> cache.release(key));
   }
 

@@ -245,4 +245,26 @@ class LocalSessionTest {
     assertEquals("VALIDATION", error.path("code").asText());
     assertEquals("NOT_FOUND", client.get("/v1/sessions/nope").body.path("code").asText());
   }
+
+  @Test
+  void aConflictIsNotReplayedForARetryWithTheSameKey() throws Exception {
+    try (SessionHost host = SessionHost.builder().port(0).build()) {
+      host.start();
+      HostClient client = new HostClient(host.port());
+      String id =
+          client
+              .post("/v1/sessions", json("{'kind':'local','saleId':'LANE-1','currency':'USD'}"))
+              .expect(201)
+              .text("id");
+      String body = json("{'type':'requestConfirmation','prompt':'Receipt?'}");
+      String path = "/v1/sessions/" + id + "/operations";
+
+      HostClient.Response first = client.post(path, body, "retry-key").expect(409);
+      HostClient.Response retry = client.post(path, body, "retry-key").expect(409);
+
+      assertFalse(first.headers.firstValue("Idempotent-Replayed").isPresent());
+      // the retry ran again rather than answering from the cache
+      assertFalse(retry.headers.firstValue("Idempotent-Replayed").isPresent());
+    }
+  }
 }
