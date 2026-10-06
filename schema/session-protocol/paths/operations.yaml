@@ -1,0 +1,174 @@
+operations:
+  parameters:
+    - $ref: '../openapi.yaml#/components/parameters/sessionId'
+  get:
+    tags: [Operations]
+    operationId: listOperations
+    summary: The session's operations, newest first
+    description: |
+      For a client that reconnects after a page reload and needs to find the operation still
+      in flight before it has caught up on events.
+    parameters:
+      - name: status
+        in: query
+        required: false
+        description: Only operations in these statuses.
+        schema:
+          type: array
+          items:
+            $ref: '../components/operations.yaml#/OperationStatus'
+        style: form
+        explode: false
+    responses:
+      '200':
+        description: The operations.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../components/operations.yaml#/Operation'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+  post:
+    tags: [Operations]
+    operationId: startOperation
+    summary: Start a session operation
+    description: |
+      The wire form of every lazy operation on `TerminalShopperSession`: the body's `type`
+      names the Java method and carries its arguments. The response is the operation resource,
+      normally still `queued` or `running`; the outcome arrives as `operation.completed` on the
+      event stream and can be polled with `GET .../operations/{operationId}`.
+
+      One ordered lane: operations run one at a time in submission order, as on the Java
+      session's operation thread. `updateInputDisplay` is the exception and never queues — it
+      targets the input prompt currently holding the lane. `setStoredValueCard` is a setter in
+      Java and completes immediately here without queueing.
+
+      Operations that consult the register mid-flight (`settle`, `refund`, `refundUnlinked`,
+      `voidTransaction`) declare in `handledSteps` which step kinds the client will answer; a
+      step kind not declared is resolved with its default at once, which is what the Java SDK
+      does when no handler is registered.
+
+      A local session (`kind: local`) accepts no operation but `end`; everything here needs a
+      terminal and is refused with 409 `UNSUPPORTED`. See `OperationRequest` for each type's
+      preconditions.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/operations.yaml#/OperationRequest'
+    responses:
+      '202':
+        description: The operation was accepted onto the lane.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/operations.yaml#/Operation'
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+
+operation:
+  get:
+    tags: [Operations]
+    operationId: getOperation
+    summary: Read an operation
+    description: Mirrors `SessionResult.get()` as a poll; the result or error is on the resource once it completed.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '../openapi.yaml#/components/parameters/operationId'
+    responses:
+      '200':
+        description: The operation.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/operations.yaml#/Operation'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+
+reply:
+  post:
+    tags: [Operations]
+    operationId: replyToStep
+    summary: Answer a pending step
+    description: |
+      The register's side of a settlement or reversal handler. The body names the `stepId` from
+      the `operation.step` event and carries the one field that step kind takes: `total` for
+      `TOTAL_REQUIRED`, `saleTransactionId` for `BEFORE_STEP`, `recovery` for
+      `RECOVERY_REQUIRED`, `decision` for `REVERSAL_DECISION_REQUIRED`. A reply after the
+      step's deadline, for a step already answered, or for a step the operation is not awaiting
+      is refused with 422; the default has already applied or will apply.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '../openapi.yaml#/components/parameters/operationId'
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/operations.yaml#/StepReply'
+    responses:
+      '200':
+        description: The reply was taken; the operation continues.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/operations.yaml#/Operation'
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '422':
+        description: The step is not pending (answered, expired or unknown).
+        content:
+          application/json:
+            schema:
+              $ref: '../components/common.yaml#/SessionError'
+
+abort:
+  post:
+    tags: [Operations]
+    operationId: abortOperation
+    summary: Abort an operation
+    description: |
+      Mirrors `TerminalShopperSession.abort()` aimed at one operation. The session continues:
+      an abort is a normal register manoeuvre, not an abandonment. If the terminal is awaiting
+      a response a Nexo `AbortRequest` is sent best-effort. An aborted payment stops at its next
+      step boundary, reverses the committed steps and leaves the basket intact so `settle` may
+      retry; the operation completes with `ABORTED`. Aborted prompts deliver their aborted or
+      cancelled outcome. Money-moving operations (refunds, stored value) always deliver their
+      real outcome even when the abort raced them. Voids, `end` and `forceEnd` are never the
+      abort's target (409). An operation that already completed is left alone (200).
+
+      Unordered: the abort overtakes the lane instead of queueing behind the operation it
+      cancels.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '../openapi.yaml#/components/parameters/operationId'
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    responses:
+      '202':
+        description: The abort was issued.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/operations.yaml#/Operation'
+      '200':
+        description: The operation had already completed; nothing to abort.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/operations.yaml#/Operation'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'

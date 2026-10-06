@@ -1,0 +1,205 @@
+basket:
+  parameters:
+    - $ref: '../openapi.yaml#/components/parameters/sessionId'
+  get:
+    tags: [Basket]
+    operationId: getBasket
+    summary: The current basket snapshot
+    description: Mirrors `SessionBasket.snapshot()`.
+    responses:
+      '200':
+        description: The basket.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/basket.yaml#/Basket'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+  put:
+    tags: [Basket]
+    operationId: replaceBasket
+    summary: Replace the whole basket
+    description: |
+      Mirrors `SessionBasket.replace(Basket)` and `replace(List<BasketItem>)`. The session
+      diffs the new content against the current basket and reports one `basket.changed` event
+      with source `REPLACE`; lines are paired by `reference` when present, otherwise by SKU and
+      type, and a paired line keeps its item id. A snapshot equal to the current basket produces
+      no change and no event. On a terminal session whose basket has been consumed by a
+      successful settlement, replace starts a fresh cart (as `clear` would, under its guards)
+      and then installs the content.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/basket.yaml#/ReplaceBasketRequest'
+    responses:
+      '200':
+        $ref: '#/basketResponse'
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+
+items:
+  post:
+    tags: [Basket]
+    operationId: addBasketItem
+    summary: Add an item
+    description: |
+      Mirrors `SessionBasket.addItem(item)` and `addItem(item, itemId)`. When the SKU (and
+      type, for an unreferenced item) is already in the basket its quantity is incremented.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/basket.yaml#/AddBasketItemRequest'
+    responses:
+      '200':
+        $ref: '#/basketResponse'
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+
+item:
+  parameters:
+    - $ref: '../openapi.yaml#/components/parameters/sessionId'
+    - name: itemId
+      in: path
+      required: true
+      description: The session-assigned line id (`BasketLineItem.itemId`).
+      schema:
+        type: string
+  patch:
+    tags: [Basket]
+    operationId: updateBasketItem
+    summary: Change a line's quantity, discounts or tax
+    description: |
+      Mirrors `updateItemQuantity`, `setDiscounts`, `setTaxRate` and `setTaxAmount` for one
+      line, applied atomically as one change. A quantity of `0` removes the line.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/basket.yaml#/BasketItemPatch'
+    responses:
+      '200':
+        $ref: '#/basketResponse'
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+  delete:
+    tags: [Basket]
+    operationId: removeBasketItem
+    summary: Remove a line
+    description: Mirrors `SessionBasket.removeItem(itemId)`.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    responses:
+      '200':
+        $ref: '#/basketResponse'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+
+mutations:
+  post:
+    tags: [Basket]
+    operationId: mutateBasket
+    summary: Apply a batch of mutations atomically
+    description: |
+      Mirrors `SessionBasket.mutate(..)`: the mutations are applied in order as one atomic
+      change (source `BATCH`), with one event and one customer display refresh. If any
+      mutation fails the basket is left untouched. SKU-addressed mutations prefer a unique sale
+      line when a SKU exists with several types and reject ambiguous SKUs.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/basket.yaml#/BasketMutationsRequest'
+    responses:
+      '200':
+        $ref: '#/basketResponse'
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+
+taxTotal:
+  post:
+    tags: [Basket]
+    operationId: setBasketTaxTotal
+    summary: Override the basket's total tax
+    description: |
+      Mirrors `SessionBasket.setTaxTotal(amount)`; `null` restores item-level computation. The
+      override is a magnitude; an all-refund basket carries it with a negative sign.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/basket.yaml#/TaxTotalRequest'
+    responses:
+      '200':
+        $ref: '#/basketResponse'
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+
+clear:
+  post:
+    tags: [Basket]
+    operationId: clearBasket
+    summary: Start a fresh basket
+    description: |
+      Mirrors `SessionBasket.clear()`: clears items and tax, mints a new cart id and sale
+      transaction id, and drops the stored-value card selected for split tender. This is the
+      transaction boundary between settlements in one session. Refused (409) while money
+      movement, settlement recovery or a partially completed void is in progress.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    responses:
+      '200':
+        $ref: '#/basketResponse'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+
+basketResponse:
+  description: The updated basket snapshot.
+  content:
+    application/json:
+      schema:
+        $ref: '../components/basket.yaml#/Basket'

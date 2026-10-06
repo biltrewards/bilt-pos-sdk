@@ -1,0 +1,157 @@
+terminals:
+  get:
+    tags: [Terminals]
+    operationId: listTerminals
+    summary: Terminals the host can reach
+    description: |
+      The terminals from the host's configuration. Terminal addresses, certificates and payload
+      passphrases are the host's concern and never cross this protocol; the client only ever
+      names a terminal by its `poiId`.
+    responses:
+      '200':
+        description: The configured terminals.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../components/common.yaml#/TerminalInfo'
+
+diagnose:
+  post:
+    tags: [Terminals]
+    operationId: diagnoseTerminal
+    summary: Query terminal health and host reachability
+    description: |
+      Mirrors `Terminal.diagnose()`. Terminal operations are session-less and synchronous: the
+      request blocks until the terminal answers. They run on the terminal's own exchange, so a
+      connectivity check mid-payment does not queue behind the payment.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/poiId'
+      - $ref: '#/saleIdParam'
+    responses:
+      '200':
+        description: The terminal answered.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/common.yaml#/DiagnosisResult'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '503':
+        $ref: '../openapi.yaml#/components/responses/TerminalUnreachable'
+
+totals:
+  post:
+    tags: [Terminals]
+    operationId: getTerminalTotals
+    summary: Running totals since the last reconciliation
+    description: |
+      Mirrors `Terminal.getTotals()` (Nexo `GetTotals`): lighter than reconciliation, which
+      closes the period. Filtered by `saleId` and, when given, `storeLocation` as the
+      `TotalsGroupID`.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/poiId'
+      - $ref: '#/saleIdParam'
+      - $ref: '#/storeLocationParam'
+    responses:
+      '200':
+        description: The totals.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/common.yaml#/ReconciliationResult'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '503':
+        $ref: '../openapi.yaml#/components/responses/TerminalUnreachable'
+
+reconcile:
+  post:
+    tags: [Terminals]
+    operationId: reconcileTerminal
+    summary: Run a sale reconciliation
+    description: Mirrors `Terminal.reconcile()` — end-of-period totals; closes the period.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/poiId'
+      - $ref: '#/saleIdParam'
+      - $ref: '#/storeLocationParam'
+    responses:
+      '200':
+        description: The reconciliation outcome.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/common.yaml#/ReconciliationResult'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '503':
+        $ref: '../openapi.yaml#/components/responses/TerminalUnreachable'
+
+print:
+  post:
+    tags: [Terminals]
+    operationId: printOnTerminal
+    summary: Print a document on the terminal printer
+    description: Mirrors `Terminal.print(PrintPayload)`.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/poiId'
+      - $ref: '#/saleIdParam'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/common.yaml#/PrintPayload'
+    responses:
+      '204':
+        description: Printed.
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '503':
+        $ref: '../openapi.yaml#/components/responses/TerminalUnreachable'
+
+sound:
+  post:
+    tags: [Terminals]
+    operationId: terminalSound
+    summary: Play or stop a sound on the terminal
+    description: Mirrors `Terminal.playSound(..)` and `Terminal.stopSound()`.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/poiId'
+      - $ref: '#/saleIdParam'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/common.yaml#/SoundRequest'
+    responses:
+      '204':
+        description: Done.
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '503':
+        $ref: '../openapi.yaml#/components/responses/TerminalUnreachable'
+
+saleIdParam:
+  name: saleId
+  in: query
+  required: false
+  description: |
+    The register identifier sent as Nexo `SaleID`. Defaults to the host's configured sale id
+    for session-less operations.
+  schema:
+    type: string
+
+storeLocationParam:
+  name: storeLocation
+  in: query
+  required: false
+  description: Store location identifier used as the `TotalsGroupID` filter.
+  schema:
+    type: string

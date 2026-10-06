@@ -1,0 +1,72 @@
+{
+  "seq": 9,
+  "at": "2026-10-06T14:05:40.003Z",
+  "type": "operation.step",
+  "payload": {
+    "operationId": "op_01J9Q2N8K2M3P4Q5R6S7T8V9W0",
+    "stepId": "stp_01J9Q2P7A8B9C0D1E2F3G4H5J6",
+    "kind": "TOTAL_REQUIRED",
+    "step": "REBATE_REDEMPTION",
+    "deadlineAt": "2026-10-06T14:06:10.003Z",
+    "default": { "stepId": "stp_01J9Q2P7A8B9C0D1E2F3G4H5J6", "total": "22.46" },
+    "rebates": {
+      "rebates": [
+        { "itemId": "1", "sku": "SKU-4471", "amount": "2.00", "label": "Gold Member: $2 off toothpaste", "promotionRef": "PROMO-88" }
+      ],
+      "totalRebateAmount": "2.00",
+      "previousTotal": "24.46",
+      "suggestedTotal": "22.46",
+      "updatedBasket": {
+        "cartId": "cart_01J9Q2M3N4P5R6S7T8V9W0X1Y3",
+        "saleTransactionId": { "transactionId": "7c1b8e9a-5d3f-4a2b-9c8d-1e2f3a4b5c6d", "timestamp": "2026-10-06T14:03:11.412Z" },
+        "items": [
+          {
+            "itemId": "1",
+            "sku": "SKU-4471",
+            "description": "Toothpaste",
+            "quantity": 1,
+            "unitPrice": "4.99",
+            "discounts": [],
+            "discountTotal": "0.00",
+            "subtotal": "4.99",
+            "type": "SALE",
+            "originalTotal": "4.99",
+            "rebateAmount": "2.00",
+            "rebateLabel": "Gold Member: $2 off toothpaste",
+            "adjustedTotal": "2.99",
+            "taxRate": "0.08875",
+            "taxAmount": "0.44",
+            "metadata": {}
+          },
+          {
+            "itemId": "2",
+            "sku": "KRK-CNDL-LRG-VAN",
+            "description": "Large Vanilla Candle",
+            "quantity": 1,
+            "unitPrice": "17.99",
+            "discounts": [],
+            "discountTotal": "0.00",
+            "subtotal": "17.99",
+            "type": "SALE",
+            "originalTotal": "17.99",
+            "rebateAmount": "0.00",
+            "adjustedTotal": "17.99",
+            "taxAmount": "1.04",
+            "metadata": {}
+          }
+        ],
+        "taxTotal": "1.48",
+        "originalTotal": "22.98",
+        "discountTotal": "0.00",
+        "subtotal": "22.98",
+        "grandTotal": "24.46",
+        "rebateTotal": "2.00",
+        "pointDiscountTotal": "0.00",
+        "storedValueTotal": "0.00",
+        "cardPaymentTotal": "0.00",
+        "externalPaymentTotal": "0.00",
+        "updatedAt": "2026-10-06T14:05:40.001Z"
+      }
+    }
+  }
+}

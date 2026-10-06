@@ -1,0 +1,62 @@
+events:
+  get:
+    tags: [Events]
+    operationId: streamEvents
+    summary: Subscribe to the session's event stream
+    description: |
+      Every state change of a session is an `Event` on this stream: an envelope with a
+      monotonically increasing `seq`, the time it happened and a typed `payload`. The stream is
+      the source of truth for state changes; the resource endpoints are for reading state on
+      demand and after a reconnect.
+
+      **Transports.** The same path serves two transports. With `Accept: text/event-stream` the
+      response is Server-Sent Events: each event is framed as `id: <seq>`, `event: <type>`,
+      `data: <Event JSON>`, and the host sends a comment line (`: ping`) at least every 15
+      seconds. With an `Upgrade: websocket` handshake the connection becomes a WebSocket on
+      which each text frame is one `Event` JSON document; the host pings per RFC 6455. React
+      Native clients use WebSocket only; browsers may use either.
+
+      **Replay.** `since` is the last `seq` the client processed. The host replays every
+      buffered event with a greater `seq` before live events, so a client that reconnects before
+      a step's deadline still sees the pending `operation.step`. Without `since` the stream
+      starts from the oldest buffered event, which for a fresh session is `session.started`. A
+      `since` older than the buffer is answered 410: refetch the session, basket, member,
+      context and operations, then subscribe again without `since`. Hosts buffer at least the
+      whole session's events while the session is open and for a grace period after it ended.
+
+      **Ordering and conflation.** Events are delivered in the order the changes happened. A
+      host never conflates events on the wire; what Java conflates (basket changes to a slow
+      observer) is a concern of the host's own observers, not of this stream.
+
+      **Lifecycle.** `session.started` is always the first event and `session.ended` the last;
+      the host closes the stream after it.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/sessionId'
+      - name: since
+        in: query
+        required: false
+        description: Replay events with a `seq` greater than this.
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+    responses:
+      '200':
+        description: The event stream.
+        content:
+          text/event-stream:
+            schema:
+              description: |
+                A stream of SSE frames; each frame's `data` is one `Event`. The schema below
+                describes the `data` of one frame.
+              $ref: '../components/events.yaml#/Event'
+      '101':
+        description: Switching to WebSocket; each text frame is one `Event`.
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '410':
+        description: The `since` position is no longer buffered; resynchronise from the resources.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/common.yaml#/SessionError'

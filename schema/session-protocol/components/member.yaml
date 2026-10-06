@@ -1,0 +1,182 @@
+IdentifyStatus:
+  type: string
+  description: Outcome of a member identification attempt.
+  enum: [FOUND, NOT_FOUND, SUSPENDED, CANCELLED, ERROR]
+
+MemberIdResolver:
+  type: object
+  description: |
+    How a member that is not yet resolved is to be looked up: the kind of identifier the POS
+    has on file, its value, and whether the cashier typed it in (a terminal lookup then sends
+    `EntryMode=Keyed` instead of `File`). In responses and events the `value` is masked for
+    `PHONE`, `EMAIL` and `CUSTOM` (all but the last four characters); an `ACCOUNT_ID` is shown
+    in full.
+  required: [type, value]
+  properties:
+    type:
+      type: string
+      enum: [ACCOUNT_ID, PHONE, EMAIL, CUSTOM]
+    customType:
+      type: string
+      minLength: 1
+      description: The retailer-specific identifier kind; required for `CUSTOM`, absent otherwise.
+    value:
+      type: string
+      minLength: 1
+    keyedByCashier:
+      type: boolean
+      default: false
+
+MemberInput:
+  type: object
+  description: Exactly one of `id` (a member the POS already knows the Bilt member id of) or `resolver` (a member pending resolution).
+  properties:
+    id:
+      type: string
+      minLength: 1
+    resolver:
+      $ref: '#/MemberIdResolver'
+  oneOf:
+    - required: [id]
+      properties:
+        id:
+          type: string
+          minLength: 1
+    - required: [resolver]
+      properties:
+        resolver:
+          $ref: '#/MemberIdResolver'
+
+Member:
+  type: object
+  description: |
+    The member attached to a visit, mirroring the Java `Member`. `resolved` is `true` once the
+    Bilt member id is known; a resolved member found by the terminal also carries the loyalty
+    brand, rewards and point balance it reported.
+  required: [resolved, rewards, pointBalance]
+  properties:
+    resolved:
+      type: boolean
+    memberId:
+      type: string
+      description: The Bilt member id; absent while pending.
+    resolver:
+      description: How the member is being looked up; absent once resolved. Masked.
+      $ref: '#/MemberIdResolver'
+    status:
+      description: '`FOUND` for a resolved member; absent while pending.'
+      $ref: '#/IdentifyStatus'
+    loyaltyBrand:
+      type: string
+      description: The loyalty program name the terminal reported, e.g. `"K-Club"`.
+    rewards:
+      type: array
+      items:
+        $ref: '#/Reward'
+    pointBalance:
+      type: integer
+      description: '`0` when not reported.'
+
+Reward:
+  type: object
+  description: A reward or coupon available to an identified member; `rewardRef` is the redemption handle.
+  required: [rewardRef]
+  properties:
+    rewardRef:
+      type: string
+    type:
+      type: string
+      enum: [REWARD, COUPON, POINT]
+    description:
+      type: string
+    expirationDate:
+      type: string
+      format: date-time
+
+IdentifyResult:
+  type: object
+  description: Result of a member identification; member data is present only when `status` is `FOUND`.
+  required: [status, rewards, pointBalance]
+  properties:
+    status:
+      $ref: '#/IdentifyStatus'
+    memberId:
+      type: string
+    loyaltyBrand:
+      type: string
+    rewards:
+      type: array
+      items:
+        $ref: '#/Reward'
+    pointBalance:
+      type: integer
+
+ForceEntryMode:
+  type: string
+  description: Restricts how the terminal captures an identifier or card; `KEYED` for typed entry, `SCANNED` for a barcode.
+  enum: [CHECK_READER, CONTACTLESS, FILE, ICC, KEYED, MAG_STRIPE, MANUAL, RFID, SCANNED, SYNCHRONOUS_ICC, TAPPED]
+
+EntryMode:
+  type: string
+  description: How an identifier or card was actually captured.
+  enum: [CONTACTLESS, FILE, ICC, KEYED, MAG_STRIPE, MANUAL, MOBILE, RFID, SCANNED, SYNCHRONOUS_ICC, TAPPED]
+
+IdentifyOptions:
+  type: object
+  description: Options for the terminal-prompted identification. Defaults are any entry mode, any brand, member required.
+  properties:
+    forceEntryModes:
+      type: array
+      items:
+        $ref: '#/ForceEntryMode'
+    allowedLoyaltyBrands:
+      type: array
+      items:
+        type: string
+    requireMember:
+      type: boolean
+      default: true
+      description: Whether the lookup fails when no member is found (`LoyaltyHandling=Required`) or continues without one (`Proposed`).
+    timeout:
+      $ref: './common.yaml#/Duration'
+
+CardAcquisitionOptions:
+  type: object
+  properties:
+    forceEntryModes:
+      type: array
+      items:
+        $ref: '#/ForceEntryMode'
+    paymentType:
+      type: string
+      description: Optional routing hint, the Nexo `PaymentTypeEnum`.
+      enum: [CASH_ADVANCE, CASH_DEPOSIT, COMPLETION, FIRST_RESERVATION, INSTALMENT, ISSUER_INSTALMENT, NORMAL, ONE_TIME_RESERVATION, PAID_OUT, RECURRING, REFUND, UPDATE_RESERVATION]
+    timeout:
+      $ref: './common.yaml#/Duration'
+
+CardAcquisitionResult:
+  type: object
+  description: Card data read without initiating a payment. A host may withhold `rawPan` even where the terminal returned it.
+  required: [additionalData]
+  properties:
+    maskedPan:
+      type: string
+      description: e.g. `"****1234"`.
+    rawPan:
+      type: string
+      description: Full PAN; only for PLCC cards.
+    truncatedPan:
+      type: string
+    paymentBrand:
+      type: string
+    entryMode:
+      $ref: '#/EntryMode'
+    cardToken:
+      type: string
+    expiryDate:
+      type: string
+      description: '`MMYY`.'
+    additionalData:
+      type: object
+      additionalProperties:
+        type: string

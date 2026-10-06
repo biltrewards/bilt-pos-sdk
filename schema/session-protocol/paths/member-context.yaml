@@ -1,0 +1,122 @@
+member:
+  parameters:
+    - $ref: '../openapi.yaml#/components/parameters/sessionId'
+  get:
+    tags: [Member]
+    operationId: getMember
+    summary: The member attached to the visit
+    description: |
+      Mirrors `ShopperSession.member()`: the member as the POS attached it or as identification
+      resolved it, resolved or still pending. Phone numbers, email addresses and custom
+      identifiers are masked in every response and event.
+    responses:
+      '200':
+        description: The attached member.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/member.yaml#/Member'
+      '204':
+        description: No member is attached (guest checkout).
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+  put:
+    tags: [Member]
+    operationId: setMember
+    summary: Attach the member for this visit
+    description: |
+      Mirrors `ShopperSession.member(Member)`. A member with an `id` attaches immediately. A
+      member with a `resolver` attaches as pending and is resolved in the background on the
+      session's operation lane: on a terminal session by a Nexo `BalanceInquiry` (account id
+      and phone only — email and custom identifiers cannot be resolved there, are reported
+      through `background.error` and stay pending), on a local session not at all yet. Until it
+      resolves the visit is a guest's. A lookup that finds nobody clears the member; one that
+      fails leaves it pending. Whatever member is attached last wins. Every change is announced
+      through `member.changed`.
+
+      Allowed at any time on both session kinds, but refused (409) once the session has ended
+      and on a terminal session while a settlement or void is moving money.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/member.yaml#/MemberInput'
+    responses:
+      '200':
+        description: The member as attached (pending until a lookup completes).
+        content:
+          application/json:
+            schema:
+              $ref: '../components/member.yaml#/Member'
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+  delete:
+    tags: [Member]
+    operationId: clearMember
+    summary: Sign the member out
+    description: Mirrors `ShopperSession.member(null)`. Same guards as attaching.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    responses:
+      '204':
+        description: No member is attached any more.
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'
+
+context:
+  parameters:
+    - $ref: '../openapi.yaml#/components/parameters/sessionId'
+  get:
+    tags: [Context]
+    operationId: getContext
+    summary: The session context
+    description: Mirrors `SessionContext.snapshot()`.
+    responses:
+      '200':
+        description: The context as it is now.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/session.yaml#/SessionContext'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+  patch:
+    tags: [Context]
+    operationId: updateContext
+    summary: Move the phase or change attributes
+    description: |
+      Mirrors `SessionContext.phase(..)`, `attribute(..)` and `removeAttribute(..)`. Pure local
+      compute; nothing reaches a terminal. A terminal session moves the phase itself around
+      settlement (`TENDERING` when a settlement starts executing, `COMPLETE` when it succeeds,
+      back on failure or abort, `SCANNING` when the basket is cleared) and may later override a
+      phase set here. Refused (409) once the session is ending or has ended.
+    parameters:
+      - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/session.yaml#/SessionContextPatch'
+    responses:
+      '200':
+        description: The context after the change.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/session.yaml#/SessionContext'
+      '400':
+        $ref: '../openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../openapi.yaml#/components/responses/NotFound'
+      '409':
+        $ref: '../openapi.yaml#/components/responses/Conflict'

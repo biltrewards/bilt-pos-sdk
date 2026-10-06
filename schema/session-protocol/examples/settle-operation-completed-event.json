@@ -1,0 +1,86 @@
+{
+  "seq": 14,
+  "at": "2026-10-06T14:06:21.772Z",
+  "type": "operation.completed",
+  "payload": {
+    "id": "op_01J9Q2N8K2M3P4Q5R6S7T8V9W0",
+    "type": "settle",
+    "status": "succeeded",
+    "createdAt": "2026-10-06T14:05:38.900Z",
+    "startedAt": "2026-10-06T14:05:38.905Z",
+    "completedAt": "2026-10-06T14:06:21.770Z",
+    "result": {
+      "success": true,
+      "finalBasket": {
+        "cartId": "cart_01J9Q2M3N4P5R6S7T8V9W0X1Y3",
+        "saleTransactionId": { "transactionId": "7c1b8e9a-5d3f-4a2b-9c8d-1e2f3a4b5c6d", "timestamp": "2026-10-06T14:03:11.412Z" },
+        "items": [
+          {
+            "itemId": "1",
+            "sku": "SKU-4471",
+            "description": "Toothpaste",
+            "quantity": 1,
+            "unitPrice": "4.99",
+            "discounts": [],
+            "discountTotal": "0.00",
+            "subtotal": "4.99",
+            "type": "SALE",
+            "originalTotal": "4.99",
+            "rebateAmount": "2.00",
+            "rebateLabel": "Gold Member: $2 off toothpaste",
+            "adjustedTotal": "2.99",
+            "taxRate": "0.08875",
+            "taxAmount": "0.44",
+            "metadata": {}
+          }
+        ],
+        "taxTotal": "0.44",
+        "originalTotal": "4.99",
+        "discountTotal": "0.00",
+        "subtotal": "4.99",
+        "grandTotal": "5.43",
+        "rebateTotal": "2.00",
+        "pointDiscountTotal": "0.00",
+        "storedValueTotal": "0.00",
+        "cardPaymentTotal": "3.43",
+        "externalPaymentTotal": "0.00",
+        "updatedAt": "2026-10-06T14:06:21.700Z"
+      },
+      "authorizedAmount": "3.43",
+      "storedValueAmountUsed": "0.00",
+      "storedValueLoadedAmount": "0.00",
+      "cardAmountCharged": "3.43",
+      "externalPaymentAmount": "0.00",
+      "approvalCode": "A1B2C3",
+      "acquirerTransactionId": "ACQ-99120031",
+      "paymentBrand": "Visa",
+      "redeemedRebates": [
+        { "itemId": "1", "sku": "SKU-4471", "amount": "2.00", "label": "Gold Member: $2 off toothpaste", "promotionRef": "PROMO-88" }
+      ],
+      "totalRebateAmount": "2.00",
+      "pointsRedeemed": 0,
+      "pointsMonetaryValue": "0.00",
+      "earnedRewards": [{ "type": "POINT", "description": "Base points", "quantity": 3 }],
+      "totalPointsEarned": 3,
+      "pointsBalance": 1203,
+      "promotionMessages": [],
+      "customerReceipt": { "plainText": "BILT MART\nToothpaste  4.99\n..." },
+      "poiTransactionId": "POI-88214",
+      "poiTransactionTimestamp": "2026-10-06T14:06:19.000Z",
+      "rebatePoiTransactionId": "POI-88212",
+      "rebatePoiTransactionTimestamp": "2026-10-06T14:05:39.000Z",
+      "awardPoiTransactionId": "POI-88215",
+      "awardPoiTransactionTimestamp": "2026-10-06T14:06:21.000Z",
+      "cardRefundedAmount": "0.00",
+      "storedValueRefundedAmount": "0.00",
+      "externalRefundedAmount": "0.00",
+      "loyaltyRefundedAmount": "0.00",
+      "movements": [
+        { "step": "REBATE_REDEMPTION", "target": { "type": "SALES" }, "amount": "2.00", "saleTransactionId": "7c1b8e9a-5d3f-4a2b-9c8d-1e2f3a4b5c6d", "poiTransactionId": "POI-88212", "memberId": "mbr_8f2a" },
+        { "step": "CARD_CHARGE", "target": { "type": "SALES" }, "amount": "3.43", "saleTransactionId": "7c1b8e9a-5d3f-4a2b-9c8d-1e2f3a4b5c6d", "poiTransactionId": "POI-88214" },
+        { "step": "AWARD", "target": { "type": "SALES" }, "amount": "0", "saleTransactionId": "7c1b8e9a-5d3f-4a2b-9c8d-1e2f3a4b5c6d", "poiTransactionId": "POI-88215", "memberId": "mbr_8f2a", "points": 3, "pointBalance": 1203 }
+      ],
+      "warnings": []
+    }
+  }
+}

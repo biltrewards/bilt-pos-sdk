@@ -1,0 +1,10 @@
+[
+  { "file": "create-session-request.json", "schema": "CreateSessionRequest" },
+  { "file": "session.json", "schema": "Session" },
+  { "file": "settle-request.json", "schema": "OperationRequest" },
+  { "file": "operation-step-total-required-event.json", "schema": "Event" },
+  { "file": "step-reply-total.json", "schema": "StepReply" },
+  { "file": "settle-operation-completed-event.json", "schema": "Event" },
+  { "file": "basket-changed-event.json", "schema": "Event" },
+  { "file": "session-error.json", "schema": "SessionError" }
+]

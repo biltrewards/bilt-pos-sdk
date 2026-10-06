@@ -1,0 +1,119 @@
+InputOptions:
+  type: object
+  description: Options for the plain terminal input prompts (`requestDigitString`, `requestDecimalString`, `requestTextString`).
+  properties:
+    maxLength:
+      type: integer
+      minimum: 1
+    minLength:
+      type: integer
+      minimum: 0
+    timeout:
+      description: Maximum time the customer has to respond; the terminal default when absent.
+      $ref: './common.yaml#/Duration'
+    additionalText:
+      type: string
+      description: Extra text line shown under the prompt.
+    additionalText2:
+      type: string
+      description: Second extra text line.
+
+ConfirmationOptions:
+  type: object
+  description: |
+    Options for `requestConfirmation`. The terminal confirmation screen has two buttons;
+    custom labels replace the default confirm and cancel texts. For three or more choices use
+    `requestMenuEntry`.
+  properties:
+    confirmButton:
+      type: string
+    cancelButton:
+      type: string
+    timeout:
+      $ref: './common.yaml#/Duration'
+
+MenuOptions:
+  type: object
+  properties:
+    multiSelect:
+      type: boolean
+      default: false
+      description: Whether the customer may pick several entries.
+    additionalText:
+      type: string
+    timeout:
+      $ref: './common.yaml#/Duration'
+
+MenuSelection:
+  type: object
+  description: |
+    The entry (or entries, for multi-select menus) the customer picked. Indices are zero-based
+    positions into the `entries` list of the request; the first element of each list is the
+    selection for a single-select menu.
+  required: [indices, values]
+  properties:
+    indices:
+      type: array
+      minItems: 1
+      items:
+        type: integer
+        minimum: 0
+    values:
+      type: array
+      minItems: 1
+      items:
+        type: string
+
+PinMode:
+  type: string
+  description: Kind of PIN operation, mapping to the Nexo `PINRequestType`.
+  enum: [PIN_ENTER, PIN_VERIFY, PIN_VERIFY_ONLY]
+
+PinOptions:
+  type: object
+  description: |
+    Options for PIN entry and verification. For the verify modes the reference the terminal
+    verifies against is addressed by `keyReference` and `pinVerificationMethod`; PIN blocks
+    never travel in the clear. Length constraints are terminal-side policy.
+  properties:
+    timeout:
+      $ref: './common.yaml#/Duration'
+    keyReference:
+      type: string
+    pinVerificationMethod:
+      type: string
+
+PinResult:
+  type: object
+  required: [mode, verified]
+  properties:
+    mode:
+      $ref: '#/PinMode'
+    verified:
+      type: boolean
+      description: For the verify modes, whether the PIN matched.
+    cardholderPin:
+      description: The encrypted PIN block structure (Nexo `CardholderPIN`, a CMS envelope); absent for verify-only.
+      $ref: './common.yaml#/NexoObject'
+
+Signature:
+  type: object
+  description: A signature captured on the terminal.
+  required: [imageData, format, width, height]
+  properties:
+    imageData:
+      type: string
+      contentEncoding: base64
+      description: Raw image bytes, Base64.
+    format:
+      type: string
+      description: Image format, e.g. `"PNG"`.
+    width:
+      type: integer
+      description: Pixel width, `0` when unknown.
+    height:
+      type: integer
+      description: Pixel height, `0` when unknown.
+    capturedAt:
+      type: string
+      format: date-time

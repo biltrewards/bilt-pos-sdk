@@ -1,0 +1,140 @@
+CheckoutPhase:
+  type: string
+  description: |
+    Where a checkout stands, as far as shopper-facing widgets are concerned. `SCANNING` is the
+    default of a new session and of a freshly cleared basket; a terminal session enters
+    `TENDERING` when a settlement starts executing and `COMPLETE` when it succeeds.
+    `MEMBER_IDENTIFIED` is never set automatically.
+  enum: [SCANNING, MEMBER_IDENTIFIED, TENDERING, COMPLETE]
+
+SessionKind:
+  type: string
+  description: '`local` has no terminal (basket and member state only); `terminal` is bracketed on a terminal.'
+  enum: [local, terminal]
+
+SessionState:
+  type: string
+  enum: [open, ending, ended]
+
+CreateSessionRequest:
+  type: object
+  description: The builder fields of `ShopperSession.Builder` and `TerminalShopperSession.Builder`.
+  required: [kind, saleId, currency]
+  properties:
+    kind:
+      $ref: '#/SessionKind'
+    saleId:
+      type: string
+      minLength: 1
+      description: The register's identifier for this lane, sent as Nexo `SaleID`.
+    poiId:
+      type: string
+      description: "The terminal to bracket the session on. Required for `kind: terminal`, ignored for `local`."
+    currency:
+      type: string
+      pattern: '^[A-Z]{3}$'
+      description: ISO 4217 currency code.
+    storeLocation:
+      type: string
+      description: Store location identifier, sent as `TotalsGroupID` on every transaction; required for a retail-media widget.
+    autoDisplay:
+      type: boolean
+      default: true
+      description: Whether basket changes refresh the terminal's customer display automatically (terminal sessions).
+    member:
+      description: The member to start with, when the shopper is known before the visit begins. Not announced through `member.changed`; a pending member's resolution is.
+      $ref: './member.yaml#/MemberInput'
+    context:
+      type: object
+      description: The initial phase and attributes of the session context.
+      properties:
+        phase:
+          $ref: '#/CheckoutPhase'
+          default: SCANNING
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+    widgets:
+      type: array
+      description: Shopper-facing widgets to attach, in order.
+      items:
+        $ref: './widgets.yaml#/WidgetConfig'
+    clientCapabilities:
+      description: What this client can render, applied to every widget placement that does not declare its own.
+      $ref: './widgets.yaml#/ClientCapabilities'
+
+Session:
+  type: object
+  required: [id, kind, saleId, currency, autoDisplay, state, createdAt, eventsUrl]
+  properties:
+    id:
+      type: string
+      description: Unique identifier of this session instance (`getSessionId()`).
+    kind:
+      $ref: '#/SessionKind'
+    saleId:
+      type: string
+    poiId:
+      type: string
+      description: The terminal identifier; absent on a local session.
+    currency:
+      type: string
+    storeLocation:
+      type: string
+    autoDisplay:
+      type: boolean
+    state:
+      $ref: '#/SessionState'
+    createdAt:
+      type: string
+      format: date-time
+    endedAt:
+      type: string
+      format: date-time
+    eventsUrl:
+      type: string
+      description: Where to subscribe to the session's events; relative to the host when it does not carry a scheme.
+
+SessionContext:
+  type: object
+  description: A consistent copy of the session context, mirroring `SessionContextSnapshot`.
+  required: [phase, attributes, saleId, currency]
+  properties:
+    phase:
+      $ref: '#/CheckoutPhase'
+    attributes:
+      type: object
+      description: Free-form attributes a widget may use, in insertion order.
+      additionalProperties:
+        type: string
+    saleId:
+      type: string
+    currency:
+      type: string
+    storeLocation:
+      type: string
+    poiId:
+      type: string
+
+SessionContextPatch:
+  type: object
+  description: Fields absent are left alone. An attribute set to `null` is removed.
+  properties:
+    phase:
+      $ref: '#/CheckoutPhase'
+    attributes:
+      type: object
+      additionalProperties:
+        type: [string, 'null']
+  minProperties: 1
+
+ForceEndRequest:
+  type: object
+  required: [reason]
+  properties:
+    reason:
+      type: string
+      minLength: 1
+      pattern: '\S'
+      description: Nonblank operational reason, recorded in the host's warning log.

@@ -1,0 +1,54 @@
+name: JS
+
+on:
+  push:
+    branches: [main]
+  # Every pull request, whatever its base, so a PR stacked on a feature branch is checked too.
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  js:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: js
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: js/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: js/.nvmrc
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint the Session Protocol spec
+        run: pnpm lint:spec
+
+      - name: Lint and check formatting
+        run: pnpm lint
+
+      # Covers the generated TypeScript and the published docs/session-protocol-reference.html.
+      - name: Check generated code and reference is up to date
+        run: pnpm generate:check
+
+      # Build first: a workspace package resolves its siblings through their built dist/.
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test

@@ -1,0 +1,12 @@
+{
+  "id": "ses_01J9Q2M3N4P5R6S7T8V9W0X1Y2",
+  "kind": "terminal",
+  "saleId": "LANE-3",
+  "poiId": "VictaLane-275839164",
+  "currency": "USD",
+  "storeLocation": "STR-0142",
+  "autoDisplay": true,
+  "state": "open",
+  "createdAt": "2026-10-06T14:03:11.412Z",
+  "eventsUrl": "/v1/sessions/ses_01J9Q2M3N4P5R6S7T8V9W0X1Y2/events"
+}
