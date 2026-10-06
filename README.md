@@ -96,6 +96,10 @@ BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
 
 `trustAllCertificates()` is for development only. In production, validate the terminal's TLS certificate against the Bilt CA — see [Configuring Certificate Validation](docs/certificate-validation-setup.md).
 
+## Browser and React
+
+A web page cannot reach a Bilt terminal itself, so browser-based registers talk the Session Protocol to a host that embeds this SDK: the [Terminal Bridge](docs/terminal-bridge.md) on the register machine. The [JavaScript SDK](docs/javascript-sdk-integration.md) (`@bilt/pos-sdk`, `@bilt/pos-react`, under [`js/`](js/)) mirrors `ShopperSession` and `TerminalShopperSession` over it, and [`js/examples/browser-pos`](js/examples/browser-pos) is a complete register built on it. The wire contract is the [Session Protocol reference](docs/session-protocol-reference.html).
+
 ## Build
 
 ```bash
