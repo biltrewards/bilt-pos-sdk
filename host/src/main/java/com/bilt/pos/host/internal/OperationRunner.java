@@ -70,7 +70,15 @@ public final class OperationRunner {
     boolean ordered = !"updateInputDisplay".equals(type);
     HostedOperation operation = new HostedOperation(type, ordered);
     Runnable launch = launch(hosted, operation, type, body);
-    hosted.submit(operation, launch);
+    hosted.submit(
+        operation,
+        () -> {
+          if (!operation.claimLaunch()) {
+            abortedBeforeStart(hosted, operation);
+            return;
+          }
+          launch.run();
+        });
     return operation;
   }
 
@@ -105,12 +113,12 @@ public final class OperationRunner {
       throw HostError.conflict(operation.type() + " is never the abort's target");
     }
     if (operation.status() == HostedOperation.Status.QUEUED && hosted.dequeue(operation)) {
-      operation.failed(
-          HostError.of(
-              new SessionError(
-                  SessionErrorCode.ABORTED, "the operation was aborted before it started")),
-          true);
-      hosted.completed(operation);
+      abortedBeforeStart(hosted, operation);
+      return true;
+    }
+    // promoted off the lane but not yet launched: the SDK has nothing to abort, so the launch
+    // itself refuses to start
+    if (operation.abortBeforeLaunch()) {
       return true;
     }
     TerminalShopperSession terminal = hosted.terminal();
@@ -126,6 +134,15 @@ public final class OperationRunner {
       step.abort();
     }
     return true;
+  }
+
+  private static void abortedBeforeStart(HostedSession hosted, HostedOperation operation) {
+    operation.failed(
+        HostError.of(
+            new SessionError(
+                SessionErrorCode.ABORTED, "the operation was aborted before it started")),
+        true);
+    hosted.completed(operation);
   }
 
   // ─── Launch construction ───

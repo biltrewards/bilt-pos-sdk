@@ -64,6 +64,8 @@ public final class HostedOperation {
   }
 
   private volatile PendingStep<?> pendingStep;
+  private boolean launched;
+  private boolean abortedBeforeLaunch;
 
   HostedOperation(String type, boolean ordered) {
     this.type = type;
@@ -99,6 +101,31 @@ public final class HostedOperation {
   /** Voids and the lifecycle signals are never an abort's target. */
   public boolean isAbortable() {
     return !"voidTransaction".equals(type) && !"end".equals(type) && !"forceEnd".equals(type);
+  }
+
+  /**
+   * Called by the launch before it touches the SDK. False when an abort got there first, in which
+   * case the launch must not run: exactly one of this and {@link #abortBeforeLaunch} succeeds.
+   */
+  synchronized boolean claimLaunch() {
+    if (abortedBeforeLaunch) {
+      return false;
+    }
+    launched = true;
+    return true;
+  }
+
+  /**
+   * Marks an operation whose launch has not begun as aborted, so it fails without ever reaching the
+   * SDK, where an abort sent before the operation starts would be a no-op. False once the launch
+   * has begun and the SDK's own abort applies.
+   */
+  synchronized boolean abortBeforeLaunch() {
+    if (launched) {
+      return false;
+    }
+    abortedBeforeLaunch = true;
+    return true;
   }
 
   public PendingStep<?> pendingStep() {
