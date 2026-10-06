@@ -42,8 +42,15 @@ function sessionOptions(settings: Settings): ShopperSessionOptions {
     saleId: settings.saleId,
     currency: settings.currency,
     storeLocation: settings.storeLocation,
-    widgets: [{ type: 'retail-media', placements: ['lane-banner'] }],
-    rendering: { formats: ['IMAGE', 'VIDEO', 'HTML'], surfaceKind: 'WEB' },
+    ...(settings.retailMedia
+      ? {
+          widgets: [{ type: 'retail-media' as const, placements: ['lane-banner'] }],
+          rendering: {
+            formats: ['IMAGE' as const, 'VIDEO' as const, 'HTML' as const],
+            surfaceKind: 'WEB' as const,
+          },
+        }
+      : {}),
   };
 }
 
@@ -231,13 +238,15 @@ export function Register({ settings }: RegisterProps): ReactNode {
         </span>
       </div>
 
-      <RetailMediaSurface
-        session={session}
-        placement="lane-banner"
-        dismissible
-        placeholder={<span className="muted">lane-banner: nothing to show</span>}
-        onError={report}
-      />
+      {settings.retailMedia ? (
+        <RetailMediaSurface
+          session={session}
+          placement="lane-banner"
+          dismissible
+          placeholder={<span className="muted">lane-banner: nothing to show</span>}
+          onError={report}
+        />
+      ) : null}
 
       <div className="columns">
         <div className="column">

@@ -75,6 +75,18 @@ export function SettingsPanel({ settings, onApply }: SettingsPanelProps): ReactN
         </label>
       </div>
       <fieldset>
+        <legend>Widgets</legend>
+        <label>
+          <input
+            type="checkbox"
+            checked={draft.retailMedia}
+            onChange={(event) => field('retailMedia', event.target.checked)}
+          />
+          Retail media on the <code>lane-banner</code> placement (turn off for a host without an ad
+          decision service)
+        </label>
+      </fieldset>
+      <fieldset>
         <legend>Bridge route</legend>
         <label>
           <input

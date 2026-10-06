@@ -19,6 +19,9 @@ export interface Settings {
   readonly currency: string;
   readonly storeLocation: string;
   readonly bridge: BridgeRoute;
+
+  /** Whether the session carries a retail-media widget for the `lane-banner` placement. */
+  readonly retailMedia: boolean;
 }
 
 export const STORAGE_KEY = 'browser-pos.settings';
@@ -30,6 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   currency: 'USD',
   storeLocation: 'STR-0142',
   bridge: import.meta.env.DEV ? 'proxy' : 'direct',
+  retailMedia: true,
 };
 
 function text(value: unknown, fallback: string): string {
@@ -60,6 +64,7 @@ export function loadSettings(storage: Storage | undefined = safeStorage()): Sett
         parsed.bridge === 'proxy' || parsed.bridge === 'direct'
           ? parsed.bridge
           : DEFAULT_SETTINGS.bridge,
+      retailMedia: typeof parsed.retailMedia === 'boolean' ? parsed.retailMedia : true,
     };
   } catch {
     return DEFAULT_SETTINGS;

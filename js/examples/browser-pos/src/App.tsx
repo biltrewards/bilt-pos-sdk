@@ -32,6 +32,7 @@ function registerKey(settings: Settings): string {
     settings.saleId,
     settings.currency,
     settings.storeLocation,
+    settings.retailMedia ? 'rm' : 'no-rm',
   ].join('|');
 }
 
