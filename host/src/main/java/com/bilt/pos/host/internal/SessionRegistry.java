@@ -233,21 +233,19 @@ public final class SessionRegistry {
       call.get().get();
       operation.succeeded(null);
     } catch (SessionException e) {
-      hosted.endFailed();
       if (e.getError().getCode() == SessionErrorCode.INVALID_STATE) {
-        hosted.unregister(operation);
-        hosted.releaseLane(operation);
+        hosted.endRefused(operation);
         throw HostError.of(e.getError());
       }
+      hosted.endFailed();
       operation.failed(HostError.of(e.getError()), false);
     } catch (RuntimeException e) {
-      hosted.endFailed();
       HostError error = HostError.from(e);
       if (error.status() == 409) {
-        hosted.unregister(operation);
-        hosted.releaseLane(operation);
+        hosted.endRefused(operation);
         throw error;
       }
+      hosted.endFailed();
       operation.failed(error, false);
     }
     hosted.completed(operation);

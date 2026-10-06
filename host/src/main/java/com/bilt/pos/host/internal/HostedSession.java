@@ -211,11 +211,6 @@ public final class HostedSession {
     return running;
   }
 
-  /** Drops an operation registered with {@link #register} whose request was refused outright. */
-  void unregister(HostedOperation operation) {
-    operations.remove(operation.id());
-  }
-
   /** Publishes {@code operation.completed} once, however many paths reach the end. */
   void publishCompletion(HostedOperation operation) {
     // claiming and publishing are one step: the thread that loses the claim must not be able
@@ -274,12 +269,24 @@ public final class HostedSession {
     }
   }
 
-  /** Frees the lane an idle end claimed when the SDK refused it and the session stays open. */
-  void releaseLane(HostedOperation operation) {
+  /**
+   * An idle end the SDK refused: nothing is recorded, the session reopens and the lane it claimed
+   * moves on. All three happen in one lane-lock step, so work submitted the moment the session is
+   * open again queues behind a lane that is already free and is started here, never stranded behind
+   * an end that no longer exists.
+   */
+  void endRefused(HostedOperation operation) {
+    QueuedOperation next = null;
     synchronized (lane) {
+      endFailed();
+      operations.remove(operation.id());
       if (running == operation) {
-        running = null;
+        next = lane.pollFirst();
+        running = next == null ? null : next.operation;
       }
+    }
+    if (next != null) {
+      start(next.operation, next.launch);
     }
   }
 
