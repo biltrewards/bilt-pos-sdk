@@ -3,6 +3,7 @@ package com.bilt.pos.bridge.tray;
 import com.bilt.pos.bridge.AppDirs;
 import com.bilt.pos.bridge.Bridge;
 import com.bilt.pos.bridge.BridgeStatus;
+import com.bilt.pos.bridge.config.BridgeConfigException;
 import java.awt.AWTException;
 import java.awt.CheckboxMenuItem;
 import java.awt.Desktop;
@@ -136,14 +137,16 @@ public final class BridgeTray {
     Path file = Path.of(location.get());
     try {
       if (!Files.exists(file)) {
-        bridge.reload();
+        // Reload refuses to invent a config, so the user's explicit ask is what recreates the
+        // starter; the file watcher then reloads it like any other change to the file.
+        bridge.source().load();
       }
       if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
         Desktop.getDesktop().open(file.toFile());
       } else {
         LOG.info("Config file: " + file);
       }
-    } catch (IOException | RuntimeException e) {
+    } catch (BridgeConfigException | IOException | RuntimeException e) {
       LOG.log(Level.WARNING, "Cannot open " + file, e);
     }
   }
