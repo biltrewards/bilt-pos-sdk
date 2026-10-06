@@ -1,0 +1,186 @@
+DisplayPayload:
+  type: object
+  description: |
+    The structured customer-display model (`display.xsd`, `urn:bilt:display:v1`) as JSON:
+    exactly one of `receipt`, `qrCode`, `image`, `standby` or `waiting`, plus the `layout` the
+    terminal renders it with (`receipt.xslt`, `receipt-qr.xslt`, `qr.xslt`, `barcode.xslt`,
+    `image.xslt`, `standby.xslt`, `waiting.xslt`; kept a free string so new layouts need no
+    schema change). The host converts it to the XML the terminal expects.
+  required: [layout]
+  properties:
+    layout:
+      type: string
+    version:
+      type: string
+      default: '1.0'
+    receipt:
+      $ref: '#/DisplayReceipt'
+    qrCode:
+      $ref: '#/DisplayQrCode'
+    image:
+      $ref: '#/DisplayImage'
+    standby:
+      $ref: '#/DisplayStandby'
+    waiting:
+      $ref: '#/DisplayWaiting'
+  oneOf:
+    - required: [receipt]
+    - required: [qrCode]
+    - required: [image]
+    - required: [standby]
+    - required: [waiting]
+
+DisplayText:
+  type: object
+  description: A title and zero or more text lines (`common.xsd` `DisplayType`).
+  properties:
+    title:
+      type: string
+    text:
+      type: array
+      items:
+        type: string
+
+DisplayHeaderFooter:
+  type: object
+  required: [text]
+  properties:
+    text:
+      type: string
+
+DisplayMoney:
+  type: object
+  description: Currency may be an ISO 4217 code or a display symbol.
+  required: [currency, value]
+  properties:
+    currency:
+      type: string
+    value:
+      $ref: './common.yaml#/Money'
+
+DisplayLabeledAmount:
+  type: object
+  properties:
+    description:
+      type: string
+    amount:
+      $ref: '#/DisplayMoney'
+
+DisplayImage:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: string
+      contentEncoding: base64
+      description: Base64-encoded image bytes.
+    mediaType:
+      type: string
+      default: image/png
+    altText:
+      type: string
+
+DisplayQrCode:
+  type: object
+  required: [data]
+  properties:
+    type:
+      type: string
+      default: qr
+      description: Symbology, e.g. `qr`, `barcode128`, `pdf417`, `datamatrix`.
+    header:
+      $ref: '#/DisplayHeaderFooter'
+    data:
+      type: string
+      format: uri-reference
+    callToAction:
+      type: string
+    footer:
+      $ref: '#/DisplayHeaderFooter'
+
+DisplayStandby:
+  type: object
+  properties:
+    theme:
+      type: string
+      description: A seasonal or branded visual variant, e.g. `christmas`.
+    display:
+      $ref: '#/DisplayText'
+
+DisplayWaiting:
+  type: object
+  properties:
+    display:
+      $ref: '#/DisplayText'
+
+DisplayLineItem:
+  type: object
+  description: One receipt row; which children are meaningful depends on `kind`.
+  properties:
+    kind:
+      type: string
+      enum: [item, return, void, separator, spacer]
+      default: item
+    description:
+      type: string
+    subtitle:
+      type: string
+    image:
+      $ref: '#/DisplayImage'
+    quantity:
+      $ref: './common.yaml#/Money'
+    unitPrice:
+      $ref: '#/DisplayMoney'
+    amount:
+      $ref: '#/DisplayMoney'
+    originalAmount:
+      $ref: '#/DisplayMoney'
+    sections:
+      type: array
+      description: Discount groups applied to the item, each a label with descriptions.
+      items:
+        type: object
+        required: [label, items]
+        properties:
+          label:
+            type: string
+          items:
+            type: array
+            items:
+              type: string
+
+DisplayReceipt:
+  type: object
+  description: An itemised purchase summary.
+  properties:
+    qrCode:
+      $ref: '#/DisplayQrCode'
+    waiting:
+      type: string
+      description: A waiting message shown while the transaction is processed; an empty string falls back to the terminal default.
+    header:
+      $ref: '#/DisplayHeaderFooter'
+    lineItems:
+      type: array
+      items:
+        $ref: '#/DisplayLineItem'
+    subtotal:
+      $ref: '#/DisplayLabeledAmount'
+    adjustments:
+      type: array
+      description: Order-level discounts (loyalty rewards, coupons).
+      items:
+        $ref: '#/DisplayLabeledAmount'
+    tax:
+      type: object
+      properties:
+        taxItems:
+          type: array
+          items:
+            $ref: '#/DisplayLabeledAmount'
+        taxTotal:
+          $ref: '#/DisplayLabeledAmount'
+    total:
+      $ref: '#/DisplayLabeledAmount'
+    footer:
+      $ref: '#/DisplayHeaderFooter'
