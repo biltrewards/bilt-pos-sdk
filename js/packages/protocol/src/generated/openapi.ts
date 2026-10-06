@@ -845,7 +845,7 @@ export interface components {
             format: "TEXT" | "XHTML";
             content: string;
             /** @default CUSTOMER_RECEIPT */
-            documentQualifier: components["schemas"]["DocumentQualifier"];
+            documentQualifier?: components["schemas"]["DocumentQualifier"];
         };
         /** @description `PLAY` mirrors `playSound(soundReferenceId, volumePercent)`; `STOP` mirrors `stopSound()`. */
         SoundRequest: {
@@ -885,7 +885,7 @@ export interface components {
         DisplayPayload: {
             layout: string;
             /** @default 1.0 */
-            version: string;
+            version?: string;
             receipt?: components["schemas"]["DisplayReceipt"];
             qrCode?: components["schemas"]["DisplayQrCode"];
             image?: components["schemas"]["DisplayImage"];
@@ -925,13 +925,13 @@ export interface components {
              * @description Whether basket changes refresh the terminal's customer display automatically (terminal sessions).
              * @default true
              */
-            autoDisplay: boolean;
+            autoDisplay?: boolean;
             /** @description The member to start with, when the shopper is known before the visit begins. Not announced through `member.changed`; a pending member's resolution is. */
             member?: components["schemas"]["MemberInput"];
             /** @description The initial phase and attributes of the session context. */
             context?: {
                 /** @default SCANNING */
-                phase: components["schemas"]["CheckoutPhase"];
+                phase?: components["schemas"]["CheckoutPhase"];
                 attributes?: {
                     [key: string]: string;
                 };
@@ -1040,12 +1040,12 @@ export interface components {
             sku: string;
             description: string;
             /** @default 1 */
-            quantity: number;
+            quantity?: number;
             /** @description Non-negative catalog price. */
             unitPrice: components["schemas"]["Money"];
             discounts?: components["schemas"]["BasketDiscount"][];
             /** @default SALE */
-            type: components["schemas"]["BasketItemType"];
+            type?: components["schemas"]["BasketItemType"];
             /** @description Optional product category; aids terminal-side offer matching. */
             category?: string;
             /** @description Optional tax rate, e.g. `"0.08875"`. */
@@ -1172,7 +1172,7 @@ export interface components {
             customType?: string;
             value: string;
             /** @default false */
-            keyedByCashier: boolean;
+            keyedByCashier?: boolean;
         };
         /**
          * @description Outcome of a member identification attempt.
@@ -1195,7 +1195,7 @@ export interface components {
              * @description Whether the lookup fails when no member is found (`LoyaltyHandling=Required`) or continues without one (`Proposed`).
              * @default true
              */
-            requireMember: boolean;
+            requireMember?: boolean;
             timeout?: components["schemas"]["Duration"];
         };
         /** @description A reward or coupon available to an identified member; `rewardRef` is the redemption handle. */
@@ -1258,7 +1258,7 @@ export interface components {
              * @description Whether the customer may pick several entries.
              * @default false
              */
-            multiSelect: boolean;
+            multiSelect?: boolean;
             additionalText?: string;
             timeout?: components["schemas"]["Duration"];
         };
@@ -1322,7 +1322,7 @@ export interface components {
              * @default GIFT_CARD
              * @enum {string}
              */
-            accountType: "GIFT_CARD" | "OTHER" | "PHONE_CARD";
+            accountType?: "GIFT_CARD" | "OTHER" | "PHONE_CARD";
             /** @description Stored value provider, e.g. `"givex"`; the terminal default when absent. */
             provider?: string;
             /** @description `MMYY`. */
@@ -1354,11 +1354,11 @@ export interface components {
         /** @description The register's plan for resolving a basket, mirroring `SettlementOptions`; all fields optional. */
         SettlementOptions: {
             /** @default false */
-            disableRebates: boolean;
+            disableRebates?: boolean;
             /** @default false */
-            disablePoints: boolean;
+            disablePoints?: boolean;
             /** @default false */
-            disableAward: boolean;
+            disableAward?: boolean;
             /** @description Positive cashback requested with the card payment. */
             cashback?: components["schemas"]["Money"];
             /** @description Overrides the display shown while the card payment is processing. */
@@ -1366,7 +1366,7 @@ export interface components {
             refunds?: components["schemas"]["RefundAllocation"][];
             fulfillments?: components["schemas"]["StoredValueLoad"][];
             /** @default REFUND_THEN_CHARGE */
-            settlementType: components["schemas"]["SettlementType"];
+            settlementType?: components["schemas"]["SettlementType"];
         };
         /**
          * @description Final outcome of a successful settlement. `movements` is the authoritative ledger of what
@@ -1552,12 +1552,12 @@ export interface components {
         /** @description By default the referenced request is assumed to be a payment and no receipt data is requested. */
         TransactionStatusOptions: {
             /** @default PAYMENT */
-            originalCategory: components["schemas"]["MessageCategory"];
+            originalCategory?: components["schemas"]["MessageCategory"];
             /**
              * @description Whether the terminal should include the original receipts, to reprint after a crash or connection loss.
              * @default false
              */
-            receiptReprint: boolean;
+            receiptReprint?: boolean;
             /** @description Receipt kinds to include when reprinting; defaults to customer and cashier receipts. */
             documentQualifiers?: components["schemas"]["DocumentQualifier"][];
         };
@@ -2034,7 +2034,7 @@ export interface components {
              * @description Symbology, e.g. `qr`, `barcode128`, `pdf417`, `datamatrix`.
              * @default qr
              */
-            type: string;
+            type?: string;
             header?: components["schemas"]["DisplayHeaderFooter"];
             /** Format: uri-reference */
             data: string;
@@ -2045,7 +2045,7 @@ export interface components {
             /** @description Base64-encoded image bytes. */
             data: string;
             /** @default image/png */
-            mediaType: string;
+            mediaType?: string;
             altText?: string;
         };
         /** @description Currency may be an ISO 4217 code or a display symbol. */
@@ -2059,7 +2059,7 @@ export interface components {
              * @default item
              * @enum {string}
              */
-            kind: "item" | "return" | "void" | "separator" | "spacer";
+            kind?: "item" | "return" | "void" | "separator" | "spacer";
             description?: string;
             subtitle?: string;
             image?: components["schemas"]["DisplayImage"];
@@ -2120,7 +2120,7 @@ export interface components {
         RefundAllocation: {
             type: components["schemas"]["RefundAllocationType"];
             /** @default 0 */
-            amount: components["schemas"]["Money"];
+            amount?: components["schemas"]["Money"];
             originalPoiTransactionId?: string;
             /** Format: date-time */
             originalPoiTransactionTimestamp?: string;

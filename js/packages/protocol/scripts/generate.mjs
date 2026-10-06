@@ -24,9 +24,10 @@ const header = `/*
 `;
 
 const ast = await openapiTS(pathToFileURL(spec), {
-  // Money, Duration and the rest are plain strings; keeping the aliases named makes the
-  // generated types read like the spec.
   rootTypes: false,
+  // A property with a `default` is still optional on the wire: the host fills it in. Without
+  // this, `quantity`, `keyedByCashier`, `settlementType` and friends would be required inputs.
+  defaultNonNullable: false,
 });
 await mkdir(dirname(out), { recursive: true });
 await writeFile(out, header + astToString(ast));
