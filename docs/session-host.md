@@ -51,7 +51,23 @@ lists the terminals to advertise. Where the address, CA and passphrase come from
 is the embedding application's business — the page never sees them.
 `SessionFactory` lets you hand the host pre-configured SDK builders (Bilt
 platform credentials, display renderer); `adDecisionService(..)` enables
-`retail-media` widgets.
+`retail-media` widgets. `GET /health` answers with the spec's `Health` (`host`,
+`hostVersion`, `sdkVersion`, `protocolVersions`, `terminals`) plus a `sessions`
+count, the same number `activeSessions()` returns, for a tray or dashboard that
+only has HTTP.
+
+## Conformance
+
+`host/src/test/java/com/bilt/pos/host/SpecConformanceTest.java` is the guard
+against drift between the host and `schema/session-protocol`. It reads the
+multi-file OpenAPI document as it is (no bundling step) and, for every request
+example under `schema/session-protocol/examples/`, sends it to a running host
+and validates the response against the schema the spec gives that route and
+status; every event the host emits during the local- and terminal-session flows
+is validated against the `Event` schema. The same validator sits inside the
+tests' `HostClient`, so every other host test checks each response and event
+too. A failure prints the JSON path, the offending value and the schema path
+that rejected it. Run it with `./gradlew :host:test`.
 
 ## Development config
 
