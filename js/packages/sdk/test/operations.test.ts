@@ -93,6 +93,8 @@ describe('starting an operation', () => {
     });
     const { session } = await lane(engine);
     const op = session.settle({ onRebatesRedeemed: () => '80.00' });
+    const heard: unknown[] = [];
+    session.on('operation.step', (step) => heard.push(step));
     await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
     const id = engine.lastOperation(session.id).id;
     engine.step(session.id, id, rebateStep('s1', '90.00'));
@@ -101,6 +103,7 @@ describe('starting an operation', () => {
     release();
     await vi.waitFor(() => expect(engine.replies).toHaveLength(1));
     expect(engine.replies[0]!.reply).toEqual({ stepId: 's1', total: '80.00' });
+    expect(heard).toHaveLength(1); // the replay must not emit the event a second time
     engine.complete(session.id, id, { result: { cardAmountCharged: '80.00' } } as never);
     await expect(op).resolves.toMatchObject({ cardAmountCharged: '80.00' });
   });

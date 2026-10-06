@@ -262,7 +262,7 @@ export class ShopperSessionImpl implements ShopperSession {
     const held = this.unclaimed.get(resource.id);
     if (held) {
       this.unclaimed.delete(resource.id);
-      for (const event of held) this.dispatchOperationEvent(event);
+      for (const event of held) this.routeOperationEvent(event);
     }
   }
 
@@ -421,6 +421,22 @@ export class ShopperSessionImpl implements ShopperSession {
   }
 
   private dispatchOperationEvent(event: OperationEvent): void {
+    this.routeOperationEvent(event);
+    switch (event.type) {
+      case 'operation.step':
+        this.emitter.emit(event.type, event.payload);
+        break;
+      case 'operation.movement':
+        this.emitter.emit(event.type, event.payload);
+        break;
+      case 'operation.completed':
+        this.emitter.emit(event.type, event.payload);
+        break;
+    }
+  }
+
+  /** Hands an event to its pending operation, or holds it; replayed events come through here so listeners hear each one once. */
+  private routeOperationEvent(event: OperationEvent): void {
     const operationId =
       event.type === 'operation.completed' ? event.payload.id : event.payload.operationId;
     const operation = this.pending.get(operationId);
@@ -439,17 +455,6 @@ export class ShopperSessionImpl implements ShopperSession {
       }
     } else if (event.type !== 'operation.completed' || this.currentState !== 'ended') {
       this.hold(operationId, event);
-    }
-    switch (event.type) {
-      case 'operation.step':
-        this.emitter.emit(event.type, event.payload);
-        break;
-      case 'operation.movement':
-        this.emitter.emit(event.type, event.payload);
-        break;
-      case 'operation.completed':
-        this.emitter.emit(event.type, event.payload);
-        break;
     }
   }
 
