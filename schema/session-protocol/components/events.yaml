@@ -1,0 +1,270 @@
+Event:
+  description: |
+    One event on a session's stream, discriminated by `type`. `seq` increases by one per event
+    within a session and is what a client passes back as `since`.
+  oneOf:
+    - $ref: '#/SessionStartedEvent'
+    - $ref: '#/BasketChangedEvent'
+    - $ref: '#/MemberChangedEvent'
+    - $ref: '#/ContextChangedEvent'
+    - $ref: '#/OperationStepEvent'
+    - $ref: '#/OperationMovementEvent'
+    - $ref: '#/OperationCompletedEvent'
+    - $ref: '#/WidgetRenderingEvent'
+    - $ref: '#/WidgetClearEvent'
+    - $ref: '#/WidgetOfferEvent'
+    - $ref: '#/WidgetInteractionEvent'
+    - $ref: '#/BackgroundErrorEvent'
+    - $ref: '#/SessionEndedEvent'
+  discriminator:
+    propertyName: type
+    mapping:
+      session.started: '#/SessionStartedEvent'
+      basket.changed: '#/BasketChangedEvent'
+      member.changed: '#/MemberChangedEvent'
+      context.changed: '#/ContextChangedEvent'
+      operation.step: '#/OperationStepEvent'
+      operation.movement: '#/OperationMovementEvent'
+      operation.completed: '#/OperationCompletedEvent'
+      widget.rendering: '#/WidgetRenderingEvent'
+      widget.clear: '#/WidgetClearEvent'
+      widget.offer: '#/WidgetOfferEvent'
+      widget.interaction: '#/WidgetInteractionEvent'
+      background.error: '#/BackgroundErrorEvent'
+      session.ended: '#/SessionEndedEvent'
+
+EventBase:
+  type: object
+  required: [seq, at, type, payload]
+  properties:
+    seq:
+      type: integer
+      format: int64
+      minimum: 1
+    at:
+      type: string
+      format: date-time
+    type:
+      type: string
+
+SessionStartedEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: Always the first event. When the session started with a member attached, `member.changed` follows with it.
+      properties:
+        type:
+          type: string
+          enum: [session.started]
+        payload:
+          type: object
+          required: [session, context]
+          properties:
+            session:
+              $ref: './session.yaml#/Session'
+            context:
+              $ref: './session.yaml#/SessionContext'
+
+BasketChangedEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: One per basket updater call that changed something; the payload is the `BasketChange` diff.
+      properties:
+        type:
+          type: string
+          enum: [basket.changed]
+        payload:
+          $ref: './basket.yaml#/BasketChange'
+
+MemberChangedEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: The member was attached, found by a prompt or lookup, resolved, or cleared (`member` is `null`).
+      properties:
+        type:
+          type: string
+          enum: [member.changed]
+        payload:
+          type: object
+          required: [member]
+          properties:
+            member:
+              oneOf:
+                - $ref: './member.yaml#/Member'
+                - type: 'null'
+
+ContextChangedEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: The phase or attributes changed, by the client or by the session itself around settlement; the payload is the whole context.
+      properties:
+        type:
+          type: string
+          enum: [context.changed]
+        payload:
+          $ref: './session.yaml#/SessionContext'
+
+OperationStepEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: The host is waiting on the register; see `OperationStep` for the step kinds, replies, deadlines and defaults.
+      properties:
+        type:
+          type: string
+          enum: [operation.step]
+        payload:
+          $ref: './operations.yaml#/OperationStep'
+
+OperationMovementEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: |
+        A money or loyalty movement committed during a settlement (`onMovement` and the
+        per-step callbacks). Provisional: an abort or a same-run recovery may reverse
+        charge-side movements without a compensating event; `SettlementResult.movements` is
+        the final ledger.
+      properties:
+        type:
+          type: string
+          enum: [operation.movement]
+        payload:
+          type: object
+          required: [operationId, movement]
+          properties:
+            operationId:
+              type: string
+            movement:
+              $ref: './settlement.yaml#/SettlementMovement'
+
+OperationCompletedEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: The operation reached `succeeded`, `failed` or `aborted`; the payload is the final resource.
+      properties:
+        type:
+          type: string
+          enum: [operation.completed]
+        payload:
+          $ref: './operations.yaml#/Operation'
+
+WidgetRenderingEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: A widget decided to show a rendering on a placement; it replaces whatever the placement shows.
+      properties:
+        type:
+          type: string
+          enum: [widget.rendering]
+        payload:
+          type: object
+          required: [widget, placement, rendering]
+          properties:
+            widget:
+              type: string
+              enum: [retail-media]
+            placement:
+              type: string
+            rendering:
+              $ref: './widgets.yaml#/Rendering'
+
+WidgetClearEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: The placement must be cleared; idempotent. The client stops reporting interactions for the rendering it was showing.
+      properties:
+        type:
+          type: string
+          enum: [widget.clear]
+        payload:
+          type: object
+          required: [widget, placement]
+          properties:
+            widget:
+              type: string
+              enum: [retail-media]
+            placement:
+              type: string
+
+WidgetOfferEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: The one widget event the register must act on; a validated offer to apply to its own pricing.
+      properties:
+        type:
+          type: string
+          enum: [widget.offer]
+        payload:
+          type: object
+          required: [widget, offer]
+          properties:
+            widget:
+              type: string
+              enum: [retail-media]
+            offer:
+              $ref: './widgets.yaml#/Offer'
+
+WidgetInteractionEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: Informational; every shopper-visible ad event.
+      properties:
+        type:
+          type: string
+          enum: [widget.interaction]
+        payload:
+          type: object
+          required: [widget, interaction]
+          properties:
+            widget:
+              type: string
+              enum: [retail-media]
+            interaction:
+              $ref: './widgets.yaml#/AdInteraction'
+
+BackgroundErrorEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: |
+        A failure of work the session performed on its own behalf, with no operation to carry
+        it: the automatic display push after a basket change, a pending member's lookup, a
+        widget that failed to attach or render, a rejected widget action. Never interrupts the
+        checkout.
+      properties:
+        type:
+          type: string
+          enum: [background.error]
+        payload:
+          $ref: './common.yaml#/SessionError'
+
+SessionEndedEvent:
+  allOf:
+    - $ref: '#/EventBase'
+    - type: object
+      description: Always the last event; the host closes the stream after it.
+      properties:
+        type:
+          type: string
+          enum: [session.ended]
+        payload:
+          type: object
+          required: [sessionId, forced]
+          properties:
+            sessionId:
+              type: string
+            forced:
+              type: boolean
+              description: '`true` after `force-end`.'
+            reason:
+              type: string
+              description: The `force-end` reason, when forced.

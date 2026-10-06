@@ -1,0 +1,721 @@
+OperationStatus:
+  type: string
+  description: |
+    `queued` until the lane reaches it, `running` while it executes, `awaitingReply` while a
+    step waits on the register, then exactly one of `succeeded`, `failed` or `aborted`.
+  enum: [queued, running, awaitingReply, succeeded, failed, aborted]
+
+StepKind:
+  type: string
+  description: Which register handler a step stands for; see `OperationStep`.
+  enum: [BEFORE_STEP, TOTAL_REQUIRED, RECOVERY_REQUIRED, REVERSAL_DECISION_REQUIRED]
+
+HandledSteps:
+  type: array
+  description: |
+    The step kinds this client will answer. A step kind not listed is resolved with its
+    default immediately and emits no `operation.step`, which is the Java SDK's behaviour when
+    no handler is registered. Default: none.
+  items:
+    $ref: '#/StepKind'
+  uniqueItems: true
+
+OperationRequest:
+  description: |
+    One lazy operation of `TerminalShopperSession`, discriminated by `type`. Each type maps to
+    the Java method of the same name; `end` and `forceEnd` are created through their own
+    endpoints and are not accepted here.
+  oneOf:
+    - $ref: '#/IdentifyMemberRequest'
+    - $ref: '#/AcquireCardRequest'
+    - $ref: '#/InputPromptRequest'
+    - $ref: '#/ConfirmationRequest'
+    - $ref: '#/MenuEntryRequest'
+    - $ref: '#/SignatureRequest'
+    - $ref: '#/AmountConfirmationRequest'
+    - $ref: '#/PinRequest'
+    - $ref: '#/StoredValueCardRequest'
+    - $ref: '#/StoredValueAmountRequest'
+    - $ref: '#/StoredValueReverseRequest'
+    - $ref: '#/SetStoredValueCardRequest'
+    - $ref: '#/SettleRequest'
+    - $ref: '#/RefundRequest'
+    - $ref: '#/RefundUnlinkedRequest'
+    - $ref: '#/VoidTransactionRequest'
+    - $ref: '#/TransactionStatusRequest'
+    - $ref: '#/UpdateDisplayRequest'
+    - $ref: '#/UpdateInputDisplayRequest'
+  discriminator:
+    propertyName: type
+    mapping:
+      identifyMember: '#/IdentifyMemberRequest'
+      acquireCard: '#/AcquireCardRequest'
+      requestDigitString: '#/InputPromptRequest'
+      requestDecimalString: '#/InputPromptRequest'
+      requestTextString: '#/InputPromptRequest'
+      requestConfirmation: '#/ConfirmationRequest'
+      requestMenuEntry: '#/MenuEntryRequest'
+      requestSignature: '#/SignatureRequest'
+      requestAmountConfirmation: '#/AmountConfirmationRequest'
+      requestPinEntry: '#/PinRequest'
+      requestPinVerify: '#/PinRequest'
+      requestPinVerifyOnly: '#/PinRequest'
+      storedValueBalance: '#/StoredValueCardRequest'
+      storedValueDeactivate: '#/StoredValueCardRequest'
+      storedValueDuplicate: '#/StoredValueCardRequest'
+      storedValueActivate: '#/StoredValueAmountRequest'
+      storedValueLoad: '#/StoredValueAmountRequest'
+      storedValueUnload: '#/StoredValueAmountRequest'
+      storedValueReserve: '#/StoredValueAmountRequest'
+      storedValueReverse: '#/StoredValueReverseRequest'
+      setStoredValueCard: '#/SetStoredValueCardRequest'
+      settle: '#/SettleRequest'
+      refund: '#/RefundRequest'
+      refundUnlinked: '#/RefundUnlinkedRequest'
+      voidTransaction: '#/VoidTransactionRequest'
+      getTransactionStatus: '#/TransactionStatusRequest'
+      updateDisplay: '#/UpdateDisplayRequest'
+      updateInputDisplay: '#/UpdateInputDisplayRequest'
+
+IdentifyMemberRequest:
+  type: object
+  description: |
+    Without `resolver`, prompts the customer on the terminal (`identifyMember(options)`):
+    outcomes that leave the checkout without a member (not found, suspended, cancelled) are
+    successes with the matching `IdentifyStatus`. With `resolver`, a POS-driven lookup with no
+    terminal prompt (`identifyMember(Member pending)`); account id and phone only — email and
+    custom identifiers fail with `UNSUPPORTED`. Available after a failed settlement.
+  required: [type]
+  properties:
+    type:
+      type: string
+      enum: [identifyMember]
+    options:
+      $ref: './member.yaml#/IdentifyOptions'
+    resolver:
+      $ref: './member.yaml#/MemberIdResolver'
+
+AcquireCardRequest:
+  type: object
+  description: Reads card data from the terminal without initiating a payment.
+  required: [type]
+  properties:
+    type:
+      type: string
+      enum: [acquireCard]
+    options:
+      $ref: './member.yaml#/CardAcquisitionOptions'
+
+InputPromptRequest:
+  type: object
+  description: '`requestDigitString` (e.g. a ZIP code), `requestDecimalString` (e.g. a tip; result is `Money`) and `requestTextString` (e.g. an email address).'
+  required: [type, prompt]
+  properties:
+    type:
+      type: string
+      enum: [requestDigitString, requestDecimalString, requestTextString]
+    prompt:
+      type: string
+    options:
+      $ref: './input.yaml#/InputOptions'
+
+ConfirmationRequest:
+  type: object
+  description: A yes/no confirmation.
+  required: [type, prompt]
+  properties:
+    type:
+      type: string
+      enum: [requestConfirmation]
+    prompt:
+      type: string
+    options:
+      $ref: './input.yaml#/ConfirmationOptions'
+
+MenuEntryRequest:
+  type: object
+  required: [type, prompt, entries]
+  properties:
+    type:
+      type: string
+      enum: [requestMenuEntry]
+    prompt:
+      type: string
+    entries:
+      type: array
+      minItems: 1
+      items:
+        type: string
+    options:
+      $ref: './input.yaml#/MenuOptions'
+
+SignatureRequest:
+  type: object
+  description: Captures a handwritten signature on the terminal.
+  required: [type, prompt]
+  properties:
+    type:
+      type: string
+      enum: [requestSignature]
+    prompt:
+      type: string
+
+AmountConfirmationRequest:
+  type: object
+  description: Asks the customer to confirm an amount.
+  required: [type, amount, prompt]
+  properties:
+    type:
+      type: string
+      enum: [requestAmountConfirmation]
+    amount:
+      $ref: './common.yaml#/Money'
+    prompt:
+      type: string
+
+PinRequest:
+  type: object
+  description: '`requestPinEntry` captures and encrypts a PIN; `requestPinVerify` verifies it and returns the block; `requestPinVerifyOnly` verifies without returning it.'
+  required: [type]
+  properties:
+    type:
+      type: string
+      enum: [requestPinEntry, requestPinVerify, requestPinVerifyOnly]
+    options:
+      $ref: './input.yaml#/PinOptions'
+
+StoredValueCardRequest:
+  type: object
+  description: '`storedValueBalance` (result `StoredValueBalance`), `storedValueDeactivate` (an unload of zero; provider support varies) and `storedValueDuplicate` (provider support varies).'
+  required: [type, card]
+  properties:
+    type:
+      type: string
+      enum: [storedValueBalance, storedValueDeactivate, storedValueDuplicate]
+    card:
+      $ref: './storedvalue.yaml#/StoredValueCard'
+
+StoredValueAmountRequest:
+  type: object
+  description: '`storedValueActivate` (`amount` is the initial balance, `"0"` to activate without funds), `storedValueLoad`, `storedValueUnload` (cash out) and `storedValueReserve` (provider support varies).'
+  required: [type, card, amount]
+  properties:
+    type:
+      type: string
+      enum: [storedValueActivate, storedValueLoad, storedValueUnload, storedValueReserve]
+    card:
+      $ref: './storedvalue.yaml#/StoredValueCard'
+    amount:
+      $ref: './common.yaml#/Money'
+
+StoredValueReverseRequest:
+  type: object
+  description: Reverses a prior stored value operation by its terminal reference.
+  required: [type, originalPoiTransactionId]
+  properties:
+    type:
+      type: string
+      enum: [storedValueReverse]
+    originalPoiTransactionId:
+      type: string
+    originalPoiTransactionTimestamp:
+      type: string
+      format: date-time
+
+SetStoredValueCardRequest:
+  type: object
+  description: |
+    Registers the gift card charged as part of a split tender during `settle`, or clears it
+    with `card: null`. A setter in Java: applied immediately, never queued, and the response
+    already carries `succeeded`. Dropped by `clear` on the basket.
+  required: [type, card]
+  properties:
+    type:
+      type: string
+      enum: [setStoredValueCard]
+    card:
+      oneOf:
+        - $ref: './storedvalue.yaml#/StoredValueCard'
+        - type: 'null'
+
+SettleRequest:
+  type: object
+  description: |
+    Starts the settlement orchestration: refund allocations, rebate redemption, point
+    redemption, stored value line fulfillment, stored value tender, card charge, award (or the
+    signed difference only, with `settlementType: NET`). Preconditions are checked when the
+    lane reaches it: the session open with a non-empty, unconsumed basket, and no same-session
+    void partially reversed. Charge-side failures consult the register through
+    `RECOVERY_REQUIRED` steps when declared; refund allocation failures are never retried in
+    the same run and the register retries `settle` with the same committed allocation prefix.
+  required: [type]
+  properties:
+    type:
+      type: string
+      enum: [settle]
+    options:
+      $ref: './settlement.yaml#/SettlementOptions'
+    handledSteps:
+      $ref: '#/HandledSteps'
+
+RefundRequest:
+  type: object
+  description: |
+    Full (no `amount`) or partial linked refund of this session's completed payment, also
+    reversing the loyalty award best-effort. After a split tender this references the card
+    leg; the committed rebate and redemption movements are reversed by `voidTransaction`.
+    Refused once a void has partially reversed the payment's money legs.
+  required: [type]
+  properties:
+    type:
+      type: string
+      enum: [refund]
+    amount:
+      $ref: './common.yaml#/Money'
+    handledSteps:
+      $ref: '#/HandledSteps'
+
+RefundUnlinkedRequest:
+  type: object
+  description: An unlinked refund, not tied to a prior transaction; payment only, no loyalty reversal.
+  required: [type, amount]
+  properties:
+    type:
+      type: string
+      enum: [refundUnlinked]
+    amount:
+      $ref: './common.yaml#/Money'
+    handledSteps:
+      $ref: '#/HandledSteps'
+
+VoidTransactionRequest:
+  type: object
+  description: |
+    Without `originalSale`, reverses this session's completed payment: every movement it
+    committed, in `ReversalStep` order; a retried void resumes at the first movement still
+    standing. With `originalSale`, a whole-transaction void of a prior sale by its persisted
+    record; retry it on the same session so the in-memory progress prevents re-sending
+    reversed legs. Not allowed once the payment has been refunded from this session.
+  required: [type]
+  properties:
+    type:
+      type: string
+      enum: [voidTransaction]
+    originalSale:
+      $ref: './settlement.yaml#/OriginalSaleRecord'
+    handledSteps:
+      $ref: '#/HandledSteps'
+
+TransactionStatusRequest:
+  type: object
+  description: Checks the status of a prior request by the `ServiceID` it was sent with; the terminal repeats the original response when found.
+  required: [type, originalServiceId]
+  properties:
+    type:
+      type: string
+      enum: [getTransactionStatus]
+    originalServiceId:
+      type: string
+    options:
+      $ref: './reversal.yaml#/TransactionStatusOptions'
+
+UpdateDisplayRequest:
+  type: object
+  description: Refreshes the customer display from a basket snapshot (rendered by the host's display renderer) or shows a custom payload; exactly one. Failures are this operation's, not `background.error`.
+  required: [type]
+  properties:
+    type:
+      type: string
+      enum: [updateDisplay]
+    basket:
+      $ref: './basket.yaml#/Basket'
+    display:
+      $ref: './display.yaml#/DisplayPayload'
+  oneOf:
+    - required: [basket]
+    - required: [display]
+
+UpdateInputDisplayRequest:
+  type: object
+  description: Replaces the display content of the input prompt currently awaiting a response (Nexo `InputUpdate`). Unordered; fails with `INVALID_STATE` when no input is in progress.
+  required: [type, display]
+  properties:
+    type:
+      type: string
+      enum: [updateInputDisplay]
+    display:
+      $ref: './display.yaml#/DisplayPayload'
+
+StepReply:
+  type: object
+  description: The answer to a pending step; set the one field the step kind takes.
+  required: [stepId]
+  properties:
+    stepId:
+      type: string
+    saleTransactionId:
+      type: string
+      description: For `BEFORE_STEP`; empty or equal to the default keeps the basket's transaction and its timestamp.
+    total:
+      description: For `TOTAL_REQUIRED`; the running total for the next step.
+      $ref: './common.yaml#/Money'
+    recovery:
+      description: For `RECOVERY_REQUIRED`.
+      $ref: './settlement.yaml#/SettlementRecovery'
+    decision:
+      description: For `REVERSAL_DECISION_REQUIRED`.
+      $ref: './reversal.yaml#/ReversalDecision'
+
+OperationStep:
+  description: |
+    A register handler the host is waiting on, emitted as `operation.step` while the
+    operation is `awaitingReply`. The client answers before `deadlineAt` with
+    `POST .../operations/{id}/reply`; otherwise `default` applies. The deadline is the host's
+    (30 seconds for totals and transaction ids, 120 seconds for recovery and reversal
+    decisions by default, configurable per host).
+
+    | Java handler | kind | reply | default |
+    |---|---|---|---|
+    | `beforeStep` | `BEFORE_STEP` | `saleTransactionId` | the basket's shared sale transaction id (`context.defaultTransactionId`) |
+    | `onRebatesRedeemed`, `onPointsRedeemed`, `onGiftCardPayment` | `TOTAL_REQUIRED` | `total` | `suggestedTotal`: the previous total minus the step's amount |
+    | `SettlementFlow.onError` | `RECOVERY_REQUIRED` | `recovery` | `ABORT` |
+    | `ReversalFlow.onError` | `REVERSAL_DECISION_REQUIRED` | `decision` | the Java default policy: `ABORT` for a money step or a loyalty movement that is the substance of the reversal, `SKIP` for a loyalty movement riding along with a money step; `default.decision` says which |
+
+    `onMovement` and the per-movement callbacks, `onCardCharged` and `onAwarded` are
+    `operation.movement` events and take no reply.
+  oneOf:
+    - $ref: '#/BeforeStepStep'
+    - $ref: '#/TotalRequiredStep'
+    - $ref: '#/RecoveryRequiredStep'
+    - $ref: '#/ReversalDecisionRequiredStep'
+  discriminator:
+    propertyName: kind
+    mapping:
+      BEFORE_STEP: '#/BeforeStepStep'
+      TOTAL_REQUIRED: '#/TotalRequiredStep'
+      RECOVERY_REQUIRED: '#/RecoveryRequiredStep'
+      REVERSAL_DECISION_REQUIRED: '#/ReversalDecisionRequiredStep'
+
+StepBase:
+  type: object
+  required: [operationId, stepId, kind, deadlineAt, default]
+  properties:
+    operationId:
+      type: string
+    stepId:
+      type: string
+      description: Unique per step; the reply names it.
+    kind:
+      $ref: '#/StepKind'
+    deadlineAt:
+      type: string
+      format: date-time
+    default:
+      description: The reply the host applies when none arrives in time.
+      $ref: '#/StepReply'
+
+BeforeStepStep:
+  allOf:
+    - $ref: '#/StepBase'
+    - type: object
+      required: [context]
+      properties:
+        kind:
+          type: string
+          enum: [BEFORE_STEP]
+        context:
+          $ref: './settlement.yaml#/SettlementContext'
+
+TotalRequiredStep:
+  allOf:
+    - $ref: '#/StepBase'
+    - type: object
+      description: Exactly one of `rebates`, `points` or `giftCard` is present, matching `step`.
+      required: [step]
+      properties:
+        kind:
+          type: string
+          enum: [TOTAL_REQUIRED]
+        step:
+          type: string
+          enum: [REBATE_REDEMPTION, POINT_REDEMPTION, STORED_VALUE_CHARGE]
+        rebates:
+          $ref: './settlement.yaml#/RebateRedemptionResult'
+        points:
+          $ref: './settlement.yaml#/PointRedemptionResult'
+        giftCard:
+          $ref: './settlement.yaml#/GiftCardPaymentResult'
+
+RecoveryRequiredStep:
+  allOf:
+    - $ref: '#/StepBase'
+    - type: object
+      required: [failure]
+      properties:
+        kind:
+          type: string
+          enum: [RECOVERY_REQUIRED]
+        failure:
+          $ref: './settlement.yaml#/SettlementFailure'
+
+ReversalDecisionRequiredStep:
+  allOf:
+    - $ref: '#/StepBase'
+    - type: object
+      description: '`step` is absent for a terminal failure before any step ran or after every step was skipped; the decision is then informational and ignored.'
+      required: [error]
+      properties:
+        kind:
+          type: string
+          enum: [REVERSAL_DECISION_REQUIRED]
+        step:
+          $ref: './reversal.yaml#/ReversalStep'
+        error:
+          $ref: './common.yaml#/SessionError'
+
+OperationBase:
+  type: object
+  required: [id, type, status, createdAt]
+  properties:
+    id:
+      type: string
+    type:
+      type: string
+    status:
+      $ref: '#/OperationStatus'
+    createdAt:
+      type: string
+      format: date-time
+    startedAt:
+      type: string
+      format: date-time
+    completedAt:
+      type: string
+      format: date-time
+    error:
+      description: Present when `failed` or `aborted`.
+      $ref: './common.yaml#/SessionError'
+    pendingStep:
+      description: The step awaiting a reply while `awaitingReply`.
+      $ref: '#/OperationStep'
+
+Operation:
+  description: |
+    An operation resource, discriminated by `type` so `result` is typed per operation. The
+    `type` set is `OperationRequest`'s plus `end` and `forceEnd`.
+  oneOf:
+    - $ref: '#/IdentifyMemberOperation'
+    - $ref: '#/AcquireCardOperation'
+    - $ref: '#/StringOperation'
+    - $ref: '#/DecimalOperation'
+    - $ref: '#/BooleanOperation'
+    - $ref: '#/MenuEntryOperation'
+    - $ref: '#/SignatureOperation'
+    - $ref: '#/PinOperation'
+    - $ref: '#/StoredValueBalanceOperation'
+    - $ref: '#/StoredValueOperation'
+    - $ref: '#/SettleOperation'
+    - $ref: '#/RefundOperation'
+    - $ref: '#/VoidTransactionOperation'
+    - $ref: '#/TransactionStatusOperation'
+    - $ref: '#/VoidResultOperation'
+  discriminator:
+    propertyName: type
+    mapping:
+      identifyMember: '#/IdentifyMemberOperation'
+      acquireCard: '#/AcquireCardOperation'
+      requestDigitString: '#/StringOperation'
+      requestTextString: '#/StringOperation'
+      requestDecimalString: '#/DecimalOperation'
+      requestConfirmation: '#/BooleanOperation'
+      requestAmountConfirmation: '#/BooleanOperation'
+      requestMenuEntry: '#/MenuEntryOperation'
+      requestSignature: '#/SignatureOperation'
+      requestPinEntry: '#/PinOperation'
+      requestPinVerify: '#/PinOperation'
+      requestPinVerifyOnly: '#/PinOperation'
+      storedValueBalance: '#/StoredValueBalanceOperation'
+      storedValueActivate: '#/StoredValueOperation'
+      storedValueLoad: '#/StoredValueOperation'
+      storedValueUnload: '#/StoredValueOperation'
+      storedValueDeactivate: '#/StoredValueOperation'
+      storedValueReserve: '#/StoredValueOperation'
+      storedValueReverse: '#/StoredValueOperation'
+      storedValueDuplicate: '#/StoredValueOperation'
+      settle: '#/SettleOperation'
+      refund: '#/RefundOperation'
+      refundUnlinked: '#/RefundOperation'
+      voidTransaction: '#/VoidTransactionOperation'
+      getTransactionStatus: '#/TransactionStatusOperation'
+      setStoredValueCard: '#/VoidResultOperation'
+      updateDisplay: '#/VoidResultOperation'
+      updateInputDisplay: '#/VoidResultOperation'
+      end: '#/VoidResultOperation'
+      forceEnd: '#/VoidResultOperation'
+
+IdentifyMemberOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [identifyMember]
+        result:
+          $ref: './member.yaml#/IdentifyResult'
+
+AcquireCardOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [acquireCard]
+        result:
+          $ref: './member.yaml#/CardAcquisitionResult'
+
+StringOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [requestDigitString, requestTextString]
+        result:
+          type: string
+
+DecimalOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [requestDecimalString]
+        result:
+          $ref: './common.yaml#/Money'
+
+BooleanOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [requestConfirmation, requestAmountConfirmation]
+        result:
+          type: boolean
+
+MenuEntryOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [requestMenuEntry]
+        result:
+          $ref: './input.yaml#/MenuSelection'
+
+SignatureOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [requestSignature]
+        result:
+          $ref: './input.yaml#/Signature'
+
+PinOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [requestPinEntry, requestPinVerify, requestPinVerifyOnly]
+        result:
+          $ref: './input.yaml#/PinResult'
+
+StoredValueBalanceOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [storedValueBalance]
+        result:
+          $ref: './storedvalue.yaml#/StoredValueBalance'
+
+StoredValueOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [storedValueActivate, storedValueLoad, storedValueUnload, storedValueDeactivate, storedValueReserve, storedValueReverse, storedValueDuplicate]
+        result:
+          $ref: './storedvalue.yaml#/StoredValueOperationResult'
+
+SettleOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [settle]
+        result:
+          $ref: './settlement.yaml#/SettlementResult'
+        abandonedSettlement:
+          description: Present when the settlement failed with `ABANDONED`; the `onAbandoned` record.
+          $ref: './settlement.yaml#/AbandonedSettlementRecord'
+
+RefundOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [refund, refundUnlinked]
+        result:
+          $ref: './reversal.yaml#/RefundResult'
+
+VoidTransactionOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [voidTransaction]
+        result:
+          $ref: './reversal.yaml#/VoidResult'
+
+TransactionStatusOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      properties:
+        type:
+          type: string
+          enum: [getTransactionStatus]
+        result:
+          $ref: './reversal.yaml#/TransactionStatusResult'
+
+VoidResultOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      description: Operations with no result value; `end` and `forceEnd` are the session lifecycle signals.
+      properties:
+        type:
+          type: string
+          enum: [setStoredValueCard, updateDisplay, updateInputDisplay, end, forceEnd]
