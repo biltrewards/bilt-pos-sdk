@@ -7,7 +7,7 @@ The JavaScript SDK runs a Bilt checkout from a browser page. It is the JavaScrip
 
 This guide covers `@bilt/pos-sdk` (framework-free) and `@bilt/pos-react` (hooks and components). Every sample on this page is compiled from [`js/examples/browser-pos/src/guide-samples`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos/src/guide-samples) in CI, and the [browser POS example](#the-example) puts them together into a register.
 
-> **Using React?** The core, `@bilt/pos-sdk`, works in any framework or none; the [plain TypeScript example](#the-example) uses nothing else. React apps add `@bilt/pos-react` for `BiltPosProvider`, the session, basket, member and settlement hooks, `BridgeGate` and `InstallBridgePrompt`, and `RetailMediaSurface` (see [React](#react)). The [browser POS example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) and the [browser emulator](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) are the React references.
+> **Using React?** The core, `@bilt/pos-sdk`, works in any framework or none; the [plain TypeScript example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/vanilla-ts) uses nothing else. React apps add `@bilt/pos-react` for `BiltPosProvider`, the session, basket, member and settlement hooks, `BridgeGate` and `InstallBridgePrompt`, and `RetailMediaSurface` (see [React](#react)). The [browser POS example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) and the [browser emulator](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) are the React references.
 
 ---
 
@@ -74,6 +74,7 @@ sequenceDiagram
 | `@bilt/pos-react` | `BiltPosProvider`, the session, basket, member, context, settlement and operation hooks, `RetailMediaSurface`. `@bilt/pos-react/bridge` adds `useBridge`, `InstallBridgePrompt`, `BridgeGate`. | [`js/packages/react/README.md`](https://github.com/biltrewards/bilt-pos-sdk/blob/main/js/packages/react/README.md) |
 | Workspace | How the packages are built, tested and generated. | [`js/README.md`](https://github.com/biltrewards/bilt-pos-sdk/blob/main/js/README.md) |
 | Example | The browser POS register this guide walks through. | [`js/examples/browser-pos`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) |
+| Example, no framework | The same register in plain TypeScript and DOM, over `@bilt/pos-sdk` alone. | [`js/examples/vanilla-ts`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/vanilla-ts) |
 
 ---
 
@@ -753,6 +754,8 @@ The hooks are written against the public `@bilt/pos-sdk` interface only, so a re
 ## The example
 
 [`js/examples/browser-pos`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) is a Vite + React register that uses everything above: `BridgeGate` and the install prompt, a settings panel (terminal or local session, `poiId`, `saleId`, currency, store location) kept in `localStorage`, scanning from a small catalog (`addItem`), quantity buttons (`updateItemQuantity`), a POS-owned cart pushed with `replace`, discount removal with `mutate`, member sign-in by phone resolver and on the terminal, `RetailMediaSurface` with offers applied as line discounts, settlement with a tax-recompute `TOTAL_REQUIRED` handler and an interactive `RECOVERY_REQUIRED` prompt counting down to the host's default, the result with receipts, a void, and a local session mode for a machine without a terminal. Its README says how to run it against the bridge or the development host.
+
+[`js/examples/vanilla-ts`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/vanilla-ts) is its framework-free counterpart: a Vite + TypeScript register in plain DOM over `@bilt/pos-sdk` and `@bilt/pos-sdk/bridge` only, with bridge detection through `detectBridge()`, a lane settings form kept in `localStorage`, a local or terminal session, scanning, the basket redrawn from `basket.changed`, phone sign-in, settlement with a tax-recompute `onRebatesRedeemed` handler, the result and `end()`. Start there for a register in another framework or none.
 
 For everything the guide touches in one place, [`js/apps/emulator`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) is the browser register emulator, the counterpart of the Compose desktop and Android emulator in `emulator/`: the same mock catalog and tax policy, per-line discounts and credits, gift-card sales with settlement-time fulfilment and split tender, `beforeStep` persistence, sales kept in IndexedDB for referenced refunds and voids with the reversal decision prompt, a companion display with the `lane-banner` surface, and a log of every event and operation. It is for trying the SDK, not a reference to copy; the example above stays minimal for that.
 
