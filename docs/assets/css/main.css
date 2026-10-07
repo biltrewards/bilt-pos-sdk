@@ -614,6 +614,19 @@ pre code {
   font-size: 0.85rem;
 }
 
+/* --- Mermaid diagrams --- */
+pre.mermaid {
+  text-align: center;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+pre.mermaid:not([data-processed]) {
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
 /* --- Code Tabs --- */
 .code-tabs {
   margin: 1.5rem 0;
