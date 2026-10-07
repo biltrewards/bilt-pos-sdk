@@ -183,6 +183,8 @@ export function RefundsPane(): ReactNode {
     settlement,
     reversal: busy,
     setReversal: setBusy,
+    pendingRefund,
+    setPendingRefund,
   } = useLane();
   const { sales: stored, error: storeError } = useStoredSales(sales);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -190,10 +192,6 @@ export function RefundsPane(): ReactNode {
   const [unlinked, setUnlinked] = useState('5.00');
   const [prompt, setPrompt] = useState<ReversalPrompt | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [pendingRefund, setPendingRefund] = useState<{
-    readonly sale: StoredSale;
-    readonly plan: ReferencedRefundPlan;
-  } | null>(null);
   const currency = settings.currency;
   const selected = stored.find((s) => s.sale.id === selectedId) ?? null;
   const promptRef = useRef<ReversalPrompt | null>(null);

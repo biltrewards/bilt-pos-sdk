@@ -238,6 +238,7 @@ export function SettlementPanel(): ReactNode {
     reversal,
     abandoned,
     resolveAbandoned,
+    pendingRefund,
   } = useLane();
   const [options, setOptions] = useState<PayOptions>(DEFAULT_PAY_OPTIONS);
   // The quick void belongs to the payment it voided: the panel stays mounted across shoppers, so
@@ -274,7 +275,11 @@ export function SettlementPanel(): ReactNode {
   const total = basket.basket?.grandTotal ?? null;
   const running = settlement.status === 'running' || settlement.status === 'awaitingReply';
   // A Refunds-tab reversal also moves money on the session: no payment or void alongside it.
-  const canPay = (basket.basket?.items.length ?? 0) > 0 && reversal === null && abandoned === null;
+  const canPay =
+    (basket.basket?.items.length ?? 0) > 0 &&
+    reversal === null &&
+    abandoned === null &&
+    pendingRefund === null;
   const toggle = (key: keyof PayOptions) => (
     <label className="check" key={key}>
       <input
@@ -329,6 +334,13 @@ export function SettlementPanel(): ReactNode {
             Mark reconciled
           </button>
         </div>
+      ) : null}
+
+      {pendingRefund ? (
+        <p className="small" data-testid="refund-hold">
+          The refund of sale <code>{pendingRefund.sale.sale.id}</code> is incomplete: its return
+          line stays in the basket until the Refunds tab retries it.
+        </p>
       ) : null}
 
       {settlement.status === 'idle' ? (

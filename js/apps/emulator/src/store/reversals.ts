@@ -102,6 +102,12 @@ export function planReferencedRefund(
   };
 }
 
+/** A referenced refund that stopped after committing an allocation, held for its retry. */
+export interface PendingRefund {
+  readonly sale: StoredSale;
+  readonly plan: ReferencedRefundPlan;
+}
+
 /** The refund record a successful referenced-refund settlement leaves behind. */
 export function refundRecordFrom(
   stored: StoredSale,

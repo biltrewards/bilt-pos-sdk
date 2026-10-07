@@ -55,6 +55,7 @@ import {
 } from '../money';
 import type { Settings } from '../settings';
 import { toSaleRecord, type SaleRecord } from '../store/sale-record';
+import type { PendingRefund } from '../store/reversals';
 import type { SaleStore } from '../store/sales-store';
 
 /** What the register chose for this payment; the loyalty flags map onto `SettlementOptions`. */
@@ -147,6 +148,14 @@ export interface LaneValue {
    */
   readonly abandoned: AbandonedSettlementRecord | null;
   resolveAbandoned(): void;
+
+  /**
+   * A referenced refund that stopped after committing an allocation. The session holds its
+   * `RETURN` line and accepts only a retry of the same basket and allocations, so the Sale tab
+   * locks until the Refunds tab's retry settles it.
+   */
+  readonly pendingRefund: PendingRefund | null;
+  setPendingRefund(pending: PendingRefund | null): void;
 }
 
 const LaneContext = createContext<LaneValue | null>(null);
@@ -223,6 +232,7 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
   const [lastSale, setLastSale] = useState<SaleRecord | null>(null);
   const [reversal, setReversal] = useState<string | null>(null);
   const [abandoned, setAbandoned] = useState<AbandonedSettlementRecord | null>(null);
+  const [pendingRefund, setPendingRefund] = useState<PendingRefund | null>(null);
 
   useSessionLogging(session, log);
 
@@ -527,6 +537,8 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
       setReversal,
       abandoned,
       resolveAbandoned,
+      pendingRefund,
+      setPendingRefund,
     }),
     [
       settings,
@@ -556,6 +568,7 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
       reversal,
       abandoned,
       resolveAbandoned,
+      pendingRefund,
     ],
   );
 

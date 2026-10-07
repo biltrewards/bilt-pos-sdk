@@ -198,6 +198,14 @@ describe('the Refunds pane', () => {
     expect(terminal().basket.current.items).toHaveLength(1);
     expect((screen.getByRole('button', { name: 'Void' }) as HTMLButtonElement).disabled).toBe(true);
 
+    // The Sale tab cannot edit the held return line or pay meanwhile.
+    fireEvent.click(screen.getByRole('tab', { name: 'Sale' }));
+    const lamp = () => screen.getByRole('button', { name: /^Desk Lamp/ }) as HTMLButtonElement;
+    expect(lamp().disabled).toBe(true);
+    expect((screen.getByRole('button', { name: /^Pay/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('refund-hold').textContent).toContain('sale-seeded');
+    fireEvent.click(screen.getByRole('tab', { name: 'Refunds' }));
+
     fireEvent.click(within(prompt).getByRole('button', { name: 'Retry the refund' }));
     await waitFor(() =>
       expect(screen.getByTestId('reversal-outcome').textContent).toContain('Refunded'),
@@ -209,6 +217,9 @@ describe('the Refunds pane', () => {
     await waitFor(async () =>
       expect((await store.findSale('sale-seeded'))?.refunds).toHaveLength(1),
     );
+    fireEvent.click(screen.getByRole('tab', { name: 'Sale' }));
+    expect(lamp().disabled).toBe(false);
+    expect(screen.queryByTestId('refund-hold')).toBeNull();
   });
 
   it('voids by OriginalSaleRecord, asking the cashier when a leg fails', async () => {
