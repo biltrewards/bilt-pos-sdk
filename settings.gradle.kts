@@ -56,3 +56,5 @@ include(":emulator:android")
 include(":emulator:desktop")
 
 include(":bridge")
+
+include(":emulator:browser")
