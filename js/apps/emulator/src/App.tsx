@@ -146,7 +146,7 @@ export function App(props: AppProps): ReactNode {
         {(bridge) => (
           <BiltPosProvider key={probeKey} connect={() => connect(probe)}>
             <LaneProvider key={laneKey(settings)} settings={settings} log={log} sales={sales}>
-              <LaneBar />
+              <LaneBar onDisableRetailMedia={() => apply({ ...settings, retailMedia: false })} />
               <section role="tabpanel" hidden={tab !== 'sale'} aria-label="Sale">
                 <SalePane />
               </section>

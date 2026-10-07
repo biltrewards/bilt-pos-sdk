@@ -71,7 +71,10 @@ the legs a stopped void did reverse are kept so a retry omits them. The unrefere
 `refundUnlinked(amount)`.
 
 **Companion display.** `RetailMediaSurface` on the `lane-banner` placement with an explicit "no
-creatives served yet" state (the host's retail media engine is an API skeleton today), the
+creatives served yet" state (the host's retail media engine is an API skeleton today; the
+development bridge goes further and refuses to start a session that asks for the widget at all,
+`UNSUPPORTED: this host has no ad decision service`, so the lane bar offers "Retry without
+retail media", which turns the widget off in the settings), the
 offers the host validated with an "apply as discount" action (also offered as a toast wherever
 you are), pause/resume of the widget, and a customer-display mirror of the basket.
 
