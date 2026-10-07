@@ -158,7 +158,7 @@ describe('the Sale pane', () => {
     expect(screen.getByTestId('settlement-status').textContent).toContain('awaitingReply');
     expect(
       (within(prompt).getByLabelText('External tender amount') as HTMLInputElement).value,
-    ).toBe('0.35');
+    ).toBe('1.75');
 
     fireEvent.click(within(prompt).getByRole('button', { name: 'Retry the step' }));
     await waitFor(() =>
