@@ -110,3 +110,41 @@ val run by
             )
         }
     }
+
+// The bridge is started by scripts/browser-emulator.sh, not as a Gradle
+// JavaExec: a daemon-run bridge cannot reach a LAN terminal on macOS 15+
+// (no Local Network grant), and the script owns startup ordering and cleanup.
+val runWithBridge by
+    tasks.registering(Exec::class) {
+        group = "emulator"
+        description =
+            "Starts a Terminal Bridge and the browser emulator " +
+                "(-PterminalHost=<ip> [-PterminalPort=8443 -PpoiId=DEV-TERMINAL] or -Plocal; " +
+                "-Pport=5173 -PbridgePort=48333 -PnoOpen)"
+        // Build here and let the script skip its own build: a nested gradlew on
+        // the same project would wait on this build's lock.
+        dependsOn(":bridge:installDist", buildPackages)
+        environment("SKIP_BUILD", "1")
+        workingDir = rootProject.layout.projectDirectory.asFile
+        standardInput = System.`in`
+        val terminalHost = providers.gradleProperty("terminalHost")
+        val terminalPort = providers.gradleProperty("terminalPort").orElse("8443")
+        val poiId = providers.gradleProperty("poiId")
+        val local = providers.gradleProperty("local").isPresent
+        val noOpen = providers.gradleProperty("noOpen").isPresent
+        val args = mutableListOf("scripts/browser-emulator.sh")
+        if (local) {
+            args += "--local"
+        } else if (terminalHost.isPresent) {
+            args += listOf("--terminal", "${terminalHost.get()}:${terminalPort.get()}")
+        }
+        if (poiId.isPresent) args += listOf("--poi-id", poiId.get())
+        args += listOf("--port", bridgePort.get(), "--web-port", port.get())
+        if (noOpen) args += "--no-open"
+        commandLine(args)
+        doFirst {
+            check(local || terminalHost.isPresent) {
+                "Pass -PterminalHost=<ip> for a LAN terminal, or -Plocal for local sessions only."
+            }
+        }
+    }
