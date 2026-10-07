@@ -7,6 +7,8 @@ The JavaScript SDK runs a Bilt checkout from a browser page. It is the JavaScrip
 
 This guide covers `@bilt/pos-sdk` (framework-free) and `@bilt/pos-react` (hooks and components). Every sample on this page is compiled from [`js/examples/browser-pos/src/guide-samples`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos/src/guide-samples) in CI, and the [browser POS example](#the-example) puts them together into a register.
 
+> **Using React?** The core, `@bilt/pos-sdk`, works in any framework or none; the [plain TypeScript example](#the-example) uses nothing else. React apps add `@bilt/pos-react` for `BiltPosProvider`, the session, basket, member and settlement hooks, `BridgeGate` and `InstallBridgePrompt`, and `RetailMediaSurface` (see [React](#react)). The [browser POS example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) and the [browser emulator](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) are the React references.
+
 ---
 
 ## Before you begin
