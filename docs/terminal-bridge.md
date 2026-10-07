@@ -3,7 +3,7 @@
 
 # Terminal Bridge — Setup Guide
 
-The Terminal Bridge is a small menu-bar application that runs on the register machine, embeds the Java SDK and the Session Host (`:host`), and serves them on `127.0.0.1` so a browser-based POS page can drive a Bilt terminal on the store LAN. The page never sees the terminal's address, certificate or payload passphrase; it talks the Session Protocol (HTTP, Server-Sent Events and WebSocket) to the bridge, and the bridge speaks Nexo over HTTPS to the terminal. The page side is the [JavaScript SDK](./javascript-sdk-integration.md); the wire contract is the [Session Protocol reference](./session-protocol-reference.html).
+The Terminal Bridge is a small menu-bar application that runs on the register machine, embeds the Java SDK and the Session Host (`:host`), and serves them on `127.0.0.1` so a browser-based POS page can drive a Bilt terminal on the store LAN. The page never sees the terminal's address, certificate or payload passphrase; it talks the Session Protocol (HTTP, Server-Sent Events and WebSocket) to the bridge, and the bridge speaks Nexo over HTTPS to the terminal. The page side is the [JavaScript & React SDK](./javascript-sdk-integration.md); the wire contract is the [Session Protocol reference](./session-protocol-reference.html).
 
 The design is in Notion: *Bilt POS SDK — Terminal Bridge, Session Protocol & JavaScript SDK (Design)*. This page covers the **development-mode** bridge in this repository: configuration from a local file, no pairing, no authentication, macOS packaging only.
 
@@ -196,6 +196,6 @@ The Session Host alone, without the tray, runs from `./gradlew :host:run --args=
 
 ## Next steps
 
-- [JavaScript SDK Integration Guide](./javascript-sdk-integration.md) — the page side: sessions, basket, settlement, widgets and the React hooks.
+- [JavaScript & React SDK Integration Guide](./javascript-sdk-integration.md) — the page side: sessions, basket, settlement, widgets and the React hooks.
 - [Session Protocol Reference](./session-protocol-reference.html) — every request and event the bridge serves.
 - [TerminalShopperSession Integration Guide](./checkout-session-integration.md) — the Java engine the bridge embeds, for what each operation does on the terminal.

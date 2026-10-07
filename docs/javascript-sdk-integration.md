@@ -1,7 +1,7 @@
 ---
 ---
 
-# JavaScript SDK — Integration Guide
+# JavaScript & React SDK — Integration Guide
 
 The JavaScript SDK runs a Bilt checkout from a browser page. It is the JavaScript form of [`ShopperSession`](./shopper-session-integration.md) and [`TerminalShopperSession`](./checkout-session-integration.md): the same basket, member, context, settlement, reversal and widget vocabulary, over a **host** that embeds the Java SDK and does the terminal work. Today that host is the [Terminal Bridge](./terminal-bridge.md) on the register machine; later it is also the Cloud Session Service, behind the same API.
 
