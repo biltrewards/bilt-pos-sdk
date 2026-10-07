@@ -199,10 +199,10 @@ sequenceDiagram
     T->>A: Authorization
     Note over P: Request timeout<br/>(no response)
     Note over T,A: Processing timeout<br/>(no acquirer response)
-    Note over T,A: User action timeout<br/>(shopper inaction)
+    Note over T: User action timeout<br/>(shopper inaction)
     P->>T: InputRequest
     Note over P: (MaxInputTime=30)
-    Note over T,A: Input timeout<br/>(MaxInputTime expired)
+    Note over T: Input timeout<br/>(MaxInputTime expired)
 ```
 
 | Timeout | Duration | Payment/input processed? | Safe to retry? | ErrorCondition |
