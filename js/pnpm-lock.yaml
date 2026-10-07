@@ -125,6 +125,25 @@ importers:
         specifier: ^8.3.3
         version: 8.3.3(@types/node@20.19.43)(esbuild@0.27.7)
 
+  examples/vanilla-ts:
+    dependencies:
+      '@bilt/pos-protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@bilt/pos-sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^20.19.0
+        version: 20.19.43
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
+      vite:
+        specifier: ^8.3.3
+        version: 8.3.3(@types/node@20.19.43)(esbuild@0.27.7)
+
   packages/protocol:
     dependencies:
       openapi-fetch:
