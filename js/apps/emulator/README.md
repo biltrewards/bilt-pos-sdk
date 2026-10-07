@@ -12,6 +12,27 @@ this app and lists the deliberate differences.
 
 ## Run it
 
+One command starts a Terminal Bridge and the emulator together, from the repository root:
+
+```sh
+./gradlew :emulator:browser:runWithBridge -PterminalHost=192.168.4.108   # a LAN terminal
+./gradlew :emulator:browser:runWithBridge -Plocal                        # local sessions only
+scripts/browser-emulator.sh --terminal 192.168.4.108                     # same, without Gradle
+scripts/browser-emulator.sh --local
+```
+
+Both write a development bridge config (the terminal unencrypted with `trustAll`, as development
+terminals accept), start the bridge, wait for its `/health`, start the dev server on
+`http://127.0.0.1:5173` and open it; Ctrl-C stops both. Options: `-PterminalPort` / `--terminal ip:port`
+(default 8443), `-PpoiId` / `--poi-id` (default `DEV-TERMINAL`), `-PbridgePort` / `--port`
+(default 48333), `-Pport` / `--web-port` (default 5173), `-PnoOpen` / `--no-open`.
+`SKIP_BUILD=1 scripts/browser-emulator.sh ...` skips rebuilding the bridge and the JS packages.
+
+`./gradlew :emulator:browser:run` starts only the dev server, next to
+`./gradlew :emulator:desktop:run` for the Compose emulator, when a bridge is already running.
+
+### Manually
+
 Start a host first: the [Terminal Bridge](../../../docs/terminal-bridge.md) on this machine
 (`./gradlew :bridge:run --args="--config /path/to/config.json"`; without a terminal it still serves
 local sessions), or the Session Host alone. Then:

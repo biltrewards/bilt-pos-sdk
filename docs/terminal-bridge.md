@@ -173,6 +173,8 @@ Two browser-side caveats in this iteration:
 
 `-Dbilt.bridge.dir=/some/dir` pins both the config and the log directory, which keeps a development instance away from the installed one.
 
+To try the bridge with a register right away, the browser emulator starts both: `./gradlew :emulator:browser:runWithBridge -PterminalHost=<terminal ip>` (or `-Plocal` without a terminal), or `scripts/browser-emulator.sh --terminal <terminal ip>` without Gradle. See [`js/apps/emulator`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) for the options.
+
 The Session Host alone, without the tray, runs from `./gradlew :host:run --args=dev-host.json`; its config format is the host's own and documented on the [Session Host](./session-host.html) page.
 
 ### Packaging details

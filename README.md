@@ -100,7 +100,7 @@ BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
 
 A web page cannot reach a Bilt terminal itself, so browser-based registers talk the Session Protocol to a host that embeds this SDK: the [Terminal Bridge](docs/terminal-bridge.md) on the register machine. The [JavaScript & React SDK](docs/javascript-sdk-integration.md) (`@bilt/pos-sdk`, `@bilt/pos-react`, under [`js/`](js/)) mirrors `ShopperSession` and `TerminalShopperSession` over it, and [`js/examples/browser-pos`](js/examples/browser-pos) is a complete register built on it. The wire contract is the [Session Protocol reference](docs/session-protocol-reference.html).
 
-Two emulators exercise the SDK end to end against a terminal: the Compose desktop and Android emulator in [`emulator/`](emulator/) over the Java SDK, and the browser register emulator in [`js/apps/emulator`](js/apps/emulator) over the JavaScript SDK and the Terminal Bridge, with the same catalog, tax policy and persisted sales for refunds and voids.
+Two emulators exercise the SDK end to end against a terminal: the Compose desktop and Android emulator in [`emulator/`](emulator/) over the Java SDK, and the browser register emulator in [`js/apps/emulator`](js/apps/emulator) over the JavaScript SDK and the Terminal Bridge, with the same catalog, tax policy and persisted sales for refunds and voids. Start them with `./gradlew :emulator:desktop:run` and `./gradlew :emulator:browser:runWithBridge -PterminalHost=<terminal ip>` (or `-Plocal`, or `scripts/browser-emulator.sh`).
 
 ## Build
 
