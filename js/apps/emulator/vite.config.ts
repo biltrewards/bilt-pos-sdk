@@ -8,7 +8,11 @@ import { defineConfig } from 'vitest/config';
 // points the SDK at this page's own origin and Vite forwards `/health` and `/v1` (HTTP and
 // WebSocket) to the bridge. `BRIDGE_URL` overrides the target, e.g. when the bridge fell back
 // to port 48334; the "direct" route uses the port from the Settings pane instead.
-const bridge = process.env.BRIDGE_URL ?? 'http://127.0.0.1:48333';
+// `VITE_BILT_BRIDGE_PORT` (what the Gradle and script launchers set, and the page's default for
+// the direct route) moves the target the same way when `BRIDGE_URL` is absent.
+const bridge =
+  process.env.BRIDGE_URL ??
+  `http://127.0.0.1:${process.env.VITE_BILT_BRIDGE_PORT ?? '48333'}`;
 
 const sibling = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 

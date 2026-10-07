@@ -31,6 +31,9 @@ export interface Settings {
 
 export const STORAGE_KEY = 'bilt-pos-emulator.settings';
 
+/** The bridge's own default port; `VITE_BILT_BRIDGE_PORT` at build time moves the default. */
+const DEFAULT_BRIDGE_PORT = 48333;
+
 /**
  * The defaults. The lane identity (sale id, currency, store) is configuration, as on the desktop
  * emulator, which reads it from its environment: `VITE_SALE_ID`, `VITE_CURRENCY` and
@@ -43,7 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   currency: import.meta.env.VITE_CURRENCY ?? 'USD',
   storeLocation: import.meta.env.VITE_STORE_LOCATION ?? 'STR-0142',
   bridge: import.meta.env.DEV ? 'proxy' : 'direct',
-  bridgePort: 48333,
+  bridgePort: port(import.meta.env.VITE_BILT_BRIDGE_PORT, DEFAULT_BRIDGE_PORT),
 };
 
 function text(value: unknown, fallback: string): string {
