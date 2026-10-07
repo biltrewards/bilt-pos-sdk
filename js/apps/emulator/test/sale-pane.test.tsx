@@ -118,15 +118,15 @@ describe('the Sale pane', () => {
       expect(screen.getByTestId('settlement-status').textContent).toContain('succeeded'),
     );
     const result = screen.getByTestId('settlement-result');
-    // The double's rebate leaves the line totals alone, so re-taxing gives the rung total back.
-    expect(result.textContent).toContain('Authorized$37.31');
-    expect(result.textContent).toContain('CARD_CHARGE $37.31');
+    // The double's 2.00 rebate is cart-level, so it comes off the re-taxed total.
+    expect(result.textContent).toContain('Authorized$35.31');
+    expect(result.textContent).toContain('CARD_CHARGE $35.31');
     expect(localStorage.getItem(PENDING_STEP_KEY)).toBeNull();
     expect(session().context.phase()).toBe('COMPLETE');
 
     await waitFor(async () => expect(await store.listSales()).toHaveLength(1));
     const [sale] = await store.listSales();
-    expect(sale?.sale).toMatchObject({ authorizedAmount: '37.31', poiId: 'VictaLane-275839164' });
+    expect(sale?.sale).toMatchObject({ authorizedAmount: '35.31', poiId: 'VictaLane-275839164' });
     expect(sale?.sale.legs.map((leg) => leg.type)).toEqual(['CARD']);
     expect(screen.getByText(/Recorded as sale/)).toBeTruthy();
 
@@ -144,8 +144,8 @@ describe('the Sale pane', () => {
 
   it('holds a charge-side failure open for the cashier with a countdown and retries on request', async () => {
     const { terminal } = await renderApp();
-    fireEvent.click(screen.getByRole('button', { name: /Banana/ }));
-    await waitFor(() => expect(grandTotal()).toContain('0.35'));
+    fireEvent.click(screen.getByRole('button', { name: /Coffee/ }));
+    await waitFor(() => expect(grandTotal()).toContain('3.75'));
     terminal().failNextChargeWith = new SessionError({
       code: 'DECLINED',
       message: 'Card declined',
@@ -170,8 +170,8 @@ describe('the Sale pane', () => {
 
   it('records an external tender for the amount due when the cashier took cash', async () => {
     const { terminal } = await renderApp();
-    fireEvent.click(screen.getByRole('button', { name: /Banana/ }));
-    await waitFor(() => expect(grandTotal()).toContain('0.35'));
+    fireEvent.click(screen.getByRole('button', { name: /Coffee/ }));
+    await waitFor(() => expect(grandTotal()).toContain('3.75'));
     terminal().failNextChargeWith = new SessionError({ code: 'TIMEOUT', message: 'No answer' });
     fireEvent.click(screen.getByRole('button', { name: /^Pay/ }));
     const prompt = await screen.findByRole('alertdialog', { name: 'Payment step failed' });

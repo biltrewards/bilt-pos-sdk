@@ -36,20 +36,24 @@ export function parseMoney(input: string, allowZero = false): Money | undefined 
  * `TOTAL_REQUIRED` step after rebates: the host's suggested total is the previous total minus
  * the rebates, which keeps tax on the undiscounted price, whereas the register taxes what the
  * shopper actually pays. Lines without a rate keep the tax amount they were rung with. Return
- * and credit lines arrive with negative totals from the host, so no sign is applied here.
+ * and credit lines arrive with negative totals from the host, so no sign is applied here. A
+ * rebate the terminal granted at cart level, not on any line, comes off the end.
  */
 export function recomputeTotal(basket: Basket): Money {
   let goods = 0;
   let tax = 0;
+  let lineRebates = 0;
   for (const line of basket.items) {
     const adjusted = cents(line.adjustedTotal);
     goods += adjusted;
+    lineRebates += cents(line.rebateAmount);
     tax +=
       line.taxRate === undefined
         ? cents(line.taxAmount)
         : Math.round(adjusted * Number(line.taxRate));
   }
-  return money(Math.max(0, goods + tax));
+  const cartRebate = Math.max(0, cents(basket.rebateTotal) - lineRebates);
+  return money(Math.max(0, goods + tax - cartRebate));
 }
 
 /** The discount an offer is worth on a line: its fixed amount, or its percentage of the line's subtotal, never more than the line. */

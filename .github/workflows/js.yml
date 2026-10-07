@@ -115,3 +115,7 @@ jobs:
       - name: Contract tests against the Session Host
         if: steps.host.outputs.present == 'true'
         run: pnpm --filter @bilt/pos-sdk test:contract
+
+      - name: Emulator smoke test against the Session Host
+        if: steps.host.outputs.present == 'true'
+        run: pnpm --filter @bilt/pos-emulator test:contract

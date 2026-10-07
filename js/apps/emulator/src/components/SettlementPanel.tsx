@@ -10,7 +10,7 @@ import {
 import { useState, type ReactNode } from 'react';
 import { DEFAULT_PAY_OPTIONS, useLane, type PayOptions } from '../lane/LaneProvider';
 import { describeError, track } from '../log';
-import { formatMoney, parseMoney } from '../money';
+import { cents, formatMoney, parseMoney } from '../money';
 import { Countdown } from './Countdown';
 
 /**
@@ -141,7 +141,7 @@ function ResultSummary({ result, currency }: { result: SettlementResult; currenc
         {result.approvalCode ? ` · approval ${result.approvalCode}` : ''}
         {result.poiTransactionId ? ` · txn ${result.poiTransactionId}` : ''}
       </dd>
-      {result.storedValueAmountUsed !== '0.00' ? (
+      {cents(result.storedValueAmountUsed) !== 0 ? (
         <>
           <dt>Gift card</dt>
           <dd>
@@ -152,19 +152,19 @@ function ResultSummary({ result, currency }: { result: SettlementResult; currenc
           </dd>
         </>
       ) : null}
-      {result.storedValueLoadedAmount !== '0.00' ? (
+      {cents(result.storedValueLoadedAmount) !== 0 ? (
         <>
           <dt>Gift cards loaded</dt>
           <dd>{fmt(result.storedValueLoadedAmount)}</dd>
         </>
       ) : null}
-      {result.externalPaymentAmount !== '0.00' ? (
+      {cents(result.externalPaymentAmount) !== 0 ? (
         <>
           <dt>Paid externally</dt>
           <dd>{fmt(result.externalPaymentAmount)}</dd>
         </>
       ) : null}
-      {result.totalRebateAmount !== '0.00' ? (
+      {cents(result.totalRebateAmount) !== 0 ? (
         <>
           <dt>Rebates</dt>
           <dd>
@@ -183,7 +183,7 @@ function ResultSummary({ result, currency }: { result: SettlementResult; currenc
           </dd>
         </>
       ) : null}
-      {result.cardRefundedAmount !== '0.00' || result.storedValueRefundedAmount !== '0.00' ? (
+      {cents(result.cardRefundedAmount) !== 0 || cents(result.storedValueRefundedAmount) !== 0 ? (
         <>
           <dt>Refunded</dt>
           <dd>

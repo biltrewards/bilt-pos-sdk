@@ -188,7 +188,7 @@ function leg(
       type,
       poiTransactionId: id,
       ...(timestamp === undefined ? {} : { poiTimestamp: timestamp }),
-      ...(amount === undefined ? {} : { amount }),
+      ...(amount === undefined ? {} : { amount: money(cents(amount)) }),
       ...extra,
     },
   ];
@@ -252,7 +252,7 @@ export function toSaleRecord(result: SettlementResult, context: SaleContext): Sa
       ? [
           {
             basketReference: movement.target.basketReference,
-            amount: movement.amount,
+            amount: money(cents(movement.amount)),
             poiTransactionId: movement.poiTransactionId,
             ...(movement.poiTransactionTimestamp === undefined
               ? {}
@@ -284,12 +284,12 @@ export function toSaleRecord(result: SettlementResult, context: SaleContext): Sa
     completedAt: context.completedAt.toISOString(),
     ...(context.memberId === undefined ? {} : { memberId: context.memberId }),
     items,
-    authorizedAmount: result.authorizedAmount,
+    authorizedAmount: money(cents(result.authorizedAmount)),
     pointsRedeemed: result.pointsRedeemed,
     totalPointsEarned: result.totalPointsEarned,
     legs,
     giftCardLoads,
-    externalPaymentAmount: result.externalPaymentAmount,
+    externalPaymentAmount: money(cents(result.externalPaymentAmount)),
   };
 }
 

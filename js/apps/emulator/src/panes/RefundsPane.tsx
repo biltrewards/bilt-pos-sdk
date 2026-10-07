@@ -12,7 +12,7 @@ import { Countdown } from '../components/Countdown';
 import { ReceiptView } from '../components/SettlementPanel';
 import { useLane } from '../lane/LaneProvider';
 import { describeError, track } from '../log';
-import { formatMoney, parseMoney } from '../money';
+import { cents, formatMoney, parseMoney } from '../money';
 import {
   defaultReversalDecision,
   linkedRefundRecord,
@@ -114,7 +114,7 @@ function SaleCard({
       </div>
       <p className="small muted">
         <code>{sale.id}</code> · session {sale.sessionId} · {sale.items.length} item(s)
-        {sale.externalPaymentAmount !== '0.00' && sale.externalPaymentAmount !== '0'
+        {cents(sale.externalPaymentAmount) !== 0
           ? ` · cash ${formatMoney(sale.externalPaymentAmount, currency)} (refund manually)`
           : ''}
       </p>
