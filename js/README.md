@@ -5,12 +5,13 @@ terminal itself, so these packages speak the [Session Protocol](../schema/sessio
 to a host that embeds the Java SDK — the Terminal Bridge on the register machine today, the
 Cloud Session Service later.
 
-| Package              | Contents                                                                                                                                                                                                  |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@bilt/pos-protocol` | Types and a typed `fetch` client generated from `schema/session-protocol/openapi.yaml`; the TypeScript domain model.                                                                                      |
-| `@bilt/pos-sdk`      | The SDK: `BiltPos`, `ShopperSession`, `TerminalShopperSession`, settlement handlers, `Operation`, errors; `@bilt/pos-sdk/bridge` is the Terminal Bridge engine, `@bilt/pos-sdk/internal` the engine seam. |
-| `@bilt/pos-react`    | React bindings: `BiltPosProvider`, session, basket, member and settlement hooks, `RetailMediaSurface`; `@bilt/pos-react/bridge` has `useBridge`, `InstallBridgePrompt` and `BridgeGate`.                  |
-| `browser-pos`        | `examples/browser-pos`: the reference register, a Vite + React page over the packages above; also holds the compiled samples of the [JavaScript SDK guide](../docs/javascript-sdk-integration.md).        |
+| Package              | Contents                                                                                                                                                                                                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@bilt/pos-protocol` | Types and a typed `fetch` client generated from `schema/session-protocol/openapi.yaml`; the TypeScript domain model.                                                                                                                                      |
+| `@bilt/pos-sdk`      | The SDK: `BiltPos`, `ShopperSession`, `TerminalShopperSession`, settlement handlers, `Operation`, errors; `@bilt/pos-sdk/bridge` is the Terminal Bridge engine, `@bilt/pos-sdk/internal` the engine seam.                                                 |
+| `@bilt/pos-react`    | React bindings: `BiltPosProvider`, session, basket, member and settlement hooks, `RetailMediaSurface`; `@bilt/pos-react/bridge` has `useBridge`, `InstallBridgePrompt` and `BridgeGate`.                                                                  |
+| `browser-pos`        | `examples/browser-pos`: the reference register, a Vite + React page over the packages above; also holds the compiled samples of the [JavaScript SDK guide](../docs/javascript-sdk-integration.md).                                                        |
+| `@bilt/pos-emulator` | `apps/emulator`: the browser register emulator, the counterpart of the Compose emulator in `../emulator`; every feature of the checkout contract, with a contract smoke test against the Session Host (`pnpm --filter @bilt/pos-emulator test:contract`). |
 
 ## Working in the workspace
 
