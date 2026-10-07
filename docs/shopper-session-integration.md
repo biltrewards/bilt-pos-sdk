@@ -30,22 +30,33 @@ Make sure you have:
 - **Nothing a widget does blocks the register.** Widget work runs on the session's own threads under timeouts. A slow or unreachable platform shows up as an empty placement, and failures go to one handler, `onBackgroundError`. A session with no widgets behaves exactly as a session did before widgets existed.
 - **Local calls are local.** Basket, member and context updates are pure local compute that return immediately, so they are safe to call from the register's UI thread. Only terminal operations (on `TerminalShopperSession`) go over the wire, and those are [lazy](./checkout-session-integration.md#lazy-execution).
 
-```
-Register (POS)                  ShopperSession                  Widgets (e.g. RetailMedia)
-   │                                 │                                 │
-   │ ── builder()…start() ─────────> │ ── attach(host), started ─────> │ registers the visit
-   │ <── session ─────────────────── │                                 │ with its platform
-   │                                 │                                 │
-   │ ── basket().replace(cart) ────> │ diff against current basket     │
-   │ <── Basket ──────────────────── │ ── basketChanged(diff) ───────> │
-   │ ── member(Member...) ─────────> │ ── memberChanged ─────────────> │
-   │ ── context().phase(...) ──────> │ ── contextChanged ────────────> │
-   │                                 │                                 │ ── Surface.show(...)
-   │                                 │                                 │    shopper taps a CTA
-   │ <── onOffer(offer) ──────────────────────────────────────────────── │ token validated
-   │     apply in register pricing   │                                 │
-   │                                 │                                 │
-   │ ── end() ─────────────────────> │ ── ended, detach ─────────────> │ closes the visit
+```mermaid
+sequenceDiagram
+    participant R as Register (POS)
+    participant S as ShopperSession
+    participant W as Widgets (e.g. RetailMedia)
+
+    R->>S: builder()…start()
+    S->>W: attach(host), started
+    Note right of W: registers the visit<br/>with its platform
+    S-->>R: session
+
+    R->>S: basket().replace(cart)
+    Note over S: diff against current basket
+    S-->>R: Basket
+    S->>W: basketChanged(diff)
+    R->>S: member(Member...)
+    S->>W: memberChanged
+    R->>S: context().phase(...)
+    S->>W: contextChanged
+    Note right of W: Surface.show(...)<br/>shopper taps a CTA
+    W-->>R: onOffer(offer)
+    Note right of W: token validated
+    Note over R: apply in register pricing
+
+    R->>S: end()
+    S->>W: ended, detach
+    Note right of W: closes the visit
 ```
 
 ---

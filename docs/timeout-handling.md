@@ -189,22 +189,20 @@ No response is received. The POS must assume the transaction status is unknown.
 
 ## Timeout summary
 
-```
-POS                    Terminal                  Acquirer
- |                       |                        |
- |--- PaymentRequest --->|                        |
- |                       |--- Authorization ------>|
- |                       |                        |
- |  Request timeout      |  Processing timeout    |
- |  (no response)        |  (no acquirer response)|
- |                       |                        |
- |                       |  User action timeout   |
- |                       |  (shopper inaction)    |
- |                       |                        |
- |--- InputRequest ----->|                        |
- |  (MaxInputTime=30)    |                        |
- |                       |  Input timeout         |
- |                       |  (MaxInputTime expired)|
+```mermaid
+sequenceDiagram
+    participant P as POS
+    participant T as Terminal
+    participant A as Acquirer
+
+    P->>T: PaymentRequest
+    T->>A: Authorization
+    Note over P: Request timeout<br/>(no response)
+    Note over T,A: Processing timeout<br/>(no acquirer response)
+    Note over T,A: User action timeout<br/>(shopper inaction)
+    P->>T: InputRequest
+    Note over P: (MaxInputTime=30)
+    Note over T,A: Input timeout<br/>(MaxInputTime expired)
 ```
 
 | Timeout | Duration | Payment/input processed? | Safe to retry? | ErrorCondition |

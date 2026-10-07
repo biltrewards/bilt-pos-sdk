@@ -33,19 +33,32 @@ pnpm add @bilt/pos-react react                    # the React layer, optional
 - **Engines differ in capabilities, not in API.** `localBridge()` and, later, `cloud(...)` are engines behind one `BiltPos`. Whether a settlement survives a page reload or works through an internet outage is data on `pos.capabilities`, not a different method.
 - **Widgets run on the host; the page renders.** The host decides what the retail-media placement shows and validates every tap. The page draws `widget.rendering` events (or lets `RetailMediaSurface` do it) and acts on `widget.offer`.
 
-```
-POS page (@bilt/pos-react)          Host (Terminal Bridge: Java SDK)         Bilt terminal (LAN)
-   │                                      │                                       │
-   │ ── GET /health ────────────────────> │  bridge detection, protocol version    │
-   │ ── POST /v1/sessions ──────────────> │ ── Admin(SessionStart) ─────────────> │
-   │ <── session + event stream ───────── │ <── acknowledged ───────────────────── │
-   │ ── POST .../basket/items ──────────> │  basket.changed ──> customer display   │
-   │ ── PUT .../member (resolver) ──────> │  member.changed (lookup on terminal)   │
-   │ ── POST .../operations {settle} ───> │ ── rebates, points, card, award ─────> │
-   │ <── operation.step TOTAL_REQUIRED ── │     (waits, with a deadline)           │
-   │ ── POST .../reply {total} ─────────> │ ── continues ───────────────────────> │
-   │ <── operation.completed ─────────── │ <── receipts ──────────────────────── │
-   │ ── DELETE /v1/sessions/{id} ───────> │ ── Admin(SessionEnd) ───────────────> │
+```mermaid
+sequenceDiagram
+    participant P as POS page (@bilt/pos-react)
+    participant H as Host (Terminal Bridge: Java SDK)
+    participant T as Bilt terminal (LAN)
+
+    P->>H: GET /health
+    Note right of H: bridge detection, protocol version
+    P->>H: POST /v1/sessions
+    H->>T: Admin(SessionStart)
+    T-->>H: acknowledged
+    H-->>P: session + event stream
+    P->>H: POST .../basket/items
+    Note right of H: basket.changed → customer display
+    P->>H: PUT .../member (resolver)
+    Note right of H: member.changed (lookup on terminal)
+    P->>H: POST .../operations {settle}
+    H->>T: rebates, points, card, award
+    H-->>P: operation.step TOTAL_REQUIRED
+    Note over H: (waits, with a deadline)
+    P->>H: POST .../reply {total}
+    H->>T: continues
+    T-->>H: receipts
+    H-->>P: operation.completed
+    P->>H: DELETE /v1/sessions/{id}
+    H->>T: Admin(SessionEnd)
 ```
 
 ---

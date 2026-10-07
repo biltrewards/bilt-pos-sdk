@@ -46,35 +46,50 @@ Loyalty is where a checkout gets complicated: identifying the member, looking up
 
 ## The end-to-end flow
 
-```
-Register                    TerminalShopperSession           Terminal (POI)
-   │                              │                                │
-   │ ── builder().start()…get() > │ ── Admin(SessionStart) ──────> │  session announced
-   │ <── started session ──────── │                                │
-   │                              │                                │
-   │ ── addItem(item) ──────────> │ upsert into basket             │
-   │                              │ ── DisplayRequest ───────────> │  (auto-display)
-   │ <── updated Basket ───────── │                                │
-   │        … repeat per scan / tax change …                       │
-   │                              │                                │
-   │ ── settle()…execute() ───────> │                                │
-   │                              │ ── LoyaltyRequest(Rebate) ───> │  offers committed
-   │ <── onRebatesRedeemed ────── │                                │
-   │ ─── updated total ─────────> │                                │
-   │                              │ ── LoyaltyRequest(Redemption)> │  points redeemed
-   │ <── onPointsRedeemed ─────── │                                │
-   │ ─── updated total ─────────> │                                │
-   │                              │ ── PaymentRequest ───────────> │  gift card charged
-   │ <── onGiftCardPayment ────── │    (StoredValue instrument,    │
-   │ ─── updated total ─────────> │     if a card was registered)  │
-   │                              │                                │
-   │                              │ ── PaymentRequest ───────────> │  card approved
-   │                              │ ── StoredValueRequest ──────> │  purchased cards activated/loaded
-   │                              │ ── LoyaltyRequest(Award) ────> │  points earned (SAF)
-   │                              │ ── DisplayRequest (receipt) ─> │
-   │ <── onSuccess(result) ────── │                                │
-   │                              │                                │
-   │ ── end()…execute() ────────> │ ── Admin(SessionEnd) ────────> │  session data discarded
+```mermaid
+sequenceDiagram
+    participant R as Register
+    participant S as TerminalShopperSession
+    participant T as Terminal (POI)
+
+    R->>S: builder().start()…get()
+    S->>T: Admin(SessionStart)
+    Note right of T: session announced
+    S-->>R: started session
+
+    R->>S: addItem(item)
+    Note over S: upsert into basket
+    S->>T: DisplayRequest
+    Note right of T: (auto-display)
+    S-->>R: updated Basket
+    Note over R,T: … repeat per scan / tax change …
+
+    R->>S: settle()…execute()
+    S->>T: LoyaltyRequest(Rebate)
+    Note right of T: offers committed
+    S-->>R: onRebatesRedeemed
+    R->>S: updated total
+    S->>T: LoyaltyRequest(Redemption)
+    Note right of T: points redeemed
+    S-->>R: onPointsRedeemed
+    R->>S: updated total
+    S->>T: PaymentRequest<br/>(StoredValue instrument, if a card was registered)
+    Note right of T: gift card charged
+    S-->>R: onGiftCardPayment
+    R->>S: updated total
+
+    S->>T: PaymentRequest
+    Note right of T: card approved
+    S->>T: StoredValueRequest
+    Note right of T: purchased cards activated/loaded
+    S->>T: LoyaltyRequest(Award)
+    Note right of T: points earned (SAF)
+    S->>T: DisplayRequest (receipt)
+    S-->>R: onSuccess(result)
+
+    R->>S: end()…execute()
+    S->>T: Admin(SessionEnd)
+    Note right of T: session data discarded
 ```
 
 The terminal forwards loyalty requests to POS Loyalty for offer evaluation, redemption, and award; when loyalty is briefly unreachable the award is stored and forwarded by the terminal.
