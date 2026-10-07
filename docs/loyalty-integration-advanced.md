@@ -43,7 +43,7 @@ sequenceDiagram
 
 Each `LoyaltyRequest` is an independent, individually-reversible transaction with its own `SaleTransactionID` and its own `POITransactionID`. Keep every `POITransactionID` until the sale is settled — they are the handles the reversal paths need.
 
-```
+```text
 Final amount = basket total − TotalRebate − per-item rebates − redeemed point value
 ```
 

@@ -220,7 +220,7 @@ For general guidance on handling failed requests, see [Handle responses](./error
 
 Rebates (and any [point redemption](./loyalty-redeem-points.md)) are committed **before** payment. Compute the final amount as:
 
-```
+```text
 Final amount = TotalAmount − TotalRebate − per-item rebates − redeemed point value
 ```
 

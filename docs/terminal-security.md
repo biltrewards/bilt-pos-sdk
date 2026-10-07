@@ -26,7 +26,7 @@ The terminal runs an HTTPS server on **port 8443**. Because POS terminals operat
 
 Each terminal certificate uses a synthetic hostname as its Subject Alternative Name (SAN):
 
-```
+```text
 {Model}-{Serial}.live.pos.bilt.com       (production)
 {Model}-{Serial}.pos.staging.bilt.dev    (staging)
 ```

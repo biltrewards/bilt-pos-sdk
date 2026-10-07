@@ -100,7 +100,7 @@ Full field reference: [Redeem loyalty points](./loyalty-redeem-points.md).
 
 Send the [`PaymentRequest`](./make-payment.md) for the reduced amount, with `PaymentTransaction.TransactionConditions.LoyaltyHandling` set to `Processed` — loyalty was already handled by the standalone redemption, so the payment must not attempt any of its own.
 
-```
+```text
 Final amount = basket total − redeemed point value
 ```
 

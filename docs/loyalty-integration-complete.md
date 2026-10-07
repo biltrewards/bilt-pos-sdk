@@ -109,7 +109,7 @@ Read `LoyaltyResult[0].LoyaltyAmount` and keep `POITransactionID` exactly as in 
 
 Unchanged from the minimal flow: send the [`PaymentRequest`](./make-payment.md) for the reduced amount with `PaymentTransaction.TransactionConditions.LoyaltyHandling` set to `Processed`, then close the bracket with [session End](./session-start-end.md).
 
-```
+```text
 Final amount = basket total − TotalRebate − per-item rebates − redeemed point value
 ```
 
