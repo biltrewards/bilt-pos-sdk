@@ -58,7 +58,7 @@ val client = BiltNexoTerminalClient(
 
 **CLI**
 
-```
+```bash
 scripts/terminal-cli.sh 192.168.1.100 --type payment --no-recover-on-network-error
 ```
 

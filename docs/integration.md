@@ -9,7 +9,7 @@ The Nexo Terminal API Java client (`BiltNexoTerminalClient`) is a client library
 
 The terminal exposes a single HTTPS endpoint:
 
-```
+```text
 POST https://<device_local_ip_address>:8443/nexo
 Content-Type: application/json
 ```

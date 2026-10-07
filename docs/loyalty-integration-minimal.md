@@ -16,23 +16,31 @@ One code path, guests and members alike.
 
 ## The flow
 
-```
-Register                                            Terminal (POI)
-   │ ── AdminRequest (BiltSession,Start) ─────────────> │  session scope opened
-   │ <── AdminResponse (Success) ────────────────────── │
-   │                                                    │
-   │ ── DisplayRequest (virtual receipt) ─────────────> │  basket shown; customer
-   │ <── DisplayResponse ────────────────────────────── │  may sign in meanwhile
-   │        … repeat on every basket change …           │
-   │                                                    │
-   │ ── LoyaltyRequest (Redemption) ──────────────────> │  customer's points applied
-   │ <── LoyaltyResponse (monetary value, or 0.00) ──── │
-   │                                                    │
-   │ ── PaymentRequest (final amount) ────────────────> │  card payment
-   │ <── PaymentResponse ────────────────────────────── │
-   │                                                    │
-   │ ── AdminRequest (BiltSession,End) ───────────────> │  session state discarded
-   │ <── AdminResponse ──────────────────────────────── │
+```mermaid
+sequenceDiagram
+    participant R as Register
+    participant T as Terminal (POI)
+
+    R->>T: AdminRequest (BiltSession,Start)
+    Note right of T: session scope opened
+    T-->>R: AdminResponse (Success)
+
+    R->>T: DisplayRequest (virtual receipt)
+    Note right of T: basket shown#59; customer<br/>may sign in meanwhile
+    T-->>R: DisplayResponse
+    Note over R,T: … repeat on every basket change …
+
+    R->>T: LoyaltyRequest (Redemption)
+    Note right of T: customer's points applied
+    T-->>R: LoyaltyResponse (monetary value, or 0.00)
+
+    R->>T: PaymentRequest (final amount)
+    Note right of T: card payment
+    T-->>R: PaymentResponse
+
+    R->>T: AdminRequest (BiltSession,End)
+    Note right of T: session state discarded
+    T-->>R: AdminResponse
 ```
 
 ---
@@ -92,7 +100,7 @@ Full field reference: [Redeem loyalty points](./loyalty-redeem-points.md).
 
 Send the [`PaymentRequest`](./make-payment.md) for the reduced amount, with `PaymentTransaction.TransactionConditions.LoyaltyHandling` set to `Processed` — loyalty was already handled by the standalone redemption, so the payment must not attempt any of its own.
 
-```
+```text
 Final amount = basket total − redeemed point value
 ```
 

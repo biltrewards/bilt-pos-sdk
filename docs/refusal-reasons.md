@@ -9,7 +9,7 @@ When a payment fails, the `PaymentResponse.Response` includes an `ErrorCondition
 
 The `AdditionalResponse` field contains structured key-value pairs separated by `&`, similar to URL query parameters:
 
-```
+```text
 authorizationResult=DECLINED&failureReason=Insufficient funds
 ```
 

@@ -18,29 +18,39 @@ The rest of the flow is unchanged; both the rebate and the redemption still work
 
 ## The flow
 
-```
-Register                                            Terminal (POI)
-   │ ── AdminRequest (BiltSession,Start) ─────────────> │  session scope opened
-   │ <── AdminResponse (Success) ────────────────────── │
-   │                                                    │
-   │ ── DisplayRequest (virtual receipt) ─────────────> │  basket shown
-   │ <── DisplayResponse ────────────────────────────── │
-   │        … repeat on every basket change …           │
-   │                                                    │
-   │ ── CardAcquisitionRequest (loyalty) ─────────────> │  prompts sign-in, or returns
-   │ <── CardAcquisitionResponse (LoyaltyAccount) ───── │  the already-signed-in member
-   │                                                    │
-   │ ── LoyaltyRequest (Rebate) ──────────────────────> │  coupons/offers committed
-   │ <── LoyaltyResponse (Rebates) ──────────────────── │
-   │                                                    │
-   │ ── LoyaltyRequest (Redemption) ──────────────────> │  customer's points applied
-   │ <── LoyaltyResponse (monetary value) ───────────── │
-   │                                                    │
-   │ ── PaymentRequest (final amount) ────────────────> │  card payment
-   │ <── PaymentResponse ────────────────────────────── │
-   │                                                    │
-   │ ── AdminRequest (BiltSession,End) ───────────────> │  session state discarded
-   │ <── AdminResponse ──────────────────────────────── │
+```mermaid
+sequenceDiagram
+    participant R as Register
+    participant T as Terminal (POI)
+
+    R->>T: AdminRequest (BiltSession,Start)
+    Note right of T: session scope opened
+    T-->>R: AdminResponse (Success)
+
+    R->>T: DisplayRequest (virtual receipt)
+    Note right of T: basket shown
+    T-->>R: DisplayResponse
+    Note over R,T: … repeat on every basket change …
+
+    R->>T: CardAcquisitionRequest (loyalty)
+    Note right of T: prompts sign-in, or returns<br/>the already-signed-in member
+    T-->>R: CardAcquisitionResponse (LoyaltyAccount)
+
+    R->>T: LoyaltyRequest (Rebate)
+    Note right of T: coupons/offers committed
+    T-->>R: LoyaltyResponse (Rebates)
+
+    R->>T: LoyaltyRequest (Redemption)
+    Note right of T: customer's points applied
+    T-->>R: LoyaltyResponse (monetary value)
+
+    R->>T: PaymentRequest (final amount)
+    Note right of T: card payment
+    T-->>R: PaymentResponse
+
+    R->>T: AdminRequest (BiltSession,End)
+    Note right of T: session state discarded
+    T-->>R: AdminResponse
 ```
 
 ---
@@ -99,7 +109,7 @@ Read `LoyaltyResult[0].LoyaltyAmount` and keep `POITransactionID` exactly as in 
 
 Unchanged from the minimal flow: send the [`PaymentRequest`](./make-payment.md) for the reduced amount with `PaymentTransaction.TransactionConditions.LoyaltyHandling` set to `Processed`, then close the bracket with [session End](./session-start-end.md).
 
-```
+```text
 Final amount = basket total − TotalRebate − per-item rebates − redeemed point value
 ```
 
