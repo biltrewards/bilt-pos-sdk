@@ -10,13 +10,15 @@ import {
 import { useState, type ReactNode } from 'react';
 import { DEFAULT_PAY_OPTIONS, useLane, type PayOptions } from '../lane/LaneProvider';
 import { describeError, track } from '../log';
-import { cents, formatMoney, parseMoney } from '../money';
+import { cents, formatMoney } from '../money';
+import { reversalProgress, voidRecordFrom } from '../store/reversals';
 import { Countdown } from './Countdown';
 
 /**
  * A charge-side failure waiting for the register. The host applies the default (`ABORT`) at
  * the deadline, so the prompt counts down; `SKIP` and an external tender are only valid when
- * the terminal outcome is known, and the external tender must cover exactly the amount due.
+ * the terminal outcome is known, and the external tender replaces only a failed card charge and
+ * covers exactly the amount due.
  */
 function RecoveryPrompt({
   step,
@@ -27,9 +29,10 @@ function RecoveryPrompt({
   currency: string;
   reply: UseSettlementResult['reply'];
 }): ReactNode {
-  const [external, setExternal] = useState(step.failure.amountDue);
   const indeterminate = step.failure.outcomeCertainty === 'INDETERMINATE';
-  const externalAmount = parseMoney(external);
+  // The SDK takes an external tender only in place of the final card charge, and only for the
+  // amount due exactly; offering it elsewhere, or for another amount, just fails the settlement.
+  const cashAllowed = step.failure.step === 'CARD_CHARGE';
 
   return (
     <div className="prompt" role="alertdialog" aria-label="Payment step failed">
@@ -71,32 +74,26 @@ function RecoveryPrompt({
           Use the default
         </button>
       </div>
-      <div className="inline">
-        <input
-          aria-label="External tender amount"
-          inputMode="decimal"
-          value={external}
-          onChange={(event) => setExternal(event.target.value)}
-          disabled={indeterminate}
-        />
-        <button
-          type="button"
-          className="secondary"
-          disabled={indeterminate || externalAmount === undefined}
-          title="Record cash for the amount due and continue"
-          onClick={() =>
-            externalAmount &&
-            reply({
-              recovery: {
-                action: 'EXTERNAL',
-                externalPayment: { tenderType: 'CASH', amount: externalAmount },
-              },
-            })
-          }
-        >
-          Paid in cash
-        </button>
-      </div>
+      {cashAllowed ? (
+        <div className="inline">
+          <button
+            type="button"
+            className="secondary"
+            disabled={indeterminate}
+            title="Record cash for exactly the amount due and complete the sale"
+            onClick={() =>
+              reply({
+                recovery: {
+                  action: 'EXTERNAL',
+                  externalPayment: { tenderType: 'CASH', amount: step.failure.amountDue },
+                },
+              })
+            }
+          >
+            Paid {formatMoney(step.failure.amountDue, currency)} in cash
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -237,14 +234,47 @@ export function SettlementPanel(): ReactNode {
     report,
     log,
     lastSale,
+    sales,
+    reversal,
+    abandoned,
+    resolveAbandoned,
   } = useLane();
   const [options, setOptions] = useState<PayOptions>(DEFAULT_PAY_OPTIONS);
-  const [voidOp, setVoidOp] = useState<Operation<VoidResult> | null>(null);
-  const voiding = useOperation(voidOp);
+  // The quick void belongs to the payment it voided: the panel stays mounted across shoppers, so
+  // a later payment's result must not inherit an earlier "Voided".
+  const [voidOp, setVoidOp] = useState<{
+    readonly operation: Operation<VoidResult>;
+    readonly of: SettlementResult;
+  } | null>(null);
+  const voiding = useOperation(voidOp && voidOp.of === settlement.result ? voidOp.operation : null);
+  const voidPayment = () => {
+    if (!terminalSession || !settlement.result) return;
+    const operation = track(
+      log,
+      'voidTransaction',
+      terminalSession.voidTransaction(),
+    ) as Operation<VoidResult>;
+    setVoidOp({ operation, of: settlement.result });
+    // The sale is already in the store, so the void goes there too, as the Refunds tab's does:
+    // otherwise that tab still offers a refund or void of a payment the terminal reversed.
+    const stored = lastSale ? { sale: lastSale, refunds: [], voided: null } : null;
+    if (!stored) return;
+    operation.then(
+      (result) => sales.recordVoid(voidRecordFrom(stored, result)).catch(report),
+      async (error: unknown) => {
+        if (error instanceof SessionError) {
+          for (const record of reversalProgress(stored, error.reversedMovements)) {
+            await sales.recordRefund(record).catch(report);
+          }
+        }
+      },
+    );
+  };
   const currency = settings.currency;
   const total = basket.basket?.grandTotal ?? null;
   const running = settlement.status === 'running' || settlement.status === 'awaitingReply';
-  const canPay = (basket.basket?.items.length ?? 0) > 0;
+  // A Refunds-tab reversal also moves money on the session: no payment or void alongside it.
+  const canPay = (basket.basket?.items.length ?? 0) > 0 && reversal === null && abandoned === null;
   const toggle = (key: keyof PayOptions) => (
     <label className="check" key={key}>
       <input
@@ -278,6 +308,28 @@ export function SettlementPanel(): ReactNode {
           {settlement.operation ? ` · ${settlement.operation.status}` : ''}
         </span>
       </div>
+
+      {abandoned ? (
+        <div className="prompt" role="alertdialog" aria-label="Abandoned settlement">
+          <h3>Settlement {abandoned.settlementId} abandoned to the register</h3>
+          <p className="small">
+            {formatMoney(abandoned.outstandingAmount, currency)} outstanding. These movements
+            committed and stand; reconcile them before taking another payment, which could move them
+            again:
+          </p>
+          <ul className="movements">
+            {abandoned.committedMovements.map((movement, index) => (
+              <li key={index}>
+                {movement.step} {formatMoney(movement.amount, currency)}
+                {movement.poiTransactionId ? ` · txn ${movement.poiTransactionId}` : ''}
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="secondary" onClick={resolveAbandoned}>
+            Mark reconciled
+          </button>
+        </div>
+      ) : null}
 
       {settlement.status === 'idle' ? (
         <>
@@ -344,22 +396,18 @@ export function SettlementPanel(): ReactNode {
           <ReceiptView title="Customer receipt" receipt={settlement.result.customerReceipt} />
           <ReceiptView title="Merchant receipt" receipt={settlement.result.merchantReceipt} />
           <div className="actions">
-            <button type="button" disabled={voiding.pending} onClick={nextShopper}>
+            <button
+              type="button"
+              disabled={voiding.pending || reversal !== null}
+              onClick={nextShopper}
+            >
               Next shopper
             </button>
             <button
               type="button"
               className="danger"
-              disabled={voiding.pending || voiding.status === 'succeeded'}
-              onClick={() =>
-                setVoidOp(
-                  track(
-                    log,
-                    'voidTransaction',
-                    terminalSession.voidTransaction(),
-                  ) as Operation<VoidResult>,
-                )
-              }
+              disabled={voiding.pending || voiding.status === 'succeeded' || reversal !== null}
+              onClick={voidPayment}
               title="Reverses every movement this payment committed"
             >
               {voiding.pending

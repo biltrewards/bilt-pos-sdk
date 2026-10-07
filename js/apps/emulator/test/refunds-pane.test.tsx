@@ -7,12 +7,13 @@ import {
   type OriginalSaleRecord,
   type ReversalHandlers,
   type SettleOptions,
+  type SettlementResult,
   type TerminalSessionOptions,
   type VoidResult,
 } from '@bilt/pos-sdk';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { SaleRecord } from '../src/store/sale-record';
+import { originalSaleRecord, type SaleRecord } from '../src/store/sale-record';
 import { freshStore, MockBiltPos, MockTerminalSession, renderApp } from './harness';
 
 const SALE: SaleRecord = {
@@ -55,9 +56,35 @@ class ReversalTerminal extends MockTerminalSession {
   decisions: string[] = [];
   settles: SettleOptions[] = [];
   failVoidStep: 'CARD' | 'AWARD' | null = null;
+  /** Fails the next refund settle after its card allocation committed, as the session does. */
+  failRefundAfterCommit = false;
+  private refundCommitted = false;
+
+  constructor(options: TerminalSessionOptions) {
+    super(options);
+    const clear = this.basket.clear.bind(this.basket);
+    this.basket.clear = () =>
+      this.refundCommitted
+        ? Promise.reject(new Error('retry settle() with the same allocations'))
+        : clear();
+  }
 
   override settle(options: SettleOptions = {}) {
     this.settles.push(options);
+    if (this.failRefundAfterCommit) {
+      this.failRefundAfterCommit = false;
+      this.refundCommitted = true;
+      const failed: Promise<SettlementResult> = Promise.reject(
+        new SessionError({ code: 'TERMINAL_ERROR', message: 'award reversal refused' }),
+      );
+      return Object.defineProperties(failed, {
+        id: { value: 'op_refund', enumerable: true },
+        type: { value: 'settle', enumerable: true },
+        status: { get: () => 'failed', enumerable: true },
+        abort: { value: async () => undefined, enumerable: true },
+      }) as Operation<SettlementResult>;
+    }
+    this.refundCommitted = false;
     return super.settle(options);
   }
 
@@ -160,6 +187,30 @@ describe('the Refunds pane', () => {
     expect((screen.getByRole('button', { name: 'Void' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('retries a refund that stopped after committing with the same allocations', async () => {
+    const { terminal, store } = await seeded();
+    terminal().failRefundAfterCommit = true;
+    fireEvent.click(screen.getByRole('button', { name: 'select' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Referenced refund' }));
+
+    const prompt = await screen.findByRole('alertdialog', { name: 'Refund incomplete' });
+    // The session holds the return line; nothing else may reverse this sale meanwhile.
+    expect(terminal().basket.current.items).toHaveLength(1);
+    expect((screen.getByRole('button', { name: 'Void' }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(within(prompt).getByRole('button', { name: 'Retry the refund' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('reversal-outcome').textContent).toContain('Refunded'),
+    );
+    expect(terminal().settles).toHaveLength(2);
+    expect(terminal().settles[1]?.refunds).toEqual(terminal().settles[0]?.refunds);
+    expect(screen.queryByRole('alertdialog', { name: 'Refund incomplete' })).toBeNull();
+    expect(terminal().basket.current.items).toHaveLength(0);
+    await waitFor(async () =>
+      expect((await store.findSale('sale-seeded'))?.refunds).toHaveLength(1),
+    );
+  });
+
   it('voids by OriginalSaleRecord, asking the cashier when a leg fails', async () => {
     const { terminal, store } = await seeded();
     terminal().failVoidStep = 'AWARD';
@@ -187,7 +238,7 @@ describe('the Refunds pane', () => {
     );
   });
 
-  it('keeps the legs a stopped void reversed, so the retry omits them', async () => {
+  it('retries a stopped void with the same record and keeps its progress for another session', async () => {
     const { terminal, store } = await seeded();
     terminal().failVoidStep = 'AWARD';
     fireEvent.click(screen.getByRole('button', { name: 'select' }));
@@ -201,9 +252,35 @@ describe('the Refunds pane', () => {
     const stored = await store.findSale('sale-seeded');
     expect(stored?.refunds[0]).toMatchObject({ leg: 'CARD', full: true, reversalProgress: true });
 
+    // The session resumes only an identical record, and skips the reversed leg itself.
     fireEvent.click(screen.getByRole('button', { name: 'Void' }));
     await waitFor(() => expect(terminal().voids).toHaveLength(2));
-    expect(terminal().voids[1]).toEqual({ awardPoiTransactionId: 'POI-AW-9', memberId: '98234' });
+    expect(terminal().voids[1]).toEqual(terminal().voids[0]);
+    // A void started afresh elsewhere leaves out what the stored progress says is reversed.
+    expect(originalSaleRecord(stored!)).toEqual({
+      awardPoiTransactionId: 'POI-AW-9',
+      memberId: '98234',
+    });
+  });
+
+  it('locks the Sale tab while a reversal is in flight', async () => {
+    const { terminal } = await seeded();
+    terminal().failVoidStep = 'AWARD';
+    fireEvent.click(screen.getByRole('button', { name: 'select' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Void' }));
+    const prompt = await screen.findByRole('alertdialog', { name: 'Reversal step failed' });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Sale' }));
+    const lamp = () => screen.getByRole('button', { name: /^Desk Lamp/ }) as HTMLButtonElement;
+    expect(lamp().disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Refunds' }));
+    fireEvent.click(within(prompt).getByRole('button', { name: /Skip it/ }));
+    await waitFor(() =>
+      expect(screen.getByTestId('reversal-outcome').textContent).toContain('success'),
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Sale' }));
+    expect(lamp().disabled).toBe(false);
   });
 
   it('refunds without a sale', async () => {

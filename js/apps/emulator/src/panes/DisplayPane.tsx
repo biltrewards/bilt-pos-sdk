@@ -3,7 +3,7 @@ import type { Offer, Rendering, WidgetHandle } from '@bilt/pos-sdk';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLane } from '../lane/LaneProvider';
 import { describeError } from '../log';
-import { formatMoney } from '../money';
+import { formatMoney, offerApplied, offerExpired } from '../money';
 
 /**
  * The shopper-facing side of the lane: the retail-media `lane-banner` placement drawn by
@@ -116,9 +116,15 @@ export function DisplayPane(): ReactNode {
                       ? `${offer.percentage}% off`
                       : ''}
                   {offer.expiry ? ` · until ${new Date(offer.expiry).toLocaleTimeString()}` : ''}{' '}
-                  <button type="button" className="link" onClick={() => applyOffer(offer)}>
-                    apply as discount
-                  </button>
+                  {basket.basket && offerApplied(offer, basket.basket) ? (
+                    <span className="badge">applied</span>
+                  ) : offerExpired(offer) ? (
+                    <span className="badge warn">expired</span>
+                  ) : (
+                    <button type="button" className="link" onClick={() => applyOffer(offer)}>
+                      apply as discount
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

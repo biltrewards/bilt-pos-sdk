@@ -68,6 +68,19 @@ export function offerAmount(offer: Offer, line: BasketLineItem): Money {
   return money(Math.min(Math.max(amount, 0), subtotal));
 }
 
+/**
+ * Whether the offer is already a discount somewhere in the basket. Every line is checked: the
+ * line a basket-scoped offer lands on can change as the basket does.
+ */
+export function offerApplied(offer: Offer, basket: Basket): boolean {
+  return basket.items.some((line) => line.discounts.some((d) => d.reference === offer.id));
+}
+
+/** Whether the offer's expiry has passed; an offer without one does not expire. */
+export function offerExpired(offer: Offer, now: Date = new Date()): boolean {
+  return offer.expiry !== undefined && Date.parse(offer.expiry) <= now.getTime();
+}
+
 /** The line a basket-scoped offer lands on: the most valuable one. A line-scoped offer names its SKU. */
 export function offerTarget(offer: Offer, basket: Basket): BasketLineItem | undefined {
   const sale = basket.items.filter((line) => line.type === 'SALE');

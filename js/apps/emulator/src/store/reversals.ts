@@ -15,6 +15,7 @@ import {
   legOf,
   refundLeg,
   remainingLegAmount,
+  standingLoads,
   type LegType,
   type RefundRecord,
   type StoredSale,
@@ -44,6 +45,11 @@ export function planReferencedRefund(
   stored: StoredSale,
   requested: Money | undefined,
 ): ReferencedRefundPlan | { error: string } {
+  if (standingLoads(stored).length > 0) {
+    return {
+      error: 'The sale loaded a gift card: void it so the load is reversed with its funding.',
+    };
+  }
   const leg = refundLeg(stored);
   if (!leg) return { error: 'The sale has no tender leg left to refund.' };
   const remaining = remainingLegAmount(stored, leg.type) ?? leg.amount;
@@ -166,14 +172,27 @@ const LEG_OF_STEP: Partial<Record<ReversalStep, LegType>> = {
 };
 
 /**
- * What a void that stopped midway already reversed, as per-leg full records, so a retry omits
- * those legs instead of reversing them twice.
+ * What a void that stopped midway already reversed, as per-leg and per-load full records, so a
+ * retry omits those legs and loads instead of reversing them twice.
  */
 export function reversalProgress(
   stored: StoredSale,
   reversed: readonly ReversedMovement[],
 ): RefundRecord[] {
-  return reversed.flatMap((movement) => {
+  return reversed.flatMap((movement): RefundRecord[] => {
+    if (movement.step === 'STORED_VALUE_LOAD') {
+      return [
+        {
+          saleId: stored.sale.id,
+          recordedAt: new Date().toISOString(),
+          poiTransactionId: movement.poiTransactionId,
+          full: true,
+          awardReversed: false,
+          reversalProgress: true,
+          giftCardLoad: movement.poiTransactionId,
+        },
+      ];
+    }
     const leg = LEG_OF_STEP[movement.step];
     if (!leg) return [];
     return [

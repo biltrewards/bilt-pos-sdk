@@ -15,6 +15,7 @@ import {
   type UseSettlementResult,
 } from '@bilt/pos-react';
 import type {
+  AbandonedSettlementRecord,
   BasketChange,
   Money,
   Offer,
@@ -44,7 +45,14 @@ import {
   type StoredValueLoadType,
 } from '../gift-cards';
 import { describeError, track, useSessionLogging, type LogStore } from '../log';
-import { formatMoney, offerAmount, offerTarget, recomputeTotal } from '../money';
+import {
+  formatMoney,
+  offerAmount,
+  offerApplied,
+  offerExpired,
+  offerTarget,
+  recomputeTotal,
+} from '../money';
 import type { Settings } from '../settings';
 import { toSaleRecord, type SaleRecord } from '../store/sale-record';
 import type { SaleStore } from '../store/sales-store';
@@ -122,6 +130,23 @@ export interface LaneValue {
 
   /** Clears the basket and the member for the next shopper and resets the settlement. */
   nextShopper(): void;
+
+  /**
+   * The Refunds tab's reversal in flight (`void sale-…`, `refund sale-…`, `unlinked refund`), or
+   * `null`. Those run on the terminal session outside the settlement hook, so the Sale tab locks
+   * on this as well; it lives here so a tab switch mid-reversal does not lose it.
+   */
+  readonly reversal: string | null;
+  setReversal(reversal: string | null): void;
+
+  /**
+   * A settlement abandoned to the register with movements committed, until the cashier marks it
+   * reconciled. `ABANDON` leaves the basket reusable and hands duplicate prevention to the
+   * register, so another payment is refused meanwhile: it could move the same points, rebates or
+   * stored value again.
+   */
+  readonly abandoned: AbandonedSettlementRecord | null;
+  resolveAbandoned(): void;
 }
 
 const LaneContext = createContext<LaneValue | null>(null);
@@ -196,6 +221,8 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
   const [tenderCard, setTenderCardState] = useState<StoredValueCard | null>(null);
   const [pendingStep, setPendingStep] = useState<PendingStepRecord | null>(null);
   const [lastSale, setLastSale] = useState<SaleRecord | null>(null);
+  const [reversal, setReversal] = useState<string | null>(null);
+  const [abandoned, setAbandoned] = useState<AbandonedSettlementRecord | null>(null);
 
   useSessionLogging(session, log);
 
@@ -246,6 +273,16 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
   const applyOffer = useCallback(
     (offer: Offer) => {
       const current = basket.basket;
+      // An offer is honoured once and only while it stands: the toast and the Display tab both
+      // offer it, and either may be clicked after the other or after the expiry.
+      if (current && offerApplied(offer, current)) {
+        toasts.push('info', `Offer ${offer.id} is already applied`);
+        return;
+      }
+      if (offerExpired(offer)) {
+        toasts.push('warning', `Offer ${offer.id} expired at ${offer.expiry}`);
+        return;
+      }
       const target = current ? offerTarget(offer, current) : undefined;
       if (!target) {
         toasts.push('info', `Offer ${offer.id} arrived with nothing to apply it to`);
@@ -312,14 +349,28 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
   );
 
   // The handlers read the latest member and session through refs: a settlement runs for a while.
-  const latest = useRef({ member: member.member, terminalSession, pendingGiftCards });
-  latest.current = { member: member.member, terminalSession, pendingGiftCards };
+  const latest = useRef({ member: member.member, terminalSession, pendingGiftCards, abandoned });
+  latest.current = { member: member.member, terminalSession, pendingGiftCards, abandoned };
+
+  const resolveAbandoned = useCallback(() => {
+    if (!latest.current.abandoned) return;
+    log.info('settle', `abandoned settlement ${latest.current.abandoned.settlementId} reconciled`);
+    setAbandoned(null);
+  }, [log]);
 
   const pay = useCallback(
     (options: PayOptions) => {
       const current = latest.current.terminalSession;
       if (!current) {
         report(new Error('settlement needs a terminal session'));
+        return;
+      }
+      if (latest.current.abandoned) {
+        report(
+          new Error(
+            `settlement ${latest.current.abandoned.settlementId} was abandoned with committed movements; reconcile it first`,
+          ),
+        );
         return;
       }
       const fulfillments = latest.current.pendingGiftCards.map(toFulfillment);
@@ -386,6 +437,7 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
               record,
             );
             toasts.push('warning', `Settlement ${record.settlementId} abandoned to the register`);
+            if (record.committedMovements.length > 0) setAbandoned(record);
           },
         });
       } catch (error) {
@@ -471,6 +523,10 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
       pendingStep,
       lastSale,
       nextShopper,
+      reversal,
+      setReversal,
+      abandoned,
+      resolveAbandoned,
     }),
     [
       settings,
@@ -497,6 +553,9 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
       pendingStep,
       lastSale,
       nextShopper,
+      reversal,
+      abandoned,
+      resolveAbandoned,
     ],
   );
 

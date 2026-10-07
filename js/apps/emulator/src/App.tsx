@@ -85,13 +85,10 @@ export function App(props: AppProps): ReactNode {
   const log = useMemo(() => new LogStore(), []);
   const givenSales = props.sales;
   const sales = useMemo(() => givenSales ?? new IndexedDbSaleStore(), [givenSales]);
-  const probe = useMemo(
-    () => bridgeOptions(settings),
-    // The probe only depends on the route and the port.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings.bridge, settings.bridgePort],
-  );
-  const probeKey = `${settings.bridge}:${settings.bridgePort}`;
+  // The probe depends on the route and the port only, so other settings do not re-probe.
+  const { bridge, bridgePort } = settings;
+  const probe = useMemo(() => bridgeOptions({ bridge, bridgePort }), [bridge, bridgePort]);
+  const probeKey = `${bridge}:${bridgePort}`;
 
   const apply = (next: Settings) => {
     log.info('settings', `applied: ${laneKey(next)} via ${next.bridge}:${next.bridgePort}`);

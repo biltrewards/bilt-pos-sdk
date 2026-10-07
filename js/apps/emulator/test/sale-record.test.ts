@@ -13,6 +13,7 @@ import {
   isRefundable,
   isVoidable,
   originalSaleRecord,
+  refundsLinked,
   remainingLegAmount,
   toSaleRecord,
   type StoredSale,
@@ -140,8 +141,34 @@ describe('reversal plans', () => {
     expect(isVoidable(retried)).toBe(true);
   });
 
+  it('omits the gift-card loads and rebate a stopped void already reversed', () => {
+    const progress = reversalProgress(stored, [
+      { step: 'STORED_VALUE_LOAD', poiTransactionId: 'POI-SV-LOAD-1' },
+      { step: 'REBATE', poiTransactionId: 'POI-RB-1' },
+    ]);
+    const retried: StoredSale = { ...stored, refunds: progress };
+    expect(originalSaleRecord(retried)).toEqual({
+      cardPoiTransactionId: 'POI-PAY-1',
+      cardPoiTransactionTimestamp: '2026-10-06T14:03:10Z',
+      awardPoiTransactionId: 'POI-AW-1',
+      memberId: '98234',
+    });
+    expect(isVoidable(retried)).toBe(true);
+  });
+
+  it('refuses a referenced refund while a gift-card load stands, leaving the void', () => {
+    expect(isRefundable(stored)).toBe(false);
+    expect(planReferencedRefund(stored, '10.00')).toEqual({
+      error: 'The sale loaded a gift card: void it so the load is reversed with its funding.',
+    });
+    expect(isVoidable(stored)).toBe(true);
+  });
+
+  // The same sale without the gift-card purchase, so its tender alone is refundable.
+  const tenderOnly: StoredSale = { ...stored, sale: { ...stored.sale, giftCardLoads: [] } };
+
   it('plans a partial and a full referenced refund against the card leg', () => {
-    const partial = planReferencedRefund(stored, '10.00');
+    const partial = planReferencedRefund(tenderOnly, '10.00');
     if ('error' in partial) throw new Error(partial.error);
     expect(partial.full).toBe(false);
     expect(partial.reversesAward).toBe(false);
@@ -155,7 +182,7 @@ describe('reversal plans', () => {
     ]);
     expect(partial.returnLine).toMatchObject({ type: 'RETURN', unitPrice: '10.00', quantity: 1 });
 
-    const full = planReferencedRefund(stored, undefined);
+    const full = planReferencedRefund(tenderOnly, undefined);
     if ('error' in full) throw new Error(full.error);
     expect(full).toMatchObject({ amount: '62.31', full: true, reversesAward: true });
     expect(full.allocations[1]).toMatchObject({
@@ -165,15 +192,15 @@ describe('reversal plans', () => {
       memberId: '98234',
     });
 
-    expect(planReferencedRefund(stored, '100.00')).toEqual({
+    expect(planReferencedRefund(tenderOnly, '100.00')).toEqual({
       error: 'At most 62.31 can still be refunded from the CARD leg.',
     });
   });
 
   it('keeps the ledger straight across refunds', () => {
-    const plan = planReferencedRefund(stored, '10.00');
+    const plan = planReferencedRefund(tenderOnly, '10.00');
     if ('error' in plan) throw new Error(plan.error);
-    const refunded = refundRecordFrom(stored, plan, {
+    const refunded = refundRecordFrom(tenderOnly, plan, {
       ...result(),
       movements: [
         {
@@ -190,10 +217,48 @@ describe('reversal plans', () => {
       full: false,
       poiTransactionId: 'POI-RF-1',
     });
-    const after: StoredSale = { ...stored, refunds: [refunded] };
+    const after: StoredSale = { ...tenderOnly, refunds: [refunded] };
     expect(remainingLegAmount(after, 'CARD')).toBe('52.31');
     expect(isRefundable(after)).toBe(true);
     expect(isVoidable(after)).toBe(false);
+  });
+
+  it('takes the linked refund only for the card leg', () => {
+    expect(refundsLinked(tenderOnly)).toBe(true);
+    const giftCardOnly: StoredSale = {
+      ...tenderOnly,
+      sale: toSaleRecord(
+        result({
+          poiTransactionId: 'POI-SV-1',
+          storedValuePoiTransactionId: 'POI-SV-1',
+          storedValueAmountUsed: '62.31',
+          cardAmountCharged: '0.00',
+          movements: [],
+        }),
+        CONTEXT,
+      ),
+    };
+    expect(refundsLinked(giftCardOnly)).toBe(false);
+    // Split tender: once the card is refunded in full, the stored value rest is not linked.
+    const split: StoredSale = {
+      ...tenderOnly,
+      sale: {
+        ...tenderOnly.sale,
+        legs: [...tenderOnly.sale.legs, { type: 'STORED_VALUE', poiTransactionId: 'POI-SV-2' }],
+      },
+      refunds: [
+        {
+          saleId: tenderOnly.sale.id,
+          recordedAt: '2026-10-06T15:00:00Z',
+          amount: '62.31',
+          leg: 'CARD',
+          full: true,
+          awardReversed: true,
+          reversalProgress: false,
+        },
+      ],
+    };
+    expect(refundsLinked(split)).toBe(false);
   });
 
   it('mirrors the Java default reversal policy', () => {

@@ -75,6 +75,11 @@ export interface RefundRecord {
    * omits them. Never a merchandise refund.
    */
   readonly reversalProgress: boolean;
+  /**
+   * On a `reversalProgress` record for a gift-card load rather than a leg: the load's original
+   * POI transaction, which the SDK reports the reversed load by.
+   */
+  readonly giftCardLoad?: string;
 }
 
 /** A void issued against a stored sale. */
@@ -113,13 +118,17 @@ export function isPartiallyRefunded(stored: StoredSale): boolean {
   return stored.refunds.some((refund) => !refund.full && !refund.reversalProgress);
 }
 
-/** The legs a void would still send: money legs not yet refunded, loyalty legs, an award not yet reversed. */
+/** The legs a void would still send: legs not yet refunded or reversed, an award not yet reversed. */
 export function standingLegs(stored: StoredSale): readonly TransactionLeg[] {
-  return stored.sale.legs.filter((leg) => {
-    if (leg.type === 'CARD' || leg.type === 'STORED_VALUE') return !legRefunded(stored, leg.type);
-    if (leg.type === 'AWARD') return !awardReversed(stored);
-    return true;
-  });
+  return stored.sale.legs.filter((leg) =>
+    leg.type === 'AWARD' ? !awardReversed(stored) : !legRefunded(stored, leg.type),
+  );
+}
+
+/** The gift-card loads a void would still unwind: those a stopped void has not already reversed. */
+export function standingLoads(stored: StoredSale): readonly GiftCardLoad[] {
+  const reversed = new Set(stored.refunds.map((refund) => refund.giftCardLoad));
+  return stored.sale.giftCardLoads.filter((load) => !reversed.has(load.poiTransactionId));
 }
 
 /**
@@ -132,12 +141,17 @@ export function isVoidable(stored: StoredSale): boolean {
     stored.voided === null &&
     !isPartiallyRefunded(stored) &&
     !stored.refunds.some((refund) => refund.full && !refund.reversalProgress) &&
-    (standingLegs(stored).length > 0 || stored.sale.giftCardLoads.length > 0)
+    (standingLegs(stored).length > 0 || standingLoads(stored).length > 0)
   );
 }
 
+/**
+ * A referenced refund returns tender only. A sale whose gift-card load still stands is refused:
+ * its tender funded the load, so refunding it would return the money and leave the card loaded,
+ * and a partial refund would then block the void that unwinds the load. Such a sale is voided.
+ */
 export function isRefundable(stored: StoredSale): boolean {
-  return stored.voided === null && !isFullyRefunded(stored);
+  return stored.voided === null && !isFullyRefunded(stored) && standingLoads(stored).length === 0;
 }
 
 export function awardReversed(stored: StoredSale): boolean {
@@ -163,6 +177,15 @@ export function refundLeg(stored: StoredSale): TransactionLeg | undefined {
     moneyLegs(stored.sale).find((leg) => leg.type === 'CARD' && !legRefunded(stored, 'CARD')) ??
     moneyLegs(stored.sale).find((leg) => !legRefunded(stored, leg.type))
   );
+}
+
+/**
+ * Whether this session's own payment is refunded by the linked `refund()`: it refunds the card
+ * payment only, so a stored value leg (a gift-card-only sale, or the rest of a split tender once
+ * the card is refunded) takes the allocation path.
+ */
+export function refundsLinked(stored: StoredSale): boolean {
+  return refundLeg(stored)?.type === 'CARD';
 }
 
 export interface SaleContext {
@@ -294,9 +317,9 @@ export function toSaleRecord(result: SettlementResult, context: SaleContext): Sa
 }
 
 /**
- * The `OriginalSaleRecord` that voids a stored sale: every leg still standing. Legs a previous
- * attempt already reversed (per-leg full refund records) and an already-reversed award are left
- * out, so a retried void does not send them again.
+ * The `OriginalSaleRecord` that voids a stored sale: every leg and gift-card load still standing.
+ * Legs and loads a previous attempt already reversed (its `reversalProgress` records) and an
+ * already-reversed award are left out, so a retried void does not send them again.
  */
 export function originalSaleRecord(stored: StoredSale): OriginalSaleRecord {
   const { sale } = stored;
@@ -315,8 +338,9 @@ export function originalSaleRecord(stored: StoredSale): OriginalSaleRecord {
       record.storedValuePoiTransactionTimestamp = storedValue.poiTimestamp;
     }
   }
-  if (sale.giftCardLoads.length > 0) {
-    record.storedValueLoads = sale.giftCardLoads.map((load) => ({
+  const loads = standingLoads(stored);
+  if (loads.length > 0) {
+    record.storedValueLoads = loads.map((load) => ({
       basketReference: load.basketReference,
       amount: load.amount,
       poiTransactionId: load.poiTransactionId,
@@ -324,12 +348,12 @@ export function originalSaleRecord(stored: StoredSale): OriginalSaleRecord {
     }));
   }
   const rebate = legOf(sale, 'REBATE');
-  if (rebate) {
+  if (rebate && !legRefunded(stored, 'REBATE')) {
     record.rebatePoiTransactionId = rebate.poiTransactionId;
     if (rebate.poiTimestamp) record.rebatePoiTransactionTimestamp = rebate.poiTimestamp;
   }
   const redemption = legOf(sale, 'REDEMPTION');
-  if (redemption) {
+  if (redemption && !legRefunded(stored, 'REDEMPTION')) {
     record.redemptionPoiTransactionId = redemption.poiTransactionId;
     if (redemption.poiTimestamp) {
       record.redemptionPoiTransactionTimestamp = redemption.poiTimestamp;

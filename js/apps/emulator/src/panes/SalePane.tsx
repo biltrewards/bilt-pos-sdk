@@ -10,15 +10,17 @@ import { useLane } from '../lane/LaneProvider';
 /**
  * The register's main screen: scan, basket, loyalty, stored value and settlement. Everything
  * below the session is the same in both modes except settlement and stored value, which need
- * the terminal. The basket locks while money moves and once it has settled.
+ * the terminal. The basket locks while money moves, on this tab or the Refunds tab, and once it has
+ * settled.
  */
 export function SalePane(): ReactNode {
-  const { session, settlement } = useLane();
+  const { session, settlement, reversal } = useLane();
   if (!session) return null;
   const locked =
     settlement.status === 'running' ||
     settlement.status === 'awaitingReply' ||
-    settlement.status === 'succeeded';
+    settlement.status === 'succeeded' ||
+    reversal !== null;
 
   return (
     <div className="columns">

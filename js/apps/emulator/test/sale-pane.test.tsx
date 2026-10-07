@@ -60,6 +60,37 @@ describe('the Sale pane', () => {
     expect(session().basket.current.items[0]).toMatchObject({ sku: 'SKU-0002', quantity: 3 });
   });
 
+  it('syncs a basket copy back unchanged, keeping keyed-in and gift-card lines', async () => {
+    const { session } = await renderApp();
+    fireEvent.click(screen.getByRole('button', { name: /Desk Lamp/ }));
+    await waitFor(() => expect(grandTotal()).toContain('37.31'));
+    fireEvent.click(screen.getByRole('button', { name: 'discount' }));
+    const editor = screen.getByRole('form', { name: 'Add discount' });
+    fireEvent.change(within(editor).getByLabelText('Amount'), { target: { value: '5' } });
+    fireEvent.click(within(editor).getByRole('button', { name: 'Apply discount' }));
+    fireEvent.change(screen.getByLabelText('Custom amount'), { target: { value: '12.50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom item' }));
+    fireEvent.change(screen.getByLabelText('Gift card face value'), { target: { value: '25' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add gift card line' }));
+    await waitFor(() => expect(session().basket.current.items).toHaveLength(3));
+    await waitFor(() =>
+      expect(screen.getByText(/activate \$25\.00 on 6006491260550218157/)).toBeTruthy(),
+    );
+    const before = session().basket.current;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy from basket' }));
+    fireEvent.click(screen.getByRole('button', { name: /Sync cart \(3 lines\)/ }));
+    await waitFor(() => expect(screen.getByText('last change: REPLACE')).toBeTruthy());
+    const after = session().basket.current;
+    expect(after.items.map((line) => [line.sku, line.quantity, line.reference])).toEqual(
+      before.items.map((line) => [line.sku, line.quantity, line.reference]),
+    );
+    expect(after.items[0]?.discounts).toEqual(before.items[0]?.discounts);
+    expect(after.grandTotal).toBe(before.grandTotal);
+    // The gift-card line kept its reference, so its fulfilment is still pending.
+    expect(screen.getByText(/activate \$25\.00 on 6006491260550218157/)).toBeTruthy();
+  });
+
   it('signs a member in by phone and on the terminal and shows the member card', async () => {
     const { terminal } = await renderApp();
     fireEvent.change(screen.getByLabelText('Phone number'), {
@@ -142,6 +173,30 @@ describe('the Sale pane', () => {
     expect(screen.getByText('Nothing rung yet.')).toBeTruthy();
   });
 
+  it('records a void from the Sale tab against the stored sale', async () => {
+    const { store } = await renderApp();
+    fireEvent.click(screen.getByRole('button', { name: /Desk Lamp/ }));
+    await waitFor(() => expect(grandTotal()).toContain('37.31'));
+    fireEvent.click(screen.getByRole('button', { name: /^Pay/ }));
+    await waitFor(async () => expect(await store.listSales()).toHaveLength(1));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Void this payment' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Voided' })).toBeTruthy());
+    await waitFor(async () => expect((await store.listSales())[0]?.voided).not.toBeNull());
+
+    // The next shopper's payment can be voided in turn.
+    fireEvent.click(screen.getByRole('button', { name: 'Next shopper' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('settlement-status').textContent).toContain('idle'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Desk Lamp/ }));
+    await waitFor(() => expect(grandTotal()).toContain('37.31'));
+    fireEvent.click(screen.getByRole('button', { name: /^Pay/ }));
+    await waitFor(async () => expect(await store.listSales()).toHaveLength(2));
+    const again = await screen.findByRole('button', { name: 'Void this payment' });
+    expect((again as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('holds a charge-side failure open for the cashier with a countdown and retries on request', async () => {
     const { terminal } = await renderApp();
     fireEvent.click(screen.getByRole('button', { name: /Coffee/ }));
@@ -156,9 +211,8 @@ describe('the Sale pane', () => {
     expect(prompt.textContent).toContain('CARD_CHARGE failed: DECLINED');
     expect(within(prompt).getByTestId('countdown').textContent).toMatch(/^\d+s$/);
     expect(screen.getByTestId('settlement-status').textContent).toContain('awaitingReply');
-    expect(
-      (within(prompt).getByLabelText('External tender amount') as HTMLInputElement).value,
-    ).toBe('1.75');
+    // Cash stands in for the failed card charge, for exactly the amount due.
+    expect(within(prompt).getByRole('button', { name: 'Paid $1.75 in cash' })).toBeTruthy();
 
     fireEvent.click(within(prompt).getByRole('button', { name: 'Retry the step' }));
     await waitFor(() =>
@@ -168,6 +222,57 @@ describe('the Sale pane', () => {
     await flush();
   });
 
+  it('refuses another payment until an abandoned settlement is marked reconciled', async () => {
+    const { terminal } = await renderApp();
+    fireEvent.click(screen.getByRole('button', { name: /Coffee/ }));
+    await waitFor(() => expect(grandTotal()).toContain('3.75'));
+    const lane = terminal();
+    lane.failNextChargeWith = new SessionError({ code: 'TIMEOUT', message: 'No answer' });
+    // The double does not abandon, so hand the lane the record the SDK would.
+    const settle = lane.settle.bind(lane);
+    lane.settle = (options = {}) =>
+      settle({
+        ...options,
+        onError: async (failure, step) => {
+          const answer = await options.onError!(failure, step);
+          if ((typeof answer === 'string' ? answer : answer.action) === 'ABANDON') {
+            options.onAbandoned?.({
+              settlementId: 'stl_1',
+              abandonedAt: new Date().toISOString(),
+              basket: lane.basket.current,
+              options: {},
+              failure,
+              outstandingAmount: '1.75',
+              committedMovements: [
+                {
+                  step: 'POINT_REDEMPTION',
+                  target: { type: 'SALES' },
+                  amount: '2.00',
+                  poiTransactionId: 'POI-PTS-1',
+                },
+              ],
+            });
+          }
+          return answer;
+        },
+      });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Pay/ }));
+    const prompt = await screen.findByRole('alertdialog', { name: 'Payment step failed' });
+    fireEvent.click(within(prompt).getByRole('button', { name: 'Abandon to the register' }));
+    const abandoned = await screen.findByRole('alertdialog', { name: 'Abandoned settlement' });
+    expect(abandoned.textContent).toContain('POINT_REDEMPTION $2.00 · txn POI-PTS-1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the basket' }));
+    const pay = () => screen.getByRole('button', { name: /^Pay/ }) as HTMLButtonElement;
+    await waitFor(() => expect(pay()).toBeTruthy());
+    expect(pay().disabled).toBe(true);
+
+    fireEvent.click(within(abandoned).getByRole('button', { name: 'Mark reconciled' }));
+    await waitFor(() => expect(pay().disabled).toBe(false));
+    expect(screen.queryByRole('alertdialog', { name: 'Abandoned settlement' })).toBeNull();
+  });
+
   it('records an external tender for the amount due when the cashier took cash', async () => {
     const { terminal } = await renderApp();
     fireEvent.click(screen.getByRole('button', { name: /Coffee/ }));
@@ -175,7 +280,7 @@ describe('the Sale pane', () => {
     terminal().failNextChargeWith = new SessionError({ code: 'TIMEOUT', message: 'No answer' });
     fireEvent.click(screen.getByRole('button', { name: /^Pay/ }));
     const prompt = await screen.findByRole('alertdialog', { name: 'Payment step failed' });
-    fireEvent.click(within(prompt).getByRole('button', { name: 'Paid in cash' }));
+    fireEvent.click(within(prompt).getByRole('button', { name: 'Paid $1.75 in cash' }));
     // The double treats anything but RETRY as a failure; what matters is the decision it saw.
     await waitFor(() => expect(terminal().recoveries).toEqual(['EXTERNAL']));
     await waitFor(() =>

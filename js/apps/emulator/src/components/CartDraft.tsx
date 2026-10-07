@@ -1,31 +1,77 @@
-import type { Basket } from '@bilt/pos-sdk';
+import type { Basket, BasketItem, BasketLineItem } from '@bilt/pos-sdk';
 import { useState, type ReactNode } from 'react';
 import { CATALOG, toBasketItem } from '../catalog';
 import { useLane } from '../lane/LaneProvider';
 
 type Quantities = Readonly<Record<string, number>>;
 
-function fromBasket(basket: Basket | null): Quantities {
+interface Draft {
+  readonly quantities: Quantities;
+  /** Catalog lines as copied from the basket, so a sync keeps their discounts and reference. */
+  readonly copied: Readonly<Record<string, BasketItem>>;
+  /** Lines the draft does not edit (keyed-in, gift-card, credit, return), synced back as they were. */
+  readonly kept: readonly BasketItem[];
+}
+
+const EMPTY: Draft = { quantities: {}, copied: {}, kept: [] };
+const CATALOG_SKUS = new Set(CATALOG.map((product) => product.sku));
+
+/** The register-side fields of a basket line; a fixed tax is the amount on a line without a rate. */
+function toItem(line: BasketLineItem): BasketItem {
+  return {
+    sku: line.sku,
+    description: line.description,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    discounts: line.discounts,
+    type: line.type,
+    metadata: line.metadata,
+    ...(line.reference === undefined ? {} : { reference: line.reference }),
+    ...(line.category === undefined ? {} : { category: line.category }),
+    ...(line.taxRate === undefined
+      ? Number(line.taxAmount) !== 0
+        ? { taxAmount: line.taxAmount }
+        : {}
+      : { taxRate: line.taxRate }),
+  };
+}
+
+function fromBasket(basket: Basket | null): Draft {
   const quantities: Record<string, number> = {};
+  const copied: Record<string, BasketItem> = {};
+  const kept: BasketItem[] = [];
   for (const line of basket?.items ?? []) {
-    if (line.type === 'SALE') quantities[line.sku] = (quantities[line.sku] ?? 0) + line.quantity;
+    if (line.type === 'SALE' && CATALOG_SKUS.has(line.sku) && copied[line.sku] === undefined) {
+      quantities[line.sku] = line.quantity;
+      copied[line.sku] = toItem(line);
+    } else {
+      kept.push(toItem(line));
+    }
   }
-  return quantities;
+  return { quantities, copied, kept };
 }
 
 /**
  * A cart the register owns, edited offline and pushed whole with `replace`: the model of a POS
  * that keeps its own cart and syncs it after every change, as opposed to scanning into the
  * session line by line. Lines are paired by SKU, so a synced quantity change keeps its item id.
+ * The draft edits catalog quantities; a copy from the basket keeps every other line as it was, so
+ * syncing an unchanged copy leaves the basket unchanged.
  */
 export function CartDraft({ disabled }: { readonly disabled: boolean }): ReactNode {
   const { basket, run } = useLane();
-  const [quantities, setQuantities] = useState<Quantities>({});
+  const [draft, setDraft] = useState<Draft>(EMPTY);
   const [open, setOpen] = useState(false);
-  const items = CATALOG.flatMap((product) => {
-    const quantity = quantities[product.sku] ?? 0;
-    return quantity > 0 ? [toBasketItem(product, quantity)] : [];
-  });
+  const { quantities, copied, kept } = draft;
+  const items = [
+    ...CATALOG.flatMap((product) => {
+      const quantity = quantities[product.sku] ?? 0;
+      if (quantity <= 0) return [];
+      const line = copied[product.sku];
+      return [line ? { ...line, quantity } : toBasketItem(product, quantity)];
+    }),
+    ...kept,
+  ];
 
   return (
     <section className="panel">
@@ -52,13 +98,22 @@ export function CartDraft({ disabled }: { readonly disabled: boolean }): ReactNo
                     aria-label={`${product.name} draft quantity`}
                     value={quantities[product.sku] ?? 0}
                     onChange={(event) =>
-                      setQuantities((previous) => ({
+                      setDraft((previous) => ({
                         ...previous,
-                        [product.sku]: Math.max(0, Math.trunc(Number(event.target.value) || 0)),
+                        quantities: {
+                          ...previous.quantities,
+                          [product.sku]: Math.max(0, Math.trunc(Number(event.target.value) || 0)),
+                        },
                       }))
                     }
                   />
                 </td>
+              </tr>
+            ))}
+            {kept.map((line, index) => (
+              <tr key={`kept-${index}`}>
+                <td>{line.description}</td>
+                <td className="muted small">{line.quantity ?? 1} × kept as copied</td>
               </tr>
             ))}
           </tbody>
@@ -72,7 +127,7 @@ export function CartDraft({ disabled }: { readonly disabled: boolean }): ReactNo
           type="button"
           className="secondary"
           onClick={() => {
-            setQuantities(fromBasket(basket.basket));
+            setDraft(fromBasket(basket.basket));
             setOpen(true);
           }}
         >

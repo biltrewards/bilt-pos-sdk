@@ -44,6 +44,13 @@ describe('the companion display', () => {
       ]),
     );
     await screen.findByText(/Offer applied/);
+    // Once on the basket, the offer is not applied a second time.
+    expect(screen.getByText('applied', { selector: '.badge' })).toBeTruthy();
+    // A second tap on the creative delivers the offer again; its toast must not stack it.
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply as discount' }));
+    await screen.findByText('Offer ofr_1 is already applied');
+    expect(session().basket.current.items[0]?.discounts).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: /Pause widget/ }));
     await waitFor(() => expect(screen.getByTestId('widget-status').textContent).toBe('paused'));

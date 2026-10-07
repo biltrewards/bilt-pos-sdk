@@ -53,8 +53,10 @@ terminal, and shows the member card (program, points, rewards). The gift-card pa
 a card as split tender with `setStoredValueCard`, and asks for a balance. Pay runs `useSettlement`
 with `beforeStep` persisting the sale transaction id (`localStorage`, cleared on completion), a
 tax recompute on `TOTAL_REQUIRED` after rebates, the suggested total after points or a gift card,
-and an interactive `RECOVERY_REQUIRED` prompt (retry, skip, abort, abandon, or cash for the
-amount due) counting down to the host's deadline. Movements show as they commit, the result
+and an interactive `RECOVERY_REQUIRED` prompt (retry, skip, abort, abandon, or, for a failed card
+charge, cash for exactly the amount due) counting down to the host's deadline. A settlement abandoned with committed
+movements lists them and refuses another payment until the cashier marks it reconciled, since
+the SDK leaves the basket reusable and duplicate prevention to the register. Movements show as they commit, the result
 with receipts afterwards; the sale is recorded to IndexedDB for the Refunds tab. Abort, "Next
 shopper" (basket and member cleared, settlement reset) and "End session" are on the panel and
 the lane bar. The lane bar also moves the phase by hand on a local session.
@@ -64,10 +66,14 @@ ported from the desktop store), newest first, with their refund and void ledger.
 refund of a prior sale rings a `RETURN` line for the amount and settles it with a `CARD` (or
 `STORED_VALUE`) refund allocation against the original tender; a full refund of a sale with an
 award also files the award reversal. When the selected sale is this session's own last payment
-the linked `refund()` runs instead. Void reverses every standing leg by `OriginalSaleRecord`
+and the leg to refund is its card, the linked `refund()` runs instead; it refunds the card only,
+so a stored value leg keeps the allocation path. A sale that loaded a gift card is not refundable: its tender
+funded the load, so it is voided, which reverses the load before its funding. Void reverses every standing leg by `OriginalSaleRecord`
 (or the parameterless `voidTransaction()` for this session's payment); a failed leg opens the
 reversal decision prompt (retry, skip, abort) with the Java default policy as the fallback, and
-the legs a stopped void did reverse are kept so a retry omits them. The unreferenced refund is
+the legs a stopped void did reverse are recorded. A retry in the same session resends the
+identical record, which the session resumes from its own progress; a void started afresh in a
+later session sends only the legs still standing. The unreferenced refund is
 `refundUnlinked(amount)`.
 
 **Companion display.** `RetailMediaSurface` on the `lane-banner` placement with an explicit "no

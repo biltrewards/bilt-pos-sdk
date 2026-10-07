@@ -1,5 +1,7 @@
 import {
   SessionError,
+  type Operation,
+  type OriginalSaleRecord,
   type RefundResult,
   type ReversalDecision,
   type ReversalHandlers,
@@ -19,15 +21,19 @@ import {
   planReferencedRefund,
   refundRecordFrom,
   reversalProgress,
+  type ReferencedRefundPlan,
   voidRecordFrom,
 } from '../store/reversals';
 import {
+  isFullyRefunded,
   isPartiallyRefunded,
   isRefundable,
   isVoidable,
   originalSaleRecord,
   refundLeg,
+  refundsLinked,
   remainingLegAmount,
+  standingLoads,
   type StoredSale,
 } from '../store/sale-record';
 import { useStoredSales } from '../store/sales-store';
@@ -92,7 +98,7 @@ function SaleCard({
   const { sale } = stored;
   const status = stored.voided
     ? 'voided'
-    : !isRefundable(stored)
+    : isFullyRefunded(stored)
       ? 'refunded'
       : stored.refunds.some((r) => !r.reversalProgress)
         ? 'partially refunded'
@@ -140,6 +146,7 @@ function SaleCard({
             {refund.reversalProgress ? 'reversed' : 'refund'}{' '}
             {refund.amount ? formatMoney(refund.amount, currency) : ''}
             {refund.leg ? ` from ${refund.leg}` : ''}
+            {refund.giftCardLoad ? ' gift card load' : ''}
             {refund.full ? ' (full)' : ''}
             {refund.awardReversed ? ' · award reversed' : ''}
             {refund.poiTransactionId ? ` · txn ${refund.poiTransactionId}` : ''} ·{' '}
@@ -165,17 +172,36 @@ function SaleCard({
  * decision prompt; outcomes land in the sale's ledger.
  */
 export function RefundsPane(): ReactNode {
-  const { sales, terminalSession, settings, basket, log, report, lastSale, settlement } = useLane();
+  const {
+    sales,
+    terminalSession,
+    settings,
+    basket,
+    log,
+    report,
+    lastSale,
+    settlement,
+    reversal: busy,
+    setReversal: setBusy,
+  } = useLane();
   const { sales: stored, error: storeError } = useStoredSales(sales);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [unlinked, setUnlinked] = useState('5.00');
-  const [busy, setBusy] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<ReversalPrompt | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [pendingRefund, setPendingRefund] = useState<{
+    readonly sale: StoredSale;
+    readonly plan: ReferencedRefundPlan;
+  } | null>(null);
   const currency = settings.currency;
   const selected = stored.find((s) => s.sale.id === selectedId) ?? null;
   const promptRef = useRef<ReversalPrompt | null>(null);
+  // The record each stopped prior-sale void sent, by session and sale. The session resumes only
+  // a retry with the identical record and refuses any other while the void is incomplete, so a
+  // retry in that session resends it; the reduced record from the stored progress is for a void
+  // started afresh in another session.
+  const stoppedVoids = useRef(new Map<string, OriginalSaleRecord>());
 
   const handlers: ReversalHandlers = {
     onError: (step, error, info) =>
@@ -202,7 +228,7 @@ export function RefundsPane(): ReactNode {
       setBusy(null);
       if (next.kind === 'error') report(next.error);
     },
-    [report],
+    [report, setBusy],
   );
 
   const sameSessionSale = (sale: StoredSale) =>
@@ -214,20 +240,24 @@ export function RefundsPane(): ReactNode {
   const doVoid = (sale: StoredSale) => {
     if (!terminalSession) return;
     setBusy(`void ${sale.sale.id}`);
-    const operation = sameSessionSale(sale)
-      ? terminalSession.voidTransaction(undefined, handlers)
-      : terminalSession.voidTransaction(originalSaleRecord(sale), handlers);
+    const key = `${terminalSession.id}:${sale.sale.id}`;
+    const record = sameSessionSale(sale)
+      ? undefined
+      : (stoppedVoids.current.get(key) ?? originalSaleRecord(sale));
+    const operation = terminalSession.voidTransaction(record, handlers);
     track(log, 'voidTransaction', operation);
     operation.then(
       async (result) => {
+        stoppedVoids.current.delete(key);
         await sales.recordVoid(voidRecordFrom(sale, result)).catch(report);
         if (sameSessionSale(sale)) settlement.reset();
         finish({ kind: 'void', saleId: sale.sale.id, result });
       },
       async (error: unknown) => {
         if (error instanceof SessionError && error.reversedMovements.length > 0) {
-          for (const record of reversalProgress(sale, error.reversedMovements)) {
-            await sales.recordRefund(record).catch(report);
+          if (record) stoppedVoids.current.set(key, record);
+          for (const progress of reversalProgress(sale, error.reversedMovements)) {
+            await sales.recordRefund(progress).catch(report);
           }
         }
         finish({ kind: 'error', saleId: sale.sale.id, error });
@@ -247,8 +277,8 @@ export function RefundsPane(): ReactNode {
       return;
     }
     setBusy(`refund ${sale.sale.id}`);
-    if (sameSessionSale(sale)) {
-      // This session took the payment: the linked refund needs no references.
+    if (sameSessionSale(sale) && refundsLinked(sale)) {
+      // This session took the card payment: the linked refund needs no references.
       const operation = terminalSession.refund(requested, handlers);
       track(log, 'refund', operation);
       operation.then(
@@ -282,37 +312,68 @@ export function RefundsPane(): ReactNode {
     basket
       .clear()
       .then(() => basket.addItem(plan.returnLine))
-      .then(() => {
-        const operation = terminalSession.settle({
-          settlementType: 'REFUND_THEN_CHARGE',
-          refunds: [...plan.allocations],
-          disableRebates: true,
-          disablePoints: true,
-          disableAward: true,
-          // A refund allocation failure arrives here as a notification; the answer is ignored.
-          onError: (failure) => {
-            log.info(
-              'refund',
-              `${failure.step ?? 'allocation'} failed: ${failure.error.code} ${failure.error.message}`,
-              failure,
-            );
-            return 'ABORT';
-          },
-        });
-        track(log, 'settle (refund)', operation);
-        return operation;
-      })
       .then(
-        async (result) => {
-          await sales.recordRefund(refundRecordFrom(sale, plan, result)).catch(report);
-          await basket.clear().catch(() => undefined);
-          finish({ kind: 'refund', saleId: sale.sale.id, result });
-        },
-        async (error: unknown) => {
-          await basket.clear().catch(() => undefined);
-          finish({ kind: 'error', saleId: sale.sale.id, error });
-        },
+        () => settleRefund(sale, plan),
+        (error: unknown) => finish({ kind: 'error', saleId: sale.sale.id, error }),
       );
+  };
+
+  /**
+   * Settles the return line in the basket. When an allocation committed before the settlement
+   * failed (the card refunded, the award reversal refused), the session refuses to clear the
+   * basket and accepts only a retry with the same allocations, so the plan is kept for one.
+   */
+  const settleRefund = (sale: StoredSale, plan: ReferencedRefundPlan) => {
+    if (!terminalSession) return;
+    let operation: Operation<SettlementResult>;
+    try {
+      operation = terminalSession.settle({
+        settlementType: 'REFUND_THEN_CHARGE',
+        refunds: [...plan.allocations],
+        disableRebates: true,
+        disablePoints: true,
+        disableAward: true,
+        // A refund allocation failure arrives here as a notification; the answer is ignored.
+        onError: (failure) => {
+          log.info(
+            'refund',
+            `${failure.step ?? 'allocation'} failed: ${failure.error.code} ${failure.error.message}`,
+            failure,
+          );
+          return 'ABORT';
+        },
+      });
+    } catch (error) {
+      finish({ kind: 'error', saleId: sale.sale.id, error });
+      return;
+    }
+    track(log, 'settle (refund)', operation);
+    operation.then(
+      async (result) => {
+        setPendingRefund(null);
+        await sales.recordRefund(refundRecordFrom(sale, plan, result)).catch(report);
+        await basket.clear().catch(() => undefined);
+        finish({ kind: 'refund', saleId: sale.sale.id, result });
+      },
+      async (error: unknown) => {
+        const cleared = await basket.clear().then(
+          () => true,
+          () => false,
+        );
+        setPendingRefund(cleared ? null : { sale, plan });
+        finish({ kind: 'error', saleId: sale.sale.id, error });
+      },
+    );
+  };
+
+  const retryRefund = () => {
+    if (!pendingRefund) return;
+    setBusy(`refund ${pendingRefund.sale.sale.id}`);
+    log.info(
+      'refund',
+      `retrying the refund of ${pendingRefund.sale.sale.id} with the same allocations`,
+    );
+    settleRefund(pendingRefund.sale, pendingRefund.plan);
   };
 
   const doUnlinked = () => {
@@ -330,6 +391,9 @@ export function RefundsPane(): ReactNode {
 
   const settling = settlement.status === 'running' || settlement.status === 'awaitingReply';
   const disabled = !terminalSession || busy !== null || settling;
+  // Until the stopped refund's allocations settle, the session refuses a void and keeps its
+  // return line in the basket, so neither a void nor another referenced refund can start.
+  const blocked = disabled || pendingRefund !== null;
 
   return (
     <div className="columns two">
@@ -368,7 +432,9 @@ export function RefundsPane(): ReactNode {
               <p className="small">
                 Selected sale <code>{selected.sale.id}</code>
                 {sameSessionSale(selected)
-                  ? ' (this session’s last payment: linked reversal, no references)'
+                  ? refundsLinked(selected)
+                    ? ' (this session’s last payment: linked reversal, no references)'
+                    : ' (this session’s last payment: linked void; the refund goes by persisted references)'
                   : ' (by persisted references)'}
                 {refundLeg(selected)
                   ? ` · ${formatMoney(remainingLegAmount(selected, refundLeg(selected)!.type), currency)} left on ${refundLeg(selected)!.type}`
@@ -385,16 +451,20 @@ export function RefundsPane(): ReactNode {
                 />
                 <button
                   type="button"
-                  disabled={disabled || !isRefundable(selected)}
+                  disabled={blocked || !isRefundable(selected)}
                   onClick={() => doRefund(selected)}
-                  title="A RETURN line settled with a refund allocation against the original tender"
+                  title={
+                    standingLoads(selected).length > 0
+                      ? 'Refused: the sale loaded a gift card, so void it to reverse the load with its funding'
+                      : 'A RETURN line settled with a refund allocation against the original tender'
+                  }
                 >
                   Referenced refund
                 </button>
                 <button
                   type="button"
                   className="danger"
-                  disabled={disabled || !isVoidable(selected)}
+                  disabled={blocked || !isVoidable(selected)}
                   onClick={() => doVoid(selected)}
                   title={
                     isPartiallyRefunded(selected)
@@ -427,6 +497,18 @@ export function RefundsPane(): ReactNode {
               Refund without a sale
             </button>
           </div>
+          {pendingRefund && !busy ? (
+            <div className="prompt" role="alertdialog" aria-label="Refund incomplete">
+              <p>
+                The refund of sale <code>{pendingRefund.sale.sale.id}</code> stopped after
+                committing part of it; the session holds its return line until the same allocations
+                settle.
+              </p>
+              <button type="button" disabled={disabled} onClick={retryRefund}>
+                Retry the refund
+              </button>
+            </div>
+          ) : null}
           {busy ? <p className="small muted">Running {busy}…</p> : null}
           {prompt ? <ReversalDecisionPrompt prompt={prompt} /> : null}
           {outcome ? <OutcomeView outcome={outcome} currency={currency} /> : null}
