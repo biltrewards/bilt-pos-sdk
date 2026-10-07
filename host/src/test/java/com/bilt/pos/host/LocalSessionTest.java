@@ -165,6 +165,10 @@ class LocalSessionTest {
             .body;
     assertEquals("UNSUPPORTED", refused.path("code").asText());
 
+    JsonNode invalid =
+        client.post(base + "/operations", json("{'type':'requestDigitString'}")).expect(400).body;
+    assertEquals("VALIDATION", invalid.path("code").asText());
+
     JsonNode cleared = client.post(base + "/basket/clear", "{}").expect(200).body;
     assertEquals(0, cleared.path("items").size());
 

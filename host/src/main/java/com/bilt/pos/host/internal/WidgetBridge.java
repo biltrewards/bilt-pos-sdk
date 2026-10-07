@@ -112,6 +112,13 @@ public final class WidgetBridge {
                     publish.accept("widget.interaction", payload);
                   });
       for (JsonNode placementSpec : placements) {
+        // the spec's PlacementConfig is an object; a bare id, the pre-spec shape, still works
+        if (placementSpec.isTextual()) {
+          placementSpec = Json.object().put("id", placementSpec.asText());
+        }
+        if (!placementSpec.isObject()) {
+          throw HostError.badRequest("placements must be PlacementConfig objects");
+        }
         Placement placement = Placement.of(Json.requireText(placementSpec, "id"));
         Set<MediaSpec.MediaType> formats =
             placementSpec.has("formats") ? formats(placementSpec, "placements") : defaultFormats;
