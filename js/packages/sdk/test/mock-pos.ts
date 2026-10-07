@@ -4,7 +4,9 @@
 // the SDK core.
 import type {
   Basket,
+  BasketDiscount,
   BasketItem,
+  BasketLineItem,
   CheckoutPhase,
   Cta,
   IdentifyResult,
@@ -62,6 +64,30 @@ function operation<T>(type: OperationType, run: () => Promise<T>): Operation<T> 
     abort: { value: async () => undefined, enumerable: true },
   });
   return handle as Operation<T>;
+}
+
+/**
+ * The register-side fields of a line, so a patched line is recomputed from them rather than from
+ * its derived totals. A line's `taxAmount` is always filled in; it is the register's own fixed
+ * amount only on a line without a rate (`setTaxAmount` clears the rate, `setTaxRate` the amount),
+ * and a fixed amount survives a quantity or discount edit, as on the host.
+ */
+function toItem(line: BasketLineItem): BasketItem {
+  return {
+    sku: line.sku,
+    description: line.description,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    discounts: line.discounts,
+    type: line.type,
+    metadata: line.metadata,
+    ...(line.reference === undefined ? {} : { reference: line.reference }),
+    ...(line.category === undefined ? {} : { category: line.category }),
+    ...(line.taxRate === undefined ? {} : { taxRate: line.taxRate }),
+    ...(line.taxRate === undefined && Number(line.taxAmount) !== 0
+      ? { taxAmount: line.taxAmount }
+      : {}),
+  };
 }
 
 class Emitter {
@@ -157,10 +183,7 @@ class MockBasket implements SessionBasket {
 
   updateItemQuantity(itemId: string, quantity: number): Promise<Basket> {
     if (quantity === 0) return this.removeItem(itemId);
-    const items = this.current.items.map((l) =>
-      l.itemId === itemId ? fx.lineItem({ ...l, quantity }, l.itemId) : l,
-    );
-    return this.commit(fx.basket(items, this.current.cartId), 'INCREMENTAL');
+    return this.patchLine((l) => l.itemId === itemId, { quantity });
   }
 
   updateItemQuantityBySku(sku: string, quantity: number): Promise<Basket> {
@@ -168,23 +191,38 @@ class MockBasket implements SessionBasket {
     return line ? this.updateItemQuantity(line.itemId, quantity) : Promise.resolve(this.current);
   }
 
-  setDiscounts(): Promise<Basket> {
-    return Promise.resolve(this.current);
+  /** Rebuilds one line with a patch, as the host would; an unknown line leaves the basket untouched. */
+  private patchLine(
+    match: (line: BasketLineItem) => boolean,
+    patch: Partial<BasketItem>,
+    clear?: 'taxRate' | 'taxAmount',
+  ): Promise<Basket> {
+    const items = this.current.items.map((l) => {
+      if (!match(l)) return l;
+      const item: BasketItem = { ...toItem(l), ...patch };
+      if (clear) delete item[clear];
+      return fx.lineItem(item, l.itemId);
+    });
+    return this.commit(fx.basket(items, this.current.cartId), 'INCREMENTAL');
   }
-  setDiscountsBySku(): Promise<Basket> {
-    return Promise.resolve(this.current);
+
+  setDiscounts(itemId: string, discounts: readonly BasketDiscount[]): Promise<Basket> {
+    return this.patchLine((l) => l.itemId === itemId, { discounts: [...discounts] });
   }
-  setTaxRate(): Promise<Basket> {
-    return Promise.resolve(this.current);
+  setDiscountsBySku(sku: string, discounts: readonly BasketDiscount[]): Promise<Basket> {
+    return this.patchLine((l) => l.sku === sku, { discounts: [...discounts] });
   }
-  setTaxRateBySku(): Promise<Basket> {
-    return Promise.resolve(this.current);
+  setTaxRate(itemId: string, rate: Money): Promise<Basket> {
+    return this.patchLine((l) => l.itemId === itemId, { taxRate: rate }, 'taxAmount');
   }
-  setTaxAmount(): Promise<Basket> {
-    return Promise.resolve(this.current);
+  setTaxRateBySku(sku: string, rate: Money): Promise<Basket> {
+    return this.patchLine((l) => l.sku === sku, { taxRate: rate }, 'taxAmount');
   }
-  setTaxAmountBySku(): Promise<Basket> {
-    return Promise.resolve(this.current);
+  setTaxAmount(itemId: string, amount: Money): Promise<Basket> {
+    return this.patchLine((l) => l.itemId === itemId, { taxAmount: amount }, 'taxRate');
+  }
+  setTaxAmountBySku(sku: string, amount: Money): Promise<Basket> {
+    return this.patchLine((l) => l.sku === sku, { taxAmount: amount }, 'taxRate');
   }
 
   setTaxTotal(amount: Money | null): Promise<Basket> {
