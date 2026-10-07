@@ -11,23 +11,34 @@ This page builds on the [minimal](./loyalty-integration-minimal.md) and [identif
 
 ## The full flow
 
-```
-Register                                            Terminal (POI)
-   │ ── AdminRequest (BiltSession,Start) ─────────────> │  session scope opened
-   │ ── DisplayRequest (virtual receipt) ─────────────> │  … per basket change …
-   │ ── CardAcquisitionRequest (loyalty) ─────────────> │  member identified
-   │                                                    │
-   │ ── LoyaltyRequest (Rebate) ──────────────────────> │  coupons/offers committed
-   │ <── LoyaltyResponse (Rebates) ──────────────────── │
-   │ ── LoyaltyRequest (Redemption) ──────────────────> │  points redeemed
-   │ <── LoyaltyResponse (monetary value) ───────────── │
-   │                                                    │
-   │ ── PaymentRequest (LoyaltyHandling=Processed) ───> │  card payment
-   │ <── PaymentResponse ────────────────────────────── │
-   │                                                    │
-   │ ── LoyaltyRequest (Award) ───────────────────────> │  points earned
-   │ <── LoyaltyResponse (points, new balance) ──────── │
-   │ ── AdminRequest (BiltSession,End) ───────────────> │  session state discarded
+```mermaid
+sequenceDiagram
+    participant R as Register
+    participant T as Terminal (POI)
+
+    R->>T: AdminRequest (BiltSession,Start)
+    Note right of T: session scope opened
+    R->>T: DisplayRequest (virtual receipt)
+    Note right of T: … per basket change …
+    R->>T: CardAcquisitionRequest (loyalty)
+    Note right of T: member identified
+
+    R->>T: LoyaltyRequest (Rebate)
+    Note right of T: coupons/offers committed
+    T-->>R: LoyaltyResponse (Rebates)
+    R->>T: LoyaltyRequest (Redemption)
+    Note right of T: points redeemed
+    T-->>R: LoyaltyResponse (monetary value)
+
+    R->>T: PaymentRequest (LoyaltyHandling=Processed)
+    Note right of T: card payment
+    T-->>R: PaymentResponse
+
+    R->>T: LoyaltyRequest (Award)
+    Note right of T: points earned
+    T-->>R: LoyaltyResponse (points, new balance)
+    R->>T: AdminRequest (BiltSession,End)
+    Note right of T: session state discarded
 ```
 
 Each `LoyaltyRequest` is an independent, individually-reversible transaction with its own `SaleTransactionID` and its own `POITransactionID`. Keep every `POITransactionID` until the sale is settled — they are the handles the reversal paths need.
