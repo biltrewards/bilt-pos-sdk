@@ -6,8 +6,6 @@
       url: /shopper-session-integration.html
     - name: TerminalShopperSession
       url: /checkout-session-integration.html
-    - name: Terminal Bridge
-      url: /terminal-bridge.html
 
 - title: Browser & JavaScript
   items:
@@ -156,7 +154,5 @@
       url: /api-reference.html
     - name: Session Host
       url: /session-host.html
-    - name: Session Protocol Reference
-      url: /session-protocol-reference.html
     - name: SDK Javadoc
       url: /javadoc/index.html
