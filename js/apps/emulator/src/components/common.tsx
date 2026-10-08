@@ -139,7 +139,11 @@ export function Dialog({
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const inerted: Element[] = [];
-    for (let node = backdrop.current; node?.parentElement; node = node.parentElement) {
+    for (
+      let node: HTMLElement | null = backdrop.current;
+      node?.parentElement;
+      node = node.parentElement
+    ) {
       for (const sibling of Array.from(node.parentElement.children)) {
         if (sibling !== node && !sibling.hasAttribute('inert')) {
           sibling.setAttribute('inert', '');
