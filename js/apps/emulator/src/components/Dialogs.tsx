@@ -13,12 +13,7 @@ function PaymentRecoveryDialog({ prompt }: { prompt: PaymentRecoveryPrompt }): R
       <pre className="message">{prompt.message}</pre>
       <p>Choose how to continue:</p>
       {prompt.actions.map((action) => (
-        <button
-          key={action}
-          type="button"
-          className="choice"
-          onClick={() => prompt.choose(action)}
-        >
+        <button key={action} type="button" className="choice" onClick={() => prompt.choose(action)}>
           <span>{RECOVERY_ACTIONS[action].label}</span>
           <span className="small">{RECOVERY_ACTIONS[action].description}</span>
         </button>

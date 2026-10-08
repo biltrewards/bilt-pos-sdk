@@ -238,7 +238,7 @@ export function BasketCard({
                   quantity={line.quantity}
                   description={describeLine(line, editing)}
                   amountLabel={`$${line.lineTotal}`}
-                  className={editing ? "editing" : ""}
+                  className={editing ? 'editing' : ''}
                   {...(editable !== null
                     ? { onClick: () => onEditCustomLine(line.sku, editable) }
                     : {})}

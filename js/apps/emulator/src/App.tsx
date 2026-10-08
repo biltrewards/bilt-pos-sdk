@@ -188,7 +188,11 @@ export function App(props: AppProps): ReactNode {
     () => controller.getState().connection.phase,
   );
   useEffect(() => {
-    if (bridge.status === 'ready' && phase === 'DISCONNECTED' && !controller.disconnectedByOperator) {
+    if (
+      bridge.status === 'ready' &&
+      phase === 'DISCONNECTED' &&
+      !controller.disconnectedByOperator
+    ) {
       controller.connect();
     }
   }, [bridge.status, phase, controller]);

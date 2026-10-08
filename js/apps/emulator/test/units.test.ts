@@ -3,8 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import * as fx from '../../../packages/sdk/test/fixtures';
 import { CATALOG, customItem, nextCustomSku, toBasketItem } from '../src/catalog';
-import { LogStore, summarize, track } from '../src/log';
-import { parseMoney, recomputeTotal } from '../src/money';
+import { LineLog, summarize } from '../src/log';
+import { formatMinor, nonNegativeMoneyMinor, parseMoney, recomputeTotal } from '../src/money';
 import { NJ_SALES_TAX_RATE, taxRateFor } from '../src/tax';
 import { bridgeOptions, loadSettings, saveSettings } from '../src/settings';
 
@@ -17,6 +17,17 @@ describe('money', () => {
     expect(parseMoney('1.234')).toBeUndefined();
     expect(parseMoney('-1')).toBeUndefined();
     expect(parseMoney('abc')).toBeUndefined();
+  });
+
+  it('formats and validates cents as the desktop does', () => {
+    expect(formatMinor(7999)).toBe('79.99');
+    expect(formatMinor(5)).toBe('0.05');
+    expect(formatMinor(-3731)).toBe('-37.31');
+    expect(nonNegativeMoneyMinor('12.5')).toBe(1250);
+    expect(nonNegativeMoneyMinor('0')).toBe(0);
+    expect(nonNegativeMoneyMinor('1.')).toBe(100);
+    expect(nonNegativeMoneyMinor('1.234')).toBeNull();
+    expect(nonNegativeMoneyMinor('-1')).toBeNull();
   });
 
   it('re-taxes the adjusted amount after rebates', () => {
@@ -101,13 +112,11 @@ describe('settings', () => {
 });
 
 describe('log', () => {
-  it('numbers entries, summarises events and tracks operations', async () => {
-    const log = new LogStore();
+  it('stamps lines, notifies readers and summarises events', () => {
+    const log = new LineLog();
     const seen: number[] = [];
     log.subscribe(() => seen.push(log.snapshot().length));
     log.add(
-      'event',
-      'basket.changed',
       summarize('basket.changed', {
         previous: fx.basket([]),
         current: fx.basket([fx.lineItem({ sku: 'A', description: 'A', unitPrice: '1.00' })]),
@@ -122,20 +131,11 @@ describe('log', () => {
         taxTotalChanged: false,
       }),
     );
-    await track(log, 'refund', Promise.reject(new Error('declined'))).then(
-      () => undefined,
-      () => undefined,
-    );
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const entries = log.snapshot();
-    expect(entries.map((e) => e.seq)).toEqual([1, 2, 3]);
-    expect(entries[0]?.summary).toContain('incremental: 1 line(s), total 1.00');
-    expect(entries[2]).toMatchObject({
-      kind: 'operation',
-      type: 'refund',
-      summary: 'failed: declined',
-    });
-    expect(seen.length).toBe(3);
+    log.add('second');
+    const lines = log.snapshot();
+    expect(lines[0]).toMatch(/^\d\d:\d\d:\d\d incremental: 1 line\(s\), total 1\.00/);
+    expect(lines[1]).toMatch(/ second$/);
+    expect(seen).toEqual([1, 2]);
     expect(summarize('session.ended', { sessionId: 's', forced: true })).toBe(
       'session s ended (forced)',
     );

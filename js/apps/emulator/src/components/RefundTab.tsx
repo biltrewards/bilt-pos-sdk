@@ -213,7 +213,11 @@ export function RefundTab(): ReactNode {
   const selected = state.sales.find((sale) => sale.id === selectedId) ?? state.sales[0] ?? null;
   return (
     <div className="refund-tab tab-content-row">
-      <SalesListCard sales={state.sales} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
+      <SalesListCard
+        sales={state.sales}
+        selectedId={selected?.id ?? null}
+        onSelect={setSelectedId}
+      />
       {selected ? <RefundDetailsCard key={selected.id} sale={selected} /> : null}
     </div>
   );

@@ -20,7 +20,8 @@ import {
 import type { LocalBridgeOptions } from '@bilt/pos-sdk/bridge';
 import { isCustomSku, nextCustomSku, customItem, toBasketItem, type Product } from '../catalog';
 import { storedValueCard, GIFT_CARD_SKU } from '../gift-cards';
-import { describeError, LineLog, SESSION_EVENT_TYPES, summarize } from '../log';
+import type { LineLog } from '../log';
+import { describeError, SESSION_EVENT_TYPES, summarize } from '../log';
 import { cents, formatMinor, money } from '../money';
 import { originalSaleRecord, toSaleRecord, type RefundRecord } from '../store/sale-record';
 import { defaultReversalDecision, reversalProgress } from '../store/reversals';
@@ -620,9 +621,10 @@ export class BrowserEmulatorController implements EmulatorController {
     try {
       // The basket has no re-price mutator, so the line is replaced in one atomic batch.
       const basket = await session.basket.mutate((mutation) =>
-        mutation
-          .removeItem(existing.itemId)
-          .addItem({ ...customItem(sku, money(priceMinor), '', false), quantity: existing.quantity }),
+        mutation.removeItem(existing.itemId).addItem({
+          ...customItem(sku, money(priceMinor), '', false),
+          quantity: existing.quantity,
+        }),
       );
       this.publishBasket(basket);
       this.detailedLog(`Custom line ${sku} re-priced to $${formatMinor(priceMinor)}`);
@@ -827,7 +829,10 @@ export class BrowserEmulatorController implements EmulatorController {
       if (target.type !== 'SALE') throw new Error('discounts can only be applied to sale lines');
       const saleSubtotal = snapshot.items
         .filter((item) => item.type === 'SALE' && item.itemId !== itemId)
-        .reduce((sum, item) => sum + cents(item.adjustedTotal), cents(target.originalTotal) - value);
+        .reduce(
+          (sum, item) => sum + cents(item.adjustedTotal),
+          cents(target.originalTotal) - value,
+        );
       const creditTotal = snapshot.items
         .filter((item) => item.type === 'CREDIT')
         .reduce((sum, item) => sum - cents(item.adjustedTotal), 0);
@@ -1232,9 +1237,7 @@ export class BrowserEmulatorController implements EmulatorController {
     );
   }
 
-  private async recordReturns(
-    records: readonly RefundRecord[],
-  ): Promise<boolean> {
+  private async recordReturns(records: readonly RefundRecord[]): Promise<boolean> {
     let recorded = true;
     for (const record of records) {
       try {
