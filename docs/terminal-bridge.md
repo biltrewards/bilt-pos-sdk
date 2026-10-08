@@ -63,7 +63,7 @@ curl http://127.0.0.1:48333/health
 ```
 
 ```json
-{"host":"bridge","hostVersion":"0.32.0","sdkVersion":"0.32.0","protocolVersions":["1"],"terminal":{"label":"Lane 1","model":"VictaLane"}}
+{"host":"bridge","hostVersion":"0.32.0","sdkVersion":"0.32.0","protocolVersions":["2"],"terminal":{"label":"Lane 1","model":"VictaLane"}}
 ```
 
 `terminal` is absent when none is configured; `GET /v1/terminal` returns the same object, or `404` without a terminal. If the default port was taken, the bridge log (and the tray's status line) names the port that was bound; `curl http://127.0.0.1:48334/health` and so on finds it, and the SDK probes the same range on its own.

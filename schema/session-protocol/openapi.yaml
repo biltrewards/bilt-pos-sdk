@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Bilt POS Session Protocol
-  version: 1.0.0-draft
+  version: 2.0.0-draft
   summary: The wire form of the Bilt POS SDK's ShopperSession API.
   description: |
     The Session Protocol is how a register that cannot embed the Java SDK — a browser page, a

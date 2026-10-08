@@ -51,7 +51,7 @@ class LocalSessionTest {
   void healthReportsVersionsAndProtocol() throws Exception {
     JsonNode health = client.get("/health").expect(200).body;
     assertEquals("bridge", health.path("host").asText());
-    assertEquals("1", health.path("protocolVersions").get(0).asText());
+    assertEquals("2", health.path("protocolVersions").get(0).asText());
     assertNotNull(health.path("sdkVersion").asText(null));
     assertTrue(health.path("terminal").isMissingNode());
   }

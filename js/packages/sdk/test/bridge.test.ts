@@ -23,7 +23,7 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function health(versions: string[] = ['1']) {
+function health(versions: string[] = ['2']) {
   return {
     host: 'bridge',
     hostVersion: '0.1',
@@ -125,7 +125,7 @@ describe('localBridge', () => {
     expect(error).toBeInstanceOf(BridgeOutdatedError);
     expect(error).toBeInstanceOf(EngineOutdatedError);
     expect(error).toMatchObject({
-      required: '1',
+      required: '2',
       available: ['0'],
       baseUrl: 'http://127.0.0.1:48333',
     });

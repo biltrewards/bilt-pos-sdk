@@ -2904,7 +2904,7 @@ export interface operations {
                      *       "hostVersion": "0.1.0",
                      *       "sdkVersion": "0.30.0",
                      *       "protocolVersions": [
-                     *         "1"
+                     *         "2"
                      *       ],
                      *       "terminal": {
                      *         "label": "Lane 3",

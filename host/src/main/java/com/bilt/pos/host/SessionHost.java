@@ -87,7 +87,7 @@ import java.util.logging.Logger;
 public final class SessionHost implements AutoCloseable {
 
   private static final Logger LOGGER = Logger.getLogger(SessionHost.class.getName());
-  private static final String PROTOCOL_VERSION = "1";
+  private static final String PROTOCOL_VERSION = "2";
   private static final Duration SSE_PING = Duration.ofSeconds(15);
   private static final AtomicInteger WORKER_COUNTER = new AtomicInteger();
 

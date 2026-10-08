@@ -711,7 +711,7 @@ export class MockBiltPos implements BiltPos {
       host: 'bridge' as const,
       hostVersion: '0.0.0',
       sdkVersion: '0.0.0',
-      protocolVersions: ['1'],
+      protocolVersions: ['2'],
       terminal: { model: 'VictaLane', reachable: true },
     });
   }

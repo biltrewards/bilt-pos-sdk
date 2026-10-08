@@ -13,7 +13,7 @@ const ready: BridgeDetection = {
     host: 'bridge',
     hostVersion: '0.0.0',
     sdkVersion: '0.0.0',
-    protocolVersions: ['1'],
+    protocolVersions: ['2'],
   },
 };
 

@@ -21,7 +21,7 @@ export const HEALTH: Health = {
   host: 'bridge',
   hostVersion: '0.30.0',
   sdkVersion: '0.30.0',
-  protocolVersions: ['1'],
+  protocolVersions: ['2'],
   terminal: { label: 'Lane 3', model: 'VictaLane', reachable: true },
 };
 
