@@ -19,7 +19,7 @@ import {
 } from '../../../../packages/sdk/test/contract/host';
 import { connectTo } from '../../../../packages/sdk/test/contract/setup';
 import { CATALOG, toBasketItem } from '../../src/catalog';
-import { recomputeTotal } from '../../src/money';
+import { totalAfterRebates } from '../../src/emulator/controller';
 import {
   planAllocations,
   planReturn,
@@ -115,7 +115,7 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
         transactionIds.push(context.defaultTransactionId);
         return context.defaultTransactionId;
       },
-      onRebatesRedeemed: (rebates) => recomputeTotal(rebates.updatedBasket),
+      onRebatesRedeemed: totalAfterRebates,
       onError: (failure) => {
         failures.push(failure);
         return 'RETRY';

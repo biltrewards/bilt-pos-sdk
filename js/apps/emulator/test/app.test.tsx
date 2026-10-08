@@ -1,5 +1,5 @@
 // The shell and the connection card: the desktop's panel structure, the install prompt while the
-// bridge is missing, the terminal picker from `/health`, and the explicit checkout lifecycle.
+// bridge is missing, the bridge terminal from `/health`, and the explicit checkout lifecycle.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { App } from '../src/App';

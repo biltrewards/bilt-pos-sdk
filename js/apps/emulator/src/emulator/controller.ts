@@ -22,7 +22,7 @@ import { isCustomSku, nextCustomSku, customItem, toBasketItem, type Product } fr
 import { storedValueCard, GIFT_CARD_SKU } from '../gift-cards';
 import type { LineLog } from '../log';
 import { describeError, SESSION_EVENT_TYPES, summarize } from '../log';
-import { cents, formatMinor, money } from '../money';
+import { cents, formatMinor, money, recomputeTotal } from '../money';
 import { originalSaleRecord, toSaleRecord, type RefundRecord } from '../store/sale-record';
 import { defaultReversalDecision, reversalProgress } from '../store/reversals';
 import type { SaleStore } from '../store/sales-store';
@@ -1035,10 +1035,9 @@ export class BrowserEmulatorController implements EmulatorController {
               `Gift card refund committed: $${movement.amount} (txn ${movement.poiTransactionId})`,
             ),
           onRebatesRedeemed: (rebates) => {
-            this.log(
-              `Rebates applied: −$${rebates.totalRebateAmount} → total $${rebates.suggestedTotal}`,
-            );
-            return rebates.suggestedTotal;
+            const total = totalAfterRebates(rebates);
+            this.log(`Rebates applied: −$${rebates.totalRebateAmount} → total $${total}`);
+            return total;
           },
           onPointsRedeemed: (points) => {
             this.log(
@@ -1555,4 +1554,12 @@ export class BrowserEmulatorController implements EmulatorController {
   dismissPaymentOutcome(): void {
     this.update({ paymentOutcome: null });
   }
+}
+
+/**
+ * The amount to charge once rebates are redeemed: the host's `suggestedTotal` keeps the tax of the
+ * price before the rebates, so the register re-taxes the updated basket as the desktop does.
+ */
+export function totalAfterRebates(rebates: { readonly updatedBasket: Basket }): Money {
+  return recomputeTotal(rebates.updatedBasket);
 }
