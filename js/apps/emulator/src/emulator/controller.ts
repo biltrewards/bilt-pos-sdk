@@ -1356,10 +1356,11 @@ export class BrowserEmulatorController implements EmulatorController {
           this.log('Return aborted — nothing was rung into the basket');
           return;
         }
-        let basket = session.basket.current;
-        for (const item of plan.pending.items) {
-          basket = await session.basket.addItem(returnLine(item));
-        }
+        // One atomic batch: a failure part-way must not leave returns in the basket that
+        // `pendingReturns` does not know about.
+        const basket = await session.basket.mutate((mutation) => {
+          for (const item of plan.pending.items) mutation.addItem(returnLine(item));
+        });
         this.pendingReturns = [...this.pendingReturns, plan.pending];
         if (this.session === session) this.publishBasket(basket);
         this.refreshSales();
