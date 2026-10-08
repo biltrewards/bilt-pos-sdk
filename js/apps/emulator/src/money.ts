@@ -1,4 +1,4 @@
-import type { Basket, BasketLineItem, Money, Offer } from '@bilt/pos-sdk';
+import type { Basket, Money } from '@bilt/pos-sdk';
 
 /** `Money` is a decimal string on the wire; the register does its arithmetic in integer cents. */
 export function cents(value: Money | undefined): number {
@@ -56,34 +56,26 @@ export function recomputeTotal(basket: Basket): Money {
   return money(Math.max(0, goods + tax - cartRebate));
 }
 
-/** The discount an offer is worth on a line: its fixed amount, or its percentage of the line's subtotal, never more than the line. */
-export function offerAmount(offer: Offer, line: BasketLineItem): Money {
-  const subtotal = cents(line.subtotal);
-  const amount =
-    offer.amount !== undefined
-      ? cents(offer.amount)
-      : offer.percentage !== undefined
-        ? Math.round((subtotal * Number(offer.percentage)) / 100)
-        : 0;
-  return money(Math.min(Math.max(amount, 0), subtotal));
+/** Cents as a plain two-decimal string, e.g. `7999` → `"79.99"`: the desktop's `minorUnitsToDecimal`. */
+export function formatMinor(minor: number): string {
+  const sign = minor < 0 ? '-' : '';
+  const abs = Math.abs(Math.trunc(minor));
+  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`;
 }
 
 /**
- * Whether the offer is already a discount somewhere in the basket. Every line is checked: the
- * line a basket-scoped offer lands on can change as the basket does.
+ * Exact two-decimal parser for UI validation, in cents; `null` for anything that is not a
+ * non-negative amount with at most two places.
  */
-export function offerApplied(offer: Offer, basket: Basket): boolean {
-  return basket.items.some((line) => line.discounts.some((d) => d.reference === offer.id));
+export function nonNegativeMoneyMinor(raw: string): number | null {
+  const value = raw.trim();
+  if (!/^\d+(\.\d{0,2})?$/.test(value)) return null;
+  const [whole = '0', fraction = ''] = value.split('.');
+  const minor = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  return Number.isSafeInteger(minor) ? minor : null;
 }
 
-/** Whether the offer's expiry has passed; an offer without one does not expire. */
-export function offerExpired(offer: Offer, now: Date = new Date()): boolean {
-  return offer.expiry !== undefined && Date.parse(offer.expiry) <= now.getTime();
-}
-
-/** The line a basket-scoped offer lands on: the most valuable one. A line-scoped offer names its SKU. */
-export function offerTarget(offer: Offer, basket: Basket): BasketLineItem | undefined {
-  const sale = basket.items.filter((line) => line.type === 'SALE');
-  if (offer.scope === 'LINE_ITEM') return sale.find((line) => line.sku === offer.sku);
-  return [...sale].sort((a, b) => cents(b.subtotal) - cents(a.subtotal))[0];
+export function positiveMoneyMinor(raw: string): number | null {
+  const minor = nonNegativeMoneyMinor(raw);
+  return minor !== null && minor > 0 ? minor : null;
 }

@@ -1,13 +1,43 @@
-// The shell and the Settings pane: the install prompt in front of the gate with the settings
-// still reachable, the bridge's terminal from `/health`, and applying settings restarting the lane.
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+// The shell and the connection card: the desktop's panel structure, the install prompt while the
+// bridge is missing, the bridge terminal from `/health`, and the explicit checkout lifecycle.
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { App } from '../src/App';
 import { loadSettings } from '../src/settings';
-import { freshStore, probe, renderApp } from './harness';
+import { addProduct, button, events, freshStore, probe, region, renderApp } from './harness';
 
 describe('the emulator shell', () => {
-  it('shows the install prompt while the bridge is missing, with the settings one tab away', async () => {
+  it('lays the page out as the desktop emulator does', async () => {
+    await renderApp();
+    expect(screen.getByRole('heading', { name: 'Bilt POS Emulator' })).toBeTruthy();
+    for (const name of ['Connection', 'Basket', 'Sale', 'Log']) expect(region(name)).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Loyalty sign-in' })).toBeNull();
+    const screens = screen.getByRole('tablist', { name: 'Screens' });
+    expect(Array.from(screens.querySelectorAll('[role=tab]')).map((t) => t.textContent)).toEqual([
+      'Sale',
+      'Stored Value',
+      'Refund',
+    ]);
+    const feeds = screen.getByRole('tablist', { name: 'Log feeds' });
+    expect(Array.from(feeds.querySelectorAll('[role=tab]')).map((t) => t.textContent)).toEqual([
+      'Events',
+      'Detailed',
+      'Protocol',
+    ]);
+    for (const name of [
+      'Disconnect',
+      'Start Checkout',
+      'Loyalty Sign-In',
+      'Clear basket',
+      'Abort operation',
+    ]) {
+      expect(button(name)).toBeTruthy();
+    }
+    expect(screen.getByLabelText('Identify')).toBeTruthy();
+    expect(screen.queryByText(/Companion display/)).toBeNull();
+  });
+
+  it('shows the install prompt in the connection card while the bridge is missing', async () => {
     const connect = async () => {
       throw new Error('connect must not run while the bridge is missing');
     };
@@ -15,45 +45,69 @@ describe('the emulator shell', () => {
     await waitFor(() =>
       expect(screen.getByRole('alert').getAttribute('data-status')).toBe('missing'),
     );
-    expect(screen.getByText(/Install the Bilt Terminal Bridge/)).toBeTruthy();
-    expect(screen.getByText(/The port is in the Settings tab/)).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
-    expect(screen.getByTestId('bridge-status').textContent).toContain('bridge missing');
-    expect(screen.getByTestId('bridge-terminal').textContent).toContain('unknown');
+    expect(screen.getByTestId('bridge-status').textContent).toBe('Bridge: not found');
+    expect(button('Connect').disabled).toBe(true);
+    expect(screen.getByTestId('status').textContent).toContain('Disconnected');
   });
 
-  it('shows the bridge terminal, passes any POI id through and restarts the lane on apply', async () => {
-    const { pos } = await renderApp({ tab: 'settings' });
-    expect(screen.getByTestId('bridge-status').textContent).toContain(
-      'bridge ready at http://127.0.0.1:48333',
+  it('shows the bridge terminal and passes the POI id through to the checkout', async () => {
+    const { pos } = await renderApp();
+    expect(screen.getByTestId('bridge-status').textContent).toBe(
+      'Bridge: ready at http://127.0.0.1:48333 (0.30.0)',
     );
     expect(screen.getByTestId('bridge-terminal').textContent).toBe(
       'Terminal: Lane 3 · VictaLane · reachable',
     );
-    expect((screen.getByLabelText('POI id') as HTMLInputElement).value).toBe('');
-    expect(pos.sessions[0]).toMatchObject({ kind: 'terminal', poiId: 'bilt-session-host' });
+    const poiId = screen.getByLabelText('POI id') as HTMLInputElement;
+    expect(poiId.value).toBe('');
+    expect(poiId.disabled).toBe(true);
 
-    fireEvent.change(screen.getByLabelText('POI id'), { target: { value: 'VictaLane-2' } });
-    fireEvent.change(screen.getByLabelText('Sale id'), { target: { value: 'LANE-9' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Apply and restart the lane' }));
+    fireEvent.click(button('Disconnect'));
+    expect(poiId.disabled).toBe(false);
+    fireEvent.change(poiId, { target: { value: 'VictaLane-2' } });
+    fireEvent.click(button('Connect'));
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toMatch(/Connected/));
+    expect(loadSettings().poiId).toBe('VictaLane-2');
 
-    await waitFor(() => expect(pos.sessions).toHaveLength(2));
-    expect(pos.sessions[1]).toMatchObject({
-      kind: 'terminal',
-      saleId: 'LANE-9',
-      poiId: 'VictaLane-2',
-    });
-    expect(loadSettings()).toMatchObject({ poiId: 'VictaLane-2', saleId: 'LANE-9' });
+    fireEvent.click(button('Start Checkout'));
+    await waitFor(() => expect(pos.sessions).toHaveLength(1));
+    expect(pos.sessions[0]).toMatchObject({ kind: 'terminal', poiId: 'VictaLane-2' });
+    await waitFor(() => expect(button('End Checkout')).toBeTruthy());
+
+    fireEvent.click(button('End Checkout'));
+    await waitFor(() => expect(button('Start Checkout')).toBeTruthy());
     expect(pos.sessions[0]?.state).toBe('ended');
+    expect(events()).toContain('Checkout session ended');
   });
 
   it('keeps a saved POI id and runs a local session when asked', async () => {
-    const { pos } = await renderApp({ tab: 'settings', settings: { poiId: 'Lab-7' } });
+    const { pos } = await renderApp({ settings: { poiId: 'Lab-7' } });
     expect((screen.getByLabelText('POI id') as HTMLInputElement).value).toBe('Lab-7');
-    fireEvent.click(screen.getByLabelText(/Local session:/));
-    fireEvent.click(screen.getByRole('button', { name: 'Apply and restart the lane' }));
-    await waitFor(() => expect(pos.sessions[1]?.kind).toBe('local'));
-    expect(screen.getByText(/Local session · lane/)).toBeTruthy();
+    fireEvent.click(button('Disconnect'));
+    fireEvent.click(screen.getByLabelText('Local session'));
+    fireEvent.click(button('Connect'));
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toMatch(/local sessions/));
+    fireEvent.click(button('Start Checkout'));
+    await waitFor(() => expect(pos.sessions[0]?.kind).toBe('local'));
+    await waitFor(() => expect(screen.getByTestId('session-id').textContent).toMatch(/^ses_/));
+    expect(button('Loyalty Sign-In').disabled).toBe(true);
+    expect(screen.getByTestId('status').textContent).toContain('Mode: local session');
+  });
+
+  it('feeds the log tabs: curated events, the detailed log and the session events', async () => {
+    await renderApp({ checkout: true });
+    addProduct('Coffee');
+    await waitFor(() => expect(events()).toContain('Added Coffee ($3.75)'));
+    // Newest first, as the desktop log.
+    expect(events().indexOf('Added Coffee')).toBeLessThan(
+      events().indexOf('Checkout session started'),
+    );
+    const feeds = screen.getByRole('tablist', { name: 'Log feeds' });
+    fireEvent.click(within(feeds).getByRole('tab', { name: 'Protocol' }));
+    expect(screen.getByTestId('log-protocol').textContent).toContain(
+      '⇠ basket.changed incremental: 1 line(s), total 3.75',
+    );
+    fireEvent.click(within(feeds).getByRole('tab', { name: 'Detailed' }));
+    expect(screen.getByTestId('log-detailed').textContent).toContain('Added Coffee ($3.75)');
   });
 });

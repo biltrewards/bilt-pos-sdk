@@ -125,7 +125,8 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
     expect(charged).toHaveLength(1);
     expect(charged[0]?.amount).toBe('89.50');
     expect(movements.map((m) => m.step)).toContain('AWARD');
-    expect(session.context.phase()).toBe('COMPLETE');
+    // The host moves the phase with a context event that can land after the settle result.
+    await vi.waitFor(() => expect(session.context.phase()).toBe('COMPLETE'));
     await session.end();
   });
 

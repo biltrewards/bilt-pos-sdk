@@ -1,19 +1,20 @@
 // The persisted sale: the projection from a SettlementResult, the IndexedDB store, and the
-// reversal plans built from a stored sale.
+// return and full-refund plans built from a stored sale.
 import type { SettlementResult } from '@bilt/pos-sdk';
 import { describe, expect, it } from 'vitest';
 import * as fx from '../../../packages/sdk/test/fixtures';
 import {
-  defaultReversalDecision,
-  planReferencedRefund,
-  refundRecordFrom,
-  reversalProgress,
-} from '../src/store/reversals';
+  fullRefundRecord,
+  planAllocations,
+  planReturn,
+  returnLine,
+  settledReturns,
+  toStoredSaleUi,
+} from '../src/emulator/returns';
+import { defaultReversalDecision, reversalProgress } from '../src/store/reversals';
 import {
-  isRefundable,
-  isVoidable,
+  isFullyRefunded,
   originalSaleRecord,
-  refundsLinked,
   remainingLegAmount,
   toSaleRecord,
   type StoredSale,
@@ -117,7 +118,7 @@ describe('toSaleRecord', () => {
   });
 });
 
-describe('reversal plans', () => {
+describe('return and refund plans', () => {
   const stored: StoredSale = { sale: toSaleRecord(result(), CONTEXT), refunds: [], voided: null };
 
   it('builds the OriginalSaleRecord from every standing leg', () => {
@@ -138,7 +139,6 @@ describe('reversal plans', () => {
     const retried: StoredSale = { ...stored, refunds: progress };
     expect(originalSaleRecord(retried).cardPoiTransactionId).toBeUndefined();
     expect(originalSaleRecord(retried).awardPoiTransactionId).toBe('POI-AW-1');
-    expect(isVoidable(retried)).toBe(true);
   });
 
   it('omits the gift-card loads and rebate a stopped void already reversed', () => {
@@ -153,112 +153,109 @@ describe('reversal plans', () => {
       awardPoiTransactionId: 'POI-AW-1',
       memberId: '98234',
     });
-    expect(isVoidable(retried)).toBe(true);
   });
 
-  it('refuses a referenced refund while a gift-card load stands, leaving the void', () => {
-    expect(isRefundable(stored)).toBe(false);
-    expect(planReferencedRefund(stored, '10.00')).toEqual({
-      error: 'The sale loaded a gift card: void it so the load is reversed with its funding.',
+  it('keeps a sale refundable when a stopped void reversed only its gift-card load', () => {
+    const progress = reversalProgress(stored, [
+      { step: 'STORED_VALUE_LOAD', poiTransactionId: 'POI-SV-LOAD-1' },
+    ]);
+    expect(isFullyRefunded({ ...stored, refunds: progress })).toBe(false);
+  });
+
+  it('refuses an item return of a sale with a gift-card purchase', () => {
+    expect(planReturn(stored, new Set(['SKU-0013']), () => 0)).toEqual({
+      error:
+        'The sale contains a gift card purchase — use the full refund to reverse its load and funding together',
     });
-    expect(isVoidable(stored)).toBe(true);
+    expect(toStoredSaleUi(stored, () => 0)).toMatchObject({
+      hasGiftCardPurchase: true,
+      fullRefundAvailable: true,
+    });
   });
 
-  // The same sale without the gift-card purchase, so its tender alone is refundable.
+  // The same sale without the gift-card purchase, so its merchandise is returnable.
   const tenderOnly: StoredSale = { ...stored, sale: { ...stored.sale, giftCardLoads: [] } };
 
-  it('plans a partial and a full referenced refund against the card leg', () => {
-    const partial = planReferencedRefund(tenderOnly, '10.00');
-    if ('error' in partial) throw new Error(partial.error);
-    expect(partial.full).toBe(false);
-    expect(partial.reversesAward).toBe(false);
-    expect(partial.allocations).toEqual([
+  it('plans an item return at shelf price plus tax against the card leg', () => {
+    const plan = planReturn(tenderOnly, new Set(['SKU-0013']), () => 0);
+    if ('error' in plan) throw new Error(plan.error);
+    // 34.99 + round(34.99 × 6.625%) = 37.31
+    expect(plan.pending).toMatchObject({
+      saleId: 'sale-1',
+      amountMinor: 3731,
+      legCapacityMinor: 6231,
+    });
+    expect(plan.pending.leg.type).toBe('CARD');
+    expect(returnLine(plan.pending.items[0]!)).toEqual({
+      sku: 'SKU-0013',
+      description: 'Desk Lamp',
+      quantity: 1,
+      unitPrice: '34.99',
+      type: 'RETURN',
+      taxRate: '0.06625',
+    });
+    // A return already in the basket leaves nothing to ring.
+    expect(planReturn(tenderOnly, new Set(['SKU-0013']), () => 1)).toEqual({
+      error: 'Nothing left to return among the selected items',
+    });
+
+    const { returns, allocations } = planAllocations([plan.pending], 3731);
+    expect(allocations).toEqual([
       {
         type: 'CARD',
-        amount: '10.00',
+        amount: '37.31',
         originalPoiTransactionId: 'POI-PAY-1',
         originalPoiTransactionTimestamp: '2026-10-06T14:03:10Z',
       },
     ]);
-    expect(partial.returnLine).toMatchObject({ type: 'RETURN', unitPrice: '10.00', quantity: 1 });
+    // Under NET a purchase that absorbs the return needs no refund at all.
+    expect(planAllocations([plan.pending], 0).allocations).toEqual([]);
+    // A tender that collected less than the shelf value refunds what it has; the register pays the rest.
+    const capped = planAllocations([{ ...plan.pending, legCapacityMinor: 2000 }], 3731);
+    expect(capped.allocations.map((a) => [a.type, a.amount])).toEqual([
+      ['CARD', '20.00'],
+      ['EXTERNAL', '17.31'],
+    ]);
 
-    const full = planReferencedRefund(tenderOnly, undefined);
-    if ('error' in full) throw new Error(full.error);
-    expect(full).toMatchObject({ amount: '62.31', full: true, reversesAward: true });
-    expect(full.allocations[1]).toMatchObject({
-      type: 'AWARD',
-      amount: '0',
-      originalPoiTransactionId: 'POI-AW-1',
-      memberId: '98234',
-    });
-
-    expect(planReferencedRefund(tenderOnly, '100.00')).toEqual({
-      error: 'At most 62.31 can still be refunded from the CARD leg.',
-    });
-  });
-
-  it('keeps the ledger straight across refunds', () => {
-    const plan = planReferencedRefund(tenderOnly, '10.00');
-    if ('error' in plan) throw new Error(plan.error);
-    const refunded = refundRecordFrom(tenderOnly, plan, {
+    const { records, parts } = settledReturns(returns, {
       ...result(),
       movements: [
         {
           step: 'CARD_REFUND',
           target: { type: 'REFUNDS' },
-          amount: '10.00',
+          amount: '37.31',
           poiTransactionId: 'POI-RF-1',
         },
       ],
     });
-    expect(refunded).toMatchObject({
-      amount: '10.00',
+    expect(parts).toEqual(['returned $37.31 to the card']);
+    expect(records[0]).toMatchObject({
+      amount: '37.31',
+      tenderAmount: '37.31',
       leg: 'CARD',
       full: false,
       poiTransactionId: 'POI-RF-1',
+      items: [{ sku: 'SKU-0013', quantity: 1 }],
     });
-    const after: StoredSale = { ...tenderOnly, refunds: [refunded] };
-    expect(remainingLegAmount(after, 'CARD')).toBe('52.31');
-    expect(isRefundable(after)).toBe(true);
-    expect(isVoidable(after)).toBe(false);
+    const after: StoredSale = { ...tenderOnly, refunds: [...records] };
+    expect(remainingLegAmount(after, 'CARD')).toBe('25.00');
+    const ui = toStoredSaleUi(after, () => 0);
+    expect(ui.items[0]).toMatchObject({ remainingQuantity: 0, refundMinor: 0 });
+    expect(ui).toMatchObject({ refunded: true, fullyRefunded: false, fullRefundAvailable: false });
   });
 
-  it('takes the linked refund only for the card leg', () => {
-    expect(refundsLinked(tenderOnly)).toBe(true);
-    const giftCardOnly: StoredSale = {
-      ...tenderOnly,
-      sale: toSaleRecord(
-        result({
-          poiTransactionId: 'POI-SV-1',
-          storedValuePoiTransactionId: 'POI-SV-1',
-          storedValueAmountUsed: '62.31',
-          cardAmountCharged: '0.00',
-          movements: [],
-        }),
-        CONTEXT,
-      ),
-    };
-    expect(refundsLinked(giftCardOnly)).toBe(false);
-    // Split tender: once the card is refunded in full, the stored value rest is not linked.
-    const split: StoredSale = {
-      ...tenderOnly,
-      sale: {
-        ...tenderOnly.sale,
-        legs: [...tenderOnly.sale.legs, { type: 'STORED_VALUE', poiTransactionId: 'POI-SV-2' }],
-      },
-      refunds: [
-        {
-          saleId: tenderOnly.sale.id,
-          recordedAt: '2026-10-06T15:00:00Z',
-          amount: '62.31',
-          leg: 'CARD',
-          full: true,
-          awardReversed: true,
-          reversalProgress: false,
-        },
-      ],
-    };
-    expect(refundsLinked(split)).toBe(false);
+  it('records a full refund as exhausting the sale', () => {
+    const record = fullRefundRecord(tenderOnly, {
+      success: true,
+      reversedAmount: '62.31',
+      poiTransactionId: 'POI-V-1',
+      pointsReversed: 62,
+      remainingPointBalance: 0,
+    });
+    expect(record).toMatchObject({ full: true, awardReversed: true, amount: '62.31' });
+    expect(record.leg).toBeUndefined();
+    const ui = toStoredSaleUi({ ...tenderOnly, refunds: [record] }, () => 0);
+    expect(ui).toMatchObject({ fullyRefunded: true, fullRefundAvailable: false });
   });
 
   it('mirrors the Java default reversal policy', () => {

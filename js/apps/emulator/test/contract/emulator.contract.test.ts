@@ -2,8 +2,8 @@
 // the launcher and fake terminal of `@bilt/pos-sdk`'s contract suite: a sale whose rebate step
 // is re-taxed by the register (`TOTAL_REQUIRED`) and whose declined card charge is retried
 // through the recovery decision (`RECOVERY_REQUIRED`), the sale persisted the way the Refunds
-// pane needs it, a gift-card tender, and a referenced refund of the persisted sale from a later
-// session.
+// tab needs it, a gift-card tender, and an item return of the persisted sale from a later
+// session, refunded to the original card.
 import { writeFileSync } from 'node:fs';
 import type { OperationStep, SettlementFailure } from '@bilt/pos-protocol';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -19,8 +19,15 @@ import {
 } from '../../../../packages/sdk/test/contract/host';
 import { connectTo } from '../../../../packages/sdk/test/contract/setup';
 import { CATALOG, toBasketItem } from '../../src/catalog';
-import { recomputeTotal } from '../../src/money';
-import { planReferencedRefund, refundRecordFrom } from '../../src/store/reversals';
+import { totalAfterRebates } from '../../src/emulator/controller';
+import {
+  planAllocations,
+  planReturn,
+  requiredRefundMinor,
+  returnLine,
+  settledReturns,
+  toStoredSaleUi,
+} from '../../src/emulator/returns';
 import { remainingLegAmount, toSaleRecord } from '../../src/store/sale-record';
 import { IndexedDbSaleStore } from '../../src/store/sales-store';
 
@@ -108,7 +115,7 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
         transactionIds.push(context.defaultTransactionId);
         return context.defaultTransactionId;
       },
-      onRebatesRedeemed: (rebates) => recomputeTotal(rebates.updatedBasket),
+      onRebatesRedeemed: totalAfterRebates,
       onError: (failure) => {
         failures.push(failure);
         return 'RETRY';
@@ -186,43 +193,61 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
     await session.end();
   });
 
-  it('refunds part of the persisted sale from a later session by its card reference', async () => {
+  it('returns the persisted sale item from a later session against its card reference', async () => {
     const stored = await store.findSale('sale-contract-1');
     expect(stored).not.toBeNull();
-    const plan = planReferencedRefund(stored!, '10.00');
+    const plan = planReturn(stored!, new Set(['SKU-0013']), () => 0);
     if ('error' in plan) throw new Error(plan.error);
-    expect(plan.allocations[0]).toMatchObject({
-      type: 'CARD',
-      amount: '10.00',
-      originalPoiTransactionId: 'POI-PAY-1',
-    });
+    // Shelf price plus tax, 37.31; the card collected only 26.65 after the rebate.
+    expect(plan.pending).toMatchObject({ amountMinor: 3731, legCapacityMinor: 2665 });
 
     const session = await lane();
-    await session.basket.addItem(plan.returnLine);
+    await session.basket.addItem(returnLine(plan.pending.items[0]!));
+    expect(session.basket.current.grandTotal).toBe('-37.31');
+    const { returns, allocations } = planAllocations(
+      [plan.pending],
+      requiredRefundMinor(session.basket.current, false),
+    );
+    expect(allocations).toEqual([
+      {
+        type: 'CARD',
+        amount: '26.65',
+        originalPoiTransactionId: 'POI-PAY-1',
+        originalPoiTransactionTimestamp: expect.any(String),
+      },
+      { type: 'EXTERNAL', amount: '10.66' },
+    ]);
     const result = await session.settle({
       settlementType: 'REFUND_THEN_CHARGE',
-      refunds: [...plan.allocations],
+      refunds: allocations,
       disableRebates: true,
       disablePoints: true,
       disableAward: true,
     });
 
-    expect(Number(result.cardRefundedAmount)).toBe(10);
+    expect(Number(result.cardRefundedAmount)).toBe(26.65);
     expect(Number(result.cardAmountCharged)).toBe(0);
     const refundMovement = result.movements.find((m) => m.step === 'CARD_REFUND');
-    expect(refundMovement?.poiTransactionId).toBe('POI-PAY-1');
-    expect(Number(refundMovement?.amount)).toBe(10);
+    expect(Number(refundMovement?.amount)).toBe(26.65);
     // The linked refund named the original card payment on the wire.
     const refundRequests = terminal
       .requestsOf('Payment')
       .filter((body) => JSON.stringify(body).includes('"POI-PAY-1"'));
     expect(refundRequests.length).toBeGreaterThan(0);
 
-    await store.recordRefund(refundRecordFrom(stored!, plan, result));
+    const { records, parts } = settledReturns(returns, result);
+    expect(parts[0]).toContain('returned $37.31 ($26.65 to the card, $10.66 register-paid');
+    for (const record of records) await store.recordRefund(record);
     const after = await store.findSale('sale-contract-1');
-    expect(after?.refunds).toHaveLength(1);
-    expect(after?.refunds[0]).toMatchObject({ amount: '10.00', leg: 'CARD', full: false });
-    expect(remainingLegAmount(after!, 'CARD')).toBe('16.65');
+    expect(after?.refunds[0]).toMatchObject({
+      amount: '37.31',
+      tenderAmount: '26.65',
+      leg: 'CARD',
+      full: false,
+      items: [{ sku: 'SKU-0013', quantity: 1 }],
+    });
+    expect(remainingLegAmount(after!, 'CARD')).toBe('0.00');
+    expect(toStoredSaleUi(after!, () => 0).items[0]?.remainingQuantity).toBe(0);
     await session.end();
   });
 });
