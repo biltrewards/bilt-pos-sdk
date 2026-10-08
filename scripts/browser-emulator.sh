@@ -38,7 +38,8 @@
 # Options:
 #   --terminal <ip[:port]>  Terminal on the LAN (port defaults to 8443). With
 #                           --adb it only picks the device, by serial or
-#                           wifi-adb ip; the forward targets its port 8443.
+#                           wifi-adb ip (a port is ignored); the forward
+#                           targets its port 8443.
 #   --adb                   Reach the terminal through `adb forward` instead of
 #                           the LAN: the device whose serial matches --terminal,
 #                           else the single attached one.
@@ -193,14 +194,19 @@ if [[ "$local_only" -eq 0 ]]; then
       [[ ${#serials[@]} -gt 0 ]] && break
       sleep 0.5
     done
+    # An exact serial wins; otherwise the ip alone, so a habitual nexo port
+    # (--terminal 10.0.0.5:8443) still finds the wifi-adb serial 10.0.0.5:5555.
     selector="$terminal"
+    selector_ip="${selector%:*}"
     t_port=8443
     for serial in ${serials[@]+"${serials[@]}"}; do
-      if [[ -n "$selector" && ( "$serial" == "$selector" || "${serial%:*}" == "$selector" ) ]]; then
-        adb_serial="$serial"
-        break
-      fi
+      if [[ "$serial" == "$selector" ]]; then adb_serial="$serial"; break; fi
     done
+    if [[ -z "$adb_serial" && -n "$selector" ]]; then
+      for serial in ${serials[@]+"${serials[@]}"}; do
+        if [[ "${serial%:*}" == "$selector_ip" ]]; then adb_serial="$serial"; break; fi
+      done
+    fi
     if [[ -z "$adb_serial" && ${#serials[@]} -eq 1 ]]; then adb_serial="${serials[0]}"; fi
     if [[ -z "$adb_serial" ]]; then
       if [[ ${#serials[@]} -eq 0 ]]; then
