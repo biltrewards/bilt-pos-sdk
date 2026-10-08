@@ -9,7 +9,7 @@
 
 - title: Browser & JavaScript
   items:
-    - name: JavaScript SDK Integration
+    - name: JavaScript & React SDK
       url: /javascript-sdk-integration.html
     - name: Terminal Bridge
       url: /terminal-bridge.html

@@ -2,7 +2,7 @@
 
 The reference browser register for the Bilt POS SDK: a Vite + React + TypeScript page that
 drives a Bilt terminal through the Terminal Bridge with `@bilt/pos-react`. It is the example the
-[JavaScript SDK integration guide](../../../docs/javascript-sdk-integration.md) walks through,
+[JavaScript & React SDK integration guide](../../../docs/javascript-sdk-integration.md) walks through,
 and `src/guide-samples/` holds every code sample from that guide, so the samples are type-checked
 with the rest of the workspace.
 
