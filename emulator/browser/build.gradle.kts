@@ -141,7 +141,8 @@ val runWithBridge by
         group = "emulator"
         description =
             "Starts a Terminal Bridge and the browser emulator " +
-                "(-PterminalHost=<ip> [-PterminalPort=8443] or -Plocal; " +
+                "(-PterminalHost=<ip> [-PterminalPort=8443], -Padb [-PterminalHost=<serial>] " +
+                "or -Plocal; " +
                 "-Pport=5173 -PbridgePort=48333 -PnoOpen)"
         // Build here and let the script skip its own build: a nested gradlew on
         // the same project would wait on this build's lock.
@@ -152,10 +153,15 @@ val runWithBridge by
         val terminalHost = providers.gradleProperty("terminalHost")
         val terminalPort = providers.gradleProperty("terminalPort").orElse("8443")
         val local = providers.gradleProperty("local").isPresent
+        val adb = providers.gradleProperty("adb").isPresent
         val noOpen = providers.gradleProperty("noOpen").isPresent
         val args = mutableListOf("scripts/browser-emulator.sh")
         if (local) {
             args += "--local"
+        } else if (adb) {
+            // Under --adb the address only picks the device, so it goes without a port.
+            args += "--adb"
+            if (terminalHost.isPresent) args += listOf("--terminal", terminalHost.get())
         } else if (terminalHost.isPresent) {
             args += listOf("--terminal", "${terminalHost.get()}:${terminalPort.get()}")
         }
@@ -163,8 +169,9 @@ val runWithBridge by
         if (noOpen) args += "--no-open"
         commandLine(args)
         doFirst {
-            check(local || terminalHost.isPresent) {
-                "Pass -PterminalHost=<ip> for a LAN terminal, or -Plocal for local sessions only."
+            check(local || adb || terminalHost.isPresent) {
+                "Pass -PterminalHost=<ip> for a LAN terminal, -Padb to reach it over adb, " +
+                    "or -Plocal for local sessions only."
             }
         }
     }

@@ -16,8 +16,10 @@ One command starts a Terminal Bridge and the emulator together, from the reposit
 
 ```sh
 ./gradlew :emulator:browser:runWithBridge -PterminalHost=192.168.4.108   # a LAN terminal
+./gradlew :emulator:browser:runWithBridge -Padb                          # the terminal over adb
 ./gradlew :emulator:browser:runWithBridge -Plocal                        # local sessions only
 scripts/browser-emulator.sh --terminal 192.168.4.108                     # same, without Gradle
+scripts/browser-emulator.sh --adb
 scripts/browser-emulator.sh --local
 ```
 
@@ -27,7 +29,11 @@ server on `http://127.0.0.1:5173` and open it; Ctrl-C stops both. The page comes
 mode the bridge was configured for (`VITE_BILT_SESSION_MODE`), over whatever an earlier launch saved
 in Settings; the POI id stays a page setting, since the bridge passes any value through. Either port
 already in use (a tray bridge, another dev server) stops the launch rather than pointing the page at
-a bridge with another config. Options: `-PterminalPort` / `--terminal ip:port` (default 8443),
+a bridge with another config. `-Padb` / `--adb` reaches the terminal through a localhost `adb forward` to its port 8443 instead of
+the LAN, as the desktop emulator's adb tunnel does: the bridge then only touches loopback, so the
+macOS Local Network permission does not matter, and a USB-only terminal works. It forwards through
+the single attached device, or the one `-PterminalHost` / `--terminal` names by serial or wifi-adb
+ip, and removes the forward on exit. Options: `-PterminalPort` / `--terminal ip:port` (default 8443),
 `-PbridgePort` / `--port` (default 48333), `-Pport` / `--web-port` (default 5173),
 `-PnoOpen` / `--no-open`.
 `SKIP_BUILD=1 scripts/browser-emulator.sh ...` skips rebuilding the bridge and the JS packages.
