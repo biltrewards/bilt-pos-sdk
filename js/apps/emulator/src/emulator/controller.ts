@@ -314,14 +314,14 @@ export class BrowserEmulatorController implements EmulatorController {
         let detail = 'bridge connected';
         try {
           const health = await pos.health();
-          const terminal = this.config.poiId
-            ? health.terminals.find((t) => t.poiId === this.config.poiId)
-            : health.terminals[0];
+          const terminal = health.terminal;
           detail =
             this.config.mode === 'local'
               ? `bridge ${health.hostVersion} · local sessions`
-              : `bridge ${health.hostVersion} · ${terminal?.poiId ?? (this.config.poiId || 'terminal')} ${
-                  terminal ? (terminal.reachable ? 'reachable' : 'unreachable') : 'not listed'
+              : `bridge ${health.hostVersion} · ${
+                  terminal
+                    ? `terminal ${terminal.reachable === false ? 'unreachable' : 'reachable'}`
+                    : 'no terminal configured'
                 }`;
         } catch (error) {
           this.detailedLog(`Health check failed: ${describeError(error)}`);

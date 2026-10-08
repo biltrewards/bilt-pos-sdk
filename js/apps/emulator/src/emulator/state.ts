@@ -188,12 +188,12 @@ export function saleStatusLabel(sale: StoredSaleUi): string {
     .join(' · ');
 }
 
-/** What the bridge reported: its status, where it answered, and the terminals it knows. */
+/** What the bridge reported: its status, where it answered, and the terminal it drives. */
 export interface BridgeInfo {
   readonly status: 'detecting' | 'missing' | 'outdated' | 'ready';
   readonly baseUrl?: string;
   readonly version?: string;
-  readonly terminals: readonly { poiId: string; model?: string; reachable: boolean }[];
+  readonly terminal?: { label?: string; model?: string; reachable?: boolean };
 }
 
 export interface EmulatorState {
