@@ -27,9 +27,6 @@ export interface Settings {
 
   /** The first port the direct route probes; the SDK tries the ten above it as well. */
   readonly bridgePort: number;
-
-  /** Whether the session carries a retail-media widget for the `lane-banner` placement. */
-  readonly retailMedia: boolean;
 }
 
 export const STORAGE_KEY = 'bilt-pos-emulator.settings';
@@ -42,7 +39,6 @@ export const DEFAULT_SETTINGS: Settings = {
   storeLocation: 'STR-0142',
   bridge: import.meta.env.DEV ? 'proxy' : 'direct',
   bridgePort: 48333,
-  retailMedia: true,
 };
 
 function text(value: unknown, fallback: string): string {
@@ -79,7 +75,6 @@ export function loadSettings(storage: Storage | undefined = safeStorage()): Sett
           ? parsed.bridge
           : DEFAULT_SETTINGS.bridge,
       bridgePort: port(parsed.bridgePort, DEFAULT_SETTINGS.bridgePort),
-      retailMedia: typeof parsed.retailMedia === 'boolean' ? parsed.retailMedia : true,
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -138,6 +133,5 @@ export function laneKey(settings: Settings): string {
     settings.saleId,
     settings.currency,
     settings.storeLocation,
-    settings.retailMedia ? 'rm' : 'no-rm',
   ].join('|');
 }

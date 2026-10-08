@@ -4,14 +4,7 @@ import { describe, expect, it } from 'vitest';
 import * as fx from '../../../packages/sdk/test/fixtures';
 import { CATALOG, customItem, nextCustomSku, toBasketItem } from '../src/catalog';
 import { LogStore, summarize, track } from '../src/log';
-import {
-  offerAmount,
-  offerApplied,
-  offerExpired,
-  offerTarget,
-  parseMoney,
-  recomputeTotal,
-} from '../src/money';
+import { parseMoney, recomputeTotal } from '../src/money';
 import { NJ_SALES_TAX_RATE, taxRateFor } from '../src/tax';
 import { bridgeOptions, loadSettings, saveSettings } from '../src/settings';
 
@@ -46,40 +39,6 @@ describe('money', () => {
       { ...credit, subtotal: '-2.00', adjustedTotal: '-2.00', taxAmount: '0.00' },
     ]);
     expect(recomputeTotal(basket)).toBe('8.50');
-  });
-
-  it('values an offer against its target line', () => {
-    const cheap = fx.lineItem({ sku: 'SKU-0001', description: 'Gum', unitPrice: '0.75' });
-    const dear = fx.lineItem({ sku: 'SKU-0024', description: 'TV', unitPrice: '549.99' });
-    const basket = fx.basket([cheap, dear]);
-    expect(offerTarget({ id: 'o', scope: 'BASKET', creativeId: 'c' }, basket)?.sku).toBe(
-      'SKU-0024',
-    );
-    expect(offerAmount({ id: 'o', scope: 'BASKET', percentage: '10', creativeId: 'c' }, dear)).toBe(
-      '55.00',
-    );
-    expect(
-      offerAmount(
-        { id: 'o', scope: 'LINE_ITEM', sku: 'SKU-0001', amount: '5.00', creativeId: 'c' },
-        cheap,
-      ),
-    ).toBe('0.75');
-  });
-
-  it('knows an applied and an expired offer', () => {
-    const offer = { id: 'ofr_9', scope: 'BASKET' as const, creativeId: 'c' };
-    const plain = fx.lineItem({ sku: 'SKU-0001', description: 'Gum', unitPrice: '0.75' });
-    const discounted = {
-      ...fx.lineItem({ sku: 'SKU-0024', description: 'TV', unitPrice: '549.99' }),
-      discounts: [{ reference: 'ofr_9', label: 'Offer ofr_9', amount: '1.00' }],
-    };
-    expect(offerApplied(offer, fx.basket([plain]))).toBe(false);
-    expect(offerApplied(offer, fx.basket([plain, discounted]))).toBe(true);
-
-    const now = new Date('2026-10-07T12:00:00Z');
-    expect(offerExpired(offer, now)).toBe(false);
-    expect(offerExpired({ ...offer, expiry: '2026-10-07T11:59:59Z' }, now)).toBe(true);
-    expect(offerExpired({ ...offer, expiry: '2026-10-07T12:30:00Z' }, now)).toBe(false);
   });
 });
 

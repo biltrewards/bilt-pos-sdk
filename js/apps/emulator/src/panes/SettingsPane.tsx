@@ -156,18 +156,6 @@ export function SettingsPane({ settings, bridge, onApply }: SettingsPaneProps): 
         </div>
       </fieldset>
 
-      <fieldset>
-        <legend>Widgets</legend>
-        <label>
-          <input
-            type="checkbox"
-            checked={draft.retailMedia}
-            onChange={(event) => field('retailMedia', event.target.checked)}
-          />
-          Retail media on the <code>lane-banner</code> placement (the companion display)
-        </label>
-      </fieldset>
-
       <div className="actions">
         <button type="submit">Apply and restart the lane</button>
         <button type="button" className="secondary" onClick={() => setDraft(DEFAULT_SETTINGS)}>

@@ -11,7 +11,6 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { LaneBar } from './components/LaneBar';
 import { LaneProvider } from './lane/LaneProvider';
 import { LogStore } from './log';
-import { DisplayPane } from './panes/DisplayPane';
 import { LogPane } from './panes/LogPane';
 import { RefundsPane } from './panes/RefundsPane';
 import { SalePane } from './panes/SalePane';
@@ -25,12 +24,11 @@ const BRIDGE_GUIDE_URL = 'https://biltrewards.github.io/bilt-pos-sdk/terminal-br
 /** The update manifest, once the feed exists; the prompt falls back to the guide link without it. */
 const MANIFEST_URL = import.meta.env.VITE_BRIDGE_MANIFEST_URL;
 
-export type Tab = 'sale' | 'refunds' | 'display' | 'log' | 'settings';
+export type Tab = 'sale' | 'refunds' | 'log' | 'settings';
 
 const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'sale', label: 'Sale' },
   { id: 'refunds', label: 'Refunds' },
-  { id: 'display', label: 'Companion display' },
   { id: 'log', label: 'Log' },
   { id: 'settings', label: 'Settings' },
 ];
@@ -75,7 +73,7 @@ function TabBar({ tab, onSelect }: { tab: Tab; onSelect: (tab: Tab) => void }): 
 /**
  * The emulator page: a tab bar, the bridge gate and, behind it, the connection and the lane
  * shared by every pane. Every pane stays mounted and the inactive ones are hidden, so the
- * companion display keeps its rendering and the log its scroll position across tab switches.
+ * log keeps its scroll position across tab switches.
  * The Settings pane is reachable in front of the gate too, since the bridge port lives there.
  */
 export function App(props: AppProps): ReactNode {
@@ -142,15 +140,12 @@ export function App(props: AppProps): ReactNode {
         {(bridge) => (
           <BiltPosProvider key={probeKey} connect={() => connect(probe)}>
             <LaneProvider key={laneKey(settings)} settings={settings} log={log} sales={sales}>
-              <LaneBar onDisableRetailMedia={() => apply({ ...settings, retailMedia: false })} />
+              <LaneBar />
               <section role="tabpanel" hidden={tab !== 'sale'} aria-label="Sale">
                 <SalePane />
               </section>
               <section role="tabpanel" hidden={tab !== 'refunds'} aria-label="Refunds">
                 <RefundsPane />
-              </section>
-              <section role="tabpanel" hidden={tab !== 'display'} aria-label="Companion display">
-                <DisplayPane />
               </section>
               <section role="tabpanel" hidden={tab !== 'log'} aria-label="Log">
                 <LogPane />

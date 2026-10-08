@@ -18,7 +18,6 @@ import type {
   AbandonedSettlementRecord,
   BasketChange,
   Money,
-  Offer,
   SettlementContext,
   SettlementResult,
   ShopperSession,
@@ -47,10 +46,6 @@ import {
 import { describeError, track, useSessionLogging, type LogStore } from '../log';
 import {
   formatMoney,
-  offerAmount,
-  offerApplied,
-  offerExpired,
-  offerTarget,
   recomputeTotal,
 } from '../money';
 import { describeSession, type Settings } from '../settings';
@@ -119,8 +114,6 @@ export interface LaneValue {
   readonly tenderCard: StoredValueCard | null;
   setTenderCard(cardNumber: string | null): Promise<void>;
 
-  /** Applies a validated offer as a register discount on one line. */
-  applyOffer(offer: Offer): void;
 
   /** Starts the settlement with the lane's handlers. */
   pay(options: PayOptions): void;
@@ -179,15 +172,6 @@ function sessionOptions(settings: Settings): ShopperSessionOptions {
     saleId: settings.saleId,
     currency: settings.currency,
     storeLocation: settings.storeLocation,
-    ...(settings.retailMedia
-      ? {
-          widgets: [{ type: 'retail-media' as const, placements: ['lane-banner'] }],
-          rendering: {
-            formats: ['IMAGE' as const, 'VIDEO' as const, 'HTML' as const],
-            surfaceKind: 'WEB' as const,
-          },
-        }
-      : {}),
   };
 }
 
@@ -279,56 +263,6 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
   useSessionEvent(session, 'session.ended', ({ forced }) =>
     toasts.push('info', forced ? 'Session force-ended' : 'Session ended'),
   );
-
-  const applyOffer = useCallback(
-    (offer: Offer) => {
-      const current = basket.basket;
-      // An offer is honoured once and only while it stands: the toast and the Display tab both
-      // offer it, and either may be clicked after the other or after the expiry.
-      if (current && offerApplied(offer, current)) {
-        toasts.push('info', `Offer ${offer.id} is already applied`);
-        return;
-      }
-      if (offerExpired(offer)) {
-        toasts.push('warning', `Offer ${offer.id} expired at ${offer.expiry}`);
-        return;
-      }
-      const target = current ? offerTarget(offer, current) : undefined;
-      if (!target) {
-        toasts.push('info', `Offer ${offer.id} arrived with nothing to apply it to`);
-        return;
-      }
-      const amount = offerAmount(offer, target);
-      const discounts = [
-        ...target.discounts,
-        { reference: offer.id, label: `Offer ${offer.id}`, amount },
-      ];
-      basket
-        .setDiscounts(target.itemId, discounts)
-        .then(
-          () =>
-            toasts.push(
-              'success',
-              `Offer applied: −${formatMoney(amount, settings.currency)} on ${target.description}`,
-            ),
-          report,
-        );
-    },
-    [basket, toasts, settings.currency, report],
-  );
-
-  useSessionEvent(session, 'widget.offer', ({ offer }) => {
-    const worth =
-      offer.amount !== undefined
-        ? `${formatMoney(offer.amount, settings.currency)} off`
-        : offer.percentage !== undefined
-          ? `${offer.percentage}% off`
-          : 'an offer';
-    toasts.push('info', `Offer ${offer.id}: ${worth} (${offer.scope.toLowerCase()})`, {
-      label: 'Apply as discount',
-      run: () => applyOffer(offer),
-    });
-  });
 
   const addGiftCard = useCallback(
     async (amount: Money, cardNumber: string, type: StoredValueLoadType) => {
@@ -528,7 +462,6 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
       addGiftCard,
       tenderCard,
       setTenderCard,
-      applyOffer,
       pay,
       pendingStep,
       lastSale,
@@ -560,7 +493,6 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
       addGiftCard,
       tenderCard,
       setTenderCard,
-      applyOffer,
       pay,
       pendingStep,
       lastSale,

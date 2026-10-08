@@ -10,12 +10,7 @@ const PHASES: readonly CheckoutPhase[] = ['SCANNING', 'MEMBER_IDENTIFIED', 'TEND
  * The strip above every pane: where the connection and the session stand, the phase (settable
  * by hand on a local session), and the session's end and restart controls.
  */
-export interface LaneBarProps {
-  /** Restarts the lane without the retail-media widget, for a host that has no ad decision service. */
-  readonly onDisableRetailMedia?: () => void;
-}
-
-export function LaneBar({ onDisableRetailMedia }: LaneBarProps): ReactNode {
+export function LaneBar(): ReactNode {
   const { connection, lane, session, terminalSession, settings, context, run, report, settlement } =
     useLane();
 
@@ -47,13 +42,6 @@ export function LaneBar({ onDisableRetailMedia }: LaneBarProps): ReactNode {
           <button type="button" onClick={lane.restart}>
             Try again
           </button>
-          {settings.retailMedia &&
-          onDisableRetailMedia &&
-          /retail-media/.test(lane.error?.message ?? '') ? (
-            <button type="button" className="secondary" onClick={onDisableRetailMedia}>
-              Retry without retail media
-            </button>
-          ) : null}
         </div>
       </div>
     );
