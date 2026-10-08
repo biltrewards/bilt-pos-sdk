@@ -26,12 +26,11 @@
 #
 # Usage:
 #   scripts/browser-emulator.sh --terminal 192.168.4.108
-#   scripts/browser-emulator.sh --terminal 192.168.4.108:8443 --poi-id VictaLane-275839164
+#   scripts/browser-emulator.sh --terminal 192.168.4.108:8443
 #   scripts/browser-emulator.sh --local
 #
 # Options:
 #   --terminal <ip[:port]>  Terminal on the LAN (port defaults to 8443).
-#   --poi-id <id>           POIID to register the terminal under (default DEV-TERMINAL).
 #   --local                 No terminal; use the emulator's local-session mode.
 #   --port <port>           Bridge port (default 48333).
 #   --web-port <port>       Vite dev server port (default 5173).
@@ -47,7 +46,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BRIDGE_LAUNCHER="$REPO_ROOT/bridge/build/install/bridge/bin/bridge"
 
 terminal=""
-poi_id="DEV-TERMINAL"
 local_only=0
 bridge_port=48333
 web_port=5173
@@ -58,7 +56,6 @@ usage() { sed -n '/^# Usage:/,/^# Env:/p' "$0" | sed 's/^# \{0,1\}//' | sed '$d'
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --terminal) terminal="${2:?--terminal needs <ip[:port]>}"; shift 2 ;;
-    --poi-id) poi_id="${2:?--poi-id needs a value}"; shift 2 ;;
     --local) local_only=1; shift ;;
     --port) bridge_port="${2:?--port needs a value}"; shift 2 ;;
     --web-port) web_port="${2:?--web-port needs a value}"; shift 2 ;;
@@ -114,19 +111,19 @@ if [[ "$local_only" -eq 1 ]]; then session_mode=local; else session_mode=termina
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/bilt-browser-emulator.XXXXXX")"
 config="$work_dir/config.json"
 
-terminals="[]"
+terminal_entry=""
 if [[ "$local_only" -eq 0 ]]; then
   host="${terminal%%:*}"
   t_port=8443
   [[ "$terminal" == *:* ]] && t_port="${terminal##*:}"
-  terminals="[{\"poiId\":\"$poi_id\",\"host\":\"$host\",\"port\":$t_port,\"encryption\":false,\"trustAll\":true}]"
+  terminal_entry=",
+  \"terminal\": {\"host\": \"$host\", \"port\": $t_port, \"encryption\": false, \"trustAll\": true}"
 fi
 
 cat >"$config" <<EOF
 {
   "port": $bridge_port,
-  "allowedOrigins": ["http://127.0.0.1:$web_port", "http://localhost:$web_port"],
-  "terminals": $terminals
+  "allowedOrigins": ["http://127.0.0.1:$web_port", "http://localhost:$web_port"]$terminal_entry
 }
 EOF
 

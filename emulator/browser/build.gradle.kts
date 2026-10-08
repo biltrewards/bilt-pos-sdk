@@ -141,7 +141,7 @@ val runWithBridge by
         group = "emulator"
         description =
             "Starts a Terminal Bridge and the browser emulator " +
-                "(-PterminalHost=<ip> [-PterminalPort=8443 -PpoiId=DEV-TERMINAL] or -Plocal; " +
+                "(-PterminalHost=<ip> [-PterminalPort=8443] or -Plocal; " +
                 "-Pport=5173 -PbridgePort=48333 -PnoOpen)"
         // Build here and let the script skip its own build: a nested gradlew on
         // the same project would wait on this build's lock.
@@ -151,7 +151,6 @@ val runWithBridge by
         standardInput = System.`in`
         val terminalHost = providers.gradleProperty("terminalHost")
         val terminalPort = providers.gradleProperty("terminalPort").orElse("8443")
-        val poiId = providers.gradleProperty("poiId")
         val local = providers.gradleProperty("local").isPresent
         val noOpen = providers.gradleProperty("noOpen").isPresent
         val args = mutableListOf("scripts/browser-emulator.sh")
@@ -160,7 +159,6 @@ val runWithBridge by
         } else if (terminalHost.isPresent) {
             args += listOf("--terminal", "${terminalHost.get()}:${terminalPort.get()}")
         }
-        if (poiId.isPresent) args += listOf("--poi-id", poiId.get())
         args += listOf("--port", bridgePort.get(), "--web-port", port.get())
         if (noOpen) args += "--no-open"
         commandLine(args)
