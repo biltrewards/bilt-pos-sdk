@@ -337,8 +337,11 @@ export interface ShopperSessionOptions {
 
 /** Options for `BiltPos.startTerminalSession`; the `TerminalShopperSession.Builder` fields. */
 export interface TerminalSessionOptions extends ShopperSessionOptions {
-  /** The terminal to bracket the session on. */
-  readonly poiId: string;
+  /**
+   * The Nexo `POIID` the session's messages carry. It does not select a terminal: a host drives
+   * exactly one and passes this value through, using its own default when it is omitted.
+   */
+  readonly poiId?: string;
 
   /** Whether basket changes refresh the terminal's customer display automatically; default `true`. */
   readonly autoDisplay?: boolean;

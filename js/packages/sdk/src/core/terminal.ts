@@ -7,7 +7,7 @@ import { newIdempotencyKey } from './ids';
 export class TerminalImpl implements Terminal {
   constructor(
     private readonly engine: Engine,
-    readonly poiId: string,
+    readonly poiId: string | undefined,
     private readonly storeLocation?: string,
   ) {}
 

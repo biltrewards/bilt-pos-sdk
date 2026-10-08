@@ -23,6 +23,7 @@ import type {
   TerminalCommand,
   TerminalCommandResult,
 } from '../internal';
+import { SessionError } from '../errors';
 import { BridgeEventStream } from './events';
 import { BridgeHttp, type HttpRequest } from './http';
 import type { ResolvedBridgeOptions } from './options';
@@ -41,9 +42,6 @@ function sessionPath(sessionId: string, rest = ''): string {
   return `/v1/sessions/${encodeURIComponent(sessionId)}${rest}`;
 }
 
-function terminalPath(poiId: string, rest: string): string {
-  return `/v1/terminals/${encodeURIComponent(poiId)}${rest}`;
-}
 
 function keyed(
   options: RequestOptions | undefined,
@@ -75,42 +73,43 @@ export class BridgeEngine implements Engine {
     return this.http.send<Health>({ method: 'GET', path: '/health' });
   }
 
-  terminals(): Promise<readonly TerminalInfo[]> {
-    return this.http.send<TerminalInfo[]>({ method: 'GET', path: '/v1/terminals' });
+  async terminalInfo(): Promise<TerminalInfo | null> {
+    try {
+      return await this.http.send<TerminalInfo>({ method: 'GET', path: '/v1/terminal' });
+    } catch (error) {
+      if (error instanceof SessionError && error.code === 'NOT_FOUND') return null;
+      throw error;
+    }
   }
 
   async terminal<C extends TerminalCommand>(
-    poiId: string,
+    poiId: string | undefined,
     command: C,
     options?: RequestOptions,
   ): Promise<TerminalCommandResult<C>> {
-    const common = keyed(options);
+    const common = { ...keyed(options), query: { poiId } };
     switch (command.kind) {
       case 'diagnose':
-        return this.http.send({
-          method: 'POST',
-          path: terminalPath(poiId, '/diagnose'),
-          ...common,
-        });
+        return this.http.send({ method: 'POST', path: '/v1/terminal/diagnose', ...common });
       case 'totals':
       case 'reconcile':
         return this.http.send({
           method: 'POST',
-          path: terminalPath(poiId, command.kind === 'totals' ? '/totals' : '/reconcile'),
-          query: { storeLocation: command.storeLocation },
+          path: command.kind === 'totals' ? '/v1/terminal/totals' : '/v1/terminal/reconcile',
           ...common,
+          query: { poiId, storeLocation: command.storeLocation },
         });
       case 'print':
         return this.http.send({
           method: 'POST',
-          path: terminalPath(poiId, '/print'),
+          path: '/v1/terminal/print',
           body: command.payload,
           ...common,
         });
       case 'sound':
         return this.http.send({
           method: 'POST',
-          path: terminalPath(poiId, '/sound'),
+          path: '/v1/terminal/sound',
           body: command.request,
           ...common,
         });

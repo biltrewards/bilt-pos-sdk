@@ -8,7 +8,9 @@ import type {
 export type { TerminalInfo };
 
 /**
- * A terminal's device and admin operations outside any session — the Java `Terminal` facade.
+ * The host's terminal's device and admin operations outside any session — the Java `Terminal`
+ * facade. A host drives exactly one terminal; `poiId` is only the Nexo `POIID` these requests
+ * carry, the host's default when absent.
  * There is no bracket: nothing is sent until an operation is called and the terminal holds no
  * state on this object's behalf. For a connectivity ping before the first checkout, end-of-day
  * reconciliation, or a receipt reprint after the session that took the payment has ended.
@@ -16,7 +18,7 @@ export type { TerminalInfo };
  * (`NETWORK` when it cannot be reached).
  */
 export interface Terminal {
-  readonly poiId: string;
+  readonly poiId: string | undefined;
 
   /** Terminal health and host reachability. */
   diagnose(): Promise<DiagnosisResult>;

@@ -139,9 +139,9 @@ export class BridgeEngine implements Engine {
     // Warning: (ae-forgotten-export) The symbol "TerminalCommandResult" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
-    terminal<C extends TerminalCommand>(poiId: string, command: C, options?: RequestOptions): Promise<TerminalCommandResult<C>>;
+    terminal<C extends TerminalCommand>(poiId: string | undefined, command: C, options?: RequestOptions): Promise<TerminalCommandResult<C>>;
     // (undocumented)
-    terminals(): Promise<readonly TerminalInfo[]>;
+    terminalInfo(): Promise<TerminalInfo | null>;
     // (undocumented)
     widget(sessionId: string, widgetType: WidgetState['type'], command: 'pause' | 'resume', options?: RequestOptions): Promise<WidgetState>;
     // (undocumented)
@@ -212,8 +212,8 @@ interface Engine {
     reply(sessionId: string, operationId: string, reply: StepReply, options?: RequestOptions): Promise<Operation>;
     request(sessionId: string, operation: EngineOperationRequest, options?: RequestOptions): Promise<Operation>;
     session(sessionId: string, options?: RequestOptions): Promise<Session>;
-    terminal<C extends TerminalCommand>(poiId: string, command: C, options?: RequestOptions): Promise<TerminalCommandResult<C>>;
-    terminals(): Promise<readonly TerminalInfo[]>;
+    terminal<C extends TerminalCommand>(poiId: string | undefined, command: C, options?: RequestOptions): Promise<TerminalCommandResult<C>>;
+    terminalInfo(): Promise<TerminalInfo | null>;
     // (undocumented)
     widget(sessionId: string, widgetType: WidgetState['type'], command: 'pause' | 'resume', options?: RequestOptions): Promise<WidgetState>;
     // (undocumented)

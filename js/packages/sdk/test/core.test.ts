@@ -27,7 +27,6 @@ describe('BiltPos.connect', () => {
       hostVersion: '0',
       sdkVersion: '0',
       protocolVersions: ['0'],
-      terminals: [],
     });
     const close = vi.spyOn(engine, 'close');
     await expect(connect(engine)).rejects.toBeInstanceOf(EngineOutdatedError);

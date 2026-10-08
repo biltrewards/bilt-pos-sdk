@@ -37,7 +37,7 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
     buildHost(hostProbe.location);
     terminal = new FakeTerminal();
     const address = await terminal.start();
-    host = await startHost(hostProbe.location, [{ poiId: POI, ...address, model: 'VictaLane' }]);
+    host = await startHost(hostProbe.location, { ...address, model: 'VictaLane' });
     proxy = new TcpProxy('127.0.0.1', host.port);
     const port = await proxy.start();
     pos = await connectTo(port);
@@ -71,15 +71,28 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
     return session;
   }
 
-  it('lists the terminal and brackets a session on it', async () => {
-    expect(await pos.terminals()).toEqual([{ poiId: POI, model: 'VictaLane' }]);
+  it('reports the terminal and brackets a session on it with the poiId passed through', async () => {
+    expect(await pos.terminalInfo()).toEqual({ model: 'VictaLane' });
     const session = await lane();
     expect(session.kind).toBe('terminal');
     expect(session.poiId).toBe(POI);
-    expect(terminal.requestsOf('Admin')).toHaveLength(1);
+    const admin = terminal.requestsOf('Admin');
+    expect(admin).toHaveLength(1);
+    expect(JSON.stringify(admin[0])).toContain(`"POIID":"${POI}"`);
     await session.end();
     expect(session.state).toBe('ended');
     expect(terminal.requestsOf('Admin')).toHaveLength(2);
+  });
+
+  it('runs a session without a poiId on the same terminal under the host default', async () => {
+    const session = await pos.startTerminalSession({
+      saleId: 'LANE-1',
+      currency: 'USD',
+      autoDisplay: false,
+    });
+    open.push(session);
+    expect(session.poiId).toBe('bilt-session-host');
+    await session.end();
   });
 
   it('settles with a TOTAL_REQUIRED step answered by the handler', async () => {
@@ -187,6 +200,7 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
     );
     const diagnosis = await pos.terminal(POI).diagnose();
     expect(diagnosis.hostStatuses).toEqual([]);
-    await expect(pos.terminal('nope').diagnose()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect((await pos.terminal('ANY-LANE').diagnose()).hostStatuses).toEqual([]);
+    expect(JSON.stringify(terminal.requestsOf('Diagnosis').at(-1))).toContain('"POIID":"ANY-LANE"');
   });
 });

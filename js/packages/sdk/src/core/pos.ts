@@ -13,7 +13,7 @@ import { SDK_VERSION } from './version';
 import { newIdempotencyKey } from './ids';
 
 /**
- * The `BiltPos` the SDK ships: one engine, the sessions started on it, and the terminals it
+ * The `BiltPos` the SDK ships: one engine, the sessions started on it, and the terminal it
  * reaches. Construct one with `BiltPos.connect(localBridge())`.
  */
 export class BiltPosImpl implements BiltPosInterface {
@@ -81,11 +81,11 @@ export class BiltPosImpl implements BiltPosInterface {
     return session;
   }
 
-  terminals(): Promise<readonly TerminalInfo[]> {
-    return this.runtime.engine.terminals();
+  terminalInfo(): Promise<TerminalInfo | null> {
+    return this.runtime.engine.terminalInfo();
   }
 
-  terminal(poiId: string): Terminal {
+  terminal(poiId?: string): Terminal {
     return new TerminalImpl(this.runtime.engine, poiId);
   }
 

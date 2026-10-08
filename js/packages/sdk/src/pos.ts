@@ -48,8 +48,8 @@ export interface EngineContext {
 export type EngineFactory = (context: EngineContext) => Engine | Promise<Engine>;
 
 /**
- * The entry point: a connection to one host, from which sessions are started and terminals
- * reached.
+ * The entry point: a connection to one host, from which sessions are started and its one
+ * terminal reached.
  *
  * ```ts
  * const pos = await BiltPos.connect(localBridge());
@@ -62,7 +62,7 @@ export type EngineFactory = (context: EngineContext) => Engine | Promise<Engine>
 export interface BiltPos {
   readonly capabilities: EngineCapabilities;
 
-  /** The host's health, as last fetched: versions and the terminals it knows. */
+  /** The host's health, as last fetched: versions and the terminal it drives, if any. */
   health(): Promise<Health>;
 
   /**
@@ -77,11 +77,14 @@ export interface BiltPos {
    */
   startTerminalSession(options: TerminalSessionOptions): Promise<TerminalShopperSession>;
 
-  /** The terminals the host can reach. */
-  terminals(): Promise<readonly TerminalInfo[]>;
+  /** The terminal the host drives, or `null` when it has none and only local sessions work. */
+  terminalInfo(): Promise<TerminalInfo | null>;
 
-  /** Session-less device operations on one terminal. */
-  terminal(poiId: string): Terminal;
+  /**
+   * Session-less device operations on the host's terminal. `poiId` is the Nexo `POIID` the
+   * requests carry; it does not select a terminal, and the host's default applies when omitted.
+   */
+  terminal(poiId?: string): Terminal;
 
   /**
    * Releases the connection. Open sessions are left to the host, which keeps them alive for a

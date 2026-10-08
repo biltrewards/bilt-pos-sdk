@@ -59,7 +59,7 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
     terminal = new FakeTerminal();
     terminal.reply('Loyalty/Rebate', LAMP_REBATE);
     const address = await terminal.start();
-    host = await startHost(hostProbe.location, [{ poiId: POI, ...address, model: 'VictaLane' }]);
+    host = await startHost(hostProbe.location, { ...address, model: 'VictaLane' });
     pos = await connectTo(host.port);
     store = new IndexedDbSaleStore(indexedDB, `contract-${Date.now()}`);
   });

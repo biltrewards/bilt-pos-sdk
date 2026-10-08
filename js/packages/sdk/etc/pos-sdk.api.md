@@ -173,8 +173,8 @@ export interface BiltPos {
     health(): Promise<Health>;
     startShopperSession(options: ShopperSessionOptions): Promise<ShopperSession>;
     startTerminalSession(options: TerminalSessionOptions): Promise<TerminalShopperSession>;
-    terminal(poiId: string): Terminal;
-    terminals(): Promise<readonly TerminalInfo[]>;
+    terminal(poiId?: string): Terminal;
+    terminalInfo(): Promise<TerminalInfo | null>;
 }
 
 // @public
@@ -229,8 +229,8 @@ interface Engine {
     // Warning: (ae-forgotten-export) The symbol "TerminalCommand" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "RequestOptions" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "TerminalCommandResult" needs to be exported by the entry point index.d.ts
-    terminal<C extends TerminalCommand>(poiId: string, command: C, options?: RequestOptions): Promise<TerminalCommandResult<C>>;
-    terminals(): Promise<readonly TerminalInfo[]>;
+    terminal<C extends TerminalCommand>(poiId: string | undefined, command: C, options?: RequestOptions): Promise<TerminalCommandResult<C>>;
+    terminalInfo(): Promise<TerminalInfo | null>;
     // (undocumented)
     widget(sessionId: string, widgetType: WidgetState['type'], command: 'pause' | 'resume', options?: RequestOptions): Promise<WidgetState>;
     // (undocumented)
@@ -622,7 +622,7 @@ export interface Terminal {
     diagnose(): Promise<DiagnosisResult>;
     playSound(soundReferenceId: string, volumePercent?: number): Promise<void>;
     // (undocumented)
-    readonly poiId: string;
+    readonly poiId: string | undefined;
     print(payload: PrintPayload): Promise<void>;
     reconcile(): Promise<ReconciliationResult>;
     stopSound(): Promise<void>;
@@ -658,7 +658,7 @@ export { TerminalInfo }
 // @public
 export interface TerminalSessionOptions extends ShopperSessionOptions {
     readonly autoDisplay?: boolean;
-    readonly poiId: string;
+    readonly poiId?: string;
 }
 
 // @public
