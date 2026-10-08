@@ -67,6 +67,8 @@ describe('the vanilla TypeScript register', () => {
     await until(() => (root.textContent ?? '').includes('Member lookup pending'));
 
     button(root, /^Pay$/).click();
+    // The double's rebate leaves line totals untouched, so the re-taxed total is the original;
+    // the discounted case is covered in catalog.test.ts.
     await until(() => (root.querySelector('pre')?.textContent ?? '').includes('Paid 27.21 USD'));
 
     button(root, /End session/).click();
