@@ -627,7 +627,9 @@ export class BrowserEmulatorController implements EmulatorController {
       return false;
     }
     try {
-      // The basket has no re-price mutator, so the line is replaced in one atomic batch.
+      // The basket has no re-price mutator, so the line is replaced in one atomic batch. A
+      // register discount is dropped with the old line, as on the desktop: a fixed amount set for
+      // the old price may not fit the new one.
       const basket = await session.basket.mutate((mutation) =>
         mutation.removeItem(existing.itemId).addItem({
           ...customItem(sku, money(priceMinor), '', false),
@@ -636,6 +638,9 @@ export class BrowserEmulatorController implements EmulatorController {
       );
       if (this.session === session) this.publishBasket(basket);
       this.detailedLog(`Custom line ${sku} re-priced to $${formatMinor(priceMinor)}`);
+      if (existing.discounts.length > 0) {
+        this.log(`Re-pricing ${sku} cleared its register discount; apply it again if still due`);
+      }
       return true;
     } catch (error) {
       this.fail(`Failed to re-price ${sku}`, error);
