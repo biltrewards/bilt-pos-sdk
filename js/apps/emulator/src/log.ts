@@ -1,82 +1,47 @@
-import type { SessionEventPayload, SessionEventType, ShopperSession } from '@bilt/pos-sdk';
+import type { SessionEventPayload, SessionEventType } from '@bilt/pos-sdk';
 import { SessionError } from '@bilt/pos-sdk';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 
-/** What produced a log line: a session event, an operation's lifecycle, an SDK error, or the page. */
-export type LogKind = 'event' | 'operation' | 'error' | 'info';
-
-export interface LogEntry {
-  /** The log's own sequence number; the wire `seq` stays inside the engine. */
-  readonly seq: number;
-  readonly at: string;
-  readonly kind: LogKind;
-  readonly type: string;
-  readonly summary: string;
-  readonly payload?: unknown;
+/** Wall-clock `HH:MM:SS`, the desktop log's timestamp. */
+export function timestamp(at: Date = new Date()): string {
+  return at.toTimeString().slice(0, 8);
 }
 
 type Listener = () => void;
 
-const MAX_ENTRIES = 2000;
+const MAX_LINES = 2000;
 
 /**
- * The Log pane's store: an append-only list React reads through `useSyncExternalStore`. Kept
- * outside React so the lane, the panes and the SDK event handlers can all write to it without
- * threading state through props, and so it survives a lane restart.
+ * One of the log panel's feeds: an append-only list of timestamped lines that React reads
+ * through `useSyncExternalStore`. Kept outside React so the controller and the SDK callbacks
+ * write to it directly, and so it outlives a reconnect.
  */
-export class LogStore {
-  private entries: readonly LogEntry[] = [];
-  private seq = 0;
+export class LineLog {
+  private lines: readonly string[] = [];
   private readonly listeners = new Set<Listener>();
 
-  add(kind: LogKind, type: string, summary: string, payload?: unknown): LogEntry {
-    const entry: LogEntry = {
-      seq: ++this.seq,
-      at: new Date().toISOString(),
-      kind,
-      type,
-      summary,
-      ...(payload === undefined ? {} : { payload }),
-    };
-    const next = [...this.entries, entry];
-    this.entries = next.length > MAX_ENTRIES ? next.slice(next.length - MAX_ENTRIES) : next;
-    this.notify();
-    return entry;
+  add(message: string): void {
+    const next = [...this.lines, `${timestamp()} ${message}`];
+    this.lines = next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next;
+    for (const listener of this.listeners) listener();
   }
 
-  info(type: string, summary: string, payload?: unknown): void {
-    this.add('info', type, summary, payload);
-  }
-
-  error(type: string, error: unknown): void {
-    this.add('error', type, describeError(error), errorPayload(error));
-  }
-
-  clear(): void {
-    this.entries = [];
-    this.notify();
-  }
-
-  snapshot(): readonly LogEntry[] {
-    return this.entries;
+  snapshot(): readonly string[] {
+    return this.lines;
   }
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
-
-  private notify(): void {
-    for (const listener of this.listeners) listener();
-  }
 }
 
-/** The log's entries as state, re-rendered on every addition. */
-export function useLogEntries(store: LogStore): readonly LogEntry[] {
+/** A feed's lines as state, re-rendered on every addition. */
+export function useLines(log: LineLog): readonly string[] {
   return useSyncExternalStore(
-    (listener) => store.subscribe(listener),
-    () => store.snapshot(),
-    () => store.snapshot(),
+    (listener) => log.subscribe(listener),
+    () => log.snapshot(),
+    () => log.snapshot(),
   );
 }
 
@@ -85,17 +50,6 @@ export function describeError(error: unknown): string {
   if (error instanceof SessionError) return `${error.code}: ${error.message}`;
   if (error instanceof Error) return error.message;
   return String(error);
-}
-
-function errorPayload(error: unknown): unknown {
-  if (error instanceof SessionError) {
-    return {
-      ...error.toJSON(),
-      ...(error.abandonedSettlement ? { abandonedSettlement: error.abandonedSettlement } : {}),
-    };
-  }
-  if (error instanceof Error) return { name: error.name, message: error.message };
-  return error;
 }
 
 /** Every event type the protocol defines, so the log can subscribe to all of them. */
@@ -179,52 +133,4 @@ export function summarize<T extends SessionEventType>(
     default:
       return '';
   }
-}
-
-/** Logs every event of a session for as long as the component is mounted. */
-export function useSessionLogging(
-  session: ShopperSession | null | undefined,
-  store: LogStore,
-): void {
-  useEffect(() => {
-    if (!session) return;
-    const offs = SESSION_EVENT_TYPES.map((type) =>
-      session.on(type, (payload) =>
-        store.add(
-          type === 'background.error' ? 'error' : 'event',
-          type,
-          summarize(type, payload),
-          payload,
-        ),
-      ),
-    );
-    return () => offs.forEach((off) => off());
-  }, [session, store]);
-}
-
-/**
- * Tracks an operation's lifecycle in the log: when it started, and how it ended. Returns the
- * operation, so a call site can keep awaiting it.
- */
-export function track<T>(
-  store: LogStore,
-  label: string,
-  operation: PromiseLike<T>,
-): PromiseLike<T> {
-  store.add('operation', label, 'started');
-  operation.then(
-    (result) => store.add('operation', label, 'succeeded', result),
-    (error: unknown) =>
-      store.add('operation', label, `failed: ${describeError(error)}`, errorPayload(error)),
-  );
-  return operation;
-}
-
-/** Everything a bug report needs, as text for the clipboard. */
-export function diagnostics(store: LogStore, context: Record<string, unknown>): string {
-  return JSON.stringify(
-    { exportedAt: new Date().toISOString(), ...context, log: store.snapshot() },
-    null,
-    2,
-  );
 }

@@ -55,3 +55,27 @@ export function recomputeTotal(basket: Basket): Money {
   const cartRebate = Math.max(0, cents(basket.rebateTotal) - lineRebates);
   return money(Math.max(0, goods + tax - cartRebate));
 }
+
+/** Cents as a plain two-decimal string, e.g. `7999` → `"79.99"`: the desktop's `minorUnitsToDecimal`. */
+export function formatMinor(minor: number): string {
+  const sign = minor < 0 ? '-' : '';
+  const abs = Math.abs(Math.trunc(minor));
+  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`;
+}
+
+/**
+ * Exact two-decimal parser for UI validation, in cents; `null` for anything that is not a
+ * non-negative amount with at most two places.
+ */
+export function nonNegativeMoneyMinor(raw: string): number | null {
+  const value = raw.trim();
+  if (!/^\d+(\.\d{0,2})?$/.test(value)) return null;
+  const [whole = '0', fraction = ''] = value.split('.');
+  const minor = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  return Number.isSafeInteger(minor) ? minor : null;
+}
+
+export function positiveMoneyMinor(raw: string): number | null {
+  const minor = nonNegativeMoneyMinor(raw);
+  return minor !== null && minor > 0 ? minor : null;
+}

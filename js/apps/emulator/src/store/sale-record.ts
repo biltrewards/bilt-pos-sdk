@@ -64,9 +64,14 @@ export interface RefundRecord {
   readonly amount?: Money;
   readonly poiTransactionId?: string;
   readonly poiTimestamp?: string;
-  /** The tender leg the refund drew from. */
+  /** The tender leg the refund drew from; a legless full record exhausted the whole sale. */
   readonly leg?: LegType;
-  /** True for a refund that returned the whole leg. */
+  /**
+   * What actually flowed back to `leg`: `amount` is the whole return value, which may include
+   * shares netted against a charge or paid out by the register.
+   */
+  readonly tenderAmount?: Money;
+  /** True for a refund that returned the whole leg (or, without a leg, the whole sale). */
   readonly full: boolean;
   /** True when this refund also reversed the sale's loyalty award. */
   readonly awardReversed: boolean;
@@ -80,6 +85,14 @@ export interface RefundRecord {
    * POI transaction, which the SDK reports the reversed load by.
    */
   readonly giftCardLoad?: string;
+  /** The returned items of an item-based refund; empty or absent for a full refund. */
+  readonly items?: readonly RefundedItem[];
+}
+
+/** One returned line of an item-based refund: how much of the sold quantity of `sku` it gave back. */
+export interface RefundedItem {
+  readonly sku: string;
+  readonly quantity: number;
 }
 
 /** A void issued against a stored sale. */
@@ -110,48 +123,31 @@ export function legRefunded(stored: StoredSale, type: LegType): boolean {
 }
 
 export function isFullyRefunded(stored: StoredSale): boolean {
+  if (stored.refunds.some((refund) => refund.full && refund.leg === undefined)) return true;
   const legs = moneyLegs(stored.sale);
   return legs.length > 0 && legs.every((leg) => legRefunded(stored, leg.type));
+}
+
+/** How much of the sold quantity of `sku` earlier refunds already returned. */
+export function refundedQuantity(stored: StoredSale, sku: string): number {
+  return stored.refunds.reduce(
+    (sum, refund) =>
+      sum +
+      (refund.items ?? [])
+        .filter((item) => item.sku === sku)
+        .reduce((n, item) => n + item.quantity, 0),
+    0,
+  );
 }
 
 export function isPartiallyRefunded(stored: StoredSale): boolean {
   return stored.refunds.some((refund) => !refund.full && !refund.reversalProgress);
 }
 
-/** The legs a void would still send: legs not yet refunded or reversed, an award not yet reversed. */
-export function standingLegs(stored: StoredSale): readonly TransactionLeg[] {
-  return stored.sale.legs.filter((leg) =>
-    leg.type === 'AWARD' ? !awardReversed(stored) : !legRefunded(stored, leg.type),
-  );
-}
-
 /** The gift-card loads a void would still unwind: those a stopped void has not already reversed. */
 export function standingLoads(stored: StoredSale): readonly GiftCardLoad[] {
   const reversed = new Set(stored.refunds.map((refund) => refund.giftCardLoad));
   return stored.sale.giftCardLoads.filter((load) => !reversed.has(load.poiTransactionId));
-}
-
-/**
- * A void must not run on a voided sale, nor after a partial refund (it would return the full
- * amount on top), nor once nothing is left to reverse. The residue of a void that stopped midway
- * does not block it: the retry resumes at the first leg still standing.
- */
-export function isVoidable(stored: StoredSale): boolean {
-  return (
-    stored.voided === null &&
-    !isPartiallyRefunded(stored) &&
-    !stored.refunds.some((refund) => refund.full && !refund.reversalProgress) &&
-    (standingLegs(stored).length > 0 || standingLoads(stored).length > 0)
-  );
-}
-
-/**
- * A referenced refund returns tender only. A sale whose gift-card load still stands is refused:
- * its tender funded the load, so refunding it would return the money and leave the card loaded,
- * and a partial refund would then block the void that unwinds the load. Such a sale is voided.
- */
-export function isRefundable(stored: StoredSale): boolean {
-  return stored.voided === null && !isFullyRefunded(stored) && standingLoads(stored).length === 0;
 }
 
 export function awardReversed(stored: StoredSale): boolean {
@@ -167,25 +163,8 @@ export function remainingLegAmount(stored: StoredSale, type: LegType): Money | u
   if (collected === undefined) return undefined;
   const drawn = stored.refunds
     .filter((refund) => refund.leg === type && !refund.reversalProgress)
-    .reduce((sum, refund) => sum + cents(refund.amount), 0);
+    .reduce((sum, refund) => sum + cents(refund.tenderAmount ?? refund.amount), 0);
   return money(Math.max(0, cents(collected) - drawn));
-}
-
-/** The tender leg a referenced refund draws from: the card leg when there is one, else the gift card. */
-export function refundLeg(stored: StoredSale): TransactionLeg | undefined {
-  return (
-    moneyLegs(stored.sale).find((leg) => leg.type === 'CARD' && !legRefunded(stored, 'CARD')) ??
-    moneyLegs(stored.sale).find((leg) => !legRefunded(stored, leg.type))
-  );
-}
-
-/**
- * Whether this session's own payment is refunded by the linked `refund()`: it refunds the card
- * payment only, so a stored value leg (a gift-card-only sale, or the rest of a split tender once
- * the card is refunded) takes the allocation path.
- */
-export function refundsLinked(stored: StoredSale): boolean {
-  return refundLeg(stored)?.type === 'CARD';
 }
 
 export interface SaleContext {

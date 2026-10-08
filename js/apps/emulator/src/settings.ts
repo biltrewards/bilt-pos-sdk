@@ -31,12 +31,17 @@ export interface Settings {
 
 export const STORAGE_KEY = 'bilt-pos-emulator.settings';
 
+/**
+ * The defaults. The lane identity (sale id, currency, store) is configuration, as on the desktop
+ * emulator, which reads it from its environment: `VITE_SALE_ID`, `VITE_CURRENCY` and
+ * `VITE_STORE_LOCATION` override it at build or dev-server start.
+ */
 export const DEFAULT_SETTINGS: Settings = {
   mode: 'terminal',
-  poiId: '',
-  saleId: 'LANE-3',
-  currency: 'USD',
-  storeLocation: 'STR-0142',
+  poiId: import.meta.env.VITE_POI_ID ?? '',
+  saleId: import.meta.env.VITE_SALE_ID ?? 'LANE-3',
+  currency: import.meta.env.VITE_CURRENCY ?? 'USD',
+  storeLocation: import.meta.env.VITE_STORE_LOCATION ?? 'STR-0142',
   bridge: import.meta.env.DEV ? 'proxy' : 'direct',
   bridgePort: 48333,
 };
@@ -123,15 +128,4 @@ export function bridgeOptions(
   const { hostname, port: pagePort, protocol } = window.location;
   if (protocol !== 'http:') return { port: settings.bridgePort };
   return { host: hostname, port: Number(pagePort || 80), fallbackPorts: 0 };
-}
-
-/** What identifies a lane: changing any of it restarts the session. */
-export function laneKey(settings: Settings): string {
-  return [
-    settings.mode,
-    settings.poiId,
-    settings.saleId,
-    settings.currency,
-    settings.storeLocation,
-  ].join('|');
 }
