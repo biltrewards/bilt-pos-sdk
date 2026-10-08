@@ -6,7 +6,7 @@
 // session.
 import { writeFileSync } from 'node:fs';
 import type { OperationStep, SettlementFailure } from '@bilt/pos-protocol';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { BiltPos, TerminalShopperSession } from '@bilt/pos-sdk';
 import { FakeTerminal, paymentEcho } from '../../../../packages/sdk/test/contract/fake-terminal';
 import {
@@ -125,7 +125,8 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
     expect(steps).toContain('TOTAL_REQUIRED');
     expect(steps).toContain('RECOVERY_REQUIRED');
     expect(new Set(transactionIds).size).toBe(1);
-    expect(session.context.phase()).toBe('COMPLETE');
+    // The host moves the phase with a context event that can land after the settle result.
+    await vi.waitFor(() => expect(session.context.phase()).toBe('COMPLETE'));
 
     const record = toSaleRecord(result, {
       sessionId: session.id,
