@@ -320,9 +320,13 @@ export class BrowserEmulatorController implements EmulatorController {
             this.config.mode === 'local'
               ? `bridge ${health.hostVersion} · local sessions`
               : `bridge ${health.hostVersion} · ${
-                  terminal
-                    ? `terminal ${terminal.reachable === false ? 'unreachable' : 'reachable'}`
-                    : 'no terminal configured'
+                  !terminal
+                    ? 'no terminal configured'
+                    : terminal.reachable === false
+                      ? 'terminal unreachable'
+                      : terminal.reachable
+                        ? 'terminal reachable'
+                        : 'terminal listed'
                 }`;
         } catch (error) {
           this.detailedLog(`Health check failed: ${describeError(error)}`);

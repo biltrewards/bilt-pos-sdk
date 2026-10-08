@@ -93,7 +93,9 @@ button {
   cursor: pointer;
 }
 
-button:disabled {
+button:disabled,
+button.tonal:disabled,
+button.danger:disabled {
   background: #e4e4e2;
   color: #9a9aa0;
   cursor: default;
