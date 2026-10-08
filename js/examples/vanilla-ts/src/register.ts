@@ -69,6 +69,7 @@ export async function mountRegister(root: HTMLElement, deps: RegisterDeps): Prom
     );
     mode.value = saved.mode;
     const error = el('p', { className: 'error' });
+    const start = el('button', { type: 'submit', textContent: 'Start session' });
     const form = el(
       'form',
       {},
@@ -82,11 +83,15 @@ export async function mountRegister(root: HTMLElement, deps: RegisterDeps): Prom
         field('currency', 'Currency'),
         field('storeLocation', 'Store location'),
       ),
-      el('button', { type: 'submit', textContent: 'Start session' }),
+      start,
       error,
     );
     form.onsubmit = async (event) => {
       event.preventDefault();
+      // A second click while the request is in flight would open a second session nothing ends.
+      if (start.disabled) return;
+      start.disabled = true;
+      error.textContent = '';
       const data = new FormData(form);
       const settings: Settings = {
         mode: data.get('mode') === 'local' ? 'local' : 'terminal',
@@ -105,6 +110,7 @@ export async function mountRegister(root: HTMLElement, deps: RegisterDeps): Prom
         showSession(pos, session, kind === 'terminal' ? (session as TerminalShopperSession) : null);
       } catch (err) {
         error.textContent = `Could not start the session: ${message(err)}`;
+        start.disabled = false;
       }
     };
     show(form);
