@@ -6,7 +6,7 @@ public record BridgeStatus(
     String sdkVersion,
     String bindAddress,
     int port,
-    int terminalCount,
+    boolean terminalConfigured,
     int sessionCount,
     boolean sessionHostEmbedded) {
 

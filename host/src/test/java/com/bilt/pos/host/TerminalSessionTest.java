@@ -2,12 +2,13 @@ package com.bilt.pos.host;
 
 import static com.bilt.pos.host.HostClient.json;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.bilt.pos.nexo.client.TerminalClient;
 import com.bilt.pos.nexo.model.MessageCategoryType;
+import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.List;
@@ -46,18 +47,9 @@ class TerminalSessionTest {
     return SessionHost.builder()
         .port(0)
         .stepDeadlines(deadlines)
-        .terminalClients(
-            new TerminalClientProvider() {
-              @Override
-              public TerminalClient forPoi(String poiId) {
-                return POI.equals(poiId) ? terminal : null;
-              }
-
-              @Override
-              public List<TerminalInfo> terminals() {
-                return List.of(TerminalInfo.of(POI, "VictaLane").withReachable(true));
-              }
-            })
+        .terminal(
+            TerminalClientProvider.of(
+                terminal, TerminalInfo.of("Lane 1", "VictaLane").withReachable(true)))
         .build();
   }
 
@@ -95,13 +87,15 @@ class TerminalSessionTest {
       json("{'type':'settle','handledSteps':['TOTAL_REQUIRED']}");
 
   @Test
-  void terminalsAreListedAndSessionCarriesPoiId() throws Exception {
-    JsonNode terminals = client.get("/v1/terminals").expect(200).body;
-    assertEquals(POI, terminals.get(0).path("poiId").asText());
-    assertEquals("VictaLane", terminals.get(0).path("model").asText());
-    assertTrue(terminals.get(0).path("reachable").asBoolean());
-    assertEquals(1, client.get("/health").expect(200).body.path("terminals").size());
-    client.post("/v1/terminals/unknown/diagnose", "{}").expect(404);
+  void theTerminalIsReportedAndTheSessionPoiIdIsPassedThrough() throws Exception {
+    JsonNode info = client.get("/v1/terminal").expect(200).body;
+    assertEquals("Lane 1", info.path("label").asText());
+    assertEquals("VictaLane", info.path("model").asText());
+    assertTrue(info.path("reachable").asBoolean());
+    assertTrue(info.path("poiId").isMissingNode());
+    assertEquals(
+        "VictaLane",
+        client.get("/health").expect(200).body.path("terminal").path("model").asText());
 
     String id = createWithMemberAndItem();
     JsonNode session = client.get("/v1/sessions/" + id).expect(200).body;
@@ -109,6 +103,53 @@ class TerminalSessionTest {
     assertEquals(POI, session.path("poiId").asText());
     assertTrue(client.get("/v1/sessions/" + id + "/widgets").expect(200).body.isEmpty());
     assertEquals("succeeded", client.delete("/v1/sessions/" + id).expect(202).text("status"));
+    assertFalse(terminal.requests().isEmpty());
+    terminal
+        .requests()
+        .forEach(request -> assertEquals(POI, request.getMessageHeader().getPoiid()));
+  }
+
+  @Test
+  void anyPoiIdReachesTheOneTerminalAndAMissingOneFallsBackToTheDefault() throws Exception {
+    String named =
+        client
+            .post(
+                "/v1/sessions",
+                json("{'kind':'terminal','saleId':'L','poiId':'ANY-LANE','currency':'USD'}"))
+            .expect(201)
+            .text("poiId");
+    assertEquals("ANY-LANE", named);
+    assertEquals("ANY-LANE", lastPoiId());
+
+    String fallback =
+        client
+            .post("/v1/sessions", json("{'kind':'terminal','saleId':'L','currency':'USD'}"))
+            .expect(201)
+            .text("poiId");
+    assertEquals("bilt-session-host", fallback);
+    assertEquals("bilt-session-host", lastPoiId());
+  }
+
+  private String lastPoiId() {
+    List<SaleToPOIRequest> requests = terminal.requests();
+    return requests.get(requests.size() - 1).getMessageHeader().getPoiid();
+  }
+
+  @Test
+  void aHostWithoutATerminalRefusesTerminalSessions() throws Exception {
+    try (SessionHost bare = SessionHost.builder().port(0).build()) {
+      bare.start();
+      HostClient bareClient = new HostClient(bare.port());
+      assertTrue(bareClient.get("/health").expect(200).body.path("terminal").isMissingNode());
+      assertEquals("NOT_FOUND", bareClient.get("/v1/terminal").expect(404).text("code"));
+      bareClient.post("/v1/terminal/diagnose", "{}").expect(404);
+      assertEquals(
+          "UNSUPPORTED",
+          bareClient
+              .post("/v1/sessions", json("{'kind':'terminal','saleId':'L','currency':'USD'}"))
+              .expect(409)
+              .text("code"));
+    }
   }
 
   @Test

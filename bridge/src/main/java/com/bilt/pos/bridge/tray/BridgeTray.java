@@ -40,7 +40,7 @@ public final class BridgeTray {
   private final Runnable quit;
 
   private final MenuItem listening = new MenuItem();
-  private final MenuItem terminals = new MenuItem();
+  private final MenuItem terminal = new MenuItem();
   private final MenuItem sessions = new MenuItem();
   private final MenuItem configError = new MenuItem();
   private final CheckboxMenuItem startAtLogin = new CheckboxMenuItem("Start at login");
@@ -78,7 +78,7 @@ public final class BridgeTray {
   /** Adds the icon to the system tray. */
   public void install() throws AWTException {
     PopupMenu menu = new PopupMenu();
-    for (MenuItem status : new MenuItem[] {listening, terminals, sessions, configError}) {
+    for (MenuItem status : new MenuItem[] {listening, terminal, sessions, configError}) {
       status.setEnabled(false);
       menu.add(status);
     }
@@ -119,7 +119,8 @@ public final class BridgeTray {
   private void refresh() {
     BridgeStatus status = bridge.status();
     listening.setLabel(status.listeningLine());
-    terminals.setLabel("Terminals configured: " + status.terminalCount());
+    terminal.setLabel(
+        status.terminalConfigured() ? "Terminal configured" : "No terminal configured");
     sessions.setLabel("Sessions active: " + status.sessionCount());
     Optional<String> error = bridge.lastConfigError();
     configError.setLabel(error.map(e -> "Config error: " + truncate(e)).orElse(""));

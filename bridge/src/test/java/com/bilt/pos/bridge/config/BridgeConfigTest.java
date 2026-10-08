@@ -15,13 +15,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 class BridgeConfigTest {
 
-  private static final String DEV_TERMINAL =
-      """
-      { "poiId": "VictaLane-1", "host": "192.168.4.108", "port": 8443,
-        "encryption": false, "passphrase": null, "keyId": null,
-        "trustAll": true, "caCertificatePath": null, "environment": null }
-      """;
-
   @Test
   void emptyObjectYieldsDefaults() throws Exception {
     BridgeConfig config = BridgeConfig.parse("{}");
@@ -30,16 +23,15 @@ class BridgeConfigTest {
     assertTrue(config.bindAddress().isLoopbackAddress());
     assertEquals(List.of("*"), config.allowedOrigins());
     assertTrue(config.allowsAnyOrigin());
-    assertTrue(config.terminals().isEmpty());
+    assertTrue(config.terminal().isEmpty());
   }
 
   @Test
   void starterFileParsesWithOneDevelopmentTerminal() throws Exception {
     BridgeConfig config = BridgeConfig.parse(FileBridgeConfigSource.exampleJson());
 
-    assertEquals(1, config.terminals().size());
-    TerminalConfig t = config.terminals().get(0);
-    assertEquals("VictaLane-275839164", t.poiId());
+    TerminalConfig t = config.terminal().orElseThrow();
+    assertEquals(Optional.of("Lane 1"), t.label());
     assertEquals("https://192.168.4.108:8443/nexo", t.endpoint());
     assertTrue(t.trustAll());
     assertFalse(t.encryption());
@@ -102,34 +94,57 @@ class BridgeConfigTest {
   }
 
   @Test
-  void terminalRequiresPoiIdAndHost() {
-    BridgeConfigException noId =
+  void terminalRequiresHostAndTakesAnOptionalLabelAndModel() throws Exception {
+    BridgeConfigException noHost =
+        assertThrows(
+            BridgeConfigException.class,
+            () -> BridgeConfig.parse("{\"terminal\": {\"trustAll\": true}}"));
+    assertTrue(noHost.getMessage().contains("terminal.host is required"), noHost.getMessage());
+
+    TerminalConfig t =
+        BridgeConfig.parse(
+                "{\"terminal\": {\"label\": \"Lane 3\", \"model\": \"VictaLane\","
+                    + " \"host\": \"10.0.0.1\", \"trustAll\": true}}")
+            .terminal()
+            .orElseThrow();
+    assertEquals(Optional.of("Lane 3"), t.label());
+    assertEquals(Optional.of("VictaLane"), t.model());
+  }
+
+  @Test
+  void theFormerTerminalsListAndPoiIdAreRejectedWithMigrationAdvice() {
+    BridgeConfigException list =
         assertThrows(
             BridgeConfigException.class,
             () ->
                 BridgeConfig.parse(
-                    "{\"terminals\": [{\"host\": \"10.0.0.1\", \"trustAll\": true}]}"));
-    assertTrue(noId.getMessage().contains("terminals[0].poiId is required"), noId.getMessage());
+                    "{\"terminals\": [{\"poiId\": \"T1\", \"host\": \"h\", \"trustAll\": true}]}"));
+    assertTrue(list.getMessage().contains("single \"terminal\" object"), list.getMessage());
 
-    BridgeConfigException noHost =
+    BridgeConfigException poiId =
         assertThrows(
             BridgeConfigException.class,
-            () -> BridgeConfig.parse("{\"terminals\": [{\"poiId\": \"T1\", \"trustAll\": true}]}"));
-    assertTrue(noHost.getMessage().contains("terminals[0].host is required"), noHost.getMessage());
+            () ->
+                BridgeConfig.parse(
+                    "{\"terminal\": {\"poiId\": \"T1\", \"host\": \"h\", \"trustAll\": true}}"));
+    assertTrue(poiId.getMessage().contains("terminal.poiId is no longer"), poiId.getMessage());
+
+    assertThrows(
+        BridgeConfigException.class,
+        () -> BridgeConfig.parse("{\"terminal\": [{\"host\": \"h\"}]}"));
   }
 
   @Test
   void encryptionNeedsPassphraseAndKeyId() {
-    String base =
-        "{\"terminals\": [{\"poiId\": \"T1\", \"host\": \"h\", \"trustAll\": true, \"encryption\": true";
+    String base = "{\"terminal\": {\"host\": \"h\", \"trustAll\": true, \"encryption\": true";
     BridgeConfigException noPass =
-        assertThrows(BridgeConfigException.class, () -> BridgeConfig.parse(base + "}]}"));
+        assertThrows(BridgeConfigException.class, () -> BridgeConfig.parse(base + "}}"));
     assertTrue(noPass.getMessage().contains("passphrase is missing"), noPass.getMessage());
 
     BridgeConfigException noKey =
         assertThrows(
             BridgeConfigException.class,
-            () -> BridgeConfig.parse(base + ", \"passphrase\": \"s3cret\"}]}"));
+            () -> BridgeConfig.parse(base + ", \"passphrase\": \"s3cret\"}}"));
     assertTrue(noKey.getMessage().contains("keyId is missing"), noKey.getMessage());
   }
 
@@ -140,8 +155,8 @@ class BridgeConfigTest {
             BridgeConfigException.class,
             () ->
                 BridgeConfig.parse(
-                    "{\"terminals\": [{\"poiId\": \"T1\", \"host\": \"h\", \"trustAll\": true,"
-                        + " \"environment\": \"STAGING\"}]}"));
+                    "{\"terminal\": {\"host\": \"h\", \"trustAll\": true,"
+                        + " \"environment\": \"STAGING\"}}"));
     assertTrue(e.getMessage().contains("trustAll cannot be combined"), e.getMessage());
   }
 
@@ -154,7 +169,7 @@ class BridgeConfigTest {
     BridgeConfigException noCa =
         assertThrows(
             BridgeConfigException.class,
-            () -> BridgeConfig.parse("{\"terminals\": [{\"poiId\": \"T1\", \"host\": \"h\"}]}"));
+            () -> BridgeConfig.parse("{\"terminal\": {\"host\": \"h\"}}"));
     assertTrue(noCa.getMessage().contains("caCertificatePath is required"), noCa.getMessage());
 
     BridgeConfigException noEnv =
@@ -162,9 +177,9 @@ class BridgeConfigTest {
             BridgeConfigException.class,
             () ->
                 BridgeConfig.parse(
-                    "{\"terminals\": [{\"poiId\": \"T1\", \"host\": \"h\", \"caCertificatePath\": \""
+                    "{\"terminal\": {\"host\": \"h\", \"caCertificatePath\": \""
                         + caJson
-                        + "\"}]}"));
+                        + "\"}}"));
     assertTrue(noEnv.getMessage().contains("environment"), noEnv.getMessage());
 
     BridgeConfigException missingFile =
@@ -172,56 +187,49 @@ class BridgeConfigTest {
             BridgeConfigException.class,
             () ->
                 BridgeConfig.parse(
-                    "{\"terminals\": [{\"poiId\": \"T1\", \"host\": \"h\", \"environment\": \"STAGING\","
+                    "{\"terminal\": {\"host\": \"h\", \"environment\": \"STAGING\","
                         + " \"caCertificatePath\": \""
                         + caJson
-                        + ".missing\"}]}"));
+                        + ".missing\"}}"));
     assertTrue(missingFile.getMessage().contains("does not exist"), missingFile.getMessage());
 
     BridgeConfig ok =
         BridgeConfig.parse(
-            "{\"terminals\": [{\"poiId\": \"T1\", \"host\": \"h\", \"environment\": \"staging\","
+            "{\"terminal\": {\"host\": \"h\", \"environment\": \"staging\","
                 + " \"caCertificatePath\": \""
                 + caJson
                 + "\", \"encryption\": true, \"passphrase\": \"p\", \"keyId\": \"k\","
-                + " \"keyVersion\": 2}]}");
-    TerminalConfig t = ok.terminals().get(0);
+                + " \"keyVersion\": 2}}");
+    TerminalConfig t = ok.terminal().orElseThrow();
     assertEquals(Optional.of(BiltTerminalEnvironment.STAGING), t.environment());
     assertEquals(2, t.keyVersion());
     assertFalse(t.trustAll());
   }
 
   @Test
-  void rejectsUnknownEnvironmentAndDuplicateIds() {
+  void rejectsUnknownEnvironment() {
     BridgeConfigException env =
         assertThrows(
             BridgeConfigException.class,
             () ->
                 BridgeConfig.parse(
-                    "{\"terminals\": [{\"poiId\": \"T1\", \"host\": \"h\", \"environment\": \"QA\","
-                        + " \"caCertificatePath\": \"/x\"}]}"));
+                    "{\"terminal\": {\"host\": \"h\", \"environment\": \"QA\","
+                        + " \"caCertificatePath\": \"/x\"}}"));
     assertTrue(env.getMessage().contains("PRODUCTION or STAGING"), env.getMessage());
-
-    BridgeConfigException dup =
-        assertThrows(
-            BridgeConfigException.class,
-            () ->
-                BridgeConfig.parse("{\"terminals\": [" + DEV_TERMINAL + "," + DEV_TERMINAL + "]}"));
-    assertTrue(dup.getMessage().contains("duplicate terminal poiId"), dup.getMessage());
   }
 
   @Test
   void redactedCopyHidesPassphraseEverywhere() throws Exception {
     BridgeConfig config =
         BridgeConfig.parse(
-            "{\"terminals\": [{\"poiId\": \"T1\", \"host\": \"h\", \"trustAll\": true,"
-                + " \"encryption\": true, \"passphrase\": \"hunter2\", \"keyId\": \"k\"}]}");
+            "{\"terminal\": {\"host\": \"h\", \"trustAll\": true,"
+                + " \"encryption\": true, \"passphrase\": \"hunter2\", \"keyId\": \"k\"}}");
 
     String json = config.redacted().toJson().toString();
     assertFalse(json.contains("hunter2"), json);
     assertTrue(json.contains("\"passphrase\":\"***\""), json);
     assertFalse(config.toString().contains("hunter2"), config.toString());
-    assertFalse(config.terminals().get(0).toString().contains("hunter2"));
+    assertFalse(config.terminal().orElseThrow().toString().contains("hunter2"));
   }
 
   @Test

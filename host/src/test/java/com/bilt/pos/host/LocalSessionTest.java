@@ -53,8 +53,7 @@ class LocalSessionTest {
     assertEquals("bridge", health.path("host").asText());
     assertEquals("1", health.path("protocolVersions").get(0).asText());
     assertNotNull(health.path("sdkVersion").asText(null));
-    assertTrue(health.path("terminals").isArray());
-    assertEquals(0, health.path("terminals").size());
+    assertTrue(health.path("terminal").isMissingNode());
   }
 
   @Test
@@ -241,9 +240,8 @@ class LocalSessionTest {
     client.post("/v1/sessions", "{not json").expect(400);
     client
         .post(
-            "/v1/sessions",
-            json("{'kind':'terminal','saleId':'L','poiId':'none','currency':'USD'}"))
-        .expect(404);
+            "/v1/sessions", json("{'kind':'terminal','saleId':'L','poiId':'any','currency':'USD'}"))
+        .expect(409);
     JsonNode error =
         client.post("/v1/sessions", json("{'kind':'local','currency':'USD'}")).expect(400).body;
     assertEquals("VALIDATION", error.path("code").asText());

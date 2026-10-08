@@ -2,21 +2,22 @@ package com.bilt.pos.bridge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.bilt.pos.bridge.config.FileBridgeConfigSource;
 import com.bilt.pos.host.TerminalInfo;
+import com.bilt.pos.nexo.client.TerminalClient;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class BridgeTerminalProviderTest {
 
   @Test
-  void exposesConfiguredTerminalsAndFollowsReloads(@TempDir Path dir) throws Exception {
+  void exposesTheConfiguredTerminalAndFollowsReloads(@TempDir Path dir) throws Exception {
     Path file = dir.resolve("config.json");
     int free;
     try (ServerSocket s = new ServerSocket(0)) {
@@ -26,26 +27,30 @@ class BridgeTerminalProviderTest {
         file,
         "{\"port\": "
             + free
-            + ", \"terminals\": [{\"poiId\": \"T1\", \"host\": \"10.0.0.1\", \"trustAll\": true}]}");
+            + ", \"terminal\": {\"label\": \"Lane 1\", \"model\": \"VictaLane\","
+            + " \"host\": \"10.0.0.1\", \"trustAll\": true}}");
 
     try (Bridge bridge = new Bridge(new FileBridgeConfigSource(file))) {
       bridge.start();
       BridgeTerminalProvider provider = new BridgeTerminalProvider(bridge);
 
-      assertEquals(List.of(TerminalInfo.of("T1")), provider.terminals());
-      assertNotNull(provider.forPoi("T1"));
-      assertNull(provider.forPoi("T2"));
+      assertEquals(TerminalInfo.of("Lane 1", "VictaLane"), provider.info());
+      TerminalClient first = provider.client();
+      assertNotNull(first);
 
       Files.writeString(
           file,
-          "{\"port\": "
-              + free
-              + ", \"terminals\": [{\"poiId\": \"T2\", \"host\": \"10.0.0.2\", \"trustAll\": true}]}");
+          "{\"port\": " + free + ", \"terminal\": {\"host\": \"10.0.0.2\", \"trustAll\": true}}");
       bridge.reload();
 
-      assertEquals(List.of(TerminalInfo.of("T2")), provider.terminals());
-      assertNull(provider.forPoi("T1"));
-      assertNotNull(provider.forPoi("T2"));
+      assertEquals(TerminalInfo.of(null, null), provider.info());
+      assertNotNull(provider.client());
+      assertNotSame(first, provider.client());
+
+      Files.writeString(file, "{\"port\": " + free + "}");
+      bridge.reload();
+
+      assertNull(provider.client());
     }
   }
 }

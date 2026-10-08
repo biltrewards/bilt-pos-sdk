@@ -28,9 +28,9 @@ tasks.test {
     systemProperty("bilt.sessionProtocolDir", sessionProtocolDir.asFile.absolutePath)
 }
 
-// DevMain starts the host from a small JSON terminal config so the protocol can
+// DevMain starts the host from a small JSON config naming its one terminal so the protocol can
 // be driven with curl before the Terminal Bridge exists:
-//   ./gradlew :host:run --args="path/to/terminals.json"
+//   ./gradlew :host:run --args="path/to/dev-host.json"
 application {
     mainClass.set("com.bilt.pos.host.DevMain")
 }

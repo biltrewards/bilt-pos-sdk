@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.bilt.pos.media.service.InMemoryAdDecisionService;
-import com.bilt.pos.nexo.client.TerminalClient;
 import com.bilt.pos.nexo.model.MessageCategoryType;
+import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -82,18 +82,9 @@ class SpecConformanceTest {
         SessionHost.builder()
             .port(0)
             .adDecisionService(new InMemoryAdDecisionService())
-            .terminalClients(
-                new TerminalClientProvider() {
-                  @Override
-                  public TerminalClient forPoi(String poiId) {
-                    return POI.equals(poiId) ? terminal : null;
-                  }
-
-                  @Override
-                  public List<TerminalInfo> terminals() {
-                    return List.of(TerminalInfo.of(POI, "VictaLane").withReachable(true));
-                  }
-                })
+            .terminal(
+                TerminalClientProvider.of(
+                    terminal, TerminalInfo.of("Lane 3", "VictaLane").withReachable(true)))
             .build();
     host.start();
     client = new HostClient(host.port());
@@ -136,33 +127,60 @@ class SpecConformanceTest {
   }
 
   @Test
-  void healthAndTerminalsFollowTheSpec() throws Exception {
+  void healthAndTheTerminalFollowTheSpec() throws Exception {
     JsonNode health = client.get("/health").expect(200).body;
     assertEquals("bridge", health.path("host").asText());
-    assertEquals(POI, health.path("terminals").get(0).path("poiId").asText());
+    assertEquals("Lane 3", health.path("terminal").path("label").asText());
     assertEquals(0, health.path("sessions").asInt());
 
-    client.get("/v1/terminals").expect(200);
-    JsonNode diagnosis = client.post("/v1/terminals/" + POI + "/diagnose", "{}").expect(200).body;
+    assertEquals("VictaLane", client.get("/v1/terminal").expect(200).text("model"));
+    JsonNode diagnosis = client.post("/v1/terminal/diagnose", "{}").expect(200).body;
     assertTrue(diagnosis.path("hostStatuses").isArray());
-    client.post("/v1/terminals/nope/diagnose", "{}").expect(404);
+    assertEquals("bilt-session-host", lastPoiId());
+    client.post("/v1/terminal/diagnose?poiId=" + POI, "{}").expect(200);
+    assertEquals(POI, lastPoiId());
 
-    JsonNode totals =
-        client.post("/v1/terminals/" + POI + "/totals?storeLocation=STR-1", "{}").expect(200).body;
+    JsonNode totals = client.post("/v1/terminal/totals?storeLocation=STR-1", "{}").expect(200).body;
     assertEquals("REC-1", totals.path("poiReconciliationId").asText());
     assertEquals(1, totals.path("transactionTotals").size());
     JsonNode reconciliation =
-        client.post("/v1/terminals/" + POI + "/reconcile", "{}").expect(200).body;
+        client.post("/v1/terminal/reconcile?poiId=ANY-LANE", "{}").expect(200).body;
     assertEquals("REC-2", reconciliation.path("poiReconciliationId").asText());
-    client.post("/v1/terminals/nope/totals", "{}").expect(404);
-    client.post("/v1/terminals/nope/reconcile", "{}").expect(404);
+    assertEquals("ANY-LANE", lastPoiId());
 
     String print = json("{'format':'TEXT','content':'Thank you','documentQualifier':'JOURNAL'}");
-    SPEC.request("POST", "/v1/terminals/" + POI + "/print", MAPPER.readTree(print));
-    client.post("/v1/terminals/" + POI + "/print", print).expect(204);
-    client.post("/v1/terminals/" + POI + "/print", json("{'format':'TEXT'}")).expect(400);
-    client.post("/v1/terminals/nope/print", print).expect(404);
-    client.post("/v1/terminals/" + POI + "/sound", json("{'action':'NOPE'}")).expect(400);
+    SPEC.request("POST", "/v1/terminal/print", MAPPER.readTree(print));
+    client.post("/v1/terminal/print", print).expect(204);
+    client.post("/v1/terminal/print", json("{'format':'TEXT'}")).expect(400);
+    client.post("/v1/terminal/sound", json("{'action':'NOPE'}")).expect(400);
+  }
+
+  private String lastPoiId() {
+    List<SaleToPOIRequest> requests = terminal.requests();
+    return requests.get(requests.size() - 1).getMessageHeader().getPoiid();
+  }
+
+  @Test
+  void aHostWithoutATerminalAnswersAsTheSpecSays() throws Exception {
+    try (SessionHost bare = SessionHost.builder().port(0).build()) {
+      bare.start();
+      HostClient bareClient = new HostClient(bare.port());
+      assertTrue(bareClient.get("/health").expect(200).body.path("terminal").isMissingNode());
+      assertEquals("NOT_FOUND", bareClient.get("/v1/terminal").expect(404).text("code"));
+      bareClient.post("/v1/terminal/diagnose", "{}").expect(404);
+      bareClient.post("/v1/terminal/totals", "{}").expect(404);
+      bareClient.post("/v1/terminal/reconcile", "{}").expect(404);
+      bareClient
+          .post("/v1/terminal/print", json("{'format':'TEXT','content':'Thank you'}"))
+          .expect(404);
+      bareClient.post("/v1/terminal/sound", json("{'action':'STOP'}")).expect(404);
+      assertEquals(
+          "UNSUPPORTED",
+          bareClient
+              .post("/v1/sessions", json("{'kind':'terminal','saleId':'L','currency':'USD'}"))
+              .expect(409)
+              .text("code"));
+    }
   }
 
   @Test
@@ -457,14 +475,6 @@ class SpecConformanceTest {
         client
             .postUnkeyed("/v1/sessions", json("{'kind':'local','saleId':'L','currency':'USD'}"))
             .expect(400)
-            .text("code"));
-    assertEquals(
-        "NOT_FOUND",
-        client
-            .post(
-                "/v1/sessions",
-                json("{'kind':'terminal','saleId':'L','poiId':'nope','currency':'USD'}"))
-            .expect(404)
             .text("code"));
     assertEquals(
         "VALIDATION",

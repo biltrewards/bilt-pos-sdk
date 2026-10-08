@@ -159,7 +159,9 @@ public final class FileBridgeConfigSource implements BridgeConfigSource {
             "port: loopback port the browser POS talks to; the next 10 ports are tried if taken.",
             "allowedOrigins: browser origins allowed by CORS. \\"*\\" is development-only;",
             "  list your POS page origins (e.g. https://pos.example.com) before going live.",
-            "terminals: one entry per Bilt terminal on the store LAN, keyed by poiId.",
+            "terminal: the one Bilt terminal on the store LAN this bridge connects the POS to.",
+            "  Remove it to run local sessions only. There is no poiId: the one the POS page",
+            "  sends is passed through to the terminal. label and model are optional.",
             "  Development terminals: encryption=false, trustAll=true.",
             "  Production terminals: encryption=true with passphrase+keyId, trustAll=false",
             "  with caCertificatePath and environment (PRODUCTION or STAGING).",
@@ -167,19 +169,17 @@ public final class FileBridgeConfigSource implements BridgeConfigSource {
           ],
           "port": 48333,
           "allowedOrigins": ["*"],
-          "terminals": [
-            {
-              "poiId": "VictaLane-275839164",
-              "host": "192.168.4.108",
-              "port": 8443,
-              "encryption": false,
-              "passphrase": null,
-              "keyId": null,
-              "trustAll": true,
-              "caCertificatePath": null,
-              "environment": null
-            }
-          ]
+          "terminal": {
+            "label": "Lane 1",
+            "host": "192.168.4.108",
+            "port": 8443,
+            "encryption": false,
+            "passphrase": null,
+            "keyId": null,
+            "trustAll": true,
+            "caCertificatePath": null,
+            "environment": null
+          }
         }
         """;
   }

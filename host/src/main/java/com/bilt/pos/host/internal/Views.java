@@ -665,7 +665,7 @@ public final class Views {
 
   public static ObjectNode terminal(TerminalInfo terminal) {
     ObjectNode node = Json.object();
-    node.put("poiId", terminal.poiId());
+    Json.putText(node, "label", terminal.label());
     Json.putText(node, "model", terminal.model());
     if (terminal.reachable() != null) {
       node.put("reachable", terminal.reachable());

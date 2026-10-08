@@ -49,7 +49,7 @@ public final class Diagnostics {
         .append(System.getProperty("os.arch"))
         .append('\n');
     sb.append("listener: ").append(status.listeningLine()).append('\n');
-    sb.append("terminals configured: ").append(status.terminalCount()).append('\n');
+    sb.append("terminal configured: ").append(status.terminalConfigured()).append('\n');
     sb.append("sessions active: ").append(status.sessionCount()).append('\n');
     sb.append("config file: ").append(configLocation.orElse("-")).append('\n');
     sb.append("log dir: ").append(dirs.logDir()).append('\n');
@@ -71,17 +71,13 @@ public final class Diagnostics {
     }
   }
 
-  /** Replaces every configured passphrase, wherever it appears in {@code text}. */
+  /** Replaces the configured passphrase, wherever it appears in {@code text}. */
   static String scrub(String text, Optional<BridgeConfig> config) {
-    if (config.isEmpty()) {
-      return text;
-    }
-    String result = text;
-    for (TerminalConfig t : config.get().terminals()) {
-      if (t.passphrase().isPresent() && !t.passphrase().get().isEmpty()) {
-        result = result.replace(t.passphrase().get(), MASK);
-      }
-    }
-    return result;
+    Optional<String> passphrase =
+        config
+            .flatMap(BridgeConfig::terminal)
+            .flatMap(TerminalConfig::passphrase)
+            .filter(p -> !p.isEmpty());
+    return passphrase.map(p -> text.replace(p, MASK)).orElse(text);
   }
 }

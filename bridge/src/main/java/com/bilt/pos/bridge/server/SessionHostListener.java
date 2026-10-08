@@ -22,7 +22,7 @@ public final class SessionHostListener implements Closeable {
   private final InetAddress bindAddress;
   private final int preferredPort;
   private final int fallbackPorts;
-  private final TerminalClientProvider terminals;
+  private final TerminalClientProvider terminal;
   private final HostAuth auth;
 
   private SessionHost host;
@@ -31,12 +31,12 @@ public final class SessionHostListener implements Closeable {
       InetAddress bindAddress,
       int preferredPort,
       int fallbackPorts,
-      TerminalClientProvider terminals,
+      TerminalClientProvider terminal,
       HostAuth auth) {
     this.bindAddress = bindAddress;
     this.preferredPort = preferredPort;
     this.fallbackPorts = fallbackPorts;
-    this.terminals = terminals;
+    this.terminal = terminal;
     this.auth = auth;
   }
 
@@ -55,7 +55,7 @@ public final class SessionHostListener implements Closeable {
         SessionHost.builder()
             .bindAddress(bindAddress.getHostAddress())
             .port(port)
-            .terminalClients(terminals)
+            .terminal(terminal)
             .auth(auth)
             .hostKind("bridge")
             .build();

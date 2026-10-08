@@ -11,7 +11,8 @@ class TerminalClientFactoryTest {
   void buildsDevelopmentClient() {
     TerminalConfig dev =
         new TerminalConfig(
-            "T1",
+            Optional.empty(),
+            Optional.empty(),
             "192.168.4.108",
             8443,
             false,
@@ -29,7 +30,8 @@ class TerminalClientFactoryTest {
   void buildsEncryptedTrustAllClient() {
     TerminalConfig encrypted =
         new TerminalConfig(
-            "T1",
+            Optional.empty(),
+            Optional.empty(),
             "192.168.4.108",
             8443,
             true,
