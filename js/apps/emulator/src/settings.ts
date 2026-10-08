@@ -31,19 +31,38 @@ export interface Settings {
 
 export const STORAGE_KEY = 'bilt-pos-emulator.settings';
 
+/** The bridge's own default port; `VITE_BILT_BRIDGE_PORT` at build time moves the default. */
+const DEFAULT_BRIDGE_PORT = 48333;
+
+/**
+ * What a launcher that started the bridge itself (scripts/browser-emulator.sh) says the page should
+ * use: `VITE_BILT_SESSION_MODE`, `local` when it configured the bridge without a terminal.
+ */
+export interface Launch {
+  readonly mode?: SessionMode;
+}
+
+const LAUNCH_KEY = `${STORAGE_KEY}.launch`;
+
+const ENV_LAUNCH: Launch = launchFrom(import.meta.env.VITE_BILT_SESSION_MODE);
+
+function launchFrom(mode: unknown): Launch {
+  return mode === 'local' || mode === 'terminal' ? { mode } : {};
+}
+
 /**
  * The defaults. The lane identity (sale id, currency, store) is configuration, as on the desktop
  * emulator, which reads it from its environment: `VITE_SALE_ID`, `VITE_CURRENCY` and
  * `VITE_STORE_LOCATION` override it at build or dev-server start.
  */
 export const DEFAULT_SETTINGS: Settings = {
-  mode: 'terminal',
+  mode: ENV_LAUNCH.mode ?? 'terminal',
   poiId: import.meta.env.VITE_POI_ID ?? '',
   saleId: import.meta.env.VITE_SALE_ID ?? 'LANE-3',
   currency: import.meta.env.VITE_CURRENCY ?? 'USD',
   storeLocation: import.meta.env.VITE_STORE_LOCATION ?? 'STR-0142',
   bridge: import.meta.env.DEV ? 'proxy' : 'direct',
-  bridgePort: 48333,
+  bridgePort: port(import.meta.env.VITE_BILT_BRIDGE_PORT, DEFAULT_BRIDGE_PORT),
 };
 
 function text(value: unknown, fallback: string): string {
@@ -63,8 +82,31 @@ function safeStorage(): Storage | undefined {
   }
 }
 
-/** The settings as last saved, each field falling back to its default when missing or malformed. */
-export function loadSettings(storage: Storage | undefined = safeStorage()): Settings {
+/**
+ * The settings as last saved, each field falling back to its default when missing or malformed. A
+ * launch that differs from the last one applied overrides the saved mode once, so a profile saved
+ * in terminal mode still opens a local session on a bridge started without a terminal; later edits
+ * in Settings then persist until the launch changes again.
+ */
+export function loadSettings(
+  storage: Storage | undefined = safeStorage(),
+  launch: Launch = ENV_LAUNCH,
+): Settings {
+  const saved = loadSaved(storage);
+  if (launch.mode === undefined) return saved;
+  const key = JSON.stringify(launch);
+  try {
+    if (storage?.getItem(LAUNCH_KEY) === key) return saved;
+    storage?.setItem(LAUNCH_KEY, key);
+  } catch {
+    // Without storage every load is a first load, and the launch applies each time.
+  }
+  const next = { ...saved, ...launch };
+  saveSettings(next, storage);
+  return next;
+}
+
+function loadSaved(storage: Storage | undefined): Settings {
   try {
     const raw = storage?.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
