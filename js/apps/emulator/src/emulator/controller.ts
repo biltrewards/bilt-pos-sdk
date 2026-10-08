@@ -183,6 +183,7 @@ export class BrowserEmulatorController implements EmulatorController {
   private unsubscribeSales: (() => void) | null = null;
   /** Serializes the keypad's basket edits, so keystrokes land in the order they were typed. */
   private keypadQueue: Promise<unknown> = Promise.resolve();
+  private scanQueue: Promise<unknown> = Promise.resolve();
   /** True once the operator disconnected by hand; the page then stops auto-connecting. */
   disconnectedByOperator = false;
 
@@ -558,22 +559,26 @@ export class BrowserEmulatorController implements EmulatorController {
     );
   }
 
+  /**
+   * Scans queue behind one another: the quantity is set from the basket as it stands, so a second
+   * scan has to read it after the first one's answer or both send the same quantity.
+   */
   addProduct(product: Product): void {
     const priceLabel = `$${formatMinor(product.priceMinor)}`;
     const session = this.checkout();
     if (!session) return;
-    const existing = session.basket.current.items.find(
-      (item) => item.sku === product.sku && item.type === 'SALE',
-    );
-    const change = existing
-      ? session.basket.updateItemQuantity(existing.itemId, existing.quantity + 1)
-      : session.basket.addItem(toBasketItem(product));
-    change.then(
-      (basket) => {
-        if (this.session === session) this.publishBasket(basket);
-        this.log(`Added ${product.name} (${priceLabel})`);
-      },
-      (error: unknown) => this.fail(`Failed to add ${product.name}`, error),
+    const next = this.scanQueue.then(async () => {
+      const existing = session.basket.current.items.find(
+        (item) => item.sku === product.sku && item.type === 'SALE',
+      );
+      const basket = await (existing
+        ? session.basket.updateItemQuantity(existing.itemId, existing.quantity + 1)
+        : session.basket.addItem(toBasketItem(product)));
+      if (this.session === session) this.publishBasket(basket);
+      this.log(`Added ${product.name} (${priceLabel})`);
+    });
+    this.scanQueue = next.catch((error: unknown) =>
+      this.fail(`Failed to add ${product.name}`, error),
     );
   }
 
