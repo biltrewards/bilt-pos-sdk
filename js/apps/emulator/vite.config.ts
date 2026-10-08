@@ -11,8 +11,7 @@ import { defineConfig } from 'vitest/config';
 // `VITE_BILT_BRIDGE_PORT` (what the Gradle and script launchers set, and the page's default for
 // the direct route) moves the target the same way when `BRIDGE_URL` is absent.
 const bridge =
-  process.env.BRIDGE_URL ??
-  `http://127.0.0.1:${process.env.VITE_BILT_BRIDGE_PORT ?? '48333'}`;
+  process.env.BRIDGE_URL ?? `http://127.0.0.1:${process.env.VITE_BILT_BRIDGE_PORT ?? '48333'}`;
 
 const sibling = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
