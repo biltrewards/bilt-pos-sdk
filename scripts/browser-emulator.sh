@@ -97,6 +97,20 @@ if [[ ! -x "$BRIDGE_LAUNCHER" ]]; then
   exit 1
 fi
 
+# The bridge moves to the next free port when its own is taken, so a check on
+# --port could answer for another bridge (the tray app, say) with another
+# config. Refuse instead of guessing; Vite's --strictPort would fail later anyway.
+port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+for p in "$bridge_port" "$web_port"; do
+  if port_in_use "$p"; then
+    echo "Port $p on 127.0.0.1 is already in use (another bridge or dev server?)." >&2
+    echo "Stop it, or pick another with --port / --web-port." >&2
+    exit 1
+  fi
+done
+
+if [[ "$local_only" -eq 1 ]]; then session_mode=local; else session_mode=terminal; fi
+
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/bilt-browser-emulator.XXXXXX")"
 config="$work_dir/config.json"
 
@@ -169,17 +183,27 @@ fi
 
 echo "Browser emulator: $url (Ctrl-C stops the emulator and the bridge)"
 # Both servers run as background children so a signal reaches this shell's
-# traps immediately, instead of after the foreground dev server exits.
+# traps immediately, instead of after the foreground dev server exits. The
+# session mode becomes the page's launch setting (src/settings.ts), so it opens
+# the kind of session the bridge config above can serve.
 (cd "$REPO_ROOT/js" &&
   BRIDGE_URL="http://127.0.0.1:$bridge_port" VITE_BILT_BRIDGE_PORT="$bridge_port" \
+    VITE_BILT_SESSION_MODE="$session_mode" \
     exec "${PNPM[@]}" --filter @bilt/pos-emulator dev --host 127.0.0.1 --port "$web_port" --strictPort) &
 web_pid=$!
 
-# Exit when either server stops on its own; the EXIT trap stops the other.
+# Exit when either server stops on its own, with its status; the EXIT trap
+# stops the other.
 while kill -0 "$web_pid" 2>/dev/null && kill -0 "$bridge_pid" 2>/dev/null; do
   sleep 1
 done
+status=0
 if ! kill -0 "$bridge_pid" 2>/dev/null; then
+  wait "$bridge_pid" || status=$?
   echo "The bridge stopped; last log lines:" >&2
   tail -20 "$work_dir/bridge.log" >&2
+  exit $((status == 0 ? 1 : status))
 fi
+wait "$web_pid" || status=$?
+[[ "$status" -eq 0 ]] || echo "The dev server exited with status $status." >&2
+exit "$status"

@@ -23,7 +23,10 @@ scripts/browser-emulator.sh --local
 
 Both write a development bridge config (the terminal unencrypted with `trustAll`, as development
 terminals accept), start the bridge, wait for its `/health`, start the dev server on
-`http://127.0.0.1:5173` and open it; Ctrl-C stops both. Options: `-PterminalPort` / `--terminal ip:port`
+`http://127.0.0.1:5173` and open it; Ctrl-C stops both. The page comes up in the session mode the
+bridge was configured for (`VITE_BILT_SESSION_MODE`), over whatever an earlier launch saved in
+Settings. Either port already in use (a tray bridge, another
+dev server) stops the launch rather than pointing the page at a bridge with another config. Options: `-PterminalPort` / `--terminal ip:port`
 (default 8443), `-PpoiId` / `--poi-id` (default `DEV-TERMINAL`), `-PbridgePort` / `--port`
 (default 48333), `-Pport` / `--web-port` (default 5173), `-PnoOpen` / `--no-open`.
 `SKIP_BUILD=1 scripts/browser-emulator.sh ...` skips rebuilding the bridge and the JS packages.

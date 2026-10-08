@@ -100,6 +100,22 @@ describe('settings', () => {
     expect(loadSettings()).toMatchObject({ mode: 'terminal', bridgePort: 48333 });
   });
 
+  it('applies a new launch over the saved settings once', () => {
+    localStorage.clear();
+    saveSettings({ ...loadSettings(), poiId: 'SAVED', mode: 'terminal', saleId: 'LANE-9' });
+    const launch = { mode: 'local' } as const;
+    expect(loadSettings(localStorage, launch)).toMatchObject({
+      mode: 'local',
+      poiId: 'SAVED',
+      saleId: 'LANE-9',
+    });
+    // a Settings edit after that launch persists until the launch changes
+    saveSettings({ ...loadSettings(localStorage, launch), mode: 'terminal' });
+    expect(loadSettings(localStorage, launch).mode).toBe('terminal');
+    saveSettings({ ...loadSettings(localStorage, launch), mode: 'local' });
+    expect(loadSettings(localStorage, { mode: 'terminal' }).mode).toBe('terminal');
+  });
+
   it('builds the probe options for each route', () => {
     expect(bridgeOptions({ bridge: 'direct', bridgePort: 48340 })).toEqual({ port: 48340 });
     // jsdom serves the page from http://localhost:3000

@@ -33,23 +33,13 @@ val corepackVersion = providers.exec {
 val port = providers.gradleProperty("port").orElse("5173")
 val bridgePort = providers.gradleProperty("bridgePort").orElse("48333")
 
-fun checkNode() {
-    val version = nodeVersion.standardOutput.asText.get().trim()
-    val major = Regex("""^v(\d+)""").find(version)?.groupValues?.get(1)?.toIntOrNull()
-    check(major != null) {
-        "Node.js was not found on PATH. The browser emulator needs Node 20 or newer " +
-            "with pnpm or corepack: https://nodejs.org/"
+
+// The root and member manifests (pnpm-workspace.yaml: packages/*, examples/*, apps/*).
+val manifests =
+    fileTree(jsDir) {
+        include("package.json", "pnpm-workspace.yaml", "*/*/package.json")
+        exclude("**/node_modules/**")
     }
-    check(major >= 20) {
-        "Node.js $version is too old; the browser emulator needs Node 20 or newer."
-    }
-    if (pnpm.first() == "corepack") {
-        check(corepackVersion.result.get().exitValue == 0) {
-            "Neither pnpm nor corepack is on PATH. Install pnpm (https://pnpm.io/installation) " +
-                "or enable corepack (`corepack enable`), then rerun."
-        }
-    }
-}
 
 val install by
     tasks.registering(Exec::class) {
@@ -58,12 +48,45 @@ val install by
         workingDir = jsDir.asFile
         commandLine(pnpm + listOf("install", "--frozen-lockfile"))
         inputs.file(lockFile)
+        inputs.files(manifests)
         outputs.file(modulesMarker)
+        // Up to date only while the install is newer than every manifest and no member has lost
+        // its node_modules; a member without dependencies has none, and just reinstalls each time.
+        val marker = modulesMarker.asFile
+        val root = jsDir.asFile
+        val lock = lockFile.asFile
+        val tree: FileCollection = manifests
         outputs.upToDateWhen {
-            val marker = modulesMarker.asFile
-            marker.isFile && marker.lastModified() >= lockFile.asFile.lastModified()
+            val files = tree.files
+            marker.isFile &&
+                (files + lock).all { marker.lastModified() >= it.lastModified() } &&
+                files
+                    .filter { it.parentFile != root }
+                    .all { File(it.parentFile, "node_modules").isDirectory }
         }
-        doFirst { checkNode() }
+        // Locals only: the configuration cache cannot serialize an action that reaches back into
+        // this script.
+        val node = nodeVersion
+        val corepack = corepackVersion
+        val viaCorepack = pnpm.first() == "corepack"
+        doFirst {
+            val version = node.standardOutput.asText.get().trim()
+            val major = Regex("""^v(\d+)""").find(version)?.groupValues?.get(1)?.toIntOrNull()
+            check(major != null) {
+                "Node.js was not found on PATH. The browser emulator needs Node 20 or newer " +
+                    "with pnpm or corepack: https://nodejs.org/"
+            }
+            check(major >= 20) {
+                "Node.js $version is too old; the browser emulator needs Node 20 or newer."
+            }
+            if (viaCorepack) {
+                check(corepack.result.get().exitValue == 0) {
+                    "Neither pnpm nor corepack is on PATH. Install pnpm " +
+                        "(https://pnpm.io/installation) or enable corepack (`corepack enable`), " +
+                        "then rerun."
+                }
+            }
+        }
     }
 
 // Vite resolves the emulator's workspace siblings through their dist/, so the
