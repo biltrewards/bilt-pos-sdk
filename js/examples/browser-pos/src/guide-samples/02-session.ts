@@ -7,7 +7,7 @@ declare function recordIncident(message: string): void;
 export async function startLane(pos: BiltPos): Promise<TerminalShopperSession> {
   const session = await pos.startTerminalSession({
     saleId: 'LANE-3',
-    poiId: 'VictaLane-275839164',
+    poiId: 'VictaLane-275839164', // optional: passed through as the Nexo POIID
     currency: 'USD',
     storeLocation: 'STR-0142',
     widgets: [{ type: 'retail-media', placements: ['lane-banner'] }],
@@ -35,11 +35,7 @@ export async function endLane(session: TerminalShopperSession): Promise<void> {
 }
 
 export async function oneVisit(pos: BiltPos): Promise<void> {
-  await using session = await pos.startTerminalSession({
-    saleId: 'LANE-3',
-    poiId: 'VictaLane-275839164',
-    currency: 'USD',
-  });
+  await using session = await pos.startTerminalSession({ saleId: 'LANE-3', currency: 'USD' });
   await session.basket.addItem({
     sku: 'GRC-OJ-1L',
     description: 'Orange Juice 1L',
@@ -49,7 +45,7 @@ export async function oneVisit(pos: BiltPos): Promise<void> {
 } // end() runs here, best-effort: a refusal is reported, not thrown
 
 export async function beforeOpening(pos: BiltPos): Promise<void> {
-  const terminal = pos.terminal('VictaLane-275839164');
+  const terminal = pos.terminal();
   const diagnosis = await terminal.diagnose();
   console.log(diagnosis.hostStatuses);
   const totals = await terminal.totals(); // running totals; reconcile() closes the period

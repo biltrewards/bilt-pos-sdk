@@ -34,7 +34,7 @@ The short version:
 SessionHost host = SessionHost.builder()
     .bindAddress("127.0.0.1")
     .port(48333)
-    .terminalClients(myTerminals)            // TerminalClientProvider
+    .terminal(myTerminal)                    // TerminalClientProvider: the one terminal
     .allowedOrigins(List.of("https://pos.example.com")) // CORS; "*" for a dev host
     .auth(HostAuth.permitAll())              // default; the bridge plugs pairing in here
     .stepDeadlines(StepDeadlines.defaults()) // 30 s totals, 120 s recovery decisions
@@ -45,14 +45,21 @@ int open = host.activeSessions();            // for a tray icon
 host.stop();
 ```
 
-`TerminalClientProvider` is the only thing the host needs from you: given a
-`poiId` it returns the SDK `TerminalClient` that reaches that device, and it
-lists the terminals to advertise. Where the address, CA and passphrase come from
-is the embedding application's business — the page never sees them.
+`TerminalClientProvider` is the only thing the host needs from you: the SDK
+`TerminalClient` that reaches the host's one terminal (or none, and the host
+serves `local` sessions only), and the `TerminalInfo` (optional label and model)
+to advertise; `TerminalClientProvider.of(client, info)` covers the common case.
+A host bridges one register to one terminal: every `terminal` session and
+device operation runs on that client, and the `poiId` a request names is passed
+through as the Nexo `POIID` rather than used to pick a terminal. A request that
+names none gets `defaultPoiId(..)`, `bilt-session-host` unless changed. Where
+the address, CA and passphrase come from is the embedding application's
+business — the page never sees them.
 `SessionFactory` lets you hand the host pre-configured SDK builders (Bilt
 platform credentials, display renderer); `adDecisionService(..)` enables
 `retail-media` widgets. `GET /health` answers with the spec's `Health` (`host`,
-`hostVersion`, `sdkVersion`, `protocolVersions`, `terminals`) plus a `sessions`
+`hostVersion`, `sdkVersion`, `protocolVersions`, and `terminal` when one is
+configured) plus a `sessions`
 count, the same number `activeSessions()` returns, for a tray or dashboard that
 only has HTTP.
 
@@ -77,16 +84,14 @@ bridge exists:
 ```json
 {
   "port": 48333,
-  "terminals": [
-    {
-      "poiId": "VictaLane-275839164",
-      "host": "192.168.1.40",
-      "port": 8443,
-      "encryption": false,
-      "trustAll": true,
-      "model": "VictaLane"
-    }
-  ]
+  "terminal": {
+    "host": "192.168.1.40",
+    "port": 8443,
+    "encryption": false,
+    "trustAll": true,
+    "label": "Lane 3",
+    "model": "VictaLane"
+  }
 }
 ```
 
@@ -94,9 +99,11 @@ bridge exists:
 ./gradlew :host:run --args="$PWD/dev-host.json"
 ```
 
-Per terminal: `tls` (default true), `encryption` (default true; needs
-`passphrase` and `keyIdentifier`), `trustAll` or `caFile`. Without a file the
-host starts with no terminals and still serves `local` sessions. The dev host
+The terminal takes `tls` (default true), `encryption` (default true; needs
+`passphrase` and `keyIdentifier`), `trustAll` or `caFile`, and an optional
+`label` and `model`; it has no `poiId`. A `terminals` list from the earlier
+format is refused with a message saying how to convert it. Without a file, or
+without `terminal`, the host still serves `local` sessions. The dev host
 answers CORS for every origin unless the file narrows it with
 `"allowedOrigins": ["https://pos.example.com"]`.
 
@@ -126,7 +133,8 @@ curl -s -X PATCH -H "$H" -H 'Idempotency-Key: x1' -d '{"phase":"TENDERING"}' $B/
 curl -s -X DELETE -H 'Idempotency-Key: e1' $B/v1/sessions/$SID   # 202, the end operation
 ```
 
-A `terminal` session adds `"poiId"` to the creation body and unlocks
+A `terminal` session (`"kind":"terminal"`, with an optional `"poiId"` that is
+passed through as the Nexo `POIID`) unlocks
 `POST .../operations` with `{"type":"settle","handledSteps":["TOTAL_REQUIRED"]}`,
 `identifyMember`, `requestConfirmation`, `refund`, `voidTransaction` and the
 rest. A settlement that redeems rebates then publishes an `operation.step` of
