@@ -182,10 +182,17 @@ if [[ "$local_only" -eq 0 ]]; then
     # The device whose serial is the address, or its wifi-adb serial
     # ("<ip>:5555"); else the single attached device, as a USB-only terminal's
     # opaque serial never matches its wlan address.
+    # USB devices take a moment to enumerate after a cold server start, so an
+    # empty listing is retried for a few seconds before it means "none".
+    "$ADB" start-server >/dev/null 2>&1 || true
     serials=()
-    while read -r serial state _; do
-      [[ "$state" == device ]] && serials+=("$serial")
-    done < <("$ADB" devices 2>/dev/null | tail -n +2)
+    for _ in 1 2 3 4 5 6; do
+      while read -r serial state _; do
+        [[ "$state" == device ]] && serials+=("$serial")
+      done < <("$ADB" devices 2>/dev/null | tail -n +2)
+      [[ ${#serials[@]} -gt 0 ]] && break
+      sleep 0.5
+    done
     selector="$terminal"
     t_port=8443
     for serial in ${serials[@]+"${serials[@]}"}; do
@@ -197,8 +204,7 @@ if [[ "$local_only" -eq 0 ]]; then
     if [[ -z "$adb_serial" && ${#serials[@]} -eq 1 ]]; then adb_serial="${serials[0]}"; fi
     if [[ -z "$adb_serial" ]]; then
       if [[ ${#serials[@]} -eq 0 ]]; then
-        echo "--adb: no adb device attached (checked with $ADB); plug the terminal in"\
-          "${selector:+or run 'adb connect $selector'}" >&2
+        echo "--adb: no adb device attached (checked with $ADB); plug the terminal in${selector:+ or run 'adb connect $selector'}." >&2
       else
         echo "--adb: several adb devices attached and none matches '$selector': ${serials[*]}" >&2
         echo "Pick one with --terminal <serial or wifi-adb ip>." >&2
