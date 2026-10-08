@@ -1,28 +1,34 @@
 import type { BridgeState } from '@bilt/pos-react/bridge';
 import { useEffect, useState, type ReactNode } from 'react';
+import type { TerminalInfo } from '@bilt/pos-sdk';
 import { DEFAULT_SETTINGS, type Settings } from '../settings';
+
+function describeTerminal(bridge: BridgeState | null, terminal: TerminalInfo | undefined): string {
+  if (!bridge?.health) return 'Terminal: unknown until the bridge answers.';
+  if (!terminal) return 'The bridge has no terminal configured: only local sessions work.';
+  const name = [terminal.label, terminal.model].filter(Boolean).join(' · ') || 'configured';
+  const reach =
+    terminal.reachable === undefined ? '' : terminal.reachable ? ' · reachable' : ' · unreachable';
+  return `Terminal: ${name}${reach}`;
+}
 
 export interface SettingsPaneProps {
   readonly settings: Settings;
 
-  /** The bridge as last probed, for the terminal list and the status line; `null` before the gate ran. */
+  /** The bridge as last probed, for its terminal and the status line; `null` before the gate ran. */
   readonly bridge: BridgeState | null;
   readonly onApply: (next: Settings) => void;
 }
 
-const OTHER = '__other__';
-
 /**
  * Edits the lane's settings in a draft and applies them in one go, so a keystroke in the POI id
- * does not restart the session; applying remounts the lane with the new options. The terminal
- * is picked from the ones the bridge lists in `/health`, with a free-text fallback for one the
- * bridge does not know yet.
+ * does not restart the session; applying remounts the lane with the new options. The bridge
+ * drives exactly one terminal, shown as `/health` reports it; the POI id is only passed through
+ * to it, so any value, or none, works.
  */
 export function SettingsPane({ settings, bridge, onApply }: SettingsPaneProps): ReactNode {
   const [draft, setDraft] = useState<Settings>(settings);
-  const terminals = bridge?.health?.terminals ?? [];
-  const listed = terminals.some((terminal) => terminal.poiId === draft.poiId);
-  const [freeText, setFreeText] = useState(() => !listed && terminals.length > 0);
+  const terminal = bridge?.health?.terminal;
   useEffect(() => setDraft(settings), [settings]);
 
   const field = <K extends keyof Settings>(key: K, value: Settings[K]) =>
@@ -36,7 +42,7 @@ export function SettingsPane({ settings, bridge, onApply }: SettingsPaneProps): 
         onApply({
           ...draft,
           currency: draft.currency.trim().toUpperCase() || DEFAULT_SETTINGS.currency,
-          poiId: draft.poiId.trim() || DEFAULT_SETTINGS.poiId,
+          poiId: draft.poiId.trim(),
           saleId: draft.saleId.trim() || DEFAULT_SETTINGS.saleId,
           storeLocation: draft.storeLocation.trim(),
         });
@@ -97,7 +103,7 @@ export function SettingsPane({ settings, bridge, onApply }: SettingsPaneProps): 
             checked={draft.mode === 'terminal'}
             onChange={() => field('mode', 'terminal')}
           />
-          Terminal session: bracketed on the terminal below, with settlement and refunds
+          Terminal session: bracketed on the bridge&apos;s terminal, with settlement and refunds
         </label>
         <label>
           <input
@@ -109,44 +115,19 @@ export function SettingsPane({ settings, bridge, onApply }: SettingsPaneProps): 
           Local session: basket, member, context and widgets only, no hardware
         </label>
         <div className="fields">
+          <p className="muted small" data-testid="bridge-terminal">
+            {describeTerminal(bridge, terminal)}
+          </p>
           <label>
-            Terminal (from the bridge&apos;s <code>/health</code>)
-            <select
-              aria-label="Terminal"
+            POI id (optional; sent to the terminal as the Nexo <code>POIID</code>, the bridge&apos;s
+            default when blank)
+            <input
+              aria-label="POI id"
+              value={draft.poiId}
+              onChange={(event) => field('poiId', event.target.value)}
               disabled={draft.mode === 'local'}
-              value={freeText || !listed ? OTHER : draft.poiId}
-              onChange={(event) => {
-                if (event.target.value === OTHER) {
-                  setFreeText(true);
-                } else {
-                  setFreeText(false);
-                  field('poiId', event.target.value);
-                }
-              }}
-            >
-              {terminals.map((terminal) => (
-                <option key={terminal.poiId} value={terminal.poiId}>
-                  {terminal.poiId}
-                  {terminal.model ? ` (${terminal.model})` : ''}
-                  {terminal.reachable === false ? ' · unreachable' : ''}
-                </option>
-              ))}
-              <option value={OTHER}>
-                {terminals.length === 0 ? 'No terminals listed: type a POI id' : 'Other…'}
-              </option>
-            </select>
+            />
           </label>
-          {freeText || !listed ? (
-            <label>
-              POI id
-              <input
-                aria-label="POI id"
-                value={draft.poiId}
-                onChange={(event) => field('poiId', event.target.value)}
-                disabled={draft.mode === 'local'}
-              />
-            </label>
-          ) : null}
           <label>
             Sale id (lane)
             <input

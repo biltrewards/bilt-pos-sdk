@@ -18,7 +18,7 @@ const HEALTH: Health = {
   hostVersion: '1.2.0',
   sdkVersion: '0.25.0',
   protocolVersions: ['1'],
-  terminals: [{ poiId: 'VictaLane-275839164' }],
+  terminal: { model: 'VictaLane' },
 };
 
 const BASE_URL = 'http://127.0.0.1:48333';

@@ -42,7 +42,6 @@ function sessionPath(sessionId: string, rest = ''): string {
   return `/v1/sessions/${encodeURIComponent(sessionId)}${rest}`;
 }
 
-
 function keyed(
   options: RequestOptions | undefined,
 ): Pick<HttpRequest, 'idempotencyKey' | 'signal'> {

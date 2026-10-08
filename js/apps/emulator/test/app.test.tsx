@@ -1,5 +1,5 @@
 // The shell and the Settings pane: the install prompt in front of the gate with the settings
-// still reachable, the terminal list from `/health`, and applying settings restarting the lane.
+// still reachable, the bridge's terminal from `/health`, and applying settings restarting the lane.
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { App } from '../src/App';
@@ -20,24 +20,21 @@ describe('the emulator shell', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
     expect(screen.getByTestId('bridge-status').textContent).toContain('bridge missing');
-    expect(screen.getByText('No terminals listed: type a POI id')).toBeTruthy();
+    expect(screen.getByTestId('bridge-terminal').textContent).toContain('unknown');
   });
 
-  it('lists the terminals the bridge knows and restarts the lane on apply', async () => {
+  it('shows the bridge terminal, passes any POI id through and restarts the lane on apply', async () => {
     const { pos } = await renderApp({ tab: 'settings' });
     expect(screen.getByTestId('bridge-status').textContent).toContain(
       'bridge ready at http://127.0.0.1:48333',
     );
-    const select = screen.getByLabelText('Terminal') as HTMLSelectElement;
-    const labels = Array.from(select.options).map((option) => option.textContent);
-    expect(labels).toEqual([
-      'VictaLane-275839164 (VictaLane)',
-      'VictaLane-2 · unreachable',
-      'Other…',
-    ]);
-    expect(select.value).toBe('VictaLane-275839164');
+    expect(screen.getByTestId('bridge-terminal').textContent).toBe(
+      'Terminal: Lane 3 · VictaLane · reachable',
+    );
+    expect((screen.getByLabelText('POI id') as HTMLInputElement).value).toBe('');
+    expect(pos.sessions[0]).toMatchObject({ kind: 'terminal', poiId: 'bilt-session-host' });
 
-    fireEvent.change(select, { target: { value: 'VictaLane-2' } });
+    fireEvent.change(screen.getByLabelText('POI id'), { target: { value: 'VictaLane-2' } });
     fireEvent.change(screen.getByLabelText('Sale id'), { target: { value: 'LANE-9' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply and restart the lane' }));
 
@@ -51,7 +48,7 @@ describe('the emulator shell', () => {
     expect(pos.sessions[0]?.state).toBe('ended');
   });
 
-  it('takes a free-text POI id and runs a local session when asked', async () => {
+  it('keeps a saved POI id and runs a local session when asked', async () => {
     const { pos } = await renderApp({ tab: 'settings', settings: { poiId: 'Lab-7' } });
     expect((screen.getByLabelText('POI id') as HTMLInputElement).value).toBe('Lab-7');
     fireEvent.click(screen.getByLabelText(/Local session:/));

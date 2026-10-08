@@ -47,7 +47,7 @@ export function SettingsPanel({ settings, onApply }: SettingsPanelProps): ReactN
       </fieldset>
       <div className="fields">
         <label>
-          POI id (terminal)
+          POI id (optional; passed through to the terminal as its Nexo POIID)
           <input
             value={draft.poiId}
             onChange={(event) => field('poiId', event.target.value)}

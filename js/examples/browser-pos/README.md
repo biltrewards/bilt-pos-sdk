@@ -9,8 +9,8 @@ with the rest of the workspace.
 What it shows, top to bottom:
 
 - `BridgeGate` with the install prompt, then `BiltPosProvider` connecting through `localBridge()`;
-- a settings panel (terminal or local session, `poiId`, `saleId`, currency, store location,
-  bridge route) persisted in `localStorage`; applying it restarts the lane;
+- a settings panel (terminal or local session, an optional `poiId` passed through to the bridge's
+  one terminal, `saleId`, currency, store location, bridge route) persisted in `localStorage`; applying it restarts the lane;
 - the three basket updaters: scanning from a tiny catalog is incremental `addItem`, the quantity
   buttons are `updateItemQuantity`, "Remove all discounts" is one `mutate` batch, and the
   POS-owned cart's "Sync cart" is `basket.replace`;
@@ -26,7 +26,7 @@ What it shows, top to bottom:
 
 Start a host first: the [Terminal Bridge](../../../docs/terminal-bridge.md) on this machine, or
 the development Session Host from the repository root (`./gradlew :host:run --args=dev-host.json`;
-without terminals it still serves local sessions). Then:
+without a terminal it still serves local sessions). Then:
 
 ```sh
 cd js

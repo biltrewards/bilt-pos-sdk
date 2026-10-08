@@ -14,7 +14,6 @@ const ready: BridgeDetection = {
     hostVersion: '0.0.0',
     sdkVersion: '0.0.0',
     protocolVersions: ['1'],
-    terminals: [],
   },
 };
 

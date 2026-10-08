@@ -14,6 +14,8 @@ export type BridgeRoute = 'direct' | 'proxy';
 
 export interface Settings {
   readonly mode: SessionMode;
+
+  /** The Nexo `POIID` passed through to the bridge's one terminal; blank uses the bridge's default. */
   readonly poiId: string;
   readonly saleId: string;
   readonly currency: string;
@@ -28,7 +30,7 @@ export const STORAGE_KEY = 'browser-pos.settings';
 
 export const DEFAULT_SETTINGS: Settings = {
   mode: 'terminal',
-  poiId: 'VictaLane-275839164',
+  poiId: '',
   saleId: 'LANE-3',
   currency: 'USD',
   storeLocation: 'STR-0142',
@@ -56,7 +58,7 @@ export function loadSettings(storage: Storage | undefined = safeStorage()): Sett
     const parsed = JSON.parse(raw) as Partial<Record<keyof Settings, unknown>>;
     return {
       mode: parsed.mode === 'local' ? 'local' : 'terminal',
-      poiId: text(parsed.poiId, DEFAULT_SETTINGS.poiId),
+      poiId: typeof parsed.poiId === 'string' ? parsed.poiId.trim() : DEFAULT_SETTINGS.poiId,
       saleId: text(parsed.saleId, DEFAULT_SETTINGS.saleId),
       currency: text(parsed.currency, DEFAULT_SETTINGS.currency).toUpperCase(),
       storeLocation: text(parsed.storeLocation, DEFAULT_SETTINGS.storeLocation),
@@ -104,4 +106,10 @@ export function bridgeOptions(route: BridgeRoute): LocalBridgeOptions {
   const { hostname, port, protocol } = window.location;
   if (protocol !== 'http:') return {};
   return { host: hostname, port: Number(port || 80), fallbackPorts: 0 };
+}
+
+/** How status lines name the session, with the passed-through `POIID` when one is set. */
+export function describeSession(settings: Pick<Settings, 'mode' | 'poiId'>): string {
+  if (settings.mode === 'local') return 'local session';
+  return settings.poiId ? `terminal session (POIID ${settings.poiId})` : 'terminal session';
 }

@@ -23,7 +23,7 @@ import type {
 import { useState, type ReactNode } from 'react';
 import { toBasketItem, type CatalogEntry } from './catalog';
 import { formatMoney, offerAmount, offerTarget, recomputeTotal } from './money';
-import type { Settings } from './settings';
+import { describeSession, type Settings } from './settings';
 import { BasketPanel } from './components/BasketPanel';
 import { CartDraft } from './components/CartDraft';
 import { CatalogPanel } from './components/CatalogPanel';
@@ -64,7 +64,7 @@ export function Register({ settings }: RegisterProps): ReactNode {
   const toasts = useToasts();
   const options = sessionOptions(settings);
   const terminalLane = useTerminalSession(
-    { ...options, poiId: settings.poiId },
+    settings.poiId ? { ...options, poiId: settings.poiId } : options,
     { enabled: settings.mode === 'terminal' },
   );
   const localLane = useShopperSession(options, { enabled: settings.mode === 'local' });
@@ -177,12 +177,7 @@ export function Register({ settings }: RegisterProps): ReactNode {
     );
   }
   if (lane.status === 'idle' || lane.status === 'starting') {
-    return (
-      <p className="notice">
-        Starting{' '}
-        {settings.mode === 'terminal' ? `a session on ${settings.poiId}` : 'a local session'}…
-      </p>
-    );
+    return <p className="notice">Starting a {describeSession(settings)}…</p>;
   }
   // A refused `end()` also lands in `error` but leaves the session open (a settlement may still be
   // moving money), so only a lane without a session is a start failure.
@@ -218,8 +213,8 @@ export function Register({ settings }: RegisterProps): ReactNode {
     <>
       <div className="lane-bar">
         <span>
-          {session.kind === 'terminal' ? `Terminal ${settings.poiId}` : 'Local session'} · lane{' '}
-          {session.saleId} · session {session.id}
+          {terminalSession ? `Terminal session · POIID ${terminalSession.poiId}` : 'Local session'}{' '}
+          · lane {session.saleId} · session {session.id}
         </span>
         <span className="lane-phase">
           Phase: {phase}

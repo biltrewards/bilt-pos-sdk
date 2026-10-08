@@ -53,7 +53,7 @@ import {
   offerTarget,
   recomputeTotal,
 } from '../money';
-import type { Settings } from '../settings';
+import { describeSession, type Settings } from '../settings';
 import { toSaleRecord, type SaleRecord } from '../store/sale-record';
 import type { PendingRefund } from '../store/reversals';
 import type { SaleStore } from '../store/sales-store';
@@ -212,7 +212,7 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
   const toasts = useToasts();
   const options = sessionOptions(settings);
   const terminalLane = useTerminalSession(
-    { ...options, poiId: settings.poiId },
+    settings.poiId ? { ...options, poiId: settings.poiId } : options,
     { enabled: settings.mode === 'terminal' },
   );
   const localLane = useShopperSession(options, { enabled: settings.mode === 'local' });
@@ -254,12 +254,12 @@ export function LaneProvider({ settings, log, sales, children }: LaneProviderPro
   }, [log, connection.status, connection.error]);
 
   useEffect(() => {
-    const where = settings.mode === 'terminal' ? `terminal ${settings.poiId}` : 'a local session';
+    const where = describeSession(settings);
     log.info(
       'lane',
-      `${lane.status}${session ? ` (${session.id} on ${where})` : ''}${lane.error ? `: ${describeError(lane.error)}` : ''}`,
+      `${lane.status}${session ? ` (${session.id}, ${where})` : ''}${lane.error ? `: ${describeError(lane.error)}` : ''}`,
     );
-  }, [log, lane.status, lane.error, session, settings.mode, settings.poiId]);
+  }, [log, lane.status, lane.error, session, settings]);
 
   useSessionEvent(session, 'basket.changed', (change) => {
     setLastChange(change.source);
