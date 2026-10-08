@@ -29,7 +29,11 @@ CreateSessionRequest:
       description: The register's identifier for this lane, sent as Nexo `SaleID`.
     poiId:
       type: string
-      description: "The terminal to bracket the session on. Required for `kind: terminal`, ignored for `local`."
+      minLength: 1
+      description: |
+        The Nexo `POIID` the session's messages carry, for `kind: terminal`; ignored for `local`.
+        It does not select a terminal: the host has exactly one and passes this value through.
+        Optional; the host uses its own default when absent.
     currency:
       type: string
       pattern: '^[A-Z]{3}$'
@@ -77,7 +81,7 @@ Session:
       type: string
     poiId:
       type: string
-      description: The terminal identifier; absent on a local session.
+      description: The Nexo `POIID` the session's messages carry, as requested or the host's default; absent on a local session.
     currency:
       type: string
     storeLocation:

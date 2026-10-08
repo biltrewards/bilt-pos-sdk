@@ -1,7 +1,7 @@
 extends:
   - recommended
 rules:
-  # /health and GET /v1/terminals have no failure mode of their own to document.
+  # /health has no failure mode of its own to document.
   operation-4xx-response: off
   # The bearer scheme is reserved for paired-origin tokens and deliberately unreferenced
   # while development-mode hosts run unauthenticated.

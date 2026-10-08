@@ -22,9 +22,9 @@ export interface paths {
          * Host health and capabilities
          * @description Unauthenticated. The install prompt in the JavaScript SDK polls this to detect a bridge,
          *     and every client reads it once to check that the host speaks the protocol version it was
-         *     generated from. The terminal list is what the host knows from its configuration;
-         *     `reachable` is a cached view, not a probe — use `POST /v1/terminals/{poiId}/diagnose` for
-         *     a live check.
+         *     generated from. `terminal` is the one terminal the host was configured with, absent when
+         *     it has none; `reachable` is a cached view, not a probe — use `POST /v1/terminal/diagnose`
+         *     for a live check.
          */
         get: operations["getHealth"];
         put?: never;
@@ -35,7 +35,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/terminals": {
+    "/v1/terminal": {
         parameters: {
             query?: never;
             header?: never;
@@ -43,12 +43,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Terminals the host can reach
-         * @description The terminals from the host's configuration. Terminal addresses, certificates and payload
-         *     passphrases are the host's concern and never cross this protocol; the client only ever
-         *     names a terminal by its `poiId`.
+         * The terminal the host drives
+         * @description A host is a bridge between one register and one terminal, configured when it starts. The
+         *     terminal's address, certificate and payload passphrase are the host's concern and never
+         *     cross this protocol. Answers 404 when the host has no terminal configured.
          */
-        get: operations["listTerminals"];
+        get: operations["getTerminal"];
         put?: never;
         post?: never;
         delete?: never;
@@ -57,7 +57,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/terminals/{poiId}/diagnose": {
+    "/v1/terminal/diagnose": {
         parameters: {
             query?: never;
             header?: never;
@@ -79,7 +79,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/terminals/{poiId}/totals": {
+    "/v1/terminal/totals": {
         parameters: {
             query?: never;
             header?: never;
@@ -101,7 +101,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/terminals/{poiId}/reconcile": {
+    "/v1/terminal/reconcile": {
         parameters: {
             query?: never;
             header?: never;
@@ -121,7 +121,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/terminals/{poiId}/print": {
+    "/v1/terminal/print": {
         parameters: {
             query?: never;
             header?: never;
@@ -141,7 +141,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/terminals/{poiId}/sound": {
+    "/v1/terminal/sound": {
         parameters: {
             query?: never;
             header?: never;
@@ -177,6 +177,12 @@ export interface paths {
          *     session is announced to the terminal (Nexo `Admin` session start) and only exists once the
          *     terminal acknowledged, so this request blocks for that round trip; a refused start creates
          *     no session. Each attempt is a new session with a new id.
+         *
+         *     A host drives exactly one terminal, the one it was configured with, so a terminal session
+         *     always runs on it; `poiId` does not select a terminal. It is passed through as the Nexo
+         *     `POIID` of every message the session sends, and the host substitutes its own default when
+         *     the request leaves it out. A host with no terminal configured refuses `kind: terminal`
+         *     with 409 (`UNSUPPORTED`).
          *
          *     Widgets are attached once the session exists; a widget that cannot run (no ad decision
          *     service, missing store location) is reported through a `background.error` event and the
@@ -812,11 +818,16 @@ export interface components {
             sdkVersion: string;
             /** @description Protocol major versions the host implements; this document is `"1"`. */
             protocolVersions: string[];
-            terminals: components["schemas"]["TerminalInfo"][];
+            /** @description The terminal the host drives; absent when none is configured, in which case only `local` sessions work. */
+            terminal?: components["schemas"]["TerminalInfo"];
         };
+        /**
+         * @description What a client is told about the host's one terminal. Deliberately not its address,
+         *     certificate or passphrase, and no `POIID`: that is whatever the session or request names.
+         */
         TerminalInfo: {
-            /** @description The terminal identifier, sent as Nexo `POIID`. */
-            poiId: string;
+            /** @description A human-readable name for the terminal, when the host's configuration gives one. */
+            label?: string;
             /** @description The terminal model, when the host's configuration names it. */
             model?: string;
             /** @description The host's last known reachability; a cached view, not a live probe. */
@@ -897,7 +908,7 @@ export interface components {
             id: string;
             kind: components["schemas"]["SessionKind"];
             saleId: string;
-            /** @description The terminal identifier; absent on a local session. */
+            /** @description The Nexo `POIID` the session's messages carry, as requested or the host's default; absent on a local session. */
             poiId?: string;
             currency: string;
             storeLocation?: string;
@@ -915,7 +926,11 @@ export interface components {
             kind: components["schemas"]["SessionKind"];
             /** @description The register's identifier for this lane, sent as Nexo `SaleID`. */
             saleId: string;
-            /** @description The terminal to bracket the session on. Required for `kind: terminal`, ignored for `local`. */
+            /**
+             * @description The Nexo `POIID` the session's messages carry, for `kind: terminal`; ignored for `local`.
+             *     It does not select a terminal: the host has exactly one and passes this value through.
+             *     Optional; the host uses its own default when absent.
+             */
             poiId?: string;
             /** @description ISO 4217 currency code. */
             currency: string;
@@ -2743,8 +2758,17 @@ export interface components {
                 "application/json": components["schemas"]["SessionError"];
             };
         };
-        /** @description No such session, operation, item, terminal or widget. */
+        /** @description No such session, operation, item or widget. */
         NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["SessionError"];
+            };
+        };
+        /** @description The host has no terminal configured. */
+        NoTerminal: {
             headers: {
                 [name: string]: unknown;
             };
@@ -2770,8 +2794,8 @@ export interface components {
                 "application/json": components["schemas"]["SessionError"];
             };
         };
-        /** @description No such session, operation, item, terminal or widget. */
-        "responses-NotFound": {
+        /** @description The host has no terminal configured. */
+        "responses-NoTerminal": {
             headers: {
                 [name: string]: unknown;
             };
@@ -2790,6 +2814,15 @@ export interface components {
         };
         /** @description The request did not validate. */
         "responses-BadRequest": {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["SessionError"];
+            };
+        };
+        /** @description No such session, operation, item or widget. */
+        "responses-NotFound": {
             headers: {
                 [name: string]: unknown;
             };
@@ -2821,8 +2854,6 @@ export interface components {
         sessionId: string;
         /** @description The operation's identifier, as `Operation.id` reports it. */
         operationId: string;
-        /** @description The terminal identifier, sent as Nexo `POIID`. */
-        poiId: string;
         /**
          * @description A client-generated key, unique per intended request (a UUID). The host remembers the
          *     key for the life of the session and answers a replay with the original response. The
@@ -2831,6 +2862,11 @@ export interface components {
          *     dropped connection and money may have moved.
          */
         idempotencyKey: string;
+        /**
+         * @description The Nexo `POIID` to send. It does not select a terminal; the host has exactly one and passes
+         *     this value through, using its own default when absent.
+         */
+        poiIdParam: string;
         /**
          * @description The register identifier sent as Nexo `SaleID`. Defaults to the host's configured sale id
          *     for session-less operations.
@@ -2870,13 +2906,11 @@ export interface operations {
                      *       "protocolVersions": [
                      *         "1"
                      *       ],
-                     *       "terminals": [
-                     *         {
-                     *           "poiId": "VictaLane-275839164",
-                     *           "model": "VictaLane",
-                     *           "reachable": true
-                     *         }
-                     *       ]
+                     *       "terminal": {
+                     *         "label": "Lane 3",
+                     *         "model": "VictaLane",
+                     *         "reachable": true
+                     *       }
                      *     }
                      */
                     "application/json": components["schemas"]["Health"];
@@ -2884,7 +2918,7 @@ export interface operations {
             };
         };
     };
-    listTerminals: {
+    getTerminal: {
         parameters: {
             query?: never;
             header?: never;
@@ -2893,20 +2927,26 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The configured terminals. */
+            /** @description The configured terminal. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TerminalInfo"][];
+                    "application/json": components["schemas"]["TerminalInfo"];
                 };
             };
+            404: components["responses"]["responses-NoTerminal"];
         };
     };
     diagnoseTerminal: {
         parameters: {
             query?: {
+                /**
+                 * @description The Nexo `POIID` to send. It does not select a terminal; the host has exactly one and passes
+                 *     this value through, using its own default when absent.
+                 */
+                poiId?: components["parameters"]["poiIdParam"];
                 /**
                  * @description The register identifier sent as Nexo `SaleID`. Defaults to the host's configured sale id
                  *     for session-less operations.
@@ -2914,10 +2954,7 @@ export interface operations {
                 saleId?: components["parameters"]["saleIdParam"];
             };
             header?: never;
-            path: {
-                /** @description The terminal identifier, sent as Nexo `POIID`. */
-                poiId: components["parameters"]["poiId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -2931,13 +2968,18 @@ export interface operations {
                     "application/json": components["schemas"]["DiagnosisResult"];
                 };
             };
-            404: components["responses"]["responses-NotFound"];
+            404: components["responses"]["responses-NoTerminal"];
             503: components["responses"]["responses-TerminalUnreachable"];
         };
     };
     getTerminalTotals: {
         parameters: {
             query?: {
+                /**
+                 * @description The Nexo `POIID` to send. It does not select a terminal; the host has exactly one and passes
+                 *     this value through, using its own default when absent.
+                 */
+                poiId?: components["parameters"]["poiIdParam"];
                 /**
                  * @description The register identifier sent as Nexo `SaleID`. Defaults to the host's configured sale id
                  *     for session-less operations.
@@ -2947,10 +2989,7 @@ export interface operations {
                 storeLocation?: components["parameters"]["storeLocationParam"];
             };
             header?: never;
-            path: {
-                /** @description The terminal identifier, sent as Nexo `POIID`. */
-                poiId: components["parameters"]["poiId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -2964,13 +3003,18 @@ export interface operations {
                     "application/json": components["schemas"]["ReconciliationResult"];
                 };
             };
-            404: components["responses"]["responses-NotFound"];
+            404: components["responses"]["responses-NoTerminal"];
             503: components["responses"]["responses-TerminalUnreachable"];
         };
     };
     reconcileTerminal: {
         parameters: {
             query?: {
+                /**
+                 * @description The Nexo `POIID` to send. It does not select a terminal; the host has exactly one and passes
+                 *     this value through, using its own default when absent.
+                 */
+                poiId?: components["parameters"]["poiIdParam"];
                 /**
                  * @description The register identifier sent as Nexo `SaleID`. Defaults to the host's configured sale id
                  *     for session-less operations.
@@ -2980,10 +3024,7 @@ export interface operations {
                 storeLocation?: components["parameters"]["storeLocationParam"];
             };
             header?: never;
-            path: {
-                /** @description The terminal identifier, sent as Nexo `POIID`. */
-                poiId: components["parameters"]["poiId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -2997,7 +3038,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReconciliationResult"];
                 };
             };
-            404: components["responses"]["responses-NotFound"];
+            404: components["responses"]["responses-NoTerminal"];
             503: components["responses"]["responses-TerminalUnreachable"];
         };
     };
@@ -3005,16 +3046,18 @@ export interface operations {
         parameters: {
             query?: {
                 /**
+                 * @description The Nexo `POIID` to send. It does not select a terminal; the host has exactly one and passes
+                 *     this value through, using its own default when absent.
+                 */
+                poiId?: components["parameters"]["poiIdParam"];
+                /**
                  * @description The register identifier sent as Nexo `SaleID`. Defaults to the host's configured sale id
                  *     for session-less operations.
                  */
                 saleId?: components["parameters"]["saleIdParam"];
             };
             header?: never;
-            path: {
-                /** @description The terminal identifier, sent as Nexo `POIID`. */
-                poiId: components["parameters"]["poiId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -3031,7 +3074,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["responses-BadRequest"];
-            404: components["responses"]["responses-NotFound"];
+            404: components["responses"]["responses-NoTerminal"];
             503: components["responses"]["responses-TerminalUnreachable"];
         };
     };
@@ -3039,16 +3082,18 @@ export interface operations {
         parameters: {
             query?: {
                 /**
+                 * @description The Nexo `POIID` to send. It does not select a terminal; the host has exactly one and passes
+                 *     this value through, using its own default when absent.
+                 */
+                poiId?: components["parameters"]["poiIdParam"];
+                /**
                  * @description The register identifier sent as Nexo `SaleID`. Defaults to the host's configured sale id
                  *     for session-less operations.
                  */
                 saleId?: components["parameters"]["saleIdParam"];
             };
             header?: never;
-            path: {
-                /** @description The terminal identifier, sent as Nexo `POIID`. */
-                poiId: components["parameters"]["poiId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -3065,7 +3110,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["responses-BadRequest"];
-            404: components["responses"]["responses-NotFound"];
+            404: components["responses"]["responses-NoTerminal"];
             503: components["responses"]["responses-TerminalUnreachable"];
         };
     };
@@ -3101,8 +3146,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["responses-BadRequest"];
-            /** @description Unknown `poiId`. */
-            404: {
+            /** @description `kind: terminal` on a host with no terminal configured (`UNSUPPORTED`). */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -70,7 +70,7 @@ NexoObject:
 
 Health:
   type: object
-  required: [host, hostVersion, sdkVersion, protocolVersions, terminals]
+  required: [host, hostVersion, sdkVersion, protocolVersions]
   properties:
     host:
       type: string
@@ -88,18 +88,19 @@ Health:
       items:
         type: string
       minItems: 1
-    terminals:
-      type: array
-      items:
-        $ref: '#/TerminalInfo'
+    terminal:
+      description: The terminal the host drives; absent when none is configured, in which case only `local` sessions work.
+      $ref: '#/TerminalInfo'
 
 TerminalInfo:
   type: object
-  required: [poiId]
+  description: |
+    What a client is told about the host's one terminal. Deliberately not its address,
+    certificate or passphrase, and no `POIID`: that is whatever the session or request names.
   properties:
-    poiId:
+    label:
       type: string
-      description: The terminal identifier, sent as Nexo `POIID`.
+      description: A human-readable name for the terminal, when the host's configuration gives one.
     model:
       type: string
       description: The terminal model, when the host's configuration names it.
