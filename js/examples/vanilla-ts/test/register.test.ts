@@ -48,6 +48,23 @@ describe('the vanilla TypeScript register', () => {
     expect(root.textContent).toContain('Install the Bilt Terminal Bridge');
   });
 
+  it('offers a retry when the connection fails after the probe succeeds', async () => {
+    const root = document.createElement('main');
+    document.body.append(root);
+    let attempts = 0;
+    void mountRegister(root, {
+      detect: async () => ready,
+      connect: async () => {
+        if (++attempts === 1) throw new Error('bridge restarted');
+        return new MockBiltPos();
+      },
+    });
+    await until(() => root.querySelector('[data-status="connect-failed"]') !== null);
+    expect(root.textContent).toContain('bridge restarted');
+    button(root, /Retry/).click();
+    await until(() => root.querySelector('form') !== null);
+  });
+
   it('rings, signs in, settles with the recomputed total and ends', async () => {
     const pos = new MockBiltPos();
     const root = mount(async () => ready, pos);

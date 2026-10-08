@@ -45,16 +45,20 @@ export async function mountRegister(root: HTMLElement, deps: RegisterDeps): Prom
         found.status === 'missing'
           ? 'Install the Bilt Terminal Bridge on this machine, then retry.'
           : `The bridge at ${found.baseUrl} is outdated; update it, then retry.`;
-      const retry = el('button', { type: 'button', textContent: 'Retry' });
-      retry.onclick = () => void detect();
-      show(el('p', { role: 'alert', dataset: { status: found.status } }, text), retry);
+      showRetry(text, { status: found.status });
       return;
     }
     try {
       showSettings(await deps.connect());
     } catch (error) {
-      show(el('p', { className: 'error' }, `Could not connect: ${message(error)}`));
+      showRetry(`Could not connect: ${message(error)}`, { status: 'connect-failed' });
     }
+  }
+
+  function showRetry(text: string, dataset: Record<string, string>): void {
+    const retry = el('button', { type: 'button', textContent: 'Retry' });
+    retry.onclick = () => void detect();
+    show(el('p', { role: 'alert', dataset }, text), retry);
   }
 
   function showSettings(pos: BiltPos): void {
