@@ -117,7 +117,14 @@ an abandoned settlement (the desktop reports it in the outcome popup instead).
 
 - TLS verification status: the page talks plain HTTP to loopback; the bridge holds the terminal
   TLS and does not report it. The top bar says "TLS: bridge-managed".
-- Periodic POI diagnosis: `Terminal.diagnose()` exists and is used once on connect for the status
-  detail, but the bridge reports terminal reachability in `/health` already, so the browser
-  re-probes `/health` instead of polling the terminal.
+- Periodic POI diagnosis: the desktop polls `Terminal.diagnose()` for the "POI OK" detail. The
+  browser reads the terminal from the bridge's `/health` once on connect instead (the Session Host
+  reports no reachability, so the detail says "listed"); `diagnose()` exists in the SDK and could be
+  polled, but a poll loop against a terminal is the bridge's job, not the page's.
 - Nexo message envelopes: not exposed by the bridge (see Protocol above).
+
+## Test notes
+
+- Signed return totals: the in-memory `BiltPos` used by the unit tests does not negate
+  return lines, so the unit tests check the rung lines and allocations; the signed totals are
+  covered by `test:contract` against the real host.
