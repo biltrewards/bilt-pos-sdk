@@ -130,6 +130,13 @@ class TerminalSessionTest {
     assertEquals("bilt-session-host", lastPoiId());
   }
 
+  @Test
+  void anEmptyPoiIdIsRejectedLikeTheSchemaSays() throws Exception {
+    client
+        .post("/v1/sessions", json("{'kind':'terminal','saleId':'L','poiId':'','currency':'USD'}"))
+        .expect(400);
+  }
+
   private String lastPoiId() {
     List<SaleToPOIRequest> requests = terminal.requests();
     return requests.get(requests.size() - 1).getMessageHeader().getPoiid();

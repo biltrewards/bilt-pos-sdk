@@ -102,7 +102,10 @@ public final class SessionRegistry {
       }
       // the host has one terminal; poiId only fills the Nexo header and never selects one
       String requested = Json.text(body, "poiId");
-      poiId = requested == null || requested.isEmpty() ? defaultPoiId : requested;
+      if (requested != null && requested.isEmpty()) {
+        throw HostError.badRequest("poiId must not be empty");
+      }
+      poiId = requested == null ? defaultPoiId : requested;
     }
     boolean autoDisplay = Json.bool(body, "autoDisplay", true);
     Member member = Parsers.member(body.get("member"));
