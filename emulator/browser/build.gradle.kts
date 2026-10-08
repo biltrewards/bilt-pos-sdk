@@ -33,7 +33,6 @@ val corepackVersion = providers.exec {
 val port = providers.gradleProperty("port").orElse("5173")
 val bridgePort = providers.gradleProperty("bridgePort").orElse("48333")
 
-
 // The root and member manifests (pnpm-workspace.yaml: packages/*, examples/*, apps/*).
 val manifests =
     fileTree(jsDir) {
