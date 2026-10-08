@@ -597,9 +597,8 @@ export class BrowserEmulatorController implements EmulatorController {
         snapshot.cartId,
         snapshot.items.map((item) => item.sku),
       );
-      this.publishBasket(
-        await session.basket.addItem(customItem(sku, money(priceMinor), '', false)),
-      );
+      const basket = await session.basket.addItem(customItem(sku, money(priceMinor), '', false));
+      if (this.session === session) this.publishBasket(basket);
       this.log(`Added custom amount $${formatMinor(priceMinor)} (${sku})`);
       return true;
     } catch (error) {
@@ -635,7 +634,7 @@ export class BrowserEmulatorController implements EmulatorController {
           quantity: existing.quantity,
         }),
       );
-      this.publishBasket(basket);
+      if (this.session === session) this.publishBasket(basket);
       this.detailedLog(`Custom line ${sku} re-priced to $${formatMinor(priceMinor)}`);
       return true;
     } catch (error) {
@@ -664,7 +663,8 @@ export class BrowserEmulatorController implements EmulatorController {
       return true;
     }
     try {
-      this.publishBasket(await session.basket.removeItem(existing.itemId));
+      const basket = await session.basket.removeItem(existing.itemId);
+      if (this.session === session) this.publishBasket(basket);
       this.log(`Removed custom line ${sku}`);
       return true;
     } catch (error) {
