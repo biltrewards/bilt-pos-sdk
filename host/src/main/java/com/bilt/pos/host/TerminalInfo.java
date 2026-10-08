@@ -12,42 +12,35 @@ package com.bilt.pos.host;
 import java.util.Objects;
 
 /**
- * What a client is told about a terminal: its {@code poiId}, optionally the device model and the
+ * What a client is told about the host's terminal: optionally a label, the device model and the
  * host's last known reachability. Deliberately not the address, certificate or passphrase — the
- * page that drives a checkout never sees how the terminal is reached.
+ * page that drives a checkout never sees how the terminal is reached — and no {@code poiId}, which
+ * is whatever each session or request names.
  */
 public final class TerminalInfo {
 
-  private final String poiId;
+  private final String label;
   private final String model;
   private final Boolean reachable;
 
-  private TerminalInfo(String poiId, String model, Boolean reachable) {
-    this.poiId = Objects.requireNonNull(poiId, "poiId");
-    if (poiId.isEmpty()) {
-      throw new IllegalArgumentException("poiId must not be empty");
-    }
+  private TerminalInfo(String label, String model, Boolean reachable) {
+    this.label = label;
     this.model = model;
     this.reachable = reachable;
   }
 
-  /** A terminal known only by its {@code poiId}. */
-  public static TerminalInfo of(String poiId) {
-    return new TerminalInfo(poiId, null, null);
-  }
-
-  /** A terminal with its model for the register's terminal picker. */
-  public static TerminalInfo of(String poiId, String model) {
-    return new TerminalInfo(poiId, model, null);
+  /** A terminal with a human-readable label and model, either of which may be {@code null}. */
+  public static TerminalInfo of(String label, String model) {
+    return new TerminalInfo(label, model, null);
   }
 
   /** The same terminal with a cached reachability verdict; {@code null} means unknown. */
   public TerminalInfo withReachable(Boolean reachable) {
-    return new TerminalInfo(poiId, model, reachable);
+    return new TerminalInfo(label, model, reachable);
   }
 
-  public String poiId() {
-    return poiId;
+  public String label() {
+    return label;
   }
 
   public String model() {
@@ -70,18 +63,18 @@ public final class TerminalInfo {
       return false;
     }
     TerminalInfo that = (TerminalInfo) other;
-    return poiId.equals(that.poiId)
+    return Objects.equals(label, that.label)
         && Objects.equals(model, that.model)
         && Objects.equals(reachable, that.reachable);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(poiId, model, reachable);
+    return Objects.hash(label, model, reachable);
   }
 
   @Override
   public String toString() {
-    return "TerminalInfo{" + poiId + (model == null ? "" : ", " + model) + "}";
+    return "TerminalInfo{label=" + label + ", model=" + model + ", reachable=" + reachable + "}";
   }
 }

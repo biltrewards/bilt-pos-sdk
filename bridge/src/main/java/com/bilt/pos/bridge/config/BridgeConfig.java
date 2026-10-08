@@ -11,8 +11,6 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -23,7 +21,12 @@ import java.util.Set;
 
 /**
  * The bridge's validated configuration: where to listen, which browser origins may call it, and the
- * terminals it can reach.
+ * one terminal it bridges to.
+ *
+ * <p>The bridge connects exactly one register to exactly one terminal. Whatever {@code poiId} the
+ * register's page sends is passed through as the Nexo {@code POIID} of the messages sent to that
+ * terminal, so the terminal entry has no {@code poiId} of its own. Without a {@code terminal} only
+ * {@code local} sessions work.
  *
  * <p>Parsing is strict. Unknown keys are rejected so a typo cannot silently disable a setting; keys
  * starting with an underscore (such as {@code _comment}) are the exception, since JSON has no
@@ -34,17 +37,18 @@ public record BridgeConfig(
     InetAddress bindAddress,
     int port,
     List<String> allowedOrigins,
-    List<TerminalConfig> terminals) {
+    Optional<TerminalConfig> terminal) {
 
   public static final int DEFAULT_PORT = 48333;
   public static final int DEFAULT_TERMINAL_PORT = 8443;
   public static final List<String> DEFAULT_ALLOWED_ORIGINS = List.of("*");
 
   private static final Set<String> ROOT_KEYS =
-      Set.of("bindAddress", "port", "allowedOrigins", "terminals");
+      Set.of("bindAddress", "port", "allowedOrigins", "terminal");
   private static final Set<String> TERMINAL_KEYS =
       Set.of(
-          "poiId",
+          "label",
+          "model",
           "host",
           "port",
           "encryption",
@@ -57,23 +61,17 @@ public record BridgeConfig(
 
   public BridgeConfig {
     allowedOrigins = List.copyOf(allowedOrigins);
-    terminals = List.copyOf(terminals);
   }
 
   /** The configuration a fresh install runs with until the user edits the file. */
   public static BridgeConfig defaults() {
     return new BridgeConfig(
-        InetAddress.getLoopbackAddress(), DEFAULT_PORT, DEFAULT_ALLOWED_ORIGINS, List.of());
+        InetAddress.getLoopbackAddress(), DEFAULT_PORT, DEFAULT_ALLOWED_ORIGINS, Optional.empty());
   }
 
   /** Whether any browser origin may call the bridge, which is acceptable in development only. */
   public boolean allowsAnyOrigin() {
     return allowedOrigins.contains("*");
-  }
-
-  /** The terminal with the given id, if configured. */
-  public Optional<TerminalConfig> terminal(String poiId) {
-    return terminals.stream().filter(t -> t.poiId().equals(poiId)).findFirst();
   }
 
   /** Parses and validates a configuration document. */
@@ -87,13 +85,19 @@ public record BridgeConfig(
     if (root == null || !root.isObject()) {
       throw new BridgeConfigException("config must be a JSON object");
     }
+    if (root.has("terminals")) {
+      throw new BridgeConfigException(
+          "\"terminals\" is no longer supported: the bridge connects to exactly one terminal."
+              + " Replace the list with a single \"terminal\" object and drop its poiId; the"
+              + " poiId the POS page sends is passed through to the terminal");
+    }
     rejectUnknownKeys(root, ROOT_KEYS, "config");
 
     InetAddress bind = parseBindAddress(root.path("bindAddress"));
     int port = parsePort(root.path("port"), DEFAULT_PORT, "port");
     List<String> origins = parseOrigins(root.path("allowedOrigins"));
-    List<TerminalConfig> terminals = parseTerminals(root.path("terminals"));
-    return new BridgeConfig(bind, port, origins, terminals);
+    Optional<TerminalConfig> terminal = parseTerminal(root.path("terminal"));
+    return new BridgeConfig(bind, port, origins, terminal);
   }
 
   /** Reads and parses the configuration file at {@code path}. */
@@ -105,13 +109,10 @@ public record BridgeConfig(
     }
   }
 
-  /** A copy with every passphrase replaced by a marker, safe to print in diagnostics. */
+  /** A copy with the passphrase replaced by a marker, safe to print in diagnostics. */
   public BridgeConfig redacted() {
     return new BridgeConfig(
-        bindAddress,
-        port,
-        allowedOrigins,
-        terminals.stream().map(TerminalConfig::redacted).toList());
+        bindAddress, port, allowedOrigins, terminal.map(TerminalConfig::redacted));
   }
 
   /** Renders this configuration as a JSON tree; use on {@link #redacted()} before printing. */
@@ -122,10 +123,11 @@ public record BridgeConfig(
     root.put("port", port);
     ArrayNode origins = root.putArray("allowedOrigins");
     allowedOrigins.forEach(origins::add);
-    ArrayNode list = root.putArray("terminals");
-    for (TerminalConfig t : terminals) {
-      ObjectNode node = list.addObject();
-      node.put("poiId", t.poiId());
+    if (terminal.isPresent()) {
+      TerminalConfig t = terminal.get();
+      ObjectNode node = root.putObject("terminal");
+      node.put("label", t.label().orElse(null));
+      node.put("model", t.model().orElse(null));
       node.put("host", t.host());
       node.put("port", t.port());
       node.put("encryption", t.encryption());
@@ -205,34 +207,24 @@ public record BridgeConfig(
     return List.copyOf(origins);
   }
 
-  private static List<TerminalConfig> parseTerminals(JsonNode node) throws BridgeConfigException {
-    if (node.isMissingNode() || node.isNull()) {
-      return List.of();
-    }
-    if (!node.isArray()) {
-      throw new BridgeConfigException("terminals must be an array");
-    }
-    List<TerminalConfig> terminals = new ArrayList<>();
-    Set<String> ids = new HashSet<>();
-    int index = 0;
-    for (JsonNode item : node) {
-      TerminalConfig terminal = parseTerminal(item, "terminals[" + index + "]");
-      if (!ids.add(terminal.poiId())) {
-        throw new BridgeConfigException("duplicate terminal poiId '" + terminal.poiId() + "'");
-      }
-      terminals.add(terminal);
-      index++;
-    }
-    return terminals;
-  }
-
-  private static TerminalConfig parseTerminal(JsonNode node, String where)
+  private static Optional<TerminalConfig> parseTerminal(JsonNode node)
       throws BridgeConfigException {
+    if (node.isMissingNode() || node.isNull()) {
+      return Optional.empty();
+    }
+    String where = "terminal";
     if (!node.isObject()) {
       throw new BridgeConfigException(where + " must be an object");
     }
+    if (node.has("poiId")) {
+      throw new BridgeConfigException(
+          where
+              + ".poiId is no longer supported: the bridge has one terminal and passes the poiId"
+              + " the POS page sends through to it; remove the key");
+    }
     rejectUnknownKeys(node, TERMINAL_KEYS, where);
-    String poiId = requireText(node, "poiId", where);
+    Optional<String> label = optionalText(node, "label", where);
+    Optional<String> model = optionalText(node, "model", where);
     String host = requireText(node, "host", where);
     int port = parsePort(node.path("port"), DEFAULT_TERMINAL_PORT, where + ".port");
     boolean encryption = optionalBoolean(node, "encryption", false, where);
@@ -275,17 +267,19 @@ public record BridgeConfig(
             where + ".caCertificatePath '" + caPath.get() + "' does not exist");
       }
     }
-    return new TerminalConfig(
-        poiId,
-        host,
-        port,
-        encryption,
-        passphrase,
-        keyId,
-        keyVersion,
-        trustAll,
-        caPath,
-        environment);
+    return Optional.of(
+        new TerminalConfig(
+            label,
+            model,
+            host,
+            port,
+            encryption,
+            passphrase,
+            keyId,
+            keyVersion,
+            trustAll,
+            caPath,
+            environment));
   }
 
   private static Optional<BiltTerminalEnvironment> parseEnvironment(JsonNode node, String where)

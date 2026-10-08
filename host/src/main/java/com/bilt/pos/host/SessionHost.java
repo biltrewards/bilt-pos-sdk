@@ -64,13 +64,13 @@ import java.util.logging.Logger;
  * The Session Host: an HTTP, Server-Sent Events and WebSocket server that exposes the SDK's shopper
  * sessions as the Session Protocol.
  *
- * <p>Embed it, point it at a {@link TerminalClientProvider}, start it:
+ * <p>Embed it, point it at the {@link TerminalClientProvider} for its one terminal, start it:
  *
  * <pre>{@code
  * SessionHost host = SessionHost.builder()
  *     .bindAddress("127.0.0.1")
  *     .port(48333)
- *     .terminalClients(myProvider)
+ *     .terminal(myProvider)
  *     .build();
  * host.start();
  * }</pre>
@@ -87,7 +87,7 @@ import java.util.logging.Logger;
 public final class SessionHost implements AutoCloseable {
 
   private static final Logger LOGGER = Logger.getLogger(SessionHost.class.getName());
-  private static final String PROTOCOL_VERSION = "1";
+  private static final String PROTOCOL_VERSION = "2";
   private static final Duration SSE_PING = Duration.ofSeconds(15);
   private static final AtomicInteger WORKER_COUNTER = new AtomicInteger();
 
@@ -119,7 +119,8 @@ public final class SessionHost implements AutoCloseable {
     this.registry =
         new SessionRegistry(
             builder.sessionFactory,
-            builder.terminalClients,
+            builder.terminal,
+            builder.defaultPoiId,
             builder.adDecisionService,
             builder.eventReplayCapacity,
             builder.eventReplayWindow,
@@ -202,23 +203,25 @@ public final class SessionHost implements AutoCloseable {
 
     routes.get("/health", ctx -> respond(ctx, 200, health()));
 
-    routes.get("/v1/terminals", ctx -> respond(ctx, 200, terminals()));
+    routes.get(
+        "/v1/terminal",
+        ctx -> {
+          requireTerminal();
+          respond(ctx, 200, Views.terminal(config.terminal.info()));
+        });
+    routes.post("/v1/terminal/diagnose", ctx -> device(ctx, Terminal::diagnose, Views::diagnosis));
     routes.post(
-        "/v1/terminals/{poiId}/diagnose", ctx -> device(ctx, Terminal::diagnose, Views::diagnosis));
+        "/v1/terminal/totals", ctx -> device(ctx, Terminal::getTotals, Views::reconciliation));
     routes.post(
-        "/v1/terminals/{poiId}/totals",
-        ctx -> device(ctx, Terminal::getTotals, Views::reconciliation));
+        "/v1/terminal/reconcile", ctx -> device(ctx, Terminal::reconcile, Views::reconciliation));
     routes.post(
-        "/v1/terminals/{poiId}/reconcile",
-        ctx -> device(ctx, Terminal::reconcile, Views::reconciliation));
-    routes.post(
-        "/v1/terminals/{poiId}/print",
+        "/v1/terminal/print",
         ctx -> {
           var payload = Parsers.printPayload(Json.body(ctx.body()));
           device(ctx, terminal -> terminal.print(payload), v -> null);
         });
     routes.post(
-        "/v1/terminals/{poiId}/sound",
+        "/v1/terminal/sound",
         ctx -> {
           ObjectNode body = Json.body(ctx.body());
           String action = Json.requireText(body, "action");
@@ -570,18 +573,20 @@ public final class SessionHost implements AutoCloseable {
     node.put("hostVersion", HostVersion.current());
     node.put("sdkVersion", SdkVersion.current());
     node.putArray("protocolVersions").add(PROTOCOL_VERSION);
-    node.set("terminals", terminals());
+    if (config.terminal.client() != null) {
+      node.set("terminal", Views.terminal(config.terminal.info()));
+    }
     // beyond the spec's Health, which allows additional properties: the bridge's tray reads it
     node.put("sessions", registry.openCount());
     return node;
   }
 
-  private ArrayNode terminals() {
-    ArrayNode array = Json.array();
-    for (TerminalInfo terminal : config.terminalClients.terminals()) {
-      array.add(Views.terminal(terminal));
+  private TerminalClient requireTerminal() {
+    TerminalClient client = config.terminal.client();
+    if (client == null) {
+      throw new HostError(404, HostError.NOT_FOUND, "no terminal is configured on this host");
     }
-    return array;
+    return client;
   }
 
   private ArrayNode sessions() {
@@ -609,19 +614,19 @@ public final class SessionHost implements AutoCloseable {
     return array;
   }
 
-  /** A session-less device operation, run synchronously against a short-lived {@link Terminal}. */
+  /**
+   * A session-less device operation, run synchronously against a short-lived {@link Terminal} on
+   * the host's one terminal; the {@code poiId} query parameter only fills the Nexo header.
+   */
   private <T> void device(
       Context ctx, Function<Terminal, SessionResult<T>> call, Function<T, JsonNode> view) {
-    String poiId = ctx.pathParam("poiId");
-    TerminalClient client = config.terminalClients.forPoi(poiId);
-    if (client == null) {
-      throw HostError.notFound("terminal " + poiId);
-    }
+    TerminalClient client = requireTerminal();
+    String poiId = ctx.queryParam("poiId");
     String saleId = ctx.queryParam("saleId");
     try (Terminal terminal =
         Terminal.builder()
             .client(client)
-            .poiId(poiId)
+            .poiId(poiId == null || poiId.isEmpty() ? config.defaultPoiId : poiId)
             .saleId(saleId == null || saleId.isEmpty() ? config.deviceSaleId : saleId)
             .storeLocation(ctx.queryParam("storeLocation"))
             .build()) {
@@ -846,17 +851,18 @@ public final class SessionHost implements AutoCloseable {
 
   // ─── Builder ───
 
-  /** Configuration for a host; everything has a development-mode default except the terminals. */
+  /** Configuration for a host; everything has a development-mode default except the terminal. */
   public static final class Builder {
     private int port;
     private String bindAddress = "127.0.0.1";
-    private TerminalClientProvider terminalClients = TerminalClientProvider.none();
+    private TerminalClientProvider terminal = TerminalClientProvider.none();
     private SessionFactory sessionFactory = SessionFactory.defaults();
     private StepDeadlines stepDeadlines = StepDeadlines.defaults();
     private HostAuth auth = HostAuth.permitAll();
     private AdDecisionService adDecisionService;
     private String hostKind = "bridge";
     private String deviceSaleId = "bilt-session-host";
+    private String defaultPoiId = "bilt-session-host";
     private int eventReplayCapacity = 1000;
     private Duration eventReplayWindow = Duration.ofMinutes(10);
     private int idempotencyCapacity = 256;
@@ -892,8 +898,26 @@ public final class SessionHost implements AutoCloseable {
       return this;
     }
 
-    public Builder terminalClients(TerminalClientProvider terminalClients) {
-      this.terminalClients = Objects.requireNonNull(terminalClients, "terminalClients");
+    /**
+     * The one terminal this host drives. Every {@code terminal} session and device operation runs
+     * on it, whatever {@code poiId} the request names; without one, only {@code local} sessions
+     * work.
+     */
+    public Builder terminal(TerminalClientProvider terminal) {
+      this.terminal = Objects.requireNonNull(terminal, "terminal");
+      return this;
+    }
+
+    /**
+     * The Nexo {@code POIID} sent to the terminal when a session or device operation names none;
+     * {@code bilt-session-host} by default.
+     */
+    public Builder defaultPoiId(String defaultPoiId) {
+      Objects.requireNonNull(defaultPoiId, "defaultPoiId");
+      if (defaultPoiId.isEmpty()) {
+        throw new IllegalArgumentException("defaultPoiId must not be empty");
+      }
+      this.defaultPoiId = defaultPoiId;
       return this;
     }
 

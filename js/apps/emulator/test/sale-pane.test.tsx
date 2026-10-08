@@ -157,7 +157,7 @@ describe('the Sale pane', () => {
 
     await waitFor(async () => expect(await store.listSales()).toHaveLength(1));
     const [sale] = await store.listSales();
-    expect(sale?.sale).toMatchObject({ authorizedAmount: '35.31', poiId: 'VictaLane-275839164' });
+    expect(sale?.sale).toMatchObject({ authorizedAmount: '35.31', poiId: 'bilt-session-host' });
     expect(sale?.sale.legs.map((leg) => leg.type)).toEqual(['CARD']);
     expect(screen.getByText(/Recorded as sale/)).toBeTruthy();
 

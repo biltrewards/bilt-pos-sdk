@@ -11,7 +11,8 @@ What it shows, in `src/register.ts`:
 
 - bridge detection with `detectBridge()`: a missing or outdated bridge gets a message and a retry
   button, a ready one is connected with `BiltPos.connect(localBridge())`;
-- a lane settings form (terminal or local session, `poiId`, `saleId`, currency, store location)
+- a lane settings form (terminal or local session, an optional `poiId` passed through to the
+  bridge's one terminal, `saleId`, currency, store location)
   persisted in `localStorage`, which starts a terminal or a local session;
 - scanning from a three-item catalog with `basket.addItem`, the basket table and total redrawn
   from `basket.changed`;
@@ -24,7 +25,7 @@ What it shows, in `src/register.ts`:
 
 Start a host first: the [Terminal Bridge](../../../docs/terminal-bridge.md) on this machine, or
 the development Session Host from the repository root (`./gradlew :host:run --args=dev-host.json`;
-without terminals it still serves local sessions). Then:
+without a terminal it still serves local sessions). Then:
 
 ```sh
 cd js

@@ -19,7 +19,7 @@ export type {
 export { createProtocolClient, type ProtocolClient } from './client';
 
 /** The protocol major version this package was generated from; hosts list theirs in `GET /health`. */
-export const PROTOCOL_VERSION = '1';
+export const PROTOCOL_VERSION = '2';
 
 /** The spec's `components.schemas`, by name. */
 export type Schemas = components['schemas'];

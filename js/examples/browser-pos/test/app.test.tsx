@@ -12,8 +12,8 @@ const HEALTH: Health = {
   host: 'bridge',
   hostVersion: '0.30.0',
   sdkVersion: '0.30.0',
-  protocolVersions: ['1'],
-  terminals: [{ poiId: DEFAULT_SETTINGS.poiId }],
+  protocolVersions: ['2'],
+  terminal: { model: 'VictaLane' },
 };
 
 function probe(status: BridgeDetection['status']): BridgeDetect {

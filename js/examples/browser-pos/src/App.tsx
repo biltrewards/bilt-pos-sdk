@@ -5,7 +5,7 @@ import { localBridge, type LocalBridgeOptions } from '@bilt/pos-sdk/bridge';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Register } from './Register';
 import { SettingsPanel } from './components/SettingsPanel';
-import { bridgeOptions, useSettings, type Settings } from './settings';
+import { bridgeOptions, describeSession, useSettings, type Settings } from './settings';
 
 /** Where to send a cashier who has no bridge: the setup guide says where the installer is. */
 const BRIDGE_GUIDE_URL = 'https://biltrewards.github.io/bilt-pos-sdk/terminal-bridge.html';
@@ -71,9 +71,8 @@ export function App(props: AppProps): ReactNode {
         <div>
           <h1>Browser POS</h1>
           <p className="muted">
-            Bilt POS SDK example register ·{' '}
-            {settings.mode === 'terminal' ? `terminal ${settings.poiId}` : 'local session'} · lane{' '}
-            {settings.saleId} · {settings.currency}
+            Bilt POS SDK example register · {describeSession(settings)} · lane {settings.saleId} ·{' '}
+            {settings.currency}
           </p>
         </div>
         <button

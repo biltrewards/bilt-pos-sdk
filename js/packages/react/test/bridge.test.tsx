@@ -17,8 +17,8 @@ const HEALTH: Health = {
   host: 'bridge',
   hostVersion: '1.2.0',
   sdkVersion: '0.25.0',
-  protocolVersions: ['1'],
-  terminals: [{ poiId: 'VictaLane-275839164' }],
+  protocolVersions: ['2'],
+  terminal: { model: 'VictaLane' },
 };
 
 const BASE_URL = 'http://127.0.0.1:48333';
@@ -269,7 +269,7 @@ describe('InstallBridgePrompt', () => {
       expect(screen.getByRole('alert').getAttribute('data-status')).toBe('outdated'),
     );
     expect(screen.getByText(/Update the Bilt Terminal Bridge/)).toBeTruthy();
-    expect(screen.getByText('0 → 1')).toBeTruthy();
+    expect(screen.getByText('0 → 2')).toBeTruthy();
   });
 });
 

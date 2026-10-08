@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Bilt POS Session Protocol
-  version: 1.0.0-draft
+  version: 2.0.0-draft
   summary: The wire form of the Bilt POS SDK's ShopperSession API.
   description: |
     The Session Protocol is how a register that cannot embed the Java SDK — a browser page, a
@@ -54,8 +54,8 @@ info:
     |---|---|---|
     | 400 | Request validation failed | `VALIDATION` |
     | 401 | Missing or invalid bearer token (reserved; not enforced in development mode) | `UNAUTHORIZED` |
-    | 404 | Unknown session, operation, item, terminal or widget | `NOT_FOUND` |
-    | 409 | Lifecycle refusal: the same guards the Java SDK throws `IllegalStateException` for | `INVALID_STATE` |
+    | 404 | Unknown session, operation, item or widget, or no terminal configured | `NOT_FOUND` |
+    | 409 | Lifecycle refusal: the same guards the Java SDK throws `IllegalStateException` for, or a terminal session on a host without a terminal | `INVALID_STATE` / `UNSUPPORTED` |
     | 410 | Event replay position no longer buffered | `NOT_FOUND` |
     | 422 | Step reply does not match the pending step, or an `Idempotency-Key` reused with a different body | `INVALID_STATE` / `VALIDATION` |
     | 503 | Terminal unreachable | `NETWORK` |
@@ -83,8 +83,8 @@ servers:
 tags:
   - name: Health
     description: Host discovery, unauthenticated.
-  - name: Terminals
-    description: Session-less device operations, mirroring the Java `Terminal` facade.
+  - name: Terminal
+    description: The host's one terminal and its session-less device operations, mirroring the Java `Terminal` facade.
   - name: Sessions
     description: Session lifecycle, mirroring `ShopperSession` and `TerminalShopperSession`.
   - name: Basket
@@ -101,7 +101,7 @@ tags:
     description: The per-session event stream.
 x-tagGroups:
   - name: Host
-    tags: [Health, Terminals]
+    tags: [Health, Terminal]
   - name: Session
     tags: [Sessions, Basket, Member, Context]
   - name: Operations
@@ -110,18 +110,18 @@ security: []
 paths:
   /health:
     $ref: './paths/health.yaml#/health'
-  /v1/terminals:
-    $ref: './paths/terminals.yaml#/terminals'
-  /v1/terminals/{poiId}/diagnose:
-    $ref: './paths/terminals.yaml#/diagnose'
-  /v1/terminals/{poiId}/totals:
-    $ref: './paths/terminals.yaml#/totals'
-  /v1/terminals/{poiId}/reconcile:
-    $ref: './paths/terminals.yaml#/reconcile'
-  /v1/terminals/{poiId}/print:
-    $ref: './paths/terminals.yaml#/print'
-  /v1/terminals/{poiId}/sound:
-    $ref: './paths/terminals.yaml#/sound'
+  /v1/terminal:
+    $ref: './paths/terminal.yaml#/terminal'
+  /v1/terminal/diagnose:
+    $ref: './paths/terminal.yaml#/diagnose'
+  /v1/terminal/totals:
+    $ref: './paths/terminal.yaml#/totals'
+  /v1/terminal/reconcile:
+    $ref: './paths/terminal.yaml#/reconcile'
+  /v1/terminal/print:
+    $ref: './paths/terminal.yaml#/print'
+  /v1/terminal/sound:
+    $ref: './paths/terminal.yaml#/sound'
   /v1/sessions:
     $ref: './paths/sessions.yaml#/sessions'
   /v1/sessions/{sessionId}:
@@ -185,13 +185,6 @@ components:
       description: The operation's identifier, as `Operation.id` reports it.
       schema:
         type: string
-    poiId:
-      name: poiId
-      in: path
-      required: true
-      description: The terminal identifier, sent as Nexo `POIID`.
-      schema:
-        type: string
     idempotencyKey:
       name: Idempotency-Key
       in: header
@@ -214,7 +207,13 @@ components:
           schema:
             $ref: './components/common.yaml#/SessionError'
     NotFound:
-      description: No such session, operation, item, terminal or widget.
+      description: No such session, operation, item or widget.
+      content:
+        application/json:
+          schema:
+            $ref: './components/common.yaml#/SessionError'
+    NoTerminal:
+      description: The host has no terminal configured.
       content:
         application/json:
           schema:

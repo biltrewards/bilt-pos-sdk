@@ -82,7 +82,7 @@ export async function mountRegister(root: HTMLElement, deps: RegisterDeps): Prom
         {},
         el('legend', {}, `Lane settings · engine ${pos.capabilities.name}`),
         mode,
-        field('poiId', 'Terminal (poiId)'),
+        field('poiId', 'POI id (optional, passed through)'),
         field('saleId', 'Lane (saleId)'),
         field('currency', 'Currency'),
         field('storeLocation', 'Store location'),
@@ -99,7 +99,7 @@ export async function mountRegister(root: HTMLElement, deps: RegisterDeps): Prom
       const data = new FormData(form);
       const settings: Settings = {
         mode: data.get('mode') === 'local' ? 'local' : 'terminal',
-        poiId: String(data.get('poiId')),
+        poiId: String(data.get('poiId')).trim(),
         saleId: String(data.get('saleId')),
         currency: String(data.get('currency')).toUpperCase(),
         storeLocation: String(data.get('storeLocation')),
@@ -109,7 +109,7 @@ export async function mountRegister(root: HTMLElement, deps: RegisterDeps): Prom
         const { mode: kind, poiId, ...lane } = settings;
         const session =
           kind === 'terminal'
-            ? await pos.startTerminalSession({ ...lane, poiId })
+            ? await pos.startTerminalSession(poiId ? { ...lane, poiId } : lane)
             : await pos.startShopperSession(lane);
         showSession(pos, session, kind === 'terminal' ? (session as TerminalShopperSession) : null);
       } catch (err) {

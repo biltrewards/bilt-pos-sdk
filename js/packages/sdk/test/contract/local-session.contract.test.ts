@@ -40,8 +40,9 @@ describe.skipIf(!hostAvailable)('local sessions over the Terminal Bridge engine'
     });
     const health = await pos.health();
     expect(health.host).toBe('bridge');
-    expect(health.protocolVersions).toContain('1');
-    expect(await pos.terminals()).toEqual([]);
+    expect(health.protocolVersions).toContain('2');
+    expect(health.terminal).toBeUndefined();
+    expect(await pos.terminalInfo()).toBeNull();
   });
 
   it('reports a missing bridge on a silent port', async () => {

@@ -474,7 +474,7 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
 
   constructor(options: TerminalSessionOptions) {
     super(options);
-    this.poiId = options.poiId;
+    this.poiId = options.poiId ?? 'bilt-session-host';
   }
 
   identifyMember(): Operation<IdentifyResult> {
@@ -678,7 +678,7 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
   }
 }
 
-function mockTerminal(poiId: string): Terminal {
+function mockTerminal(poiId?: string): Terminal {
   return {
     poiId,
     diagnose: async () => ({ hostStatuses: [] }),
@@ -711,8 +711,8 @@ export class MockBiltPos implements BiltPos {
       host: 'bridge' as const,
       hostVersion: '0.0.0',
       sdkVersion: '0.0.0',
-      protocolVersions: ['1'],
-      terminals: [{ poiId: 'VictaLane-275839164', reachable: true }],
+      protocolVersions: ['2'],
+      terminal: { model: 'VictaLane', reachable: true },
     });
   }
 
@@ -728,11 +728,11 @@ export class MockBiltPos implements BiltPos {
     return Promise.resolve(session);
   }
 
-  terminals() {
-    return this.health().then((h) => h.terminals);
+  terminalInfo() {
+    return this.health().then((h) => h.terminal);
   }
 
-  terminal(poiId: string): Terminal {
+  terminal(poiId?: string): Terminal {
     return mockTerminal(poiId);
   }
 

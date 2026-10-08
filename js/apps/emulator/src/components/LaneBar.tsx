@@ -2,6 +2,7 @@ import type { CheckoutPhase } from '@bilt/pos-sdk';
 import type { ReactNode } from 'react';
 import { useLane } from '../lane/LaneProvider';
 import { describeError } from '../log';
+import { describeSession } from '../settings';
 
 const PHASES: readonly CheckoutPhase[] = ['SCANNING', 'MEMBER_IDENTIFIED', 'TENDERING', 'COMPLETE'];
 
@@ -15,7 +16,8 @@ export interface LaneBarProps {
 }
 
 export function LaneBar({ onDisableRetailMedia }: LaneBarProps): ReactNode {
-  const { connection, lane, session, settings, context, run, report, settlement } = useLane();
+  const { connection, lane, session, terminalSession, settings, context, run, report, settlement } =
+    useLane();
 
   if (connection.status === 'connecting') {
     return <p className="notice">Connecting to the Terminal Bridge…</p>;
@@ -31,12 +33,7 @@ export function LaneBar({ onDisableRetailMedia }: LaneBarProps): ReactNode {
     );
   }
   if (lane.status === 'idle' || lane.status === 'starting') {
-    return (
-      <p className="notice">
-        Starting{' '}
-        {settings.mode === 'terminal' ? `a session on ${settings.poiId}` : 'a local session'}…
-      </p>
-    );
+    return <p className="notice">Starting a {describeSession(settings)}…</p>;
   }
   // A refused `end()` also lands in `error` but leaves the session open (a settlement may still be
   // moving money), so only a lane without a session is a start failure.
@@ -78,8 +75,8 @@ export function LaneBar({ onDisableRetailMedia }: LaneBarProps): ReactNode {
   return (
     <div className="lane-bar">
       <span>
-        {session.kind === 'terminal' ? `Terminal ${settings.poiId}` : 'Local session'} · lane{' '}
-        {session.saleId} · session <code data-testid="session-id">{session.id}</code> · engine{' '}
+        {terminalSession ? `Terminal session · POIID ${terminalSession.poiId}` : 'Local session'} ·
+        lane {session.saleId} · session <code data-testid="session-id">{session.id}</code> · engine{' '}
         {c.name}
         {c.survivesPageReload ? ' (survives reload)' : ''}
       </span>

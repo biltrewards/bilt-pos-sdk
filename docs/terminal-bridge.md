@@ -3,20 +3,20 @@
 
 # Terminal Bridge — Setup Guide
 
-The Terminal Bridge is a small menu-bar application that runs on the register machine, embeds the Java SDK and the Session Host (`:host`), and serves them on `127.0.0.1` so a browser-based POS page can drive a Bilt terminal on the store LAN. The page never sees the terminal's address, certificate or payload passphrase; it talks the Session Protocol (HTTP, Server-Sent Events and WebSocket) to the bridge, and the bridge speaks Nexo over HTTPS to the terminal. The page side is the [JavaScript & React SDK](./javascript-sdk-integration.md); the wire contract is the [Session Protocol reference](./session-protocol-reference.html).
+The Terminal Bridge is a small menu-bar application that runs on the register machine, embeds the Java SDK and the Session Host (`:host`), and serves them on `127.0.0.1` so a browser-based POS page can drive a Bilt terminal on the store LAN. It bridges exactly one POS to exactly one terminal (POI): the terminal is configured when the bridge starts, and whatever `poiId` the page sends is passed through as the Nexo `POIID` of the messages to that terminal rather than used to pick one. The page never sees the terminal's address, certificate or payload passphrase; it talks the Session Protocol (HTTP, Server-Sent Events and WebSocket) to the bridge, and the bridge speaks Nexo over HTTPS to the terminal. The page side is the [JavaScript & React SDK](./javascript-sdk-integration.md); the wire contract is the [Session Protocol reference](./session-protocol-reference.html).
 
 The design is in Notion: *Bilt POS SDK — Terminal Bridge, Session Protocol & JavaScript SDK (Design)*. This page covers the **development-mode** bridge in this repository: configuration from a local file, no pairing, no authentication, macOS packaging only.
 
-> **Development mode.** The bridge in this iteration allows any browser origin by default (`allowedOrigins: ["*"]`), accepts no bearer tokens, and lets terminals run unencrypted with certificate checks off. Use it against development terminals on a trusted network only.
+> **Development mode.** The bridge in this iteration allows any browser origin by default (`allowedOrigins: ["*"]`), accepts no bearer tokens, and lets the terminal run unencrypted with certificate checks off. Use it against development terminals on a trusted network only.
 
 ---
 
 ## What it does
 
-- Runs the Session Host on `http://127.0.0.1:48333`: `GET /health`, `GET /v1/terminals`, `POST /v1/sessions` and the rest of the Session Protocol. If that port is taken it tries the next ten (`48334`…`48343`) and logs the one it chose. It never binds a LAN interface, even if the config file asks it to.
-- Builds a `BiltNexoTerminalClient` per terminal in the config file, using the same builder options documented in the [Integration Guide](integration.html), [Certificate Validation](certificate-validation-setup.html) and [Terminal Security](terminal-security.html), and hands them to the host by `poiId`.
+- Runs the Session Host on `http://127.0.0.1:48333`: `GET /health`, `GET /v1/terminal`, `POST /v1/sessions` and the rest of the Session Protocol. If that port is taken it tries the next ten (`48334`…`48343`) and logs the one it chose. It never binds a LAN interface, even if the config file asks it to.
+- Builds one `BiltNexoTerminalClient` for the terminal in the config file, using the same builder options documented in the [Integration Guide](integration.html), [Certificate Validation](certificate-validation-setup.html) and [Terminal Security](terminal-security.html), and hands it to the host. Every terminal session and session-less device operation runs on it; the `poiId` a request names only fills the Nexo header, and the host sends `bilt-session-host` when the request names none.
 - Admits browser requests only from the origins in `allowedOrigins` (requests without an `Origin` header, such as curl, always pass).
-- Shows a menu-bar icon with the listener status, the number of terminals configured and sessions active, and actions to open the config file, reload it, open the logs folder, copy a redacted diagnostics summary, toggle *Start at login*, and quit.
+- Shows a menu-bar icon with the listener status, whether a terminal is configured, the number of sessions active, and actions to open the config file, reload it, open the logs folder, copy a redacted diagnostics summary, toggle *Start at login*, and quit.
 - Reloads the config file when it changes or when *Reload config* is chosen. A broken file keeps the previous configuration in force (or the defaults on first start) and the error shows in the menu.
 - Logs to rotating files and to stderr.
 - Runs headless: without a system tray (SSH session, CI, server) it stays a foreground process until interrupted.
@@ -46,13 +46,13 @@ Requirements for building: JDK 21 with `jlink` and `jpackage` (Temurin works), X
 
 On the first start the bridge
 
-1. creates its configuration file (see [Configuration file](#configuration-file)) with a commented example and no usable terminal, and its log folder;
+1. creates its configuration file (see [Configuration file](#configuration-file)) with a commented example terminal you replace with yours, and its log folder;
 2. binds `127.0.0.1:48333`, or the next free port up to `48343`, and writes the port it chose to the log and the menu's status line;
-3. starts serving `/health` at once. There are no terminals until the config file lists them, but `local` sessions (basket, member, context and widgets without a terminal) already work, which is enough to bring a register page up.
+3. starts serving `/health` at once. Without a `terminal` in the config file `local` sessions (basket, member, context and widgets without a terminal) still work, which is enough to bring a register page up.
 
 Then:
 
-1. Open the config file from the menu (**Open config**), replace the example terminal with yours (`poiId`, LAN `host` and `port`, and either `trustAll: true` for a lab device or the Bilt CA and environment), save, and choose **Reload config** or wait for the file watcher. The menu shows the number of terminals it now knows.
+1. Open the config file from the menu (**Open config**), replace the example terminal with yours (LAN `host` and `port`, and either `trustAll: true` for a lab device or the Bilt CA and environment), save, and choose **Reload config** or wait for the file watcher. The menu shows whether a terminal is configured.
 2. Run [Verify](#verify) below.
 3. Open the register page. The JavaScript SDK finds the bridge on its own: `BiltPos.connect(localBridge())`, or `BridgeGate` in React, which shows an install prompt while nothing answers on loopback and lets the page through once the bridge is up. The first time a page from an `https://` origin reaches `127.0.0.1`, Chrome asks once whether the page may connect to software on this computer; choose *Allow*. See [Bridge detection and install](./javascript-sdk-integration.md#bridge-detection-and-install) in the SDK guide.
 
@@ -63,16 +63,18 @@ curl http://127.0.0.1:48333/health
 ```
 
 ```json
-{"host":"bridge","hostVersion":"0.30.0","sdkVersion":"0.30.0","protocolVersions":["1"],"terminals":[{"poiId":"VictaLane-275839164"}]}
+{"host":"bridge","hostVersion":"0.32.0","sdkVersion":"0.32.0","protocolVersions":["2"],"terminal":{"label":"Lane 1","model":"VictaLane"}}
 ```
 
-`GET /v1/terminals` lists the configured `poiId`s. If the default port was taken, the bridge log (and the tray's status line) names the port that was bound; `curl http://127.0.0.1:48334/health` and so on finds it, and the SDK probes the same range on its own.
+`terminal` is absent when none is configured; `GET /v1/terminal` returns the same object, or `404` without a terminal. If the default port was taken, the bridge log (and the tray's status line) names the port that was bound; `curl http://127.0.0.1:48334/health` and so on finds it, and the SDK probes the same range on its own.
 
 To check that a terminal is reachable through the bridge without a session:
 
 ```bash
-curl -X POST http://127.0.0.1:48333/v1/terminals/VictaLane-275839164/diagnose
+curl -X POST http://127.0.0.1:48333/v1/terminal/diagnose
 ```
+
+`?poiId=...` sets the Nexo `POIID` the diagnosis request carries; without it the bridge sends its default.
 
 A terminal that cannot be reached answers with a `SessionError` whose `code` is `NETWORK` or `TIMEOUT`; the [troubleshooting](#troubleshooting) section says what to check.
 
@@ -92,19 +94,18 @@ The file is created on first start with a commented example (JSON has no comment
 {
   "port": 48333,
   "allowedOrigins": ["*"],
-  "terminals": [
-    {
-      "poiId": "VictaLane-275839164",
-      "host": "192.168.4.108",
-      "port": 8443,
-      "encryption": false,
-      "passphrase": null,
-      "keyId": null,
-      "trustAll": true,
-      "caCertificatePath": null,
-      "environment": "STAGING"
-    }
-  ]
+  "terminal": {
+    "label": "Lane 1",
+    "model": "VictaLane",
+    "host": "192.168.4.108",
+    "port": 8443,
+    "encryption": false,
+    "passphrase": null,
+    "keyId": null,
+    "trustAll": true,
+    "caCertificatePath": null,
+    "environment": null
+  }
 }
 ```
 
@@ -113,11 +114,14 @@ The file is created on first start with a commented example (JSON has no comment
 | `bindAddress` | `127.0.0.1` | Must be a loopback address; anything else is refused at load time. |
 | `port` | `48333` | First port to try; the next ten are fallbacks. Changing it takes effect after a restart. |
 | `allowedOrigins` | `["*"]` | Browser origins admitted, e.g. `https://pos.example.com`; a request whose `Origin` is not listed gets `401`. `*` is development-only and logs a warning at start. |
-| `terminals[].poiId` | required | The terminal id sessions refer to. Must be unique. |
-| `terminals[].host`, `port` | required, `8443` | The terminal's LAN address. |
-| `terminals[].encryption` | `false` | Nexo payload encryption. When `true`, `passphrase` and `keyId` are required; `keyVersion` defaults to `0`. |
-| `terminals[].trustAll` | `false` | Skip TLS verification (development terminals). Cannot be combined with `caCertificatePath` or `environment`. |
-| `terminals[].caCertificatePath`, `environment` | required unless `trustAll` | The Bilt CA PEM and `PRODUCTION` or `STAGING`, which selects the certificate hostname pattern. |
+| `terminal` | none | The one terminal the bridge connects the POS to. Without it only `local` sessions work. It has no `poiId`: the page's `poiId` is passed through as the Nexo `POIID`. |
+| `terminal.label`, `model` | none | Descriptive only; reported to the page in `/health` and `GET /v1/terminal`. |
+| `terminal.host`, `port` | required, `8443` | The terminal's LAN address. |
+| `terminal.encryption` | `false` | Nexo payload encryption. When `true`, `passphrase` and `keyId` are required; `keyVersion` defaults to `0`. |
+| `terminal.trustAll` | `false` | Skip TLS verification (development terminals). Cannot be combined with `caCertificatePath` or `environment`. |
+| `terminal.caCertificatePath`, `environment` | required unless `trustAll` | The Bilt CA PEM and `PRODUCTION` or `STAGING`, which selects the certificate hostname pattern. |
+
+A config file from before this change, with a `terminals` list or a `poiId` on the terminal, is refused with a message saying what to change: replace the list with its one entry as `terminal` and delete the `poiId`. The bridge keeps running on its previous configuration (or the defaults) and shows the error in the menu until the file is fixed.
 
 Passphrases never appear in logs, in `toString()` output or in the diagnostics summary.
 
@@ -147,9 +151,9 @@ Two browser-side caveats in this iteration:
 
 **The request succeeds in curl but fails in the browser with a CORS error.** The bridge does not send CORS headers in this iteration (see above). Serve the page same-origin, proxy `/health` and `/v1` through the page's own dev server, or wait for the host's CORS option.
 
-**Starting a terminal session fails with `TIMEOUT` or `NETWORK`.** The bridge is up but cannot reach the terminal: `POST /v1/terminals/{poiId}/diagnose` fails the same way. Check the `host` and `port` in the config against the terminal's network screen, that the register machine is on the same LAN or routed to it, and that a firewall is not dropping 8443. A TLS failure shows as `NETWORK` with a certificate message in the bridge log: for a lab device set `"trustAll": true`; for a boarded one give `caCertificatePath` and the right `environment`. A mismatch between `encryption` and the terminal's own setting fails the first exchange with a `TERMINAL_ERROR` or a decode failure in the log. The admin exchange that opens a session times out after about two minutes, so a wrong address looks like a hang before it fails.
+**Starting a terminal session fails with `TIMEOUT` or `NETWORK`.** The bridge is up but cannot reach the terminal: `POST /v1/terminal/diagnose` fails the same way. Check the `host` and `port` in the config against the terminal's network screen, that the register machine is on the same LAN or routed to it, and that a firewall is not dropping 8443. A TLS failure shows as `NETWORK` with a certificate message in the bridge log: for a lab device set `"trustAll": true`; for a boarded one give `caCertificatePath` and the right `environment`. A mismatch between `encryption` and the terminal's own setting fails the first exchange with a `TERMINAL_ERROR` or a decode failure in the log. The admin exchange that opens a session times out after about two minutes, so a wrong address looks like a hang before it fails.
 
-**`NOT_FOUND` for the `poiId`.** The id in the page's session options is not in `terminals[]`; `GET /v1/terminals` lists what the bridge knows. The id is case-sensitive.
+**Starting a terminal session fails with `UNSUPPORTED`, or `GET /v1/terminal` answers `404`.** The bridge has no terminal configured, so only `local` sessions work. Add a `terminal` object to the config file (the menu says *No terminal configured* until it loads); if the file still has the old `terminals` list, the menu shows the config error explaining the change. The `poiId` the page sends never causes this: it is passed through to the one terminal whatever its value.
 
 **A terminal session cannot be started because one is already open on the terminal (`INVALID_STATE`).** A session the register did not end is still alive on the bridge: a page that was closed or reloaded without `end()`, or a crashed register. Sessions outlive the page by design (the bridge is where settlement runs). End the stale one through the bridge, `curl -X DELETE http://127.0.0.1:48333/v1/sessions/<id>`, and if it refuses because money is unresolved, finish the unwind or force-end it as the SDK guide's [session section](./javascript-sdk-integration.md#start-and-end-a-session) describes. Restarting the bridge drops its sessions and tells the terminal to discard its session data on the next start.
 

@@ -167,13 +167,13 @@ export async function connect(): Promise<BiltPos> {
 
 ## Start and end a session
 
-A **terminal session** is bracketed on a terminal: it exists once the terminal acknowledged the start, and `end()` tells the terminal to discard its session-scoped data. A **local session** has no terminal: basket, member, context and widgets for a lane without hardware, or for a register that only wants the bookkeeping.
+A **terminal session** is bracketed on the host's terminal: it exists once the terminal acknowledged the start, and `end()` tells the terminal to discard its session-scoped data. A host bridges one register to exactly one terminal, configured when it starts, so there is no terminal to pick: `poiId` is optional and only passed through as the Nexo `POIID` of the session's messages (the host sends its default, `bilt-session-host`, when it is left out). A **local session** has no terminal: basket, member, context and widgets for a lane without hardware, or for a register that only wants the bookkeeping.
 
 ```ts
 export async function startLane(pos: BiltPos): Promise<TerminalShopperSession> {
   const session = await pos.startTerminalSession({
     saleId: 'LANE-3',
-    poiId: 'VictaLane-275839164',
+    poiId: 'VictaLane-275839164', // optional: passed through as the Nexo POIID
     currency: 'USD',
     storeLocation: 'STR-0142',
     widgets: [{ type: 'retail-media', placements: ['lane-banner'] }],
@@ -186,7 +186,7 @@ export function startLocalLane(pos: BiltPos): Promise<ShopperSession> {
 }
 ```
 
-The options are the Java builders' fields: `saleId`, `currency`, `storeLocation` (required for retail media), an initial `member`, the starting `phase` and `attributes`, `widgets`, `rendering` capabilities, and for a terminal session `poiId` and `autoDisplay` (default `true`: basket changes refresh the customer display). A refused start (terminal unreachable, unknown `poiId`, a session already open on the terminal) rejects with a `SessionError` and creates nothing.
+The options are the Java builders' fields: `saleId`, `currency`, `storeLocation` (required for retail media), an initial `member`, the starting `phase` and `attributes`, `widgets`, `rendering` capabilities, and for a terminal session `poiId` and `autoDisplay` (default `true`: basket changes refresh the customer display). A refused start (terminal unreachable, no terminal configured on the host, a session already open on the terminal) rejects with a `SessionError` and creates nothing.
 
 A session lives for one shopper's visit and may run several settlements, with `basket.clear()` between them. It ends once:
 
@@ -211,11 +211,7 @@ export async function endLane(session: TerminalShopperSession): Promise<void> {
 
 ```ts
 export async function oneVisit(pos: BiltPos): Promise<void> {
-  await using session = await pos.startTerminalSession({
-    saleId: 'LANE-3',
-    poiId: 'VictaLane-275839164',
-    currency: 'USD',
-  });
+  await using session = await pos.startTerminalSession({ saleId: 'LANE-3', currency: 'USD' });
   await session.basket.addItem({
     sku: 'GRC-OJ-1L',
     description: 'Orange Juice 1L',
@@ -225,11 +221,11 @@ export async function oneVisit(pos: BiltPos): Promise<void> {
 } // end() runs here, best-effort: a refusal is reported, not thrown
 ```
 
-Device and admin operations need no session. `pos.terminal(poiId)` is the Java `Terminal` facade, and `session.terminal()` the same thing on its own exchange, so a connectivity check never queues behind a payment:
+Device and admin operations need no session. `pos.terminal()` is the Java `Terminal` facade on the host's terminal (`pos.terminal(poiId)` sets the `POIID` its requests carry), `pos.terminalInfo()` describes that terminal or resolves `null` when the host has none, and `session.terminal()` is the same facade on its own exchange, so a connectivity check never queues behind a payment:
 
 ```ts
 export async function beforeOpening(pos: BiltPos): Promise<void> {
-  const terminal = pos.terminal('VictaLane-275839164');
+  const terminal = pos.terminal();
   const diagnosis = await terminal.diagnose();
   console.log(diagnosis.hostStatuses);
   const totals = await terminal.totals(); // running totals; reconcile() closes the period
@@ -592,7 +588,7 @@ Every rejected operation rejects with a `SessionError`, the JavaScript form of t
 | `INVALID_STATE` | A guard: a mutation while money moves, `end()` with money unresolved, `settle()` on a consumed basket, a terminal that already has a session. |
 | `UNSUPPORTED` | An email or custom resolver in a prompt-less lookup; a provider without the stored value operation. |
 | `TERMINAL_ERROR`, `UNKNOWN` | The terminal refused (see `nexoErrorCondition`) or failed unexpectedly. |
-| `VALIDATION`, `NOT_FOUND`, `UNAUTHORIZED` | The host rejected the request: a malformed body, an unknown `poiId` or session, an origin the bridge does not allow. |
+| `VALIDATION`, `NOT_FOUND`, `UNAUTHORIZED` | The host rejected the request: a malformed body, an unknown session, an origin the bridge does not allow. A terminal session on a host with no terminal configured is refused with `UNSUPPORTED`. |
 
 ```ts
 export function classify(error: unknown): string {
@@ -655,7 +651,6 @@ A lane, end to end:
 function Lane(): ReactNode {
   const { session, status, error, restart } = useTerminalSession({
     saleId: 'LANE-3',
-    poiId: 'VictaLane-275839164',
     currency: 'USD',
     storeLocation: 'STR-0142',
     widgets: [{ type: 'retail-media', placements: ['lane-banner'] }],
@@ -768,7 +763,7 @@ For everything the guide touches in one place, [`js/apps/emulator`](https://gith
 | Connect over the bridge | `await BiltPos.connect(localBridge())` |
 | Probe without connecting | `await detectBridge()` → `ready` / `missing` / `outdated` |
 | What this engine can do | `pos.capabilities` |
-| Start a terminal session | `await pos.startTerminalSession({ saleId, poiId, currency, storeLocation, widgets })` |
+| Start a terminal session | `await pos.startTerminalSession({ saleId, currency, storeLocation, widgets })` (`poiId` optional, passed through) |
 | Start a local session | `await pos.startShopperSession({ saleId, currency })` |
 | End / abandon | `await session.end()` / `await session.forceEnd(reason)` |
 | Scan, set quantity, remove | `session.basket.addItem(item)`, `.updateItemQuantityBySku(sku, qty)`, `.removeItemBySku(sku)` |
@@ -783,7 +778,7 @@ For everything the guide touches in one place, [`js/apps/emulator`](https://gith
 | Prompts | `session.requestConfirmation(prompt)`, `requestDigitString`, `requestMenuEntry`, ... |
 | Widget reporting | `session.widget('retail-media').perform / viewed / dismissed / completed / pause / resume` |
 | Events | `session.on('basket.changed' \| 'member.changed' \| 'widget.offer' \| 'background.error' \| 'session.ended', handler)` |
-| Device ops, no session | `pos.terminal(poiId).diagnose() / totals() / reconcile() / print() / playSound()` |
+| Device ops, no session | `pos.terminal().diagnose() / totals() / reconcile() / print() / playSound()`; `pos.terminalInfo()` |
 | React | `BridgeGate` → `BiltPosProvider` → `useTerminalSession` → `useBasket`, `useMember`, `useSettlement`, `RetailMediaSurface` |
 
 ---

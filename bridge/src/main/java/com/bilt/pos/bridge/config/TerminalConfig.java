@@ -4,15 +4,17 @@ import com.bilt.pos.nexo.client.BiltTerminalEnvironment;
 import java.util.Optional;
 
 /**
- * One terminal the bridge can reach. {@code trustAll} and {@code encryption=false} are development
- * terminal settings; production terminals need the CA certificate, the environment and the payload
- * passphrase.
+ * The terminal the bridge connects to. {@code label} and {@code model} are descriptive only and
+ * reported to the POS page; there is no {@code poiId}, since the page's own is passed through.
+ * {@code trustAll} and {@code encryption=false} are development terminal settings; production
+ * terminals need the CA certificate, the environment and the payload passphrase.
  *
  * <p>The record is a plain value, so the passphrase must never be printed through {@link
  * #toString()}; it is omitted there and from {@link #redacted()}.
  */
 public record TerminalConfig(
-    String poiId,
+    Optional<String> label,
+    Optional<String> model,
     String host,
     int port,
     boolean encryption,
@@ -31,7 +33,8 @@ public record TerminalConfig(
   /** A copy with the passphrase replaced by a marker, safe for diagnostics. */
   public TerminalConfig redacted() {
     return new TerminalConfig(
-        poiId,
+        label,
+        model,
         host,
         port,
         encryption,
@@ -46,8 +49,8 @@ public record TerminalConfig(
   @Override
   public String toString() {
     return "TerminalConfig{"
-        + "poiId="
-        + poiId
+        + "label="
+        + label.orElse("-")
         + ", endpoint="
         + endpoint()
         + ", encryption="

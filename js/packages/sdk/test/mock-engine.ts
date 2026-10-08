@@ -4,6 +4,7 @@
 // event-stream contract (`since` is exclusive, `session.started` first, `session.ended` last).
 import type {
   Basket,
+  Health,
   Member,
   Operation,
   Session,
@@ -49,22 +50,22 @@ export class MockEngine implements Engine {
   protected readonly sessions = new Map<string, State>();
   protected counter = 0;
 
-  async health() {
+  async health(): Promise<Health> {
     return {
       host: 'bridge' as const,
       hostVersion: '0.0.0',
       sdkVersion: '0.0.0',
-      protocolVersions: ['1'],
-      terminals: [{ poiId: 'VictaLane-275839164' }],
+      protocolVersions: ['2'],
+      terminal: { model: 'VictaLane' },
     };
   }
 
-  async terminals() {
-    return (await this.health()).terminals;
+  async terminalInfo() {
+    return (await this.health()).terminal ?? null;
   }
 
   async terminal<C extends TerminalCommand>(
-    _poiId: string,
+    _poiId: string | undefined,
     command: C,
   ): Promise<TerminalCommandResult<C>> {
     switch (command.kind) {
@@ -90,7 +91,7 @@ export class MockEngine implements Engine {
       createdAt: new Date().toISOString(),
       eventsUrl: `/v1/sessions/${id}/events`,
     };
-    if (request.poiId !== undefined) session.poiId = request.poiId;
+    if (request.kind === 'terminal') session.poiId = request.poiId ?? 'bilt-session-host';
     if (request.storeLocation !== undefined) session.storeLocation = request.storeLocation;
     const context = fx.context({
       saleId: request.saleId,

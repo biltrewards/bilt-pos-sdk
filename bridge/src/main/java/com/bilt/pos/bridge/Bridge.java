@@ -11,21 +11,19 @@ import com.bilt.pos.bridge.server.SessionHostListener;
 import com.bilt.pos.nexo.client.TerminalClient;
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * The running bridge: configuration, the terminal clients built from it, and the Session Host
- * serving them on loopback. Reloading swaps the configuration and the terminal clients in place;
- * the host keeps its port, since clients that already found the bridge would otherwise lose it.
+ * The running bridge: configuration, the client for its one terminal, and the Session Host serving
+ * it on loopback. Reloading swaps the configuration and the terminal client in place; the host
+ * keeps its port, since clients that already found the bridge would otherwise lose it.
  *
- * <p>The host sees the terminals through {@link BridgeTerminalProvider}, which reads {@link
- * #terminalClient(String)} on every call, so a reload reaches the next session without a restart.
+ * <p>The host sees the terminal through {@link BridgeTerminalProvider}, which reads {@link
+ * #terminalClient()} on every call, so a reload reaches the next session without a restart.
  */
 public final class Bridge implements Closeable {
 
@@ -40,7 +38,7 @@ public final class Bridge implements Closeable {
   private final List<Listener> listeners = new CopyOnWriteArrayList<>();
 
   private volatile BridgeConfig config;
-  private volatile Map<String, TerminalClient> terminals = Map.of();
+  private volatile Optional<TerminalClient> terminal = Optional.empty();
   private volatile Optional<String> lastConfigError = Optional.empty();
   private SessionHostListener host;
   private Closeable watch = () -> {};
@@ -59,11 +57,11 @@ public final class Bridge implements Closeable {
       lastConfigError = Optional.of(e.getMessage());
       LOG.log(Level.SEVERE, "Config invalid, running with defaults until fixed: " + e.getMessage());
       config = BridgeConfig.defaults();
-      terminals = Map.of();
+      terminal = Optional.empty();
     }
     if (config.allowsAnyOrigin()) {
       LOG.warning(
-          "allowedOrigins is [\"*\"]: any web page on this machine may drive the terminals."
+          "allowedOrigins is [\"*\"]: any web page on this machine may drive the terminal."
               + " This is for development only; list your POS origins before going live.");
     }
     host =
@@ -94,8 +92,8 @@ public final class Bridge implements Closeable {
       }
       LOG.info(
           "Config reloaded: "
-              + next.terminals().size()
-              + " terminal(s), origins "
+              + next.terminal().map(TerminalConfig::toString).orElse("no terminal")
+              + ", origins "
               + next.allowedOrigins());
       notifyListeners(Optional.of(next), Optional.empty());
     } catch (BridgeConfigException e) {
@@ -106,18 +104,18 @@ public final class Bridge implements Closeable {
   }
 
   private void apply(BridgeConfig next) throws BridgeConfigException {
-    Map<String, TerminalClient> built = new LinkedHashMap<>();
-    for (TerminalConfig terminal : next.terminals()) {
+    Optional<TerminalClient> built = Optional.empty();
+    if (next.terminal().isPresent()) {
+      TerminalConfig spec = next.terminal().get();
       try {
-        built.put(terminal.poiId(), TerminalClientFactory.build(terminal));
+        built = Optional.of(TerminalClientFactory.build(spec));
       } catch (RuntimeException e) {
-        throw new BridgeConfigException(
-            "terminal '" + terminal.poiId() + "' cannot be set up: " + e.getMessage(), e);
+        throw new BridgeConfigException("terminal cannot be set up: " + e.getMessage(), e);
       }
-      LOG.info("Terminal " + terminal);
+      LOG.info("Terminal " + spec);
     }
     config = next;
-    terminals = Map.copyOf(built);
+    terminal = built;
     lastConfigError = Optional.empty();
   }
 
@@ -151,14 +149,9 @@ public final class Bridge implements Closeable {
     return source;
   }
 
-  /** The SDK client for a configured terminal. */
-  public Optional<TerminalClient> terminalClient(String poiId) {
-    return Optional.ofNullable(terminals.get(poiId));
-  }
-
-  /** The ids of the terminals currently configured. */
-  public List<String> terminalIds() {
-    return List.copyOf(terminals.keySet());
+  /** The SDK client for the configured terminal, if there is one. */
+  public Optional<TerminalClient> terminalClient() {
+    return terminal;
   }
 
   /** A snapshot for the tray and diagnostics. */
@@ -172,7 +165,7 @@ public final class Bridge implements Closeable {
             ? h.bindAddress().getHostAddress()
             : c == null ? "127.0.0.1" : c.bindAddress().getHostAddress(),
         h == null ? -1 : h.port(),
-        terminals.size(),
+        terminal.isPresent(),
         h == null ? 0 : h.sessionCount(),
         true);
   }

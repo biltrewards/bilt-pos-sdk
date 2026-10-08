@@ -10,6 +10,12 @@ sessions:
       terminal acknowledged, so this request blocks for that round trip; a refused start creates
       no session. Each attempt is a new session with a new id.
 
+      A host drives exactly one terminal, the one it was configured with, so a terminal session
+      always runs on it; `poiId` does not select a terminal. It is passed through as the Nexo
+      `POIID` of every message the session sends, and the host substitutes its own default when
+      the request leaves it out. A host with no terminal configured refuses `kind: terminal`
+      with 409 (`UNSUPPORTED`).
+
       Widgets are attached once the session exists; a widget that cannot run (no ad decision
       service, missing store location) is reported through a `background.error` event and the
       session continues without it, exactly as in Java. A pending initial member is resolved in
@@ -31,8 +37,8 @@ sessions:
               $ref: '../components/session.yaml#/Session'
       '400':
         $ref: '../openapi.yaml#/components/responses/BadRequest'
-      '404':
-        description: Unknown `poiId`.
+      '409':
+        description: '`kind: terminal` on a host with no terminal configured (`UNSUPPORTED`).'
         content:
           application/json:
             schema:

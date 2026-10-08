@@ -1,6 +1,8 @@
 /** The lane settings, kept in `localStorage`. `local` runs basket and member without a terminal. */
 export interface Settings {
   readonly mode: 'terminal' | 'local';
+
+  /** The Nexo `POIID` passed through to the bridge's one terminal; blank uses the bridge's default. */
   readonly poiId: string;
   readonly saleId: string;
   readonly currency: string;
@@ -11,7 +13,7 @@ export const STORAGE_KEY = 'vanilla-ts.settings';
 
 export const DEFAULT_SETTINGS: Settings = {
   mode: 'terminal',
-  poiId: 'VictaLane-275839164',
+  poiId: '',
   saleId: 'LANE-3',
   currency: 'USD',
   storeLocation: 'STR-0142',

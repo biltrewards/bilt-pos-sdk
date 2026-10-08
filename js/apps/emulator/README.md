@@ -10,7 +10,7 @@ minimal as the integration guide's reference, this app is the place to try every
 ## Run it
 
 Start a host first: the [Terminal Bridge](../../../docs/terminal-bridge.md) on this machine
-(`./gradlew :bridge:run --args="--config /path/to/config.json"`; without terminals it still serves
+(`./gradlew :bridge:run --args="--config /path/to/config.json"`; without a terminal it still serves
 local sessions), or the Session Host alone. Then:
 
 ```sh
@@ -28,10 +28,11 @@ register does, with the port from the Settings tab.
 
 ## Configure
 
-The **Settings** tab holds the bridge port and route, the session mode (terminal or local), the
-terminal `poiId` picked from the bridge's `/health` terminal list (with a free-text field for one
-the bridge does not list), the sale id, currency and store location, and the retail-media
-widget toggle. Everything persists in `localStorage`; applying restarts the lane with the new
+The **Settings** tab holds the bridge port and route, the session mode (terminal or local), an
+optional `poiId`, the sale id, currency and store location, and the retail-media widget toggle.
+The bridge drives exactly one terminal, which the tab shows as `/health` reports it; the `poiId`
+does not pick a terminal but is passed through as the Nexo `POIID` (the bridge's default when
+blank) and recorded on each sale. Everything persists in `localStorage`; applying restarts the lane with the new
 options. The Settings tab is reachable in front of the install prompt too, since the port lives
 there.
 

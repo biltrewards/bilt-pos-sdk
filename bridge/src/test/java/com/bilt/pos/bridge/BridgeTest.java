@@ -35,15 +35,15 @@ class BridgeTest {
         file,
         "{\"port\": "
             + free
-            + ", \"terminals\": [{\"poiId\": \"T1\", \"host\": \"10.0.0.1\", \"trustAll\": true}]}");
+            + ", \"terminal\": {\"model\": \"VictaLane\", \"host\": \"10.0.0.1\","
+            + " \"trustAll\": true}}");
 
     try (Bridge bridge = new Bridge(new FileBridgeConfigSource(file))) {
       bridge.start();
       BridgeStatus status = bridge.status();
       assertEquals(free, status.port());
-      assertEquals(1, status.terminalCount());
-      assertEquals(List.of("T1"), bridge.terminalIds());
-      assertTrue(bridge.terminalClient("T1").isPresent());
+      assertTrue(status.terminalConfigured());
+      assertTrue(bridge.terminalClient().isPresent());
 
       HttpResponse<String> res =
           HttpClient.newHttpClient()
@@ -52,18 +52,19 @@ class BridgeTest {
                       .build(),
                   HttpResponse.BodyHandlers.ofString());
       assertEquals(200, res.statusCode());
-      assertTrue(res.body().contains("\"poiId\":\"T1\""), res.body());
+      assertTrue(res.body().contains("\"terminal\":{\"model\":\"VictaLane\"}"), res.body());
 
       Files.writeString(file, "{\"port\": \"oops\"}");
       bridge.reload();
       assertTrue(bridge.lastConfigError().isPresent());
-      assertEquals(1, bridge.status().terminalCount(), "previous config stays in force");
+      assertTrue(bridge.status().terminalConfigured(), "previous config stays in force");
 
       Files.writeString(
           file, "{\"port\": " + free + ", \"allowedOrigins\": [\"https://a.example\"]}");
       bridge.reload();
       assertTrue(bridge.lastConfigError().isEmpty());
-      assertEquals(0, bridge.status().terminalCount());
+      assertFalse(bridge.status().terminalConfigured());
+      assertTrue(bridge.terminalClient().isEmpty());
       assertEquals(List.of("https://a.example"), bridge.config().allowedOrigins());
     }
   }
@@ -77,7 +78,7 @@ class BridgeTest {
 
     assertTrue(Files.exists(file));
     assertEquals(BridgeConfig.DEFAULT_PORT, config.port());
-    assertEquals(1, config.terminals().size());
+    assertTrue(config.terminal().isPresent());
     assertTrue(Files.readString(file).contains("\"_comment\""));
   }
 
@@ -93,7 +94,7 @@ class BridgeTest {
         "{\"port\": "
             + free
             + ", \"allowedOrigins\": [\"https://a.example\"],"
-            + " \"terminals\": [{\"poiId\": \"T1\", \"host\": \"10.0.0.1\", \"trustAll\": true}]}");
+            + " \"terminal\": {\"host\": \"10.0.0.1\", \"trustAll\": true}}");
 
     try (Bridge bridge = new Bridge(new FileBridgeConfigSource(file))) {
       bridge.start();
@@ -102,7 +103,7 @@ class BridgeTest {
 
       assertFalse(Files.exists(file), "reload must not recreate the starter file");
       assertTrue(bridge.lastConfigError().isPresent());
-      assertEquals(List.of("T1"), bridge.terminalIds());
+      assertTrue(bridge.terminalClient().isPresent());
       assertEquals(List.of("https://a.example"), bridge.config().allowedOrigins());
     }
   }
@@ -144,7 +145,7 @@ class BridgeTest {
   void tightensAnExistingWorldReadableFile(@TempDir Path dir) throws Exception {
     assumeTrue(dir.getFileSystem().supportedFileAttributeViews().contains("posix"));
     Path file = dir.resolve("config.json");
-    Files.writeString(file, "{\"terminals\": []}");
+    Files.writeString(file, "{}");
     Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-r--r--"));
 
     new FileBridgeConfigSource(file).load();

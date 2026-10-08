@@ -113,7 +113,7 @@ export class TerminalShopperSessionImpl
 
   constructor(runtime: SessionRuntime, session: Session, options: TerminalSessionOptions) {
     super(runtime, session, options);
-    this.poiId = session.poiId ?? options.poiId;
+    this.poiId = session.poiId ?? options.poiId ?? '';
   }
 
   private operation<T>(request: OperationRequest, steps?: StepHandlers): Operation<T> {

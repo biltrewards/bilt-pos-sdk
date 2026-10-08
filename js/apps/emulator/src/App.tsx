@@ -16,7 +16,7 @@ import { LogPane } from './panes/LogPane';
 import { RefundsPane } from './panes/RefundsPane';
 import { SalePane } from './panes/SalePane';
 import { SettingsPane } from './panes/SettingsPane';
-import { bridgeOptions, laneKey, useSettings, type Settings } from './settings';
+import { bridgeOptions, describeSession, laneKey, useSettings, type Settings } from './settings';
 import { IndexedDbSaleStore, type SaleStore } from './store/sales-store';
 
 /** Where to send a cashier who has no bridge: the setup guide says where the installer is. */
@@ -106,9 +106,8 @@ export function App(props: AppProps): ReactNode {
         <div>
           <h1>Register emulator</h1>
           <p className="muted small">
-            Bilt POS SDK ·{' '}
-            {settings.mode === 'terminal' ? `terminal ${settings.poiId}` : 'local session'} · lane{' '}
-            {settings.saleId} · {settings.currency} · store {settings.storeLocation}
+            Bilt POS SDK · {describeSession(settings)} · lane {settings.saleId} ·{' '}
+            {settings.currency} · store {settings.storeLocation}
           </p>
         </div>
         <TabBar tab={tab} onSelect={setTab} />

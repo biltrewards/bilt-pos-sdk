@@ -102,12 +102,12 @@ export interface Engine {
   /** `GET /health`. */
   health(): Promise<Health>;
 
-  /** `GET /v1/terminals`. */
-  terminals(): Promise<readonly TerminalInfo[]>;
+  /** `GET /v1/terminal`; `null` when the host has no terminal configured. */
+  terminalInfo(): Promise<TerminalInfo | null>;
 
-  /** The session-less terminal operations. */
+  /** The session-less terminal operations; `poiId` only fills the Nexo header. */
   terminal<C extends TerminalCommand>(
-    poiId: string,
+    poiId: string | undefined,
     command: C,
     options?: RequestOptions,
   ): Promise<TerminalCommandResult<C>>;

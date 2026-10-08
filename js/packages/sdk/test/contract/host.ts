@@ -49,7 +49,6 @@ export function buildHost(location: HostLocation): void {
 }
 
 export interface TerminalSpec {
-  readonly poiId: string;
   readonly host: string;
   readonly port: number;
   readonly model?: string;
@@ -62,10 +61,10 @@ export interface RunningHost {
   stop(): Promise<void>;
 }
 
-/** Starts the host on an ephemeral port with the given plaintext terminals. */
+/** Starts the host on an ephemeral port, bridged to the given plaintext terminal if any. */
 export async function startHost(
   location: HostLocation,
-  terminals: readonly TerminalSpec[] = [],
+  terminal?: TerminalSpec,
 ): Promise<RunningHost> {
   const dir = mkdtempSync(join(tmpdir(), 'bilt-host-'));
   const config = join(dir, 'host.json');
@@ -73,14 +72,17 @@ export async function startHost(
     config,
     JSON.stringify({
       port: 0,
-      terminals: terminals.map((t) => ({
-        poiId: t.poiId,
-        host: t.host,
-        port: t.port,
-        tls: false,
-        encryption: false,
-        ...(t.model ? { model: t.model } : {}),
-      })),
+      ...(terminal
+        ? {
+            terminal: {
+              host: terminal.host,
+              port: terminal.port,
+              tls: false,
+              encryption: false,
+              ...(terminal.model ? { model: terminal.model } : {}),
+            },
+          }
+        : {}),
     }),
   );
   const child: ChildProcess = spawn(location.bin, [config], {

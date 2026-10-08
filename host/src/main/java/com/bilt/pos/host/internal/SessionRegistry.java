@@ -46,7 +46,8 @@ public final class SessionRegistry {
   private static final int ENDED_RETENTION = 100;
 
   private final SessionFactory factory;
-  private final TerminalClientProvider terminals;
+  private final TerminalClientProvider terminal;
+  private final String defaultPoiId;
   private final AdDecisionService adService;
   private final int replayCapacity;
   private final Duration replayWindow;
@@ -57,14 +58,16 @@ public final class SessionRegistry {
 
   public SessionRegistry(
       SessionFactory factory,
-      TerminalClientProvider terminals,
+      TerminalClientProvider terminal,
+      String defaultPoiId,
       AdDecisionService adService,
       int replayCapacity,
       Duration replayWindow,
       int idempotencyCapacity,
       Executor workers) {
     this.factory = factory;
-    this.terminals = terminals;
+    this.terminal = terminal;
+    this.defaultPoiId = defaultPoiId;
     this.adService = adService;
     this.replayCapacity = replayCapacity;
     this.replayWindow = replayWindow;
@@ -89,7 +92,21 @@ public final class SessionRegistry {
       throw HostError.badRequest("currency must be an ISO 4217 code");
     }
     String storeLocation = Json.text(body, "storeLocation");
-    String poiId = kind.equals("terminal") ? Json.requireText(body, "poiId") : null;
+    TerminalClient client = null;
+    String poiId = null;
+    if (kind.equals("terminal")) {
+      client = terminal.client();
+      if (client == null) {
+        throw HostError.unsupported(
+            "no terminal is configured on this host; only local sessions are available");
+      }
+      // the host has one terminal; poiId only fills the Nexo header and never selects one
+      String requested = Json.text(body, "poiId");
+      if (requested != null && requested.isEmpty()) {
+        throw HostError.badRequest("poiId must not be empty");
+      }
+      poiId = requested == null ? defaultPoiId : requested;
+    }
     boolean autoDisplay = Json.bool(body, "autoDisplay", true);
     Member member = Parsers.member(body.get("member"));
     ObjectNode context = Json.objectField(body, "context");
@@ -132,10 +149,6 @@ public final class SessionRegistry {
       }
       started = builder.start();
     } else {
-      TerminalClient client = terminals.forPoi(poiId);
-      if (client == null) {
-        throw HostError.notFound("terminal " + poiId);
-      }
       TerminalShopperSession.Builder builder =
           factory
               .newTerminalSession()

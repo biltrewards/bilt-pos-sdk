@@ -6,9 +6,9 @@ health:
     description: |
       Unauthenticated. The install prompt in the JavaScript SDK polls this to detect a bridge,
       and every client reads it once to check that the host speaks the protocol version it was
-      generated from. The terminal list is what the host knows from its configuration;
-      `reachable` is a cached view, not a probe — use `POST /v1/terminals/{poiId}/diagnose` for
-      a live check.
+      generated from. `terminal` is the one terminal the host was configured with, absent when
+      it has none; `reachable` is a cached view, not a probe — use `POST /v1/terminal/diagnose`
+      for a live check.
     security: []
     responses:
       '200':
@@ -21,8 +21,8 @@ health:
               host: bridge
               hostVersion: 0.1.0
               sdkVersion: 0.30.0
-              protocolVersions: ['1']
-              terminals:
-                - poiId: VictaLane-275839164
-                  model: VictaLane
-                  reachable: true
+              protocolVersions: ['2']
+              terminal:
+                label: Lane 3
+                model: VictaLane
+                reachable: true

@@ -149,7 +149,7 @@ export type ReversalResult = RefundResult | VoidResult;
 export interface TerminalShopperSession extends ShopperSession {
   readonly kind: 'terminal';
 
-  /** The terminal identifier, sent as `POIID`. */
+  /** The Nexo `POIID` the session's messages carry: the one it was started with, or the host's default. */
   readonly poiId: string;
 
   /**

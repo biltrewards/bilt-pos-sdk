@@ -23,13 +23,12 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function health(versions: string[] = ['1']) {
+function health(versions: string[] = ['2']) {
   return {
     host: 'bridge',
     hostVersion: '0.1',
     sdkVersion: '0.30',
     protocolVersions: versions,
-    terminals: [],
   };
 }
 
@@ -126,7 +125,7 @@ describe('localBridge', () => {
     expect(error).toBeInstanceOf(BridgeOutdatedError);
     expect(error).toBeInstanceOf(EngineOutdatedError);
     expect(error).toMatchObject({
-      required: '1',
+      required: '2',
       available: ['0'],
       baseUrl: 'http://127.0.0.1:48333',
     });
@@ -201,8 +200,10 @@ describe('BridgeEngine over HTTP', () => {
     expect(calls.at(-1)).toMatchObject({ init: { method: 'PATCH', body: '{"quantity":0}' } });
     await e.terminal('P', { kind: 'totals', storeLocation: 'STR' });
     expect(calls.at(-1)!.url).toBe(
-      'http://127.0.0.1:48333/v1/terminals/P/totals?storeLocation=STR',
+      'http://127.0.0.1:48333/v1/terminal/totals?poiId=P&storeLocation=STR',
     );
+    await e.terminal(undefined, { kind: 'diagnose' });
+    expect(calls.at(-1)!.url).toBe('http://127.0.0.1:48333/v1/terminal/diagnose');
     await e.widgetAction('s1', 'retail-media', { kind: 'viewed', creativeId: 'c', placement: 'p' });
     expect(calls.at(-1)!.url).toMatch(/\/widgets\/retail-media\/actions$/);
   });

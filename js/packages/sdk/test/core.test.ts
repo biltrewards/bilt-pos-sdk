@@ -14,9 +14,9 @@ describe('BiltPos.connect', () => {
     const engine = new MockEngine();
     const factory = vi.fn(() => engine);
     const pos = await BiltPos.connect(factory);
-    expect(factory).toHaveBeenCalledWith({ sdkVersion: expect.any(String), protocolVersion: '1' });
+    expect(factory).toHaveBeenCalledWith({ sdkVersion: expect.any(String), protocolVersion: '2' });
     expect(pos.capabilities).toBe(engine.capabilities);
-    expect((await pos.health()).protocolVersions).toEqual(['1']);
+    expect((await pos.health()).protocolVersions).toEqual(['2']);
     await pos.close();
   });
 
@@ -27,7 +27,6 @@ describe('BiltPos.connect', () => {
       hostVersion: '0',
       sdkVersion: '0',
       protocolVersions: ['0'],
-      terminals: [],
     });
     const close = vi.spyOn(engine, 'close');
     await expect(connect(engine)).rejects.toBeInstanceOf(EngineOutdatedError);

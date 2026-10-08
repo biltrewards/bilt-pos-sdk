@@ -55,7 +55,7 @@ describe('the Log pane', () => {
       engine: { name: string };
       log: unknown[];
     };
-    expect(diagnostics.settings.poiId).toBe('VictaLane-275839164');
+    expect(diagnostics.settings.poiId).toBe('');
     expect(diagnostics.engine.name).toBe('mock');
     expect(diagnostics.log.length).toBeGreaterThan(4);
 

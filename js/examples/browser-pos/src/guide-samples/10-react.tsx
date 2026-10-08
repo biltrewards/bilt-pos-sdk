@@ -49,7 +49,6 @@ export function Register(): ReactNode {
 function Lane(): ReactNode {
   const { session, status, error, restart } = useTerminalSession({
     saleId: 'LANE-3',
-    poiId: 'VictaLane-275839164',
     currency: 'USD',
     storeLocation: 'STR-0142',
     widgets: [{ type: 'retail-media', placements: ['lane-banner'] }],
