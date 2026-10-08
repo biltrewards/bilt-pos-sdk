@@ -13,6 +13,7 @@ import {
 } from '../src/emulator/returns';
 import { defaultReversalDecision, reversalProgress } from '../src/store/reversals';
 import {
+  isFullyRefunded,
   originalSaleRecord,
   remainingLegAmount,
   toSaleRecord,
@@ -152,6 +153,13 @@ describe('return and refund plans', () => {
       awardPoiTransactionId: 'POI-AW-1',
       memberId: '98234',
     });
+  });
+
+  it('keeps a sale refundable when a stopped void reversed only its gift-card load', () => {
+    const progress = reversalProgress(stored, [
+      { step: 'STORED_VALUE_LOAD', poiTransactionId: 'POI-SV-LOAD-1' },
+    ]);
+    expect(isFullyRefunded({ ...stored, refunds: progress })).toBe(false);
   });
 
   it('refuses an item return of a sale with a gift-card purchase', () => {

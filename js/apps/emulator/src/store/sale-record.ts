@@ -123,7 +123,14 @@ export function legRefunded(stored: StoredSale, type: LegType): boolean {
 }
 
 export function isFullyRefunded(stored: StoredSale): boolean {
-  if (stored.refunds.some((refund) => refund.full && refund.leg === undefined)) return true;
+  // A stopped void's per-load progress record is full but legless too; it is not the whole sale.
+  if (
+    stored.refunds.some(
+      (refund) => refund.full && refund.leg === undefined && !refund.reversalProgress,
+    )
+  ) {
+    return true;
+  }
   const legs = moneyLegs(stored.sale);
   return legs.length > 0 && legs.every((leg) => legRefunded(stored, leg.type));
 }
