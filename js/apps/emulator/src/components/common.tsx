@@ -132,17 +132,59 @@ export function Dialog({
   onDismiss?: () => void;
 }): ReactNode {
   const ref = useRef<HTMLDivElement>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
+
+  // Modal behaviour: the page behind is inert, Tab cycles inside the dialog, and focus returns to
+  // the control that opened it.
   useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const inerted: Element[] = [];
+    for (let node = backdrop.current; node?.parentElement; node = node.parentElement) {
+      for (const sibling of Array.from(node.parentElement.children)) {
+        if (sibling !== node && !sibling.hasAttribute('inert')) {
+          sibling.setAttribute('inert', '');
+          inerted.push(sibling);
+        }
+      }
+    }
     ref.current?.focus();
-    if (!onDismiss) return;
+    return () => {
+      inerted.forEach((element) => element.removeAttribute('inert'));
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onDismiss();
+      if (event.key === 'Escape') onDismiss?.();
+      if (event.key !== 'Tab' || !ref.current) return;
+      const focusable = Array.from(
+        ref.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) {
+        event.preventDefault();
+        ref.current.focus();
+      } else if (event.shiftKey && (document.activeElement === first || document.activeElement === ref.current)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (!ref.current.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onDismiss]);
+
   return (
-    <div className="backdrop" onClick={onDismiss}>
+    <div ref={backdrop} className="backdrop" onClick={onDismiss}>
       <div
         ref={ref}
         className="dialog"
