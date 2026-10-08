@@ -168,7 +168,10 @@ export function Dialog({
       if (!first || !last) {
         event.preventDefault();
         ref.current.focus();
-      } else if (event.shiftKey && (document.activeElement === first || document.activeElement === ref.current)) {
+      } else if (
+        event.shiftKey &&
+        (document.activeElement === first || document.activeElement === ref.current)
+      ) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && document.activeElement === last) {
