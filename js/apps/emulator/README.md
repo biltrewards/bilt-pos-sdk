@@ -70,7 +70,7 @@ bridge's default when blank) and recorded on each sale.
 ## Using it
 
 The page probes the bridge and connects once it answers. **Start Checkout** opens one session per
-customer (with **Identify**, the terminal prompts for loyalty sign-in right after); **End Checkout**
+customer (with **Identify**, the terminal prompts for loyalty sign-in right after; with **Read VAS** that prompt also accepts a tapped Apple Wallet pass and the card shows what was read); **End Checkout**
 closes it, and a fully collected settlement ends it automatically. **Loyalty Sign-In** prompts again
 on demand, **Clear basket** discards every line with its pending gift-card loads and returns, and
 **Abort operation** stops whatever is on the terminal (or answers an open recovery prompt with
