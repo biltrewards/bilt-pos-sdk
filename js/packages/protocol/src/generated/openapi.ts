@@ -1198,9 +1198,50 @@ export interface components {
             loyaltyBrand?: string;
             rewards: components["schemas"]["Reward"][];
             pointBalance: number;
+            /**
+             * @description Value Added Services data the terminal read from a mobile wallet pass the shopper tapped
+             *     (e.g. an Apple Wallet loyalty pass). Omitted when the terminal returned none. The pass
+             *     payload stays encrypted; nothing in the chain decrypts it.
+             */
+            vasData?: components["schemas"]["VasData"];
+        };
+        /**
+         * @description Mirrors the Java `VasData`. The terminal forwards what its payment SDK reports, unmodified;
+         *     `encryptedData` is meant to be decrypted only by whoever holds the merchant's VAS private
+         *     key. When the terminal could not break its report into fields, only `raw` is set.
+         */
+        VasData: {
+            /** @description Wallet that supplied the pass, e.g. `"ApplePay"`. */
+            source?: string;
+            /** @description VAS merchant ID the terminal requested the pass with. */
+            merchantId?: string;
+            /** @description One entry per pass returned. Never null; may be empty. */
+            services: components["schemas"]["VasService"][];
+            /** @description The terminal's unparsed VAS report; set only when it could not be broken into fields. */
+            raw?: string;
+        };
+        /** @description One pass returned in a `VasData` read. */
+        VasService: {
+            /** @description Pass type identifier, e.g. `"pass.com.biltrewards.loyalty"`. */
+            serviceId?: string;
+            /** @description Service type the terminal reports, e.g. `"Coupon1"`. */
+            serviceType?: string;
+            /** @description ISO 7816 status word of the pass read, e.g. `"9000"`. */
+            statusWord?: string;
+            /** @description Encrypted pass payload as hex. */
+            encryptedData?: string;
+            /** @description Timestamp used in the pass encryption, as hex. */
+            cipherTimestamp?: string;
         };
         /** @description Options for the terminal-prompted identification. Defaults are any entry mode, any brand, member required. */
         IdentifyOptions: {
+            /**
+             * @description Restricts how the identifier is captured. This is also how a client requests a wallet
+             *     pass (VAS) read: the terminal lets the shopper tap a pass whenever `KEYED` is not the
+             *     only allowed mode, so omit the option, or leave `KEYED` out of it, to read a pass;
+             *     `["KEYED"]` shows the on-screen entry only and returns no `vasData`. There is no
+             *     separate VAS flag; the host passes the modes through as `ForceEntryMode`.
+             */
             forceEntryModes?: components["schemas"]["ForceEntryMode"][];
             allowedLoyaltyBrands?: string[];
             /**

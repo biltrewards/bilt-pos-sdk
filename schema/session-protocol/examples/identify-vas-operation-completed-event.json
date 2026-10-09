@@ -1,0 +1,33 @@
+{
+  "seq": 6,
+  "at": "2026-10-06T14:04:02.318Z",
+  "type": "operation.completed",
+  "payload": {
+    "id": "op_01J9Q2K4H6J7K8M9N0P1Q2R3S4",
+    "type": "identifyMember",
+    "status": "succeeded",
+    "createdAt": "2026-10-06T14:03:51.200Z",
+    "startedAt": "2026-10-06T14:03:51.205Z",
+    "completedAt": "2026-10-06T14:04:02.316Z",
+    "result": {
+      "status": "FOUND",
+      "memberId": "mbr_8f2a",
+      "loyaltyBrand": "Bilt",
+      "rewards": [],
+      "pointBalance": 1200,
+      "vasData": {
+        "source": "ApplePay",
+        "merchantId": "VerifoneTestRix2",
+        "services": [
+          {
+            "serviceId": "pass.com.biltrewards.loyalty",
+            "serviceType": "Coupon1",
+            "statusWord": "9000",
+            "encryptedData": "8ff4b4de0c11a7",
+            "cipherTimestamp": "3006a261"
+          }
+        ]
+      }
+    }
+  }
+}
