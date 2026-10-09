@@ -142,6 +142,12 @@ kind `TOTAL_REQUIRED`; answer it with `{"stepId":"...","total":"89.50"}` or let
 the deadline apply the suggested total. Leave `handledSteps` out to take every
 default without being asked.
 
+`identifyMember` takes `options.forceEntryModes` (names of the SDK's
+`ForceEntryMode`) and passes them straight to the terminal; leave it unset, or
+omit `KEYED`, and the terminal may read an Apple Wallet pass. A pass comes back
+as `result.vasData` (`services[]`, plus `source`, `merchantId` and `raw` when the
+terminal reported them), still encrypted; the key is absent when there is none.
+
 ## What this iteration leaves out
 
 - Authentication and pairing: `HostAuth.permitAll()` is the only policy;
