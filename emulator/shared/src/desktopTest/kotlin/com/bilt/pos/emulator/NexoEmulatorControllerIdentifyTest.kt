@@ -15,6 +15,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
@@ -55,6 +56,14 @@ class NexoEmulatorControllerIdentifyTest {
             """{"SaleToPOIResponse":{"CardAcquisitionResponse":{
                 "Response":{"Result":"Failure","ErrorCondition":"Cancel"}}}}"""
 
+        /**
+         * The `vas` object a terminal adds to the rewards payload when a wallet pass was tapped.
+         */
+        const val VAS_JSON =
+            """{"source":"ApplePay","merchantId":"VerifoneTestRix2","services":[
+                {"serviceId":"pass.com.biltrewards.loyalty","serviceType":"Coupon1",
+                 "statusWord":"9000","encryptedData":"8ff4b4de","cipherTimestamp":"3006a261"}]}"""
+
         /** No member matched what was keyed — an affirmative answer, unlike a cancel. */
         const val CARD_ACQUISITION_NOT_FOUND =
             """{"SaleToPOIResponse":{"CardAcquisitionResponse":{
@@ -72,10 +81,12 @@ class NexoEmulatorControllerIdentifyTest {
     /**
      * The rewards payload rides in `AdditionalResponse` as Base64 JSON, as the terminal sends it.
      */
-    private fun cardAcquisitionFound(memberId: String): String {
+    private fun cardAcquisitionFound(memberId: String, vasJson: String? = null): String {
         val rewards =
             """{"rewards":[{"rewardRef":"rwd:RWD-1","type":"reward","name":"${'$'}10 Off",""" +
-                """"expirationDate":"2026-12-31T00:00:00Z"}],"rewardCount":1}"""
+                """"expirationDate":"2026-12-31T00:00:00Z"}],"rewardCount":1""" +
+                (vasJson?.let { ""","vas":$it""" } ?: "") +
+                "}"
         val encoded = Base64.getEncoder().encodeToString(rewards.toByteArray())
         return """{"SaleToPOIResponse":{"CardAcquisitionResponse":{
                 "Response":{"Result":"Success","AdditionalResponse":"$encoded"},
@@ -192,6 +203,148 @@ class NexoEmulatorControllerIdentifyTest {
             // the claim is released, so the next operation can run
             controller.identifyMember()
             withTimeout(10_000) { controller.state.first { cardAcquisitions.size == 2 } }
+        }
+    }
+
+    @Test
+    fun vasModeLeavesTheEntryModeOpenAndPublishesThePassData() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"CardAcquisitionRequest\"" in body) {
+                cardAcquisitionFound("pass-123", vasJson = VAS_JSON)
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller()
+        runBlocking {
+            controller.connectAndStartCheckout()
+            controller.identifyMember(readVas = true)
+            val member =
+                withTimeout(10_000) {
+                    controller.state.first { it.member != null && !it.identifyInProgress }.member
+                }
+
+            // still Required, but no Keyed, or the terminal never reads a pass
+            val request = cardAcquisitions.single()
+            assertTrue("\"LoyaltyHandling\":\"Required\"" in request, request)
+            assertTrue("ForceEntryMode" !in request, request)
+
+            val vas = assertNotNull(assertIsFound(member).vas)
+            assertEquals("ApplePay", vas.source)
+            assertEquals("VerifoneTestRix2", vas.merchantId)
+            val service = vas.services.single()
+            assertEquals("pass.com.biltrewards.loyalty", service.serviceId)
+            assertEquals("Coupon1", service.serviceType)
+            assertEquals("9000", service.statusWord)
+            assertEquals("8ff4b4de", service.encryptedData)
+            assertEquals("3006a261", service.cipherTimestamp)
+            assertTrue(
+                controller.state.value.events.any { "VAS: pass.com.biltrewards.loyalty" in it },
+                "the pass read belongs in the log",
+            )
+            // the raw value, for decrypting the pass off-line
+            val raw = controller.vasLogLines().single()
+            assertTrue("VerifoneTestRix2" in String(Base64.getDecoder().decode(raw)))
+        }
+    }
+
+    @Test
+    fun vasModeOffKeepsTheKeyedFormAndCarriesNoVas() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"CardAcquisitionRequest\"" in body) {
+                cardAcquisitionFound("98234")
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller()
+        runBlocking {
+            controller.connectAndStartCheckout()
+            controller.identifyMember()
+            val member =
+                withTimeout(10_000) {
+                    controller.state.first { it.member != null && !it.identifyInProgress }.member
+                }
+            assertTrue("\"ForceEntryMode\":[\"Keyed\"]" in cardAcquisitions.single())
+            assertNull(assertIsFound(member).vas)
+            assertTrue(controller.vasLogLines().isEmpty())
+        }
+    }
+
+    /** No CardAcquisitionResponse payload at all: the prompt still reports there was nothing. */
+    @Test
+    fun vasModeWithoutAnAdditionalResponseSaysThereWasNoData() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"CardAcquisitionRequest\"" in body) {
+                CARD_ACQUISITION_CANCELLED
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller()
+        runBlocking {
+            controller.connectAndStartCheckout()
+            controller.identifyMember(readVas = true)
+            withTimeout(10_000) {
+                controller.state.first { cardAcquisitions.size == 1 && !it.identifyInProgress }
+            }
+            assertEquals(listOf("No encrypted VAS data"), controller.vasLogLines())
+        }
+    }
+
+    /** The values after each "VAS AdditionalResponse: " event, newest last. */
+    private fun NexoEmulatorController.vasLogLines(): List<String> =
+        state.value.events
+            .filter { "VAS AdditionalResponse: " in it }
+            .map { it.substringAfter("VAS AdditionalResponse: ") }
+
+    @Test
+    fun vasModeOnStartRidesTheStartCheckoutPrompt() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"CardAcquisitionRequest\"" in body) {
+                cardAcquisitionFound("pass-123", vasJson = VAS_JSON)
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller()
+        runBlocking {
+            controller.connect("127.0.0.1", encryptionEnabled = false)
+            withTimeout(10_000) {
+                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
+            }
+            controller.startSession(identifyOnStart = true, readVas = true)
+            val member =
+                withTimeout(10_000) {
+                    controller.state.first { it.member != null && !it.identifyInProgress }.member
+                }
+            assertTrue("ForceEntryMode" !in cardAcquisitions.single())
+            assertNotNull(assertIsFound(member).vas)
+        }
+    }
+
+    @Test
+    fun unparsedVasReportSurfacesAsRaw() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"CardAcquisitionRequest\"" in body) {
+                cardAcquisitionFound("pass-123", vasJson = """{"raw":"9000 deadbeef"}""")
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller()
+        runBlocking {
+            controller.connectAndStartCheckout()
+            controller.identifyMember(readVas = true)
+            val member =
+                withTimeout(10_000) {
+                    controller.state.first { it.member != null && !it.identifyInProgress }.member
+                }
+            val vas = assertNotNull(assertIsFound(member).vas)
+            assertEquals("9000 deadbeef", vas.raw)
+            assertTrue(vas.services.isEmpty())
+            assertTrue(vas.lines.any { "9000 deadbeef" in it })
+            assertEquals(listOf("No encrypted VAS data"), controller.vasLogLines())
         }
     }
 

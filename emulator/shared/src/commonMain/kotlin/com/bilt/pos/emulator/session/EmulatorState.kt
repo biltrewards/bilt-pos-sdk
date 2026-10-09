@@ -165,6 +165,54 @@ data class MemberRewardUi(
 )
 
 /**
+ * Apple Wallet Value Added Services data the terminal read from a tapped pass, as the SDK reports
+ * it: the pass payload is still encrypted with the merchant's VAS key.
+ */
+data class VasUi(
+    val source: String? = null,
+    val merchantId: String? = null,
+    val services: List<VasServiceUi> = emptyList(),
+    /** The terminal's unparsed report, set only when it could not be broken into fields. */
+    val raw: String? = null,
+) {
+    /**
+     * One line per fact, for the sign-in card and the log. The raw report goes last: it can be
+     * arbitrarily long, and the card clips its lines, so it must not push the services out of view.
+     */
+    val lines: List<String>
+        get() =
+            listOfNotNull(
+                listOfNotNull(source, merchantId?.let { "merchant $it" })
+                    .joinToString(" · ")
+                    .ifBlank { null }
+            ) + services.map { it.line } + listOfNotNull(raw?.let { "raw report: $it" })
+}
+
+/** One pass returned in a [VasUi] read. */
+data class VasServiceUi(
+    val serviceId: String?,
+    val serviceType: String?,
+    val statusWord: String?,
+    val encryptedData: String?,
+    val cipherTimestamp: String?,
+) {
+    val line: String
+        get() =
+            listOfNotNull(
+                    serviceId ?: "(no serviceId)",
+                    serviceType,
+                    statusWord?.let { "status $it" },
+                    encryptedData?.let {
+                        // the payload is opaque without the merchant key, so
+                        // a prefix identifies it and the size shows it arrived whole
+                        "data ${it.take(16)}${if (it.length > 16) "…" else ""} (${it.length / 2} bytes)"
+                    },
+                    cipherTimestamp?.let { "timestamp $it" },
+                )
+                .joinToString(" · ")
+}
+
+/**
  * The terminal's answer to a loyalty sign-in, kept for the rest of the checkout so the operator can
  * read it after the prompt closes.
  */
@@ -190,6 +238,8 @@ sealed interface MemberIdentity {
          * account settlement will actually use rather than how the last attempt went.
          */
         val retained: Boolean = false,
+        /** What the terminal read from a tapped wallet pass; null when none was read. */
+        val vas: VasUi? = null,
     ) : MemberIdentity {
         override val headline: String
             get() =
@@ -405,9 +455,10 @@ interface EmulatorController {
      * Start a new checkout session (terminal Start bracket) on the connection. With
      * [identifyOnStart], the terminal prompts for member identification right after the start
      * acknowledges — its own operation, not part of the bracket; a failed or declined prompt
-     * degrades to a guest checkout.
+     * degrades to a guest checkout. With [readVas] that prompt lets the shopper tap a wallet pass
+     * (see [identifyMember]).
      */
-    fun startSession(identifyOnStart: Boolean = false)
+    fun startSession(identifyOnStart: Boolean = false, readVas: Boolean = false)
 
     /** End the active checkout session (terminal End bracket). */
     fun endSession()
@@ -496,9 +547,11 @@ interface EmulatorController {
      * Prompt the customer to sign in to loyalty on the terminal — the same member identification
      * [startSession] can run, offered on demand so it can follow a declined or mistyped first
      * attempt without restarting the checkout. Requires an active checkout session; the terminal's
-     * answer lands in [EmulatorState.member].
+     * answer lands in [EmulatorState.member]. By default only the keyed entry form is offered; with
+     * [readVas] the terminal also accepts a tapped Apple Wallet pass, and the VAS data it reads
+     * lands in [MemberIdentity.Found.vas].
      */
-    fun identifyMember()
+    fun identifyMember(readVas: Boolean = false)
 
     /**
      * Read a card on the terminal (nexo CardAcquisition request) without charging it. A read that

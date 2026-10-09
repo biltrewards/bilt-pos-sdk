@@ -37,6 +37,7 @@ import com.bilt.pos.session.identity.IdentifyStatus
 import com.bilt.pos.session.identity.Member
 import com.bilt.pos.session.identity.Reward
 import com.bilt.pos.session.identity.RewardType
+import com.bilt.pos.session.identity.VasData
 import com.bilt.pos.session.settlement.ExternalPayment
 import com.bilt.pos.session.settlement.OriginalSaleRecord
 import com.bilt.pos.session.settlement.RefundAllocation
@@ -49,12 +50,14 @@ import com.bilt.pos.session.settlement.SettlementType
 import com.bilt.pos.session.settlement.StoredValueLoad
 import com.bilt.pos.session.settlement.StoredValueLoadRecord
 import com.bilt.pos.session.storedvalue.StoredValueCard
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
@@ -257,6 +260,35 @@ class NexoEmulatorController(
     override val state: StateFlow<EmulatorState> = _state.asStateFlow()
 
     private val nexoLogMapper = ObjectMapper()
+
+    /**
+     * True while a Read VAS sign-in prompt is on the wire, so the Nexo listener knows which
+     * response carries the encrypted VAS data the SDK does not expose raw.
+     */
+    @Volatile private var vasPromptActive = false
+
+    /** The last Read VAS response's `AdditionalResponse`, held until the prompt completes. */
+    @Volatile private var vasAdditionalResponse: String? = null
+
+    /**
+     * Logged once when the prompt completes rather than when the response arrives, so a prompt that
+     * ends without any response (cancelled, timed out) still says there was nothing.
+     */
+    private fun logVasAdditionalResponse() {
+        val raw = vasAdditionalResponse?.takeIf { it.isNotBlank() }
+        vasAdditionalResponse = null
+        val hasEncryptedData =
+            raw != null &&
+                runCatching {
+                        nexoLogMapper
+                            .readTree(Base64.getDecoder().decode(raw))
+                            .path("vas")
+                            .path("services")
+                            .any { it.path("encryptedData").asText("").isNotEmpty() }
+                    }
+                    .getOrDefault(false)
+        log("VAS AdditionalResponse: ${if (hasEncryptedData) raw else "No encrypted VAS data"}")
+    }
 
     @Volatile private var connection: Connection? = null
 
@@ -644,7 +676,7 @@ class NexoEmulatorController(
         }
     }
 
-    override fun startSession(identifyOnStart: Boolean) {
+    override fun startSession(identifyOnStart: Boolean, readVas: Boolean) {
         val conn =
             connection
                 ?: run {
@@ -702,7 +734,7 @@ class NexoEmulatorController(
                 }
                 log("Checkout session started (id ${started.sessionId})")
                 if (identifyOnStart) {
-                    runIdentifyPrompt(conn, started)
+                    runIdentifyPrompt(conn, started, readVas)
                 } else {
                     refreshCustomerDisplay(started)
                 }
@@ -1148,14 +1180,14 @@ class NexoEmulatorController(
         }
     }
 
-    override fun identifyMember() {
+    override fun identifyMember(readVas: Boolean) {
         val conn = connection
         val session = conn?.session
         if (conn == null || session == null) {
             log("No active checkout session — press Start Checkout first")
             return
         }
-        runIdentifyPrompt(conn, session)
+        runIdentifyPrompt(conn, session, readVas)
     }
 
     /**
@@ -1163,7 +1195,11 @@ class NexoEmulatorController(
      * it, and on demand from the Loyalty Sign-In button. Always its own operation, never part of
      * the bracket; a failed or declined prompt leaves the checkout without a member.
      */
-    private fun runIdentifyPrompt(conn: Connection, session: TerminalShopperSession) {
+    private fun runIdentifyPrompt(
+        conn: Connection,
+        session: TerminalShopperSession,
+        readVas: Boolean,
+    ) {
         // Claimed like pay/acquireCard: without the claim, a Pay tapped
         // during the prompt would queue behind it on the session's
         // operation thread — and an abort would cancel only the prompt
@@ -1176,12 +1212,17 @@ class NexoEmulatorController(
         // A re-run starts from a blank card rather than leaving the previous
         // answer on screen while the terminal collects the next one
         _state.update { it.copy(identifyInProgress = true, member = null) }
-        log("Loyalty sign-in on the terminal…")
-        // The terminal's keyed loyalty capture engages only with
-        // ForceEntryMode=Keyed; without it the terminal waits on the card
-        // reader instead of showing the input form
+        log(
+            if (readVas) {
+                "Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…"
+            } else {
+                "Loyalty sign-in on the terminal…"
+            }
+        )
+        vasAdditionalResponse = null
+        vasPromptActive = readVas
         session
-            .identifyMember(IdentifyOptions.builder().forceEntryMode(ForceEntryMode.KEYED).build())
+            .identifyMember(identifyOptions(readVas))
             .onSuccess { outcome ->
                 // a checkout that ended under a late-arriving prompt owns
                 // neither the card nor the display any more
@@ -1194,6 +1235,10 @@ class NexoEmulatorController(
                 error.cause?.let { detailedLog(it.stackTraceToString()) }
             }
             .onComplete {
+                if (readVas) {
+                    vasPromptActive = false
+                    logVasAdditionalResponse()
+                }
                 conn.operationClaimed.set(false)
                 if (connection !== conn) return@onComplete
                 _state.update { it.copy(identifyInProgress = false) }
@@ -1204,6 +1249,20 @@ class NexoEmulatorController(
             }
             .execute()
     }
+
+    /**
+     * The terminal's keyed loyalty capture engages only with ForceEntryMode=Keyed; without it the
+     * terminal waits on the card reader instead of showing the input form. Keyed is also the one
+     * mode that keeps a wallet pass from being read, so VAS mode leaves the entry mode unforced.
+     */
+    private fun identifyOptions(readVas: Boolean): IdentifyOptions =
+        IdentifyOptions.builder()
+            .apply {
+                if (!readVas) {
+                    forceEntryMode(ForceEntryMode.KEYED)
+                }
+            }
+            .build()
 
     /**
      * Report the sign-in as the account the checkout will actually settle against, which is not the
@@ -1223,10 +1282,11 @@ class NexoEmulatorController(
         when (identity) {
             is MemberIdentity.Found ->
                 log(
-                    "Member identified: ${identity.headline}, " +
-                        (identity.pointBalance?.let { "$it pts, " } ?: "") +
-                        "${identity.rewards.size} reward(s)"
-                )
+                        "Member identified: ${identity.headline}, " +
+                            (identity.pointBalance?.let { "$it pts, " } ?: "") +
+                            "${identity.rewards.size} reward(s)"
+                    )
+                    .also { identity.vas?.lines?.forEach { log("VAS: $it") } }
             is MemberIdentity.Absent -> log("${identity.headline} — loyalty steps will be skipped")
             // either an Absent/Failed with no member left attached, or a
             // Success the emulator could not read; the headline covers the
@@ -1253,6 +1313,7 @@ class NexoEmulatorController(
                         // "not reported", not a member with nothing banked
                         pointBalance = pointBalance.takeIf { it > 0 },
                         rewards = rewards.map { it.toUi() },
+                        vas = vasData?.toUi(),
                     )
                 } ?: MemberIdentity.Failed("The terminal reported a member with no loyalty id")
             IdentifyStatus.NOT_FOUND -> MemberIdentity.Absent(Reason.NOT_FOUND)
@@ -1274,6 +1335,23 @@ class NexoEmulatorController(
                 rewards = rewards().map { it.toUi() },
             )
         }
+
+    private fun VasData.toUi() =
+        VasUi(
+            source = source,
+            merchantId = merchantId,
+            services =
+                services.map {
+                    VasServiceUi(
+                        serviceId = it.serviceId,
+                        serviceType = it.serviceType,
+                        statusWord = it.statusWord,
+                        encryptedData = it.encryptedData,
+                        cipherTimestamp = it.cipherTimestamp,
+                    )
+                },
+            raw = raw,
+        )
 
     private fun Reward.toUi() =
         MemberRewardUi(
@@ -2923,12 +3001,17 @@ class NexoEmulatorController(
     }
 
     private fun nexoLog(direction: NexoMessageListener.Direction, json: String) {
+        val tree =
+            if (json.isBlank()) null else runCatching { nexoLogMapper.readTree(json) }.getOrNull()
         val payload =
             if (json.isBlank()) {
                 "<empty response>"
             } else {
-                runCatching { nexoLogMapper.readTree(json).toPrettyString() }.getOrDefault(json)
+                tree?.toPrettyString() ?: json
             }
+        if (vasPromptActive && direction == NexoMessageListener.Direction.RESPONSE) {
+            tree?.let(::cardAcquisitionAdditionalResponse)?.let { vasAdditionalResponse = it }
+        }
         val arrow = if (direction == NexoMessageListener.Direction.REQUEST) "→" else "←"
         val stamped = "${timestamp()} $arrow ${direction.name}\n$payload"
         _state.update {
@@ -2939,3 +3022,16 @@ class NexoEmulatorController(
     private fun timestamp(): String =
         java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))
 }
+
+/**
+ * The `AdditionalResponse` of a CardAcquisition response, from either shape the Nexo listener
+ * reports: the wire envelope with its `SaleToPOIResponse` wrapper (unencrypted), or the decrypted
+ * body, which is the wrapper's content with no wrapper of its own (encrypted).
+ */
+internal fun cardAcquisitionAdditionalResponse(tree: JsonNode): String? =
+    (tree.path("SaleToPOIResponse").takeIf { !it.isMissingNode } ?: tree)
+        .path("CardAcquisitionResponse")
+        .path("Response")
+        .path("AdditionalResponse")
+        .takeIf { it.isTextual }
+        ?.asText()

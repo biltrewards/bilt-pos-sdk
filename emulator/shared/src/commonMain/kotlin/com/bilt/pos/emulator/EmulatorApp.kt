@@ -732,6 +732,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
     var encryptionOn by rememberSaveable { mutableStateOf(state.encryptionEnabled) }
     var passphrase by remember { mutableStateOf("") }
     var identifyOnStart by rememberSaveable { mutableStateOf(false) }
+    var readVas by rememberSaveable { mutableStateOf(false) }
 
     // Adopt the autodetected address unless the operator already typed one
     LaunchedEffect(state.terminalAddress, state.addressAutodetected) {
@@ -837,7 +838,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                             if (sessionActive) {
                                 controller.endSession()
                             } else {
-                                controller.startSession(identifyOnStart)
+                                controller.startSession(identifyOnStart, readVas)
                             }
                         },
                         enabled = connected,
@@ -851,7 +852,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                 // can sign in again without restarting the checkout
                 val signInButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
-                        onClick = { controller.identifyMember() },
+                        onClick = { controller.identifyMember(readVas) },
                         enabled = state.canOperate,
                         colors = ButtonDefaults.filledTonalButtonColors(),
                         modifier = modifier,
@@ -869,6 +870,14 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                             enabled = state.sessionId == null,
                         )
                         Text("Identify", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                // Applies to every sign-in prompt, at Start Checkout or from
+                // the button, so it stays enabled mid-checkout
+                val vasToggle: @Composable () -> Unit = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = readVas, onCheckedChange = { readVas = it })
+                        Text("Read VAS", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 // Aborts whatever is on the terminal (payment, identify
@@ -912,6 +921,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         }
                         connectButton(Modifier.fillMaxWidth())
                         identifyToggle()
+                        vasToggle()
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -961,6 +971,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                             sessionButton(Modifier)
                             signInButton(Modifier)
                             identifyToggle()
+                            vasToggle()
                             // a fixed gap, not weight(1f): a weighted spacer
                             // eats the rest of its line and forces everything
                             // after it onto the next one, every time
@@ -1019,6 +1030,17 @@ private fun MemberCard(member: MemberIdentity) {
                             Modifier.heightIn(max = 96.dp).verticalScroll(rememberScrollState())
                     ) {
                         member.rewards.forEach { RewardRow(it) }
+                    }
+                    member.vas?.let { vas ->
+                        Text("Wallet pass (VAS)", style = MaterialTheme.typography.labelLarge)
+                        Column(
+                            modifier =
+                                Modifier.heightIn(max = 96.dp).verticalScroll(rememberScrollState())
+                        ) {
+                            vas.lines.forEach {
+                                Text(it, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                     }
                 }
                 // the headline already says why nobody is attached
