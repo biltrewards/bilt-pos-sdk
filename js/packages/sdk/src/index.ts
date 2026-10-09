@@ -114,5 +114,7 @@ export type {
   SurfaceKind,
   TransactionStatusOptions,
   TransactionStatusResult,
+  VasData,
+  VasService,
   VoidResult,
 } from '@bilt/pos-protocol';
