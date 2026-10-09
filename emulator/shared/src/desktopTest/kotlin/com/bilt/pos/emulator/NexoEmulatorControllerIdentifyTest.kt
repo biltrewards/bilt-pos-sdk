@@ -242,6 +242,12 @@ class NexoEmulatorControllerIdentifyTest {
                 controller.state.value.events.any { "VAS: pass.com.biltrewards.loyalty" in it },
                 "the pass read belongs in the log",
             )
+            // the raw value, for decrypting the pass off-line
+            val raw =
+                controller.state.value.events
+                    .single { "VAS AdditionalResponse: " in it }
+                    .substringAfter("VAS AdditionalResponse: ")
+            assertTrue("VerifoneTestRix2" in String(Base64.getDecoder().decode(raw)))
         }
     }
 
@@ -264,6 +270,7 @@ class NexoEmulatorControllerIdentifyTest {
                 }
             assertTrue("\"ForceEntryMode\":[\"Keyed\"]" in cardAcquisitions.single())
             assertNull(assertIsFound(member).vas)
+            assertTrue(controller.state.value.events.none { "VAS AdditionalResponse" in it })
         }
     }
 

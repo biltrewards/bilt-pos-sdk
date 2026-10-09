@@ -259,6 +259,12 @@ class NexoEmulatorController(
 
     private val nexoLogMapper = ObjectMapper()
 
+    /**
+     * True while a Read VAS sign-in prompt is on the wire, so the Nexo listener knows which
+     * response carries the encrypted VAS data the SDK does not expose raw.
+     */
+    @Volatile private var vasPromptActive = false
+
     @Volatile private var connection: Connection? = null
 
     /**
@@ -1188,6 +1194,7 @@ class NexoEmulatorController(
                 "Loyalty sign-in on the terminal…"
             }
         )
+        vasPromptActive = readVas
         session
             .identifyMember(identifyOptions(readVas))
             .onSuccess { outcome ->
@@ -1202,6 +1209,7 @@ class NexoEmulatorController(
                 error.cause?.let { detailedLog(it.stackTraceToString()) }
             }
             .onComplete {
+                vasPromptActive = false
                 conn.operationClaimed.set(false)
                 if (connection !== conn) return@onComplete
                 _state.update { it.copy(identifyInProgress = false) }
@@ -2964,12 +2972,23 @@ class NexoEmulatorController(
     }
 
     private fun nexoLog(direction: NexoMessageListener.Direction, json: String) {
+        val tree =
+            if (json.isBlank()) null else runCatching { nexoLogMapper.readTree(json) }.getOrNull()
         val payload =
             if (json.isBlank()) {
                 "<empty response>"
             } else {
-                runCatching { nexoLogMapper.readTree(json).toPrettyString() }.getOrDefault(json)
+                tree?.toPrettyString() ?: json
             }
+        if (vasPromptActive && direction == NexoMessageListener.Direction.RESPONSE) {
+            tree
+                ?.path("SaleToPOIResponse")
+                ?.path("CardAcquisitionResponse")
+                ?.path("Response")
+                ?.path("AdditionalResponse")
+                ?.takeIf { it.isTextual }
+                ?.let { log("VAS AdditionalResponse: ${it.asText()}") }
+        }
         val arrow = if (direction == NexoMessageListener.Direction.REQUEST) "→" else "←"
         val stamped = "${timestamp()} $arrow ${direction.name}\n$payload"
         _state.update {
