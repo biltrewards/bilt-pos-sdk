@@ -184,10 +184,12 @@ export interface paths {
          *     the request leaves it out. A host with no terminal configured refuses `kind: terminal`
          *     with 409 (`UNSUPPORTED`).
          *
-         *     Widgets are attached once the session exists; a widget that cannot run (no ad decision
-         *     service, missing store location) is reported through a `background.error` event and the
-         *     session continues without it, exactly as in Java. A pending initial member is resolved in
-         *     the background and announced through `member.changed`.
+         *     A `retail-media` widget on a host without an ad decision service refuses the whole request
+         *     with 409 (`UNSUPPORTED`) and creates no session. Widgets are otherwise attached once the
+         *     session exists; one that cannot run (missing store location) is reported through a
+         *     `background.error` event and the session continues without it, exactly as in Java. A
+         *     pending initial member is resolved in the background and announced through
+         *     `member.changed`.
          */
         post: operations["createSession"];
         delete?: never;
@@ -299,8 +301,9 @@ export interface paths {
          * @description Mirrors `SessionBasket.replace(Basket)` and `replace(List<BasketItem>)`. The session
          *     diffs the new content against the current basket and reports one `basket.changed` event
          *     with source `REPLACE`; lines are paired by `reference` when present, otherwise by SKU and
-         *     type, and a paired line keeps its item id. A snapshot equal to the current basket produces
-         *     no change and no event. On a terminal session whose basket has been consumed by a
+         *     type, and a paired line keeps its item id. A snapshot equal to the current basket changes
+         *     no line and emits no event, but the response is still a fresh snapshot of the session, so
+         *     its `updatedAt` is the time of the request, not of the last change. On a terminal session whose basket has been consumed by a
          *     successful settlement, replace starts a fresh cart (as `clear` would, under its guards)
          *     and then installs the content.
          */
@@ -1344,10 +1347,10 @@ export interface components {
         /** @description Outcome of a stored value operation (activate, load, unload, reserve, reverse, duplicate). */
         StoredValueOperationResult: {
             /**
-             * @description The operation the terminal performed (Nexo `StoredValueTransactionTypeEnum`).
+             * @description The operation the terminal performed (Nexo `StoredValueTransactionTypeEnum`); absent when the terminal's response did not carry it.
              * @enum {string}
              */
-            transactionType: "ACTIVATE" | "DUPLICATE" | "LOAD" | "RESERVE" | "REVERSE" | "UNLOAD";
+            transactionType?: "ACTIVATE" | "DUPLICATE" | "LOAD" | "RESERVE" | "REVERSE" | "UNLOAD";
             /** @description Amount moved; absent when not echoed. */
             amount?: components["schemas"]["Money"];
             /** @description Balance on the card after the operation, when reported. */
@@ -1764,7 +1767,10 @@ export interface components {
         ClientCapabilities: {
             formats: components["schemas"]["MediaType"][];
             surfaceKind: components["schemas"]["SurfaceKind"];
-            /** @description Calls to action the client handles; every action when absent. */
+            /**
+             * @description Calls to action the client handles. Accepted and ignored: the Java SDK's `Surface` has no
+             *     counterpart, so the host still offers every action and the client decides which to render.
+             */
             actions?: components["schemas"]["Action"][];
         };
         /** @enum {string} */
@@ -2785,6 +2791,15 @@ export interface components {
                 "application/json": components["schemas"]["SessionError"];
             };
         };
+        /** @description The `Idempotency-Key` was already used for a different request (`VALIDATION`). */
+        IdempotencyKeyReused: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["SessionError"];
+            };
+        };
         /** @description The host could not reach the terminal. */
         TerminalUnreachable: {
             headers: {
@@ -2814,6 +2829,15 @@ export interface components {
         };
         /** @description The request did not validate. */
         "responses-BadRequest": {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["SessionError"];
+            };
+        };
+        /** @description The `Idempotency-Key` was already used for a different request (`VALIDATION`). */
+        "responses-IdempotencyKeyReused": {
             headers: {
                 [name: string]: unknown;
             };
@@ -3146,7 +3170,10 @@ export interface operations {
                 };
             };
             400: components["responses"]["responses-BadRequest"];
-            /** @description `kind: terminal` on a host with no terminal configured (`UNSUPPORTED`). */
+            /**
+             * @description `UNSUPPORTED`: `kind: terminal` on a host with no terminal configured, or a
+             *     `retail-media` widget requested on a host without an ad decision service.
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3155,6 +3182,7 @@ export interface operations {
                     "application/json": components["schemas"]["SessionError"];
                 };
             };
+            422: components["responses"]["responses-IdempotencyKeyReused"];
             503: components["responses"]["responses-TerminalUnreachable"];
         };
     };
@@ -3214,6 +3242,7 @@ export interface operations {
             };
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     forceEndSession: {
@@ -3253,6 +3282,7 @@ export interface operations {
             400: components["responses"]["responses-BadRequest"];
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     abortSession: {
@@ -3289,6 +3319,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["responses-NotFound"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     getBasket: {
@@ -3344,6 +3375,7 @@ export interface operations {
             400: components["responses"]["responses-BadRequest"];
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     addBasketItem: {
@@ -3375,6 +3407,7 @@ export interface operations {
             400: components["responses"]["responses-BadRequest"];
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     removeBasketItem: {
@@ -3403,6 +3436,7 @@ export interface operations {
             200: components["responses"]["basketResponse"];
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     updateBasketItem: {
@@ -3436,6 +3470,7 @@ export interface operations {
             400: components["responses"]["responses-BadRequest"];
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     mutateBasket: {
@@ -3467,6 +3502,7 @@ export interface operations {
             400: components["responses"]["responses-BadRequest"];
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     setBasketTaxTotal: {
@@ -3498,6 +3534,7 @@ export interface operations {
             400: components["responses"]["responses-BadRequest"];
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     clearBasket: {
@@ -3524,6 +3561,7 @@ export interface operations {
             200: components["responses"]["basketResponse"];
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     getMember: {
@@ -3594,6 +3632,7 @@ export interface operations {
             400: components["responses"]["responses-BadRequest"];
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     clearMember: {
@@ -3626,6 +3665,7 @@ export interface operations {
             };
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     getContext: {
@@ -3689,6 +3729,7 @@ export interface operations {
             400: components["responses"]["responses-BadRequest"];
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     listOperations: {
@@ -3755,6 +3796,7 @@ export interface operations {
             400: components["responses"]["responses-BadRequest"];
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     getOperation: {
@@ -3821,7 +3863,10 @@ export interface operations {
             };
             400: components["responses"]["responses-BadRequest"];
             404: components["responses"]["responses-NotFound"];
-            /** @description The step is not pending (answered, expired or unknown). */
+            /**
+             * @description The step is not pending (answered, expired or unknown: `INVALID_STATE`), or the
+             *     `Idempotency-Key` was already used for a different request (`VALIDATION`).
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3875,6 +3920,7 @@ export interface operations {
             };
             404: components["responses"]["responses-NotFound"];
             409: components["responses"]["responses-Conflict"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     listWidgets: {
@@ -3934,6 +3980,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["responses-NotFound"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     resumeWidget: {
@@ -3969,6 +4016,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["responses-NotFound"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     reportRetailMediaAction: {
@@ -4005,6 +4053,7 @@ export interface operations {
             };
             400: components["responses"]["responses-BadRequest"];
             404: components["responses"]["responses-NotFound"];
+            422: components["responses"]["responses-IdempotencyKeyReused"];
         };
     };
     streamEvents: {

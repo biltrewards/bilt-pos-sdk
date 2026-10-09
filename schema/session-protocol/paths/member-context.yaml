@@ -57,6 +57,8 @@ member:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
   delete:
     tags: [Member]
     operationId: clearMember
@@ -71,6 +73,8 @@ member:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 context:
   parameters:
@@ -120,3 +124,5 @@ context:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'

@@ -239,7 +239,6 @@ public final class SessionHost implements AutoCloseable {
 
     routes.post(
         "/v1/sessions", ctx -> respond(ctx, 201, registry.create(Json.body(ctx.body())).view()));
-    routes.get("/v1/sessions", ctx -> respond(ctx, 200, sessions()));
     routes.get("/v1/sessions/{id}", ctx -> respond(ctx, 200, session(ctx).view()));
     routes.delete(
         "/v1/sessions/{id}",
@@ -587,14 +586,6 @@ public final class SessionHost implements AutoCloseable {
       throw new HostError(404, HostError.NOT_FOUND, "no terminal is configured on this host");
     }
     return client;
-  }
-
-  private ArrayNode sessions() {
-    ArrayNode array = Json.array();
-    for (HostedSession hosted : registry.all()) {
-      array.add(hosted.view());
-    }
-    return array;
   }
 
   private static ArrayNode operations(HostedSession hosted, String statusFilter) {

@@ -180,7 +180,31 @@ class SpecConformanceTest {
               .post("/v1/sessions", json("{'kind':'terminal','saleId':'L','currency':'USD'}"))
               .expect(409)
               .text("code"));
+      assertEquals(
+          "UNSUPPORTED",
+          bareClient
+              .post(
+                  "/v1/sessions",
+                  json(
+                      "{'kind':'local','saleId':'L','currency':'USD',"
+                          + "'widgets':[{'type':'retail-media','placements':['lane-banner']}]}"))
+              .expect(409)
+              .text("code"));
     }
+  }
+
+  @Test
+  void aReusedIdempotencyKeyWithADifferentBodyIsRefusedAsTheSpecSays() throws Exception {
+    String key = "reused-key";
+    client
+        .post("/v1/sessions", json("{'kind':'local','saleId':'A','currency':'USD'}"), key)
+        .expect(201);
+    assertEquals(
+        "VALIDATION",
+        client
+            .post("/v1/sessions", json("{'kind':'local','saleId':'B','currency':'USD'}"), key)
+            .expect(422)
+            .text("code"));
   }
 
   @Test
