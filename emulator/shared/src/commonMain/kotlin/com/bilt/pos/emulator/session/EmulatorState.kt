@@ -175,15 +175,17 @@ data class VasUi(
     /** The terminal's unparsed report, set only when it could not be broken into fields. */
     val raw: String? = null,
 ) {
-    /** One line per fact, for the sign-in card and the log. */
+    /**
+     * One line per fact, for the sign-in card and the log. The raw report goes last: it can be
+     * arbitrarily long, and the card clips its lines, so it must not push the services out of view.
+     */
     val lines: List<String>
         get() =
             listOfNotNull(
                 listOfNotNull(source, merchantId?.let { "merchant $it" })
                     .joinToString(" · ")
-                    .ifBlank { null },
-                raw?.let { "raw report: $it" },
-            ) + services.map { it.line }
+                    .ifBlank { null }
+            ) + services.map { it.line } + listOfNotNull(raw?.let { "raw report: $it" })
 }
 
 /** One pass returned in a [VasUi] read. */

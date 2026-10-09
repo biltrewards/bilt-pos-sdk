@@ -21,6 +21,8 @@ import com.bilt.pos.emulator.session.SaleItemUi
 import com.bilt.pos.emulator.session.StoredSaleUi
 import com.bilt.pos.emulator.session.StoredValueOptions
 import com.bilt.pos.emulator.session.TlsStatus
+import com.bilt.pos.emulator.session.VasServiceUi
+import com.bilt.pos.emulator.session.VasUi
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -99,11 +101,13 @@ class ScreenshotGenerator {
         file: File,
         initialTab: EmulatorTab = EmulatorTab.SALE,
         initialSalePane: SaleTabPane = SaleTabPane.PRODUCTS,
+        widthDp: Int = 1500,
+        heightDp: Int = 1000,
     ) {
-        // 1500x1000 dp at 2x density — the desktop window's default size,
-        // above the side-log breakpoint so the log column renders
+        // the default 1500x1000 dp at 2x density is the desktop window's
+        // default size, above the side-log breakpoint so the log column renders
         val scene =
-            ImageComposeScene(width = 3000, height = 2000, density = Density(2f)) {
+            ImageComposeScene(width = widthDp * 2, height = heightDp * 2, density = Density(2f)) {
                 EmulatorApp(
                     FakeController(state),
                     MockProductProvider.products(),
@@ -187,6 +191,48 @@ class ScreenshotGenerator {
                     ),
             ),
             File(dir, "emulator-payment-recovery.png"),
+        )
+
+        // a wallet read with several passes and an unparsed report: the
+        // card caps and scrolls these lines, so check they wrap and clip
+        // both on the wide layout and on a compact viewport
+        val found = midCheckout.member as MemberIdentity.Found
+        val walletRead =
+            midCheckout.copy(
+                member =
+                    found.copy(
+                        vas =
+                            VasUi(
+                                source = "Apple Wallet",
+                                merchantId = "pass.com.bilt.rewards",
+                                services =
+                                    listOf(
+                                        VasServiceUi(
+                                            "bilt-rewards",
+                                            "LOYALTY",
+                                            "SUCCESS",
+                                            "A1B2C3D4E5F60718293A4B5C6D7E8F90",
+                                            "1760000000",
+                                        ),
+                                        VasServiceUi(
+                                            "bilt-offers",
+                                            "OFFER",
+                                            "SUCCESS",
+                                            "0A1B2C3D",
+                                            null,
+                                        ),
+                                        VasServiceUi(null, null, "DATA_NOT_FOUND", null, null),
+                                    ),
+                                raw = "9F2A0100" + "AB12CD34".repeat(40),
+                            )
+                    )
+            )
+        render(walletRead, File(dir, "emulator-wallet-vas.png"))
+        render(
+            walletRead,
+            File(dir, "emulator-wallet-vas-compact.png"),
+            widthDp = 420,
+            heightDp = 1300,
         )
 
         val keypad =
