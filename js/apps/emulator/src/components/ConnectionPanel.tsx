@@ -50,6 +50,7 @@ export function ConnectionPanel({
   const controller = useController();
   const state = useEmulatorState();
   const [identifyOnStart, setIdentifyOnStart] = useState(false);
+  const [readVas, setReadVas] = useState(false);
   const connected = state.connection.phase !== 'DISCONNECTED';
   const sessionActive = state.sessionId !== null;
   const terminal = bridge.health?.terminal;
@@ -113,7 +114,9 @@ export function ConnectionPanel({
           type="button"
           disabled={!connected}
           onClick={() =>
-            sessionActive ? controller.endSession() : controller.startSession(identifyOnStart)
+            sessionActive
+              ? controller.endSession()
+              : controller.startSession(identifyOnStart, readVas)
           }
         >
           {sessionActive ? 'End Checkout' : 'Start Checkout'}
@@ -122,7 +125,7 @@ export function ConnectionPanel({
           type="button"
           className="tonal"
           disabled={!canOperateTerminal(state)}
-          onClick={() => controller.identifyMember()}
+          onClick={() => controller.identifyMember(readVas)}
         >
           {state.identifyInProgress ? 'Signing in…' : 'Loyalty Sign-In'}
         </button>
@@ -132,6 +135,8 @@ export function ConnectionPanel({
           disabled={sessionActive || settings.mode === 'local'}
           onChange={setIdentifyOnStart}
         />
+        {/* applies to every sign-in prompt, so it stays enabled mid-checkout */}
+        <LabeledCheckbox label="Read VAS" checked={readVas} onChange={setReadVas} />
         <span className="gap" />
         <button
           type="button"
