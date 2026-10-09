@@ -511,7 +511,14 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
         memberId: 'mbr_8f2a',
         rewards: [],
         pointBalance: 120,
-        ...(keyedOnly ? {} : { vasData: MOCK_VAS_DATA }),
+        ...(keyedOnly
+          ? {}
+          : {
+              vasData: {
+                ...MOCK_VAS_DATA,
+                services: MOCK_VAS_DATA.services.map((service) => ({ ...service })),
+              },
+            }),
       };
       await this.member.set({ id: 'mbr_8f2a' });
       return result;
