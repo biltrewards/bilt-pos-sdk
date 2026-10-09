@@ -56,6 +56,7 @@ import java.math.RoundingMode
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
@@ -264,6 +265,29 @@ class NexoEmulatorController(
      * response carries the encrypted VAS data the SDK does not expose raw.
      */
     @Volatile private var vasPromptActive = false
+
+    /** The last Read VAS response's `AdditionalResponse`, held until the prompt completes. */
+    @Volatile private var vasAdditionalResponse: String? = null
+
+    /**
+     * Logged once when the prompt completes rather than when the response arrives, so a prompt that
+     * ends without any response (cancelled, timed out) still says there was nothing.
+     */
+    private fun logVasAdditionalResponse() {
+        val raw = vasAdditionalResponse?.takeIf { it.isNotBlank() }
+        vasAdditionalResponse = null
+        val hasEncryptedData =
+            raw != null &&
+                runCatching {
+                        nexoLogMapper
+                            .readTree(Base64.getDecoder().decode(raw))
+                            .path("vas")
+                            .path("services")
+                            .any { it.path("encryptedData").asText("").isNotEmpty() }
+                    }
+                    .getOrDefault(false)
+        log("VAS AdditionalResponse: ${if (hasEncryptedData) raw else "No encrypted VAS data"}")
+    }
 
     @Volatile private var connection: Connection? = null
 
@@ -1194,6 +1218,7 @@ class NexoEmulatorController(
                 "Loyalty sign-in on the terminal…"
             }
         )
+        vasAdditionalResponse = null
         vasPromptActive = readVas
         session
             .identifyMember(identifyOptions(readVas))
@@ -1209,7 +1234,10 @@ class NexoEmulatorController(
                 error.cause?.let { detailedLog(it.stackTraceToString()) }
             }
             .onComplete {
-                vasPromptActive = false
+                if (readVas) {
+                    vasPromptActive = false
+                    logVasAdditionalResponse()
+                }
                 conn.operationClaimed.set(false)
                 if (connection !== conn) return@onComplete
                 _state.update { it.copy(identifyInProgress = false) }
@@ -2987,7 +3015,7 @@ class NexoEmulatorController(
                 ?.path("Response")
                 ?.path("AdditionalResponse")
                 ?.takeIf { it.isTextual }
-                ?.let { log("VAS AdditionalResponse: ${it.asText()}") }
+                ?.let { vasAdditionalResponse = it.asText() }
         }
         val arrow = if (direction == NexoMessageListener.Direction.REQUEST) "→" else "←"
         val stamped = "${timestamp()} $arrow ${direction.name}\n$payload"

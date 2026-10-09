@@ -243,10 +243,7 @@ class NexoEmulatorControllerIdentifyTest {
                 "the pass read belongs in the log",
             )
             // the raw value, for decrypting the pass off-line
-            val raw =
-                controller.state.value.events
-                    .single { "VAS AdditionalResponse: " in it }
-                    .substringAfter("VAS AdditionalResponse: ")
+            val raw = controller.vasLogLines().single()
             assertTrue("VerifoneTestRix2" in String(Base64.getDecoder().decode(raw)))
         }
     }
@@ -270,9 +267,36 @@ class NexoEmulatorControllerIdentifyTest {
                 }
             assertTrue("\"ForceEntryMode\":[\"Keyed\"]" in cardAcquisitions.single())
             assertNull(assertIsFound(member).vas)
-            assertTrue(controller.state.value.events.none { "VAS AdditionalResponse" in it })
+            assertTrue(controller.vasLogLines().isEmpty())
         }
     }
+
+    /** No CardAcquisitionResponse payload at all: the prompt still reports there was nothing. */
+    @Test
+    fun vasModeWithoutAnAdditionalResponseSaysThereWasNoData() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"CardAcquisitionRequest\"" in body) {
+                CARD_ACQUISITION_CANCELLED
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller()
+        runBlocking {
+            controller.connectAndStartCheckout()
+            controller.identifyMember(readVas = true)
+            withTimeout(10_000) {
+                controller.state.first { cardAcquisitions.size == 1 && !it.identifyInProgress }
+            }
+            assertEquals(listOf("No encrypted VAS data"), controller.vasLogLines())
+        }
+    }
+
+    /** The values after each "VAS AdditionalResponse: " event, newest last. */
+    private fun NexoEmulatorController.vasLogLines(): List<String> =
+        state.value.events
+            .filter { "VAS AdditionalResponse: " in it }
+            .map { it.substringAfter("VAS AdditionalResponse: ") }
 
     @Test
     fun vasModeOnStartRidesTheStartCheckoutPrompt() {
@@ -320,6 +344,7 @@ class NexoEmulatorControllerIdentifyTest {
             assertEquals("9000 deadbeef", vas.raw)
             assertTrue(vas.services.isEmpty())
             assertTrue(vas.lines.any { "9000 deadbeef" in it })
+            assertEquals(listOf("No encrypted VAS data"), controller.vasLogLines())
         }
     }
 
