@@ -50,6 +50,7 @@ import com.bilt.pos.session.settlement.SettlementType
 import com.bilt.pos.session.settlement.StoredValueLoad
 import com.bilt.pos.session.settlement.StoredValueLoadRecord
 import com.bilt.pos.session.storedvalue.StoredValueCard
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -3009,13 +3010,7 @@ class NexoEmulatorController(
                 tree?.toPrettyString() ?: json
             }
         if (vasPromptActive && direction == NexoMessageListener.Direction.RESPONSE) {
-            tree
-                ?.path("SaleToPOIResponse")
-                ?.path("CardAcquisitionResponse")
-                ?.path("Response")
-                ?.path("AdditionalResponse")
-                ?.takeIf { it.isTextual }
-                ?.let { vasAdditionalResponse = it.asText() }
+            tree?.let(::cardAcquisitionAdditionalResponse)?.let { vasAdditionalResponse = it }
         }
         val arrow = if (direction == NexoMessageListener.Direction.REQUEST) "→" else "←"
         val stamped = "${timestamp()} $arrow ${direction.name}\n$payload"
@@ -3027,3 +3022,16 @@ class NexoEmulatorController(
     private fun timestamp(): String =
         java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))
 }
+
+/**
+ * The `AdditionalResponse` of a CardAcquisition response, from either shape the Nexo listener
+ * reports: the wire envelope with its `SaleToPOIResponse` wrapper (unencrypted), or the decrypted
+ * body, which is the wrapper's content with no wrapper of its own (encrypted).
+ */
+internal fun cardAcquisitionAdditionalResponse(tree: JsonNode): String? =
+    (tree.path("SaleToPOIResponse").takeIf { !it.isMissingNode } ?: tree)
+        .path("CardAcquisitionResponse")
+        .path("Response")
+        .path("AdditionalResponse")
+        .takeIf { it.isTextual }
+        ?.asText()
