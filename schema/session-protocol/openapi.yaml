@@ -309,6 +309,10 @@ components:
       $ref: './components/member.yaml#/IdentifyStatus'
     IdentifyResult:
       $ref: './components/member.yaml#/IdentifyResult'
+    VasData:
+      $ref: './components/member.yaml#/VasData'
+    VasService:
+      $ref: './components/member.yaml#/VasService'
     IdentifyOptions:
       $ref: './components/member.yaml#/IdentifyOptions'
     Reward:

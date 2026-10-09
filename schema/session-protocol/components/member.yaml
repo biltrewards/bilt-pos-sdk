@@ -110,6 +110,55 @@ IdentifyResult:
         $ref: '#/Reward'
     pointBalance:
       type: integer
+    vasData:
+      description: |
+        Value Added Services data the terminal read from a mobile wallet pass the shopper tapped
+        (e.g. an Apple Wallet loyalty pass). Omitted when the terminal returned none. The pass
+        payload stays encrypted; nothing in the chain decrypts it.
+      $ref: '#/VasData'
+
+VasData:
+  type: object
+  description: |
+    Mirrors the Java `VasData`. The terminal forwards what its payment SDK reports, unmodified;
+    `encryptedData` is meant to be decrypted only by whoever holds the merchant's VAS private
+    key. When the terminal could not break its report into fields, only `raw` is set.
+  required: [services]
+  properties:
+    source:
+      type: string
+      description: Wallet that supplied the pass, e.g. `"ApplePay"`.
+    merchantId:
+      type: string
+      description: VAS merchant ID the terminal requested the pass with.
+    services:
+      type: array
+      description: One entry per pass returned. Never null; may be empty.
+      items:
+        $ref: '#/VasService'
+    raw:
+      type: string
+      description: The terminal's unparsed VAS report; set only when it could not be broken into fields.
+
+VasService:
+  type: object
+  description: One pass returned in a `VasData` read.
+  properties:
+    serviceId:
+      type: string
+      description: Pass type identifier, e.g. `"pass.com.biltrewards.loyalty"`.
+    serviceType:
+      type: string
+      description: Service type the terminal reports, e.g. `"Coupon1"`.
+    statusWord:
+      type: string
+      description: ISO 7816 status word of the pass read, e.g. `"9000"`.
+    encryptedData:
+      type: string
+      description: Encrypted pass payload as hex.
+    cipherTimestamp:
+      type: string
+      description: Timestamp used in the pass encryption, as hex.
 
 ForceEntryMode:
   type: string
@@ -126,6 +175,13 @@ IdentifyOptions:
   description: Options for the terminal-prompted identification. Defaults are any entry mode, any brand, member required.
   properties:
     forceEntryModes:
+      description: |
+        Restricts how the identifier is captured; the terminal accepts only the listed modes.
+        This is also how a client requests a wallet pass (VAS) read: omit the option, or include
+        a tap-capable mode (`TAPPED` or `CONTACTLESS`), to let the shopper tap a pass. A list
+        without one, such as `["KEYED"]` (on-screen entry only) or `["SCANNED"]`, rules tapping
+        out and returns no `vasData`. There is no separate VAS flag; the host passes the modes
+        through as `ForceEntryMode`.
       type: array
       items:
         $ref: '#/ForceEntryMode'

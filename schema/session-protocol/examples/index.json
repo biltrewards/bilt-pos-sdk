@@ -5,6 +5,7 @@
   { "file": "operation-step-total-required-event.json", "schema": "Event" },
   { "file": "step-reply-total.json", "schema": "StepReply" },
   { "file": "settle-operation-completed-event.json", "schema": "Event" },
+  { "file": "identify-vas-operation-completed-event.json", "schema": "Event" },
   { "file": "basket-changed-event.json", "schema": "Event" },
   { "file": "session-error.json", "schema": "SessionError" }
 ]
