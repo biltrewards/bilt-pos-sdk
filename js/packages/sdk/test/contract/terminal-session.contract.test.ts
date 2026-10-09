@@ -194,6 +194,10 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
     expect(session.state).toBe('ended');
   });
 
+  // RET-6983 layer 2 (host, feature/ret-6983-vas-host) maps VasData onto the identify result and
+  // FakeTerminal needs a scripted loyalty identify answer carrying a pass. Enable once it lands.
+  it.todo('returns vasData from identifyMember when the terminal reads a wallet pass');
+
   it('runs session-less terminal operations through the terminal facade', async () => {
     terminal.reply(
       'Diagnosis',

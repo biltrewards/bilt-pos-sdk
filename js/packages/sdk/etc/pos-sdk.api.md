@@ -82,6 +82,8 @@ import { SurfaceKind } from '@bilt/pos-protocol';
 import type { TerminalInfo } from '@bilt/pos-protocol';
 import { TransactionStatusOptions } from '@bilt/pos-protocol';
 import { TransactionStatusResult } from '@bilt/pos-protocol';
+import { VasData } from '@bilt/pos-protocol';
+import { VasService } from '@bilt/pos-protocol';
 import { VoidResult } from '@bilt/pos-protocol';
 import type { WidgetAction } from '@bilt/pos-protocol';
 import type { WidgetState } from '@bilt/pos-protocol';
@@ -712,6 +714,10 @@ export { TransactionStatusResult }
 
 // @public
 export type Unsubscribe = () => void;
+
+export { VasData }
+
+export { VasService }
 
 export { VoidResult }
 

@@ -1,7 +1,7 @@
 // The in-memory double's basket keeps the register's tax choice across line edits, as the host
 // does, so tests built on it see the totals a real session would.
 import { describe, expect, it } from 'vitest';
-import { MockShopperSession } from './mock-pos';
+import { MOCK_VAS_DATA, MockShopperSession, MockTerminalSession } from './mock-pos';
 
 function session() {
   return new MockShopperSession({ saleId: 'LANE-1', currency: 'USD' });
@@ -44,5 +44,21 @@ describe('the double basket', () => {
     await basket.setTaxRate('l1', '0.1');
     await basket.updateItemQuantity('l1', 4);
     expect(basket.current.items[0]).toMatchObject({ taxRate: '0.1', taxAmount: '4.00' });
+  });
+});
+
+describe('the double identify', () => {
+  const lane = () => new MockTerminalSession({ saleId: 'LANE-1', currency: 'USD' });
+
+  it('reports the wallet pass when entry modes are not restricted to KEYED', async () => {
+    await expect(lane().identifyMember()).resolves.toMatchObject({ vasData: MOCK_VAS_DATA });
+    await expect(
+      lane().identifyMember({ forceEntryModes: ['MAG_STRIPE', 'TAPPED'] }),
+    ).resolves.toMatchObject({ vasData: MOCK_VAS_DATA });
+  });
+
+  it('returns no vasData when entry is restricted to KEYED', async () => {
+    const result = await lane().identifyMember({ forceEntryModes: ['KEYED'] });
+    expect(result.vasData).toBeUndefined();
   });
 });
