@@ -50,7 +50,7 @@ class ScreenshotGenerator {
 
         override fun disconnect() = Unit
 
-        override fun startSession(identifyOnStart: Boolean) = Unit
+        override fun startSession(identifyOnStart: Boolean, readVas: Boolean) = Unit
 
         override fun endSession() = Unit
 
@@ -78,7 +78,7 @@ class ScreenshotGenerator {
             net: Boolean,
         ) = Unit
 
-        override fun identifyMember() = Unit
+        override fun identifyMember(readVas: Boolean) = Unit
 
         override fun acquireCard() = Unit
 

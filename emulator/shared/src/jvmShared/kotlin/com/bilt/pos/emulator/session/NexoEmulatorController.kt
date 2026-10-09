@@ -37,6 +37,7 @@ import com.bilt.pos.session.identity.IdentifyStatus
 import com.bilt.pos.session.identity.Member
 import com.bilt.pos.session.identity.Reward
 import com.bilt.pos.session.identity.RewardType
+import com.bilt.pos.session.identity.VasData
 import com.bilt.pos.session.settlement.ExternalPayment
 import com.bilt.pos.session.settlement.OriginalSaleRecord
 import com.bilt.pos.session.settlement.RefundAllocation
@@ -644,7 +645,7 @@ class NexoEmulatorController(
         }
     }
 
-    override fun startSession(identifyOnStart: Boolean) {
+    override fun startSession(identifyOnStart: Boolean, readVas: Boolean) {
         val conn =
             connection
                 ?: run {
@@ -702,7 +703,7 @@ class NexoEmulatorController(
                 }
                 log("Checkout session started (id ${started.sessionId})")
                 if (identifyOnStart) {
-                    runIdentifyPrompt(conn, started)
+                    runIdentifyPrompt(conn, started, readVas)
                 } else {
                     refreshCustomerDisplay(started)
                 }
@@ -1148,14 +1149,14 @@ class NexoEmulatorController(
         }
     }
 
-    override fun identifyMember() {
+    override fun identifyMember(readVas: Boolean) {
         val conn = connection
         val session = conn?.session
         if (conn == null || session == null) {
             log("No active checkout session — press Start Checkout first")
             return
         }
-        runIdentifyPrompt(conn, session)
+        runIdentifyPrompt(conn, session, readVas)
     }
 
     /**
@@ -1163,7 +1164,11 @@ class NexoEmulatorController(
      * it, and on demand from the Loyalty Sign-In button. Always its own operation, never part of
      * the bracket; a failed or declined prompt leaves the checkout without a member.
      */
-    private fun runIdentifyPrompt(conn: Connection, session: TerminalShopperSession) {
+    private fun runIdentifyPrompt(
+        conn: Connection,
+        session: TerminalShopperSession,
+        readVas: Boolean,
+    ) {
         // Claimed like pay/acquireCard: without the claim, a Pay tapped
         // during the prompt would queue behind it on the session's
         // operation thread — and an abort would cancel only the prompt
@@ -1176,12 +1181,15 @@ class NexoEmulatorController(
         // A re-run starts from a blank card rather than leaving the previous
         // answer on screen while the terminal collects the next one
         _state.update { it.copy(identifyInProgress = true, member = null) }
-        log("Loyalty sign-in on the terminal…")
-        // The terminal's keyed loyalty capture engages only with
-        // ForceEntryMode=Keyed; without it the terminal waits on the card
-        // reader instead of showing the input form
+        log(
+            if (readVas) {
+                "Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…"
+            } else {
+                "Loyalty sign-in on the terminal…"
+            }
+        )
         session
-            .identifyMember(IdentifyOptions.builder().forceEntryMode(ForceEntryMode.KEYED).build())
+            .identifyMember(identifyOptions(readVas))
             .onSuccess { outcome ->
                 // a checkout that ended under a late-arriving prompt owns
                 // neither the card nor the display any more
@@ -1206,6 +1214,20 @@ class NexoEmulatorController(
     }
 
     /**
+     * The terminal's keyed loyalty capture engages only with ForceEntryMode=Keyed; without it the
+     * terminal waits on the card reader instead of showing the input form. Keyed is also the one
+     * mode that keeps a wallet pass from being read, so VAS mode leaves the entry mode unforced.
+     */
+    private fun identifyOptions(readVas: Boolean): IdentifyOptions =
+        IdentifyOptions.builder()
+            .apply {
+                if (!readVas) {
+                    forceEntryMode(ForceEntryMode.KEYED)
+                }
+            }
+            .build()
+
+    /**
      * Report the sign-in as the account the checkout will actually settle against, which is not the
      * same thing as how the last prompt went: the SDK detaches a prior member only on an
      * affirmative NOT_FOUND or SUSPENDED, so a cancelled or failed prompt leaves an earlier
@@ -1223,10 +1245,11 @@ class NexoEmulatorController(
         when (identity) {
             is MemberIdentity.Found ->
                 log(
-                    "Member identified: ${identity.headline}, " +
-                        (identity.pointBalance?.let { "$it pts, " } ?: "") +
-                        "${identity.rewards.size} reward(s)"
-                )
+                        "Member identified: ${identity.headline}, " +
+                            (identity.pointBalance?.let { "$it pts, " } ?: "") +
+                            "${identity.rewards.size} reward(s)"
+                    )
+                    .also { identity.vas?.lines?.forEach { log("VAS: $it") } }
             is MemberIdentity.Absent -> log("${identity.headline} — loyalty steps will be skipped")
             // either an Absent/Failed with no member left attached, or a
             // Success the emulator could not read; the headline covers the
@@ -1253,6 +1276,7 @@ class NexoEmulatorController(
                         // "not reported", not a member with nothing banked
                         pointBalance = pointBalance.takeIf { it > 0 },
                         rewards = rewards.map { it.toUi() },
+                        vas = vasData?.toUi(),
                     )
                 } ?: MemberIdentity.Failed("The terminal reported a member with no loyalty id")
             IdentifyStatus.NOT_FOUND -> MemberIdentity.Absent(Reason.NOT_FOUND)
@@ -1274,6 +1298,23 @@ class NexoEmulatorController(
                 rewards = rewards().map { it.toUi() },
             )
         }
+
+    private fun VasData.toUi() =
+        VasUi(
+            source = source,
+            merchantId = merchantId,
+            services =
+                services.map {
+                    VasServiceUi(
+                        serviceId = it.serviceId,
+                        serviceType = it.serviceType,
+                        statusWord = it.statusWord,
+                        encryptedData = it.encryptedData,
+                        cipherTimestamp = it.cipherTimestamp,
+                    )
+                },
+            raw = raw,
+        )
 
     private fun Reward.toUi() =
         MemberRewardUi(
