@@ -1,5 +1,10 @@
 import type { ReactNode } from 'react';
-import { memberHeadline, type MemberIdentity, type MemberRewardUi } from '../emulator/state';
+import {
+  memberHeadline,
+  vasLines,
+  type MemberIdentity,
+  type MemberRewardUi,
+} from '../emulator/state';
 
 function rewardLine(reward: MemberRewardUi): string {
   return [
@@ -35,6 +40,16 @@ export function MemberCard({ member }: { member: MemberIdentity }): ReactNode {
               <li key={reward.rewardRef ?? index}>{rewardLine(reward)}</li>
             ))}
           </ul>
+          {member.vas ? (
+            <>
+              <h3>Wallet pass (VAS)</h3>
+              <ul className="rewards small">
+                {vasLines(member.vas).map((line, index) => (
+                  <li key={index}>{line}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
         </>
       ) : null}
       {member.kind === 'failed' && member.detail ? (

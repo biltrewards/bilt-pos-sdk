@@ -219,4 +219,47 @@ describe('the Sale tab and the basket card', () => {
       expect(screen.queryByRole('region', { name: 'Loyalty sign-in' })).toBeNull(),
     );
   });
+
+  it('shows no wallet pass by default: sign-in is forced to keyed entry', async () => {
+    await renderApp();
+    expect((screen.getByLabelText('Read VAS') as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByLabelText('Identify'));
+    fireEvent.click(button('Start Checkout'));
+    const card = await screen.findByRole('region', { name: 'Loyalty sign-in' });
+    expect(within(card).queryByText('Wallet pass (VAS)')).toBeNull();
+    expect(events()).not.toContain('VAS:');
+  });
+
+  it('reads the wallet pass at Start Checkout with Read VAS and logs it', async () => {
+    await renderApp();
+    fireEvent.click(screen.getByLabelText('Identify'));
+    fireEvent.click(screen.getByLabelText('Read VAS'));
+    fireEvent.click(button('Start Checkout'));
+    const card = await screen.findByRole('region', { name: 'Loyalty sign-in' });
+    expect(within(card).getByText('Wallet pass (VAS)')).toBeTruthy();
+    expect(within(card).getByText('ApplePay · merchant VerifoneTestRix2')).toBeTruthy();
+    const line =
+      'pass.com.biltrewards.loyalty · Coupon1 · status 9000 · data 8ff4b4de0c11a7 (7 bytes) · timestamp 3006a261';
+    expect(within(card).getByText(line)).toBeTruthy();
+    expect(events()).toContain(`VAS: ${line}`);
+    expect(events()).toContain('Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…');
+  });
+
+  it('reads the pass from Loyalty Sign-In mid-checkout, where Read VAS stays enabled', async () => {
+    await renderApp({ checkout: true });
+    const toggle = screen.getByLabelText('Read VAS') as HTMLInputElement;
+    expect(toggle.disabled).toBe(false);
+    fireEvent.click(button('Loyalty Sign-In'));
+    const keyed = await screen.findByRole('region', { name: 'Loyalty sign-in' });
+    expect(within(keyed).queryByText('Wallet pass (VAS)')).toBeNull();
+    fireEvent.click(toggle);
+    fireEvent.click(button('Loyalty Sign-In'));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('region', { name: 'Loyalty sign-in' })).getByText(
+          'Wallet pass (VAS)',
+        ),
+      ).toBeTruthy(),
+    );
+  });
 });

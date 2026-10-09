@@ -250,4 +250,8 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
     expect(toStoredSaleUi(after!, () => 0).items[0]?.remainingQuantity).toBe(0);
     await session.end();
   });
+
+  // RET-6983: needs the host change (feature/ret-6983-vas-host) to map a wallet-pass read onto
+  // IdentifyResult.vasData; the in-memory tests cover the emulator's rendering until it lands.
+  it.todo('shows the wallet pass on the sign-in card when Read VAS leaves the entry mode unforced');
 });

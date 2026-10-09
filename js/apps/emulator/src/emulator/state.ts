@@ -92,6 +92,55 @@ export interface MemberRewardUi {
   readonly expiresAtLabel?: string;
 }
 
+/** One pass returned in a VAS read. */
+export interface VasServiceUi {
+  readonly serviceId: string | null;
+  readonly serviceType: string | null;
+  readonly statusWord: string | null;
+  readonly encryptedData: string | null;
+  readonly cipherTimestamp: string | null;
+}
+
+/**
+ * Apple Wallet Value Added Services data the terminal read from a tapped pass; the payload is
+ * still encrypted with the merchant's VAS key.
+ */
+export interface VasUi {
+  readonly source: string | null;
+  readonly merchantId: string | null;
+  readonly services: readonly VasServiceUi[];
+  /** The terminal's unparsed report, set only when it could not be broken into fields. */
+  readonly raw: string | null;
+}
+
+export function vasServiceLine(service: VasServiceUi): string {
+  return [
+    service.serviceId ?? '(no serviceId)',
+    service.serviceType,
+    service.statusWord ? `status ${service.statusWord}` : null,
+    // the payload is opaque without the merchant key, so a prefix identifies it and the size
+    // shows it arrived whole
+    service.encryptedData
+      ? `data ${service.encryptedData.slice(0, 16)}${service.encryptedData.length > 16 ? '…' : ''} (${Math.floor(service.encryptedData.length / 2)} bytes)`
+      : null,
+    service.cipherTimestamp ? `timestamp ${service.cipherTimestamp}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** One line per fact, for the sign-in card and the log. */
+export function vasLines(vas: VasUi): string[] {
+  const head = [vas.source, vas.merchantId ? `merchant ${vas.merchantId}` : null]
+    .filter(Boolean)
+    .join(' · ');
+  return [
+    ...(head ? [head] : []),
+    ...(vas.raw ? [`raw report: ${vas.raw}`] : []),
+    ...vas.services.map(vasServiceLine),
+  ];
+}
+
 export type AbsentReason = 'NOT_FOUND' | 'SUSPENDED' | 'CANCELLED';
 
 export const ABSENT_LABELS: Readonly<Record<AbsentReason, string>> = {
@@ -111,6 +160,8 @@ export type MemberIdentity =
       readonly rewards: readonly MemberRewardUi[];
       /** True when this member predates the latest sign-in attempt. */
       readonly retained: boolean;
+      /** What the terminal read from a tapped wallet pass; absent when none was read. */
+      readonly vas?: VasUi;
     }
   | { readonly kind: 'absent'; readonly reason: AbsentReason }
   | { readonly kind: 'failed'; readonly detail?: string };
@@ -266,7 +317,7 @@ export interface EmulatorController {
   subscribe(listener: () => void): () => void;
   connect(): void;
   disconnect(): void;
-  startSession(identifyOnStart: boolean): void;
+  startSession(identifyOnStart: boolean, readVas?: boolean): void;
   endSession(): void;
   addProduct(product: Product): void;
   addCustomItem(priceMinor: number): Promise<boolean>;
@@ -278,7 +329,7 @@ export interface EmulatorController {
   applyCredit(itemId: string, amount: string, label: string): void;
   applyDiscount(itemId: string, amount: string, label: string): void;
   settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions | null, net: boolean): void;
-  identifyMember(): void;
+  identifyMember(readVas?: boolean): void;
   acquireCard(): void;
   refundSale(saleId: string): void;
   addReturnToBasket(saleId: string, skus: ReadonlySet<string>): void;
