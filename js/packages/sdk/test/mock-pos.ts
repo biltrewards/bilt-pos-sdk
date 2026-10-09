@@ -9,8 +9,11 @@ import type {
   BasketLineItem,
   CheckoutPhase,
   Cta,
+  IdentifyOptions,
   IdentifyResult,
+  VasData,
   Member,
+  MemberIdResolver,
   MemberInput,
   Money,
   Rendering,
@@ -89,6 +92,21 @@ function toItem(line: BasketLineItem): BasketItem {
       : {}),
   };
 }
+
+/** The pass the double's terminal reports; the payload is opaque hex, never decrypted. */
+export const MOCK_VAS_DATA: VasData = {
+  source: 'ApplePay',
+  merchantId: 'VerifoneTestRix2',
+  services: [
+    {
+      serviceId: 'pass.com.biltrewards.loyalty',
+      serviceType: 'Coupon1',
+      statusWord: '9000',
+      encryptedData: '8ff4b4de0c11a7',
+      cipherTimestamp: '3006a261',
+    },
+  ],
+};
 
 class Emitter {
   private readonly handlers = new Map<
@@ -477,15 +495,32 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
     this.poiId = options.poiId ?? 'bilt-session-host';
   }
 
-  identifyMember(): Operation<IdentifyResult> {
+  /** Reads a wallet pass unless `forceEntryModes` restricts entry to `KEYED`, as the terminal does. */
+  identifyMember(options?: IdentifyOptions): Operation<IdentifyResult>;
+  identifyMember(pending: { resolver: MemberIdResolver }): Operation<IdentifyResult>;
+  identifyMember(
+    arg?: IdentifyOptions | { resolver: MemberIdResolver },
+  ): Operation<IdentifyResult> {
+    const options = arg !== undefined && 'resolver' in arg ? undefined : arg;
     return operation('identifyMember', async () => {
-      const result = {
-        status: 'FOUND' as const,
+      const modes = options?.forceEntryModes;
+      const keyedOnly =
+        modes !== undefined && modes.length > 0 && modes.every((m) => m === 'KEYED');
+      const result: IdentifyResult = {
+        status: 'FOUND',
         memberId: 'mbr_8f2a',
         rewards: [],
         pointBalance: 120,
+        ...(keyedOnly
+          ? {}
+          : {
+              vasData: {
+                ...MOCK_VAS_DATA,
+                services: MOCK_VAS_DATA.services.map((service) => ({ ...service })),
+              },
+            }),
       };
-      await this.member.set({ id: result.memberId });
+      await this.member.set({ id: 'mbr_8f2a' });
       return result;
     });
   }

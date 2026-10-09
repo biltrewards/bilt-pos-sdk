@@ -449,6 +449,74 @@ describe('starting an operation', () => {
   });
 });
 
+describe('identifyMember', () => {
+  const vasData = {
+    source: 'ApplePay',
+    merchantId: 'VerifoneTestRix2',
+    services: [
+      {
+        serviceId: 'pass.com.biltrewards.loyalty',
+        serviceType: 'Coupon1',
+        statusWord: '9000',
+        encryptedData: '8ff4b4de0c11a7',
+        cipherTimestamp: '3006a261',
+      },
+    ],
+  };
+
+  it('sends the entry modes through unchanged and omits options when none are given', async () => {
+    const { engine, session } = await lane();
+    void session.identifyMember();
+    void session.identifyMember({ forceEntryModes: ['KEYED'], allowedLoyaltyBrands: ['Bilt'] });
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(2));
+    expect(engine.requests[0]!.operation).toEqual({ type: 'identifyMember' });
+    expect(engine.requests[1]!.operation).toEqual({
+      type: 'identifyMember',
+      options: { forceEntryModes: ['KEYED'], allowedLoyaltyBrands: ['Bilt'] },
+    });
+  });
+
+  it('resolves with the vasData of the completed operation untouched', async () => {
+    const { engine, session } = await lane();
+    const op = session.identifyMember({ forceEntryModes: ['TAPPED'] });
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    const result = {
+      status: 'FOUND',
+      memberId: 'mbr_8f2a',
+      rewards: [],
+      pointBalance: 1200,
+      vasData,
+    };
+    engine.complete(session.id, engine.lastOperation(session.id).id, { result } as never);
+    const identified = await op;
+    expect(identified.vasData).toEqual(vasData);
+    expect(identified.vasData?.services[0]?.encryptedData).toBe('8ff4b4de0c11a7');
+  });
+
+  it('surfaces a raw-only report and leaves vasData undefined when the terminal returned none', async () => {
+    const { engine, session } = await lane();
+    const raw = session.identifyMember();
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    engine.complete(session.id, engine.lastOperation(session.id).id, {
+      result: {
+        status: 'FOUND',
+        memberId: 'm',
+        rewards: [],
+        pointBalance: 0,
+        vasData: { services: [], raw: 'unparsed' },
+      },
+    } as never);
+    await expect(raw).resolves.toMatchObject({ vasData: { services: [], raw: 'unparsed' } });
+
+    const none = session.identifyMember();
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(2));
+    engine.complete(session.id, engine.lastOperation(session.id).id, {
+      result: { status: 'FOUND', memberId: 'm', rewards: [], pointBalance: 0 },
+    } as never);
+    expect((await none).vasData).toBeUndefined();
+  });
+});
+
 describe('steps', () => {
   async function settleWith(
     engine: ScriptedEngine,
