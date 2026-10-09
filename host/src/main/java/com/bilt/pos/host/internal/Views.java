@@ -30,6 +30,8 @@ import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.session.identity.MemberIdResolver;
 import com.bilt.pos.session.identity.Reward;
+import com.bilt.pos.session.identity.VasData;
+import com.bilt.pos.session.identity.VasService;
 import com.bilt.pos.session.input.MenuSelection;
 import com.bilt.pos.session.input.PinResult;
 import com.bilt.pos.session.input.Signature;
@@ -219,6 +221,26 @@ public final class Views {
     Json.putText(node, "loyaltyBrand", result.getLoyaltyBrand());
     node.set("rewards", rewards(result.getRewards()));
     node.put("pointBalance", result.getPointBalance());
+    if (result.getVasData() != null) {
+      node.set("vasData", vasData(result.getVasData()));
+    }
+    return node;
+  }
+
+  private static ObjectNode vasData(VasData vas) {
+    ObjectNode node = Json.object();
+    Json.putText(node, "source", vas.getSource());
+    Json.putText(node, "merchantId", vas.getMerchantId());
+    ArrayNode services = node.putArray("services");
+    for (VasService service : vas.getServices()) {
+      ObjectNode item = services.addObject();
+      Json.putText(item, "serviceId", service.getServiceId());
+      Json.putText(item, "serviceType", service.getServiceType());
+      Json.putText(item, "statusWord", service.getStatusWord());
+      Json.putText(item, "encryptedData", service.getEncryptedData());
+      Json.putText(item, "cipherTimestamp", service.getCipherTimestamp());
+    }
+    Json.putText(node, "raw", vas.getRaw());
     return node;
   }
 

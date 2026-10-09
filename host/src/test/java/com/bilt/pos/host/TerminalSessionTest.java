@@ -7,10 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.bilt.pos.nexo.model.ForceEntryModeType;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.fasterxml.jackson.databind.JsonNode;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.List;
 import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.AfterEach;
@@ -85,6 +88,104 @@ class TerminalSessionTest {
 
   private static final String SETTLE_WITH_TOTALS =
       json("{'type':'settle','handledSteps':['TOTAL_REQUIRED']}");
+
+  private static String identifyResponse(String vasJson) {
+    String additional =
+        vasJson == null
+            ? ""
+            : ",\"AdditionalResponse\":\""
+                + Base64.getEncoder().encodeToString(vasJson.getBytes(StandardCharsets.UTF_8))
+                + "\"";
+    return "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+        + "\"Response\":{\"Result\":\"Success\""
+        + additional
+        + "},\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"EntryMode\":[\"Mobile\"],"
+        + "\"IdentificationType\":\"AccountNumber\",\"LoyaltyID\":\"mbr_8f2a\"}}]}}}";
+  }
+
+  private JsonNode identify(String optionsJson) throws Exception {
+    String id =
+        client
+            .post(
+                "/v1/sessions",
+                json(
+                    "{'kind':'terminal','saleId':'LANE-1','poiId':'"
+                        + POI
+                        + "','currency':'USD','autoDisplay':false}"))
+            .expect(201)
+            .text("id");
+    String operationId =
+        submit(id, json("{'type':'identifyMember'" + optionsJson + "}")).path("id").asText();
+    return client.awaitOperation(id, operationId, "succeeded", Duration.ofSeconds(10));
+  }
+
+  private List<ForceEntryModeType> lastIdentifyModes() {
+    List<SaleToPOIRequest> sent =
+        terminal.requests().stream()
+            .filter(
+                r ->
+                    r.getMessageHeader().getMessageCategory()
+                        == MessageCategoryType.CARD_ACQUISITION)
+            .toList();
+    ForceEntryModeType[] modes =
+        sent.get(sent.size() - 1)
+            .getCardAcquisitionRequest()
+            .getCardAcquisitionTransaction()
+            .getForceEntryMode();
+    return modes == null ? null : List.of(modes);
+  }
+
+  @Test
+  void identifyReportsAWalletPassAndPassesForceEntryModesThrough() throws Exception {
+    terminal.reply(
+        MessageCategoryType.CARD_ACQUISITION,
+        identifyResponse(
+            "{\"vas\":{\"source\":\"ApplePay\",\"merchantId\":\"M-1\",\"services\":[{"
+                + "\"serviceId\":\"pass.com.biltrewards.loyalty\",\"serviceType\":\"Coupon1\","
+                + "\"statusWord\":\"9000\",\"encryptedData\":\"8ff4\","
+                + "\"cipherTimestamp\":\"3006a261\"}]}}"));
+
+    JsonNode done = identify(",'options':{'forceEntryModes':['CONTACTLESS','TAPPED']}");
+
+    JsonNode vas = done.path("result").path("vasData");
+    assertEquals("ApplePay", vas.path("source").asText());
+    assertEquals("M-1", vas.path("merchantId").asText());
+    assertFalse(vas.has("raw"));
+    JsonNode service = vas.path("services").get(0);
+    assertEquals("pass.com.biltrewards.loyalty", service.path("serviceId").asText());
+    assertEquals("Coupon1", service.path("serviceType").asText());
+    assertEquals("9000", service.path("statusWord").asText());
+    assertEquals("8ff4", service.path("encryptedData").asText());
+    assertEquals("3006a261", service.path("cipherTimestamp").asText());
+    assertEquals(
+        List.of(ForceEntryModeType.CONTACTLESS, ForceEntryModeType.TAPPED), lastIdentifyModes());
+  }
+
+  @Test
+  void identifyReportsARawOnlyVasReportAndOmitsVasDataWhenThereIsNone() throws Exception {
+    terminal.reply(
+        MessageCategoryType.CARD_ACQUISITION,
+        identifyResponse("{\"vas\":{\"services\":[],\"raw\":\"6a88\"}}"));
+    JsonNode vas = identify("").path("result").path("vasData");
+    assertTrue(vas.path("services").isArray());
+    assertEquals(0, vas.path("services").size());
+    assertEquals("6a88", vas.path("raw").asText());
+    assertFalse(vas.has("source"));
+    assertFalse(vas.has("merchantId"));
+    assertTrue(lastIdentifyModes() == null);
+
+    terminal.reply(MessageCategoryType.CARD_ACQUISITION, identifyResponse(null));
+    JsonNode none = identify("").path("result");
+    assertEquals("FOUND", none.path("status").asText());
+    assertFalse(none.has("vasData"));
+  }
+
+  @Test
+  void aKeyedOnlyIdentifyAsksTheTerminalForKeyedEntryOnly() throws Exception {
+    terminal.reply(MessageCategoryType.CARD_ACQUISITION, identifyResponse(null));
+    identify(",'options':{'forceEntryModes':['KEYED']}");
+    assertEquals(List.of(ForceEntryModeType.KEYED), lastIdentifyModes());
+  }
 
   @Test
   void theTerminalIsReportedAndTheSessionPoiIdIsPassedThrough() throws Exception {
