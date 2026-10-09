@@ -23,8 +23,9 @@ basket:
       Mirrors `SessionBasket.replace(Basket)` and `replace(List<BasketItem>)`. The session
       diffs the new content against the current basket and reports one `basket.changed` event
       with source `REPLACE`; lines are paired by `reference` when present, otherwise by SKU and
-      type, and a paired line keeps its item id. A snapshot equal to the current basket produces
-      no change and no event. On a terminal session whose basket has been consumed by a
+      type, and a paired line keeps its item id. A snapshot equal to the current basket changes
+      no line and emits no event, but the response is still a fresh snapshot of the session, so
+      its `updatedAt` is the time of the request, not of the last change. On a terminal session whose basket has been consumed by a
       successful settlement, replace starts a fresh cart (as `clear` would, under its guards)
       and then installs the content.
     parameters:
@@ -44,6 +45,8 @@ basket:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 items:
   post:
@@ -71,6 +74,8 @@ items:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 item:
   parameters:
@@ -105,6 +110,8 @@ item:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
   delete:
     tags: [Basket]
     operationId: removeBasketItem
@@ -119,6 +126,8 @@ item:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 mutations:
   post:
@@ -148,6 +157,8 @@ mutations:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 taxTotal:
   post:
@@ -175,6 +186,8 @@ taxTotal:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 clear:
   post:
@@ -196,6 +209,8 @@ clear:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 basketResponse:
   description: The updated basket snapshot.

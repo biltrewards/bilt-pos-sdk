@@ -33,7 +33,9 @@ describe('@bilt/pos-protocol types', () => {
     expectTypeOf<OperationResult<'settle'>>().toEqualTypeOf<SettlementResult>();
     expectTypeOf<OperationResult<'requestConfirmation'>>().toEqualTypeOf<boolean>();
     expectTypeOf<OperationResult<'requestDecimalString'>>().toEqualTypeOf<Money>();
-    expectTypeOf<OperationResult<'storedValueLoad'>['transactionType']>().toMatchTypeOf<string>();
+    expectTypeOf<OperationResult<'storedValueLoad'>['transactionType']>().toEqualTypeOf<
+      'ACTIVATE' | 'DUPLICATE' | 'LOAD' | 'RESERVE' | 'REVERSE' | 'UNLOAD' | undefined
+    >();
     expectTypeOf<OperationResult<'end'>>().toEqualTypeOf<undefined>();
     expectTypeOf<OperationOf<'settle'>['abandonedSettlement']>().not.toBeNever();
   });

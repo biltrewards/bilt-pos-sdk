@@ -42,6 +42,8 @@ pause:
               $ref: '../components/widgets.yaml#/WidgetState'
       '404':
         $ref: '../openapi.yaml#/components/responses/NotFound'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 resume:
   post:
@@ -62,6 +64,8 @@ resume:
               $ref: '../components/widgets.yaml#/WidgetState'
       '404':
         $ref: '../openapi.yaml#/components/responses/NotFound'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 retailMediaActions:
   post:
@@ -95,6 +99,8 @@ retailMediaActions:
         $ref: '../openapi.yaml#/components/responses/BadRequest'
       '404':
         $ref: '../openapi.yaml#/components/responses/NotFound'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 widgetType:
   name: widgetType

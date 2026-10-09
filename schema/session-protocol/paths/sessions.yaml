@@ -16,10 +16,12 @@ sessions:
       the request leaves it out. A host with no terminal configured refuses `kind: terminal`
       with 409 (`UNSUPPORTED`).
 
-      Widgets are attached once the session exists; a widget that cannot run (no ad decision
-      service, missing store location) is reported through a `background.error` event and the
-      session continues without it, exactly as in Java. A pending initial member is resolved in
-      the background and announced through `member.changed`.
+      A `retail-media` widget on a host without an ad decision service refuses the whole request
+      with 409 (`UNSUPPORTED`) and creates no session. Widgets are otherwise attached once the
+      session exists; one that cannot run (missing store location) is reported through a
+      `background.error` event and the session continues without it, exactly as in Java. A
+      pending initial member is resolved in the background and announced through
+      `member.changed`.
     parameters:
       - $ref: '../openapi.yaml#/components/parameters/idempotencyKey'
     requestBody:
@@ -38,13 +40,17 @@ sessions:
       '400':
         $ref: '../openapi.yaml#/components/responses/BadRequest'
       '409':
-        description: '`kind: terminal` on a host with no terminal configured (`UNSUPPORTED`).'
+        description: |
+          `UNSUPPORTED`: `kind: terminal` on a host with no terminal configured, or a
+          `retail-media` widget requested on a host without an ad decision service.
         content:
           application/json:
             schema:
               $ref: '../components/common.yaml#/SessionError'
       '503':
         $ref: '../openapi.yaml#/components/responses/TerminalUnreachable'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 session:
   parameters:
@@ -92,6 +98,8 @@ session:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 forceEnd:
   post:
@@ -127,6 +135,8 @@ forceEnd:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 abort:
   post:
@@ -154,3 +164,5 @@ abort:
                   $ref: '../components/operations.yaml#/Operation'
       '404':
         $ref: '../openapi.yaml#/components/responses/NotFound'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'

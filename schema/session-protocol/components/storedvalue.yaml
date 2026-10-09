@@ -41,11 +41,10 @@ StoredValueBalance:
 StoredValueOperationResult:
   type: object
   description: Outcome of a stored value operation (activate, load, unload, reserve, reverse, duplicate).
-  required: [transactionType]
   properties:
     transactionType:
       type: string
-      description: The operation the terminal performed (Nexo `StoredValueTransactionTypeEnum`).
+      description: The operation the terminal performed (Nexo `StoredValueTransactionTypeEnum`); absent when the terminal's response did not carry it.
       enum: [ACTIVATE, DUPLICATE, LOAD, RESERVE, REVERSE, UNLOAD]
     amount:
       description: Amount moved; absent when not echoed.

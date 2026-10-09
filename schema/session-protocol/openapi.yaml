@@ -55,7 +55,7 @@ info:
     | 400 | Request validation failed | `VALIDATION` |
     | 401 | Missing or invalid bearer token (reserved; not enforced in development mode) | `UNAUTHORIZED` |
     | 404 | Unknown session, operation, item or widget, or no terminal configured | `NOT_FOUND` |
-    | 409 | Lifecycle refusal: the same guards the Java SDK throws `IllegalStateException` for, or a terminal session on a host without a terminal | `INVALID_STATE` / `UNSUPPORTED` |
+    | 409 | Lifecycle refusal: the same guards the Java SDK throws `IllegalStateException` for, or a terminal session or a retail-media widget on a host without a terminal or ad decision service | `INVALID_STATE` / `UNSUPPORTED` |
     | 410 | Event replay position no longer buffered | `NOT_FOUND` |
     | 422 | Step reply does not match the pending step, or an `Idempotency-Key` reused with a different body | `INVALID_STATE` / `VALIDATION` |
     | 503 | Terminal unreachable | `NETWORK` |
@@ -220,6 +220,12 @@ components:
             $ref: './components/common.yaml#/SessionError'
     Conflict:
       description: Refused by a lifecycle guard; the body says which.
+      content:
+        application/json:
+          schema:
+            $ref: './components/common.yaml#/SessionError'
+    IdempotencyKeyReused:
+      description: The `Idempotency-Key` was already used for a different request (`VALIDATION`).
       content:
         application/json:
           schema:

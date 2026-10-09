@@ -74,6 +74,8 @@ operations:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
 
 operation:
   get:
@@ -128,7 +130,9 @@ reply:
       '404':
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '422':
-        description: The step is not pending (answered, expired or unknown).
+        description: |
+          The step is not pending (answered, expired or unknown: `INVALID_STATE`), or the
+          `Idempotency-Key` was already used for a different request (`VALIDATION`).
         content:
           application/json:
             schema:
@@ -172,3 +176,5 @@ abort:
         $ref: '../openapi.yaml#/components/responses/NotFound'
       '409':
         $ref: '../openapi.yaml#/components/responses/Conflict'
+      '422':
+        $ref: '../openapi.yaml#/components/responses/IdempotencyKeyReused'
