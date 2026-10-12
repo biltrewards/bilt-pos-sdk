@@ -1,0 +1,55 @@
+initialize: |
+  mise install java@21 node@20
+  # This VM gets HTTP 429 from repo.maven.apache.org. central-mirror.gradle (the same file the
+  # enterprise-pos-mobile blueprint writes) puts Google's Central mirror first, but Gradle still
+  # stops at the 429 from direct Central. zz-no-direct-central.gradle drops direct Central and
+  # gives included builds without a pluginManagement block (build-logic) the Plugin Portal back.
+  mkdir -p "$HOME/.gradle/init.d"
+  cat > "$HOME/.gradle/init.d/central-mirror.gradle" << 'EOF'
+  def MIRROR = 'https://maven-central.storage-download.googleapis.com/maven2/'
+  def prependMirror = { RepositoryHandler handler ->
+      def existing = new ArrayList(handler)
+      handler.clear()
+      handler.maven { url = MIRROR; name = 'CentralMirror' }
+      existing.each { handler.add(it) }
+  }
+  settingsEvaluated { settings ->
+      prependMirror(settings.pluginManagement.repositories)
+      prependMirror(settings.dependencyResolutionManagement.repositories)
+  }
+  allprojects {
+      buildscript { prependMirror(repositories) }
+  }
+  EOF
+  cat > "$HOME/.gradle/init.d/zz-no-direct-central.gradle" << 'EOF'
+  def isDirectCentral = { it instanceof MavenArtifactRepository && it.url.toString().startsWith('https://repo.maven.apache.org/') }
+  settingsEvaluated { settings ->
+      settings.pluginManagement.repositories.removeAll(isDirectCentral)
+      settings.dependencyResolutionManagement.repositories.removeAll(isDirectCentral)
+      if (!settings.pluginManagement.repositories.any { it instanceof MavenArtifactRepository && it.url.toString().startsWith('https://plugins.gradle.org/') }) {
+          settings.pluginManagement.repositories.gradlePluginPortal()
+      }
+  }
+  allprojects {
+      buildscript { repositories.removeAll(isDirectCentral) }
+      repositories.removeAll(isDirectCentral)
+  }
+  EOF
+maintenance: |
+  cd "$(git rev-parse --show-toplevel)"
+  mise exec java@21 -- ./gradlew help -q
+  cd "$(git rev-parse --show-toplevel)/js"
+  mise exec node@20 -- corepack pnpm install --frozen-lockfile
+knowledge:
+  - name: build
+    contents: |
+      # Java/Kotlin libraries: compile, unit tests and spotlessCheck, as CI build.yml runs them.
+      cd "$(git rev-parse --show-toplevel)" && mise exec java@21 -- ./gradlew build
+      # Fix formatting first with: mise exec java@21 -- ./gradlew spotlessApply
+      # :java WidgetSessionTest is timing-sensitive on this VM; re-run it once before treating a failure as real.
+  - name: js
+    contents: |
+      # JS SDK (js/): the same steps CI js.yml runs, in order.
+      cd "$(git rev-parse --show-toplevel)/js"
+      mise exec node@20 -- corepack pnpm install --frozen-lockfile
+      for s in lint:spec lint generate:check build typecheck test api:check; do mise exec node@20 -- corepack pnpm "$s" || { echo "FAILED: pnpm $s" >&2; break; }; done
