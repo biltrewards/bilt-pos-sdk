@@ -22,34 +22,42 @@ initialize: |
   }
   EOF
   cat > "$HOME/.gradle/init.d/zz-no-direct-central.gradle" << 'EOF'
+  def MIRROR = 'https://maven-central.storage-download.googleapis.com/maven2/'
   def isDirectCentral = { it instanceof MavenArtifactRepository && it.url.toString().startsWith('https://repo.maven.apache.org/') }
+  def swapCentral = { RepositoryHandler repos ->
+      if (repos.removeAll(isDirectCentral) && !repos.any { it instanceof MavenArtifactRepository && it.url.toString() == MIRROR }) {
+          repos.maven { url = MIRROR; name = 'CentralMirror' }
+      }
+  }
   settingsEvaluated { settings ->
-      settings.pluginManagement.repositories.removeAll(isDirectCentral)
-      settings.dependencyResolutionManagement.repositories.removeAll(isDirectCentral)
+      swapCentral(settings.pluginManagement.repositories)
+      swapCentral(settings.dependencyResolutionManagement.repositories)
       if (!settings.pluginManagement.repositories.any { it instanceof MavenArtifactRepository && it.url.toString().startsWith('https://plugins.gradle.org/') }) {
           settings.pluginManagement.repositories.gradlePluginPortal()
       }
   }
   allprojects {
-      buildscript { repositories.removeAll(isDirectCentral) }
-      repositories.removeAll(isDirectCentral)
+      buildscript { swapCentral(repositories) }
+      // Build scripts add their own mavenCentral() after this block runs, so swap it after evaluation.
+      afterEvaluate { swapCentral(repositories) }
   }
   EOF
 maintenance: |
   cd "$(git rev-parse --show-toplevel)"
-  mise exec java@21 -- ./gradlew help -q
+  mise exec java@21 -- "$(git rev-parse --show-toplevel)/gradlew" help -q
   cd "$(git rev-parse --show-toplevel)/js"
   mise exec node@20 -- corepack pnpm install --frozen-lockfile
 knowledge:
   - name: build
     contents: |
       # Java/Kotlin libraries: compile, unit tests and spotlessCheck, as CI build.yml runs them.
-      cd "$(git rev-parse --show-toplevel)" && mise exec java@21 -- ./gradlew build
-      # Fix formatting first with: mise exec java@21 -- ./gradlew spotlessApply
+      cd "$(git rev-parse --show-toplevel)" && mise exec java@21 -- "$(git rev-parse --show-toplevel)/gradlew" build
+      # Fix formatting first with: mise exec java@21 -- "$(git rev-parse --show-toplevel)/gradlew" spotlessApply
       # :java WidgetSessionTest is timing-sensitive on this VM; re-run it once before treating a failure as real.
   - name: js
     contents: |
       # JS SDK (js/): the same steps CI js.yml runs, in order.
       cd "$(git rev-parse --show-toplevel)/js"
       mise exec node@20 -- corepack pnpm install --frozen-lockfile
-      for s in lint:spec lint generate:check build typecheck test api:check; do mise exec node@20 -- corepack pnpm "$s" || { echo "FAILED: pnpm $s" >&2; break; }; done
+      p() { mise exec node@20 -- corepack pnpm "$@"; }
+      p lint:spec && p lint && p generate:check && p build && p typecheck && p test && p api:check
