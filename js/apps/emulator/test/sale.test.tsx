@@ -48,6 +48,13 @@ async function signInWith(
   }
 }
 
+/** Matches the element whose full text (across its bold/italic spans) is `text`. */
+function line(text: string): (content: string, element: Element | null) => boolean {
+  return (_, element) =>
+    element?.textContent === text &&
+    [...element.children].every((child) => child.textContent !== text);
+}
+
 function dialog(name: string): HTMLElement {
   return screen.getByRole('dialog', { name });
 }
@@ -268,7 +275,8 @@ describe('the Sale tab and the basket card', () => {
     });
     expect(within(card).getByTestId('member').textContent).toBe('mbr_8f2a');
     expect(within(card).getByText('Aloy Pelta')).toBeTruthy();
-    expect(within(card).getByText('Gold tier · 42000 pts · 0 reward(s)')).toBeTruthy();
+    expect(within(card).getByText(line('Gold tier · 42000 pts · 0 reward(s)'))).toBeTruthy();
+    expect(within(card).getByText('Gold tier').tagName).toBe('STRONG');
     expect(events()).toContain('Member identified: mbr_8f2a, 42000 pts, 0 reward(s)');
   });
 
@@ -323,9 +331,14 @@ describe('the Sale tab and the basket card', () => {
     try {
       fireEvent.click(button('Loyalty Sign-In'));
       await waitFor(() => expect(events()).toContain('kept from an earlier sign-in'));
-      expect(within(card).getByTestId('member').textContent).toBe('mbr_8f2a');
-      expect(within(card).getByText('Aloy Pelta')).toBeTruthy();
-      expect(within(card).getByText('Gold tier · 42000 pts · 0 reward(s)')).toBeTruthy();
+      // the prompt unmounts the card, so read the one rendered for the retained member
+      const retained = screen.getByRole('region', { name: 'Loyalty sign-in' });
+      expect(retained).not.toBe(card);
+      expect(within(retained).getByTestId('member').textContent).toBe(
+        'mbr_8f2a — kept from an earlier sign-in',
+      );
+      expect(within(retained).getByText('Aloy Pelta')).toBeTruthy();
+      expect(within(retained).getByText(line('Gold tier · 42000 pts · 0 reward(s)'))).toBeTruthy();
     } finally {
       identify.mockRestore();
     }

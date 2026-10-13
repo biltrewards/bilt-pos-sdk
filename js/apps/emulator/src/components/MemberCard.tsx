@@ -33,15 +33,16 @@ export function MemberCard({ member }: { member: MemberIdentity }): ReactNode {
         <>
           {member.name ? <p className="shopper-name">{member.name}</p> : null}
           <p className="small">
-            {[
-              ...(member.tierName ? [`${member.tierName} tier`] : []),
-              member.pointBalance !== null ? `${member.pointBalance} pts` : 'points not reported',
-              `${member.rewards.length} reward(s)`,
-            ].join(' · ')}
+            {member.tierName ? <strong>{member.tierName} tier</strong> : null}
+            {member.tierName ? ' · ' : null}
+            {member.pointBalance !== null ? `${member.pointBalance} pts` : 'points not reported'}
+            {` · ${member.rewards.length} reward(s)`}
           </p>
           <ul className="rewards small">
             {member.rewards.map((reward, index) => (
-              <li key={reward.rewardRef ?? index}>{rewardLine(reward)}</li>
+              <li key={reward.rewardRef ?? index} className="reward">
+                {rewardLine(reward)}
+              </li>
             ))}
           </ul>
           {member.vas ? (

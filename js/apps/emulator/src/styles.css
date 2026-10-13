@@ -591,7 +591,12 @@ button.choice {
 
 .member .shopper-name {
   margin: 0;
-  font-weight: 600;
+  font-weight: 700;
+}
+
+.member .reward {
+  font-weight: 700;
+  font-style: italic;
 }
 
 .member h3 {
