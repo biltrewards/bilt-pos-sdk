@@ -64,6 +64,15 @@ class NexoEmulatorControllerIdentifyTest {
                 {"serviceId":"pass.com.biltrewards.loyalty","serviceType":"Coupon1",
                  "statusWord":"9000","encryptedData":"8ff4b4de","cipherTimestamp":"3006a261"}]}"""
 
+        /**
+         * The `shopperContext` object a terminal adds when a wallet-pass sign-in resolves a
+         * shopper.
+         */
+        const val SHOPPER_CONTEXT_JSON =
+            """{"shopper":{"kind":"MEMBER","walletIdentityId":"wallet-1",""" +
+                """"firstName":"Aloy","lastName":"Pelta","pointsBalance":42000,""" +
+                """"tierName":"Gold"}}"""
+
         /** No member matched what was keyed — an affirmative answer, unlike a cancel. */
         const val CARD_ACQUISITION_NOT_FOUND =
             """{"SaleToPOIResponse":{"CardAcquisitionResponse":{
@@ -217,11 +226,7 @@ class NexoEmulatorControllerIdentifyTest {
             if ("\"CardAcquisitionRequest\"" in body) {
                 cardAcquisitionFound(
                     "19d6f8aa-51ce-484e-9e28-06949b1b8f90",
-                    shopperContextJson =
-                        """{"shopper":{"kind":"MEMBER",""" +
-                            """"walletIdentityId":"wallet-1","firstName":"Aloy",""" +
-                            """"lastName":"Pelta","pointsBalance":42000,""" +
-                            """"tierName":"Gold"}}""",
+                    shopperContextJson = SHOPPER_CONTEXT_JSON,
                 )
             } else {
                 defaultResponse(body)
@@ -418,7 +423,7 @@ class NexoEmulatorControllerIdentifyTest {
             when {
                 "\"CardAcquisitionRequest\"" !in body -> defaultResponse(body)
                 cancelNext -> CARD_ACQUISITION_CANCELLED
-                else -> cardAcquisitionFound("98234")
+                else -> cardAcquisitionFound("98234", shopperContextJson = SHOPPER_CONTEXT_JSON)
             }
         }
         val controller = controller()
@@ -443,6 +448,11 @@ class NexoEmulatorControllerIdentifyTest {
             assertEquals("98234", found.memberId)
             assertTrue(found.retained, "a cancelled prompt leaves the prior member attached")
             assertTrue("kept from an earlier sign-in" in found.headline, found.headline)
+            // the SDK's Member has no shopper context; the card keeps the
+            // earlier sign-in's shopper details
+            assertEquals("Aloy Pelta", found.name)
+            assertEquals("Gold", found.tierName)
+            assertEquals(42000, found.pointBalance)
         }
     }
 
