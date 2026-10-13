@@ -1,0 +1,63 @@
+initialize: |
+  mise install java@21 node@20
+  # This VM gets HTTP 429 from repo.maven.apache.org. central-mirror.gradle (the same file the
+  # enterprise-pos-mobile blueprint writes) puts Google's Central mirror first, but Gradle still
+  # stops at the 429 from direct Central. zz-no-direct-central.gradle drops direct Central and
+  # gives included builds without a pluginManagement block (build-logic) the Plugin Portal back.
+  mkdir -p "$HOME/.gradle/init.d"
+  cat > "$HOME/.gradle/init.d/central-mirror.gradle" << 'EOF'
+  def MIRROR = 'https://maven-central.storage-download.googleapis.com/maven2/'
+  def prependMirror = { RepositoryHandler handler ->
+      def existing = new ArrayList(handler)
+      handler.clear()
+      handler.maven { url = MIRROR; name = 'CentralMirror' }
+      existing.each { handler.add(it) }
+  }
+  settingsEvaluated { settings ->
+      prependMirror(settings.pluginManagement.repositories)
+      prependMirror(settings.dependencyResolutionManagement.repositories)
+  }
+  allprojects {
+      buildscript { prependMirror(repositories) }
+  }
+  EOF
+  cat > "$HOME/.gradle/init.d/zz-no-direct-central.gradle" << 'EOF'
+  def MIRROR = 'https://maven-central.storage-download.googleapis.com/maven2/'
+  def isDirectCentral = { it instanceof MavenArtifactRepository && it.url.toString().startsWith('https://repo.maven.apache.org/') }
+  def swapCentral = { RepositoryHandler repos ->
+      if (repos.removeAll(isDirectCentral) && !repos.any { it instanceof MavenArtifactRepository && it.url.toString() == MIRROR }) {
+          repos.maven { url = MIRROR; name = 'CentralMirror' }
+      }
+  }
+  settingsEvaluated { settings ->
+      swapCentral(settings.pluginManagement.repositories)
+      swapCentral(settings.dependencyResolutionManagement.repositories)
+      if (!settings.pluginManagement.repositories.any { it instanceof MavenArtifactRepository && it.url.toString().startsWith('https://plugins.gradle.org/') }) {
+          settings.pluginManagement.repositories.gradlePluginPortal()
+      }
+  }
+  allprojects {
+      buildscript { swapCentral(repositories) }
+      // Build scripts add their own mavenCentral() after this block runs, so swap it after evaluation.
+      afterEvaluate { swapCentral(repositories) }
+  }
+  EOF
+maintenance: |
+  cd "$(git rev-parse --show-toplevel)"
+  mise exec java@21 -- "$(git rev-parse --show-toplevel)/gradlew" help -q
+  cd "$(git rev-parse --show-toplevel)/js"
+  mise exec node@20 -- corepack pnpm install --frozen-lockfile
+knowledge:
+  - name: build
+    contents: |
+      # Java/Kotlin libraries: compile, unit tests and spotlessCheck, as CI build.yml runs them.
+      cd "$(git rev-parse --show-toplevel)" && mise exec java@21 -- "$(git rev-parse --show-toplevel)/gradlew" build
+      # Fix formatting first with: mise exec java@21 -- "$(git rev-parse --show-toplevel)/gradlew" spotlessApply
+      # :java WidgetSessionTest is timing-sensitive on this VM; re-run it once before treating a failure as real.
+  - name: js
+    contents: |
+      # JS SDK (js/): the same steps CI js.yml runs, in order.
+      cd "$(git rev-parse --show-toplevel)/js"
+      mise exec node@20 -- corepack pnpm install --frozen-lockfile
+      p() { mise exec node@20 -- corepack pnpm "$@"; }
+      p lint:spec && p lint && p generate:check && p build && p typecheck && p test && p api:check
