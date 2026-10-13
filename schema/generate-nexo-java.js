@@ -162,7 +162,7 @@ async function run() {
     const result = await quicktypeMultiFile({
         inputData,
         lang: new BuilderJavaTargetLanguage(),
-        rendererOptions: { package: PACKAGE },
+        rendererOptions: { package: PACKAGE, 'array-type': 'array' },
     });
 
     fs.mkdirSync(outputDir, { recursive: true });
