@@ -291,11 +291,24 @@ internal fun EmulatorApp(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    ConnectionPanel(state, controller)
-                    // Only after a sign-in ran, and only for the checkout it
-                    // ran in: no card is exactly a guest checkout
-                    state.member?.let { MemberCard(it) }
                     if (sideLog) {
+                        // matching heights would take intrinsic measurement,
+                        // which ConnectionPanel's BoxWithConstraints has none
+                        // of — top-align instead
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            ConnectionPanel(state, controller, Modifier.weight(2f))
+                            // Only after a sign-in ran, and only for the
+                            // checkout it ran in: no card is exactly a guest
+                            // checkout. The slot stays — the same 1f the log
+                            // column takes — so the controls don't reflow when
+                            // a sign-in lands.
+                            val memberSlot = Modifier.weight(1f)
+                            state.member?.let { MemberCard(it, memberSlot) } ?: Spacer(memberSlot)
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth().weight(1f),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -308,6 +321,10 @@ internal fun EmulatorApp(
                             EventsCard(state, Modifier.weight(1f).fillMaxHeight())
                         }
                     } else {
+                        ConnectionPanel(state, controller)
+                        // Only after a sign-in ran, and only for the checkout
+                        // it ran in: no card is exactly a guest checkout
+                        state.member?.let { MemberCard(it) }
                         basketAndTab()
                         EventsCard(state, Modifier.fillMaxWidth().weight(0.5f))
                     }
@@ -723,7 +740,11 @@ private fun PaymentOutcomeDialog(outcome: PaymentOutcome, onDismiss: () -> Unit)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController) {
+private fun ConnectionPanel(
+    state: EmulatorState,
+    controller: EmulatorController,
+    modifier: Modifier = Modifier,
+) {
     // Saveable so an Android configuration change keeps the typed values;
     // the passphrase is deliberately plain remember — secrets don't belong
     // in saved instance state
@@ -756,9 +777,9 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
             "passphrase (required)"
         }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().fillMaxHeight().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Stack the controls when the window is narrow (phones, split
@@ -991,8 +1012,8 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
  * rewards the payment may redeem — or why nobody is attached.
  */
 @Composable
-private fun MemberCard(member: MemberIdentity) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun MemberCard(member: MemberIdentity, modifier: Modifier = Modifier) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1015,8 +1036,12 @@ private fun MemberCard(member: MemberIdentity) {
             }
             when (member) {
                 is MemberIdentity.Found -> {
+                    member.name?.let {
+                        Text(it, style = MaterialTheme.typography.titleSmall)
+                    }
                     Text(
-                        listOf(
+                        listOfNotNull(
+                                member.tierName?.let { "$it tier" },
                                 member.pointBalance?.let { "$it pts" } ?: "points not reported",
                                 "${member.rewards.size} reward(s)",
                             )

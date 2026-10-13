@@ -1309,9 +1309,17 @@ class NexoEmulatorController(
                         memberId = id,
                         loyaltyBrand = loyaltyBrand,
                         // the SDK reports an unknown balance as 0, and the
-                        // prompted flow never carries one — so 0 here means
-                        // "not reported", not a member with nothing banked
-                        pointBalance = pointBalance.takeIf { it > 0 },
+                        // prompted flow's own field never carries one — the
+                        // shopper context's pointsBalance is the real report
+                        pointBalance =
+                            pointBalance.takeIf { it > 0 } ?: shopperContext?.pointsBalance,
+                        name =
+                            shopperContext?.let {
+                                listOfNotNull(it.firstName, it.lastName).joinToString(" ").ifBlank {
+                                    null
+                                }
+                            },
+                        tierName = shopperContext?.tierName,
                         rewards = rewards.map { it.toUi() },
                         vas = vasData?.toUi(),
                     )

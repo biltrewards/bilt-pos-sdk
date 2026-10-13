@@ -81,11 +81,16 @@ class NexoEmulatorControllerIdentifyTest {
     /**
      * The rewards payload rides in `AdditionalResponse` as Base64 JSON, as the terminal sends it.
      */
-    private fun cardAcquisitionFound(memberId: String, vasJson: String? = null): String {
+    private fun cardAcquisitionFound(
+        memberId: String,
+        vasJson: String? = null,
+        shopperContextJson: String? = null,
+    ): String {
         val rewards =
             """{"rewards":[{"rewardRef":"rwd:RWD-1","type":"reward","name":"${'$'}10 Off",""" +
                 """"expirationDate":"2026-12-31T00:00:00Z"}],"rewardCount":1""" +
                 (vasJson?.let { ""","vas":$it""" } ?: "") +
+                (shopperContextJson?.let { ""","shopperContext":$it""" } ?: "") +
                 "}"
         val encoded = Base64.getEncoder().encodeToString(rewards.toByteArray())
         return """{"SaleToPOIResponse":{"CardAcquisitionResponse":{
@@ -203,6 +208,40 @@ class NexoEmulatorControllerIdentifyTest {
             // the claim is released, so the next operation can run
             controller.identifyMember()
             withTimeout(10_000) { controller.state.first { cardAcquisitions.size == 2 } }
+        }
+    }
+
+    @Test
+    fun shopperContextCarriesTheShoppersNameBalanceAndTier() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"CardAcquisitionRequest\"" in body) {
+                cardAcquisitionFound(
+                    "19d6f8aa-51ce-484e-9e28-06949b1b8f90",
+                    shopperContextJson =
+                        """{"shopper":{"kind":"MEMBER",""" +
+                            """"walletIdentityId":"wallet-1","firstName":"Aloy",""" +
+                            """"lastName":"Pelta","pointsBalance":42000,""" +
+                            """"tierName":"Gold"}}""",
+                )
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller()
+        runBlocking {
+            controller.connectAndStartCheckout()
+            controller.identifyMember()
+            val member =
+                withTimeout(10_000) {
+                    controller.state.first { it.member != null && !it.identifyInProgress }.member
+                }
+
+            val found = assertIsFound(member)
+            // the member id still comes from LoyaltyAccount
+            assertEquals("19d6f8aa-51ce-484e-9e28-06949b1b8f90", found.memberId)
+            assertEquals("Aloy Pelta", found.name)
+            assertEquals("Gold", found.tierName)
+            assertEquals(42000, found.pointBalance)
         }
     }
 
