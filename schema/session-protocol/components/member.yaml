@@ -116,6 +116,42 @@ IdentifyResult:
         (e.g. an Apple Wallet loyalty pass). Omitted when the terminal returned none. The pass
         payload stays encrypted; nothing in the chain decrypts it.
       $ref: '#/VasData'
+    shopperContext:
+      description: |
+        Shopper details the terminal resolved for a wallet-pass sign-in. Omitted when the
+        terminal sent none; the member id still comes from `memberId`.
+      $ref: '#/ShopperContext'
+
+ShopperKind:
+  type: string
+  description: Kind of shopper a `ShopperContext` describes; `UNKNOWN` is a kind the SDK did not recognize.
+  enum: [MEMBER, ANONYMOUS, UNKNOWN]
+
+ShopperContext:
+  type: object
+  description: Mirrors the Java `ShopperContext`.
+  required: [kind]
+  properties:
+    kind:
+      $ref: '#/ShopperKind'
+    walletIdentityId:
+      type: string
+      description: The wallet pass identity the shopper tapped.
+    neighborhoodId:
+      type: string
+      description: The shopper's neighborhood id.
+    firstName:
+      type: string
+      description: The shopper's first name.
+    lastName:
+      type: string
+      description: The shopper's last name.
+    pointsBalance:
+      type: integer
+      description: Bilt points balance; omitted when not reported.
+    tierName:
+      type: string
+      description: The shopper's loyalty tier name, e.g. `"Gold"`.
 
 VasData:
   type: object

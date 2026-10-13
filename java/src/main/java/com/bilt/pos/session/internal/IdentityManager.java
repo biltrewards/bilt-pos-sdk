@@ -116,7 +116,8 @@ public final class IdentityManager {
         account.getLoyaltyBrand(),
         LoyaltyPayloadCodec.parseRewards(payload),
         0,
-        LoyaltyPayloadCodec.parseVas(payload));
+        LoyaltyPayloadCodec.parseVas(payload),
+        LoyaltyPayloadCodec.parseShopperContext(payload));
   }
 
   /**

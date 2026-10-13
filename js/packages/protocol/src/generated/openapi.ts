@@ -1204,6 +1204,32 @@ export interface components {
              *     payload stays encrypted; nothing in the chain decrypts it.
              */
             vasData?: components["schemas"]["VasData"];
+            /**
+             * @description Shopper details the terminal resolved for a wallet-pass sign-in. Omitted when the
+             *     terminal sent none; the member id still comes from `memberId`.
+             */
+            shopperContext?: components["schemas"]["ShopperContext"];
+        };
+        /**
+         * @description Kind of shopper a `ShopperContext` describes; `UNKNOWN` is a kind the SDK did not recognize.
+         * @enum {string}
+         */
+        ShopperKind: "MEMBER" | "ANONYMOUS" | "UNKNOWN";
+        /** @description Mirrors the Java `ShopperContext`. */
+        ShopperContext: {
+            kind: components["schemas"]["ShopperKind"];
+            /** @description The wallet pass identity the shopper tapped. */
+            walletIdentityId?: string;
+            /** @description The shopper's neighborhood id. */
+            neighborhoodId?: string;
+            /** @description The shopper's first name. */
+            firstName?: string;
+            /** @description The shopper's last name. */
+            lastName?: string;
+            /** @description Bilt points balance; omitted when not reported. */
+            pointsBalance?: number;
+            /** @description The shopper's loyalty tier name, e.g. `"Gold"`. */
+            tierName?: string;
         };
         /**
          * @description Mirrors the Java `VasData`. The terminal forwards what its payment SDK reports, unmodified;

@@ -147,6 +147,11 @@ default without being asked.
 omit `KEYED`, and the terminal may read an Apple Wallet pass. A pass comes back
 as `result.vasData` (`services[]`, plus `source`, `merchantId` and `raw` when the
 terminal reported them), still encrypted; the key is absent when there is none.
+A pass sign-in may also resolve a `result.shopperContext` — `kind` (`MEMBER`,
+`ANONYMOUS`, or `UNKNOWN` for a kind this build does not recognize) plus the
+shopper's `walletIdentityId`, `neighborhoodId`, `firstName`, `lastName`,
+`pointsBalance` and `tierName` when the terminal reported them; the key is
+absent when the terminal sent none, and `memberId` still carries the member id.
 
 ## What this iteration leaves out
 

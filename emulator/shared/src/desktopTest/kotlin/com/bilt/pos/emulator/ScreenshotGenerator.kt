@@ -144,11 +144,15 @@ class ScreenshotGenerator {
                     ),
                 basketTotal = "189.89",
                 basketTax = "10.93",
-                // the prompted sign-in reports neither brand nor balance,
-                // so the fixture doesn't claim them either
+                // the prompted sign-in reports no balance of its own — the
+                // shopper context's points balance is what the card shows
                 member =
                     MemberIdentity.Found(
                         memberId = "98234",
+                        loyaltyBrand = "WALLET_VAS_LOYALTY",
+                        pointBalance = 42000,
+                        name = "Aloy Pelta",
+                        tierName = "Gold",
                         rewards =
                             listOf(
                                 MemberRewardUi(
@@ -171,10 +175,12 @@ class ScreenshotGenerator {
                         "10:41:25 Added Sparkling Water 12-pack ($6.99)",
                         "10:41:31 Added Desk Lamp ($34.99)",
                         "10:41:34 Loyalty sign-in on the terminal…",
-                        "10:41:38 Member identified: 98234, 1 reward(s)",
+                        "10:41:38 Member identified: 98234 · WALLET_VAS_LOYALTY, 42000 pts, 1 reward(s)",
                     ),
             )
         render(midCheckout, File(dir, "emulator-mid-checkout.png"))
+        // the member card's slot stays empty on a guest checkout
+        render(midCheckout.copy(member = null), File(dir, "emulator-no-member.png"))
         render(
             midCheckout.copy(
                 paymentInProgress = true,

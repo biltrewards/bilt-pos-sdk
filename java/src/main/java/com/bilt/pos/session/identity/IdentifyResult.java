@@ -28,6 +28,7 @@ public final class IdentifyResult {
   private final List<Reward> rewards;
   private final int pointBalance;
   private final VasData vasData;
+  private final ShopperContext shopperContext;
 
   private IdentifyResult(
       IdentifyStatus status,
@@ -35,7 +36,8 @@ public final class IdentifyResult {
       String loyaltyBrand,
       List<Reward> rewards,
       int pointBalance,
-      VasData vasData) {
+      VasData vasData,
+      ShopperContext shopperContext) {
     this.status = status;
     this.memberId = memberId;
     this.loyaltyBrand = loyaltyBrand;
@@ -45,6 +47,7 @@ public final class IdentifyResult {
             : Collections.unmodifiableList(new ArrayList<>(rewards));
     this.pointBalance = pointBalance;
     this.vasData = vasData;
+    this.shopperContext = shopperContext;
   }
 
   /** A member was found. */
@@ -60,8 +63,28 @@ public final class IdentifyResult {
       List<Reward> rewards,
       int pointBalance,
       VasData vasData) {
+    return found(memberId, loyaltyBrand, rewards, pointBalance, vasData, null);
+  }
+
+  /**
+   * A member was found from a mobile wallet pass that carried {@code vasData} and resolved a {@code
+   * shopperContext}.
+   */
+  public static IdentifyResult found(
+      String memberId,
+      String loyaltyBrand,
+      List<Reward> rewards,
+      int pointBalance,
+      VasData vasData,
+      ShopperContext shopperContext) {
     return new IdentifyResult(
-        IdentifyStatus.FOUND, memberId, loyaltyBrand, rewards, pointBalance, vasData);
+        IdentifyStatus.FOUND,
+        memberId,
+        loyaltyBrand,
+        rewards,
+        pointBalance,
+        vasData,
+        shopperContext);
   }
 
   /** No member is attached; {@code status} says why. */
@@ -69,7 +92,7 @@ public final class IdentifyResult {
     if (status == IdentifyStatus.FOUND) {
       throw new IllegalArgumentException("FOUND requires member data");
     }
-    return new IdentifyResult(status, null, null, null, 0, null);
+    return new IdentifyResult(status, null, null, null, 0, null, null);
   }
 
   public IdentifyStatus getStatus() {
@@ -102,5 +125,13 @@ public final class IdentifyResult {
    */
   public VasData getVasData() {
     return vasData;
+  }
+
+  /**
+   * Shopper details the terminal resolved for a wallet-pass sign-in, or {@code null} when none was
+   * sent.
+   */
+  public ShopperContext getShopperContext() {
+    return shopperContext;
   }
 }

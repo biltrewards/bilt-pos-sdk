@@ -1211,6 +1211,7 @@ class NexoEmulatorController(
         }
         // A re-run starts from a blank card rather than leaving the previous
         // answer on screen while the terminal collects the next one
+        val previous = _state.value.member as? MemberIdentity.Found
         _state.update { it.copy(identifyInProgress = true, member = null) }
         log(
             if (readVas) {
@@ -1227,11 +1228,11 @@ class NexoEmulatorController(
                 // a checkout that ended under a late-arriving prompt owns
                 // neither the card nor the display any more
                 if (connection !== conn || conn.session !== session) return@onSuccess
-                publishIdentity(session, outcome.toUi())
+                publishIdentity(session, outcome.toUi(), previous)
             }
             .onError { error ->
                 if (connection !== conn || conn.session !== session) return@onError
-                publishIdentity(session, MemberIdentity.Failed(error.message))
+                publishIdentity(session, MemberIdentity.Failed(error.message), previous)
                 error.cause?.let { detailedLog(it.stackTraceToString()) }
             }
             .onComplete {
@@ -1271,12 +1272,26 @@ class NexoEmulatorController(
      * identification standing. Reporting [outcome] alone would tell the operator nobody is attached
      * while settlement went on applying loyalty to that member.
      */
-    private fun publishIdentity(session: TerminalShopperSession, outcome: MemberIdentity) {
+    private fun publishIdentity(
+        session: TerminalShopperSession,
+        outcome: MemberIdentity,
+        previous: MemberIdentity.Found?,
+    ) {
         val identity =
             if (outcome is MemberIdentity.Found) {
                 outcome
             } else {
-                session.member()?.toUi()?.copy(retained = true) ?: outcome
+                session.member()?.toUi()?.let { kept ->
+                    // the SDK's Member has no shopper context; carry it
+                    // over for the same member
+                    val same = previous?.takeIf { it.memberId == kept.memberId }
+                    kept.copy(
+                        retained = true,
+                        name = same?.name,
+                        tierName = same?.tierName,
+                        pointBalance = kept.pointBalance ?: same?.pointBalance,
+                    )
+                } ?: outcome
             }
         _state.update { it.copy(member = identity) }
         when (identity) {
@@ -1309,9 +1324,17 @@ class NexoEmulatorController(
                         memberId = id,
                         loyaltyBrand = loyaltyBrand,
                         // the SDK reports an unknown balance as 0, and the
-                        // prompted flow never carries one — so 0 here means
-                        // "not reported", not a member with nothing banked
-                        pointBalance = pointBalance.takeIf { it > 0 },
+                        // prompted flow's own field never carries one — the
+                        // shopper context's pointsBalance is the real report
+                        pointBalance =
+                            pointBalance.takeIf { it > 0 } ?: shopperContext?.pointsBalance,
+                        name =
+                            shopperContext?.let {
+                                listOfNotNull(it.firstName, it.lastName).joinToString(" ").ifBlank {
+                                    null
+                                }
+                            },
+                        tierName = shopperContext?.tierName,
                         rewards = rewards.map { it.toUi() },
                         vas = vasData?.toUi(),
                     )
