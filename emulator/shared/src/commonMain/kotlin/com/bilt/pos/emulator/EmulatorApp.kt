@@ -779,7 +779,7 @@ private fun ConnectionPanel(
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.fillMaxWidth().fillMaxHeight().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Stack the controls when the window is narrow (phones, split
