@@ -288,8 +288,13 @@ input.compact.grow {
 
 .member-header {
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
   align-items: baseline;
+}
+
+.member-header h2 {
+  white-space: nowrap;
 }
 
 .rewards {
@@ -298,6 +303,14 @@ input.compact.grow {
   list-style: none;
   max-height: 5rem;
   overflow: auto;
+}
+
+/* The sign-in card sits beside the controls in the event log's column; the slot stays empty on a
+   guest checkout so the controls don't reflow when a sign-in lands. */
+.top-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 0.75rem;
 }
 
 .workspace {
@@ -339,6 +352,7 @@ input.compact.grow {
     min-height: 100vh;
   }
 
+  .top-row,
   .workspace {
     grid-template-columns: 1fr;
   }
@@ -569,6 +583,11 @@ button.choice {
 .install-prompt {
   border-top: 1px solid var(--line);
   padding-top: 0.5rem;
+}
+
+.member .shopper-name {
+  margin: 0;
+  font-weight: 600;
 }
 
 .member h3 {

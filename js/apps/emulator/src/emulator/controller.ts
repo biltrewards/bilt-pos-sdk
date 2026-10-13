@@ -142,6 +142,8 @@ function vasToUi(vas: VasData): VasUi {
 }
 
 function identifyToUi(result: IdentifyResult): MemberIdentity {
+  const shopper = result.shopperContext;
+  const name = [shopper?.firstName, shopper?.lastName].filter(Boolean).join(' ');
   switch (result.status) {
     case 'FOUND':
       return result.memberId
@@ -149,7 +151,12 @@ function identifyToUi(result: IdentifyResult): MemberIdentity {
             kind: 'found',
             memberId: result.memberId,
             ...(result.loyaltyBrand ? { loyaltyBrand: result.loyaltyBrand } : {}),
-            pointBalance: result.pointBalance > 0 ? result.pointBalance : null,
+            // the SDK reports an unknown balance as 0 and the prompted flow never carries one;
+            // the shopper context's pointsBalance is the real report
+            pointBalance:
+              result.pointBalance > 0 ? result.pointBalance : (shopper?.pointsBalance ?? null),
+            ...(name ? { name } : {}),
+            ...(shopper?.tierName ? { tierName: shopper.tierName } : {}),
             rewards: result.rewards.map(rewardToUi),
             retained: false,
             ...(result.vasData ? { vas: vasToUi(result.vasData) } : {}),

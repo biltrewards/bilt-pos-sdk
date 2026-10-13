@@ -1,15 +1,47 @@
 // The Sale tab, the basket card and the settlement against the SDK double: products and the
 // keypad, the Discount and Credit dialogs, the settlement toggles, the recovery dialog with the
 // desktop's choices, the outcome popup and the stored sale.
-import { SessionError } from '@bilt/pos-sdk';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { SessionError, type IdentifyResult } from '@bilt/pos-sdk';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { addProduct, button, events, region, renderApp } from './harness';
+import { addProduct, button, events, MockTerminalSession, region, renderApp } from './harness';
 
 function basketLines(): string[] {
   return Array.from(region('Basket').querySelectorAll('.line-text')).map(
     (line) => line.textContent ?? '',
   );
+}
+
+/** Signs in at Start Checkout against a terminal reporting `shopperContext`; returns the card. */
+async function signInWith(
+  pointBalance: number,
+  shopperContext?: IdentifyResult['shopperContext'],
+): Promise<HTMLElement> {
+  const identify = vi
+    .spyOn(MockTerminalSession.prototype, 'identifyMember')
+    .mockImplementation(() =>
+      Object.assign(
+        Promise.resolve<IdentifyResult>({
+          status: 'FOUND',
+          memberId: 'mbr_8f2a',
+          rewards: [],
+          pointBalance,
+          ...(shopperContext ? { shopperContext } : {}),
+        }),
+        {
+          id: 'op_x',
+          type: 'identifyMember' as const,
+          status: 'succeeded' as const,
+          abort: async () => undefined,
+        },
+      ),
+    );
+  await renderApp();
+  fireEvent.click(screen.getByLabelText('Identify'));
+  fireEvent.click(button('Start Checkout'));
+  const card = await screen.findByRole('region', { name: 'Loyalty sign-in' });
+  identify.mockRestore();
+  return card;
 }
 
 function dialog(name: string): HTMLElement {
@@ -218,6 +250,43 @@ describe('the Sale tab and the basket card', () => {
     await waitFor(() =>
       expect(screen.queryByRole('region', { name: 'Loyalty sign-in' })).toBeNull(),
     );
+  });
+
+  it("shows the shopper's name, points and tier from the shopper context", async () => {
+    const card = await signInWith(0, {
+      kind: 'MEMBER',
+      walletIdentityId: '7d4c1f0e-0000-4000-8000-000000000001',
+      neighborhoodId: 'mbr_8f2a',
+      firstName: 'Aloy',
+      lastName: 'Pelta',
+      pointsBalance: 42000,
+      tierName: 'Gold',
+    });
+    expect(within(card).getByTestId('member').textContent).toBe('mbr_8f2a');
+    expect(within(card).getByText('Aloy Pelta')).toBeTruthy();
+    expect(within(card).getByText('Gold tier · 42000 pts · 0 reward(s)')).toBeTruthy();
+    expect(events()).toContain('Member identified: mbr_8f2a, 42000 pts, 0 reward(s)');
+  });
+
+  it('shows only the shopper fields the terminal resolved', async () => {
+    const card = await signInWith(0, { kind: 'MEMBER', firstName: 'Aloy' });
+    expect(within(card).getByText('Aloy')).toBeTruthy();
+    expect(within(card).getByText('points not reported · 0 reward(s)')).toBeTruthy();
+  });
+
+  it('keeps the sign-in of an anonymous or unrecognized shopper', async () => {
+    for (const kind of ['ANONYMOUS', 'UNKNOWN'] as const) {
+      const card = await signInWith(0, { kind, walletIdentityId: 'w-1' });
+      expect(within(card).getByTestId('member').textContent).toBe('mbr_8f2a');
+      expect(within(card).getByText('points not reported · 0 reward(s)')).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it('keeps the loyalty account balance when the terminal sent no shopper context', async () => {
+    const card = await signInWith(120);
+    expect(within(card).getByText('120 pts · 0 reward(s)')).toBeTruthy();
+    expect(within(card).queryByText(/tier/)).toBeNull();
   });
 
   it('shows no wallet pass by default: sign-in is forced to keyed entry', async () => {
