@@ -1,4 +1,4 @@
-import { SessionError } from '@bilt/pos-sdk';
+import { SessionError } from '@biltorg/pos-sdk';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 export type ToastTone = 'info' | 'success' | 'warning';

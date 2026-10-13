@@ -1,6 +1,6 @@
 // Samples for "Widgets and RetailMediaSurface".
-import { RetailMediaSurface, useSessionEvent } from '@bilt/pos-react';
-import type { Cta, Offer, Rendering, SessionEventPayload, ShopperSession } from '@bilt/pos-sdk';
+import { RetailMediaSurface, useSessionEvent } from '@biltorg/pos-react';
+import type { Cta, Offer, Rendering, SessionEventPayload, ShopperSession } from '@biltorg/pos-sdk';
 import type { ReactNode } from 'react';
 
 declare function applyOffer(offer: Offer): void;

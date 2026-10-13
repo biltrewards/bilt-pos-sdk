@@ -5,7 +5,7 @@ import type {
   WidgetAction,
   WidgetConfig,
   WidgetState,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import { SessionError } from '../errors';
 import type { Engine } from '../internal';
 import type { RetailMediaWidget, WidgetOptions, WidgetType } from '../session';

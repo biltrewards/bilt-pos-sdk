@@ -1,7 +1,7 @@
 // Compile-time checks of the public contract: the design sketch typed verbatim, and the shapes a
 // register relies on. `BiltPos.connect` is declared here because this release ships the
 // interface and the core that provides the value is the follow-up.
-import type { Basket, Member, Offer, SettlementResult, VoidResult } from '@bilt/pos-protocol';
+import type { Basket, Member, Offer, SettlementResult, VoidResult } from '@biltorg/pos-protocol';
 import { describe, expectTypeOf, it } from 'vitest';
 import type {
   BiltPosStatic,

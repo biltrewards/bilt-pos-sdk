@@ -8,9 +8,9 @@ import {
   useSessionEvent,
   useSettlement,
   useTerminalSession,
-} from '@bilt/pos-react';
-import { BridgeGate, InstallBridgePrompt, useBridge } from '@bilt/pos-react/bridge';
-import { BiltPos } from '@bilt/pos-sdk';
+} from '@biltorg/pos-react';
+import { BridgeGate, InstallBridgePrompt, useBridge } from '@biltorg/pos-react/bridge';
+import { BiltPos } from '@biltorg/pos-sdk';
 import type {
   Basket,
   IdentifyResult,
@@ -20,8 +20,8 @@ import type {
   SettlementFailure,
   SettlementRecoveryAction,
   TerminalShopperSession,
-} from '@bilt/pos-sdk';
-import { localBridge } from '@bilt/pos-sdk/bridge';
+} from '@biltorg/pos-sdk';
+import { localBridge } from '@biltorg/pos-sdk/bridge';
 import { useState, type ReactNode } from 'react';
 
 declare function applyOffer(offer: Offer): void;

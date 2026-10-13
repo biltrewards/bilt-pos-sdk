@@ -2,7 +2,7 @@
   "name": "vanilla-ts",
   "version": "0.0.0",
   "private": true,
-  "description": "A framework-free browser register for the Bilt POS SDK: Vite + TypeScript and plain DOM over @bilt/pos-sdk and the Terminal Bridge.",
+  "description": "A framework-free browser register for the Bilt POS SDK: Vite + TypeScript and plain DOM over @biltorg/pos-sdk and the Terminal Bridge.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,8 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@bilt/pos-protocol": "workspace:*",
-    "@bilt/pos-sdk": "workspace:*"
+    "@biltorg/pos-protocol": "workspace:*",
+    "@biltorg/pos-sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",

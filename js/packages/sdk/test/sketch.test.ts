@@ -1,6 +1,6 @@
 // The design page's integration sketch, run against the in-memory doubles. What this proves is
 // that the public interfaces compose the way the sketch assumes; the SDK core is the follow-up.
-import type { BasketChange, Offer, SessionEvent } from '@bilt/pos-protocol';
+import type { BasketChange, Offer, SessionEvent } from '@biltorg/pos-protocol';
 import { describe, expect, it } from 'vitest';
 import { SessionError, type BiltPos, type TerminalShopperSession } from '../src/index';
 import { MockEngine } from './mock-engine';

@@ -1,4 +1,4 @@
-import type { Money, OriginalSaleRecord, SettlementResult } from '@bilt/pos-sdk';
+import type { Money, OriginalSaleRecord, SettlementResult } from '@biltorg/pos-sdk';
 import { cents, money } from '../money';
 
 /**

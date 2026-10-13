@@ -110,12 +110,12 @@ jobs:
 
       - name: Build the protocol package
         if: steps.host.outputs.present == 'true'
-        run: pnpm --filter @bilt/pos-protocol build
+        run: pnpm --filter @biltorg/pos-protocol build
 
       - name: Contract tests against the Session Host
         if: steps.host.outputs.present == 'true'
-        run: pnpm --filter @bilt/pos-sdk test:contract
+        run: pnpm --filter @biltorg/pos-sdk test:contract
 
       - name: Emulator smoke test against the Session Host
         if: steps.host.outputs.present == 'true'
-        run: pnpm --filter @bilt/pos-emulator test:contract
+        run: pnpm --filter @biltorg/pos-emulator test:contract

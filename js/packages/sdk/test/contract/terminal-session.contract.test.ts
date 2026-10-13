@@ -1,7 +1,11 @@
 // Terminal sessions against the real Session Host and a scripted terminal: settlement steps
 // answered by handlers, the host default when a handler is absent, abort mid-operation, and a
 // reconnect mid-settlement with the pending step replayed through `since`.
-import type { OperationStep, RebateRedemptionResult, SettlementMovement } from '@bilt/pos-protocol';
+import type {
+  OperationStep,
+  RebateRedemptionResult,
+  SettlementMovement,
+} from '@biltorg/pos-protocol';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   SessionError,

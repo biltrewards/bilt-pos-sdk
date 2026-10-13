@@ -1,6 +1,6 @@
 // Smoke tests: the page shows the install prompt while the bridge is missing, and runs a sale
 // end to end against a scripted probe and the SDK package's in-memory `BiltPos` double.
-import type { BridgeDetection } from '@bilt/pos-sdk/bridge';
+import type { BridgeDetection } from '@biltorg/pos-sdk/bridge';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MockBiltPos } from '../../../packages/sdk/test/mock-pos';
 import { mountRegister } from '../src/register';

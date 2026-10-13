@@ -1,5 +1,5 @@
-import { InstallBridgePrompt, type BridgeState } from '@bilt/pos-react/bridge';
-import type { TerminalInfo } from '@bilt/pos-sdk';
+import { InstallBridgePrompt, type BridgeState } from '@biltorg/pos-react/bridge';
+import type { TerminalInfo } from '@biltorg/pos-sdk';
 import { useState, type ReactNode } from 'react';
 import { useController, useEmulatorState } from '../emulator/context';
 import { canOperateTerminal, sessionOperationInProgress } from '../emulator/state';

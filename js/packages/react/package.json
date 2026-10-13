@@ -1,5 +1,5 @@
 {
-  "name": "@bilt/pos-react",
+  "name": "@biltorg/pos-react",
   "version": "0.0.0",
   "description": "React bindings for the Bilt POS SDK: provider, session hooks, the retail-media surface and the Terminal Bridge install prompt.",
   "license": "MIT",
@@ -29,6 +29,9 @@
     "dist",
     "src"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -37,13 +40,13 @@
     "api:update": "api-extractor run --local -c api-extractor.json && api-extractor run --local -c api-extractor.bridge.json"
   },
   "peerDependencies": {
-    "@bilt/pos-protocol": "workspace:*",
-    "@bilt/pos-sdk": "workspace:*",
+    "@biltorg/pos-protocol": "workspace:*",
+    "@biltorg/pos-sdk": "workspace:*",
     "react": ">=18"
   },
   "devDependencies": {
-    "@bilt/pos-protocol": "workspace:*",
-    "@bilt/pos-sdk": "workspace:*",
+    "@biltorg/pos-protocol": "workspace:*",
+    "@biltorg/pos-sdk": "workspace:*",
     "@microsoft/api-extractor": "^7.59.3",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^20.19.0",

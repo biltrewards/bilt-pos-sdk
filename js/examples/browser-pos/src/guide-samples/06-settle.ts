@@ -1,5 +1,5 @@
 // Samples for "Settle".
-import { SessionError } from '@bilt/pos-sdk';
+import { SessionError } from '@biltorg/pos-sdk';
 import type {
   AbandonedSettlementRecord,
   Basket,
@@ -11,7 +11,7 @@ import type {
   SettlementResult,
   StepInfo,
   TerminalShopperSession,
-} from '@bilt/pos-sdk';
+} from '@biltorg/pos-sdk';
 
 declare const taxService: { total(basket: Basket, signal: AbortSignal): Promise<Money> };
 declare const cashier: {

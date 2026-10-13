@@ -1,7 +1,7 @@
 // The Sale tab, the basket card and the settlement against the SDK double: products and the
 // keypad, the Discount and Credit dialogs, the settlement toggles, the recovery dialog with the
 // desktop's choices, the outcome popup and the stored sale.
-import { SessionError } from '@bilt/pos-sdk';
+import { SessionError } from '@biltorg/pos-sdk';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { addProduct, button, events, region, renderApp } from './harness';

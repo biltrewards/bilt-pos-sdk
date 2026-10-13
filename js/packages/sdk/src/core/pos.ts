@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type Health } from '@bilt/pos-protocol';
+import { PROTOCOL_VERSION, type Health } from '@biltorg/pos-protocol';
 import { EngineOutdatedError } from '../errors';
 import type { Engine } from '../internal';
 import type { BiltPos as BiltPosInterface, EngineCapabilities, EngineFactory } from '../pos';

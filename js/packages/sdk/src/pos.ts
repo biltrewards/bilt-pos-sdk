@@ -1,4 +1,4 @@
-import type { Health } from '@bilt/pos-protocol';
+import type { Health } from '@biltorg/pos-protocol';
 import { BiltPosImpl } from './core/pos';
 import type { Engine } from './internal';
 import type { ShopperSession, ShopperSessionOptions, TerminalSessionOptions } from './session';
@@ -43,7 +43,7 @@ export interface EngineContext {
 /**
  * Produces the engine `BiltPos.connect` runs on: `localBridge()` and `cloud(..)` are the two
  * factories the SDK will ship, each in its own entry point. The `Engine` interface itself is in
- * `@bilt/pos-sdk/internal`.
+ * `@biltorg/pos-sdk/internal`.
  */
 export type EngineFactory = (context: EngineContext) => Engine | Promise<Engine>;
 

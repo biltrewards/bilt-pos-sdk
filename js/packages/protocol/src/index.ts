@@ -1,5 +1,5 @@
 /**
- * `@bilt/pos-protocol`: the TypeScript form of the Bilt POS Session Protocol, generated from
+ * `@biltorg/pos-protocol`: the TypeScript form of the Bilt POS Session Protocol, generated from
  * `schema/session-protocol/openapi.yaml`. It is the domain model every JavaScript engine and
  * the SDK core share — `Basket`, `Member`, `SettlementResult`, `Rendering`, the operation and
  * event unions — plus a typed `fetch` client for talking to a host directly.

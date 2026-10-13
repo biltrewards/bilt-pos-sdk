@@ -1,8 +1,8 @@
 # Vanilla TypeScript register
 
 The framework-free counterpart to [`browser-pos`](../browser-pos): a tiny register in Vite and
-plain TypeScript that drives a Bilt terminal through the Terminal Bridge with `@bilt/pos-sdk`
-and `@bilt/pos-sdk/bridge` only. No React, no UI library: the page renders with
+plain TypeScript that drives a Bilt terminal through the Terminal Bridge with `@biltorg/pos-sdk`
+and `@biltorg/pos-sdk/bridge` only. No React, no UI library: the page renders with
 `document.createElement` and re-renders from the session's events. Use it as the starting point
 for a register written in another framework (Vue, Svelte, Angular, a server-rendered page) or in
 none; `browser-pos` is the React reference and covers more of the API.

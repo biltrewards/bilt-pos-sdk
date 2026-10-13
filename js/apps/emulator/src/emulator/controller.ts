@@ -17,8 +17,8 @@ import {
   type ShopperSession,
   type StoredValueCard,
   type TerminalShopperSession,
-} from '@bilt/pos-sdk';
-import type { LocalBridgeOptions } from '@bilt/pos-sdk/bridge';
+} from '@biltorg/pos-sdk';
+import type { LocalBridgeOptions } from '@biltorg/pos-sdk/bridge';
 import { isCustomSku, nextCustomSku, customItem, toBasketItem, type Product } from '../catalog';
 import { storedValueCard, GIFT_CARD_SKU } from '../gift-cards';
 import type { LineLog } from '../log';
@@ -178,7 +178,7 @@ function memberToUi(member: Member | null): MemberIdentity | null {
 
 /**
  * The browser port of the desktop `NexoEmulatorController`: the same actions with the same
- * guards, log lines and outcome popups, driven through `@bilt/pos-sdk` over the Terminal Bridge
+ * guards, log lines and outcome popups, driven through `@biltorg/pos-sdk` over the Terminal Bridge
  * instead of a Nexo connection. One checkout session at a time, started and ended explicitly;
  * full refunds run on a fresh session of their own, as on the desktop.
  */

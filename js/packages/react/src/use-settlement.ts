@@ -8,7 +8,7 @@ import type {
   SettlementMovement,
   SettlementRecovery,
   SettlementResult,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import {
   SessionError,
   type Operation,
@@ -16,7 +16,7 @@ import {
   type SettlementRecoveryAction,
   type StepInfo,
   type TerminalShopperSession,
-} from '@bilt/pos-sdk';
+} from '@biltorg/pos-sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**

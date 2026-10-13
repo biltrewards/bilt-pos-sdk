@@ -1,4 +1,4 @@
-import type { Offer } from '@bilt/pos-protocol';
+import type { Offer } from '@biltorg/pos-protocol';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RetailMediaSurface } from '../src/index';

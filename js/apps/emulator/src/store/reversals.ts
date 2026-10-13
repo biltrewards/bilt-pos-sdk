@@ -1,4 +1,4 @@
-import type { ReversalDecision, ReversalStep, ReversedMovement } from '@bilt/pos-sdk';
+import type { ReversalDecision, ReversalStep, ReversedMovement } from '@biltorg/pos-sdk';
 import type { LegType, RefundRecord, StoredSale } from './sale-record';
 
 const LEG_OF_STEP: Partial<Record<ReversalStep, LegType>> = {

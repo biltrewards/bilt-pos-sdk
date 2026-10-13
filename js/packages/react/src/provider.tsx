@@ -1,4 +1,4 @@
-import type { BiltPos } from '@bilt/pos-sdk';
+import type { BiltPos } from '@biltorg/pos-sdk';
 import {
   createContext,
   useCallback,

@@ -1,4 +1,4 @@
-import type { SessionEvent, SessionEventType } from '@bilt/pos-protocol';
+import type { SessionEvent, SessionEventType } from '@biltorg/pos-protocol';
 import { EngineUnavailableError, SessionError } from '../errors';
 import type { BridgeHttp } from './http';
 import type { ResolvedBridgeOptions } from './options';

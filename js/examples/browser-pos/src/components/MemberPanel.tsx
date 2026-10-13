@@ -1,10 +1,10 @@
-import { useOperation, useMember } from '@bilt/pos-react';
+import { useOperation, useMember } from '@biltorg/pos-react';
 import type {
   IdentifyResult,
   Operation,
   ShopperSession,
   TerminalShopperSession,
-} from '@bilt/pos-sdk';
+} from '@biltorg/pos-sdk';
 import { useState, type ReactNode } from 'react';
 import { describeError } from './Toasts';
 

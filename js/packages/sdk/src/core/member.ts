@@ -1,4 +1,4 @@
-import type { Member, MemberInput } from '@bilt/pos-protocol';
+import type { Member, MemberInput } from '@biltorg/pos-protocol';
 import { SessionError } from '../errors';
 import type { Engine } from '../internal';
 import type { SessionMember } from '../session';

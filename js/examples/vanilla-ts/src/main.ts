@@ -1,5 +1,5 @@
-import { BiltPos } from '@bilt/pos-sdk';
-import { detectBridge, localBridge, type LocalBridgeOptions } from '@bilt/pos-sdk/bridge';
+import { BiltPos } from '@biltorg/pos-sdk';
+import { detectBridge, localBridge, type LocalBridgeOptions } from '@biltorg/pos-sdk/bridge';
 import { mountRegister } from './register';
 import './styles.css';
 

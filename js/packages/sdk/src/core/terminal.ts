@@ -1,4 +1,4 @@
-import type { DiagnosisResult, PrintPayload, ReconciliationResult } from '@bilt/pos-protocol';
+import type { DiagnosisResult, PrintPayload, ReconciliationResult } from '@biltorg/pos-protocol';
 import type { Engine } from '../internal';
 import type { Terminal } from '../terminal';
 import { newIdempotencyKey } from './ids';

@@ -1,33 +1,33 @@
-# @bilt/pos-react
+# @biltorg/pos-react
 
 React bindings for the Bilt POS SDK. A provider holds the `BiltPos` connection, hooks turn a
 shopper session's basket, member, context and settlement into React state, `RetailMediaSurface`
-draws a retail-media placement in the DOM, and `@bilt/pos-react/bridge` adds the Terminal
+draws a retail-media placement in the DOM, and `@biltorg/pos-react/bridge` adds the Terminal
 Bridge detection and install prompt for registers that run over the bridge.
 
-Peer dependencies: `react` 18 or 19, `@bilt/pos-sdk`, `@bilt/pos-protocol`.
+Peer dependencies: `react` 18 or 19, `@biltorg/pos-sdk`, `@biltorg/pos-protocol`.
 
 ```sh
-pnpm add @bilt/pos-react @bilt/pos-sdk @bilt/pos-protocol
+pnpm add @biltorg/pos-react @biltorg/pos-sdk @biltorg/pos-protocol
 ```
 
 ## Two entry points
 
-| Entry point              | Contents                                                                                                                                                                                            |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@bilt/pos-react`        | `BiltPosProvider`, `useBiltPos`, `useShopperSession`, `useTerminalSession`, `useBasket`, `useMember`, `useSessionContext`, `useSettlement`, `useOperation`, `useSessionEvent`, `RetailMediaSurface` |
-| `@bilt/pos-react/bridge` | `useBridge`, `InstallBridgePrompt`, `BridgeGate`, `detectPlatform`, the manifest helpers                                                                                                            |
+| Entry point                 | Contents                                                                                                                                                                                            |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@biltorg/pos-react`        | `BiltPosProvider`, `useBiltPos`, `useShopperSession`, `useTerminalSession`, `useBasket`, `useMember`, `useSessionContext`, `useSettlement`, `useOperation`, `useSessionEvent`, `RetailMediaSurface` |
+| `@biltorg/pos-react/bridge` | `useBridge`, `InstallBridgePrompt`, `BridgeGate`, `detectPlatform`, the manifest helpers                                                                                                            |
 
 Nothing in the core entry point knows the bridge exists. A register that connects over the
-Cloud Session Service uses `@bilt/pos-react` alone; one that runs over the Terminal Bridge wraps
+Cloud Session Service uses `@biltorg/pos-react` alone; one that runs over the Terminal Bridge wraps
 itself in `BridgeGate` from the bridge entry point. The engine behind `BiltPos` is the
 provider's business, never a hook's.
 
 ## A register
 
 ```tsx
-import { BiltPos } from '@bilt/pos-sdk';
-import { localBridge } from '@bilt/pos-sdk/bridge';
+import { BiltPos } from '@biltorg/pos-sdk';
+import { localBridge } from '@biltorg/pos-sdk/bridge';
 import {
   BiltPosProvider,
   RetailMediaSurface,
@@ -36,8 +36,8 @@ import {
   useSettlement,
   useSessionEvent,
   useTerminalSession,
-} from '@bilt/pos-react';
-import { BridgeGate } from '@bilt/pos-react/bridge';
+} from '@biltorg/pos-react';
+import { BridgeGate } from '@biltorg/pos-react/bridge';
 
 const MANIFEST_URL = 'https://downloads.bilt.com/bridge/manifest.json';
 
@@ -190,7 +190,7 @@ in the session options); like `session.widget()`, the surface throws on a sessio
 ## Bridge detection and install prompt
 
 ```tsx
-import { useBridge, InstallBridgePrompt, BridgeGate } from '@bilt/pos-react/bridge';
+import { useBridge, InstallBridgePrompt, BridgeGate } from '@biltorg/pos-react/bridge';
 
 function Register() {
   const bridge = useBridge({ manifestUrl: MANIFEST_URL });
@@ -203,7 +203,7 @@ function Register() {
 ```
 
 `useBridge({ port?, host?, fallbackPorts?, healthTimeoutMs?, manifestUrl?, pollIntervalMs?, autoDetect?, detect? })`
-runs `detectBridge()` from `@bilt/pos-sdk/bridge`, the probe behind `localBridge()`: `GET /health`
+runs `detectBridge()` from `@biltorg/pos-sdk/bridge`, the probe behind `localBridge()`: `GET /health`
 on port 48333 and its fallback range, 400 ms each. It returns
 `{ status, error, health, baseUrl, probed, attempts, platform, manifest, download, retry }`,
 where `status` is `detecting`, `missing`, `outdated` or `ready`. While `missing` or `outdated`
@@ -225,6 +225,6 @@ There is no pairing state or dialog in this iteration.
 
 ## Testing a register
 
-The hooks are written against the public `@bilt/pos-sdk` interface only, so a register can run
+The hooks are written against the public `@biltorg/pos-sdk` interface only, so a register can run
 its own tests against any `BiltPos` double by passing it as `pos` to the provider; the SDK
 package's in-memory doubles under `js/packages/sdk/test` are what this package's tests use.

@@ -1,5 +1,5 @@
 // Samples for "Identify the member".
-import type { IdentifyResult, Member, TerminalShopperSession } from '@bilt/pos-sdk';
+import type { IdentifyResult, Member, TerminalShopperSession } from '@biltorg/pos-sdk';
 
 declare function showMember(member: Member | null): void;
 

@@ -9,7 +9,7 @@ import type {
   Rendering,
   SessionContext,
   SettlementResult,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 
 let lineCounter = 0;
 

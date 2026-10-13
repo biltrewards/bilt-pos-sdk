@@ -3,7 +3,7 @@ import type {
   ReversedMovement,
   SessionError as SessionErrorData,
   SessionErrorCode,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 
 /**
  * Why a session operation failed, as an `Error` the register can `catch` or `instanceof`.
@@ -54,7 +54,7 @@ export class SessionError extends Error {
 /**
  * The engine behind `BiltPos` could not be used at all; the base of the failures
  * `BiltPos.connect` rejects with. Bridge-specific subclasses (bridge missing, origin not
- * paired) live in `@bilt/pos-sdk/bridge` and extend these, so a register that only needs to know
+ * paired) live in `@biltorg/pos-sdk/bridge` and extend these, so a register that only needs to know
  * "show the install prompt" catches the base.
  */
 export class EngineError extends Error {

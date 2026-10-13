@@ -1,10 +1,10 @@
-import type { Health } from '@bilt/pos-protocol';
+import type { Health } from '@biltorg/pos-protocol';
 import {
   detectBridge,
   type BridgeDetection,
   type BridgeMissingError,
   type BridgeOutdatedError,
-} from '@bilt/pos-sdk/bridge';
+} from '@biltorg/pos-sdk/bridge';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { detectionError, type BridgeDetect, type BridgeProbeOptions } from './detect';
 import {
@@ -41,7 +41,7 @@ export interface UseBridgeOptions extends BridgeProbeOptions {
    */
   readonly autoDetect?: boolean;
 
-  /** The probe to run; default `detectBridge` from `@bilt/pos-sdk/bridge`. */
+  /** The probe to run; default `detectBridge` from `@biltorg/pos-sdk/bridge`. */
   readonly detect?: BridgeDetect;
 }
 

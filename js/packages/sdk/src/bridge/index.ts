@@ -1,13 +1,13 @@
 /**
- * `@bilt/pos-sdk/bridge`: the Terminal Bridge engine. `localBridge()` finds the bridge on
+ * `@biltorg/pos-sdk/bridge`: the Terminal Bridge engine. `localBridge()` finds the bridge on
  * loopback and hands `BiltPos.connect` an engine for it; `detectBridge()` is the probe an
  * install prompt polls. Everything bridge-specific — ports, detection states, the install and
  * update errors — lives here and nowhere in the core entry point, so a register written against
- * `@bilt/pos-sdk` runs unchanged over another engine.
+ * `@biltorg/pos-sdk` runs unchanged over another engine.
  *
  * ```ts
- * import { BiltPos } from '@bilt/pos-sdk';
- * import { BridgeMissingError, BridgeOutdatedError, localBridge } from '@bilt/pos-sdk/bridge';
+ * import { BiltPos } from '@biltorg/pos-sdk';
+ * import { BridgeMissingError, BridgeOutdatedError, localBridge } from '@biltorg/pos-sdk/bridge';
  *
  * try {
  *   const pos = await BiltPos.connect(localBridge());

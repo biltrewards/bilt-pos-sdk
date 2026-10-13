@@ -1,5 +1,14 @@
-import type { PendingRecoveryStep, UseOperationResult, UseSettlementResult } from '@bilt/pos-react';
-import { SessionError, type Receipt, type SettlementResult, type VoidResult } from '@bilt/pos-sdk';
+import type {
+  PendingRecoveryStep,
+  UseOperationResult,
+  UseSettlementResult,
+} from '@biltorg/pos-react';
+import {
+  SessionError,
+  type Receipt,
+  type SettlementResult,
+  type VoidResult,
+} from '@biltorg/pos-sdk';
 import { useEffect, useState, type ReactNode } from 'react';
 import { formatMoney } from '../money';
 import { describeError } from './Toasts';

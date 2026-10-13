@@ -1,4 +1,4 @@
-import type { BasketItem, Money } from '@bilt/pos-sdk';
+import type { BasketItem, Money } from '@biltorg/pos-sdk';
 
 /** One product the register can scan. Prices and tax rates are the register's own. */
 export interface CatalogEntry {

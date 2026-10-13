@@ -1,4 +1,4 @@
-import type { Basket, BasketLineItem, Money, Offer } from '@bilt/pos-sdk';
+import type { Basket, BasketLineItem, Money, Offer } from '@biltorg/pos-sdk';
 
 /** `Money` is a decimal string on the wire; the register does its arithmetic in integer cents. */
 export function cents(value: Money): number {

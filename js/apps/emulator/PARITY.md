@@ -114,7 +114,7 @@ an abandoned settlement (the desktop reports it in the outcome popup instead).
 - Without a terminal (Local session), the terminal operations (sign-in, card read, stored value,
   settlement, refunds) are disabled; the basket still works.
 
-## Not possible through `@bilt/pos-sdk`
+## Not possible through `@biltorg/pos-sdk`
 
 - TLS verification status: the page talks plain HTTP to loopback; the bridge holds the terminal
   TLS and does not report it. The top bar says "TLS: bridge-managed".
