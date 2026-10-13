@@ -17,31 +17,35 @@ async function signInWith(
   pointBalance: number,
   shopperContext?: IdentifyResult['shopperContext'],
 ): Promise<HTMLElement> {
+  // Wrap the real mock so the session still retains the member it resolves; the test only
+  // overrides the balance and shopper context the terminal reports.
+  const original = MockTerminalSession.prototype.identifyMember;
   const identify = vi
     .spyOn(MockTerminalSession.prototype, 'identifyMember')
-    .mockImplementation(() =>
-      Object.assign(
-        Promise.resolve<IdentifyResult>({
-          status: 'FOUND',
-          memberId: 'mbr_8f2a',
-          rewards: [],
+    .mockImplementation(function (this: MockTerminalSession, arg) {
+      const op = original.call(this, arg as never);
+      return Object.assign(
+        op.then((result) => ({
+          ...result,
           pointBalance,
           ...(shopperContext ? { shopperContext } : {}),
-        }),
+        })),
         {
-          id: 'op_x',
-          type: 'identifyMember' as const,
-          status: 'succeeded' as const,
-          abort: async () => undefined,
+          id: op.id,
+          type: op.type,
+          status: op.status,
+          abort: () => op.abort(),
         },
-      ),
-    );
+      );
+    });
   await renderApp();
   fireEvent.click(screen.getByLabelText('Identify'));
   fireEvent.click(button('Start Checkout'));
-  const card = await screen.findByRole('region', { name: 'Loyalty sign-in' });
-  identify.mockRestore();
-  return card;
+  try {
+    return await screen.findByRole('region', { name: 'Loyalty sign-in' });
+  } finally {
+    identify.mockRestore();
+  }
 }
 
 function dialog(name: string): HTMLElement {
@@ -287,6 +291,44 @@ describe('the Sale tab and the basket card', () => {
     const card = await signInWith(120);
     expect(within(card).getByText('120 pts · 0 reward(s)')).toBeTruthy();
     expect(within(card).queryByText(/tier/)).toBeNull();
+  });
+
+  it('keeps the signed-in member when a mid-checkout Loyalty Sign-In is cancelled', async () => {
+    const card = await signInWith(0, {
+      kind: 'MEMBER',
+      walletIdentityId: '7d4c1f0e-0000-4000-8000-000000000001',
+      neighborhoodId: 'mbr_8f2a',
+      firstName: 'Aloy',
+      lastName: 'Pelta',
+      pointsBalance: 42000,
+      tierName: 'Gold',
+    });
+    const identify = vi
+      .spyOn(MockTerminalSession.prototype, 'identifyMember')
+      .mockImplementation(() =>
+        Object.assign(
+          Promise.resolve<IdentifyResult>({
+            status: 'CANCELLED',
+            rewards: [],
+            pointBalance: 0,
+          }),
+          {
+            id: 'op_y',
+            type: 'identifyMember' as const,
+            status: 'succeeded' as const,
+            abort: async () => undefined,
+          },
+        ),
+      );
+    try {
+      fireEvent.click(button('Loyalty Sign-In'));
+      await waitFor(() => expect(events()).toContain('kept from an earlier sign-in'));
+      expect(within(card).getByTestId('member').textContent).toBe('mbr_8f2a');
+      expect(within(card).getByText('Aloy Pelta')).toBeTruthy();
+      expect(within(card).getByText('Gold tier · 42000 pts · 0 reward(s)')).toBeTruthy();
+    } finally {
+      identify.mockRestore();
+    }
   });
 
   it('shows no wallet pass by default: sign-in is forced to keyed entry', async () => {

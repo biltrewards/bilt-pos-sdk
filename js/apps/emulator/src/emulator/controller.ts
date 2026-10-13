@@ -171,7 +171,7 @@ function identifyToUi(result: IdentifyResult): MemberIdentity {
   }
 }
 
-function memberToUi(member: Member | null): MemberIdentity | null {
+function memberToUi(member: Member | null): Extract<MemberIdentity, { kind: 'found' }> | null {
   if (!member?.resolved || !member.memberId) return null;
   return {
     kind: 'found',
@@ -921,6 +921,7 @@ export class BrowserEmulatorController implements EmulatorController {
   private runIdentifyPrompt(session: TerminalShopperSession, readVas: boolean): void {
     if (!this.claim()) return;
     const generation = this.generation;
+    const shown = this.state.member;
     this.update({ identifyInProgress: true, member: null });
     this.log(
       readVas
@@ -934,15 +935,19 @@ export class BrowserEmulatorController implements EmulatorController {
       .then(
         (result) => {
           if (generation === this.generation && this.session === session) {
-            this.publishIdentity(session, identifyToUi(result));
+            this.publishIdentity(session, identifyToUi(result), shown);
           }
         },
         (error: unknown) => {
           if (generation === this.generation && this.session === session) {
-            this.publishIdentity(session, {
-              kind: 'failed',
-              ...(error instanceof Error ? { detail: describeError(error) } : {}),
-            });
+            this.publishIdentity(
+              session,
+              {
+                kind: 'failed',
+                ...(error instanceof Error ? { detail: describeError(error) } : {}),
+              },
+              shown,
+            );
             if (error instanceof Error && error.stack) this.detailedLog(error.stack);
           }
         },
@@ -957,9 +962,29 @@ export class BrowserEmulatorController implements EmulatorController {
    * Reports the sign-in as the account the checkout will settle against: a cancelled or failed
    * prompt leaves an earlier identification attached, and the card says so.
    */
-  private publishIdentity(session: ShopperSession, outcome: MemberIdentity): void {
-    const identity =
-      outcome.kind === 'found' ? outcome : (memberToUi(session.member.current) ?? outcome);
+  private publishIdentity(
+    session: ShopperSession,
+    outcome: MemberIdentity,
+    shown: MemberIdentity | null,
+  ): void {
+    const retained = memberToUi(session.member.current);
+    let identity: MemberIdentity = outcome.kind === 'found' ? outcome : (retained ?? outcome);
+    // A retained member carries no shopper context; keep the name, tier and balance the card
+    // already shows when it's the same member.
+    if (
+      retained !== null &&
+      shown !== null &&
+      shown.kind === 'found' &&
+      shown.memberId === retained.memberId &&
+      outcome.kind !== 'found'
+    ) {
+      identity = {
+        ...retained,
+        pointBalance: retained.pointBalance ?? shown.pointBalance,
+        ...(shown.name ? { name: shown.name } : {}),
+        ...(shown.tierName ? { tierName: shown.tierName } : {}),
+      };
+    }
     this.update({ member: identity });
     switch (identity.kind) {
       case 'found':
