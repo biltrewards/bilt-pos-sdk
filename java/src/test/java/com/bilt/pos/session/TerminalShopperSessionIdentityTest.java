@@ -14,6 +14,8 @@ import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
 import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.session.identity.RewardType;
+import com.bilt.pos.session.identity.ShopperContext;
+import com.bilt.pos.session.identity.ShopperKind;
 import com.bilt.pos.session.identity.VasData;
 import com.bilt.pos.session.identity.VasService;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -211,6 +213,7 @@ class TerminalShopperSessionIdentityTest {
     assertNotNull(result.getRewards().get(0).getExpirationDate());
     assertEquals(RewardType.COUPON, result.getRewards().get(1).getType());
     assertNull(result.getVasData());
+    assertNull(result.getShopperContext());
 
     assertEquals("98234", session.getMember().getMemberId());
     assertEquals(Member.resolved(result), session.member());
@@ -262,6 +265,41 @@ class TerminalShopperSessionIdentityTest {
     assertEquals("9000", pass.getStatusWord());
     assertEquals("8ff4", pass.getEncryptedData());
     assertEquals("3006a261", pass.getCipherTimestamp());
+  }
+
+  @Test
+  void identifyMemberExposesWalletPassShopperContext() throws Exception {
+    String payloadJson =
+        "{\"shopperContext\":{\"shopper\":{\"kind\":\"MEMBER\","
+            + "\"walletIdentityId\":\"d8a6f4c2-9b7e-4a1d-8f3c-2e5b7d9a1c4f\","
+            + "\"neighborhoodId\":\"nbh-7\",\"firstName\":\"Aloy\",\"lastName\":\"Pelta\","
+            + "\"pointsBalance\":42000,\"tierName\":\"Gold\"}}}";
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+                    + "\"Response\":{\"Result\":\"Success\",\"AdditionalResponse\":\""
+                    + Base64.getEncoder()
+                        .encodeToString(payloadJson.getBytes(StandardCharsets.UTF_8))
+                    + "\"},"
+                    + "\"LoyaltyAccount\":[{"
+                    + "\"LoyaltyAccountID\":{\"EntryMode\":[\"Mobile\"],"
+                    + "\"IdentificationType\":\"AccountNumber\","
+                    + "\"LoyaltyID\":\"19d6f8aa-51ce-484e-9e28-06949b1b8f90\"}}]}}}"));
+
+    IdentifyResult result = session.identifyMember().get();
+
+    // the member id still comes from LoyaltyAccount, not the shopper context
+    assertEquals("19d6f8aa-51ce-484e-9e28-06949b1b8f90", result.getMemberId());
+    ShopperContext shopper = result.getShopperContext();
+    assertNotNull(shopper);
+    assertEquals(ShopperKind.MEMBER, shopper.getKind());
+    assertEquals("d8a6f4c2-9b7e-4a1d-8f3c-2e5b7d9a1c4f", shopper.getWalletIdentityId());
+    assertEquals("nbh-7", shopper.getNeighborhoodId());
+    assertEquals("Aloy", shopper.getFirstName());
+    assertEquals("Pelta", shopper.getLastName());
+    assertEquals(42000, shopper.getPointsBalance());
+    assertEquals("Gold", shopper.getTierName());
   }
 
   @Test

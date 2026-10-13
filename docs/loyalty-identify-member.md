@@ -122,6 +122,8 @@ When the member is found, your integration receives:
 
   `encryptedData` stays encrypted with the merchant's VAS key. When the terminal could not break its VAS report into fields, `vas.raw` carries it unparsed instead. The SDK exposes this as `IdentifyResult.getVasData()`.
 
+  The same JSON may also carry a `shopperContext.shopper` object with details the terminal resolved for the pass sign-in — `kind` (`MEMBER` or `ANONYMOUS`), `walletIdentityId`, `neighborhoodId`, `firstName`, `lastName`, `pointsBalance` and `tierName`, all optional but `kind`. The member id still comes from `LoyaltyAccountID.LoyaltyID`. The SDK exposes this as `IdentifyResult.getShopperContext()`.
+
   Example response:
 
   ```json

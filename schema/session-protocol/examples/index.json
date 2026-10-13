@@ -6,6 +6,7 @@
   { "file": "step-reply-total.json", "schema": "StepReply" },
   { "file": "settle-operation-completed-event.json", "schema": "Event" },
   { "file": "identify-vas-operation-completed-event.json", "schema": "Event" },
+  { "file": "identify-shopper-context-operation-completed-event.json", "schema": "Event" },
   { "file": "basket-changed-event.json", "schema": "Event" },
   { "file": "session-error.json", "schema": "SessionError" }
 ]

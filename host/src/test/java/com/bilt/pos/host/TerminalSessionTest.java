@@ -178,6 +178,44 @@ class TerminalSessionTest {
     JsonNode none = identify("").path("result");
     assertEquals("FOUND", none.path("status").asText());
     assertFalse(none.has("vasData"));
+    assertFalse(none.has("shopperContext"));
+  }
+
+  @Test
+  void identifyReportsTheShopperContextAndOmitsAbsentFields() throws Exception {
+    terminal.reply(
+        MessageCategoryType.CARD_ACQUISITION,
+        identifyResponse(
+            "{\"shopperContext\":{\"shopper\":{\"kind\":\"MEMBER\","
+                + "\"walletIdentityId\":\"d8a6f4c2-9b7e-4a1d-8f3c-2e5b7d9a1c4f\","
+                + "\"neighborhoodId\":\"nbh-7\",\"firstName\":\"Aloy\",\"lastName\":\"Pelta\","
+                + "\"pointsBalance\":42000,\"tierName\":\"Gold\"}}}"));
+
+    JsonNode result = identify("").path("result");
+    JsonNode shopper = result.path("shopperContext");
+    // the member id still comes from LoyaltyAccount, not the shopper context
+    assertEquals("mbr_8f2a", result.path("memberId").asText());
+    assertEquals("MEMBER", shopper.path("kind").asText());
+    assertEquals("d8a6f4c2-9b7e-4a1d-8f3c-2e5b7d9a1c4f", shopper.path("walletIdentityId").asText());
+    assertEquals("nbh-7", shopper.path("neighborhoodId").asText());
+    assertEquals("Aloy", shopper.path("firstName").asText());
+    assertEquals("Pelta", shopper.path("lastName").asText());
+    assertEquals(42000, shopper.path("pointsBalance").asInt());
+    assertEquals("Gold", shopper.path("tierName").asText());
+
+    terminal.reply(
+        MessageCategoryType.CARD_ACQUISITION,
+        identifyResponse(
+            "{\"shopperContext\":{\"shopper\":{\"kind\":\"ANONYMOUS\","
+                + "\"walletIdentityId\":\"wallet-2\"}}}"));
+    JsonNode anonymous = identify("").path("result").path("shopperContext");
+    assertEquals("ANONYMOUS", anonymous.path("kind").asText());
+    assertEquals("wallet-2", anonymous.path("walletIdentityId").asText());
+    assertFalse(anonymous.has("neighborhoodId"));
+    assertFalse(anonymous.has("firstName"));
+    assertFalse(anonymous.has("lastName"));
+    assertFalse(anonymous.has("pointsBalance"));
+    assertFalse(anonymous.has("tierName"));
   }
 
   @Test

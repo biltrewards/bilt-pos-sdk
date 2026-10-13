@@ -309,6 +309,10 @@ components:
       $ref: './components/member.yaml#/IdentifyStatus'
     IdentifyResult:
       $ref: './components/member.yaml#/IdentifyResult'
+    ShopperKind:
+      $ref: './components/member.yaml#/ShopperKind'
+    ShopperContext:
+      $ref: './components/member.yaml#/ShopperContext'
     VasData:
       $ref: './components/member.yaml#/VasData'
     VasService:
