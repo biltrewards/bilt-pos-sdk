@@ -5,6 +5,7 @@ import {
   type BiltPos,
   type IdentifyResult,
   type Member,
+  type VasData,
   type Money,
   type Operation,
   type Receipt,
@@ -46,6 +47,8 @@ import {
   type LoyaltyOptions,
   type MemberIdentity,
   type MemberRewardUi,
+  type VasUi,
+  vasLines,
   type PaymentOutcome,
   type PaymentRecoveryAction,
   type StoredValueOptions,
@@ -123,6 +126,21 @@ function rewardToUi(reward: Reward): MemberRewardUi {
   };
 }
 
+function vasToUi(vas: VasData): VasUi {
+  return {
+    source: vas.source ?? null,
+    merchantId: vas.merchantId ?? null,
+    services: vas.services.map((service) => ({
+      serviceId: service.serviceId ?? null,
+      serviceType: service.serviceType ?? null,
+      statusWord: service.statusWord ?? null,
+      encryptedData: service.encryptedData ?? null,
+      cipherTimestamp: service.cipherTimestamp ?? null,
+    })),
+    raw: vas.raw ?? null,
+  };
+}
+
 function identifyToUi(result: IdentifyResult): MemberIdentity {
   switch (result.status) {
     case 'FOUND':
@@ -134,6 +152,7 @@ function identifyToUi(result: IdentifyResult): MemberIdentity {
             pointBalance: result.pointBalance > 0 ? result.pointBalance : null,
             rewards: result.rewards.map(rewardToUi),
             retained: false,
+            ...(result.vasData ? { vas: vasToUi(result.vasData) } : {}),
           }
         : { kind: 'failed', detail: 'The terminal reported a member with no loyalty id' };
     case 'NOT_FOUND':
@@ -440,7 +459,7 @@ export class BrowserEmulatorController implements EmulatorController {
     return true;
   }
 
-  startSession(identifyOnStart: boolean): void {
+  startSession(identifyOnStart: boolean, readVas = false): void {
     const pos = this.pos;
     if (!pos) {
       this.log('Not connected — connect before starting a session');
@@ -488,7 +507,7 @@ export class BrowserEmulatorController implements EmulatorController {
           this.publishBasket(session.basket.current);
           this.log(`Checkout session started (id ${session.id})`);
           if (identifyOnStart && isTerminal(session)) {
-            this.runIdentifyPrompt(session);
+            this.runIdentifyPrompt(session, readVas);
           } else if (identifyOnStart) {
             this.log('Identify skipped — a local session has no terminal to prompt on');
           }
@@ -887,18 +906,24 @@ export class BrowserEmulatorController implements EmulatorController {
 
   // ---- loyalty and card read --------------------------------------------------------------
 
-  identifyMember(): void {
+  identifyMember(readVas = false): void {
     const session = this.terminalCheckout();
-    if (session) this.runIdentifyPrompt(session);
+    if (session) this.runIdentifyPrompt(session, readVas);
   }
 
-  private runIdentifyPrompt(session: TerminalShopperSession): void {
+  private runIdentifyPrompt(session: TerminalShopperSession, readVas: boolean): void {
     if (!this.claim()) return;
     const generation = this.generation;
     this.update({ identifyInProgress: true, member: null });
-    this.log('Loyalty sign-in on the terminal…');
+    this.log(
+      readVas
+        ? 'Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…'
+        : 'Loyalty sign-in on the terminal…',
+    );
     session
-      .identifyMember({ forceEntryModes: ['KEYED'] })
+      // Keyed is the one entry mode that keeps a wallet pass from being read, so VAS mode leaves
+      // the entry mode unforced
+      .identifyMember(readVas ? {} : { forceEntryModes: ['KEYED'] })
       .then(
         (result) => {
           if (generation === this.generation && this.session === session) {
@@ -936,6 +961,7 @@ export class BrowserEmulatorController implements EmulatorController {
             identity.pointBalance !== null ? `${identity.pointBalance} pts, ` : ''
           }${identity.rewards.length} reward(s)`,
         );
+        if (identity.vas) for (const line of vasLines(identity.vas)) this.log(`VAS: ${line}`);
         break;
       case 'absent':
         this.log(`${memberHeadline(identity)} — loyalty steps will be skipped`);
