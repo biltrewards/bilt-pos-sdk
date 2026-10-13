@@ -53,8 +53,8 @@ jobs:
           fi
           VERSION="${TAG#v}"
           pnpm -r --filter './packages/*' exec npm pkg set "version=$VERSION"
-          sed -i "s/^export const SDK_VERSION = '.*';/export const SDK_VERSION = '$VERSION';/" packages/sdk/src/core/version.ts
-          grep -q "SDK_VERSION = '$VERSION'" packages/sdk/src/core/version.ts
+          sed -i "s/^export const SDK_VERSION = '.*';/export const SDK_VERSION = '$VERSION';/" "$GITHUB_WORKSPACE/js/packages/sdk/src/core/version.ts"
+          grep -q "SDK_VERSION = '$VERSION'" "$GITHUB_WORKSPACE/js/packages/sdk/src/core/version.ts"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build
@@ -86,7 +86,7 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          PACKAGES="$(jq -r 'select(.private != true) | "\(.name)@\(.version)"' packages/*/package.json | paste -sd, -)"
+          PACKAGES="$(jq -r 'select(.private != true) | "\(.name)@\(.version)"' "$GITHUB_WORKSPACE"/js/packages/*/package.json | paste -sd, -)"
           MESSAGE="$(jq -cn \
             --arg packages "$PACKAGES" --arg tag "$GIT_TAG" --arg sha "$GIT_SHA" \
             --arg repo "$REPO" --arg run "$RUN_URL" \
