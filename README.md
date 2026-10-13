@@ -4,10 +4,10 @@ Java and Kotlin libraries for the nexo POS protocol.
 
 ## Modules
 
-| Module    | Description                               |
-| --------- | ----------------------------------------- |
-| `:java`   | Java library with Jackson serialization   |
-| `:kotlin` | Kotlin library with kotlinx-serialization |
+| Module    | Description                                      |
+|-----------|--------------------------------------------------|
+| `:java`   | Java library with Jackson serialization          |
+| `:kotlin` | Kotlin library with kotlinx-serialization        |
 
 ## Usage
 
