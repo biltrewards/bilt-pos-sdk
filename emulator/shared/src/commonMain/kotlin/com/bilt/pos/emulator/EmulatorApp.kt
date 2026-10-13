@@ -63,11 +63,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.bilt.pos.emulator.catalog.Product
@@ -1037,15 +1042,23 @@ private fun MemberCard(member: MemberIdentity, modifier: Modifier = Modifier) {
             when (member) {
                 is MemberIdentity.Found -> {
                     member.name?.let {
-                        Text(it, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
                     }
                     Text(
-                        listOfNotNull(
-                                member.tierName?.let { "$it tier" },
-                                member.pointBalance?.let { "$it pts" } ?: "points not reported",
-                                "${member.rewards.size} reward(s)",
-                            )
-                            .joinToString(" · "),
+                        buildAnnotatedString {
+                            member.tierName?.let { tier ->
+                                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append("$tier tier")
+                                }
+                                append(" · ")
+                            }
+                            append(member.pointBalance?.let { "$it pts" } ?: "points not reported")
+                            append(" · ${member.rewards.size} reward(s)")
+                        },
                         style = MaterialTheme.typography.bodySmall,
                     )
                     // capped and scrollable: a long reward wallet must not
@@ -1096,6 +1109,8 @@ private fun RewardRow(reward: MemberRewardUi) {
             )
             .joinToString(" — "),
         style = MaterialTheme.typography.bodySmall,
+        fontWeight = FontWeight.Bold,
+        fontStyle = FontStyle.Italic,
     )
 }
 
