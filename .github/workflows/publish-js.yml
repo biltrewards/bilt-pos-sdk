@@ -25,13 +25,13 @@ jobs:
       GAR_REGISTRY: //us-central1-npm.pkg.dev/single-scholar-280421/bilt/
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           package_json_file: js/package.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: js/.nvmrc
           cache: pnpm
@@ -62,11 +62,11 @@ jobs:
 
       # Direct Workload Identity Federation: no service account. The provider only grants
       # trusted refs, which a published release is.
-      - uses: google-github-actions/auth@v3
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: ${{ vars.GH_ACTIONS_GCP_WORKLOAD_IDENTITY_ID_CICD }}
 
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
       - name: Point @biltorg at Artifact Registry
         run: |
