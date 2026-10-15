@@ -30,6 +30,7 @@ import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.session.identity.MemberIdResolver;
 import com.bilt.pos.session.identity.Reward;
+import com.bilt.pos.session.identity.ShopperContext;
 import com.bilt.pos.session.identity.VasData;
 import com.bilt.pos.session.identity.VasService;
 import com.bilt.pos.session.input.MenuSelection;
@@ -224,6 +225,23 @@ public final class Views {
     if (result.getVasData() != null) {
       node.set("vasData", vasData(result.getVasData()));
     }
+    if (result.getShopperContext() != null) {
+      node.set("shopperContext", shopperContext(result.getShopperContext()));
+    }
+    return node;
+  }
+
+  private static ObjectNode shopperContext(ShopperContext context) {
+    ObjectNode node = Json.object();
+    node.put("kind", context.getKind().name());
+    Json.putText(node, "walletIdentityId", context.getWalletIdentityId());
+    Json.putText(node, "neighborhoodId", context.getNeighborhoodId());
+    Json.putText(node, "firstName", context.getFirstName());
+    Json.putText(node, "lastName", context.getLastName());
+    if (context.getPointsBalance() != null) {
+      node.put("pointsBalance", context.getPointsBalance());
+    }
+    Json.putText(node, "tierName", context.getTierName());
     return node;
   }
 

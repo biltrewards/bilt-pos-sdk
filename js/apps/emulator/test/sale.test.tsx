@@ -1,15 +1,58 @@
 // The Sale tab, the basket card and the settlement against the SDK double: products and the
 // keypad, the Discount and Credit dialogs, the settlement toggles, the recovery dialog with the
 // desktop's choices, the outcome popup and the stored sale.
-import { SessionError } from '@biltorg/pos-sdk';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { SessionError, type IdentifyResult } from '@biltorg/pos-sdk';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { addProduct, button, events, region, renderApp } from './harness';
+import { addProduct, button, events, MockTerminalSession, region, renderApp } from './harness';
 
 function basketLines(): string[] {
   return Array.from(region('Basket').querySelectorAll('.line-text')).map(
     (line) => line.textContent ?? '',
   );
+}
+
+/** Signs in at Start Checkout against a terminal reporting `shopperContext`; returns the card. */
+async function signInWith(
+  pointBalance: number,
+  shopperContext?: IdentifyResult['shopperContext'],
+): Promise<HTMLElement> {
+  // Wrap the real mock so the session still retains the member it resolves; the test only
+  // overrides the balance and shopper context the terminal reports.
+  const original = MockTerminalSession.prototype.identifyMember;
+  const identify = vi
+    .spyOn(MockTerminalSession.prototype, 'identifyMember')
+    .mockImplementation(function (this: MockTerminalSession, arg) {
+      const op = original.call(this, arg as never);
+      return Object.assign(
+        op.then((result) => ({
+          ...result,
+          pointBalance,
+          ...(shopperContext ? { shopperContext } : {}),
+        })),
+        {
+          id: op.id,
+          type: op.type,
+          status: op.status,
+          abort: () => op.abort(),
+        },
+      );
+    });
+  await renderApp();
+  fireEvent.click(screen.getByLabelText('Identify'));
+  fireEvent.click(button('Start Checkout'));
+  try {
+    return await screen.findByRole('region', { name: 'Loyalty sign-in' });
+  } finally {
+    identify.mockRestore();
+  }
+}
+
+/** Matches the element whose full text (across its bold/italic spans) is `text`. */
+function line(text: string): (content: string, element: Element | null) => boolean {
+  return (_, element) =>
+    element?.textContent === text &&
+    [...element.children].every((child) => child.textContent !== text);
 }
 
 function dialog(name: string): HTMLElement {
@@ -218,6 +261,87 @@ describe('the Sale tab and the basket card', () => {
     await waitFor(() =>
       expect(screen.queryByRole('region', { name: 'Loyalty sign-in' })).toBeNull(),
     );
+  });
+
+  it("shows the shopper's name, points and tier from the shopper context", async () => {
+    const card = await signInWith(0, {
+      kind: 'MEMBER',
+      walletIdentityId: '7d4c1f0e-0000-4000-8000-000000000001',
+      neighborhoodId: 'mbr_8f2a',
+      firstName: 'Aloy',
+      lastName: 'Pelta',
+      pointsBalance: 42000,
+      tierName: 'Gold',
+    });
+    expect(within(card).getByTestId('member').textContent).toBe('mbr_8f2a');
+    expect(within(card).getByText('Aloy Pelta')).toBeTruthy();
+    expect(within(card).getByText(line('Gold tier · 42000 pts · 0 reward(s)'))).toBeTruthy();
+    expect(within(card).getByText('Gold tier').tagName).toBe('STRONG');
+    expect(events()).toContain('Member identified: mbr_8f2a, 42000 pts, 0 reward(s)');
+  });
+
+  it('shows only the shopper fields the terminal resolved', async () => {
+    const card = await signInWith(0, { kind: 'MEMBER', firstName: 'Aloy' });
+    expect(within(card).getByText('Aloy')).toBeTruthy();
+    expect(within(card).getByText('points not reported · 0 reward(s)')).toBeTruthy();
+  });
+
+  it('keeps the sign-in of an anonymous or unrecognized shopper', async () => {
+    for (const kind of ['ANONYMOUS', 'UNKNOWN'] as const) {
+      const card = await signInWith(0, { kind, walletIdentityId: 'w-1' });
+      expect(within(card).getByTestId('member').textContent).toBe('mbr_8f2a');
+      expect(within(card).getByText('points not reported · 0 reward(s)')).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it('keeps the loyalty account balance when the terminal sent no shopper context', async () => {
+    const card = await signInWith(120);
+    expect(within(card).getByText('120 pts · 0 reward(s)')).toBeTruthy();
+    expect(within(card).queryByText(/tier/)).toBeNull();
+  });
+
+  it('keeps the signed-in member when a mid-checkout Loyalty Sign-In is cancelled', async () => {
+    const card = await signInWith(0, {
+      kind: 'MEMBER',
+      walletIdentityId: '7d4c1f0e-0000-4000-8000-000000000001',
+      neighborhoodId: 'mbr_8f2a',
+      firstName: 'Aloy',
+      lastName: 'Pelta',
+      pointsBalance: 42000,
+      tierName: 'Gold',
+    });
+    const identify = vi
+      .spyOn(MockTerminalSession.prototype, 'identifyMember')
+      .mockImplementation(() =>
+        Object.assign(
+          Promise.resolve<IdentifyResult>({
+            status: 'CANCELLED',
+            rewards: [],
+            pointBalance: 0,
+          }),
+          {
+            id: 'op_y',
+            type: 'identifyMember' as const,
+            status: 'succeeded' as const,
+            abort: async () => undefined,
+          },
+        ),
+      );
+    try {
+      fireEvent.click(button('Loyalty Sign-In'));
+      await waitFor(() => expect(events()).toContain('kept from an earlier sign-in'));
+      // the prompt unmounts the card, so read the one rendered for the retained member
+      const retained = screen.getByRole('region', { name: 'Loyalty sign-in' });
+      expect(retained).not.toBe(card);
+      expect(within(retained).getByTestId('member').textContent).toBe(
+        'mbr_8f2a — kept from an earlier sign-in',
+      );
+      expect(within(retained).getByText('Aloy Pelta')).toBeTruthy();
+      expect(within(retained).getByText(line('Gold tier · 42000 pts · 0 reward(s)'))).toBeTruthy();
+    } finally {
+      identify.mockRestore();
+    }
   });
 
   it('shows no wallet pass by default: sign-in is forced to keyed entry', async () => {

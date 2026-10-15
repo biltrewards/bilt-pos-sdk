@@ -1,0 +1,28 @@
+{
+  "seq": 7,
+  "at": "2026-10-06T14:04:02.318Z",
+  "type": "operation.completed",
+  "payload": {
+    "id": "op_01J9Q2K4H6J7K8M9N0P1Q2R3S4",
+    "type": "identifyMember",
+    "status": "succeeded",
+    "createdAt": "2026-10-06T14:03:51.200Z",
+    "startedAt": "2026-10-06T14:03:51.205Z",
+    "completedAt": "2026-10-06T14:04:02.316Z",
+    "result": {
+      "status": "FOUND",
+      "memberId": "19d6f8aa-51ce-484e-9e28-06949b1b8f90",
+      "rewards": [],
+      "pointBalance": 0,
+      "shopperContext": {
+        "kind": "MEMBER",
+        "walletIdentityId": "d8a6f4c2-9b7e-4a1d-8f3c-2e5b7d9a1c4f",
+        "neighborhoodId": "5b3e2a91-7c4d-4e6f-a2b8-1d9c3e7f5a42",
+        "firstName": "Aloy",
+        "lastName": "Pelta",
+        "pointsBalance": 42000,
+        "tierName": "Gold"
+      }
+    }
+  }
+}

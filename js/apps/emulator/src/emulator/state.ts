@@ -155,8 +155,15 @@ export type MemberIdentity =
       readonly kind: 'found';
       readonly memberId: string;
       readonly loyaltyBrand?: string;
-      /** `null` when the terminal reported none, which the prompted sign-in always does. */
+      /**
+       * `null` when the terminal reported none, which the prompted sign-in always does unless its
+       * shopper context carries one.
+       */
       readonly pointBalance: number | null;
+      /** The shopper's name from the terminal's shopper context; absent when not reported. */
+      readonly name?: string;
+      /** The shopper's loyalty tier from the terminal's shopper context; absent when not reported. */
+      readonly tierName?: string;
       readonly rewards: readonly MemberRewardUi[];
       /** True when this member predates the latest sign-in attempt. */
       readonly retained: boolean;

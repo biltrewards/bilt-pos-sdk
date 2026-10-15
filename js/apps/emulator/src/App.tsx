@@ -102,14 +102,16 @@ function Workspace({
         <StatusIndicators settings={settings} />
       </header>
       <main className="main">
-        <ConnectionPanel
-          settings={settings}
-          onSettings={onSettings}
-          bridge={bridge}
-          guideUrl={BRIDGE_GUIDE_URL}
-          {...(MANIFEST_URL ? { manifestUrl: MANIFEST_URL } : {})}
-        />
-        {state.member ? <MemberCard member={state.member} /> : null}
+        <div className="top-row">
+          <ConnectionPanel
+            settings={settings}
+            onSettings={onSettings}
+            bridge={bridge}
+            guideUrl={BRIDGE_GUIDE_URL}
+            {...(MANIFEST_URL ? { manifestUrl: MANIFEST_URL } : {})}
+          />
+          {state.member ? <MemberCard member={state.member} /> : null}
+        </div>
         <div className="workspace">
           <div className="left">
             <BasketCard

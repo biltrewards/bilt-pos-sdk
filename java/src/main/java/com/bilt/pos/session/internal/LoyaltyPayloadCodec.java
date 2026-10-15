@@ -13,6 +13,8 @@ package com.bilt.pos.session.internal;
 
 import com.bilt.pos.session.identity.Reward;
 import com.bilt.pos.session.identity.RewardType;
+import com.bilt.pos.session.identity.ShopperContext;
+import com.bilt.pos.session.identity.ShopperKind;
 import com.bilt.pos.session.identity.VasData;
 import com.bilt.pos.session.identity.VasService;
 import com.bilt.pos.session.payment.EarnedReward;
@@ -137,6 +139,36 @@ public final class LoyaltyPayloadCodec {
                         text(node, "cipherTimestamp")))
             .collect(Collectors.toList());
     return new VasData(text(vas, "source"), text(vas, "merchantId"), services, text(vas, "raw"));
+  }
+
+  /**
+   * Parses the {@code {"shopperContext":{"shopper":{...}}}} object an identification response
+   * carries for a wallet-pass sign-in. Returns {@code null} when there is none or it is malformed.
+   */
+  public static ShopperContext parseShopperContext(String base64) {
+    return parseShopperContext(decode(base64));
+  }
+
+  static ShopperContext parseShopperContext(JsonNode root) {
+    JsonNode context = root == null ? null : root.get("shopperContext");
+    if (context == null || !context.isObject()) {
+      return null;
+    }
+    JsonNode shopper = context.get("shopper");
+    if (shopper == null || !shopper.isObject()) {
+      return null;
+    }
+    JsonNode balance = shopper.get("pointsBalance");
+    return new ShopperContext(
+        ShopperKind.fromWire(text(shopper, "kind")),
+        text(shopper, "walletIdentityId"),
+        text(shopper, "neighborhoodId"),
+        text(shopper, "firstName"),
+        text(shopper, "lastName"),
+        balance != null && balance.isIntegralNumber() && balance.canConvertToInt()
+            ? balance.asInt()
+            : null,
+        text(shopper, "tierName"));
   }
 
   /** The {@code rewardRefs} payload for a member's rewards. */

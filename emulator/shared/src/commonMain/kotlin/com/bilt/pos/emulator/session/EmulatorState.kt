@@ -231,6 +231,12 @@ sealed interface MemberIdentity {
          * always does, since its response carries no balance at all.
          */
         val pointBalance: Int? = null,
+        /** The shopper's name from the terminal's shopper context; null when not reported. */
+        val name: String? = null,
+        /**
+         * The shopper's loyalty tier from the terminal's shopper context; null when not reported.
+         */
+        val tierName: String? = null,
         val rewards: List<MemberRewardUi> = emptyList(),
         /**
          * True when this member predates the latest sign-in attempt. A cancelled or failed prompt
