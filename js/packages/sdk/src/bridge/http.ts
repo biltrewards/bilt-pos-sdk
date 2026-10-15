@@ -1,4 +1,4 @@
-import type { SessionError as SessionErrorData } from '@bilt/pos-protocol';
+import type { SessionError as SessionErrorData } from '@biltorg/pos-protocol';
 import { EngineUnavailableError, SessionError } from '../errors';
 import { isLoopback, type ResolvedBridgeOptions } from './options';
 

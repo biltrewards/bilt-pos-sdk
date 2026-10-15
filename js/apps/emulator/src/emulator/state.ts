@@ -1,4 +1,4 @@
-import type { Money } from '@bilt/pos-sdk';
+import type { Money } from '@biltorg/pos-sdk';
 import type { Product } from '../catalog';
 import { formatMinor } from '../money';
 

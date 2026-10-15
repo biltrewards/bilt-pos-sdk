@@ -4,7 +4,7 @@ import type {
   SettlementOptions,
   SettlementResult,
   VoidResult,
-} from '@bilt/pos-sdk';
+} from '@biltorg/pos-sdk';
 import { cents, formatMinor, money } from '../money';
 import {
   isFullyRefunded,

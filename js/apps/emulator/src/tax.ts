@@ -1,4 +1,4 @@
-import type { Money } from '@bilt/pos-sdk';
+import type { Money } from '@biltorg/pos-sdk';
 
 /**
  * The emulator's tax policy, a port of the desktop emulator's `NjSalesTax`: New Jersey sales

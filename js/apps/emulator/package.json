@@ -1,8 +1,8 @@
 {
-  "name": "@bilt/pos-emulator",
+  "name": "@biltorg/pos-emulator",
   "version": "0.0.0",
   "private": true,
-  "description": "The browser register emulator for the Bilt POS SDK: a Vite + React page over @bilt/pos-react and the Terminal Bridge that exercises the whole checkout contract.",
+  "description": "The browser register emulator for the Bilt POS SDK: a Vite + React page over @biltorg/pos-react and the Terminal Bridge that exercises the whole checkout contract.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,9 +13,9 @@
     "test:contract": "vitest run -c vitest.contract.config.ts"
   },
   "dependencies": {
-    "@bilt/pos-protocol": "workspace:*",
-    "@bilt/pos-react": "workspace:*",
-    "@bilt/pos-sdk": "workspace:*",
+    "@biltorg/pos-protocol": "workspace:*",
+    "@biltorg/pos-react": "workspace:*",
+    "@biltorg/pos-sdk": "workspace:*",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

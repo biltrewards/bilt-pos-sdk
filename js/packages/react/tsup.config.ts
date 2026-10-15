@@ -7,5 +7,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: 'es2022',
-  external: ['react', 'react/jsx-runtime', '@bilt/pos-sdk', '@bilt/pos-protocol'],
+  external: ['react', 'react/jsx-runtime', '@biltorg/pos-sdk', '@biltorg/pos-protocol'],
 });

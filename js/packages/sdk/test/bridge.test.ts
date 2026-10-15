@@ -1,7 +1,7 @@
 // The Terminal Bridge engine without a bridge: detection over a fake fetch, the HTTP layer's
 // headers, retries and error mapping, the route mapping of the Engine seam, and the event
 // stream's reconnection over a fake WebSocket.
-import type { SessionEvent } from '@bilt/pos-protocol';
+import type { SessionEvent } from '@biltorg/pos-protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BRIDGE_DEFAULT_PORT,

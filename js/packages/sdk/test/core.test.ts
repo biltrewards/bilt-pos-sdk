@@ -1,5 +1,5 @@
 // The SDK core over the in-memory MockEngine: connect, sessions, mirrors, events, end.
-import type { BasketChange, SessionEvent } from '@bilt/pos-protocol';
+import type { BasketChange, SessionEvent } from '@biltorg/pos-protocol';
 import { describe, expect, it, vi } from 'vitest';
 import { BiltPos, EngineOutdatedError, SessionError } from '../src/index';
 import type { Engine } from '../src/internal';

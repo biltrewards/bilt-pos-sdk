@@ -1,5 +1,5 @@
 // Samples for "Reliability".
-import type { ShopperSession } from '@bilt/pos-sdk';
+import type { ShopperSession } from '@biltorg/pos-sdk';
 
 declare const log: { warn(message: string): void; info(message: string): void };
 

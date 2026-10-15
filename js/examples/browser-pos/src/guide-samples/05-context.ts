@@ -1,5 +1,5 @@
 // Samples for "Session context".
-import type { ShopperSession } from '@bilt/pos-sdk';
+import type { ShopperSession } from '@biltorg/pos-sdk';
 
 export async function markTendering(session: ShopperSession): Promise<void> {
   await session.context.setPhase('TENDERING');

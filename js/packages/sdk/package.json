@@ -1,5 +1,5 @@
 {
-  "name": "@bilt/pos-sdk",
+  "name": "@biltorg/pos-sdk",
   "version": "0.0.0",
   "description": "The Bilt POS SDK for JavaScript: shopper sessions, settlement and widgets over a Session Protocol host.",
   "license": "MIT",
@@ -34,6 +34,9 @@
     "dist",
     "src"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -43,7 +46,7 @@
     "api:update": "api-extractor run --local -c api-extractor.json && api-extractor run --local -c api-extractor.internal.json && api-extractor run --local -c api-extractor.bridge.json"
   },
   "dependencies": {
-    "@bilt/pos-protocol": "workspace:*"
+    "@biltorg/pos-protocol": "workspace:*"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.59.3",

@@ -1,5 +1,5 @@
 {
-  "name": "@bilt/pos-protocol",
+  "name": "@biltorg/pos-protocol",
   "version": "0.0.0",
   "description": "Types and a typed fetch client generated from the Bilt POS Session Protocol (schema/session-protocol).",
   "license": "MIT",
@@ -24,6 +24,9 @@
     "dist",
     "src"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "generate": "node scripts/generate.mjs",
     "build": "tsup",

@@ -9,7 +9,7 @@ import {
   useShopperSession,
   useTerminalSession,
   type UseSessionResult,
-} from '@bilt/pos-react';
+} from '@biltorg/pos-react';
 import type {
   BasketChange,
   BasketItem,
@@ -19,7 +19,7 @@ import type {
   ShopperSession,
   ShopperSessionOptions,
   VoidResult,
-} from '@bilt/pos-sdk';
+} from '@biltorg/pos-sdk';
 import { useState, type ReactNode } from 'react';
 import { toBasketItem, type CatalogEntry } from './catalog';
 import { formatMoney, offerAmount, offerTarget, recomputeTotal } from './money';

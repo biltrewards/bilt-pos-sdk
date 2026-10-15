@@ -1,4 +1,4 @@
-import type { Health } from '@bilt/pos-protocol';
+import type { Health } from '@biltorg/pos-protocol';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BiltPosProvider, RetailMediaSurface, useTerminalSession } from '../src/index';

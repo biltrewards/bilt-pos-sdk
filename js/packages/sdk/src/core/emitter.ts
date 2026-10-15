@@ -1,4 +1,4 @@
-import type { SessionEventPayload, SessionEventType } from '@bilt/pos-protocol';
+import type { SessionEventPayload, SessionEventType } from '@biltorg/pos-protocol';
 import type { SessionEventHandler, Unsubscribe } from '../session';
 import type { Reporter } from './report';
 

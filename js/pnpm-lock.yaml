@@ -44,13 +44,13 @@ importers:
 
   apps/emulator:
     dependencies:
-      '@bilt/pos-protocol':
+      '@biltorg/pos-protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@bilt/pos-react':
+      '@biltorg/pos-react':
         specifier: workspace:*
         version: link:../../packages/react
-      '@bilt/pos-sdk':
+      '@biltorg/pos-sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       react:
@@ -87,13 +87,13 @@ importers:
 
   examples/browser-pos:
     dependencies:
-      '@bilt/pos-protocol':
+      '@biltorg/pos-protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@bilt/pos-react':
+      '@biltorg/pos-react':
         specifier: workspace:*
         version: link:../../packages/react
-      '@bilt/pos-sdk':
+      '@biltorg/pos-sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       react:
@@ -127,10 +127,10 @@ importers:
 
   examples/vanilla-ts:
     dependencies:
-      '@bilt/pos-protocol':
+      '@biltorg/pos-protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@bilt/pos-sdk':
+      '@biltorg/pos-sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
     devDependencies:
@@ -171,10 +171,10 @@ importers:
 
   packages/react:
     devDependencies:
-      '@bilt/pos-protocol':
+      '@biltorg/pos-protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@bilt/pos-sdk':
+      '@biltorg/pos-sdk':
         specifier: workspace:*
         version: link:../sdk
       '@microsoft/api-extractor':
@@ -204,7 +204,7 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@bilt/pos-protocol':
+      '@biltorg/pos-protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:

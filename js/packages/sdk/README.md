@@ -1,4 +1,4 @@
-# @bilt/pos-sdk
+# @biltorg/pos-sdk
 
 The Bilt POS SDK for JavaScript: shopper sessions, settlement, refunds and widgets for a
 browser register, mirroring the Java `ShopperSession` / `TerminalShopperSession` API. The
@@ -8,17 +8,17 @@ browser never talks to a terminal itself; the SDK speaks the
 
 Design: [Terminal Bridge, Session Protocol & JavaScript SDK](https://app.notion.com/p/3f0e1baadc2881088783ff86972c57c4).
 
-| Entry point              | Contents                                                                                                                           |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `@bilt/pos-sdk`          | `BiltPos`, `ShopperSession`, `TerminalShopperSession`, `Operation`, `SessionError`; engine-independent, no bridge concepts.        |
-| `@bilt/pos-sdk/bridge`   | `localBridge()`, `detectBridge()`, `BridgeMissingError`, `BridgeOutdatedError`: the Terminal Bridge engine and its install states. |
-| `@bilt/pos-sdk/internal` | The `Engine` seam an engine implements. Unstable; registers never import it.                                                       |
+| Entry point                 | Contents                                                                                                                           |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `@biltorg/pos-sdk`          | `BiltPos`, `ShopperSession`, `TerminalShopperSession`, `Operation`, `SessionError`; engine-independent, no bridge concepts.        |
+| `@biltorg/pos-sdk/bridge`   | `localBridge()`, `detectBridge()`, `BridgeMissingError`, `BridgeOutdatedError`: the Terminal Bridge engine and its install states. |
+| `@biltorg/pos-sdk/internal` | The `Engine` seam an engine implements. Unstable; registers never import it.                                                       |
 
 ## Connect, start, settle
 
 ```ts
-import { BiltPos, SessionError } from '@bilt/pos-sdk';
-import { BridgeMissingError, BridgeOutdatedError, localBridge } from '@bilt/pos-sdk/bridge';
+import { BiltPos, SessionError } from '@biltorg/pos-sdk';
+import { BridgeMissingError, BridgeOutdatedError, localBridge } from '@biltorg/pos-sdk/bridge';
 
 let pos;
 try {
@@ -115,7 +115,7 @@ globals (Node 20, React Native polyfills).
 
 ## Engines other than the bridge
 
-The core talks to an `Engine` (`@bilt/pos-sdk/internal`); `localBridge()` is the first
+The core talks to an `Engine` (`@biltorg/pos-sdk/internal`); `localBridge()` is the first
 implementation and `cloud(..)` will be the second. Nothing in the public API depends on which
 one is behind it: wire details (ports, operation ids, sequence numbers, idempotency keys, HTTP
 statuses) never leave the engine, and behavioural differences are data in

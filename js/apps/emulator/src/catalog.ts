@@ -1,4 +1,4 @@
-import type { BasketItem, Money } from '@bilt/pos-sdk';
+import type { BasketItem, Money } from '@biltorg/pos-sdk';
 import { money } from './money';
 import { NJ_SALES_TAX_RATE, taxRateFor } from './tax';
 

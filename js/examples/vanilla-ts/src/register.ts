@@ -4,8 +4,8 @@ import type {
   Member,
   ShopperSession,
   TerminalShopperSession,
-} from '@bilt/pos-sdk';
-import type { BridgeDetection } from '@bilt/pos-sdk/bridge';
+} from '@biltorg/pos-sdk';
+import type { BridgeDetection } from '@biltorg/pos-sdk/bridge';
 import { CATALOG, recomputeTotal } from './catalog';
 import { loadSettings, saveSettings, type Settings } from './settings';
 

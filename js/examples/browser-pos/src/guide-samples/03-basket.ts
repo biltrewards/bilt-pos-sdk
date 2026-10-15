@@ -1,5 +1,5 @@
 // Samples for "Build the basket".
-import type { Basket, BasketItem, ShopperSession } from '@bilt/pos-sdk';
+import type { Basket, BasketItem, ShopperSession } from '@biltorg/pos-sdk';
 
 declare function render(basket: Basket): void;
 declare function log(message: string): void;

@@ -1,5 +1,5 @@
 // Local sessions against the real Session Host: create, basket, member, context, events, end.
-import type { SessionEventType } from '@bilt/pos-protocol';
+import type { SessionEventType } from '@biltorg/pos-protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BiltPos } from '../../src/index';
 import { BridgeMissingError, detectBridge, localBridge } from '../../src/bridge/index';

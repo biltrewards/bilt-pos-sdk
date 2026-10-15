@@ -1,4 +1,10 @@
-import type { Basket, BasketDiscount, BasketItem, BasketMutation, Money } from '@bilt/pos-protocol';
+import type {
+  Basket,
+  BasketDiscount,
+  BasketItem,
+  BasketMutation,
+  Money,
+} from '@biltorg/pos-protocol';
 import type { BasketCommand, Engine } from '../internal';
 import type { BasketMutationBuilder, SessionBasket } from '../session';
 import { newIdempotencyKey } from './ids';

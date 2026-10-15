@@ -7,5 +7,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: 'es2022',
-  external: ['@bilt/pos-protocol'],
+  external: ['@biltorg/pos-protocol'],
 });

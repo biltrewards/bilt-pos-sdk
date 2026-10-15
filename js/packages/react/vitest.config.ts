@@ -8,9 +8,9 @@ export default defineConfig({
   // sources; aliasing the packages to those sources keeps one copy of `SessionError` in play.
   resolve: {
     alias: [
-      { find: /^@bilt\/pos-sdk\/bridge$/, replacement: sibling('../sdk/src/bridge/index.ts') },
-      { find: /^@bilt\/pos-sdk$/, replacement: sibling('../sdk/src/index.ts') },
-      { find: /^@bilt\/pos-protocol$/, replacement: sibling('../protocol/src/index.ts') },
+      { find: /^@biltorg\/pos-sdk\/bridge$/, replacement: sibling('../sdk/src/bridge/index.ts') },
+      { find: /^@biltorg\/pos-sdk$/, replacement: sibling('../sdk/src/index.ts') },
+      { find: /^@biltorg\/pos-protocol$/, replacement: sibling('../protocol/src/index.ts') },
     ],
   },
   test: {

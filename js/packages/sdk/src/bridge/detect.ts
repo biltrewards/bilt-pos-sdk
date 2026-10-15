@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type Health } from '@bilt/pos-protocol';
+import { PROTOCOL_VERSION, type Health } from '@biltorg/pos-protocol';
 import { isLoopback, resolveOptions, type LocalBridgeOptions } from './options';
 
 /**

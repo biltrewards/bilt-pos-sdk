@@ -120,7 +120,7 @@ if [[ "${SKIP_BUILD:-}" != "1" ]]; then
   "$REPO_ROOT/gradlew" -q -p "$REPO_ROOT" :bridge:installDist
   echo "Installing and building the JS workspace..."
   (cd "$REPO_ROOT/js" && "${PNPM[@]}" install --frozen-lockfile >/dev/null &&
-    "${PNPM[@]}" --filter '@bilt/pos-emulator^...' build >/dev/null)
+    "${PNPM[@]}" --filter '@biltorg/pos-emulator^...' build >/dev/null)
 fi
 
 if [[ ! -x "$BRIDGE_LAUNCHER" ]]; then
@@ -274,7 +274,7 @@ echo "Browser emulator: $url (Ctrl-C stops the emulator and the bridge)"
 (cd "$REPO_ROOT/js" &&
   BRIDGE_URL="http://127.0.0.1:$bridge_port" VITE_BILT_BRIDGE_PORT="$bridge_port" \
     VITE_BILT_SESSION_MODE="$session_mode" \
-    exec "${PNPM[@]}" --filter @bilt/pos-emulator dev --host 127.0.0.1 --port "$web_port" --strictPort) &
+    exec "${PNPM[@]}" --filter @biltorg/pos-emulator dev --host 127.0.0.1 --port "$web_port" --strictPort) &
 web_pid=$!
 
 # Exit when either server stops on its own, with its status; the EXIT trap

@@ -1,5 +1,5 @@
-import type { Schemas } from '@bilt/pos-protocol';
-import type { BasketItem, Money, StoredValueCard } from '@bilt/pos-sdk';
+import type { Schemas } from '@biltorg/pos-protocol';
+import type { BasketItem, Money, StoredValueCard } from '@biltorg/pos-sdk';
 
 export type StoredValueLoad = Schemas['StoredValueLoad'];
 export type StoredValueLoadType = StoredValueLoad['type'];

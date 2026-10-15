@@ -1,6 +1,6 @@
 // The persisted sale: the projection from a SettlementResult, the IndexedDB store, and the
 // return and full-refund plans built from a stored sale.
-import type { SettlementResult } from '@bilt/pos-sdk';
+import type { SettlementResult } from '@biltorg/pos-sdk';
 import { describe, expect, it } from 'vitest';
 import * as fx from '../../../packages/sdk/test/fixtures';
 import {

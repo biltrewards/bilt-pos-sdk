@@ -1,4 +1,4 @@
-import type { Basket, BasketItem } from '@bilt/pos-sdk';
+import type { Basket, BasketItem } from '@biltorg/pos-sdk';
 import { useState, type ReactNode } from 'react';
 import { CATALOG, toBasketItem } from '../catalog';
 

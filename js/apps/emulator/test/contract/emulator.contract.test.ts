@@ -1,13 +1,13 @@
 // The emulator's checkout contract against the real Session Host and a scripted terminal, using
-// the launcher and fake terminal of `@bilt/pos-sdk`'s contract suite: a sale whose rebate step
+// the launcher and fake terminal of `@biltorg/pos-sdk`'s contract suite: a sale whose rebate step
 // is re-taxed by the register (`TOTAL_REQUIRED`) and whose declined card charge is retried
 // through the recovery decision (`RECOVERY_REQUIRED`), the sale persisted the way the Refunds
 // tab needs it, a gift-card tender, and an item return of the persisted sale from a later
 // session, refunded to the original card.
 import { writeFileSync } from 'node:fs';
-import type { OperationStep, SettlementFailure } from '@bilt/pos-protocol';
+import type { OperationStep, SettlementFailure } from '@biltorg/pos-protocol';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { BiltPos, TerminalShopperSession } from '@bilt/pos-sdk';
+import type { BiltPos, TerminalShopperSession } from '@biltorg/pos-sdk';
 import { FakeTerminal, paymentEcho } from '../../../../packages/sdk/test/contract/fake-terminal';
 import {
   buildHost,

@@ -1,6 +1,6 @@
 // Samples for "Start and end a session" and "Terminal operations outside a session".
-import { SessionError } from '@bilt/pos-sdk';
-import type { BiltPos, ShopperSession, TerminalShopperSession } from '@bilt/pos-sdk';
+import { SessionError } from '@biltorg/pos-sdk';
+import type { BiltPos, ShopperSession, TerminalShopperSession } from '@biltorg/pos-sdk';
 
 declare function recordIncident(message: string): void;
 

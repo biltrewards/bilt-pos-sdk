@@ -1,6 +1,6 @@
 // Operations, steps, deadlines, idempotency keys and stream recovery, driven through the
 // ScriptedEngine so every host behaviour is under the test's control.
-import type { OperationStep, SessionError as SessionErrorData } from '@bilt/pos-protocol';
+import type { OperationStep, SessionError as SessionErrorData } from '@biltorg/pos-protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BiltPos, SessionError, type TerminalShopperSession } from '../src/index';
 import { rebateStep, ScriptedEngine } from './scripted-engine';

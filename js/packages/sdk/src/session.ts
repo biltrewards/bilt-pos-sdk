@@ -16,7 +16,7 @@ import type {
   SessionEventPayload,
   SessionEventType,
   SurfaceKind,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import type { SessionError } from './errors';
 
 /** Whether a session has a terminal: `local` is basket and member state only. */

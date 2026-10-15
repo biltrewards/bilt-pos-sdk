@@ -1,5 +1,5 @@
-import type { Cta, Rendering } from '@bilt/pos-protocol';
-import type { RetailMediaWidget, ShopperSession } from '@bilt/pos-sdk';
+import type { Cta, Rendering } from '@biltorg/pos-protocol';
+import type { RetailMediaWidget, ShopperSession } from '@biltorg/pos-sdk';
 import {
   useCallback,
   useEffect,

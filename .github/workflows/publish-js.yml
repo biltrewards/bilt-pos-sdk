@@ -1,0 +1,95 @@
+name: Publish JS packages
+
+# Stage 1 of the npm release pipeline: publish the @biltorg/pos-* packages to the private
+# Artifact Registry npm repo, then ask the Cloud Build release job (via Pub/Sub) to scan them
+# and publish them to npmjs.com.
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # id-token: write lets google-github-actions/auth federate the job's OIDC token.
+    permissions:
+      contents: read
+      id-token: write
+
+    defaults:
+      run:
+        working-directory: js
+
+    env:
+      GAR_REGISTRY: //us-central1-npm.pkg.dev/single-scholar-280421/bilt/
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          package_json_file: js/package.json
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: js/.nvmrc
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Lockstep: every publishable package gets the release tag's version. pnpm publish turns
+      # their workspace:* dependencies into that version.
+      - name: Stamp the version from the release tag
+        id: version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag '$TAG' is not vX.Y.Z"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          pnpm -r --filter './packages/*' exec npm pkg set "version=$VERSION"
+          sed -i "s/^export const SDK_VERSION = '.*';/export const SDK_VERSION = '$VERSION';/" "$GITHUB_WORKSPACE/js/packages/sdk/src/core/version.ts"
+          grep -q "SDK_VERSION = '$VERSION'" "$GITHUB_WORKSPACE/js/packages/sdk/src/core/version.ts"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: pnpm -r build
+
+      # Direct Workload Identity Federation: no service account. The provider only grants
+      # trusted refs, which a published release is.
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GH_ACTIONS_GCP_WORKLOAD_IDENTITY_ID_CICD }}
+
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Point @biltorg at Artifact Registry
+        run: |
+          TOKEN="$(gcloud auth print-access-token)"
+          echo "::add-mask::$TOKEN"
+          printf '%s:_authToken=%s\n@biltorg:registry=https:%s\n' "$GAR_REGISTRY" "$TOKEN" "$GAR_REGISTRY" >> ~/.npmrc
+
+      # --no-git-checks: the stamped versions leave the tree dirty and a release checks out a tag.
+      - name: Publish to Artifact Registry
+        run: pnpm -r publish --no-git-checks
+
+      - name: Request the npmjs release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GIT_TAG: ${{ github.event.release.tag_name }}
+          GIT_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          PACKAGES="$(jq -r 'select(.private != true) | "\(.name)@\(.version)"' "$GITHUB_WORKSPACE"/js/packages/*/package.json | paste -sd, -)"
+          MESSAGE="$(jq -cn \
+            --arg packages "$PACKAGES" --arg tag "$GIT_TAG" --arg sha "$GIT_SHA" \
+            --arg repo "$REPO" --arg run "$RUN_URL" \
+            '{substitutions: {_PACKAGES: $packages, _GIT_TAG: $tag, _GIT_SHA: $sha, _REPO: $repo, _RUN_URL: $run}}')"
+          echo "$MESSAGE"
+          gcloud pubsub topics publish npm-release-requests --project=common-cicd-mt --message="$MESSAGE"

@@ -403,7 +403,7 @@ iframe.receipt {
   line-height: 1;
 }
 
-/* The retail-media surface: headless output from @bilt/pos-react, styled here. */
+/* The retail-media surface: headless output from @biltorg/pos-react, styled here. */
 .bilt-rm {
   margin-bottom: 0.9rem;
   border: 1px dashed var(--line);
@@ -452,7 +452,7 @@ iframe.receipt {
   padding: 0 0.3rem;
 }
 
-/* The install prompt: headless output from @bilt/pos-react/bridge. */
+/* The install prompt: headless output from @biltorg/pos-react/bridge. */
 .bilt-bridge {
   max-width: 560px;
   margin: 2rem auto;

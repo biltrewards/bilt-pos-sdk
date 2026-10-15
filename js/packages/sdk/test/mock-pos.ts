@@ -20,7 +20,7 @@ import type {
   SessionContext,
   SessionEventPayload,
   SessionEventType,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import type { SessionError } from '../src/index';
 import {
   type BasketMutationBuilder,

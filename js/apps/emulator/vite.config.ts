@@ -21,11 +21,14 @@ const sibling = (path: string) => fileURLToPath(new URL(path, import.meta.url));
  */
 export const sourceAliases = [
   {
-    find: /^@bilt\/pos-sdk\/bridge$/,
+    find: /^@biltorg\/pos-sdk\/bridge$/,
     replacement: sibling('../../packages/sdk/src/bridge/index.ts'),
   },
-  { find: /^@bilt\/pos-sdk$/, replacement: sibling('../../packages/sdk/src/index.ts') },
-  { find: /^@bilt\/pos-protocol$/, replacement: sibling('../../packages/protocol/src/index.ts') },
+  { find: /^@biltorg\/pos-sdk$/, replacement: sibling('../../packages/sdk/src/index.ts') },
+  {
+    find: /^@biltorg\/pos-protocol$/,
+    replacement: sibling('../../packages/protocol/src/index.ts'),
+  },
 ];
 
 export default defineConfig(({ mode }) => ({

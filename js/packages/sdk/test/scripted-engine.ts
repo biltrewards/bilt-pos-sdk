@@ -8,7 +8,7 @@ import type {
   SessionEvent,
   SettlementMovement,
   StepReply,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import type { EngineOperationRequest, RequestOptions } from '../src/internal';
 import { MockEngine } from './mock-engine';
 

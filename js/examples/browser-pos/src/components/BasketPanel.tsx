@@ -1,4 +1,4 @@
-import type { Basket, BasketChange, BasketLineItem } from '@bilt/pos-sdk';
+import type { Basket, BasketChange, BasketLineItem } from '@biltorg/pos-sdk';
 import type { ReactNode } from 'react';
 import { cents, formatMoney } from '../money';
 

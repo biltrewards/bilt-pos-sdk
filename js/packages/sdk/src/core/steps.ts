@@ -4,7 +4,7 @@ import type {
   SettlementRecovery,
   StepKind,
   StepReply,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import { SessionError } from '../errors';
 import type { ReversalHandlers, SettlementHandlers, StepInfo } from '../terminal-session';
 

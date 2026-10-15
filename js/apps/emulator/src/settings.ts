@@ -1,4 +1,4 @@
-import type { LocalBridgeOptions } from '@bilt/pos-sdk/bridge';
+import type { LocalBridgeOptions } from '@biltorg/pos-sdk/bridge';
 import { useCallback, useState } from 'react';
 
 /** `terminal` brackets the session on a Bilt terminal; `local` runs basket, member and widgets only. */

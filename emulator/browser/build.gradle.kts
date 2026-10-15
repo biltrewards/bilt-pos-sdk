@@ -1,4 +1,4 @@
-// The browser register emulator (js/apps/emulator, package @bilt/pos-emulator)
+// The browser register emulator (js/apps/emulator, package @biltorg/pos-emulator)
 // is a pnpm workspace member, not a Gradle build; this module only lends it
 // Gradle entry points next to `:emulator:desktop:run`, so one command brings
 // up either emulator. Nothing here is wired into `build`, `check` or `test`.
@@ -96,7 +96,7 @@ val buildPackages by
         description = "Builds the workspace packages the emulator imports"
         dependsOn(install)
         workingDir = jsDir.asFile
-        commandLine(pnpm + listOf("--filter", "@bilt/pos-emulator^...", "build"))
+        commandLine(pnpm + listOf("--filter", "@biltorg/pos-emulator^...", "build"))
     }
 
 val run by
@@ -117,7 +117,7 @@ val run by
             pnpm +
                 listOf(
                     "--filter",
-                    "@bilt/pos-emulator",
+                    "@biltorg/pos-emulator",
                     "dev",
                     "--host",
                     "127.0.0.1",

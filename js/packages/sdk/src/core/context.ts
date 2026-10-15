@@ -1,4 +1,4 @@
-import type { CheckoutPhase, SessionContext, SessionContextPatch } from '@bilt/pos-protocol';
+import type { CheckoutPhase, SessionContext, SessionContextPatch } from '@biltorg/pos-protocol';
 import type { Engine } from '../internal';
 import type { SessionContextApi } from '../session';
 import { newIdempotencyKey } from './ids';
