@@ -44,7 +44,7 @@ for spec in "${SPECS[@]}"; do
 done
 echo "scanning ${#SPECS[@]} package(s): ${SPECS[*]}"
 
-# --- separate npm userconfigs (scoped registry config would override --registry on publish) ---
+# --- separate npm userconfigs: AR (authenticated) and npmjs (read-only) ---
 AR_RC="$WORK_DIR/ar-npmrc"
 NPMJS_PUBLIC_RC="$WORK_DIR/npmjs-public-npmrc"
 
