@@ -3,7 +3,7 @@ import type {
   PrintPayload,
   ReconciliationResult,
   TerminalInfo,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 
 export type { TerminalInfo };
 

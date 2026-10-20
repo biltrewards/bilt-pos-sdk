@@ -1,7 +1,7 @@
 /**
- * `@bilt/pos-react/bridge`: the Terminal Bridge pieces of the React bindings. Detecting the
- * bridge on loopback (over `detectBridge` from `@bilt/pos-sdk/bridge`), prompting for its
- * installation or update, and gating the register on it. Kept out of `@bilt/pos-react` on
+ * `@biltorg/pos-react/bridge`: the Terminal Bridge pieces of the React bindings. Detecting the
+ * bridge on loopback (over `detectBridge` from `@biltorg/pos-sdk/bridge`), prompting for its
+ * installation or update, and gating the register on it. Kept out of `@biltorg/pos-react` on
  * purpose: nothing in the core entry point knows the bridge exists, so the same register runs
  * over the Cloud Session Service with these components left out.
  *

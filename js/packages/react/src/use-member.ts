@@ -1,5 +1,5 @@
-import type { Member, MemberInput, SessionEventType } from '@bilt/pos-protocol';
-import type { ShopperSession } from '@bilt/pos-sdk';
+import type { Member, MemberInput, SessionEventType } from '@biltorg/pos-protocol';
+import type { ShopperSession } from '@biltorg/pos-sdk';
 import { useCallback, useMemo } from 'react';
 import { useSessionValue } from './internal/use-session-value';
 

@@ -1,5 +1,5 @@
-import type { SessionEventType } from '@bilt/pos-protocol';
-import type { ShopperSession } from '@bilt/pos-sdk';
+import type { SessionEventType } from '@biltorg/pos-protocol';
+import type { ShopperSession } from '@biltorg/pos-sdk';
 import { useCallback, useRef, useSyncExternalStore } from 'react';
 
 interface Cache<T> {

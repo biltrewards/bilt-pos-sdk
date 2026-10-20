@@ -5,9 +5,9 @@
 
 The JavaScript SDK runs a Bilt checkout from a browser page. It is the JavaScript form of [`ShopperSession`](./shopper-session-integration.md) and [`TerminalShopperSession`](./checkout-session-integration.md): the same basket, member, context, settlement, reversal and widget vocabulary, over a **host** that embeds the Java SDK and does the terminal work. Today that host is the [Terminal Bridge](./terminal-bridge.md) on the register machine; later it is also the Cloud Session Service, behind the same API.
 
-This guide covers `@bilt/pos-sdk` (framework-free) and `@bilt/pos-react` (hooks and components). Every sample on this page is compiled from [`js/examples/browser-pos/src/guide-samples`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos/src/guide-samples) in CI, and the [browser POS example](#the-example) puts them together into a register.
+This guide covers `@biltorg/pos-sdk` (framework-free) and `@biltorg/pos-react` (hooks and components). Every sample on this page is compiled from [`js/examples/browser-pos/src/guide-samples`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos/src/guide-samples) in CI, and the [browser POS example](#the-example) puts them together into a register.
 
-> **Using React?** The core, `@bilt/pos-sdk`, works in any framework or none; the [plain TypeScript example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/vanilla-ts) uses nothing else. React apps add `@bilt/pos-react` for `BiltPosProvider`, the session, basket, member and settlement hooks, `BridgeGate` and `InstallBridgePrompt`, and `RetailMediaSurface` (see [React](#react)). The [browser POS example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) and the [browser emulator](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) are the React references.
+> **Using React?** The core, `@biltorg/pos-sdk`, works in any framework or none; the [plain TypeScript example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/vanilla-ts) uses nothing else. React apps add `@biltorg/pos-react` for `BiltPosProvider`, the session, basket, member and settlement hooks, `BridgeGate` and `InstallBridgePrompt`, and `RetailMediaSurface` (see [React](#react)). The [browser POS example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) and the [browser emulator](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) are the React references.
 
 ---
 
@@ -20,8 +20,8 @@ Make sure you have:
 3. Node 20 and a bundler that handles ES modules (Vite, Next, webpack 5). The packages ship ESM and CommonJS builds with type declarations.
 
 ```sh
-pnpm add @bilt/pos-sdk @bilt/pos-protocol        # the core
-pnpm add @bilt/pos-react react                    # the React layer, optional
+pnpm add @biltorg/pos-sdk @biltorg/pos-protocol        # the core
+pnpm add @biltorg/pos-react react                    # the React layer, optional
 ```
 
 ---
@@ -37,7 +37,7 @@ pnpm add @bilt/pos-react react                    # the React layer, optional
 
 ```mermaid
 sequenceDiagram
-    participant P as POS page (@bilt/pos-react)
+    participant P as POS page (@biltorg/pos-react)
     participant H as Host (Terminal Bridge: Java SDK)
     participant T as Bilt terminal (LAN)
 
@@ -69,18 +69,18 @@ sequenceDiagram
 
 | Package | What it is | Source |
 |---|---|---|
-| `@bilt/pos-protocol` | The TypeScript domain model and a typed `fetch` client, generated from the Session Protocol spec. You rarely import it directly; `@bilt/pos-sdk` re-exports the types. | [`js/packages/protocol`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/packages/protocol) |
-| `@bilt/pos-sdk` | `BiltPos`, `ShopperSession`, `TerminalShopperSession`, `Operation`, settlement handlers, errors. `@bilt/pos-sdk/bridge` adds `localBridge()`, `detectBridge()` and the bridge errors. | [`js/packages/sdk`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/packages/sdk) |
-| `@bilt/pos-react` | `BiltPosProvider`, the session, basket, member, context, settlement and operation hooks, `RetailMediaSurface`. `@bilt/pos-react/bridge` adds `useBridge`, `InstallBridgePrompt`, `BridgeGate`. | [`js/packages/react/README.md`](https://github.com/biltrewards/bilt-pos-sdk/blob/main/js/packages/react/README.md) |
+| `@biltorg/pos-protocol` | The TypeScript domain model and a typed `fetch` client, generated from the Session Protocol spec. You rarely import it directly; `@biltorg/pos-sdk` re-exports the types. | [`js/packages/protocol`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/packages/protocol) |
+| `@biltorg/pos-sdk` | `BiltPos`, `ShopperSession`, `TerminalShopperSession`, `Operation`, settlement handlers, errors. `@biltorg/pos-sdk/bridge` adds `localBridge()`, `detectBridge()` and the bridge errors. | [`js/packages/sdk`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/packages/sdk) |
+| `@biltorg/pos-react` | `BiltPosProvider`, the session, basket, member, context, settlement and operation hooks, `RetailMediaSurface`. `@biltorg/pos-react/bridge` adds `useBridge`, `InstallBridgePrompt`, `BridgeGate`. | [`js/packages/react/README.md`](https://github.com/biltrewards/bilt-pos-sdk/blob/main/js/packages/react/README.md) |
 | Workspace | How the packages are built, tested and generated. | [`js/README.md`](https://github.com/biltrewards/bilt-pos-sdk/blob/main/js/README.md) |
 | Example | The browser POS register this guide walks through. | [`js/examples/browser-pos`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) |
-| Example, no framework | The same register in plain TypeScript and DOM, over `@bilt/pos-sdk` alone. | [`js/examples/vanilla-ts`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/vanilla-ts) |
+| Example, no framework | The same register in plain TypeScript and DOM, over `@biltorg/pos-sdk` alone. | [`js/examples/vanilla-ts`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/vanilla-ts) |
 
 ---
 
 ## Engines and capabilities
 
-`BiltPos.connect(factory)` runs an engine factory, reads the host's `/health` and checks that it lists the protocol version this SDK was generated from. `localBridge()` from `@bilt/pos-sdk/bridge` is the engine for a Terminal Bridge on the register machine; `cloud(...)` for the Cloud Session Service follows in its own entry point. A register written against `@bilt/pos-sdk` runs unchanged over either.
+`BiltPos.connect(factory)` runs an engine factory, reads the host's `/health` and checks that it lists the protocol version this SDK was generated from. `localBridge()` from `@biltorg/pos-sdk/bridge` is the engine for a Terminal Bridge on the register machine; `cloud(...)` for the Cloud Session Service follows in its own entry point. A register written against `@biltorg/pos-sdk` runs unchanged over either.
 
 What differs is reported on `pos.capabilities`:
 
@@ -104,7 +104,7 @@ export function describeEngine(pos: BiltPos): string {
 }
 ```
 
-Bridge-only concepts (ports, detection states, install and update errors) live in `@bilt/pos-sdk/bridge` and `@bilt/pos-react/bridge`, never in the core entry points.
+Bridge-only concepts (ports, detection states, install and update errors) live in `@biltorg/pos-sdk/bridge` and `@biltorg/pos-react/bridge`, never in the core entry points.
 
 ---
 
@@ -627,23 +627,23 @@ export function watchHealth(session: ShopperSession): void {
 
 ## React
 
-`@bilt/pos-react` turns the session into React state. The provider owns the connection; the hooks take a session (or `null`) and re-render on the matching event; nothing in the core entry point knows the bridge exists.
+`@biltorg/pos-react` turns the session into React state. The provider owns the connection; the hooks take a session (or `null`) and re-render on the matching event; nothing in the core entry point knows the bridge exists.
 
 | Hook or component | Entry point | Returns / does |
 |---|---|---|
-| `BiltPosProvider` (`pos` or `connect`) | `@bilt/pos-react` | Holds the `BiltPos`; with `connect` it owns the connection and closes it on unmount. |
-| `useBiltPos()` | `@bilt/pos-react` | `{ pos, status, error, reconnect }`; `status` is `connecting`, `connected`, `error`, `closed`. |
-| `useTerminalSession(options, { enabled })` / `useShopperSession(...)` | `@bilt/pos-react` | `{ session, status, error, end, restart }`; starts on mount once connected, ends on unmount; `status` is `idle`, `starting`, `open`, `ending`, `ended`, `error`. |
-| `useBasket(session)` | `@bilt/pos-react` | `{ basket, addItem, removeItem, updateItemQuantity, setDiscounts, setTaxRate, setTaxAmount, setTaxTotal, mutate, replace, clear, refresh, ... }`, following `basket.changed`. |
-| `useMember(session)` | `@bilt/pos-react` | `{ member, set, clear, refresh }`, following `member.changed`. |
-| `useSessionContext(session)` | `@bilt/pos-react` | `{ context, phase, attributes, setPhase, setAttribute, removeAttribute }`, following `context.changed`. |
-| `useSettlement(session, { interactive })` | `@bilt/pos-react` | `{ settle, status, pendingStep, reply, movements, result, error, operation, abort, reset }`; steps listed in `interactive` are held open as `pendingStep` until `reply()`. |
-| `useOperation(operation)` | `@bilt/pos-react` | `{ status, result, error, pending, abort }` for any `Operation` held in state. |
-| `useSessionEvent(session, type, handler)` | `@bilt/pos-react` | Subscribes for the component's lifetime; the handler may be inline. |
-| `RetailMediaSurface` | `@bilt/pos-react` | Draws one placement and reports `viewed`, `dismissed`, `completed` and taps. |
-| `useBridge(options)` | `@bilt/pos-react/bridge` | `{ status, error, health, baseUrl, probed, attempts, platform, manifest, download, retry }`; polls while `missing` or `outdated`. |
-| `InstallBridgePrompt` | `@bilt/pos-react/bridge` | The install, update and permission copy for a `useBridge` state; headless markup. |
-| `BridgeGate` | `@bilt/pos-react/bridge` | `useBridge` plus the prompt: renders children once `ready`. |
+| `BiltPosProvider` (`pos` or `connect`) | `@biltorg/pos-react` | Holds the `BiltPos`; with `connect` it owns the connection and closes it on unmount. |
+| `useBiltPos()` | `@biltorg/pos-react` | `{ pos, status, error, reconnect }`; `status` is `connecting`, `connected`, `error`, `closed`. |
+| `useTerminalSession(options, { enabled })` / `useShopperSession(...)` | `@biltorg/pos-react` | `{ session, status, error, end, restart }`; starts on mount once connected, ends on unmount; `status` is `idle`, `starting`, `open`, `ending`, `ended`, `error`. |
+| `useBasket(session)` | `@biltorg/pos-react` | `{ basket, addItem, removeItem, updateItemQuantity, setDiscounts, setTaxRate, setTaxAmount, setTaxTotal, mutate, replace, clear, refresh, ... }`, following `basket.changed`. |
+| `useMember(session)` | `@biltorg/pos-react` | `{ member, set, clear, refresh }`, following `member.changed`. |
+| `useSessionContext(session)` | `@biltorg/pos-react` | `{ context, phase, attributes, setPhase, setAttribute, removeAttribute }`, following `context.changed`. |
+| `useSettlement(session, { interactive })` | `@biltorg/pos-react` | `{ settle, status, pendingStep, reply, movements, result, error, operation, abort, reset }`; steps listed in `interactive` are held open as `pendingStep` until `reply()`. |
+| `useOperation(operation)` | `@biltorg/pos-react` | `{ status, result, error, pending, abort }` for any `Operation` held in state. |
+| `useSessionEvent(session, type, handler)` | `@biltorg/pos-react` | Subscribes for the component's lifetime; the handler may be inline. |
+| `RetailMediaSurface` | `@biltorg/pos-react` | Draws one placement and reports `viewed`, `dismissed`, `completed` and taps. |
+| `useBridge(options)` | `@biltorg/pos-react/bridge` | `{ status, error, health, baseUrl, probed, attempts, platform, manifest, download, retry }`; polls while `missing` or `outdated`. |
+| `InstallBridgePrompt` | `@biltorg/pos-react/bridge` | The install, update and permission copy for a `useBridge` state; headless markup. |
+| `BridgeGate` | `@biltorg/pos-react/bridge` | `useBridge` plus the prompt: renders children once `ready`. |
 
 A lane, end to end:
 
@@ -742,7 +742,7 @@ export function ExplainedGate(): ReactNode {
 }
 ```
 
-The hooks are written against the public `@bilt/pos-sdk` interface only, so a register's own tests can hand any `BiltPos` double to the provider as `pos`; the SDK package's in-memory doubles under `js/packages/sdk/test` are what the package's and the example's tests use.
+The hooks are written against the public `@biltorg/pos-sdk` interface only, so a register's own tests can hand any `BiltPos` double to the provider as `pos`; the SDK package's in-memory doubles under `js/packages/sdk/test` are what the package's and the example's tests use.
 
 ---
 
@@ -750,7 +750,7 @@ The hooks are written against the public `@bilt/pos-sdk` interface only, so a re
 
 [`js/examples/browser-pos`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) is a Vite + React register that uses everything above: `BridgeGate` and the install prompt, a settings panel (terminal or local session, `poiId`, `saleId`, currency, store location) kept in `localStorage`, scanning from a small catalog (`addItem`), quantity buttons (`updateItemQuantity`), a POS-owned cart pushed with `replace`, discount removal with `mutate`, member sign-in by phone resolver and on the terminal, `RetailMediaSurface` with offers applied as line discounts, settlement with a tax-recompute `TOTAL_REQUIRED` handler and an interactive `RECOVERY_REQUIRED` prompt counting down to the host's default, the result with receipts, a void, and a local session mode for a machine without a terminal. Its README says how to run it against the bridge or the development host.
 
-[`js/examples/vanilla-ts`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/vanilla-ts) is its framework-free counterpart: a Vite + TypeScript register in plain DOM over `@bilt/pos-sdk` and `@bilt/pos-sdk/bridge` only, with bridge detection through `detectBridge()`, a lane settings form kept in `localStorage`, a local or terminal session, scanning, the basket redrawn from `basket.changed`, phone sign-in, settlement with a tax-recompute `onRebatesRedeemed` handler, the result and `end()`. Start there for a register in another framework or none.
+[`js/examples/vanilla-ts`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/vanilla-ts) is its framework-free counterpart: a Vite + TypeScript register in plain DOM over `@biltorg/pos-sdk` and `@biltorg/pos-sdk/bridge` only, with bridge detection through `detectBridge()`, a lane settings form kept in `localStorage`, a local or terminal session, scanning, the basket redrawn from `basket.changed`, phone sign-in, settlement with a tax-recompute `onRebatesRedeemed` handler, the result and `end()`. Start there for a register in another framework or none.
 
 For everything the guide touches in one place, [`js/apps/emulator`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) is the browser register emulator, a port of the Compose desktop and Android emulator in `emulator/` with the same panels and actions: explicit checkouts with loyalty sign-in, the mock catalog and a keypad, the NJ tax policy, per-line discounts and credits, the settlement toggles and recovery choices, stored value operations and gift-card purchases, sales kept in IndexedDB for full refunds and item returns, and a log of every event and bridge request. It is for trying the SDK, not a reference to copy; the example above stays minimal for that.
 
@@ -788,4 +788,4 @@ For everything the guide touches in one place, [`js/apps/emulator`](https://gith
 - [Terminal Bridge setup](./terminal-bridge.md) — install, configure and troubleshoot the host on the register machine.
 - [Session Protocol reference](./session-protocol-reference.html) — every request and event under the SDK.
 - [TerminalShopperSession guide](./checkout-session-integration.md) and [ShopperSession guide](./shopper-session-integration.md) — the Java engine's own documentation of settlement, reversals, basket and widgets, which the JavaScript API mirrors.
-- [`@bilt/pos-react` README](https://github.com/biltrewards/bilt-pos-sdk/blob/main/js/packages/react/README.md) — the hooks in full.
+- [`@biltorg/pos-react` README](https://github.com/biltrewards/bilt-pos-sdk/blob/main/js/packages/react/README.md) — the hooks in full.

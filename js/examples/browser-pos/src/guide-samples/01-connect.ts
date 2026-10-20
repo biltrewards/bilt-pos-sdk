@@ -1,6 +1,6 @@
 // Samples for "Connect" and "Engines and capabilities" in docs/javascript-sdk-integration.md.
-import { BiltPos, EngineError } from '@bilt/pos-sdk';
-import { BridgeMissingError, BridgeOutdatedError, localBridge } from '@bilt/pos-sdk/bridge';
+import { BiltPos, EngineError } from '@biltorg/pos-sdk';
+import { BridgeMissingError, BridgeOutdatedError, localBridge } from '@biltorg/pos-sdk/bridge';
 
 declare function showInstallPrompt(probed: readonly string[]): void;
 declare function showUpdatePrompt(required: string, available: readonly string[]): void;

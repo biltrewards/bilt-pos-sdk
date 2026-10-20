@@ -1,9 +1,9 @@
 /**
- * `@bilt/pos-react`: React bindings for the Bilt POS SDK. A `BiltPosProvider` holds the
+ * `@biltorg/pos-react`: React bindings for the Bilt POS SDK. A `BiltPosProvider` holds the
  * connection, hooks turn a session's basket, member, context and settlement into React state,
  * and `RetailMediaSurface` draws a retail-media placement in the DOM. Nothing here knows which
  * engine is behind `BiltPos`; the Terminal Bridge pieces (`useBridge`, `InstallBridgePrompt`,
- * `BridgeGate`) live in `@bilt/pos-react/bridge`.
+ * `BridgeGate`) live in `@biltorg/pos-react/bridge`.
  *
  * @packageDocumentation
  */

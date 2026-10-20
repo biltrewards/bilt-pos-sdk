@@ -34,7 +34,7 @@ import type {
   TransactionStatusOptions,
   TransactionStatusResult,
   VoidResult,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import type { SessionError } from './errors';
 import type { Operation } from './operation';
 import type { ShopperSession } from './session';

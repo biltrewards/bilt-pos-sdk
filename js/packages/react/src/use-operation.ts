@@ -1,4 +1,4 @@
-import { SessionError, type Operation, type OperationStatus } from '@bilt/pos-sdk';
+import { SessionError, type Operation, type OperationStatus } from '@biltorg/pos-sdk';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**

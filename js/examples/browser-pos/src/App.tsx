@@ -1,7 +1,7 @@
-import { BiltPosProvider, useBiltPos } from '@bilt/pos-react';
-import { BridgeGate, type BridgeDetect } from '@bilt/pos-react/bridge';
-import { BiltPos } from '@bilt/pos-sdk';
-import { localBridge, type LocalBridgeOptions } from '@bilt/pos-sdk/bridge';
+import { BiltPosProvider, useBiltPos } from '@biltorg/pos-react';
+import { BridgeGate, type BridgeDetect } from '@biltorg/pos-react/bridge';
+import { BiltPos } from '@biltorg/pos-sdk';
+import { localBridge, type LocalBridgeOptions } from '@biltorg/pos-sdk/bridge';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Register } from './Register';
 import { SettingsPanel } from './components/SettingsPanel';

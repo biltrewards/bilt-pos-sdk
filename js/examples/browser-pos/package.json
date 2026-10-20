@@ -2,7 +2,7 @@
   "name": "browser-pos",
   "version": "0.0.0",
   "private": true,
-  "description": "The reference browser register for the Bilt POS SDK: a Vite + React page over @bilt/pos-react and the Terminal Bridge.",
+  "description": "The reference browser register for the Bilt POS SDK: a Vite + React page over @biltorg/pos-react and the Terminal Bridge.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,9 +12,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@bilt/pos-protocol": "workspace:*",
-    "@bilt/pos-react": "workspace:*",
-    "@bilt/pos-sdk": "workspace:*",
+    "@biltorg/pos-protocol": "workspace:*",
+    "@biltorg/pos-react": "workspace:*",
+    "@biltorg/pos-sdk": "workspace:*",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

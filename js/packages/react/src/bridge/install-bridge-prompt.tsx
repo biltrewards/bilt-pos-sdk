@@ -1,4 +1,4 @@
-import { BridgeOutdatedError } from '@bilt/pos-sdk/bridge';
+import { BridgeOutdatedError } from '@biltorg/pos-sdk/bridge';
 import type { CSSProperties, ReactNode } from 'react';
 import { PLATFORM_NAMES } from './platform';
 import { useBridge, type BridgeState, type UseBridgeOptions } from './use-bridge';

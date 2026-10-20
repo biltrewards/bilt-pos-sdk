@@ -5,7 +5,7 @@ import {
   EngineUnavailableError,
   SessionError,
   type TerminalShopperSession,
-} from '@bilt/pos-sdk';
+} from '@biltorg/pos-sdk';
 
 declare function showTerminalProblem(message: string, nexoErrorCondition: string | undefined): void;
 

@@ -1,15 +1,15 @@
-import { PROTOCOL_VERSION } from '@bilt/pos-protocol';
+import { PROTOCOL_VERSION } from '@biltorg/pos-protocol';
 import {
   BridgeMissingError,
   BridgeOutdatedError,
   type BridgeDetection,
   type LocalBridgeOptions,
-} from '@bilt/pos-sdk/bridge';
+} from '@biltorg/pos-sdk/bridge';
 
 export type { BridgeDetection, LocalBridgeOptions };
 
 /**
- * One probe for the Terminal Bridge: the signature of `detectBridge` from `@bilt/pos-sdk/bridge`,
+ * One probe for the Terminal Bridge: the signature of `detectBridge` from `@biltorg/pos-sdk/bridge`,
  * which `useBridge` runs by default. A test or a register with its own discovery passes another.
  */
 export type BridgeDetect = (options: LocalBridgeOptions) => Promise<BridgeDetection>;

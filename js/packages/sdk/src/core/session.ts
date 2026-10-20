@@ -5,7 +5,7 @@ import type {
   SessionEvent,
   SessionEventType,
   StepReply,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import { SessionError } from '../errors';
 import type { Engine, EngineOperationRequest } from '../internal';
 import type { Operation } from '../operation';

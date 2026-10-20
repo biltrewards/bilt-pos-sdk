@@ -1,5 +1,5 @@
-import type { SessionEventPayload, SessionEventType } from '@bilt/pos-sdk';
-import { SessionError } from '@bilt/pos-sdk';
+import type { SessionEventPayload, SessionEventType } from '@biltorg/pos-sdk';
+import { SessionError } from '@biltorg/pos-sdk';
 import { useSyncExternalStore } from 'react';
 
 /** Wall-clock `HH:MM:SS`, the desktop log's timestamp. */

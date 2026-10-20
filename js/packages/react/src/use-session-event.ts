@@ -1,5 +1,5 @@
-import type { SessionEventType } from '@bilt/pos-protocol';
-import type { SessionEventHandler, ShopperSession } from '@bilt/pos-sdk';
+import type { SessionEventType } from '@biltorg/pos-protocol';
+import type { SessionEventHandler, ShopperSession } from '@biltorg/pos-sdk';
 import { useEffect } from 'react';
 import { useLatest } from './internal/use-latest';
 

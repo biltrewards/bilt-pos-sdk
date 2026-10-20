@@ -17,7 +17,7 @@ import type {
   StepReply,
 } from '../src/index';
 
-describe('@bilt/pos-protocol types', () => {
+describe('@biltorg/pos-protocol types', () => {
   it('derives event payloads from the Event union', () => {
     expectTypeOf<SessionEventPayload<'basket.changed'>>().toEqualTypeOf<BasketChange>();
     expectTypeOf<SessionEventMap['widget.offer']['offer']['scope']>().toEqualTypeOf<

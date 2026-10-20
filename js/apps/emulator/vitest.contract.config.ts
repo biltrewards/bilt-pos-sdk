@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 import { sourceAliases } from './vite.config';
 
 // The contract smoke test drives a real Session Host and a scripted terminal (the launcher and
-// fake terminal of `@bilt/pos-sdk`'s own contract suite); it needs a JDK and runs on its own:
+// fake terminal of `@biltorg/pos-sdk`'s own contract suite); it needs a JDK and runs on its own:
 // `pnpm test:contract`.
 export default defineConfig({
   resolve: { alias: sourceAliases },

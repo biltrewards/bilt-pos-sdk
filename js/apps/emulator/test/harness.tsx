@@ -1,8 +1,8 @@
 // Shared pieces of the UI tests: the scripted bridge probe, the SDK package's in-memory `BiltPos`
 // double, an IndexedDB-backed sale store per test, and a render helper that waits for the
 // connection and, on request, starts a checkout.
-import type { BridgeDetect, BridgeDetection } from '@bilt/pos-react/bridge';
-import type { Health } from '@bilt/pos-sdk';
+import type { BridgeDetect, BridgeDetection } from '@biltorg/pos-react/bridge';
+import type { Health } from '@biltorg/pos-sdk';
 import {
   fireEvent,
   render,

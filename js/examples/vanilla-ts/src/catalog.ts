@@ -1,4 +1,4 @@
-import type { Basket, BasketItem, Money } from '@bilt/pos-sdk';
+import type { Basket, BasketItem, Money } from '@biltorg/pos-sdk';
 
 /** What the register can scan. Prices and tax rates are the register's own. */
 export const CATALOG: readonly BasketItem[] = [

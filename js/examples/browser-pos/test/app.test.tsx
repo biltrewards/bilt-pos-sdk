@@ -1,7 +1,7 @@
 // Smoke tests: the page renders the install prompt while the bridge is missing and the register
 // once it is ready, against a scripted probe and the SDK package's in-memory `BiltPos` double.
-import type { BridgeDetect, BridgeDetection } from '@bilt/pos-react/bridge';
-import type { Health } from '@bilt/pos-sdk';
+import type { BridgeDetect, BridgeDetection } from '@biltorg/pos-react/bridge';
+import type { Health } from '@biltorg/pos-sdk';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { MockBiltPos } from '../../../packages/sdk/test/mock-pos';

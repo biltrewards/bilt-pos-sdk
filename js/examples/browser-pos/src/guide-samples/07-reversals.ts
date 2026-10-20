@@ -5,7 +5,7 @@ import type {
   RefundResult,
   TerminalShopperSession,
   VoidResult,
-} from '@bilt/pos-sdk';
+} from '@biltorg/pos-sdk';
 
 declare function log(message: string): void;
 

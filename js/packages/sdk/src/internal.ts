@@ -1,8 +1,8 @@
 /**
- * `@bilt/pos-sdk/internal`: the seam between the SDK core and an engine. **Unstable** — this
+ * `@biltorg/pos-sdk/internal`: the seam between the SDK core and an engine. **Unstable** — this
  * entry point exists so the core can be written once and run over the Terminal Bridge, the
  * Cloud Session Service or an in-browser engine; it follows the Session Protocol closely and
- * changes with it. Registers import from `@bilt/pos-sdk`, never from here.
+ * changes with it. Registers import from `@biltorg/pos-sdk`, never from here.
  *
  * @packageDocumentation
  */
@@ -30,7 +30,7 @@ import type {
   WidgetAction,
   WidgetState,
   WidgetConfig,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import type { EngineCapabilities, EngineContext, EngineFactory } from './pos';
 
 export type { EngineCapabilities, EngineContext, EngineFactory };

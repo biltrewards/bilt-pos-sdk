@@ -1,7 +1,7 @@
 // The React tests run against the SDK package's in-memory doubles, the same ones its own
 // design-sketch test uses, so the hooks are proven against the public interface alone.
-import type { Rendering } from '@bilt/pos-protocol';
-import type { TerminalSessionOptions } from '@bilt/pos-sdk';
+import type { Rendering } from '@biltorg/pos-protocol';
+import type { TerminalSessionOptions } from '@biltorg/pos-sdk';
 import { render, type RenderOptions, type RenderResult } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { BiltPosProvider } from '../src/index';

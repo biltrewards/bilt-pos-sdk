@@ -1,4 +1,4 @@
-import type { BiltPos } from '@bilt/pos-sdk';
+import type { BiltPos } from '@biltorg/pos-sdk';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { BiltPosProvider, useBiltPos } from '../src/index';

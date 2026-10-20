@@ -12,7 +12,7 @@ import type {
   SessionEvent,
   StepReply,
   WidgetState,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import { SessionError, type EngineCapabilities } from '../src/index';
 import type {
   BasketCommand,

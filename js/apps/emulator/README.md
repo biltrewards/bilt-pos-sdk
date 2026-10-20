@@ -1,7 +1,7 @@
 # Register emulator (browser)
 
 A Vite + React + TypeScript port of the Compose desktop emulator in
-[`emulator/`](../../../emulator) onto `@bilt/pos-sdk`, `@bilt/pos-react` and the Terminal Bridge.
+[`emulator/`](../../../emulator) onto `@biltorg/pos-sdk`, `@biltorg/pos-react` and the Terminal Bridge.
 It has the desktop's panel structure and actions: the same connection card and action row, loyalty
 sign-in card, basket card with its settlement toggles, Sale / Stored Value / Refund tabs, log panel,
 recovery and outcome dialogs, the same mock catalog, the same New Jersey tax policy and the same
@@ -51,7 +51,7 @@ local sessions), or the Session Host alone. Then:
 cd js
 pnpm install
 pnpm build                              # the app resolves its siblings through their dist/
-pnpm --filter @bilt/pos-emulator dev    # http://localhost:5173
+pnpm --filter @biltorg/pos-emulator dev    # http://localhost:5173
 ```
 
 The development bridge sends no CORS headers yet, so in development the page reaches the bridge
@@ -93,9 +93,9 @@ Abort).
 
 ## Tests
 
-`pnpm --filter @bilt/pos-emulator test` runs the UI tests against the SDK's in-memory `BiltPos`
+`pnpm --filter @biltorg/pos-emulator test` runs the UI tests against the SDK's in-memory `BiltPos`
 double with IndexedDB from `fake-indexeddb`, querying by the desktop's labels.
-`pnpm --filter @bilt/pos-emulator test:contract` drives the real Session Host and the scripted
+`pnpm --filter @biltorg/pos-emulator test:contract` drives the real Session Host and the scripted
 terminal of the SDK's contract suite (needs a JDK 21): a sale whose rebate is re-taxed and whose
 declined charge is retried through the recovery decision, the sale persisted, a gift-card tender,
 and an item return of the persisted sale from a later session. `BILT_HOST_LOG=/path` keeps the

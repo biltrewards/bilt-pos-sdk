@@ -5,7 +5,7 @@ import type {
   OperationType,
   SettlementMovement,
   StepReply,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import { SessionError } from '../errors';
 import type { Operation } from '../operation';
 import { answerStep, fanOutMovement, type StepHandlers } from './steps';

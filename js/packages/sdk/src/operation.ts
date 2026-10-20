@@ -1,4 +1,4 @@
-import type { OperationStatus, OperationType } from '@bilt/pos-protocol';
+import type { OperationStatus, OperationType } from '@biltorg/pos-protocol';
 
 export type { OperationStatus, OperationType };
 

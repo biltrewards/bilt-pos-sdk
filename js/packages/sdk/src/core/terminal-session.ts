@@ -26,7 +26,7 @@ import type {
   TransactionStatusOptions,
   TransactionStatusResult,
   VoidResult,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import type { Operation } from '../operation';
 import type { TerminalSessionOptions } from '../session';
 import type { Terminal } from '../terminal';

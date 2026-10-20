@@ -1,4 +1,4 @@
-import { SessionError } from '@bilt/pos-sdk';
+import { SessionError } from '@biltorg/pos-sdk';
 import { act, renderHook, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';

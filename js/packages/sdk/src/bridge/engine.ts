@@ -12,7 +12,7 @@ import type {
   TerminalInfo,
   WidgetAction,
   WidgetState,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';
 import type {
   BasketCommand,
   Engine,

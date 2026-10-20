@@ -1,5 +1,5 @@
-import type { IdentifyResult } from '@bilt/pos-protocol';
-import { SessionError, type Operation } from '@bilt/pos-sdk';
+import type { IdentifyResult } from '@biltorg/pos-protocol';
+import { SessionError, type Operation } from '@biltorg/pos-sdk';
 import { act, renderHook, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';

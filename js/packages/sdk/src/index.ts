@@ -1,12 +1,12 @@
 /**
- * `@bilt/pos-sdk`: the Bilt POS SDK for JavaScript. A framework-free core mirroring the Java
+ * `@biltorg/pos-sdk`: the Bilt POS SDK for JavaScript. A framework-free core mirroring the Java
  * `ShopperSession` and `TerminalShopperSession`, running over an engine that speaks the Session
  * Protocol to a host — the Terminal Bridge on the register machine, or the Cloud Session
- * Service. React bindings live in `@bilt/pos-react`.
+ * Service. React bindings live in `@biltorg/pos-react`.
  *
  * ```ts
- * import { BiltPos } from '@bilt/pos-sdk';
- * import { localBridge } from '@bilt/pos-sdk/bridge';
+ * import { BiltPos } from '@biltorg/pos-sdk';
+ * import { localBridge } from '@biltorg/pos-sdk/bridge';
  *
  * const pos = await BiltPos.connect(localBridge());
  * ```
@@ -48,7 +48,7 @@ export type { Terminal, TerminalInfo } from './terminal';
 export type { Operation, OperationStatus, OperationType } from './operation';
 export { EngineError, EngineOutdatedError, EngineUnavailableError, SessionError } from './errors';
 
-// The domain model is `@bilt/pos-protocol`'s; these re-exports save registers a second import.
+// The domain model is `@biltorg/pos-protocol`'s; these re-exports save registers a second import.
 export type {
   AbandonedSettlementRecord,
   AdInteraction,
@@ -117,4 +117,4 @@ export type {
   VasData,
   VasService,
   VoidResult,
-} from '@bilt/pos-protocol';
+} from '@biltorg/pos-protocol';

@@ -1,6 +1,6 @@
-import { useBridge, type BridgeDetect } from '@bilt/pos-react/bridge';
-import { BiltPos } from '@bilt/pos-sdk';
-import { localBridge, type LocalBridgeOptions } from '@bilt/pos-sdk/bridge';
+import { useBridge, type BridgeDetect } from '@biltorg/pos-react/bridge';
+import { BiltPos } from '@biltorg/pos-sdk';
+import { localBridge, type LocalBridgeOptions } from '@biltorg/pos-sdk/bridge';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { BasketCard } from './components/BasketCard';
 import { TabRow } from './components/common';
@@ -141,7 +141,7 @@ function Workspace({
 }
 
 /**
- * The browser register emulator: a port of the Compose desktop emulator onto `@bilt/pos-sdk`
+ * The browser register emulator: a port of the Compose desktop emulator onto `@biltorg/pos-sdk`
  * and the Terminal Bridge. The controller holds the connection and the checkout, the components
  * render its state exactly as the desktop's panels do. The page probes the bridge on load and
  * connects once it answers, as the desktop connects to an autodetected terminal.

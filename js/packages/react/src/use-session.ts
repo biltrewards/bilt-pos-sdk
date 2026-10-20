@@ -4,7 +4,7 @@ import type {
   ShopperSessionOptions,
   TerminalSessionOptions,
   TerminalShopperSession,
-} from '@bilt/pos-sdk';
+} from '@biltorg/pos-sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBiltPos } from './provider';
 
