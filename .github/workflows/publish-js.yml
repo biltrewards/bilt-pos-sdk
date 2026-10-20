@@ -1,8 +1,8 @@
 name: Publish JS packages
 
-# Stage 1 of the npm release pipeline: publish the @biltorg/pos-* packages to the private
-# Artifact Registry npm repo, then ask the Cloud Build release job (via Pub/Sub) to scan them
-# and publish them to npmjs.com.
+# GitHub release -> private Artifact Registry -> scan the tarballs pulled back from
+# Artifact Registry -> gated publish to npmjs.com. Artifact Registry does not scan
+# standalone npm packages, so the scan here (osv-scanner + npm audit) is the gate.
 on:
   release:
     types: [published]
@@ -78,18 +78,64 @@ jobs:
       - name: Publish to Artifact Registry
         run: pnpm -r publish --no-git-checks
 
-      - name: Request the npmjs release
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          GIT_TAG: ${{ github.event.release.tag_name }}
-          GIT_SHA: ${{ github.sha }}
-          REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Scan the published tarballs
         run: |
           PACKAGES="$(jq -r 'select(.private != true) | "\(.name)@\(.version)"' "$GITHUB_WORKSPACE"/js/packages/*/package.json | paste -sd, -)"
-          MESSAGE="$(jq -cn \
-            --arg packages "$PACKAGES" --arg tag "$GIT_TAG" --arg sha "$GIT_SHA" \
-            --arg repo "$REPO" --arg run "$RUN_URL" \
-            '{substitutions: {_PACKAGES: $packages, _GIT_TAG: $tag, _GIT_SHA: $sha, _REPO: $repo, _RUN_URL: $run}}')"
-          echo "$MESSAGE"
-          gcloud pubsub topics publish npm-release-requests --project=common-cicd-mt --message="$MESSAGE"
+          export PACKAGES
+          "$GITHUB_WORKSPACE/scripts/npm-release-scan.sh" "$RUNNER_TEMP/npm-release"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: npm-tarballs
+          path: ${{ runner.temp }}/npm-release/out
+          retention-days: 7
+          if-no-files-found: error
+
+  # The npmjs environment is where repo admins add required reviewers and limit deploys
+  # to v* tags. NPM_TOKEN is only visible to this job, and this job never unpacks or
+  # runs package code.
+  publish-npmjs:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npmjs
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: npm-tarballs
+          path: ${{ runner.temp }}/npm-release/out
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish to npmjs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/npm-release/out"
+          published=()
+          skipped=()
+          while read -r spec tgz; do
+            [ -z "$spec" ] && continue
+            if [ -n "$(npm view "$spec" version 2>/dev/null || true)" ]; then
+              echo "$spec already published, skipping"
+              skipped+=("$spec")
+              continue
+            fi
+            if npm publish "$OUT/$tgz" --access public --ignore-scripts; then
+              published+=("$spec")
+            elif [ -n "$(npm view "$spec" version 2>/dev/null || true)" ]; then
+              echo "$spec publish failed but the version is already on npmjs, treating as skipped"
+              skipped+=("$spec")
+            else
+              exit 1
+            fi
+          done < "$OUT/packages.txt"
+          echo "published: ${published[*]:-none}"
+          echo "skipped:   ${skipped[*]:-none}"
