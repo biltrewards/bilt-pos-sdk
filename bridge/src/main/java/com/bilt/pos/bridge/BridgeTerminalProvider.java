@@ -27,7 +27,10 @@ public final class BridgeTerminalProvider implements TerminalClientProvider {
     return bridge
         .config()
         .terminal()
-        .map(t -> TerminalInfo.of(t.label().orElse(null), t.model().orElse(null)))
+        .map(
+            t ->
+                TerminalInfo.of(t.label().orElse(null), t.model().orElse(null))
+                    .withReachable(t.simulated() ? true : null))
         .orElseGet(() -> TerminalInfo.of(null, null));
   }
 }

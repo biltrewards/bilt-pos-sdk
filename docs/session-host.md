@@ -107,6 +107,42 @@ without `terminal`, the host still serves `local` sessions. The dev host
 answers CORS for every origin unless the file narrows it with
 `"allowedOrigins": ["https://pos.example.com"]`.
 
+### Simulated terminal
+
+For checkout without hardware, set `terminal.simulated` to `true`; host, port, and TLS settings
+are not needed. `terminal.members` optionally names a readable JSON fixture. Omit it to use the
+built-in fixture, which contains two sample members (one Gold member with 12,000 points and a
+500-point, $5 reward, plus one member without rewards). The file shape is:
+
+```json
+{
+  "members": [
+    {
+      "memberId": "mbr_example",
+      "accountId": "acct_example",
+      "phone": "+15550000001",
+      "firstName": "Sam",
+      "lastName": "Example",
+      "tierName": "Gold",
+      "points": 12000,
+      "rewards": [
+        {
+          "rewardRef": "rwd_example",
+          "type": "reward",
+          "name": "$5 off",
+          "points": 500,
+          "value": 5.00
+        }
+      ]
+    }
+  ]
+}
+```
+
+The simulator has no customer delay and confirms input prompts by default. A payment request whose
+amount in cents ends in `123` declines (for example, `$41.23`); `$41.24` approves. The simulated
+terminal is reported reachable, but no network endpoint is contacted.
+
 ## A local session with curl
 
 ```sh

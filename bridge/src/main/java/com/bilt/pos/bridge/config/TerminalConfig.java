@@ -1,6 +1,7 @@
 package com.bilt.pos.bridge.config;
 
 import com.bilt.pos.nexo.client.BiltTerminalEnvironment;
+import java.nio.file.Path;
 import java.util.Optional;
 
 /**
@@ -23,7 +24,9 @@ public record TerminalConfig(
     int keyVersion,
     boolean trustAll,
     Optional<String> caCertificatePath,
-    Optional<BiltTerminalEnvironment> environment) {
+    Optional<BiltTerminalEnvironment> environment,
+    boolean simulated,
+    Optional<Path> members) {
 
   /** The terminal's Nexo endpoint URL. */
   public String endpoint() {
@@ -43,11 +46,20 @@ public record TerminalConfig(
         keyVersion,
         trustAll,
         caCertificatePath,
-        environment);
+        environment,
+        simulated,
+        members);
   }
 
   @Override
   public String toString() {
+    if (simulated) {
+      return "TerminalConfig{label="
+          + label.orElse("-")
+          + ", simulated=true, members="
+          + members.map(Path::toString).orElse("-")
+          + "}";
+    }
     return "TerminalConfig{"
         + "label="
         + label.orElse("-")

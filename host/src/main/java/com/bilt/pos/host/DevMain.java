@@ -13,6 +13,7 @@ import com.bilt.pos.media.service.InMemoryAdDecisionService;
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.client.TerminalClient;
 import com.bilt.pos.nexo.security.SecurityKey;
+import com.bilt.pos.nexo.sim.SimulatedTerminalClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -35,13 +36,12 @@ import java.util.List;
  *
  * <p>CORS answers every origin; {@code "allowedOrigins": ["https://pos.example.com"]} narrows it.
  *
- * <p>The host drives that one terminal, a {@code BiltNexoTerminalClient} on {@code
- * https://host:port/nexo} (or {@code http://} when {@code "tls": false}). {@code "passphrase"}
- * turns on payload encryption with a key derived from it; {@code "encryption": false} leaves it off
- * for lab devices. {@code "trustAll": true} skips certificate validation, {@code "caFile"} trusts
- * one PEM instead. Without a terminal the host still serves {@code local} sessions. Retail-media
- * widgets are backed by an {@code InMemoryAdDecisionService} with no creatives, so they attach but
- * render nothing.
+ * <p>The host drives one real terminal over Nexo, or an in-memory terminal when {@code "simulated":
+ * true}. {@code "passphrase"} turns on payload encryption with a key derived from it; {@code
+ * "encryption": false} leaves it off for lab devices. {@code "trustAll": true} skips certificate
+ * validation, {@code "caFile"} trusts one PEM instead. Without a terminal the host still serves
+ * {@code local} sessions. Retail-media widgets are backed by an {@code InMemoryAdDecisionService}
+ * with no creatives, so they attach but render nothing.
  *
  * <p>Run with {@code ./gradlew :host:run --args="dev-host.json"}; the file argument is optional and
  * defaults to a terminal-less host on port 48333.
@@ -96,12 +96,26 @@ public final class DevMain {
     if (!spec.isObject()) {
       return TerminalClientProvider.none();
     }
+    boolean simulated = spec.path("simulated").asBoolean(false);
+    String label = spec.path("label").asText(simulated ? "Simulated terminal" : null);
     return TerminalClientProvider.of(
         build(spec),
-        TerminalInfo.of(spec.path("label").asText(null), spec.path("model").asText(null)));
+        TerminalInfo.of(label, spec.path("model").asText(null))
+            .withReachable(simulated ? true : null));
   }
 
   private static TerminalClient build(JsonNode spec) {
+    if (spec.path("simulated").asBoolean(false)) {
+      SimulatedTerminalClient.Builder builder = SimulatedTerminalClient.builder();
+      if (spec.hasNonNull("members")) {
+        JsonNode members = spec.get("members");
+        if (!members.isTextual() || members.asText().isBlank()) {
+          throw new IllegalArgumentException("terminal.members must be a non-empty path");
+        }
+        builder.members(Path.of(members.asText()));
+      }
+      return builder.build();
+    }
     String scheme = spec.path("tls").asBoolean(true) ? "https" : "http";
     String endpoint =
         scheme + "://" + spec.path("host").asText() + ":" + spec.path("port").asInt(8443) + "/nexo";
