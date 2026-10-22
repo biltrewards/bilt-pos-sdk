@@ -210,7 +210,7 @@ set BRIDGE_OPTS=-Dbilt.bridge.dir=C:\bridge-dev
 bridge\build\install\bridge\bin\bridge.bat
 ```
 
-In PowerShell: `$env:BRIDGE_OPTS = "-Dbilt.bridge.dir=C:\bridge-dev"` then `.\bridge\build\install\bridge\bin\bridge.bat`. The icon appears in the notification area of the taskbar, possibly behind the overflow chevron; the menu is the same as on macOS except *Start at login*, which is not implemented on Windows. Without the override, the config file is `%APPDATA%\Bilt Terminal Bridge\config.json` and the logs are in `%LOCALAPPDATA%\Bilt Terminal Bridge\Logs\`. There is no Windows installer yet (see [Limitations](#limitations-of-the-development-build)).
+In PowerShell: `.\gradlew.bat :bridge:installDist`, `$env:BRIDGE_OPTS = "-Dbilt.bridge.dir=C:\bridge-dev"`, then `.\bridge\build\install\bridge\bin\bridge.bat` (PowerShell does not search the current directory, hence the `.\`). The icon appears in the notification area of the taskbar, possibly behind the overflow chevron; the menu is the same as on macOS except *Start at login*, which is not implemented on Windows. Without the override, the config file is `%APPDATA%\Bilt Terminal Bridge\config.json` and the logs are in `%LOCALAPPDATA%\Bilt Terminal Bridge\Logs\`. There is no Windows installer yet (see [Limitations](#limitations-of-the-development-build)).
 
 #### Linux
 
