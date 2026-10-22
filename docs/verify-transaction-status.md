@@ -234,3 +234,4 @@ When the transaction is not found it can be because:
 - [Handle responses](./error-scenarios.md) — handle errors and edge cases during payment processing.
 - [Timeout handling](./timeout-handling.md) — detailed guide to timeout scenarios.
 - [Make a payment](./make-payment.md) — initiate a new payment.
+- [Terminal Bridge recovery](./terminal-bridge-recovery.md) — the same lookup from a browser register, through `getTransactionStatus` on the bridge.
