@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Stateful in-memory `SimulatedTerminalClient`, selectable from the host development config and Terminal Bridge, for hardware-free Nexo sessions.
-
 ### Changed (breaking)
 
 - The JavaScript packages are renamed from `@bilt/pos-*` to `@biltorg/pos-*` and are published from GitHub releases by the new `publish-js` workflow.
@@ -106,6 +102,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Network-error recovery for `BiltNexoTerminalClient` (on by default): re-sends an in-flight request under an `X-Bilt-Request-Id` correlation header across transient network failures, with at-most-once execution guaranteed by terminal-side dedupe. Includes a configurable keep-alive ping and HTTP protocol / pong diagnostics, mirrored across the Java and Kotlin clients and the CLI ([#83](https://github.com/biltrewards/bilt-pos-sdk/pull/83))
 - Receipt Requirements documentation with Fiserv EMV guidelines and Bilt Platform fields
+
+## [0.35.0]
+
+### Added
+
+- Stateful in-memory `SimulatedTerminalClient`, selectable from the host development config and Terminal Bridge, for hardware-free Nexo sessions.
 
 ## [0.5.10] - 2025
 
