@@ -42,10 +42,30 @@ The bridge is still running, and so are the session and any operation in flight:
 
   ```bash
   curl -s http://127.0.0.1:48333/v1/sessions/<id>                          # basket, member, context, ended?
-  curl -s http://127.0.0.1:48333/v1/sessions/<id>/operations                # every operation; the settle you want is the latest `type: settle`
+  curl -s http://127.0.0.1:48333/v1/sessions/<id>/operations                # every operation, newest first; the settle you want is the first `type: settle`
   curl -s "http://127.0.0.1:48333/v1/sessions/<id>/operations?status=running,awaitingReply"  # only what is still in flight
   curl -s http://127.0.0.1:48333/v1/sessions/<id>/operations/<operationId> # result, error, abandonedSettlement
   ```
+
+  From the page, `attachTerminalSession` gives the new page a handle on the old session. Its basket, member and context are rebuilt from the session's event stream, and its operations come back as live `Operation` handles:
+
+  ```ts
+  import { BiltPos } from '@biltorg/pos-sdk';
+  import { localBridge } from '@biltorg/pos-sdk/bridge';
+
+  const pos = await BiltPos.connect(localBridge());
+  const session = await pos.attachTerminalSession(sessionId, {
+    settlement: settlementHandlers,                        // answer the steps of a settle still in flight
+    reversal: reversalHandlers,
+  });
+
+  const operations = await session.operations();           // every operation, newest first
+  const settle = operations.find((operation) => operation.type === 'settle');
+  const inFlight = await session.operations({ status: ['running', 'awaitingReply'] });
+  const result = settle && (await settle);                 // finished: settles at once; running: when the bridge finishes it
+  ```
+
+  The handle rejects with the `SessionError` for a `failed` or `aborted` settle. An already-ended session still attaches, with `state` `ended`.
 
   A `succeeded` settle carries its `SettlementResult` in `result`; store it as if the page had received it. A `failed` or `aborted` one carries the `SessionError` in `error`, and `abandonedSettlement` when recovery was abandoned. Ended sessions stay readable for a while (the last 100), and the event stream replays from `?since=<seq>` for 10 minutes or 1000 events.
 - Then end the old session so the lane is free, as in [A stuck lane](#a-stuck-lane-invalid_state).
@@ -97,6 +117,14 @@ If none of that can complete, record the incident and the references for reconci
 ```bash
 curl -X POST http://127.0.0.1:48333/v1/sessions/<id>/force-end -H "Idempotency-Key: $(uuidgen)" \
   -H 'Content-Type: application/json' -d '{"reason":"operator escalated incomplete recovery"}'
+```
+
+From the page, on the session `attachTerminalSession` returned:
+
+```ts
+await session.abort();                                     // stop the running settlement (or inFlight[0].abort())
+await session.end();                                       // rejects with a SessionError while money is unresolved
+await session.forceEnd('operator escalated incomplete recovery'); // only when the money cannot be finished
 ```
 
 `force-end` needs a non-blank `reason`. It seals the session with the recovery still unresolved. Restarting the bridge clears a stuck lane too, with the losses described [above](#the-bridge-stopped-or-crashed).
