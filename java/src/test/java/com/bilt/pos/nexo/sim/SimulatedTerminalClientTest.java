@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
@@ -24,6 +25,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -262,6 +264,21 @@ class SimulatedTerminalClientTest {
   }
 
   @Test
+  void honorsTimeoutForCustomerWaitsWithoutRecordingThePayment() throws Exception {
+    SimulatedTerminalClient terminal =
+        SimulatedTerminalClient.builder().customerDelay(Duration.ofMillis(500)).build();
+    BiltNexoClientException timeout =
+        assertThrows(
+            BiltNexoClientException.class,
+            () ->
+                terminal.request(
+                    request("Payment", "bounded-wait", paymentBody("9.00", null)),
+                    Duration.ofMillis(20)));
+    assertTrue(hasCause(timeout, SocketTimeoutException.class));
+    assertEquals("NotFound", awaitStatus(terminal, "bounded-wait", "NotFound"));
+  }
+
+  @Test
   void reportsInProgressAndHonorsMatchingAbort() throws Exception {
     SimulatedTerminalClient terminal =
         SimulatedTerminalClient.builder().customerDelay(Duration.ofSeconds(5)).build();
@@ -441,6 +458,31 @@ class SimulatedTerminalClientTest {
   }
 
   @Test
+  void refusesRewardsWorthMoreThanTheLoyaltyTotalBeforeDebitingPoints() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    String rewardRefs =
+        Base64.getEncoder()
+            .encodeToString("{\"rewardRefs\":[\"rwd_sim_1\"]}".getBytes(StandardCharsets.UTF_8));
+    SaleToPOIResponse redemption =
+        terminal
+            .request(
+                request(
+                    "Loyalty",
+                    "redeem-over-total",
+                    "{\"LoyaltyRequest\":{\"LoyaltyTransaction\":{\"LoyaltyTransactionType\":\"Redemption\","
+                        + "\"Currency\":\"USD\",\"TotalAmount\":1.0},\"LoyaltyData\":["
+                        + "{\"LoyaltyAccountID\":{\"LoyaltyID\":\"mbr_sim_1\"},"
+                        + "\"LoyaltyAmount\":{\"AmountValue\":0.0,\"Currency\":\"USD\","
+                        + "\"LoyaltyUnit\":\"Monetary\"}}],\"SaleData\":{\"SaleToPOIData\":\""
+                        + rewardRefs
+                        + "\"}}}"))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "Refusal", redemption.getLoyaltyResponse().getResponse().getErrorCondition().toValue());
+    assertEquals(12000, terminal.points("mbr_sim_1"));
+  }
+
+  @Test
   void managesSessionAndLatestDisplay() throws Exception {
     SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
     terminal.request(
@@ -502,6 +544,14 @@ class SimulatedTerminalClientTest {
     assertFalse(response.getInputResponse().getInputResult().getInput().getConfirmedFlag());
     assertNotNull(
         response.getInputResponse().getInputResult().getResponse().getAdditionalResponse());
+    byte[] png =
+        Base64.getDecoder()
+            .decode(
+                response.getInputResponse().getInputResult().getResponse().getAdditionalResponse());
+    var image = ImageIO.read(new ByteArrayInputStream(png));
+    assertNotNull(image);
+    assertEquals(1, image.getWidth());
+    assertEquals(1, image.getHeight());
     BiltNexoClientException unsupported =
         assertThrows(
             BiltNexoClientException.class,
@@ -599,6 +649,148 @@ class SimulatedTerminalClientTest {
         reversedBalance.getBalanceInquiryResponse().getPaymentAccountStatus().getCurrentBalance());
   }
 
+  @Test
+  void chargesStoredValuePaymentsPartiallyAndRestoresTheirBalance() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    terminal.request(
+        request(
+            "StoredValue",
+            "gift-load",
+            "{\"StoredValueRequest\":{\"StoredValueData\":[{"
+                + "\"StoredValueTransactionType\":\"Load\",\"Currency\":\"USD\","
+                + "\"ItemAmount\":10.00,\"StoredValueAccountID\":"
+                + "{\"StoredValueID\":\"gift-payment\"}}]}}"));
+
+    SaleToPOIResponse payment =
+        terminal
+            .request(
+                request("Payment", "gift-payment", storedValuePaymentBody("15.00", "gift-payment")))
+            .getSaleToPOIResponse();
+    assertEquals("Success", payment.getPaymentResponse().getResponse().getResult().toValue());
+    assertEquals(
+        10.0,
+        payment.getPaymentResponse().getPaymentResult().getAmountsResp().getAuthorizedAmount());
+    assertEquals(
+        "currentBalance=0.0", payment.getPaymentResponse().getResponse().getAdditionalResponse());
+    String paymentPoiId =
+        payment.getPaymentResponse().getPoiData().getPoiTransactionID().getTransactionID();
+
+    SaleToPOIResponse status =
+        terminal
+            .request(
+                request(
+                    "TransactionStatus",
+                    "gift-payment-status",
+                    "{\"TransactionStatusRequest\":{\"MessageReference\":{\"ServiceID\":\"gift-payment\"}}}"))
+            .getSaleToPOIResponse();
+    assertEquals(
+        10.0,
+        status
+            .getTransactionStatusResponse()
+            .getRepeatedMessageResponse()
+            .getRepeatedResponseMessageBody()
+            .getPaymentResponse()
+            .getPaymentResult()
+            .getAmountsResp()
+            .getAuthorizedAmount());
+
+    SaleToPOIResponse emptyBalancePayment =
+        terminal
+            .request(
+                request("Payment", "gift-empty", storedValuePaymentBody("1.00", "gift-payment")))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "Refusal",
+        emptyBalancePayment.getPaymentResponse().getResponse().getErrorCondition().toValue());
+
+    SaleToPOIResponse refund =
+        terminal
+            .request(request("Payment", "gift-refund", paymentBody("4.00", paymentPoiId)))
+            .getSaleToPOIResponse();
+    assertEquals("Success", refund.getPaymentResponse().getResponse().getResult().toValue());
+    assertEquals(4.0, storedValueBalance(terminal, "gift-payment"));
+
+    SaleToPOIResponse secondPayment =
+        terminal
+            .request(
+                request(
+                    "Payment",
+                    "gift-payment-again",
+                    storedValuePaymentBody("4.00", "gift-payment")))
+            .getSaleToPOIResponse();
+    String secondPaymentPoiId =
+        secondPayment.getPaymentResponse().getPoiData().getPoiTransactionID().getTransactionID();
+    terminal.request(request("Reversal", "gift-payment-void", reversalBody(secondPaymentPoiId)));
+    assertEquals(4.0, storedValueBalance(terminal, "gift-payment"));
+  }
+
+  @Test
+  void reversesStoredValueOperationsByTheirOriginalPoiReference() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    SaleToPOIResponse unknown =
+        terminal
+            .request(
+                request("StoredValue", "reverse-unknown", storedValueReverseBody("SIM-missing")))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "NotFound", unknown.getStoredValueResponse().getResponse().getErrorCondition().toValue());
+
+    SaleToPOIResponse load =
+        terminal
+            .request(
+                request(
+                    "StoredValue",
+                    "reverse-load",
+                    "{\"StoredValueRequest\":{\"StoredValueData\":[{"
+                        + "\"StoredValueTransactionType\":\"Load\",\"Currency\":\"USD\","
+                        + "\"ItemAmount\":25.00,\"StoredValueAccountID\":"
+                        + "{\"StoredValueID\":\"gift-reverse\"}}]}}"))
+            .getSaleToPOIResponse();
+    String loadPoiId =
+        load.getStoredValueResponse().getPoiData().getPoiTransactionID().getTransactionID();
+
+    SaleToPOIResponse reverse =
+        terminal
+            .request(
+                request("StoredValue", "reverse-load-operation", storedValueReverseBody(loadPoiId)))
+            .getSaleToPOIResponse();
+    assertEquals("Success", reverse.getStoredValueResponse().getResponse().getResult().toValue());
+    assertEquals(25.0, reverse.getStoredValueResponse().getStoredValueResult()[0].getItemAmount());
+    assertEquals(
+        0.0,
+        reverse
+            .getStoredValueResponse()
+            .getStoredValueResult()[0]
+            .getStoredValueAccountStatus()
+            .getCurrentBalance());
+
+    SaleToPOIResponse duplicate =
+        terminal
+            .request(
+                request("StoredValue", "reverse-load-again", storedValueReverseBody(loadPoiId)))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "Refusal", duplicate.getStoredValueResponse().getResponse().getErrorCondition().toValue());
+  }
+
+  private static double storedValueBalance(SimulatedTerminalClient terminal, String storedValueId)
+      throws Exception {
+    return terminal
+        .request(
+            request(
+                "BalanceInquiry",
+                "gift-balance-" + storedValueId,
+                "{\"BalanceInquiryRequest\":{\"PaymentAccountReq\":{\"PaymentInstrumentData\":"
+                    + "{\"PaymentInstrumentType\":\"StoredValue\",\"StoredValueAccountID\":"
+                    + "{\"StoredValueID\":\""
+                    + storedValueId
+                    + "\"}}}}}"))
+        .getSaleToPOIResponse()
+        .getBalanceInquiryResponse()
+        .getPaymentAccountStatus()
+        .getCurrentBalance();
+  }
+
   private static String awaitStatus(
       SimulatedTerminalClient terminal, String serviceId, String expectedStatus) throws Exception {
     long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
@@ -652,6 +844,24 @@ class SimulatedTerminalClientTest {
                 + originalPoiId
                 + "\"}}")
         + "}}}";
+  }
+
+  private static String storedValuePaymentBody(String amount, String storedValueId) {
+    return "{\"PaymentRequest\":{\"PaymentData\":{\"PaymentType\":\"Normal\","
+        + "\"PaymentInstrumentData\":{\"PaymentInstrumentType\":\"StoredValue\","
+        + "\"StoredValueAccountID\":{\"StoredValueID\":\""
+        + storedValueId
+        + "\"}}},\"PaymentTransaction\":{\"AmountsReq\":{\"RequestedAmount\":"
+        + amount
+        + ",\"Currency\":\"USD\"}}}}";
+  }
+
+  private static String storedValueReverseBody(String originalPoiId) {
+    return "{\"StoredValueRequest\":{\"StoredValueData\":[{"
+        + "\"StoredValueTransactionType\":\"Reverse\",\"Currency\":\"USD\",\"ItemAmount\":0.0,"
+        + "\"OriginalPOITransaction\":{\"POITransactionID\":{\"TransactionID\":\""
+        + originalPoiId
+        + "\"}}}]}}";
   }
 
   private static String reversalBody(String poiId) {

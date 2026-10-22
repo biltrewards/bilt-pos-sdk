@@ -141,7 +141,10 @@ built-in fixture, which contains two sample members (one Gold member with 12,000
 
 The simulator has no customer delay and confirms input prompts by default. A payment request whose
 amount in cents ends in `123` declines (for example, `$41.23`); `$41.24` approves. The simulated
-terminal is reported reachable, but no network endpoint is contacted.
+terminal is reported reachable, but no network endpoint is contacted. Gift-card charges use the
+stored-value card balance, are partially approved up to that balance, and refuse when the balance is
+zero; linked refunds restore the refunded amount, and a void restores the approved amount when no
+refund has already been processed.
 
 ## A local session with curl
 

@@ -16,6 +16,7 @@ import com.bilt.pos.nexo.model.LoyaltyTransactionTypeEnum;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageHeader;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
+import com.bilt.pos.nexo.model.PaymentInstrumentTypeEnum;
 import com.bilt.pos.nexo.model.PaymentTypeEnum;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
@@ -155,36 +156,44 @@ public final class SimulatedTerminalClient implements TerminalClient {
         throw new BiltNexoClientException("simulated terminal request timed out", cause);
       }
     }
-    if (waitsForCustomer(body, category) && waitForCustomer(header)) {
-      return failure(requestHeader(header, category), category, "Aborted");
-    }
+    WaitState waitState =
+        waitsForCustomer(body, category) ? waitForCustomer(header, timeout) : null;
     synchronized (lock) {
-      switch (category) {
-        case ADMIN:
-          return admin(body, header);
-        case BALANCE_INQUIRY:
-          return balanceInquiry(body, header);
-        case CARD_ACQUISITION:
-          return cardAcquisition(body, header);
-        case DISPLAY:
-          return display(body, header);
-        case INPUT:
-          return input(body, header);
-        case INPUT_UPDATE:
-          return null;
-        case LOYALTY:
-          return loyalty(body, header);
-        case PAYMENT:
-          return payment(body, header);
-        case REVERSAL:
-          return reversal(body, header);
-        case STORED_VALUE:
-          return storedValue(body, header);
-        case TRANSACTION_STATUS:
-          return transactionStatus(body, header);
-        default:
-          throw new BiltNexoClientException(
-              "simulated terminal does not support " + category.toValue());
+      try {
+        if (waitState != null && waitState.aborted) {
+          return failure(requestHeader(header, category), category, "Aborted");
+        }
+        switch (category) {
+          case ADMIN:
+            return admin(body, header);
+          case BALANCE_INQUIRY:
+            return balanceInquiry(body, header);
+          case CARD_ACQUISITION:
+            return cardAcquisition(body, header);
+          case DISPLAY:
+            return display(body, header);
+          case INPUT:
+            return input(body, header);
+          case INPUT_UPDATE:
+            return null;
+          case LOYALTY:
+            return loyalty(body, header);
+          case PAYMENT:
+            return payment(body, header);
+          case REVERSAL:
+            return reversal(body, header);
+          case STORED_VALUE:
+            return storedValue(body, header);
+          case TRANSACTION_STATUS:
+            return transactionStatus(body, header);
+          default:
+            throw new BiltNexoClientException(
+                "simulated terminal does not support " + category.toValue());
+        }
+      } finally {
+        if (waitState != null) {
+          removeWaiting(header.getServiceID(), waitState);
+        }
       }
     }
   }
@@ -217,7 +226,8 @@ public final class SimulatedTerminalClient implements TerminalClient {
     }
   }
 
-  private boolean waitForCustomer(MessageHeader header) throws BiltNexoClientException {
+  private WaitState waitForCustomer(MessageHeader header, Duration timeout)
+      throws BiltNexoClientException {
     WaitState waitState = new WaitState();
     String serviceId = header.getServiceID();
     synchronized (lock) {
@@ -225,22 +235,37 @@ public final class SimulatedTerminalClient implements TerminalClient {
         waitingByServiceId.put(serviceId, waitState);
       }
     }
+    boolean timeoutBeforeCustomer =
+        !customerDelay.isZero() && timeout != null && customerDelay.compareTo(timeout) > 0;
+    Duration waitDuration = timeoutBeforeCustomer ? timeout : customerDelay;
     try {
-      if (!customerDelay.isZero()) {
-        waitState.signal.await(nanos(customerDelay), TimeUnit.NANOSECONDS);
+      if (!waitDuration.isZero() || timeoutBeforeCustomer) {
+        boolean signaled = waitState.signal.await(nanos(waitDuration), TimeUnit.NANOSECONDS);
+        if (timeoutBeforeCustomer && !signaled) {
+          synchronized (lock) {
+            if (waitState.aborted) {
+              return waitState;
+            }
+            removeWaiting(serviceId, waitState);
+          }
+          SocketTimeoutException cause =
+              new SocketTimeoutException("simulated terminal request timed out");
+          throw new BiltNexoClientException("simulated terminal request timed out", cause);
+        }
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new BiltNexoClientException("interrupted while awaiting simulated customer", e);
-    } finally {
       synchronized (lock) {
-        if (serviceId != null && waitingByServiceId.get(serviceId) == waitState) {
-          waitingByServiceId.remove(serviceId);
-        }
+        removeWaiting(serviceId, waitState);
       }
+      throw new BiltNexoClientException("interrupted while awaiting simulated customer", e);
     }
-    synchronized (lock) {
-      return waitState.aborted;
+    return waitState;
+  }
+
+  private void removeWaiting(String serviceId, WaitState waitState) {
+    if (serviceId != null && waitingByServiceId.get(serviceId) == waitState) {
+      waitingByServiceId.remove(serviceId);
     }
   }
 
@@ -384,6 +409,31 @@ public final class SimulatedTerminalClient implements TerminalClient {
           MessageCategoryType.PAYMENT,
           "Refusal");
     }
+    com.bilt.pos.nexo.model.PaymentData paymentData =
+        request.getPaymentRequest() == null ? null : request.getPaymentRequest().getPaymentData();
+    com.bilt.pos.nexo.model.PaymentInstrumentData instrumentData =
+        paymentData == null ? null : paymentData.getPaymentInstrumentData();
+    boolean storedValuePayment =
+        instrumentData != null
+            && instrumentData.getPaymentInstrumentType() == PaymentInstrumentTypeEnum.STORED_VALUE;
+    String storedValueId =
+        !storedValuePayment || instrumentData.getStoredValueAccountID() == null
+            ? ""
+            : Optional.ofNullable(instrumentData.getStoredValueAccountID().getStoredValueID())
+                .orElse("");
+    BigDecimal storedValueBalance = null;
+    if (storedValuePayment) {
+      storedValueBalance = storedValueBalances.getOrDefault(storedValueId, BigDecimal.ZERO);
+      if (amount.signum() <= 0 || storedValueBalance.signum() <= 0) {
+        return failure(
+            requestHeader(header, MessageCategoryType.PAYMENT),
+            MessageCategoryType.PAYMENT,
+            "Refusal");
+      }
+      amount = amount.min(storedValueBalance);
+      storedValueBalance = storedValueBalance.subtract(amount);
+      storedValueBalances.put(storedValueId, storedValueBalance);
+    }
     String currency = paymentCurrency(request);
     ObjectNode body = successBody();
     ObjectNode paymentResult = body.putObject("PaymentResult");
@@ -396,9 +446,14 @@ public final class SimulatedTerminalClient implements TerminalClient {
     acquirerData
         .putObject("AcquirerTransactionID")
         .put("TransactionID", "SIM-ACQ-" + (transactionCounter + 1));
-    ObjectNode card = paymentResult.putObject("PaymentInstrumentData").putObject("CardData");
-    card.put("MaskedPAN", VISA_MASKED_PAN);
-    card.put("PaymentBrand", "Visa");
+    if (storedValuePayment) {
+      ((ObjectNode) body.get("Response"))
+          .put("AdditionalResponse", "currentBalance=" + storedValueBalance.toPlainString());
+    } else {
+      ObjectNode card = paymentResult.putObject("PaymentInstrumentData").putObject("CardData");
+      card.put("MaskedPAN", VISA_MASKED_PAN);
+      card.put("PaymentBrand", "Visa");
+    }
     ObjectNode poi = addPoiData(body);
     String poiId = poi.path("POITransactionID").path("TransactionID").asText();
     LedgerEntry entry =
@@ -411,6 +466,9 @@ public final class SimulatedTerminalClient implements TerminalClient {
             amount,
             currency);
     entry.paymentType = PaymentTypeEnum.NORMAL;
+    if (storedValuePayment) {
+      entry.storedValueId = storedValueId;
+    }
     record(entry);
     return approved(header, MessageCategoryType.PAYMENT, "PaymentResponse", body);
   }
@@ -445,6 +503,9 @@ public final class SimulatedTerminalClient implements TerminalClient {
             "Refusal");
       }
       original.refunded = original.refunded.add(amount);
+      if (original.storedValueId != null) {
+        storedValueBalances.merge(original.storedValueId, amount, BigDecimal::add);
+      }
     } else if (amount == null) {
       amount = BigDecimal.ZERO;
     }
@@ -529,6 +590,15 @@ public final class SimulatedTerminalClient implements TerminalClient {
         Redemption redemption = redemption(request, member);
         pointsUsed = redemption.pointsUsed;
         monetaryValue = redemption.monetaryValue;
+        Double totalAmountDue =
+            request.getLoyaltyRequest().getLoyaltyTransaction().getTotalAmount();
+        if (totalAmountDue != null
+            && monetaryValue.compareTo(BigDecimal.valueOf(totalAmountDue)) > 0) {
+          return failure(
+              requestHeader(header, MessageCategoryType.LOYALTY),
+              MessageCategoryType.LOYALTY,
+              "Refusal");
+        }
         if (pointsUsed > member.points) {
           return failure(
               requestHeader(header, MessageCategoryType.LOYALTY),
@@ -651,6 +721,8 @@ public final class SimulatedTerminalClient implements TerminalClient {
               ? original.amount
               : original.amount.negate();
       storedValueBalances.merge(original.storedValueId, change, BigDecimal::add);
+    } else if (original.storedValueId != null) {
+      storedValueBalances.merge(original.storedValueId, original.amount, BigDecimal::add);
     }
     ObjectNode body = successBody();
     body.put("ReversedAmount", original.amount.doubleValue());
@@ -693,6 +765,38 @@ public final class SimulatedTerminalClient implements TerminalClient {
         data == null || data.path("ItemAmount").isMissingNode()
             ? BigDecimal.ZERO
             : data.path("ItemAmount").decimalValue();
+    String originalPoiId =
+        data == null
+            ? null
+            : data.path("OriginalPOITransaction")
+                .path("POITransactionID")
+                .path("TransactionID")
+                .asText(null);
+    LedgerEntry original =
+        type == StoredValueTransactionTypeEnum.REVERSE && originalPoiId != null
+            ? ledgerByPoiId.get(originalPoiId)
+            : null;
+    if (type == StoredValueTransactionTypeEnum.REVERSE) {
+      if (original == null
+          || original.category != MessageCategoryType.STORED_VALUE
+          || (original.storedValueType != StoredValueTransactionTypeEnum.ACTIVATE
+              && original.storedValueType != StoredValueTransactionTypeEnum.LOAD
+              && original.storedValueType != StoredValueTransactionTypeEnum.UNLOAD)) {
+        return failure(
+            requestHeader(header, MessageCategoryType.STORED_VALUE),
+            MessageCategoryType.STORED_VALUE,
+            "NotFound");
+      }
+      if (original.reversed) {
+        return failure(
+            requestHeader(header, MessageCategoryType.STORED_VALUE),
+            MessageCategoryType.STORED_VALUE,
+            "Refusal");
+      }
+      storedValueId = original.storedValueId;
+      key = storedValueId == null ? "" : storedValueId;
+      amount = original.amount;
+    }
     BigDecimal balance = storedValueBalances.getOrDefault(key, BigDecimal.ZERO);
     if (type == StoredValueTransactionTypeEnum.ACTIVATE
         || type == StoredValueTransactionTypeEnum.LOAD) {
@@ -701,6 +805,14 @@ public final class SimulatedTerminalClient implements TerminalClient {
     } else if (type == StoredValueTransactionTypeEnum.UNLOAD) {
       balance = balance.subtract(amount);
       storedValueBalances.put(key, balance);
+    } else if (type == StoredValueTransactionTypeEnum.REVERSE) {
+      BigDecimal change =
+          original.storedValueType == StoredValueTransactionTypeEnum.UNLOAD
+              ? amount
+              : amount.negate();
+      balance = balance.add(change);
+      storedValueBalances.put(key, balance);
+      original.reversed = true;
     }
     String currency = data == null ? "USD" : data.path("Currency").asText("USD");
     ObjectNode body = successBody();
@@ -727,7 +839,7 @@ public final class SimulatedTerminalClient implements TerminalClient {
             currency);
     entry.storedValueId = key;
     entry.storedValueType = type;
-    entry.storedValueType = type;
+    entry.originalPoiId = original == null ? null : original.poiId;
     record(entry);
     return approved(header, MessageCategoryType.STORED_VALUE, "StoredValueResponse", body);
   }
@@ -1117,34 +1229,7 @@ public final class SimulatedTerminalClient implements TerminalClient {
   }
 
   private static String signatureImage() {
-    return Base64.getEncoder()
-        .encodeToString(
-            new byte[] {
-              (byte) 0x89,
-              'P',
-              'N',
-              'G',
-              13,
-              10,
-              26,
-              10,
-              0,
-              0,
-              0,
-              13,
-              'I',
-              'H',
-              'D',
-              'R',
-              0,
-              0,
-              0,
-              1,
-              0,
-              0,
-              0,
-              1
-            });
+    return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
   }
 
   private static boolean matchesRefundType(
