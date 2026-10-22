@@ -45,7 +45,9 @@ ip, and removes the forward on exit. Options: `-PterminalPort` / `--terminal ip:
 
 Start a host first: the [Terminal Bridge](../../../docs/terminal-bridge.md) on this machine
 (`./gradlew :bridge:run --args="--config /path/to/config.json"`; without a terminal it still serves
-local sessions), or the Session Host alone. Then:
+local sessions; the per-platform steps, including Windows and a LAN terminal on macOS 15+, are under
+[Run from source](../../../docs/terminal-bridge.md#run-from-source-on-any-platform)), or the Session
+Host alone. Then:
 
 ```sh
 cd js
