@@ -165,17 +165,73 @@ Two browser-side caveats in this iteration:
 
 ## Development
 
+### Run from source on any platform
+
+The bridge runs from this repository on macOS, Windows and Linux; only the packaging (`.dmg`, *Start at login*) is macOS-only. You need a JDK 21 on `PATH` (Temurin works); the Gradle wrapper fetches everything else. Node and pnpm are only needed for the browser emulator and examples.
+
+Two ways to start it. Both run the bridge in development mode with the config file and logs at the platform locations in [Configuration file](#configuration-file), and both create the starter config on first run, which you then edit and save (the bridge reloads it).
+
+**Through Gradle**, quickest for a code change:
+
 ```bash
-./gradlew :bridge:run                                   # tray app from the build output
+./gradlew :bridge:run                                        # macOS, Linux
 ./gradlew :bridge:run --args="--config /path/to/config.json"
-./gradlew :bridge:test
+gradlew.bat :bridge:run                                      # Windows
+gradlew.bat :bridge:run --args="--config C:\path\to\config.json"
 ```
 
-`-Dbilt.bridge.dir=/some/dir` pins both the config and the log directory, which keeps a development instance away from the installed one.
+Ctrl-C stops it. The bridge runs inside the Gradle daemon, which has two limits: it takes no JVM options from the command line (so no `-Dbilt.bridge.dir`), and on macOS 15+ it cannot reach a terminal on the LAN (see [macOS](#macos) below).
 
-To try the bridge with a register right away, the browser emulator starts both: `./gradlew :emulator:browser:runWithBridge -PterminalHost=<terminal ip>` (or `-Padb` to reach it through `adb forward`, or `-Plocal` without a terminal), or `scripts/browser-emulator.sh --terminal <terminal ip>` without Gradle. See [`js/apps/emulator`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) for the options.
+**As a plain launcher**, the same thing `scripts/browser-emulator.sh` runs:
+
+```bash
+./gradlew :bridge:installDist               # gradlew.bat :bridge:installDist on Windows
+bridge/build/install/bridge/bin/bridge      # bridge\build\install\bridge\bin\bridge.bat on Windows
+```
+
+The launcher takes the same `--config <file>` argument and JVM options from the `BRIDGE_OPTS` (or `JAVA_OPTS`) environment variable. `-Dbilt.bridge.dir=<dir>` pins both the config and the log directory, which keeps a development instance away from an installed one; `-Djava.awt.headless=true` skips the tray icon and runs the bridge as a foreground process (what scripts and CI want). Rerun `installDist` after a code change.
+
+Whichever way it started, `curl http://127.0.0.1:48333/health` says it is up ([Verify](#verify)), and the log names the port if 48333 was taken.
+
+#### macOS
+
+```bash
+./gradlew :bridge:installDist
+BRIDGE_OPTS="-Dbilt.bridge.dir=$HOME/bridge-dev" bridge/build/install/bridge/bin/bridge
+```
+
+The icon appears in the menu bar (no Dock icon). Use the launcher rather than `:bridge:run` whenever the terminal is on the LAN: macOS 15 (Sequoia) and later grant Local Network access per application, the Gradle daemon is a detached process no grant covers, and the terminal is then unreachable (`NETWORK` from the bridge, `No route to host` in the log). The launcher is a child of your terminal app and uses its grant; allow it when macOS asks, or turn it on under *System Settings → Privacy & Security → Local Network*. Reaching the terminal over `adb forward` (`--adb` below) avoids the permission altogether, since the bridge then only touches loopback. The packaged app from [Install on macOS](#install-on-macos) is the third option.
+
+#### Windows
+
+```bat
+gradlew.bat :bridge:installDist
+set BRIDGE_OPTS=-Dbilt.bridge.dir=C:\bridge-dev
+bridge\build\install\bridge\bin\bridge.bat
+```
+
+In PowerShell: `.\gradlew.bat :bridge:installDist`, `$env:BRIDGE_OPTS = "-Dbilt.bridge.dir=C:\bridge-dev"`, then `.\bridge\build\install\bridge\bin\bridge.bat` (PowerShell does not search the current directory, hence the `.\`). The icon appears in the notification area of the taskbar, possibly behind the overflow chevron; the menu is the same as on macOS except *Start at login*, which is not implemented on Windows. Without the override, the config file is `%APPDATA%\Bilt Terminal Bridge\config.json` and the logs are in `%LOCALAPPDATA%\Bilt Terminal Bridge\Logs\`. There is no Windows installer yet (see [Limitations](#limitations-of-the-development-build)).
+
+#### Linux
+
+```bash
+./gradlew :bridge:installDist
+BRIDGE_OPTS="-Dbilt.bridge.dir=$HOME/bridge-dev" bridge/build/install/bridge/bin/bridge
+```
+
+On a desktop with a system tray (KDE, XFCE, GNOME with an AppIndicator extension) the icon appears there. Without one, over SSH, or with `-Djava.awt.headless=true`, the bridge logs `No system tray in this session; running in the foreground (Ctrl-C to stop)` and serves exactly the same; the menu's actions are then by hand: edit the config file and save (it reloads), read the logs, `curl /health`. Without the override, the config file is `~/.config/bilt-terminal-bridge/config.json` and the logs are in `~/.local/state/bilt-terminal-bridge/logs/` (`$XDG_CONFIG_HOME` and `$XDG_STATE_HOME` when set). No deb or rpm yet, and no *Start at login*.
+
+### With a register
+
+To try the bridge with a register right away, the browser emulator starts both: `./gradlew :emulator:browser:runWithBridge -PterminalHost=<terminal ip>` (or `-Padb` to reach it through `adb forward`, or `-Plocal` without a terminal), or `scripts/browser-emulator.sh --terminal <terminal ip>` without Gradle. Both run the bash script, so they are for macOS and Linux; on Windows start the bridge as above and the emulator's dev server by hand (the *Manually* steps in its README). See [`js/apps/emulator`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) for the options.
 
 The Session Host alone, without the tray, runs from `./gradlew :host:run --args=dev-host.json`; its config format is the host's own and documented on the [Session Host](./session-host.html) page.
+
+### Tests
+
+```bash
+./gradlew :bridge:test
+```
 
 ### Packaging details
 
