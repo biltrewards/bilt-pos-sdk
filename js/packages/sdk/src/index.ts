@@ -16,6 +16,7 @@
 export { BiltPos } from './pos';
 export type { BiltPosStatic, EngineCapabilities, EngineContext, EngineFactory } from './pos';
 export type {
+  AttachSessionOptions,
   BasketMutationBuilder,
   RenderingCapabilities,
   RetailMediaOptions,
@@ -35,6 +36,7 @@ export type {
   WidgetType,
 } from './session';
 export type {
+  AttachTerminalSessionOptions,
   MaybePromise,
   ReversalHandlers,
   ReversalResult,
@@ -45,7 +47,7 @@ export type {
   TerminalShopperSession,
 } from './terminal-session';
 export type { Terminal, TerminalInfo } from './terminal';
-export type { Operation, OperationStatus, OperationType } from './operation';
+export type { Operation, OperationFilter, OperationStatus, OperationType } from './operation';
 export { EngineError, EngineOutdatedError, EngineUnavailableError, SessionError } from './errors';
 
 // The domain model is `@biltorg/pos-protocol`'s; these re-exports save registers a second import.

@@ -125,6 +125,14 @@ export class PendingOperation<T> {
     this.rejectPromise(error);
   }
 
+  /**
+   * Marks a step as already answered without sending a reply: an attached session replays
+   * `operation.step` events the host resolved before this page existed.
+   */
+  noteStep(stepId: string): void {
+    this.answeredSteps.add(stepId);
+  }
+
   /** An `operation.step` for this operation, from the stream or a poll; each step is answered once. */
   step(step: OperationStep): void {
     if (this.settled || this.answeredSteps.has(step.stepId)) return;

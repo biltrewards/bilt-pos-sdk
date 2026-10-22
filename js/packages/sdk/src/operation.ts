@@ -3,6 +3,15 @@ import type { OperationStatus, OperationType } from '@biltorg/pos-protocol';
 export type { OperationStatus, OperationType };
 
 /**
+ * Narrows `ShopperSession.operations`: only operations in one of these states come back, so
+ * `{ status: ['running', 'awaitingReply'] }` lists what is still in flight. No filter lists
+ * every operation, newest first either way.
+ */
+export interface OperationFilter {
+  readonly status?: readonly OperationStatus[];
+}
+
+/**
  * A session operation in flight: the JavaScript form of a Java `SessionResult`,
  * `SettlementFlow` or `ReversalFlow`.
  *

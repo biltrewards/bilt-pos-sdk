@@ -37,7 +37,7 @@ import type {
 } from '@biltorg/pos-protocol';
 import type { SessionError } from './errors';
 import type { Operation } from './operation';
-import type { ShopperSession } from './session';
+import type { AttachSessionOptions, ShopperSession } from './session';
 import type { Terminal } from './terminal';
 
 /** A handler may answer synchronously or with a promise. */
@@ -134,6 +134,20 @@ export interface ReversalHandlers {
 
 /** What a refund or void resolves with. */
 export type ReversalResult = RefundResult | VoidResult;
+
+/**
+ * Options for `BiltPos.attachTerminalSession`: the per-page pieces of a session's options —
+ * `widgets` for the surfaces this page renders, and the step handlers an operation still in
+ * flight will consult from now on: `settlement` answers a `settle`, `reversal` a `refund`,
+ * `refundUnlinked` or `voidTransaction`, as if this page had started them.
+ */
+export interface AttachTerminalSessionOptions extends AttachSessionOptions {
+  /** The handlers an adopted `settle` answers its steps and reports its movements to. */
+  readonly settlement?: SettlementHandlers;
+
+  /** The handler an adopted `refund`, `refundUnlinked` or `voidTransaction` asks on a failure. */
+  readonly reversal?: ReversalHandlers;
+}
 
 /**
  * A shopper session with a Bilt terminal attached — the Java `TerminalShopperSession`: loyalty

@@ -92,6 +92,17 @@ export { AbandonedSettlementRecord }
 
 export { AdInteraction }
 
+// @public
+export interface AttachSessionOptions {
+    readonly widgets?: readonly WidgetOptions[];
+}
+
+// @public
+export interface AttachTerminalSessionOptions extends AttachSessionOptions {
+    readonly reversal?: ReversalHandlers;
+    readonly settlement?: SettlementHandlers;
+}
+
 export { Basket }
 
 export { BasketChange }
@@ -169,6 +180,8 @@ export interface BasketMutationBuilder {
 export interface BiltPos {
     // (undocumented)
     [Symbol.asyncDispose](): Promise<void>;
+    attachShopperSession(sessionId: string, options?: AttachSessionOptions): Promise<ShopperSession>;
+    attachTerminalSession(sessionId: string, options?: AttachTerminalSessionOptions): Promise<TerminalShopperSession>;
     // (undocumented)
     readonly capabilities: EngineCapabilities;
     close(): Promise<void>;
@@ -223,7 +236,7 @@ interface Engine {
     // (undocumented)
     member(sessionId: string, command: MemberCommand, options?: RequestOptions): Promise<Member | null>;
     operation(sessionId: string, operationId: string, options?: RequestOptions): Promise<Operation_2>;
-    operations(sessionId: string, options?: RequestOptions): Promise<readonly Operation_2[]>;
+    operations(sessionId: string, filter?: OperationFilter, options?: RequestOptions): Promise<readonly Operation_2[]>;
     reply(sessionId: string, operationId: string, reply: StepReply, options?: RequestOptions): Promise<Operation_2>;
     // Warning: (ae-forgotten-export) The symbol "EngineOperationRequest" needs to be exported by the entry point index.d.ts
     request(sessionId: string, operation: EngineOperationRequest, options?: RequestOptions): Promise<Operation_2>;
@@ -344,6 +357,12 @@ export interface Operation<T> extends Promise<T> {
     readonly id: string;
     readonly status: OperationStatus;
     readonly type: OperationType;
+}
+
+// @public
+export interface OperationFilter {
+    // (undocumented)
+    readonly status?: readonly OperationStatus[];
 }
 
 export { OperationStatus }
@@ -572,6 +591,7 @@ export interface ShopperSession {
     readonly context: SessionContextApi;
     readonly currency: string;
     end(): Promise<void>;
+    readonly ended: Promise<void>;
     readonly id: string;
     // (undocumented)
     readonly kind: SessionKind;
@@ -579,6 +599,8 @@ export interface ShopperSession {
     off<T extends SessionEventType>(type: T, handler: SessionEventHandler<T>): void;
     on<T extends SessionEventType>(type: T, handler: SessionEventHandler<T>): Unsubscribe;
     once<T extends SessionEventType>(type: T, handler: SessionEventHandler<T>): Unsubscribe;
+    operation(operationId: string): Operation<unknown> | undefined;
+    operations(filter?: OperationFilter): Promise<readonly Operation<unknown>[]>;
     readonly saleId: string;
     // (undocumented)
     readonly state: SessionState;

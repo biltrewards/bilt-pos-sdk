@@ -13,7 +13,7 @@ import type {
   StepReply,
   WidgetState,
 } from '@biltorg/pos-protocol';
-import { SessionError, type EngineCapabilities } from '../src/index';
+import { SessionError, type EngineCapabilities, type OperationFilter } from '../src/index';
 import type {
   BasketCommand,
   Engine,
@@ -199,8 +199,10 @@ export class MockEngine implements Engine {
     return resource;
   }
 
-  async operations(sessionId: string): Promise<readonly Operation[]> {
-    return this.state(sessionId).operations;
+  async operations(sessionId: string, filter?: OperationFilter): Promise<readonly Operation[]> {
+    const all = this.state(sessionId).operations;
+    const wanted = filter?.status;
+    return wanted ? all.filter((o) => wanted.includes(o.status)) : all;
   }
 
   async operation(sessionId: string, operationId: string): Promise<Operation> {

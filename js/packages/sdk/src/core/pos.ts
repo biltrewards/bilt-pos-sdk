@@ -1,10 +1,15 @@
-import { PROTOCOL_VERSION, type Health } from '@biltorg/pos-protocol';
-import { EngineOutdatedError } from '../errors';
+import { PROTOCOL_VERSION, type Health, type Session } from '@biltorg/pos-protocol';
+import { EngineOutdatedError, SessionError } from '../errors';
 import type { Engine } from '../internal';
 import type { BiltPos as BiltPosInterface, EngineCapabilities, EngineFactory } from '../pos';
-import type { ShopperSession, ShopperSessionOptions, TerminalSessionOptions } from '../session';
+import type {
+  AttachSessionOptions,
+  ShopperSession,
+  ShopperSessionOptions,
+  TerminalSessionOptions,
+} from '../session';
 import type { Terminal, TerminalInfo } from '../terminal';
-import type { TerminalShopperSession } from '../terminal-session';
+import type { AttachTerminalSessionOptions, TerminalShopperSession } from '../terminal-session';
 import { consoleReporter, type Reporter } from './report';
 import { ShopperSessionImpl, toCreateSessionRequest, type SessionRuntime } from './session';
 import { TerminalShopperSessionImpl } from './terminal-session';
@@ -73,6 +78,38 @@ export class BiltPosImpl implements BiltPosInterface {
     return this.track(
       await new TerminalShopperSessionImpl(this.runtime, session, options).initialize(),
     );
+  }
+
+  async attachShopperSession(
+    sessionId: string,
+    options: AttachSessionOptions = {},
+  ): Promise<ShopperSession> {
+    const session = await this.attachable(sessionId, 'local');
+    return this.track(
+      await new ShopperSessionImpl(this.runtime, session, options).initialize(true),
+    );
+  }
+
+  async attachTerminalSession(
+    sessionId: string,
+    options: AttachTerminalSessionOptions = {},
+  ): Promise<TerminalShopperSession> {
+    const session = await this.attachable(sessionId, 'terminal');
+    return this.track(
+      await new TerminalShopperSessionImpl(this.runtime, session, options).initialize(true),
+    );
+  }
+
+  /** Reads the session off the engine; rejects when the id is unknown or the kind does not match. */
+  private async attachable(sessionId: string, kind: 'local' | 'terminal'): Promise<Session> {
+    const session = await this.runtime.engine.session(sessionId);
+    if (session.kind !== kind) {
+      throw new SessionError({
+        code: 'INVALID_STATE',
+        message: `session ${sessionId} is a ${session.kind} session, not a ${kind} session`,
+      });
+    }
+    return session;
   }
 
   private track<S extends ShopperSessionImpl>(session: S): S {

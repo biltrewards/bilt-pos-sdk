@@ -12,6 +12,7 @@ import type {
   MenuSelection,
   Money,
   OperationRequest,
+  OperationType,
   OriginalSaleRecord,
   PinOptions,
   PinResult,
@@ -31,6 +32,7 @@ import type { Operation } from '../operation';
 import type { TerminalSessionOptions } from '../session';
 import type { Terminal } from '../terminal';
 import type {
+  AttachTerminalSessionOptions,
   ReversalHandlers,
   SettleOptions,
   SettlementHandlers,
@@ -111,12 +113,34 @@ export class TerminalShopperSessionImpl
   override readonly kind = 'terminal' as const;
   readonly poiId: string;
 
-  constructor(runtime: SessionRuntime, session: Session, options: TerminalSessionOptions) {
+  private readonly attachHandlers: AttachTerminalSessionOptions | undefined;
+
+  constructor(
+    runtime: SessionRuntime,
+    session: Session,
+    options: TerminalSessionOptions | AttachTerminalSessionOptions,
+  ) {
     super(runtime, session, options);
-    this.poiId = session.poiId ?? options.poiId ?? '';
+    this.poiId = session.poiId ?? ('poiId' in options ? options.poiId : undefined) ?? '';
+    this.attachHandlers = 'settlement' in options || 'reversal' in options ? options : undefined;
   }
 
-  private operation<T>(request: OperationRequest, steps?: StepHandlers): Operation<T> {
+  /** The handlers an adopted `settle` or reversal answers its steps with, from the attach options. */
+  protected override stepHandlersFor(type: OperationType): StepHandlers | undefined {
+    const handlers = this.attachHandlers;
+    if (type === 'settle' && handlers?.settlement) {
+      return { kind: 'settlement', handlers: handlers.settlement };
+    }
+    if (
+      (type === 'refund' || type === 'refundUnlinked' || type === 'voidTransaction') &&
+      handlers?.reversal
+    ) {
+      return { kind: 'reversal', handlers: handlers.reversal };
+    }
+    return undefined;
+  }
+
+  private request<T>(request: OperationRequest, steps?: StepHandlers): Operation<T> {
     return this.startOperation<T>(request, steps);
   }
 
@@ -126,9 +150,9 @@ export class TerminalShopperSessionImpl
     arg?: IdentifyOptions | { resolver: MemberIdResolver },
   ): Operation<IdentifyResult> {
     if (arg && 'resolver' in arg && arg.resolver) {
-      return this.operation({ type: 'identifyMember', resolver: arg.resolver });
+      return this.request({ type: 'identifyMember', resolver: arg.resolver });
     }
-    return this.operation(
+    return this.request(
       arg
         ? { type: 'identifyMember', options: arg as IdentifyOptions }
         : { type: 'identifyMember' },
@@ -136,11 +160,11 @@ export class TerminalShopperSessionImpl
   }
 
   acquireCard(options?: CardAcquisitionOptions): Operation<CardAcquisitionResult> {
-    return this.operation(options ? { type: 'acquireCard', options } : { type: 'acquireCard' });
+    return this.request(options ? { type: 'acquireCard', options } : { type: 'acquireCard' });
   }
 
   requestDigitString(prompt: string, options?: InputOptions): Operation<string> {
-    return this.operation(
+    return this.request(
       options
         ? { type: 'requestDigitString', prompt, options }
         : { type: 'requestDigitString', prompt },
@@ -148,7 +172,7 @@ export class TerminalShopperSessionImpl
   }
 
   requestDecimalString(prompt: string, options?: InputOptions): Operation<Money> {
-    return this.operation(
+    return this.request(
       options
         ? { type: 'requestDecimalString', prompt, options }
         : { type: 'requestDecimalString', prompt },
@@ -156,7 +180,7 @@ export class TerminalShopperSessionImpl
   }
 
   requestTextString(prompt: string, options?: InputOptions): Operation<string> {
-    return this.operation(
+    return this.request(
       options
         ? { type: 'requestTextString', prompt, options }
         : { type: 'requestTextString', prompt },
@@ -164,7 +188,7 @@ export class TerminalShopperSessionImpl
   }
 
   requestConfirmation(prompt: string, options?: ConfirmationOptions): Operation<boolean> {
-    return this.operation(
+    return this.request(
       options
         ? { type: 'requestConfirmation', prompt, options }
         : { type: 'requestConfirmation', prompt },
@@ -176,7 +200,7 @@ export class TerminalShopperSessionImpl
     entries: readonly string[],
     options?: MenuOptions,
   ): Operation<MenuSelection> {
-    return this.operation(
+    return this.request(
       options
         ? { type: 'requestMenuEntry', prompt, entries: [...entries], options }
         : { type: 'requestMenuEntry', prompt, entries: [...entries] },
@@ -184,70 +208,70 @@ export class TerminalShopperSessionImpl
   }
 
   requestSignature(prompt: string): Operation<Signature> {
-    return this.operation({ type: 'requestSignature', prompt });
+    return this.request({ type: 'requestSignature', prompt });
   }
 
   requestAmountConfirmation(amount: Money, prompt: string): Operation<boolean> {
-    return this.operation({ type: 'requestAmountConfirmation', amount, prompt });
+    return this.request({ type: 'requestAmountConfirmation', amount, prompt });
   }
 
   requestPinEntry(options?: PinOptions): Operation<PinResult> {
-    return this.operation(
+    return this.request(
       options ? { type: 'requestPinEntry', options } : { type: 'requestPinEntry' },
     );
   }
 
   requestPinVerify(options?: PinOptions): Operation<PinResult> {
-    return this.operation(
+    return this.request(
       options ? { type: 'requestPinVerify', options } : { type: 'requestPinVerify' },
     );
   }
 
   requestPinVerifyOnly(options?: PinOptions): Operation<PinResult> {
-    return this.operation(
+    return this.request(
       options ? { type: 'requestPinVerifyOnly', options } : { type: 'requestPinVerifyOnly' },
     );
   }
 
   async setStoredValueCard(card: StoredValueCard | string | null): Promise<void> {
-    await this.operation<void>({
+    await this.request<void>({
       type: 'setStoredValueCard',
       card: card === null ? null : toStoredValueCard(card),
     });
   }
 
   storedValueBalance(card: StoredValueCard): Operation<StoredValueBalance> {
-    return this.operation({ type: 'storedValueBalance', card });
+    return this.request({ type: 'storedValueBalance', card });
   }
 
   storedValueActivate(
     card: StoredValueCard,
     initialAmount: Money,
   ): Operation<StoredValueOperationResult> {
-    return this.operation({ type: 'storedValueActivate', card, amount: initialAmount });
+    return this.request({ type: 'storedValueActivate', card, amount: initialAmount });
   }
 
   storedValueLoad(card: StoredValueCard, amount: Money): Operation<StoredValueOperationResult> {
-    return this.operation({ type: 'storedValueLoad', card, amount });
+    return this.request({ type: 'storedValueLoad', card, amount });
   }
 
   storedValueUnload(card: StoredValueCard, amount: Money): Operation<StoredValueOperationResult> {
-    return this.operation({ type: 'storedValueUnload', card, amount });
+    return this.request({ type: 'storedValueUnload', card, amount });
   }
 
   storedValueDeactivate(card: StoredValueCard): Operation<StoredValueOperationResult> {
-    return this.operation({ type: 'storedValueDeactivate', card });
+    return this.request({ type: 'storedValueDeactivate', card });
   }
 
   storedValueReserve(card: StoredValueCard, amount: Money): Operation<StoredValueOperationResult> {
-    return this.operation({ type: 'storedValueReserve', card, amount });
+    return this.request({ type: 'storedValueReserve', card, amount });
   }
 
   storedValueReverse(
     originalPoiTransactionId: string,
     originalPoiTransactionTimestamp?: Date,
   ): Operation<StoredValueOperationResult> {
-    return this.operation(
+    return this.request(
       originalPoiTransactionTimestamp
         ? {
             type: 'storedValueReverse',
@@ -259,7 +283,7 @@ export class TerminalShopperSessionImpl
   }
 
   storedValueDuplicate(card: StoredValueCard): Operation<StoredValueOperationResult> {
-    return this.operation({ type: 'storedValueDuplicate', card });
+    return this.request({ type: 'storedValueDuplicate', card });
   }
 
   settle(options: SettleOptions = {}): Operation<SettlementResult> {
@@ -269,7 +293,7 @@ export class TerminalShopperSessionImpl
     if (Object.keys(split.options).length > 0) request.options = split.options;
     const declared = handledSteps(steps);
     if (declared.length > 0) request.handledSteps = declared;
-    return this.operation(request, steps);
+    return this.request(request, steps);
   }
 
   refund(amount?: Money, handlers?: ReversalHandlers): Operation<RefundResult> {
@@ -278,7 +302,7 @@ export class TerminalShopperSessionImpl
     if (amount !== undefined) request.amount = amount;
     const declared = handledSteps(steps);
     if (declared.length > 0) request.handledSteps = declared;
-    return this.operation(request, steps);
+    return this.request(request, steps);
   }
 
   refundUnlinked(amount: Money, handlers?: ReversalHandlers): Operation<RefundResult> {
@@ -286,7 +310,7 @@ export class TerminalShopperSessionImpl
     const request: OperationRequest = { type: 'refundUnlinked', amount };
     const declared = handledSteps(steps);
     if (declared.length > 0) request.handledSteps = declared;
-    return this.operation(request, steps);
+    return this.request(request, steps);
   }
 
   voidTransaction(
@@ -298,14 +322,14 @@ export class TerminalShopperSessionImpl
     if (originalSale !== undefined) request.originalSale = originalSale;
     const declared = handledSteps(steps);
     if (declared.length > 0) request.handledSteps = declared;
-    return this.operation(request, steps);
+    return this.request(request, steps);
   }
 
   getTransactionStatus(
     originalServiceId: string,
     options?: TransactionStatusOptions,
   ): Operation<TransactionStatusResult> {
-    return this.operation(
+    return this.request(
       options
         ? { type: 'getTransactionStatus', originalServiceId, options }
         : { type: 'getTransactionStatus', originalServiceId },
@@ -314,12 +338,12 @@ export class TerminalShopperSessionImpl
 
   updateDisplay(content: Basket | DisplayPayload): Operation<void> {
     return 'cartId' in content
-      ? this.operation({ type: 'updateDisplay', basket: content })
-      : this.operation({ type: 'updateDisplay', display: content });
+      ? this.request({ type: 'updateDisplay', basket: content })
+      : this.request({ type: 'updateDisplay', display: content });
   }
 
   updateInputDisplay(display: DisplayPayload): Operation<void> {
-    return this.operation({ type: 'updateInputDisplay', display });
+    return this.request({ type: 'updateInputDisplay', display });
   }
 
   abort(): Promise<void> {

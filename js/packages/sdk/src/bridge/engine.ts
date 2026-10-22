@@ -23,6 +23,7 @@ import type {
   TerminalCommand,
   TerminalCommandResult,
 } from '../internal';
+import type { OperationFilter } from '../operation';
 import { SessionError } from '../errors';
 import { BridgeEventStream } from './events';
 import { BridgeHttp, type HttpRequest } from './http';
@@ -252,10 +253,15 @@ export class BridgeEngine implements Engine {
     }
   }
 
-  operations(sessionId: string, options?: RequestOptions): Promise<readonly Operation[]> {
+  operations(
+    sessionId: string,
+    filter?: OperationFilter,
+    options?: RequestOptions,
+  ): Promise<readonly Operation[]> {
     return this.http.send<Operation[]>({
       method: 'GET',
       path: sessionPath(sessionId, '/operations'),
+      query: { status: filter?.status?.join(',') },
       ...keyed(options),
     });
   }
