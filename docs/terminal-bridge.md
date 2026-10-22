@@ -170,8 +170,30 @@ Settlement runs on the bridge, not in the page, so what can be recovered depends
 **Keep on the register side**, before and during each settlement:
 
 - the lane's `saleId` and the session `id` (for example in `sessionStorage`);
-- the `SettlementResult` of every successful sale, or at least its `movements` (`step`, `poiTransactionId`, `poiTransactionTimestamp`). These are what an `OriginalSaleRecord` is built from, and a later session needs them to void the sale;
+- the `OriginalSaleRecord` of every successful sale, built when `settle()` resolves (below). A later session needs it to void the sale;
 - `failure.serviceId` from a `RECOVERY_REQUIRED` step (`SettlementFailure`), and the `abandonedSettlement` record after an `ABANDON`.
+
+The record is the result's per-leg POI references plus the member. The JavaScript SDK has no helper for this (Java has `OriginalSaleRecord.from(result, memberId)`), so copy the fields:
+
+```ts
+const result = await session.settle();
+const record: OriginalSaleRecord = {
+  cardPoiTransactionId: result.poiTransactionId,
+  cardPoiTransactionTimestamp: result.poiTransactionTimestamp,
+  storedValuePoiTransactionId: result.storedValuePoiTransactionId,
+  storedValuePoiTransactionTimestamp: result.storedValuePoiTransactionTimestamp,
+  rebatePoiTransactionId: result.rebatePoiTransactionId,
+  rebatePoiTransactionTimestamp: result.rebatePoiTransactionTimestamp,
+  redemptionPoiTransactionId: result.redemptionPoiTransactionId,
+  redemptionPoiTransactionTimestamp: result.redemptionPoiTransactionTimestamp,
+  awardPoiTransactionId: result.awardPoiTransactionId,
+  awardPoiTransactionTimestamp: result.awardPoiTransactionTimestamp,
+  memberId: session.member.current?.memberId,
+};
+persist(record);
+```
+
+A sale that loaded a gift card (a `STORED_VALUE_LOAD` movement) also needs `storedValueLoads`: one `{ basketReference, amount, poiTransactionId, poiTransactionTimestamp }` per loaded basket line. The result does not carry the basket reference, so build these from your basket line and the matching movement.
 
 ### The page reloaded or the register crashed
 
@@ -182,7 +204,8 @@ The bridge is still running, and so are the session and any operation in flight:
 
   ```bash
   curl -s http://127.0.0.1:48333/v1/sessions/<id>                          # basket, member, context, ended?
-  curl -s "http://127.0.0.1:48333/v1/sessions/<id>/operations?status=running,awaitingReply"
+  curl -s http://127.0.0.1:48333/v1/sessions/<id>/operations                # every operation; the settle you want is the latest `type: settle`
+  curl -s "http://127.0.0.1:48333/v1/sessions/<id>/operations?status=running,awaitingReply"  # only what is still in flight
   curl -s http://127.0.0.1:48333/v1/sessions/<id>/operations/<operationId> # result, error, abandonedSettlement
   ```
 
@@ -210,7 +233,7 @@ The terminal is not affected. The next terminal session started with the same `s
    ```
 
    Inside a running settlement the SDK already does this itself when an exchange ends without an outcome: `outcomeCertainty: INDETERMINATE` means the status check could not settle it either. [Verify payment status](./verify-transaction-status.md) has the Nexo semantics, including when *not found* is trustworthy.
-3. If the sale completed, its persisted movements are the `OriginalSaleRecord`, and `session.voidTransaction(record)` reverses it from the new session. Refunds of a completed sale work the same way, from its references.
+3. If the sale completed, `session.voidTransaction(record)` with its persisted `OriginalSaleRecord` reverses it from the new session.
 4. If you have neither a `ServiceID` nor a result, use `pos.terminal().totals()` (or `curl -X POST http://127.0.0.1:48333/v1/terminal/totals`) and the terminal's and acquirer's reports to find the transaction, and reconcile it by hand.
 
 The bridge itself does not expose the `ServiceID` of an operation in flight. The protocol describes a `serviceId` on the operation resource, but the host does not fill it in yet, and the bridge log does not record it. A request that never produced a `RECOVERY_REQUIRED` step or a result therefore ends in step 4.
@@ -227,7 +250,9 @@ curl -X DELETE http://127.0.0.1:48333/v1/sessions/<id> -H "Idempotency-Key: $(uu
 
 - stop a running settlement with `POST /v1/sessions/<id>/abort`, which unwinds it at the next step boundary;
 - answer a pending step through `POST .../operations/<operationId>/reply`, or wait for its default;
-- retry a partially failed void in the same session.
+- finish an incomplete rollback of a failed settlement with `voidTransaction()` in the same session;
+- retry a partially failed void in the same session (`voidTransaction()`, or `voidTransaction(record)` with the same record for a prior sale);
+- retry `settle()` with the same refund allocations when a failed settlement had already committed some.
 
 If none of that can complete, record the incident and the references for reconciliation, then force-end it:
 
@@ -236,7 +261,7 @@ curl -X POST http://127.0.0.1:48333/v1/sessions/<id>/force-end -H "Idempotency-K
   -H 'Content-Type: application/json' -d '{"reason":"operator escalated incomplete recovery"}'
 ```
 
-`force-end` needs a non-blank `reason`. It seals the session with the recovery still unresolved and drops that session's protection against duplicate movements. Restarting the bridge clears a stuck lane too, with the losses described [above](#the-bridge-stopped-or-crashed).
+`force-end` needs a non-blank `reason`. It seals the session with the recovery still unresolved. Restarting the bridge clears a stuck lane too, with the losses described [above](#the-bridge-stopped-or-crashed).
 
 ---
 
