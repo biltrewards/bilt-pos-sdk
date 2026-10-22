@@ -638,7 +638,7 @@ public final class SimulatedTerminalClient implements TerminalClient {
           MessageCategoryType.REVERSAL,
           "NotFound");
     }
-    if (original.reversed) {
+    if (original.reversed || original.refunded.signum() > 0) {
       return failure(
           requestHeader(header, MessageCategoryType.REVERSAL),
           MessageCategoryType.REVERSAL,

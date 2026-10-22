@@ -115,18 +115,74 @@ class SimulatedTerminalClientTest {
     assertEquals(
         "NotFound",
         unknownReversal.getReversalResponse().getResponse().getErrorCondition().toValue());
+    SaleToPOIResponse voidableSale =
+        terminal
+            .request(request("Payment", "sale-to-void", paymentBody("3.00", null)))
+            .getSaleToPOIResponse();
+    String voidablePoiId =
+        voidableSale.getPaymentResponse().getPoiData().getPoiTransactionID().getTransactionID();
     SaleToPOIResponse reversal =
         terminal
-            .request(request("Reversal", "void-sale", reversalBody(poiId)))
+            .request(request("Reversal", "void-sale", reversalBody(voidablePoiId)))
             .getSaleToPOIResponse();
     assertEquals("Success", reversal.getReversalResponse().getResponse().getResult().toValue());
     SaleToPOIResponse secondReversal =
         terminal
-            .request(request("Reversal", "void-sale-again", reversalBody(poiId)))
+            .request(request("Reversal", "void-sale-again", reversalBody(voidablePoiId)))
             .getSaleToPOIResponse();
     assertEquals(
         "Refusal",
         secondReversal.getReversalResponse().getResponse().getErrorCondition().toValue());
+  }
+
+  @Test
+  void refusesVoidingAPaymentAfterPartialRefund() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    SaleToPOIResponse sale =
+        terminal
+            .request(request("Payment", "sale-after-refund", paymentBody("20.00", null)))
+            .getSaleToPOIResponse();
+    String poiId = sale.getPaymentResponse().getPoiData().getPoiTransactionID().getTransactionID();
+
+    SaleToPOIResponse partialRefund =
+        terminal
+            .request(request("Payment", "refund-5", paymentBody("5.00", poiId)))
+            .getSaleToPOIResponse();
+    assertEquals("Success", partialRefund.getPaymentResponse().getResponse().getResult().toValue());
+
+    SaleToPOIResponse reversal =
+        terminal
+            .request(request("Reversal", "void-after-refund", reversalBody(poiId)))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "Refusal", reversal.getReversalResponse().getResponse().getErrorCondition().toValue());
+
+    SaleToPOIResponse status =
+        terminal
+            .request(
+                request(
+                    "TransactionStatus",
+                    "status-after-refused-void",
+                    "{\"TransactionStatusRequest\":{\"MessageReference\":"
+                        + "{\"ServiceID\":\"sale-after-refund\",\"MessageCategory\":\"Payment\"}}}"))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "Success",
+        status
+            .getTransactionStatusResponse()
+            .getRepeatedMessageResponse()
+            .getRepeatedResponseMessageBody()
+            .getPaymentResponse()
+            .getResponse()
+            .getResult()
+            .toValue());
+
+    SaleToPOIResponse remainingRefund =
+        terminal
+            .request(request("Payment", "refund-remaining", paymentBody("15.00", poiId)))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "Success", remainingRefund.getPaymentResponse().getResponse().getResult().toValue());
   }
 
   @Test
