@@ -96,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Emulator: the Events, Detailed and Nexo log tabs are one selectable text block, so a drag selection keeps extending while the log scrolls, a click places a caret that Shift+click / Shift+arrows extend, Ctrl/Cmd+A selects the whole tab and copy works; the selection stays on the same text while new lines arrive.
 - The automatic basket display (receipt built on `addItem`) printed the ISO currency code next to every amount (`USD 79.99`); it now renders the currency symbol (`$79.99`), falling back to the code for currencies without a known symbol.
 - `docs/refund-referenced.md` placed `OriginalPOITransaction` under `PaymentData`; per the nexo schema it belongs under `PaymentTransaction`.
 

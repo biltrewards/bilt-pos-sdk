@@ -40,6 +40,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -64,11 +65,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -1955,17 +1958,48 @@ private fun EventsCard(state: EmulatorState, modifier: Modifier = Modifier) {
             }
             HorizontalDivider(modifier = Modifier.padding(bottom = 8.dp))
             val lines = tabs[selectedTab].second
-            SelectionContainer(modifier = Modifier.weight(1f)) {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(lines.asReversed()) { event ->
-                        Text(
-                            event,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                        )
-                    }
-                }
-            }
+            var selection by remember(selectedTab) { mutableStateOf(TextRange.Zero) }
+            var selectionLines by remember(selectedTab) { mutableStateOf(lines) }
+            val text = remember(lines) { lines.asReversed().joinToString("\n") }
+            val displayedSelection =
+                if (selectionLines === lines) selection
+                else shiftLogSelection(selectionLines, lines, selection)
+            BasicTextField(
+                value = TextFieldValue(text = text, selection = displayedSelection),
+                onValueChange = {
+                    selection = it.selection
+                    selectionLines = lines
+                },
+                readOnly = true,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                textStyle =
+                    MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        color = LocalContentColor.current,
+                    ),
+                cursorBrush = SolidColor(LocalContentColor.current),
+            )
         }
     }
+}
+
+internal fun shiftLogSelection(
+    old: List<String>,
+    new: List<String>,
+    selection: TextRange,
+): TextRange {
+    if (old.isEmpty() || new.isEmpty()) return TextRange.Zero
+
+    var prependedLines = 0
+    while (prependedLines < new.size && new[new.lastIndex - prependedLines] !== old.last()) {
+        prependedLines++
+    }
+    if (prependedLines == new.size) return TextRange.Zero
+
+    val delta = (0 until prependedLines).sumOf { new[new.lastIndex - it].length + 1 }
+    val newTextLength = new.sumOf { it.length } + new.size - 1
+    return TextRange(
+        start = (selection.start + delta).coerceIn(0, newTextLength),
+        end = (selection.end + delta).coerceIn(0, newTextLength),
+    )
 }
