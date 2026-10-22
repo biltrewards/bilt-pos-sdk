@@ -324,7 +324,7 @@ export class ShopperSessionImpl implements ShopperSession {
     const held = this.unclaimed.get(resource.id);
     if (held) {
       this.unclaimed.delete(resource.id);
-      this.replayHeld(held);
+      this.replayHeld(held, resource);
     }
     this.failIfEnded(operation, resource);
     if (operation.done) this.finishOperation(resource.id, operation);
@@ -402,7 +402,7 @@ export class ShopperSessionImpl implements ShopperSession {
     const held = this.unclaimed.get(resource.id);
     if (held) {
       this.unclaimed.delete(resource.id);
-      this.replayHeld(held);
+      this.replayHeld(held, resource);
     }
     this.failIfEnded(operation, resource);
     if (operation.done) this.finishOperation(resource.id, operation);
@@ -410,20 +410,36 @@ export class ShopperSessionImpl implements ShopperSession {
   }
 
   /**
-   * Applies events held while an operation was unnamed, skipping an `operation.step` a later
-   * held event already moved past: a newer step or a completion means the host resolved it,
-   * and the stream emits each step once — its handlers must not run again here.
+   * Applies events held while an operation was unnamed. A held `operation.step` the host has
+   * already resolved must not run its handlers again — the stream emits each step once. The
+   * snapshot's `pendingStep` anchors which held steps are live: anything older than its own
+   * event is resolved, and anything newer reached the buffer after the snapshot. With no
+   * pending step only a step buffered after the snapshot can be open — the last one.
    */
-  private replayHeld(held: OperationEvent[]): void {
+  private replayHeld(held: OperationEvent[], resource: OperationResource): void {
+    const pendingStepId = resource.pendingStep?.stepId;
     for (const [index, event] of held.entries()) {
-      if (event.type === 'operation.step' && this.superseded(held, index)) continue;
+      if (event.type === 'operation.step' && !this.stillPending(held, index, pendingStepId)) {
+        continue;
+      }
       this.routeOperationEvent(event);
     }
   }
 
-  /** A newer step or a completion later in the held buffer means the step at `index` is resolved. */
-  private superseded(held: OperationEvent[], index: number): boolean {
-    return held
+  /** Whether the held step at `index` could still be open, given the snapshot's `pendingStep`. */
+  private stillPending(held: OperationEvent[], index: number, pendingStepId?: string): boolean {
+    const step = held[index]!;
+    if (step.type !== 'operation.step') return false;
+    if (step.payload.stepId === pendingStepId) return true;
+    if (pendingStepId !== undefined) {
+      const anchor = held.findIndex(
+        (event) => event.type === 'operation.step' && event.payload.stepId === pendingStepId,
+      );
+      // Newer than the snapshot's pending step means it buffered after the snapshot; older or
+      // anchor-less means the host resolved it before it.
+      return anchor >= 0 && index > anchor;
+    }
+    return !held
       .slice(index + 1)
       .some((event) => event.type === 'operation.step' || event.type === 'operation.completed');
   }
