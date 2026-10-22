@@ -324,7 +324,7 @@ export class ShopperSessionImpl implements ShopperSession {
     const held = this.unclaimed.get(resource.id);
     if (held) {
       this.unclaimed.delete(resource.id);
-      for (const event of held) this.routeOperationEvent(event);
+      this.replayHeld(held);
     }
     this.failIfEnded(operation, resource);
     if (operation.done) this.finishOperation(resource.id, operation);
@@ -371,9 +371,9 @@ export class ShopperSessionImpl implements ShopperSession {
   /**
    * Wraps an operation the page did not start — one a listing returned or one found in flight
    * at attach — so its promise, `abort()` and step replies work as if this page had. Its
-   * earlier events replay from the held buffer: steps the host already resolved draw a
-   * `notPending`, which the reply path treats as redundant rather than a failure, so every
-   * held event is safe to apply as if it were live.
+   * earlier events replay from the held buffer; a held step the replay already moved past is
+   * skipped, and a step resolved since its event was buffered draws a `notPending`, which the
+   * reply path treats as redundant rather than a failure.
    */
   private adopt(resource: OperationResource): Operation<unknown> {
     const tracked = this.pending.get(resource.id);
@@ -402,11 +402,30 @@ export class ShopperSessionImpl implements ShopperSession {
     const held = this.unclaimed.get(resource.id);
     if (held) {
       this.unclaimed.delete(resource.id);
-      for (const event of held) this.routeOperationEvent(event);
+      this.replayHeld(held);
     }
     this.failIfEnded(operation, resource);
     if (operation.done) this.finishOperation(resource.id, operation);
     return operation.handle;
+  }
+
+  /**
+   * Applies events held while an operation was unnamed, skipping an `operation.step` a later
+   * held event already moved past: a newer step or a completion means the host resolved it,
+   * and the stream emits each step once — its handlers must not run again here.
+   */
+  private replayHeld(held: OperationEvent[]): void {
+    for (const [index, event] of held.entries()) {
+      if (event.type === 'operation.step' && this.superseded(held, index)) continue;
+      this.routeOperationEvent(event);
+    }
+  }
+
+  /** A newer step or a completion later in the held buffer means the step at `index` is resolved. */
+  private superseded(held: OperationEvent[], index: number): boolean {
+    return held
+      .slice(index + 1)
+      .some((event) => event.type === 'operation.step' || event.type === 'operation.completed');
   }
 
   /** The handlers an adopted operation of the type answers steps with; a terminal session maps them by operation type. */
