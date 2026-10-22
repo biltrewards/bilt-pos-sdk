@@ -309,17 +309,14 @@ export class ShopperSessionImpl implements ShopperSession {
 
   private accepted(operation: PendingOperation<unknown>, resource: OperationResource): void {
     operation.accept(resource);
-    // A listing may already have adopted this operation while its request was unanswered. The
-    // started handle keeps the handlers and becomes the tracked one; the duplicate is failed
-    // rather than left hanging on events it will never get.
+    // A listing may already have adopted this operation while its request was unanswered:
+    // that second handle is already out, so it follows this one — it settles with the same
+    // events but its own step replies stay off, since this handle's handlers are the
+    // registered ones.
     const adopted = this.pending.get(resource.id);
     if (adopted !== undefined && adopted !== operation) {
-      adopted.fail(
-        new SessionError({
-          code: 'INVALID_STATE',
-          message: `operation ${resource.id} is already tracked on session ${this.id}`,
-        }),
-      );
+      adopted.follow(operation);
+      adopted.update(resource);
     }
     // Held events replay even when accepting already settled the operation: its movements still
     // belong to the register's handlers, which must hear them before the result resolves.
@@ -361,6 +358,8 @@ export class ShopperSessionImpl implements ShopperSession {
    * one returns: a finished one is already settled, one still running follows the stream.
    */
   async operations(filter?: OperationFilter): Promise<readonly Operation<unknown>[]> {
+    // An empty status list selects nothing; to the host it would serialize as no filter.
+    if (filter?.status !== undefined && filter.status.length === 0) return [];
     const resources = await this.engine.operations(this.id, filter);
     return resources.map((resource) => this.adopt(resource));
   }
@@ -372,13 +371,19 @@ export class ShopperSessionImpl implements ShopperSession {
   /**
    * Wraps an operation the page did not start — one a listing returned or one found in flight
    * at attach — so its promise, `abort()` and step replies work as if this page had. Its
-   * earlier events were held during the replay; their steps are marked answered before they
-   * replay, since every one but the `pendingStep` the resource still carries was resolved
-   * before this page existed, and re-answering would draw a `notPending` from the host.
+   * earlier events replay from the held buffer: steps the host already resolved draw a
+   * `notPending`, which the reply path treats as redundant rather than a failure, so every
+   * held event is safe to apply as if it were live.
    */
   private adopt(resource: OperationResource): Operation<unknown> {
     const tracked = this.pending.get(resource.id);
-    if (tracked) return tracked.handle;
+    if (tracked) {
+      // The listing may be fresher than the tracker: a delayed completion event leaves a
+      // settled result on the resource that has not reached the stream yet.
+      tracked.update(resource);
+      if (tracked.done) this.finishOperation(resource.id, tracked);
+      return tracked.handle;
+    }
     const done = this.finishedOps.get(resource.id);
     if (done !== undefined) return done;
     const operation = new PendingOperation<unknown>(
@@ -397,10 +402,7 @@ export class ShopperSessionImpl implements ShopperSession {
     const held = this.unclaimed.get(resource.id);
     if (held) {
       this.unclaimed.delete(resource.id);
-      for (const event of held) {
-        if (event.type === 'operation.step') operation.noteStep(event.payload.stepId);
-        this.routeOperationEvent(event);
-      }
+      for (const event of held) this.routeOperationEvent(event);
     }
     this.failIfEnded(operation, resource);
     if (operation.done) this.finishOperation(resource.id, operation);

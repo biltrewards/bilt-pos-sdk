@@ -125,6 +125,8 @@ describe('operations on an attached session', () => {
     // The listing hands out the same handle again rather than a second tracker.
     expect(attached.operation(second!.id)).toBe(inFlight[0]);
     expect(attached.operation('op_nope')).toBeUndefined();
+    // An empty status list selects nothing rather than serializing as no filter.
+    await expect(attached.operations({ status: [] })).resolves.toEqual([]);
   });
 
   it('resolves a handle for a finished operation with its stored result', async () => {

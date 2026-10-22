@@ -35,6 +35,10 @@ export class PendingOperation<T> {
   private currentStatus: OperationStatus = 'queued';
   private settled = false;
   private readonly answeredSteps = new Set<string>();
+  /** A second handle on this operation follows it: when its request raced a listing's adopt. */
+  private readonly mirrors = new Set<PendingOperation<unknown>>();
+  /** Set once this tracker follows another: mirrored updates still apply, only the owner replies. */
+  private owner: PendingOperation<unknown> | undefined;
 
   constructor(
     readonly type: OperationType,
@@ -85,6 +89,7 @@ export class PendingOperation<T> {
   /** A fresh view of the resource, from an event or a poll. */
   update(resource: OperationResource): void {
     if (this.settled) return;
+    for (const mirror of this.mirrors) mirror.update(resource);
     this.currentStatus = resource.status;
     if (resource.status === 'awaitingReply' && resource.pendingStep) {
       this.step(resource.pendingStep);
@@ -117,6 +122,7 @@ export class PendingOperation<T> {
   /** Fails the operation from the client side (the session ended, the request was refused). */
   fail(error: unknown): void {
     if (this.settled) return;
+    for (const mirror of this.mirrors) mirror.fail(error);
     this.settled = true;
     // An abort waiting for the engine id must not wait for an acceptance that will never matter.
     this.resolveAcceptance(undefined);
@@ -126,22 +132,29 @@ export class PendingOperation<T> {
   }
 
   /**
-   * Marks a step as already answered without sending a reply: an attached session replays
-   * `operation.step` events the host resolved before this page existed.
+   * Makes this tracker follow `owner`: a `operations()` listing adopted the operation while
+   * `owner`'s request was still unanswered, so it is the second handle on one operation. It
+   * keeps updating with the owner's events but never sends its own step replies — the owner's
+   * handlers are the ones the register registered.
    */
-  noteStep(stepId: string): void {
-    this.answeredSteps.add(stepId);
+  follow(owner: PendingOperation<unknown>): void {
+    this.owner = owner;
+    // The mirrors only receive non-generic callbacks, so `this` is safe to widen.
+    owner.mirrors.add(this as PendingOperation<unknown>);
   }
 
   /** An `operation.step` for this operation, from the stream or a poll; each step is answered once. */
   step(step: OperationStep): void {
+    for (const mirror of this.mirrors) mirror.step(step);
     if (this.settled || this.answeredSteps.has(step.stepId)) return;
     this.answeredSteps.add(step.stepId);
     this.currentStatus = 'awaitingReply';
-    void this.answer(step);
+    // A followed tracker records the step but leaves the reply to the owner's handlers.
+    if (this.owner === undefined) void this.answer(step);
   }
 
   movement(movement: SettlementMovement): void {
+    for (const mirror of this.mirrors) mirror.movement(movement);
     fanOutMovement(this.steps, movement, (context, error) => this.links.reportStep(context, error));
   }
 
@@ -155,7 +168,12 @@ export class PendingOperation<T> {
         try {
           await this.links.reply(id, answer.reply);
         } catch (error) {
-          this.links.reportStep(`replying to ${step.kind} step ${step.stepId} failed`, error);
+          // `INVALID_STATE` here is the host's `notPending`: the step was already resolved
+          // by another page or by its deadline — exactly what an attach's replayed step
+          // events produce — so the reply is redundant rather than a fault.
+          if (!(error instanceof SessionError && error.code === 'INVALID_STATE')) {
+            this.links.reportStep(`replying to ${step.kind} step ${step.stepId} failed`, error);
+          }
         }
         return;
       }

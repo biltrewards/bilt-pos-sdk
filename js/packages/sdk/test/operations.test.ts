@@ -210,6 +210,26 @@ describe('starting an operation', () => {
     expect(op.status).toBe('failed');
   });
 
+  it('settles a handle listed while its request was unanswered with the started operation', async () => {
+    const engine = new ScriptedEngine();
+    let release!: () => void;
+    engine.acceptanceDelay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { session } = await lane(engine);
+    const op = session.settle();
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    // The host has already named the operation even though the acceptance is held back.
+    const [listed] = await session.operations();
+    expect(listed).toBeDefined();
+    release();
+    const id = engine.lastOperation(session.id).id;
+    engine.complete(session.id, id, { result: { cardAmountCharged: '1' } } as never);
+    await op;
+    await listed;
+    expect(session.operation(id)).toBe(op);
+  });
+
   it('rejects an operation whose acceptance arrives after the session ended', async () => {
     const engine = new ScriptedEngine();
     let release!: () => void;

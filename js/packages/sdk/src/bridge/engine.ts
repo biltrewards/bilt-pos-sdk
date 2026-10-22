@@ -258,6 +258,8 @@ export class BridgeEngine implements Engine {
     filter?: OperationFilter,
     options?: RequestOptions,
   ): Promise<readonly Operation[]> {
+    // An empty status list selects nothing; sent to the host it would read as no filter.
+    if (filter?.status?.length === 0) return Promise.resolve([]);
     return this.http.send<Operation[]>({
       method: 'GET',
       path: sessionPath(sessionId, '/operations'),

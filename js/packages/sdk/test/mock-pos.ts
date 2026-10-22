@@ -791,18 +791,18 @@ export class MockBiltPos implements BiltPos {
     return Promise.resolve(session);
   }
 
-  attachShopperSession(
+  async attachShopperSession(
     sessionId: string,
     _options?: AttachSessionOptions,
   ): Promise<ShopperSession> {
-    return Promise.resolve(this.attach(sessionId, 'local'));
+    return this.attach(sessionId, 'local');
   }
 
-  attachTerminalSession(
+  async attachTerminalSession(
     sessionId: string,
     _options?: AttachTerminalSessionOptions,
   ): Promise<TerminalShopperSession> {
-    return Promise.resolve(this.attach(sessionId, 'terminal') as unknown as TerminalShopperSession);
+    return this.attach(sessionId, 'terminal') as unknown as TerminalShopperSession;
   }
 
   private attach(sessionId: string, kind: 'local' | 'terminal'): MockShopperSession {
