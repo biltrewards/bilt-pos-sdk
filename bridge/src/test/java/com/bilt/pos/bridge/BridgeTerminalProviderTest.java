@@ -1,13 +1,16 @@
 package com.bilt.pos.bridge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.bilt.pos.bridge.config.FileBridgeConfigSource;
 import com.bilt.pos.host.TerminalInfo;
 import com.bilt.pos.nexo.client.TerminalClient;
+import com.bilt.pos.nexo.sim.SimulatedTerminalClient;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -51,6 +54,25 @@ class BridgeTerminalProviderTest {
       bridge.reload();
 
       assertNull(provider.client());
+    }
+  }
+
+  @Test
+  void simulatedTerminalIsBuiltWithoutNetworkSettingsAndReportedReachable(@TempDir Path dir)
+      throws Exception {
+    Path file = dir.resolve("simulated.json");
+    int free;
+    try (ServerSocket s = new ServerSocket(0)) {
+      free = s.getLocalPort();
+    }
+    Files.writeString(file, "{\"port\":" + free + ",\"terminal\":{\"simulated\":true}}");
+
+    try (Bridge bridge = new Bridge(new FileBridgeConfigSource(file))) {
+      bridge.start();
+      BridgeTerminalProvider provider = new BridgeTerminalProvider(bridge);
+
+      assertInstanceOf(SimulatedTerminalClient.class, provider.client());
+      assertTrue(provider.info().reachable());
     }
   }
 }

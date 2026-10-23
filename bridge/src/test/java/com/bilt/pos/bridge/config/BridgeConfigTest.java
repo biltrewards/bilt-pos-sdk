@@ -112,6 +112,34 @@ class BridgeConfigTest {
   }
 
   @Test
+  void simulatedTerminalNeedsNoNetworkSettingsAndRoundTripsMembers() throws Exception {
+    BridgeConfig config =
+        BridgeConfig.parse(
+            "{\"terminal\":{\"simulated\":true,\"members\":\"members.json\","
+                + "\"encryption\":true,\"trustAll\":true,\"environment\":\"STAGING\","
+                + "\"passphrase\":\"sim-secret\"}}");
+    TerminalConfig terminal = config.terminal().orElseThrow();
+
+    assertTrue(terminal.simulated());
+    assertEquals(Optional.of(Path.of("members.json")), terminal.members());
+    BridgeConfig roundTrip = BridgeConfig.parse(config.toJson().toString());
+    assertTrue(roundTrip.terminal().orElseThrow().simulated());
+    assertEquals(
+        Optional.of(Path.of("members.json")), roundTrip.terminal().orElseThrow().members());
+    assertFalse(config.redacted().toJson().toString().contains("sim-secret"));
+    assertFalse(terminal.toString().contains("sim-secret"));
+  }
+
+  @Test
+  void membersPathRequiresSimulatedTerminal() {
+    BridgeConfigException e =
+        assertThrows(
+            BridgeConfigException.class,
+            () -> BridgeConfig.parse("{\"terminal\":{\"host\":\"h\",\"members\":\"m.json\"}}"));
+    assertTrue(e.getMessage().contains("members requires simulated=true"), e.getMessage());
+  }
+
+  @Test
   void theFormerTerminalsListAndPoiIdAreRejectedWithMigrationAdvice() {
     BridgeConfigException list =
         assertThrows(

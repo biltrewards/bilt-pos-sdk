@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -57,7 +58,9 @@ public record BridgeConfig(
           "keyVersion",
           "trustAll",
           "caCertificatePath",
-          "environment");
+          "environment",
+          "simulated",
+          "members");
 
   public BridgeConfig {
     allowedOrigins = List.copyOf(allowedOrigins);
@@ -137,6 +140,8 @@ public record BridgeConfig(
       node.put("trustAll", t.trustAll());
       node.put("caCertificatePath", t.caCertificatePath().orElse(null));
       node.put("environment", t.environment().map(Enum::name).orElse(null));
+      node.put("simulated", t.simulated());
+      node.put("members", t.members().map(Path::toString).orElse(null));
     }
     return root;
   }
@@ -225,7 +230,19 @@ public record BridgeConfig(
     rejectUnknownKeys(node, TERMINAL_KEYS, where);
     Optional<String> label = optionalText(node, "label", where);
     Optional<String> model = optionalText(node, "model", where);
-    String host = requireText(node, "host", where);
+    boolean simulated = optionalBoolean(node, "simulated", false, where);
+    Optional<String> memberFile = optionalText(node, "members", where);
+    if (!simulated && memberFile.isPresent()) {
+      throw new BridgeConfigException(where + ".members requires simulated=true");
+    }
+    Optional<Path> members;
+    try {
+      members = memberFile.map(Path::of);
+    } catch (InvalidPathException e) {
+      throw new BridgeConfigException(where + ".members is not a valid path", e);
+    }
+    String host =
+        simulated ? optionalText(node, "host", where).orElse("") : requireText(node, "host", where);
     int port = parsePort(node.path("port"), DEFAULT_TERMINAL_PORT, where + ".port");
     boolean encryption = optionalBoolean(node, "encryption", false, where);
     Optional<String> passphrase = optionalText(node, "passphrase", where);
@@ -235,36 +252,38 @@ public record BridgeConfig(
     Optional<String> caPath = optionalText(node, "caCertificatePath", where);
     Optional<BiltTerminalEnvironment> environment = parseEnvironment(node, where);
 
-    if (encryption) {
-      if (passphrase.isEmpty()) {
-        throw new BridgeConfigException(where + ": encryption is on but passphrase is missing");
+    if (!simulated) {
+      if (encryption) {
+        if (passphrase.isEmpty()) {
+          throw new BridgeConfigException(where + ": encryption is on but passphrase is missing");
+        }
+        if (keyId.isEmpty()) {
+          throw new BridgeConfigException(where + ": encryption is on but keyId is missing");
+        }
       }
-      if (keyId.isEmpty()) {
-        throw new BridgeConfigException(where + ": encryption is on but keyId is missing");
+      if (keyVersion < 0) {
+        throw new BridgeConfigException(where + ".keyVersion must not be negative");
       }
-    }
-    if (keyVersion < 0) {
-      throw new BridgeConfigException(where + ".keyVersion must not be negative");
-    }
-    if (trustAll) {
-      if (caPath.isPresent() || environment.isPresent()) {
-        throw new BridgeConfigException(
-            where
-                + ": trustAll cannot be combined with caCertificatePath or environment; the SDK"
-                + " refuses the contradiction, so pick one");
-      }
-    } else {
-      if (caPath.isEmpty()) {
-        throw new BridgeConfigException(
-            where + ": caCertificatePath is required unless trustAll is true");
-      }
-      if (environment.isEmpty()) {
-        throw new BridgeConfigException(
-            where + ": environment (PRODUCTION or STAGING) is required unless trustAll is true");
-      }
-      if (!Files.isRegularFile(Path.of(caPath.get()))) {
-        throw new BridgeConfigException(
-            where + ".caCertificatePath '" + caPath.get() + "' does not exist");
+      if (trustAll) {
+        if (caPath.isPresent() || environment.isPresent()) {
+          throw new BridgeConfigException(
+              where
+                  + ": trustAll cannot be combined with caCertificatePath or environment; the SDK"
+                  + " refuses the contradiction, so pick one");
+        }
+      } else {
+        if (caPath.isEmpty()) {
+          throw new BridgeConfigException(
+              where + ": caCertificatePath is required unless trustAll is true");
+        }
+        if (environment.isEmpty()) {
+          throw new BridgeConfigException(
+              where + ": environment (PRODUCTION or STAGING) is required unless trustAll is true");
+        }
+        if (!Files.isRegularFile(Path.of(caPath.get()))) {
+          throw new BridgeConfigException(
+              where + ".caCertificatePath '" + caPath.get() + "' does not exist");
+        }
       }
     }
     return Optional.of(
@@ -279,7 +298,9 @@ public record BridgeConfig(
             keyVersion,
             trustAll,
             caPath,
-            environment));
+            environment,
+            simulated,
+            members));
   }
 
   private static Optional<BiltTerminalEnvironment> parseEnvironment(JsonNode node, String where)
