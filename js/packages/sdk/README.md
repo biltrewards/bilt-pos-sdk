@@ -45,7 +45,7 @@ session.on('background.error', (error) => log.warn(error));
 await session.basket.addItem({ sku: 'SKU-4471', description: 'Toothpaste', unitPrice: '4.99' });
 await session.member.set({ resolver: { type: 'PHONE', value: '+12015550123' } });
 
-const settlement = session.settle({
+const settlement = session.settle(undefined, {
   onRebatesRedeemed: (result) => recomputeTax(result.updatedBasket, result.suggestedTotal),
   onError: (failure) => (failure.outcomeCertainty === 'DEFINITIVE' ? 'ABORT' : 'RETRY'),
   onCardCharged: (movement) => journal(movement),

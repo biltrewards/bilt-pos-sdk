@@ -8,7 +8,7 @@ import type {
 } from '@biltorg/pos-protocol';
 import { SessionError } from '../errors';
 import type { Engine, EngineOperationRequest } from '../internal';
-import type { Operation } from '../operation';
+import type { Operation, OperationFilter } from '../operation';
 import type {
   RetailMediaWidget,
   SessionEventHandler,
@@ -47,6 +47,8 @@ const RECONNECT_BASE_MS = 250;
 const RECONNECT_MAX_MS = 10_000;
 /** How long `end()` waits for the `session.ended` event once the end operation succeeded. */
 const ENDED_EVENT_GRACE_MS = 3_000;
+/** The statuses of operations still in flight; attach adopts only these. */
+const IN_FLIGHT: OperationFilter = { status: ['queued', 'running', 'awaitingReply'] };
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -84,6 +86,9 @@ export function toCreateSessionRequest(
   return request;
 }
 
+/** The parts of a session's options the impl reads; `AttachSessionOptions` brings the same shape. */
+type SessionViewOptions = Pick<ShopperSessionOptions, 'phase' | 'attributes' | 'widgets'>;
+
 /**
  * The SDK's `ShopperSession` over an engine. State lives on the host; this object mirrors it
  * from the session's event stream, which it pumps from creation until `session.ended`.
@@ -116,6 +121,8 @@ export class ShopperSessionImpl implements ShopperSession {
 
   private widgetHandles: RetailMediaWidgetImpl[] = [];
   private readonly pending = new Map<string, PendingOperation<unknown>>();
+  /** Settled handles, so `operation(id)` and another `operations()` return the same handle again. */
+  private readonly finishedOps = new Map<string, Operation<unknown>>();
   /** Operations whose request has not been answered yet, so they have no engine id to key `pending` by. */
   private readonly requesting = new Set<PendingOperation<unknown>>();
   private readonly unclaimed = new Map<string, OperationEvent[]>();
@@ -125,18 +132,21 @@ export class ShopperSessionImpl implements ShopperSession {
   private readonly versions = { basket: 0, member: 0, context: 0 };
   private endedPromise: Promise<void>;
   private resolveEnded!: () => void;
+  /** Whether the host already reported the session `ended` when it was created or attached. */
+  private readonly endedOnHost: boolean;
   private endedEventSeen: Promise<void>;
   private resolveEndedEventSeen!: () => void;
 
   constructor(
     runtime: SessionRuntime,
     session: Session,
-    private readonly options: ShopperSessionOptions,
+    private readonly options: SessionViewOptions,
   ) {
     this.engine = runtime.engine;
     this.report = runtime.report;
     this.emitter = new SessionEmitter(runtime.report);
     this.id = session.id;
+    this.endedOnHost = session.state === 'ended';
     this.kind = session.kind;
     this.saleId = session.saleId;
     this.currency = session.currency;
@@ -179,23 +189,34 @@ export class ShopperSessionImpl implements ShopperSession {
     });
   }
 
-  /** Starts the event pump and loads the initial mirrors; the session is usable once this resolves. */
-  async initialize(): Promise<this> {
+  /**
+   * Starts the event pump and loads the initial mirrors; the session is usable once this
+   * resolves. `attach` is for a session the host was already running: its mirrors come from
+   * the same replay, its in-flight operations are adopted rather than started, and a failed
+   * init only detaches — the session may belong to a page still using it, so it is not ended.
+   */
+  async initialize(attach = false): Promise<this> {
+    // A session the host already ended has nothing left to stream — an expired event buffer
+    // would only have the pump resubscribing forever — so it is marked ended up front; its
+    // mirrors still come from the resync below.
+    if (this.endedOnHost) this.markEnded();
     this.pumpDone = this.pump();
     try {
-      const [widgets] = await Promise.all([
+      const [widgets, , inFlight] = await Promise.all([
         this.options.widgets && this.options.widgets.length > 0
           ? this.engine.widgets(this.id)
           : Promise.resolve([]),
         this.resync(),
+        attach ? this.engine.operations(this.id, IN_FLIGHT) : Promise.resolve([]),
       ]);
       this.widgetHandles = buildWidgets(this.engine, this.id, this.options.widgets ?? [], widgets);
+      for (const resource of inFlight) this.adopt(resource);
     } catch (error) {
       // The caller never receives the session, so nothing else can release the terminal or stop
-      // the pump. No money has moved yet, so a plain `end` is enough; if even that fails, the
-      // original error is the one worth surfacing.
+      // the pump. No money has moved yet, so a plain `end` is enough on a start; if even that
+      // fails, the original error is the one worth surfacing.
       try {
-        await this.end();
+        if (!attach) await this.end();
       } catch (endError) {
         this.report(`ending session ${this.id} after a failed start`, endError);
       } finally {
@@ -287,16 +308,35 @@ export class ShopperSessionImpl implements ShopperSession {
 
   private accepted(operation: PendingOperation<unknown>, resource: OperationResource): void {
     operation.accept(resource);
+    // A listing may already have adopted this operation while its request was unanswered:
+    // that second handle is already out, so it follows this one — it settles with the same
+    // events but its own step replies stay off, since this handle's handlers are the
+    // registered ones.
+    const adopted = this.pending.get(resource.id);
+    if (adopted !== undefined && adopted !== operation) {
+      adopted.follow(operation);
+      adopted.update(resource);
+    }
     // Held events replay even when accepting already settled the operation: its movements still
     // belong to the register's handlers, which must hear them before the result resolves.
     this.pending.set(resource.id, operation);
     const held = this.unclaimed.get(resource.id);
     if (held) {
       this.unclaimed.delete(resource.id);
-      for (const event of held) this.routeOperationEvent(event);
+      this.replayHeld(held, resource);
     }
-    // The pump is gone once the session ended, so an operation still open now would never hear
-    // from the host again. `end` itself is exempt: it is how the session got here.
+    this.failIfEnded(operation, resource);
+    if (operation.done) this.finishOperation(resource.id, operation);
+  }
+
+  /** Moves a settled operation out of `pending`, keeping its handle for `operation(id)` lookups. */
+  private finishOperation(operationId: string, operation: PendingOperation<unknown>): void {
+    this.pending.delete(operationId);
+    this.finishedOps.set(operationId, operation.handle);
+  }
+
+  /** The pump is gone once the session ended, so an operation still open now would never hear from the host again; `end` itself is exempt. */
+  private failIfEnded(operation: PendingOperation<unknown>, resource: OperationResource): void {
     if (
       !operation.done &&
       this.currentState === 'ended' &&
@@ -310,7 +350,99 @@ export class ShopperSessionImpl implements ShopperSession {
         }),
       );
     }
-    if (operation.done) this.pending.delete(resource.id);
+  }
+
+  /**
+   * The session's operations, newest first, each wrapped as the `Operation` handle a started
+   * one returns: a finished one is already settled, one still running follows the stream.
+   */
+  async operations(filter?: OperationFilter): Promise<readonly Operation<unknown>[]> {
+    // An empty status list selects nothing; to the host it would serialize as no filter.
+    if (filter?.status !== undefined && filter.status.length === 0) return [];
+    const resources = await this.engine.operations(this.id, filter);
+    return resources.map((resource) => this.adopt(resource));
+  }
+
+  operation(operationId: string): Operation<unknown> | undefined {
+    return this.pending.get(operationId)?.handle ?? this.finishedOps.get(operationId);
+  }
+
+  /**
+   * Wraps an operation the page did not start — one a listing returned or one found in flight
+   * at attach — so its promise, `abort()` and step replies work as if this page had. Its
+   * earlier events replay from the held buffer; a held step the replay already moved past is
+   * skipped, and a step resolved since its event was buffered draws a `notPending`, which the
+   * reply path treats as redundant rather than a failure. Steps stay open until `guide()`
+   * registers the handlers that answer them, as a Java flow would.
+   */
+  private adopt(resource: OperationResource): Operation<unknown> {
+    const tracked = this.pending.get(resource.id);
+    if (tracked) {
+      // The listing may be fresher than the tracker: a delayed completion event leaves a
+      // settled result on the resource that has not reached the stream yet.
+      tracked.update(resource);
+      if (tracked.done) this.finishOperation(resource.id, tracked);
+      return tracked.handle;
+    }
+    const done = this.finishedOps.get(resource.id);
+    if (done !== undefined) return done;
+    const operation = new PendingOperation<unknown>(
+      resource.type,
+      resource.id,
+      undefined,
+      {
+        reply: (operationId, reply) => this.reply(operationId, reply),
+        abort: (operationId) =>
+          this.engine.abort(this.id, operationId, { idempotencyKey: newIdempotencyKey() }),
+        reportStep: (context, error) => this.reportStep(context, error),
+      },
+      true,
+    );
+    this.pending.set(resource.id, operation);
+    operation.accept(resource);
+    const held = this.unclaimed.get(resource.id);
+    if (held) {
+      this.unclaimed.delete(resource.id);
+      this.replayHeld(held, resource);
+    }
+    this.failIfEnded(operation, resource);
+    if (operation.done) this.finishOperation(resource.id, operation);
+    return operation.handle;
+  }
+
+  /**
+   * Applies events held while an operation was unnamed. A held `operation.step` the host has
+   * already resolved must not run its handlers again — the stream emits each step once. The
+   * snapshot's `pendingStep` anchors which held steps are live: anything older than its own
+   * event is resolved, and anything newer reached the buffer after the snapshot. With no
+   * pending step only a step buffered after the snapshot can be open — the last one.
+   */
+  private replayHeld(held: OperationEvent[], resource: OperationResource): void {
+    const pendingStepId = resource.pendingStep?.stepId;
+    for (const [index, event] of held.entries()) {
+      if (event.type === 'operation.step' && !this.stillPending(held, index, pendingStepId)) {
+        continue;
+      }
+      this.routeOperationEvent(event);
+    }
+  }
+
+  /** Whether the held step at `index` could still be open, given the snapshot's `pendingStep`. */
+  private stillPending(held: OperationEvent[], index: number, pendingStepId?: string): boolean {
+    const step = held[index]!;
+    if (step.type !== 'operation.step') return false;
+    if (step.payload.stepId === pendingStepId) return true;
+    if (pendingStepId !== undefined) {
+      const anchor = held.findIndex(
+        (event) => event.type === 'operation.step' && event.payload.stepId === pendingStepId,
+      );
+      // Newer than the snapshot's pending step means it buffered after the snapshot; older or
+      // anchor-less means the host resolved it before it.
+      return anchor >= 0 && index > anchor;
+    }
+    return !held
+      .slice(index + 1)
+      .some((event) => event.type === 'operation.step' || event.type === 'operation.completed');
   }
 
   private reply(operationId: string, reply: StepReply): Promise<unknown> {
@@ -432,7 +564,7 @@ export class ShopperSessionImpl implements ShopperSession {
       try {
         const resource = await this.engine.operation(this.id, id);
         operation.update(resource);
-        if (operation.done) this.pending.delete(id);
+        if (operation.done) this.finishOperation(id, operation);
       } catch (error) {
         if (error instanceof SessionError && error.code === 'NOT_FOUND') {
           this.pending.delete(id);
@@ -506,14 +638,14 @@ export class ShopperSessionImpl implements ShopperSession {
     if (operation) {
       switch (event.type) {
         case 'operation.step':
-          operation.step(event.payload);
+          operation.step(event.payload, event.seq);
           break;
         case 'operation.movement':
           operation.movement(event.payload.movement);
           break;
         case 'operation.completed':
           operation.update(event.payload);
-          if (operation.done) this.pending.delete(operationId);
+          if (operation.done) this.finishOperation(operationId, operation);
           break;
       }
     } else if (event.type !== 'operation.completed' || this.currentState !== 'ended') {

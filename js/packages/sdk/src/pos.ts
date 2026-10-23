@@ -1,7 +1,12 @@
 import type { Health } from '@biltorg/pos-protocol';
 import { BiltPosImpl } from './core/pos';
 import type { Engine } from './internal';
-import type { ShopperSession, ShopperSessionOptions, TerminalSessionOptions } from './session';
+import type {
+  AttachSessionOptions,
+  ShopperSession,
+  ShopperSessionOptions,
+  TerminalSessionOptions,
+} from './session';
 import type { Terminal, TerminalInfo } from './terminal';
 import type { TerminalShopperSession } from './terminal-session';
 
@@ -76,6 +81,29 @@ export interface BiltPos {
    * start; a refused start rejects with a `SessionError` and creates no session.
    */
   startTerminalSession(options: TerminalSessionOptions): Promise<TerminalShopperSession>;
+
+  /**
+   * Reattaches to a `local` session the host kept running — on an engine where
+   * `capabilities.survivesPageReload` holds, a session outlives the page that started it,
+   * so after a reload or a register restart this returns a handle on it by id. The session's
+   * mirrors (basket, member, context) are rebuilt from its event stream and stay live.
+   *
+   * Rejects with a `SessionError` when `sessionId` is unknown or names a `terminal` session.
+   * Attaching to a session that already ended resolves with `state` `ended` and `ended`
+   * already settled, so its final state remains readable.
+   */
+  attachShopperSession(sessionId: string, options?: AttachSessionOptions): Promise<ShopperSession>;
+
+  /**
+   * Reattaches to a `terminal` session, as `attachShopperSession` does for a `local` one.
+   * Operations still in flight are adopted: they can be listed through
+   * `session.operations()`, and `guide()` registers the handlers that answer their pending
+   * steps, as if this page had started them.
+   */
+  attachTerminalSession(
+    sessionId: string,
+    options?: AttachSessionOptions,
+  ): Promise<TerminalShopperSession>;
 
   /** The terminal the host drives, or `null` when it has none and only local sessions work. */
   terminalInfo(): Promise<TerminalInfo | null>;

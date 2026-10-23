@@ -15,6 +15,7 @@ import type { MemberInput } from '@biltorg/pos-protocol';
 import type { Money } from '@biltorg/pos-protocol';
 import type { Operation } from '@biltorg/pos-protocol';
 import type { OperationRequest } from '@biltorg/pos-protocol';
+import type { OperationStatus } from '@biltorg/pos-protocol';
 import type { PrintPayload } from '@biltorg/pos-protocol';
 import type { ReconciliationResult } from '@biltorg/pos-protocol';
 import type { Session } from '@biltorg/pos-protocol';
@@ -76,7 +77,8 @@ export interface Engine {
     // (undocumented)
     member(sessionId: string, command: MemberCommand, options?: RequestOptions): Promise<Member | null>;
     operation(sessionId: string, operationId: string, options?: RequestOptions): Promise<Operation>;
-    operations(sessionId: string, options?: RequestOptions): Promise<readonly Operation[]>;
+    // Warning: (ae-forgotten-export) The symbol "OperationFilter" needs to be exported by the entry point internal.d.ts
+    operations(sessionId: string, filter?: OperationFilter, options?: RequestOptions): Promise<readonly Operation[]>;
     reply(sessionId: string, operationId: string, reply: StepReply, options?: RequestOptions): Promise<Operation>;
     request(sessionId: string, operation: EngineOperationRequest, options?: RequestOptions): Promise<Operation>;
     session(sessionId: string, options?: RequestOptions): Promise<Session>;
@@ -131,6 +133,12 @@ export type MemberCommand = {
 } | {
     readonly kind: 'clear';
 };
+
+// @public
+interface OperationFilter {
+    // (undocumented)
+    readonly status?: readonly OperationStatus[];
+}
 
 // @public
 export interface RequestOptions {

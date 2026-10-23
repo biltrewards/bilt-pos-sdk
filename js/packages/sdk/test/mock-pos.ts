@@ -18,15 +18,18 @@ import type {
   Money,
   Rendering,
   SessionContext,
+  SettlementOptions,
   SessionEventPayload,
   SessionEventType,
 } from '@biltorg/pos-protocol';
-import type { SessionError } from '../src/index';
+import { SessionError } from '../src/index';
 import {
+  type AttachSessionOptions,
   type BasketMutationBuilder,
   type BiltPos,
   type EngineCapabilities,
   type Operation,
+  type OperationFilter,
   type OperationStatus,
   type OperationType,
   type RetailMediaWidget,
@@ -34,7 +37,7 @@ import {
   type SessionContextApi,
   type SessionEventHandler,
   type SessionMember,
-  type SettleOptions,
+  type SettlementHandlers,
   type ShopperSession,
   type ShopperSessionOptions,
   type Terminal,
@@ -65,6 +68,7 @@ function operation<T>(type: OperationType, run: () => Promise<T>): Operation<T> 
     type: { value: type, enumerable: true },
     status: { get: () => status, enumerable: true },
     abort: { value: async () => undefined, enumerable: true },
+    guide: { value: () => undefined, enumerable: true },
   });
   return handle as Operation<T>;
 }
@@ -430,8 +434,14 @@ export class MockShopperSession implements ShopperSession {
   readonly member: MockMember;
   readonly context: MockContext;
   private readonly widgetHandles: WidgetHandle[] = [];
+  private readonly ops: Operation<unknown>[] = [];
+  protected resolveEnded!: () => void;
+  readonly ended: Promise<void>;
 
   constructor(options: ShopperSessionOptions) {
+    this.ended = new Promise((resolve) => {
+      this.resolveEnded = resolve;
+    });
     this.saleId = options.saleId;
     this.currency = options.currency;
     this.storeLocation = options.storeLocation;
@@ -462,6 +472,23 @@ export class MockShopperSession implements ShopperSession {
     return this.widgetHandles;
   }
 
+  /** Wraps the module `operation` factory so `operations()` can list what the session started. */
+  protected op<T>(type: OperationType, run: () => Promise<T>): Operation<T> {
+    const handle = operation(type, run);
+    this.ops.push(handle);
+    return handle;
+  }
+
+  operations(filter?: OperationFilter): Promise<readonly Operation<unknown>[]> {
+    const wanted = filter?.status;
+    const all = [...this.ops].reverse();
+    return Promise.resolve(wanted ? all.filter((o) => wanted.includes(o.status)) : all);
+  }
+
+  operation(operationId: string): Operation<unknown> | undefined {
+    return this.ops.find((o) => o.id === operationId);
+  }
+
   on<T extends SessionEventType>(type: T, handler: SessionEventHandler<T>): Unsubscribe {
     return this.emitter.on(type, handler);
   }
@@ -474,6 +501,7 @@ export class MockShopperSession implements ShopperSession {
 
   end(): Promise<void> {
     this.state = 'ended';
+    this.resolveEnded();
     this.emitter.emit('session.ended', { sessionId: this.id, forced: false });
     return Promise.resolve();
   }
@@ -502,7 +530,7 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
     arg?: IdentifyOptions | { resolver: MemberIdResolver },
   ): Operation<IdentifyResult> {
     const options = arg !== undefined && 'resolver' in arg ? undefined : arg;
-    return operation('identifyMember', async () => {
+    return this.op('identifyMember', async () => {
       const modes = options?.forceEntryModes;
       const keyedOnly =
         modes !== undefined && modes.length > 0 && modes.every((m) => m === 'KEYED');
@@ -526,28 +554,28 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
   }
 
   acquireCard() {
-    return operation('acquireCard', async () => ({ maskedPan: '****1234', additionalData: {} }));
+    return this.op('acquireCard', async () => ({ maskedPan: '****1234', additionalData: {} }));
   }
   requestDigitString(): Operation<string> {
-    return operation('requestDigitString', async () => '10001');
+    return this.op('requestDigitString', async () => '10001');
   }
   requestDecimalString(): Operation<Money> {
-    return operation('requestDecimalString', async () => '2.00');
+    return this.op('requestDecimalString', async () => '2.00');
   }
   requestTextString(): Operation<string> {
-    return operation('requestTextString', async () => 'a@b.c');
+    return this.op('requestTextString', async () => 'a@b.c');
   }
   requestConfirmation(): Operation<boolean> {
-    return operation('requestConfirmation', async () => true);
+    return this.op('requestConfirmation', async () => true);
   }
   requestMenuEntry(_prompt: string, entries: readonly string[]) {
-    return operation('requestMenuEntry', async () => ({
+    return this.op('requestMenuEntry', async () => ({
       indices: [0],
       values: [entries[0] ?? ''],
     }));
   }
   requestSignature() {
-    return operation('requestSignature', async () => ({
+    return this.op('requestSignature', async () => ({
       imageData: '',
       format: 'PNG',
       width: 0,
@@ -555,22 +583,22 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
     }));
   }
   requestAmountConfirmation(): Operation<boolean> {
-    return operation('requestAmountConfirmation', async () => true);
+    return this.op('requestAmountConfirmation', async () => true);
   }
   requestPinEntry() {
-    return operation('requestPinEntry', async () => ({
+    return this.op('requestPinEntry', async () => ({
       mode: 'PIN_ENTER' as const,
       verified: false,
     }));
   }
   requestPinVerify() {
-    return operation('requestPinVerify', async () => ({
+    return this.op('requestPinVerify', async () => ({
       mode: 'PIN_VERIFY' as const,
       verified: true,
     }));
   }
   requestPinVerifyOnly() {
-    return operation('requestPinVerifyOnly', async () => ({
+    return this.op('requestPinVerifyOnly', async () => ({
       mode: 'PIN_VERIFY_ONLY' as const,
       verified: true,
     }));
@@ -579,7 +607,7 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
     return Promise.resolve();
   }
   storedValueBalance() {
-    return operation('storedValueBalance', async () => ({
+    return this.op('storedValueBalance', async () => ({
       balance: '25.00',
       currency: this.currency,
     }));
@@ -588,7 +616,7 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
     type: OperationType,
     transactionType: 'ACTIVATE' | 'LOAD' | 'UNLOAD' | 'RESERVE' | 'REVERSE' | 'DUPLICATE',
   ) {
-    return operation(type, async () => ({ transactionType, poiTransactionId: 'POI-SV-1' }));
+    return this.op(type, async () => ({ transactionType, poiTransactionId: 'POI-SV-1' }));
   }
   storedValueActivate() {
     return this.storedValue('storedValueActivate', 'ACTIVATE');
@@ -612,16 +640,16 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
     return this.storedValue('storedValueDuplicate', 'DUPLICATE');
   }
 
-  settle(options: SettleOptions = {}) {
-    return operation('settle', async () => {
+  settle(options: SettlementOptions = {}, handlers: SettlementHandlers = {}) {
+    return this.op('settle', async () => {
       const step = {
         deadline: new Date(Date.now() + 30_000),
         signal: new AbortController().signal,
       };
       await this.context.setPhase('TENDERING');
       let total: Money = this.basket.current.grandTotal;
-      if (options.beforeStep) {
-        await options.beforeStep(
+      if (handlers.beforeStep) {
+        await handlers.beforeStep(
           {
             step: 'REBATE_REDEMPTION',
             currentBasket: this.basket.current,
@@ -632,15 +660,15 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
           step,
         );
       }
-      if (!options.disableRebates && options.onRebatesRedeemed) {
+      if (!options.disableRebates && handlers.onRebatesRedeemed) {
         const result = fx.rebates(this.basket.current, '2.00');
-        total = await options.onRebatesRedeemed(result, step);
+        total = await handlers.onRebatesRedeemed(result, step);
       }
       if (this.failNextChargeWith) {
         const error = this.failNextChargeWith;
         this.failNextChargeWith = null;
-        const answer = options.onError
-          ? await options.onError(
+        const answer = handlers.onError
+          ? await handlers.onError(
               {
                 step: 'CARD_CHARGE',
                 error: error.toJSON(),
@@ -663,48 +691,49 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
         target: { type: 'SALES' as const },
         amount: total,
       };
-      options.onMovement?.(movement);
-      options.onCardCharged?.(movement);
+      handlers.onMovement?.(movement);
+      handlers.onCardCharged?.(movement);
       await this.context.setPhase('COMPLETE');
       return fx.settlementResult(this.basket.current, total);
     });
   }
 
   refund() {
-    return operation('refund', async () => ({
+    return this.op('refund', async () => ({
       success: true,
       pointsReversed: 0,
       remainingPointBalance: 0,
     }));
   }
   refundUnlinked() {
-    return operation('refundUnlinked', async () => ({
+    return this.op('refundUnlinked', async () => ({
       success: true,
       pointsReversed: 0,
       remainingPointBalance: 0,
     }));
   }
   voidTransaction() {
-    return operation('voidTransaction', async () => ({
+    return this.op('voidTransaction', async () => ({
       success: true,
       pointsReversed: 0,
       remainingPointBalance: 0,
     }));
   }
   getTransactionStatus() {
-    return operation('getTransactionStatus', async () => ({ found: false }));
+    return this.op('getTransactionStatus', async () => ({ found: false }));
   }
   updateDisplay(): Operation<void> {
-    return operation('updateDisplay', async () => undefined);
+    return this.op('updateDisplay', async () => undefined);
   }
   updateInputDisplay(): Operation<void> {
-    return operation('updateInputDisplay', async () => undefined);
+    return this.op('updateInputDisplay', async () => undefined);
   }
   abort(): Promise<void> {
     return Promise.resolve();
   }
   forceEnd(): Promise<void> {
     this.state = 'ended';
+    this.resolveEnded();
     this.emitter.emit('session.ended', { sessionId: this.id, forced: true });
     return Promise.resolve();
   }
@@ -761,6 +790,34 @@ export class MockBiltPos implements BiltPos {
     const session = new MockTerminalSession(options);
     this.sessions.push(session);
     return Promise.resolve(session);
+  }
+
+  async attachShopperSession(
+    sessionId: string,
+    _options?: AttachSessionOptions,
+  ): Promise<ShopperSession> {
+    return this.attach(sessionId, 'local');
+  }
+
+  async attachTerminalSession(
+    sessionId: string,
+    _options?: AttachSessionOptions,
+  ): Promise<TerminalShopperSession> {
+    return this.attach(sessionId, 'terminal') as unknown as TerminalShopperSession;
+  }
+
+  private attach(sessionId: string, kind: 'local' | 'terminal'): MockShopperSession {
+    const session = this.sessions.find((s) => s.id === sessionId);
+    if (!session) {
+      throw new SessionError({ code: 'NOT_FOUND', message: `no session ${sessionId}` });
+    }
+    if (session.kind !== kind) {
+      throw new SessionError({
+        code: 'INVALID_STATE',
+        message: `session ${sessionId} is a ${session.kind} session, not a ${kind} session`,
+      });
+    }
+    return session;
   }
 
   terminalInfo() {

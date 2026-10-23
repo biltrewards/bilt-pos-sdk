@@ -18,6 +18,7 @@ import type {
   SurfaceKind,
 } from '@biltorg/pos-protocol';
 import type { SessionError } from './errors';
+import type { Operation, OperationFilter } from './operation';
 
 /** Whether a session has a terminal: `local` is basket and member state only. */
 export type SessionKind = 'local' | 'terminal';
@@ -67,6 +68,13 @@ export interface ShopperSession {
 
   readonly state: SessionState;
 
+  /**
+   * Resolves once the session has ended, however that happened — `end()`, `forceEnd()`, the
+   * host ending it, or it having already ended when `BiltPos.attachTerminalSession` returned
+   * this handle. Never rejects; it carries no value, `state` says where the session stands.
+   */
+  readonly ended: Promise<void>;
+
   /** The basket: item and tax mutations, batch edits, snapshots. */
   readonly basket: SessionBasket;
 
@@ -86,6 +94,28 @@ export interface ShopperSession {
 
   /** Every registered widget, in registration order. */
   widgets(): readonly WidgetHandle[];
+
+  /**
+   * The session's operations, newest first, as live handles — how a page that attached to a
+   * session it did not start finds the operation it needs, and how any page reaches back for
+   * an operation it did not keep. `filter.status` narrows the list, e.g.
+   * `['running', 'awaitingReply']` for what is still in flight.
+   *
+   * A finished operation settles immediately with its stored `result` or `error`; one still
+   * running follows the session's event stream and settles when the host finishes it, exactly
+   * like a handle the original page held — `abort()` and pending-step replies work the same.
+   * An operation this session itself started is the same object its method returned.
+   */
+  operations(filter?: OperationFilter): Promise<readonly Operation<unknown>[]>;
+
+  /**
+   * The `Operation` handle the session already tracks for this id — one it started, adopted
+   * at attach, or returned from `operations()` — or `undefined` for an id it has not seen.
+   * There is no async form of this lookup: a handle is itself the promise of the result, so
+   * `Promise<Operation>` would await to the result instead. `operations()` first pulls in
+   * every operation the session has not seen.
+   */
+  operation(operationId: string): Operation<unknown> | undefined;
 
   /**
    * Subscribes to one event type. Handlers receive the payload the protocol defines for the
@@ -306,6 +336,21 @@ export interface RenderingCapabilities {
   readonly formats: readonly MediaType[];
   readonly surfaceKind: SurfaceKind;
   readonly actions?: ClientCapabilities['actions'];
+}
+
+/**
+ * Options for `BiltPos.attachShopperSession` / `BiltPos.attachTerminalSession`: only what a
+ * reattaching page brings. The session's identifiers — sale, currency, location — live on
+ * the host and come back with it, so they are not options here, and neither are the
+ * creation-only fields (`member`, `phase`, `attributes`, `rendering`, `poiId`,
+ * `autoDisplay`).
+ */
+export interface AttachSessionOptions {
+  /**
+   * Shopper-facing widgets this page has surfaces for; the handles are rebuilt from the
+   * states the host reports, as at `startShopperSession`.
+   */
+  readonly widgets?: readonly WidgetOptions[];
 }
 
 /** Options for `BiltPos.startShopperSession`; the `ShopperSession.Builder` fields. */

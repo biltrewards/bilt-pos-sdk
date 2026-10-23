@@ -10,6 +10,7 @@ import type {
   StepReply,
 } from '@biltorg/pos-protocol';
 import type { EngineOperationRequest, RequestOptions } from '../src/internal';
+import { SessionError } from '../src/index';
 import { MockEngine } from './mock-engine';
 
 /** `Omit` applied to each member of a union, so the step kinds keep their own fields. */
@@ -94,8 +95,15 @@ export class ScriptedEngine extends MockEngine {
     reply: StepReply,
     options?: RequestOptions,
   ): Promise<Operation> {
-    this.replies.push({ sessionId, operationId, reply, options });
     const resource = await this.operation(sessionId, operationId);
+    // As the host does: a reply for a step that is not pending is `notPending` (INVALID_STATE).
+    if (resource.pendingStep?.stepId !== reply.stepId) {
+      throw new SessionError({
+        code: 'INVALID_STATE',
+        message: `step ${reply.stepId} is not the pending step of operation ${operationId}`,
+      });
+    }
+    this.replies.push({ sessionId, operationId, reply, options });
     this.patch(sessionId, operationId, { status: 'running' });
     delete (resource as { pendingStep?: unknown }).pendingStep;
     return resource;

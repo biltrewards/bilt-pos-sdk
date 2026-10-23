@@ -363,7 +363,7 @@ export async function markTendering(session: ShopperSession): Promise<void> {
 
 ## Settle
 
-`session.settle(options)` runs the settlement sequence the [TerminalShopperSession guide](./checkout-session-integration.md#the-settlement-sequence-explained) describes: refund allocations, rebate redemption, point redemption, stored value, card charge, award. The one options object takes the Java `SettlementOptions` (`settlementType`, `disableRebates`, `disablePoints`, `disableAward`, `cashback`, `refunds`, `fulfillments`, `paymentProcessingDisplay`) and the `SettlementFlow` handlers side by side.
+`session.settle(options, handlers)` runs the settlement sequence the [TerminalShopperSession guide](./checkout-session-integration.md#the-settlement-sequence-explained) describes: refund allocations, rebate redemption, point redemption, stored value, card charge, award. `options` takes the Java `SettlementOptions` (`settlementType`, `disableRebates`, `disablePoints`, `disableAward`, `cashback`, `refunds`, `fulfillments`, `paymentProcessingDisplay`) and `handlers` the `SettlementFlow` handlers.
 
 ### Steps, deadlines and defaults
 
@@ -379,7 +379,7 @@ Deadlines are the host's (30 seconds for totals, 120 for recovery decisions by d
 
 ```ts
 export function pay(session: TerminalShopperSession): Promise<SettlementResult> {
-  return session.settle({
+  return session.settle(undefined, {
     // TOTAL_REQUIRED after rebates: re-tax the rebated lines, within the step's deadline.
     onRebatesRedeemed: (rebates, step) => taxService.total(rebates.updatedBasket, step.signal),
     // Points and a gift card are tender, not price changes: the suggested total is right.
@@ -696,7 +696,9 @@ function Lane(): ReactNode {
       ) : (
         <button
           disabled={settlement.status !== 'idle'}
-          onClick={() => settlement.settle({ onRebatesRedeemed: (r) => retax(r.updatedBasket) })}
+          onClick={() =>
+            settlement.settle(undefined, { onRebatesRedeemed: (r) => retax(r.updatedBasket) })
+          }
         >
           Pay
         </button>
@@ -772,7 +774,7 @@ For everything the guide touches in one place, [`js/apps/emulator`](https://gith
 | Attach a member | `session.member.set({ id })`, `session.member.set({ resolver: { type: 'PHONE', value } })`, `.clear()` |
 | Identify on the terminal | `await session.identifyMember()` |
 | Phase and attributes | `session.context.setPhase('TENDERING')`, `.setAttribute(key, value)` |
-| Settle | `await session.settle({ onRebatesRedeemed, onError, onMovement, settlementType })` |
+| Settle | `await session.settle({ settlementType }, { onRebatesRedeemed, onError, onMovement })` |
 | Follow or cancel an operation | `operation.status`, `await operation.abort()` |
 | Refund, void | `session.refund(amount?)`, `session.refundUnlinked(amount)`, `session.voidTransaction(record?, handlers?)` |
 | Prompts | `session.requestConfirmation(prompt)`, `requestDigitString`, `requestMenuEntry`, ... |

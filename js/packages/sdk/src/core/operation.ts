@@ -8,6 +8,7 @@ import type {
 } from '@biltorg/pos-protocol';
 import { SessionError } from '../errors';
 import type { Operation } from '../operation';
+import type { ReversalHandlers, SettlementHandlers } from '../terminal-session';
 import { answerStep, fanOutMovement, type StepHandlers } from './steps';
 
 /** What a pending operation needs from its session. */
@@ -35,13 +36,26 @@ export class PendingOperation<T> {
   private currentStatus: OperationStatus = 'queued';
   private settled = false;
   private readonly answeredSteps = new Set<string>();
+  /** A second handle on this operation follows it: when its request raced a listing's adopt. */
+  private readonly mirrors = new Set<PendingOperation<unknown>>();
+  /** Set once this tracker follows another: mirrored updates still apply, only the owner replies. */
+  private owner: PendingOperation<unknown> | undefined;
+  /** A step that arrived before `guide()` registered the handlers that answer it. */
+  private deferredStep: OperationStep | undefined;
+  private deferredSeq: number | undefined;
+  /** The newest stream `seq` a step arrived with; replayed steps older than it are resolved. */
+  private latestStepSeq: number | undefined;
+  /** Every stepId this tracker ever saw, so a stale snapshot can't pose as new information. */
+  private readonly seenStepIds = new Set<string>();
 
   constructor(
     readonly type: OperationType,
     /** The client's id for the request, its idempotency key; `id` reports it until the engine assigned one. */
     readonly requestId: string,
-    private readonly steps: StepHandlers | undefined,
+    private steps: StepHandlers | undefined,
     private readonly links: OperationLinks,
+    /** An adopted operation holds its steps open until `guide()` wires handlers for them. */
+    private readonly deferStepAnswers = false,
   ) {
     this.promise = new Promise<T>((resolve, reject) => {
       this.resolvePromise = resolve;
@@ -58,6 +72,10 @@ export class PendingOperation<T> {
       type: { value: type, enumerable: true },
       status: { get: () => this.currentStatus, enumerable: true },
       abort: { value: () => this.abort(), enumerable: true },
+      guide: {
+        value: (handlers: SettlementHandlers | ReversalHandlers) => this.guide(handlers),
+        enumerable: true,
+      },
     }) as Operation<T>;
   }
 
@@ -85,6 +103,7 @@ export class PendingOperation<T> {
   /** A fresh view of the resource, from an event or a poll. */
   update(resource: OperationResource): void {
     if (this.settled) return;
+    for (const mirror of this.mirrors) mirror.update(resource);
     this.currentStatus = resource.status;
     if (resource.status === 'awaitingReply' && resource.pendingStep) {
       this.step(resource.pendingStep);
@@ -117,6 +136,7 @@ export class PendingOperation<T> {
   /** Fails the operation from the client side (the session ended, the request was refused). */
   fail(error: unknown): void {
     if (this.settled) return;
+    for (const mirror of this.mirrors) mirror.fail(error);
     this.settled = true;
     // An abort waiting for the engine id must not wait for an acceptance that will never matter.
     this.resolveAcceptance(undefined);
@@ -125,15 +145,105 @@ export class PendingOperation<T> {
     this.rejectPromise(error);
   }
 
-  /** An `operation.step` for this operation, from the stream or a poll; each step is answered once. */
-  step(step: OperationStep): void {
+  /**
+   * Makes this tracker follow `owner`: a `operations()` listing adopted the operation while
+   * `owner`'s request was still unanswered, so it is the second handle on one operation. It
+   * keeps updating with the owner's events but never sends its own step replies — the owner's
+   * handlers are the ones the register registered.
+   */
+  follow(owner: PendingOperation<unknown>): void {
+    this.owner = owner;
+    // The mirrors only receive non-generic callbacks, so `this` is safe to widen.
+    owner.mirrors.add(this as PendingOperation<unknown>);
+    // Handlers and a step deferred on this second handle belong to the owner, the replying one.
+    if (this.steps !== undefined && owner.steps === undefined) owner.steps = this.steps;
+    owner.noteSeq(this.latestStepSeq);
+    const step = this.deferredStep;
+    const seq = this.deferredSeq;
+    this.deferredStep = undefined;
+    this.deferredSeq = undefined;
+    // The transfer must reach the owner before its seen ids do — a step the owner already
+    // counts as seen would be skipped as a stale replay instead of answered.
+    if (step !== undefined) owner.step(step, seq);
+    for (const stepId of this.seenStepIds) owner.seenStepIds.add(stepId);
+  }
+
+  /**
+   * Registers the handlers the operation answers its steps and reports its movements with —
+   * the `SettlementFlow`/`ReversalFlow` handler calls in Java, taken here on the handle: an
+   * adopted operation's pending step is answered with them right away. Calling `guide` on a
+   * handle that follows another forwards to the owner, whose handlers are the replying ones.
+   */
+  guide(handlers: SettlementHandlers | ReversalHandlers): void {
+    if (this.owner !== undefined) {
+      this.owner.guide(handlers);
+      return;
+    }
+    this.steps = {
+      kind: this.type === 'settle' ? 'settlement' : 'reversal',
+      handlers,
+    } as StepHandlers;
+    const step = this.deferredStep;
+    this.deferredStep = undefined;
+    this.deferredSeq = undefined;
+    if (step !== undefined && !this.settled && !this.answeredSteps.has(step.stepId)) {
+      this.answeredSteps.add(step.stepId);
+      void this.answer(step);
+    }
+  }
+
+  private noteSeq(seq: number | undefined): void {
+    if (seq !== undefined && (this.latestStepSeq === undefined || seq > this.latestStepSeq)) {
+      this.latestStepSeq = seq;
+    }
+  }
+
+  /**
+   * An `operation.step` for this operation, from the stream or a poll; each step is answered
+   * once. `seq` is the event's stream position when it has one: a step older than the newest
+   * one seen is a replay the host already resolved, not something to answer.
+   */
+  step(step: OperationStep, seq?: number): void {
+    const unseen = !this.seenStepIds.has(step.stepId);
+    this.seenStepIds.add(step.stepId);
+    if (seq !== undefined && this.latestStepSeq !== undefined && seq < this.latestStepSeq) {
+      return;
+    }
+    this.noteSeq(seq);
+    for (const mirror of this.mirrors) mirror.step(step, seq);
     if (this.settled || this.answeredSteps.has(step.stepId)) return;
-    this.answeredSteps.add(step.stepId);
     this.currentStatus = 'awaitingReply';
+    // A followed tracker records the step but leaves the reply to the owner's handlers.
+    if (this.owner !== undefined) return;
+    // An adopted operation keeps a step the previous page's handlers would have answered open
+    // until `guide()` registers this page's — otherwise it would resolve with defaults first.
+    if (this.deferStepAnswers && this.steps === undefined) {
+      // The held step gives way only to provably-newer information: a stepId the stream never
+      // delivered (a poll's read of what the host awaits then wins), or a stream event newer
+      // than the held step's own seq. A seen id that cannot prove itself newer — the held
+      // step itself, an answered or stale one, or a snapshot taken before it — must not drop
+      // the answer `guide()` still owes.
+      const held = this.deferredStep;
+      if (
+        held !== undefined &&
+        !unseen &&
+        (seq === undefined || this.deferredSeq === undefined || seq <= this.deferredSeq)
+      ) {
+        return;
+      }
+      this.deferredStep = step;
+      this.deferredSeq = seq;
+      return;
+    }
+    // A step the tracker already saw and let go of — displaced from the deferred slot or
+    // skipped as a stale replay — must not be answered late: the host already moved past it.
+    if (!unseen) return;
+    this.answeredSteps.add(step.stepId);
     void this.answer(step);
   }
 
   movement(movement: SettlementMovement): void {
+    for (const mirror of this.mirrors) mirror.movement(movement);
     fanOutMovement(this.steps, movement, (context, error) => this.links.reportStep(context, error));
   }
 
@@ -147,7 +257,12 @@ export class PendingOperation<T> {
         try {
           await this.links.reply(id, answer.reply);
         } catch (error) {
-          this.links.reportStep(`replying to ${step.kind} step ${step.stepId} failed`, error);
+          // `INVALID_STATE` here is the host's `notPending`: the step was already resolved
+          // by another page or by its deadline — exactly what an attach's replayed step
+          // events produce — so the reply is redundant rather than a fault.
+          if (!(error instanceof SessionError && error.code === 'INVALID_STATE')) {
+            this.links.reportStep(`replying to ${step.kind} step ${step.stepId} failed`, error);
+          }
         }
         return;
       }

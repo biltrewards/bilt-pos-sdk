@@ -1079,75 +1079,79 @@ export class BrowserEmulatorController implements EmulatorController {
     session
       .setStoredValueCard(card)
       .then(() =>
-        session.settle({
-          settlementType: net ? 'NET' : 'REFUND_THEN_CHARGE',
-          disableRebates: !loyalty.rebates,
-          disablePoints: !loyalty.redemption,
-          disableAward: !loyalty.award,
-          ...(allocations.length ? { refunds: allocations } : {}),
-          ...(giftCards.length
-            ? {
-                fulfillments: giftCards.map((gift) => ({
-                  basketReference: gift.reference,
-                  type: 'RELOAD' as const,
-                  card: gift.card,
-                })),
+        session.settle(
+          {
+            settlementType: net ? 'NET' : 'REFUND_THEN_CHARGE',
+            disableRebates: !loyalty.rebates,
+            disablePoints: !loyalty.redemption,
+            disableAward: !loyalty.award,
+            ...(allocations.length ? { refunds: allocations } : {}),
+            ...(giftCards.length
+              ? {
+                  fulfillments: giftCards.map((gift) => ({
+                    basketReference: gift.reference,
+                    type: 'RELOAD' as const,
+                    card: gift.card,
+                  })),
+                }
+              : {}),
+          },
+          {
+            onCardRefunded: (movement) =>
+              this.log(
+                `Card refund committed: $${movement.amount} (txn ${movement.poiTransactionId})`,
+              ),
+            onGiftCardRefunded: (movement) =>
+              this.log(
+                `Gift card refund committed: $${movement.amount} (txn ${movement.poiTransactionId})`,
+              ),
+            onRebatesRedeemed: (rebates) => {
+              const total = totalAfterRebates(rebates);
+              this.log(`Rebates applied: −$${rebates.totalRebateAmount} → total $${total}`);
+              return total;
+            },
+            onPointsRedeemed: (points) => {
+              this.log(
+                `Points redeemed: ${points.pointsUsed} (−$${points.monetaryValue}) → total $${points.suggestedTotal}`,
+              );
+              return points.suggestedTotal;
+            },
+            onGiftCardPayment: (giftCard) => {
+              const balance = giftCard.remainingCardBalance
+                ? ` (card balance $${giftCard.remainingCardBalance})`
+                : '';
+              this.log(
+                `Gift card charged: $${giftCard.amountCharged}${balance} → total $${giftCard.suggestedTotal}`,
+              );
+              return giftCard.suggestedTotal;
+            },
+            onStoredValueLoaded: (movement) =>
+              this.log(`Gift card loaded: $${movement.amount} (txn ${movement.poiTransactionId})`),
+            onError: async (failure, info) => {
+              this.log(`Settlement failed: ${failure.error.code} — ${failure.error.message}`);
+              const recovery = await this.awaitPaymentRecovery(generation, failure, info.signal);
+              if (recovery === 'ABORT') {
+                attempt = 'FAILED';
+                if (generation === this.generation) {
+                  this.outcome({
+                    success: false,
+                    title: 'Settlement failed',
+                    message: `${failure.error.code}\n${failure.error.message}`,
+                  });
+                }
               }
-            : {}),
-          onCardRefunded: (movement) =>
-            this.log(
-              `Card refund committed: $${movement.amount} (txn ${movement.poiTransactionId})`,
-            ),
-          onGiftCardRefunded: (movement) =>
-            this.log(
-              `Gift card refund committed: $${movement.amount} (txn ${movement.poiTransactionId})`,
-            ),
-          onRebatesRedeemed: (rebates) => {
-            const total = totalAfterRebates(rebates);
-            this.log(`Rebates applied: −$${rebates.totalRebateAmount} → total $${total}`);
-            return total;
-          },
-          onPointsRedeemed: (points) => {
-            this.log(
-              `Points redeemed: ${points.pointsUsed} (−$${points.monetaryValue}) → total $${points.suggestedTotal}`,
-            );
-            return points.suggestedTotal;
-          },
-          onGiftCardPayment: (giftCard) => {
-            const balance = giftCard.remainingCardBalance
-              ? ` (card balance $${giftCard.remainingCardBalance})`
-              : '';
-            this.log(
-              `Gift card charged: $${giftCard.amountCharged}${balance} → total $${giftCard.suggestedTotal}`,
-            );
-            return giftCard.suggestedTotal;
-          },
-          onStoredValueLoaded: (movement) =>
-            this.log(`Gift card loaded: $${movement.amount} (txn ${movement.poiTransactionId})`),
-          onError: async (failure, info) => {
-            this.log(`Settlement failed: ${failure.error.code} — ${failure.error.message}`);
-            const recovery = await this.awaitPaymentRecovery(generation, failure, info.signal);
-            if (recovery === 'ABORT') {
+              return recovery;
+            },
+            onAbandoned: (record) => {
               attempt = 'FAILED';
+              const message = `No rollback was performed. Reconcile these movements manually before settling again.\n\n${this.failureDetails(record.failure)}`;
+              this.log(`Settlement abandoned: ${message}`);
               if (generation === this.generation) {
-                this.outcome({
-                  success: false,
-                  title: 'Settlement failed',
-                  message: `${failure.error.code}\n${failure.error.message}`,
-                });
+                this.outcome({ success: false, title: 'Settlement abandoned', message });
               }
-            }
-            return recovery;
+            },
           },
-          onAbandoned: (record) => {
-            attempt = 'FAILED';
-            const message = `No rollback was performed. Reconcile these movements manually before settling again.\n\n${this.failureDetails(record.failure)}`;
-            this.log(`Settlement abandoned: ${message}`);
-            if (generation === this.generation) {
-              this.outcome({ success: false, title: 'Settlement abandoned', message });
-            }
-          },
-        }),
+        ),
       )
       .then(
         (result) => {
