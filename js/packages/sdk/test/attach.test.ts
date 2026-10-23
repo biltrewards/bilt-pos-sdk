@@ -252,6 +252,14 @@ describe('operations on an attached session', () => {
       pendingStep: { ...rebateStep('s2', '85.00'), operationId: opId },
     } as never);
     await attached.operations();
+
+    // A late replay of the displaced step carries a real seq but is still older information:
+    // it must neither take the deferred slot back nor get answered.
+    engine.pushEvent(session.id, 'operation.step', {
+      ...rebateStep('s1', '88.00'),
+      operationId: opId,
+    } as never);
+    await new Promise((r) => setTimeout(r, 20));
     handle!.guide({ onRebatesRedeemed: () => '80.00' });
     await vi.waitFor(() => expect(engine.replies).toHaveLength(1));
     expect(engine.replies[0]!.reply).toEqual({ stepId: 's2', total: '80.00' });

@@ -158,12 +158,14 @@ export class PendingOperation<T> {
     // Handlers and a step deferred on this second handle belong to the owner, the replying one.
     if (this.steps !== undefined && owner.steps === undefined) owner.steps = this.steps;
     owner.noteSeq(this.latestStepSeq);
-    for (const stepId of this.seenStepIds) owner.seenStepIds.add(stepId);
     const step = this.deferredStep;
     const seq = this.deferredSeq;
     this.deferredStep = undefined;
     this.deferredSeq = undefined;
+    // The transfer must reach the owner before its seen ids do — a step the owner already
+    // counts as seen would be skipped as a stale replay instead of answered.
     if (step !== undefined) owner.step(step, seq);
+    for (const stepId of this.seenStepIds) owner.seenStepIds.add(stepId);
   }
 
   /**
@@ -216,15 +218,26 @@ export class PendingOperation<T> {
     // An adopted operation keeps a step the previous page's handlers would have answered open
     // until `guide()` registers this page's — otherwise it would resolve with defaults first.
     if (this.deferStepAnswers && this.steps === undefined) {
-      // A snapshot injection has no seq: it may displace the held step only when it names one
-      // the stream never delivered — a poll's read of what the host awaits beats the last
-      // event we saw. A seen id is the same step or a stale one; it must not drop the answer
-      // `guide()` still owes.
-      if (seq === undefined && this.deferredStep !== undefined && !unseen) return;
+      // The held step gives way only to provably-newer information: a stepId the stream never
+      // delivered (a poll's read of what the host awaits then wins), or a stream event newer
+      // than the held step's own seq. A seen id that cannot prove itself newer — the held
+      // step itself, an answered or stale one, or a snapshot taken before it — must not drop
+      // the answer `guide()` still owes.
+      const held = this.deferredStep;
+      if (
+        held !== undefined &&
+        !unseen &&
+        (seq === undefined || this.deferredSeq === undefined || seq <= this.deferredSeq)
+      ) {
+        return;
+      }
       this.deferredStep = step;
       this.deferredSeq = seq;
       return;
     }
+    // A step the tracker already saw and let go of — displaced from the deferred slot or
+    // skipped as a stale replay — must not be answered late: the host already moved past it.
+    if (!unseen) return;
     this.answeredSteps.add(step.stepId);
     void this.answer(step);
   }
