@@ -21,7 +21,9 @@ package com.bilt.pos.session;
  * request fails with a {@link SessionException} and nothing reaches the terminal. Without a
  * provider the SDK mints random 10-character uppercase alphanumeric ids.
  *
- * <p>Called on the session's operation thread, synchronously, before the request it names is sent.
+ * <p>Called synchronously before the request it names is sent, but not always from the same thread:
+ * {@code abort()}, input updates, and {@code terminal()} operations run off the session's operation
+ * thread and can overlap a settlement. Implementations must be thread-safe.
  */
 @FunctionalInterface
 public interface ServiceIdProvider {

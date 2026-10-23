@@ -17,7 +17,8 @@ import com.bilt.pos.nexo.model.MessageCategoryType;
  * TerminalShopperSession.Builder} or {@link Terminal.Builder}.
  *
  * <p>Called synchronously right after the id is minted and before the request carrying it is sent.
- * If the listener throws, that request is not sent and fails with a {@link SessionException}.
+ * If the listener throws, that request is not sent and fails with a {@link SessionException}. Like
+ * the provider, it can be called from different threads concurrently and must be thread-safe.
  */
 @FunctionalInterface
 public interface ServiceIdListener {

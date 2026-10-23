@@ -97,7 +97,8 @@ loadScripts(document, 'script');</script>
  <a href="ServiceIdProvider.html" title="interface in com.bilt.pos.session"><code>ServiceIdProvider</code></a>. Register one through <code>serviceIdListener(...)</code> on <a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session"><code>TerminalShopperSession.Builder</code></a> or <a href="Terminal.Builder.html" title="class in com.bilt.pos.session"><code>Terminal.Builder</code></a>.
 
  <p>Called synchronously right after the id is minted and before the request carrying it is sent.
- If the listener throws, that request is not sent and fails with a <a href="SessionException.html" title="class in com.bilt.pos.session"><code>SessionException</code></a>.</div>
+ If the listener throws, that request is not sent and fails with a <a href="SessionException.html" title="class in com.bilt.pos.session"><code>SessionException</code></a>. Like
+ the provider, it can be called from different threads concurrently and must be thread-safe.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
