@@ -23,7 +23,7 @@ class SettlementContextTest {
   void resolveSaleTransactionIdUsesGeneratedDefaultWithoutHandler() {
     TransactionIdentificationType id =
         SettlementContext.resolveSaleTransactionId(
-            SettlementStep.CARD_CHARGE, BASKET, new BigDecimal("10.00"), List.of(), null);
+            SettlementStep.CARD_CHARGE, BASKET, new BigDecimal("10.00"), List.of(), null, null);
 
     assertNotNull(id.getTransactionID());
     assertFalse(id.getTransactionID().isEmpty());
@@ -40,6 +40,7 @@ class SettlementContextTest {
             BASKET,
             new BigDecimal("10.00"),
             List.of(),
+            null,
             ctx -> {
               defaultId.set(ctx.getDefaultTransactionId());
               return null;
@@ -48,7 +49,12 @@ class SettlementContextTest {
 
     TransactionIdentificationType emptyResult =
         SettlementContext.resolveSaleTransactionId(
-            SettlementStep.CARD_CHARGE, BASKET, new BigDecimal("10.00"), List.of(), ctx -> "");
+            SettlementStep.CARD_CHARGE,
+            BASKET,
+            new BigDecimal("10.00"),
+            List.of(),
+            null,
+            ctx -> "");
     assertFalse(emptyResult.getTransactionID().isEmpty());
     assertEquals(nullResult.getTransactionID(), emptyResult.getTransactionID());
     assertEquals(nullResult.getTimeStamp(), emptyResult.getTimeStamp());
@@ -62,6 +68,7 @@ class SettlementContextTest {
             BASKET,
             new BigDecimal("10.00"),
             List.of(),
+            null,
             ctx -> ctx.getDefaultTransactionId());
 
     assertEquals(BASKET.getSaleTransactionID().getTransactionID(), id.getTransactionID());
@@ -84,12 +91,14 @@ class SettlementContextTest {
             BASKET,
             new BigDecimal("10.00"),
             List.of(priorStep),
+            "SVC1",
             ctx -> {
               assertEquals(SettlementStep.STORED_VALUE_CHARGE, ctx.getStep());
               assertEquals(BASKET, ctx.getCurrentBasket());
               assertEquals(new BigDecimal("10.00"), ctx.getCurrentTotal());
               assertEquals(List.of(priorStep), ctx.getPriorSteps());
               assertNotNull(ctx.getDefaultTransactionId());
+              assertEquals("SVC1", ctx.getServiceId());
               return "register-txn-1";
             });
 
@@ -110,7 +119,12 @@ class SettlementContextTest {
 
     SettlementContext context =
         new SettlementContext(
-            SettlementStep.CARD_CHARGE, BASKET, new BigDecimal("10.00"), "default-txn", priorSteps);
+            SettlementStep.CARD_CHARGE,
+            BASKET,
+            new BigDecimal("10.00"),
+            "default-txn",
+            priorSteps,
+            null);
     priorSteps.clear();
 
     assertEquals(List.of(priorStep), context.getPriorSteps());

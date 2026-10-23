@@ -3193,9 +3193,20 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Pass type identifier, e.g.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#getServiceId()" class="member-name-link">getServiceId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
+<dd>
+<div class="block">The Nexo <code>ServiceID</code> this step's terminal request will be sent with — minted for this
+ attempt before the handler runs, so the register can record it before anything is sent and
+ resolve the request with Transaction Status after a crash.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getServiceId()" class="member-name-link">getServiceId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
 <dd>
 <div class="block">Original request's Nexo <code>ServiceID</code>, when a request was sent.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#getServiceId()" class="member-name-link">getServiceId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
+<dd>
+<div class="block">The Nexo <code>ServiceID</code> of the terminal request that committed this movement — the id the
+ step's <code>beforeStep</code> context reported.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/identity/VasData.html#getServices()" class="member-name-link">getServices()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasData.html" title="class in com.bilt.pos.session.identity">VasData</a></dt>
 <dd>
@@ -4379,6 +4390,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/nexo/client/NexoMessageListener.Direction.html" class="type-name-link" title="enum class in com.bilt.pos.nexo.client">NexoMessageListener.Direction</a> - Enum Class in <a href="com/bilt/pos/nexo/client/package-summary.html">com.bilt.pos.nexo.client</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/ServiceIdProvider.html#next()" class="member-name-link">next()</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/ServiceIdProvider.html" title="interface in com.bilt.pos.session">ServiceIdProvider</a></dt>
+<dd>
+<div class="block">Returns the <code>ServiceID</code> for the next request.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/identity/IdentifyStatus.html#NOT_FOUND" class="member-name-link">NOT_FOUND</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/IdentifyStatus.html" title="enum class in com.bilt.pos.session.identity">IdentifyStatus</a></dt>
 <dd>
 <div class="block">No member matched the captured identifier.</div>
@@ -5411,7 +5426,7 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">How this member is to be looked up, or <code>null</code> once resolved.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.util.List,java.util.function.Function)" class="member-name-link">resolveSaleTransactionId(SettlementStep, Basket, BigDecimal, List&lt;CommittedStep&gt;, Function&lt;SettlementContext, String&gt;)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
+<dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.util.List,java.lang.String,java.util.function.Function)" class="member-name-link">resolveSaleTransactionId(SettlementStep, Basket, BigDecimal, List&lt;CommittedStep&gt;, String, Function&lt;SettlementContext, String&gt;)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
 <dd>
 <div class="block">Resolves the <code>SaleTransactionID</code> for a settlement step using the same contract as <code>
  SettlementFlow.beforeStep</code>: the basket's own sale transaction is the default — every step,
@@ -5633,6 +5648,41 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#serviceId(java.lang.String)" class="member-name-link">serviceId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html#serviceId(java.lang.String)" class="member-name-link">serviceId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/ServiceIdListener.html#serviceIdAssigned(java.lang.String,com.bilt.pos.nexo.model.MessageCategoryType)" class="member-name-link">serviceIdAssigned(String, MessageCategoryType)</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/ServiceIdListener.html" title="interface in com.bilt.pos.session">ServiceIdListener</a></dt>
+<dd>
+<div class="block">An id was assigned to a request about to be sent.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/Terminal.Builder.html#serviceIdListener(com.bilt.pos.session.ServiceIdListener)" class="member-name-link">serviceIdListener(ServiceIdListener)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></dt>
+<dd>
+<div class="block">Notified of every <code>ServiceID</code> this terminal assigns, before the request is sent.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#serviceIdListener(com.bilt.pos.session.ServiceIdListener)" class="member-name-link">serviceIdListener(ServiceIdListener)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></dt>
+<dd>
+<div class="block">Notified of every <code>ServiceID</code> the session assigns, before the request is sent.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ServiceIdListener.html" class="type-name-link" title="interface in com.bilt.pos.session">ServiceIdListener</a> - Interface in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
+<dd>
+<div class="block">Observes every <code>ServiceID</code> the SDK assigns, whether minted by the default generator or a
+ <a href="com/bilt/pos/session/ServiceIdProvider.html" title="interface in com.bilt.pos.session"><code>ServiceIdProvider</code></a>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/Terminal.Builder.html#serviceIdProvider(com.bilt.pos.session.ServiceIdProvider)" class="member-name-link">serviceIdProvider(ServiceIdProvider)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></dt>
+<dd>
+<div class="block">Mints the <code>ServiceID</code> of every request this terminal sends.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/TerminalShopperSession.Builder.html#serviceIdProvider(com.bilt.pos.session.ServiceIdProvider)" class="member-name-link">serviceIdProvider(ServiceIdProvider)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></dt>
+<dd>
+<div class="block">Mints the <code>ServiceID</code> of every request the session sends — settlement legs and their
+ retries, Transaction Status recovery polls, aborts, displays, input, session signals, and
+ <a href="com/bilt/pos/session/TerminalShopperSession.html#terminal()"><code>TerminalShopperSession.terminal()</code></a> operations.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ServiceIdProvider.html" class="type-name-link" title="interface in com.bilt.pos.session">ServiceIdProvider</a> - Interface in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
+<dd>
+<div class="block">Mints the Nexo <code>ServiceID</code> of every request the SDK sends to the terminal: settlement legs
+ and their retries, Transaction Status recovery polls, aborts, input updates, displays, session
+ signals, and terminal services.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/SessionBasket.html" class="type-name-link" title="class in com.bilt.pos.session">SessionBasket</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">The basket surface of a shopper session: item and tax mutations, batch edits, whole-basket
@@ -6116,7 +6166,7 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Context handed to the <code>beforeStep</code> handler before each payment step.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#%3Cinit%3E(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.lang.String,java.util.List)" class="member-name-link">SettlementContext(SettlementStep, Basket, BigDecimal, String, List&lt;CommittedStep&gt;)</a> - Constructor for class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
+<dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#%3Cinit%3E(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.lang.String,java.util.List,java.lang.String)" class="member-name-link">SettlementContext(SettlementStep, Basket, BigDecimal, String, List&lt;CommittedStep&gt;, String)</a> - Constructor for class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementFailure</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>

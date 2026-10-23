@@ -103,6 +103,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Network-error recovery for `BiltNexoTerminalClient` (on by default): re-sends an in-flight request under an `X-Bilt-Request-Id` correlation header across transient network failures, with at-most-once execution guaranteed by terminal-side dedupe. Includes a configurable keep-alive ping and HTTP protocol / pong diagnostics, mirrored across the Java and Kotlin clients and the CLI ([#83](https://github.com/biltrewards/bilt-pos-sdk/pull/83))
 - Receipt Requirements documentation with Fiserv EMV guidelines and Bilt Platform fields
 
+## [0.36.0]
+
+### Added
+
+- `ServiceIdProvider` and `ServiceIdListener`, set with `serviceIdProvider(..)` / `serviceIdListener(..)` on `TerminalShopperSession.Builder` and `Terminal.Builder`. The provider mints the Nexo `ServiceID` of every request the SDK sends (settlement legs and retries, Transaction Status recovery polls, aborts, displays, input, session signals, terminal services); ids must be 1–10 characters `[A-Za-z0-9]`. The listener is told each id before its request is sent. An invalid id, a failing provider, or a throwing listener fails the request with a `SessionException` and nothing is sent. Without a provider, ids stay random 10-character uppercase alphanumeric.
+- `SettlementContext.getServiceId()`: the `ServiceID` the step's request will be sent with, minted before `beforeStep` runs; each retry mints a new id and calls `beforeStep` again. Refund allocations get theirs the same way. `SettlementMovement.getServiceId()` reports the id of the request that committed the movement.
+
+### Changed (breaking)
+
+- `SettlementContext`'s constructor and `SettlementContext.resolveSaleTransactionId(..)` take the step's `serviceId`.
+
 ## [0.35.0]
 
 ### Added

@@ -63,7 +63,12 @@ public final class Terminal implements AutoCloseable {
     this.operations = new SessionOperations(builder.callbackExecutor);
     this.client = builder.client;
     NexoMessageFactory factory =
-        new NexoMessageFactory(builder.saleId, builder.poiId, builder.storeLocation);
+        new NexoMessageFactory(
+            builder.saleId,
+            builder.poiId,
+            builder.storeLocation,
+            builder.serviceIdProvider,
+            builder.serviceIdListener);
     NexoExchange exchange = new NexoExchange(new DisplayRouter(builder.client, null), factory);
     this.services = new TerminalServices(exchange, factory, builder.storeLocation);
   }
@@ -176,6 +181,8 @@ public final class Terminal implements AutoCloseable {
     private String poiId;
     private String storeLocation;
     private Executor callbackExecutor;
+    private ServiceIdProvider serviceIdProvider;
+    private ServiceIdListener serviceIdListener;
 
     private Builder() {}
 
@@ -216,6 +223,24 @@ public final class Terminal implements AutoCloseable {
      */
     public Builder callbackExecutor(Executor callbackExecutor) {
       this.callbackExecutor = callbackExecutor;
+      return this;
+    }
+
+    /**
+     * Mints the {@code ServiceID} of every request this terminal sends. Optional: random
+     * 10-character alphanumeric ids by default. See {@link ServiceIdProvider}.
+     */
+    public Builder serviceIdProvider(ServiceIdProvider serviceIdProvider) {
+      this.serviceIdProvider = serviceIdProvider;
+      return this;
+    }
+
+    /**
+     * Notified of every {@code ServiceID} this terminal assigns, before the request is sent.
+     * Optional. See {@link ServiceIdListener}.
+     */
+    public Builder serviceIdListener(ServiceIdListener serviceIdListener) {
+      this.serviceIdListener = serviceIdListener;
       return this;
     }
 

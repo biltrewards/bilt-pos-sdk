@@ -19,6 +19,7 @@ public final class SettlementMovement {
   private final SettlementTarget target;
   private final BigDecimal amount;
   private final String saleTransactionId;
+  private final String serviceId;
   private final String poiTransactionId;
   private final Instant poiTransactionTimestamp;
   private final String memberId;
@@ -32,6 +33,7 @@ public final class SettlementMovement {
     this.target = builder.target;
     this.amount = builder.amount;
     this.saleTransactionId = builder.saleTransactionId;
+    this.serviceId = builder.serviceId;
     this.poiTransactionId = builder.poiTransactionId;
     this.poiTransactionTimestamp = builder.poiTransactionTimestamp;
     this.memberId = builder.memberId;
@@ -60,6 +62,15 @@ public final class SettlementMovement {
 
   public String getSaleTransactionId() {
     return saleTransactionId;
+  }
+
+  /**
+   * The Nexo {@code ServiceID} of the terminal request that committed this movement — the id the
+   * step's {@code beforeStep} context reported. {@code null} for movements the register settled
+   * outside the terminal (external payments and refunds).
+   */
+  public String getServiceId() {
+    return serviceId;
   }
 
   public String getPoiTransactionId() {
@@ -99,6 +110,7 @@ public final class SettlementMovement {
     private SettlementTarget target = SettlementTarget.sales();
     private BigDecimal amount = BigDecimal.ZERO;
     private String saleTransactionId;
+    private String serviceId;
     private String poiTransactionId;
     private Instant poiTransactionTimestamp;
     private String memberId;
@@ -126,6 +138,11 @@ public final class SettlementMovement {
 
     public Builder saleTransactionId(String saleTransactionId) {
       this.saleTransactionId = saleTransactionId;
+      return this;
+    }
+
+    public Builder serviceId(String serviceId) {
+      this.serviceId = serviceId;
       return this;
     }
 
