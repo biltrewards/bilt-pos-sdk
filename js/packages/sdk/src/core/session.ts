@@ -638,7 +638,7 @@ export class ShopperSessionImpl implements ShopperSession {
     if (operation) {
       switch (event.type) {
         case 'operation.step':
-          operation.step(event.payload);
+          operation.step(event.payload, event.seq);
           break;
         case 'operation.movement':
           operation.movement(event.payload.movement);

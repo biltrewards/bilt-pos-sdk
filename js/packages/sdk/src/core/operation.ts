@@ -42,6 +42,9 @@ export class PendingOperation<T> {
   private owner: PendingOperation<unknown> | undefined;
   /** A step that arrived before `guide()` registered the handlers that answer it. */
   private deferredStep: OperationStep | undefined;
+  private deferredSeq: number | undefined;
+  /** The newest stream `seq` a step arrived with; replayed steps older than it are resolved. */
+  private latestStepSeq: number | undefined;
 
   constructor(
     readonly type: OperationType,
@@ -101,7 +104,12 @@ export class PendingOperation<T> {
     for (const mirror of this.mirrors) mirror.update(resource);
     this.currentStatus = resource.status;
     if (resource.status === 'awaitingReply' && resource.pendingStep) {
-      this.step(resource.pendingStep);
+      // The snapshot's step is a fallback for adopted trackers: once the stream delivered a
+      // step, injecting this (possibly older) `pendingStep` would clobber the one `guide()`
+      // must answer.
+      if (!this.deferStepAnswers || this.deferredStep === undefined) {
+        this.step(resource.pendingStep);
+      }
     }
     if (resource.status === 'succeeded') {
       this.settled = true;
@@ -150,6 +158,14 @@ export class PendingOperation<T> {
     this.owner = owner;
     // The mirrors only receive non-generic callbacks, so `this` is safe to widen.
     owner.mirrors.add(this as PendingOperation<unknown>);
+    // Handlers and a step deferred on this second handle belong to the owner, the replying one.
+    if (this.steps !== undefined && owner.steps === undefined) owner.steps = this.steps;
+    owner.noteSeq(this.latestStepSeq);
+    const step = this.deferredStep;
+    const seq = this.deferredSeq;
+    this.deferredStep = undefined;
+    this.deferredSeq = undefined;
+    if (step !== undefined) owner.step(step, seq);
   }
 
   /**
@@ -169,15 +185,30 @@ export class PendingOperation<T> {
     } as StepHandlers;
     const step = this.deferredStep;
     this.deferredStep = undefined;
+    this.deferredSeq = undefined;
     if (step !== undefined && !this.settled && !this.answeredSteps.has(step.stepId)) {
       this.answeredSteps.add(step.stepId);
       void this.answer(step);
     }
   }
 
-  /** An `operation.step` for this operation, from the stream or a poll; each step is answered once. */
-  step(step: OperationStep): void {
-    for (const mirror of this.mirrors) mirror.step(step);
+  private noteSeq(seq: number | undefined): void {
+    if (seq !== undefined && (this.latestStepSeq === undefined || seq > this.latestStepSeq)) {
+      this.latestStepSeq = seq;
+    }
+  }
+
+  /**
+   * An `operation.step` for this operation, from the stream or a poll; each step is answered
+   * once. `seq` is the event's stream position when it has one: a step older than the newest
+   * one seen is a replay the host already resolved, not something to answer.
+   */
+  step(step: OperationStep, seq?: number): void {
+    if (seq !== undefined && this.latestStepSeq !== undefined && seq < this.latestStepSeq) {
+      return;
+    }
+    this.noteSeq(seq);
+    for (const mirror of this.mirrors) mirror.step(step, seq);
     if (this.settled || this.answeredSteps.has(step.stepId)) return;
     this.currentStatus = 'awaitingReply';
     // A followed tracker records the step but leaves the reply to the owner's handlers.
@@ -186,6 +217,7 @@ export class PendingOperation<T> {
     // until `guide()` registers this page's — otherwise it would resolve with defaults first.
     if (this.deferStepAnswers && this.steps === undefined) {
       this.deferredStep = step;
+      this.deferredSeq = seq;
       return;
     }
     this.answeredSteps.add(step.stepId);

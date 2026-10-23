@@ -234,6 +234,30 @@ describe('starting an operation', () => {
     expect(session.operation(id)).toBe(op);
   });
 
+  it('moves a step deferred on a listed handle to the started one once it is accepted', async () => {
+    const engine = new ScriptedEngine();
+    let release!: () => void;
+    engine.acceptanceDelay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { session } = await lane(engine);
+    const op = session.settle({}, { onRebatesRedeemed: () => '80.00' });
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    // The host named the operation already: the listing's adopted tracker gets the step
+    // while the request it races is still unanswered.
+    const [listed] = await session.operations();
+    expect(listed).toBeDefined();
+    const id = engine.lastOperation(session.id).id;
+    engine.step(session.id, id, rebateStep('s1', '88.00'));
+    release();
+    await vi.waitFor(() => expect(engine.replies).toHaveLength(1));
+    expect(engine.replies[0]).toMatchObject({
+      operationId: id,
+      reply: { stepId: 's1', total: '80.00' },
+    });
+    void op.catch(() => undefined);
+  });
+
   it('rejects an operation whose acceptance arrives after the session ended', async () => {
     const engine = new ScriptedEngine();
     let release!: () => void;
