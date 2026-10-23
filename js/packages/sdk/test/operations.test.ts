@@ -733,6 +733,52 @@ describe('steps', () => {
   });
 });
 
+describe('ServiceIDs before send', () => {
+  it('declares and answers a reversal BEFORE_STEP with the leg and its ServiceID', async () => {
+    const { engine, session } = await lane();
+    const beforeStep = vi.fn();
+    const op = session.voidTransaction(undefined, { beforeStep });
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    expect(engine.requests[0]!.operation).toEqual({
+      type: 'voidTransaction',
+      handledSteps: ['BEFORE_STEP'],
+    });
+    const id = engine.lastOperation(session.id).id;
+    engine.step(session.id, id, {
+      stepId: 'b1',
+      kind: 'BEFORE_STEP',
+      deadlineAt: new Date(Date.now() + 30_000).toISOString(),
+      default: { stepId: 'b1' },
+      context: { step: 'CARD', serviceId: 'RV1234ABCD' },
+    });
+    await vi.waitFor(() => expect(engine.replies).toHaveLength(1));
+    expect(engine.replies[0]!.reply).toEqual({ stepId: 'b1' });
+    expect(beforeStep).toHaveBeenCalledWith(
+      { step: 'CARD', serviceId: 'RV1234ABCD' },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    engine.complete(session.id, id, { status: 'succeeded' });
+    await expect(op).resolves.toBeUndefined();
+  });
+
+  it('exposes the ServiceID the host assigned at accept on the handle', async () => {
+    const { engine, session } = await lane();
+    engine.nextServiceId = 'SV12345678';
+    const load = session.storedValueLoad(
+      { storedValueId: '6006491234', identificationType: 'PAN', entryMode: 'KEYED' },
+      '25.00',
+    );
+    expect(load.serviceId).toBeUndefined();
+    await vi.waitFor(() => expect(load.serviceId).toBe('SV12345678'));
+    const settle = session.settle();
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(2));
+    await vi.waitFor(() => expect(settle.id).toBe(engine.lastOperation(session.id).id));
+    expect(settle.serviceId).toBeUndefined();
+    void load.catch(() => undefined);
+    void settle.catch(() => undefined);
+  });
+});
+
 describe('ending', () => {
   it('is "ending" while the end operation is queued and rejects when the host refuses', async () => {
     const engine = new ScriptedEngine();

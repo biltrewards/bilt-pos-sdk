@@ -157,6 +157,9 @@ SettlementMovement:
       type: string
     externalReference:
       type: string
+    serviceId:
+      type: string
+      description: The Nexo `ServiceID` of the terminal request that committed the movement, as the step's `BEFORE_STEP` context reported it; absent for movements settled outside the terminal (external payments and refunds).
 
 CommittedStep:
   type: object
@@ -192,6 +195,13 @@ SettlementContext:
       type: array
       items:
         $ref: '#/CommittedStep'
+    serviceId:
+      type: string
+      description: |
+        The Nexo `ServiceID` this step's terminal request will be sent with, minted for this
+        attempt before the step is asked, so the register can record it before anything is sent.
+        A retried step is asked again with a new id. Absent for steps that send no terminal
+        request (`EXTERNAL_PAYMENT`, `EXTERNAL_REFUND`).
 
 SettlementFailure:
   type: object

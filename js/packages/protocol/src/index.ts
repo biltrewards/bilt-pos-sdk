@@ -102,6 +102,7 @@ export type RefundResult = Schemas['RefundResult'];
 export type VoidResult = Schemas['VoidResult'];
 export type ReversalDecision = Schemas['ReversalDecision'];
 export type ReversalStep = Schemas['ReversalStep'];
+export type ReversalContext = Schemas['ReversalContext'];
 export type TransactionStatusOptions = Schemas['TransactionStatusOptions'];
 export type TransactionStatusResult = Schemas['TransactionStatusResult'];
 

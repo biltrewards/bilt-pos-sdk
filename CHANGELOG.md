@@ -103,6 +103,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Network-error recovery for `BiltNexoTerminalClient` (on by default): re-sends an in-flight request under an `X-Bilt-Request-Id` correlation header across transient network failures, with at-most-once execution guaranteed by terminal-side dedupe. Includes a configurable keep-alive ping and HTTP protocol / pong diagnostics, mirrored across the Java and Kotlin clients and the CLI ([#83](https://github.com/biltrewards/bilt-pos-sdk/pull/83))
 - Receipt Requirements documentation with Fiserv EMV guidelines and Bilt Platform fields
 
+## [0.38.0]
+
+### Added
+
+- Session Protocol / Terminal Bridge: a browser register learns every money request's Nexo `ServiceID` before the bridge sends it. A settle step's `BEFORE_STEP` context carries `serviceId` (the id the step's request is sent with after the reply), and `refund` / `voidTransaction` accept `BEFORE_STEP` in `handledSteps`: each leg is asked first with a `ReversalContext` (`step`, `serviceId`) and is sent once the reply (just the `stepId`), an abort or the deadline arrives. For `refundUnlinked` and the stored value changes (`storedValueActivate`, `Load`, `Unload`, `Deactivate`, `Reserve`, `Reverse`) the host mints the id through the session's `ServiceIdProvider` when it accepts the operation and returns it as the operation resource's `serviceId` on the `POST` response; the request is sent with exactly that id. A provider or listener failure at accept rejects the request. `SettlementMovement` and `ReversedMovement` report `serviceId`.
+- `@biltorg/pos-sdk`: `ReversalHandlers.beforeStep(context, info)` (`ReversalContext`), `SettlementContext.serviceId`, and `Operation.serviceId` for the operations above.
+
 ## [0.37.0]
 
 ### Added

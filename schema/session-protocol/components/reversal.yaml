@@ -15,6 +15,17 @@ ReversalDecision:
     `ABORT` stops, with already-reversed steps standing so the operation can be retried.
   enum: [RETRY, SKIP, ABORT]
 
+ReversalContext:
+  type: object
+  description: What a refund's or void's `BEFORE_STEP` handler sees before each leg is sent.
+  required: [step, serviceId]
+  properties:
+    step:
+      $ref: '#/ReversalStep'
+    serviceId:
+      type: string
+      description: The Nexo `ServiceID` this leg's terminal request will be sent with, minted for this attempt; a retried leg is asked again with a new id.
+
 ReversedMovement:
   type: object
   description: A movement that completed before a whole-sale void stopped.
@@ -24,6 +35,9 @@ ReversedMovement:
       $ref: '#/ReversalStep'
     poiTransactionId:
       type: string
+    serviceId:
+      type: string
+      description: The Nexo `ServiceID` of the reversal request that reversed the movement, as its `BEFORE_STEP` context reported it.
 
 RefundResult:
   type: object

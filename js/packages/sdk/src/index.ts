@@ -92,6 +92,7 @@ export type {
   ReconciliationResult,
   RefundResult,
   Rendering,
+  ReversalContext,
   ReversalDecision,
   ReversalStep,
   ReversedMovement,

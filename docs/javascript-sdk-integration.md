@@ -371,7 +371,7 @@ Three handler groups are **steps**: the host pauses the sequence, asks the regis
 
 | Handler | Step | Reply | Default at the deadline |
 |---|---|---|---|
-| `beforeStep(context, step)` | `BEFORE_STEP` | the `SaleTransactionID` for the next step, or nothing | the basket's shared transaction id |
+| `beforeStep(context, step)` | `BEFORE_STEP` | the `SaleTransactionID` for the next step, or nothing; `context.serviceId` is the `ServiceID` the step is then sent with | the basket's shared transaction id |
 | `onRebatesRedeemed`, `onPointsRedeemed`, `onGiftCardPayment` | `TOTAL_REQUIRED` | the running total for the next step | `result.suggestedTotal`: previous total minus the step's amount |
 | `onError(failure, step)` | `RECOVERY_REQUIRED` | `RETRY`, `SKIP`, `{ action: 'EXTERNAL', externalPayment }`, `ABORT`, `ABANDON` | `ABORT` |
 
@@ -459,7 +459,7 @@ export function netSettlement(session: TerminalShopperSession): Promise<Settleme
 
 ## Refund and void
 
-Reversals take an optional `ReversalHandlers` with one step handler, `onError(step, error, info)`, the Java `ReversalFlow.onError`: it answers `RETRY`, `SKIP` or `ABORT` for the leg that failed (`REVERSAL_DECISION_REQUIRED`, default `ABORT`). Without a handler the Java default policy applies: a failed money leg aborts, a failed loyalty leg riding along is skipped, a failed loyalty leg that is the substance of the reversal aborts.
+Reversals take an optional `ReversalHandlers` with two step handlers. `onError(step, error, info)`, the Java `ReversalFlow.onError`, answers `RETRY`, `SKIP` or `ABORT` for the leg that failed (`REVERSAL_DECISION_REQUIRED`, default `ABORT`). Without it the Java default policy applies: a failed money leg aborts, a failed loyalty leg riding along is skipped, a failed loyalty leg that is the substance of the reversal aborts. `beforeStep(context, info)` (`BEFORE_STEP`), the Java `ReversalFlow.beforeStep`, is told each leg's `step` and the `serviceId` its terminal request is then sent with, before it is sent; record it so a crash mid-reversal can be resolved with `getTransactionStatus`. `refundUnlinked` and the stored value changes send a single request whose `ServiceID` is on the handle as `op.serviceId` as soon as the host has accepted the operation.
 
 ```ts
 export function refundLast(session: TerminalShopperSession, amount?: Money): Promise<RefundResult> {

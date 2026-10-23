@@ -19,6 +19,7 @@ import type {
   PointRedemptionResult,
   RebateRedemptionResult,
   RefundResult,
+  ReversalContext,
   ReversalDecision,
   ReversalStep,
   SettlementContext,
@@ -69,7 +70,9 @@ export type SettlementRecoveryAction = Exclude<SettlementRecovery['action'], 'EX
  *
  * The three total handlers return the running total for the next step, letting the register
  * recompute tax on the discounted amount; `beforeStep` returns the `SaleTransactionID` for the
- * step, or nothing to keep the basket's. Movement callbacks are observations, not the final
+ * step, or nothing to keep the basket's. Its `context.serviceId` is the `ServiceID` the step's
+ * terminal request is sent with once the handler has answered, so the register can record it
+ * first; a retried step is asked again with a new id. Movement callbacks are observations, not the final
  * ledger: an abort or a same-run recovery can reverse charge-side movements without a
  * compensating callback, and `SettlementResult.movements` is authoritative.
  */
@@ -114,14 +117,21 @@ export interface SettlementHandlers {
 }
 
 /**
- * The register's handler for a refund or void — `ReversalFlow.onError` in Java. `step` is
- * `null` for a failure before any step ran or after every step was skipped; the decision is
- * then informational. `null` or `undefined` counts as `ABORT`. Without a handler the Java
- * default policy applies: a failed money step aborts, a failed loyalty movement riding along
- * with a money step is skipped, a failed loyalty movement that is the substance of the
+ * The register's handlers for a refund or void — the `ReversalFlow` handlers in Java.
+ *
+ * `beforeStep` is called before each leg is sent with the `ServiceID` the leg's terminal request
+ * is then sent with, so the register can record it first; a retried leg is asked again with a new
+ * id. A handler that throws leaves the step to the host's deadline, after which the leg is sent.
+ *
+ * `onError`: `step` is `null` for a failure before any step ran or after every step was skipped;
+ * the decision is then informational. `null` or `undefined` counts as `ABORT`. Without a handler
+ * the Java default policy applies: a failed money step aborts, a failed loyalty movement riding
+ * along with a money step is skipped, a failed loyalty movement that is the substance of the
  * reversal aborts.
  */
 export interface ReversalHandlers {
+  beforeStep?(context: ReversalContext, step: StepInfo): MaybePromise<void>;
+
   onError?(
     step: ReversalStep | null,
     error: SessionError,

@@ -383,7 +383,8 @@ OperationStep:
 
     | Java handler | kind | reply | default |
     |---|---|---|---|
-    | `beforeStep` | `BEFORE_STEP` | `saleTransactionId` | the basket's shared sale transaction id (`context.defaultTransactionId`) |
+    | `SettlementFlow.beforeStep` | `BEFORE_STEP` | `saleTransactionId` | the basket's shared sale transaction id (`context.defaultTransactionId`) |
+    | `ReversalFlow.beforeStep` (`refund`, `voidTransaction`) | `BEFORE_STEP` | none | none; the leg is sent |
     | `onRebatesRedeemed`, `onPointsRedeemed`, `onGiftCardPayment` | `TOTAL_REQUIRED` | `total` | `suggestedTotal`: the previous total minus the step's amount |
     | `SettlementFlow.onError` | `RECOVERY_REQUIRED` | `recovery` | `ABORT` |
     | `ReversalFlow.onError` | `REVERSAL_DECISION_REQUIRED` | `decision` | the Java default policy: `ABORT` for a money step or a loyalty movement that is the substance of the reversal, `SKIP` for a loyalty movement riding along with a money step; `default.decision` says which |
@@ -431,7 +432,13 @@ BeforeStepStep:
           type: string
           enum: [BEFORE_STEP]
         context:
-          $ref: './settlement.yaml#/SettlementContext'
+          description: |
+            A `settle` step's `SettlementContext`, or a `refund`/`voidTransaction` leg's
+            `ReversalContext`. Either carries the `serviceId` the step's terminal request is then
+            sent with; the request goes out only after the reply, an abort or the deadline.
+          anyOf:
+            - $ref: './settlement.yaml#/SettlementContext'
+            - $ref: './reversal.yaml#/ReversalContext'
 
 TotalRequiredStep:
   allOf:
@@ -508,10 +515,15 @@ OperationBase:
     serviceId:
       type: string
       description: |
-        The Nexo `ServiceID` the host sent the terminal request with, once it has been sent;
-        absent for operations that send none. Keep it for an operation whose outcome is
-        uncertain (the connection dropped, or it ended `failed` without a reply), then pass
-        it as `originalServiceId` of a `getTransactionStatus` operation.
+        Assigned at accept for single-request money operations (`refundUnlinked` and the stored
+        value changes `storedValueActivate`, `storedValueLoad`, `storedValueUnload`,
+        `storedValueDeactivate`, `storedValueReserve`, `storedValueReverse`): the Nexo `ServiceID`
+        the host minted through the session's provider and sends the operation's terminal request
+        with, already on the `POST` response. Absent for other operations; settlement, refund and
+        void legs report theirs in their `BEFORE_STEP` context and movements. Keep it for an
+        operation whose outcome is uncertain (the connection dropped, or it ended `failed`
+        without a reply), then pass it as `originalServiceId` of a `getTransactionStatus`
+        operation.
 
 Operation:
   description: |

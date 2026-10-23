@@ -34,6 +34,7 @@ export class PendingOperation<T> {
   private resolveAcceptance!: (id: string | undefined) => void;
   private engineId: string | undefined;
   private currentStatus: OperationStatus = 'queued';
+  private serviceId: string | undefined;
   private settled = false;
   private readonly answeredSteps = new Set<string>();
   /** A second handle on this operation follows it: when its request raced a listing's adopt. */
@@ -71,6 +72,7 @@ export class PendingOperation<T> {
       id: { get: () => this.engineId ?? this.requestId, enumerable: true },
       type: { value: type, enumerable: true },
       status: { get: () => this.currentStatus, enumerable: true },
+      serviceId: { get: () => this.serviceId, enumerable: true },
       abort: { value: () => this.abort(), enumerable: true },
       guide: {
         value: (handlers: SettlementHandlers | ReversalHandlers) => this.guide(handlers),
@@ -105,6 +107,7 @@ export class PendingOperation<T> {
     if (this.settled) return;
     for (const mirror of this.mirrors) mirror.update(resource);
     this.currentStatus = resource.status;
+    this.serviceId ??= resource.serviceId;
     if (resource.status === 'awaitingReply' && resource.pendingStep) {
       this.step(resource.pendingStep);
     }

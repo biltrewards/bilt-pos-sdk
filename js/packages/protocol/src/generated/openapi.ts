@@ -585,7 +585,8 @@ export interface paths {
          * Answer a pending step
          * @description The register's side of a settlement or reversal handler. The body names the `stepId` from
          *     the `operation.step` event and carries the one field that step kind takes: `total` for
-         *     `TOTAL_REQUIRED`, `saleTransactionId` for `BEFORE_STEP`, `recovery` for
+         *     `TOTAL_REQUIRED`, `saleTransactionId` for a settlement's `BEFORE_STEP` (a refund's or
+         *     void's takes none), `recovery` for
          *     `RECOVERY_REQUIRED`, `decision` for `REVERSAL_DECISION_REQUIRED`. A reply after the
          *     step's deadline, for a step already answered, or for a step the operation is not awaiting
          *     is refused with 422; the default has already applied or will apply.
@@ -1511,6 +1512,8 @@ export interface components {
             pointBalance?: number;
             externalTenderType?: string;
             externalReference?: string;
+            /** @description The Nexo `ServiceID` of the terminal request that committed the movement, as the step's `BEFORE_STEP` context reported it; absent for movements settled outside the terminal (external payments and refunds). */
+            serviceId?: string;
         };
         /** @description What the `onError` handler sees when a charge-side step failed. */
         SettlementFailure: {
@@ -1550,6 +1553,13 @@ export interface components {
             /** @description The basket's shared sale transaction id, used when the reply names nothing else. */
             defaultTransactionId: string;
             priorSteps: components["schemas"]["CommittedStep"][];
+            /**
+             * @description The Nexo `ServiceID` this step's terminal request will be sent with, minted for this
+             *     attempt before the step is asked, so the register can record it before anything is sent.
+             *     A retried step is asked again with a new id. Absent for steps that send no terminal
+             *     request (`EXTERNAL_PAYMENT`, `EXTERNAL_REFUND`).
+             */
+            serviceId?: string;
         };
         /** @description The manual-takeover record produced when the register abandons recovery; every committed movement becomes its reconciliation responsibility. */
         AbandonedSettlementRecord: {
@@ -1681,7 +1691,8 @@ export interface components {
          *
          *     | Java handler | kind | reply | default |
          *     |---|---|---|---|
-         *     | `beforeStep` | `BEFORE_STEP` | `saleTransactionId` | the basket's shared sale transaction id (`context.defaultTransactionId`) |
+         *     | `SettlementFlow.beforeStep` | `BEFORE_STEP` | `saleTransactionId` | the basket's shared sale transaction id (`context.defaultTransactionId`) |
+         *     | `ReversalFlow.beforeStep` (`refund`, `voidTransaction`) | `BEFORE_STEP` | none | none; the leg is sent |
          *     | `onRebatesRedeemed`, `onPointsRedeemed`, `onGiftCardPayment` | `TOTAL_REQUIRED` | `total` | `suggestedTotal`: the previous total minus the step's amount |
          *     | `SettlementFlow.onError` | `RECOVERY_REQUIRED` | `recovery` | `ABORT` |
          *     | `ReversalFlow.onError` | `REVERSAL_DECISION_REQUIRED` | `decision` | the Java default policy: `ABORT` for a money step or a loyalty movement that is the substance of the reversal, `SKIP` for a loyalty movement riding along with a money step; `default.decision` says which |
@@ -1798,6 +1809,8 @@ export interface components {
         ReversedMovement: {
             step: components["schemas"]["ReversalStep"];
             poiTransactionId: string;
+            /** @description The Nexo `ServiceID` of the reversal request that reversed the movement, as its `BEFORE_STEP` context reported it. */
+            serviceId?: string;
         };
         /**
          * @description The Nexo `DocumentQualifierEnum`.
@@ -1880,10 +1893,21 @@ export interface components {
             poiTransactionTimestamp?: string;
             success: boolean;
         };
+        /** @description What a refund's or void's `BEFORE_STEP` handler sees before each leg is sent. */
+        ReversalContext: {
+            step: components["schemas"]["ReversalStep"];
+            /** @description The Nexo `ServiceID` this leg's terminal request will be sent with, minted for this attempt; a retried leg is asked again with a new id. */
+            serviceId: string;
+        };
         BeforeStepStep: components["schemas"]["StepBase"] & {
             /** @enum {string} */
             kind?: "BEFORE_STEP";
-            context: components["schemas"]["SettlementContext"];
+            /**
+             * @description A `settle` step's `SettlementContext`, or a `refund`/`voidTransaction` leg's
+             *     `ReversalContext`. Either carries the `serviceId` the step's terminal request is then
+             *     sent with; the request goes out only after the reply, an abort or the deadline.
+             */
+            context: components["schemas"]["SettlementContext"] | components["schemas"]["ReversalContext"];
         } & {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -1982,10 +2006,15 @@ export interface components {
             /** @description The step awaiting a reply while `awaitingReply`. */
             pendingStep?: components["schemas"]["OperationStep"];
             /**
-             * @description The Nexo `ServiceID` the host sent the terminal request with, once it has been sent;
-             *     absent for operations that send none. Keep it for an operation whose outcome is
-             *     uncertain (the connection dropped, or it ended `failed` without a reply), then pass
-             *     it as `originalServiceId` of a `getTransactionStatus` operation.
+             * @description Assigned at accept for single-request money operations (`refundUnlinked` and the stored
+             *     value changes `storedValueActivate`, `storedValueLoad`, `storedValueUnload`,
+             *     `storedValueDeactivate`, `storedValueReserve`, `storedValueReverse`): the Nexo `ServiceID`
+             *     the host minted through the session's provider and sends the operation's terminal request
+             *     with, already on the `POST` response. Absent for other operations; settlement, refund and
+             *     void legs report theirs in their `BEFORE_STEP` context and movements. Keep it for an
+             *     operation whose outcome is uncertain (the connection dropped, or it ended `failed`
+             *     without a reply), then pass it as `originalServiceId` of a `getTransactionStatus`
+             *     operation.
              */
             serviceId?: string;
         };

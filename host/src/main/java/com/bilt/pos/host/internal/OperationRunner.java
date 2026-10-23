@@ -11,6 +11,8 @@ package com.bilt.pos.host.internal;
 
 import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.host.StepDeadlines;
+import com.bilt.pos.nexo.model.MessageCategoryType;
+import com.bilt.pos.session.ReversalContext;
 import com.bilt.pos.session.ReversalDecision;
 import com.bilt.pos.session.ReversalFlow;
 import com.bilt.pos.session.ReversalStep;
@@ -22,6 +24,7 @@ import com.bilt.pos.session.SettlementFlow;
 import com.bilt.pos.session.TerminalShopperSession;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.identity.Member;
+import com.bilt.pos.session.internal.PresetServiceIds;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
@@ -33,6 +36,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.math.BigDecimal;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -70,6 +74,10 @@ public final class OperationRunner {
     boolean ordered = !"updateInputDisplay".equals(type);
     HostedOperation operation = new HostedOperation(type, ordered);
     Runnable launch = launch(hosted, operation, type, body);
+    MessageCategoryType category = PRESET_SERVICE_ID_CATEGORIES.get(type);
+    if (category != null) {
+      operation.assignServiceId(mintServiceId(hosted.terminal(), category));
+    }
     hosted.submit(
         operation,
         () -> {
@@ -146,6 +154,39 @@ public final class OperationRunner {
   }
 
   // ─── Launch construction ───
+
+  /**
+   * Single-request money operations: their {@code ServiceID} is minted when the operation is
+   * accepted and returned on the resource, so the register holds it before the request is sent.
+   */
+  private static final Map<String, MessageCategoryType> PRESET_SERVICE_ID_CATEGORIES =
+      Map.of(
+          "refundUnlinked", MessageCategoryType.PAYMENT,
+          "storedValueActivate", MessageCategoryType.STORED_VALUE,
+          "storedValueLoad", MessageCategoryType.STORED_VALUE,
+          "storedValueUnload", MessageCategoryType.STORED_VALUE,
+          "storedValueDeactivate", MessageCategoryType.STORED_VALUE,
+          "storedValueReserve", MessageCategoryType.STORED_VALUE,
+          "storedValueReverse", MessageCategoryType.STORED_VALUE);
+
+  /** Mints through the session's provider and listener; a failure rejects the request. */
+  private static String mintServiceId(
+      TerminalShopperSession terminal, MessageCategoryType category) {
+    try {
+      return ((PresetServiceIds) terminal).mintServiceId(category);
+    } catch (SessionException e) {
+      throw HostError.from(e);
+    }
+  }
+
+  /** Creates the SDK operation, sending its request with the id assigned at accept, if any. */
+  private static <T> T create(
+      HostedSession hosted, HostedOperation operation, Supplier<T> factory) {
+    String serviceId = operation.serviceId();
+    return serviceId == null
+        ? factory.get()
+        : ((PresetServiceIds) hosted.terminal()).withPresetServiceId(serviceId, factory);
+  }
 
   /** The {@code OperationRequest} discriminator values, in the spec's order. */
   private static final Set<String> REQUEST_TYPES =
@@ -518,7 +559,7 @@ public final class OperationRunner {
       Function<T, JsonNode> view) {
     return () -> {
       try {
-        SessionResult<T> result = factory.get();
+        SessionResult<T> result = create(hosted, operation, factory);
         result.execute();
         operation.succeeded(view.apply(result.get()));
       } catch (Throwable failure) {
@@ -625,7 +666,11 @@ public final class OperationRunner {
       boolean moneyAnchored) {
     return () -> {
       try {
-        ReversalFlow<T> flow = factory.get();
+        ReversalFlow<T> flow = create(hosted, operation, factory);
+        if (steps.contains(PendingStep.Kind.BEFORE_STEP)) {
+          flow.beforeStep(
+              context -> ask(hosted, operation, reversalBeforeStep(operation, context)));
+        }
         if (steps.contains(PendingStep.Kind.REVERSAL_DECISION_REQUIRED)) {
           // a null step is the SDK's final notification, where the decision is ignored; the
           // flow is not held up for an answer nobody acts on
@@ -682,6 +727,19 @@ public final class OperationRunner {
         defaults.deepCopy(),
         deadlines.beforeStep(),
         answer -> Json.text(answer, "saleTransactionId"));
+  }
+
+  private PendingStep<Void> reversalBeforeStep(HostedOperation operation, ReversalContext context) {
+    ObjectNode payload = Json.object();
+    payload.set("context", Views.reversalContext(context));
+    return new PendingStep<>(
+        operation.id(),
+        PendingStep.Kind.BEFORE_STEP,
+        payload,
+        Json.object(),
+        Json.object(),
+        deadlines.beforeStep(),
+        answer -> null);
   }
 
   private PendingStep<BigDecimal> totalStep(
