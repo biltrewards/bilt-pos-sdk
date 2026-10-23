@@ -16,6 +16,7 @@ import com.bilt.pos.session.DiagnosisResult;
 import com.bilt.pos.session.Receipt;
 import com.bilt.pos.session.ReconciliationResult;
 import com.bilt.pos.session.RefundResult;
+import com.bilt.pos.session.ReversalContext;
 import com.bilt.pos.session.ReversedMovement;
 import com.bilt.pos.session.SessionContextSnapshot;
 import com.bilt.pos.session.SessionError;
@@ -306,6 +307,7 @@ public final class Views {
         ObjectNode m = reversed.addObject();
         m.put("step", movement.getStep().name());
         Json.putText(m, "poiTransactionId", movement.getPoiTransactionId());
+        Json.putText(m, "serviceId", movement.getServiceId());
       }
     }
     return node;
@@ -416,6 +418,7 @@ public final class Views {
     }
     Json.putText(node, "externalTenderType", movement.getExternalTenderType());
     Json.putText(node, "externalReference", movement.getExternalReference());
+    Json.putText(node, "serviceId", movement.getServiceId());
     return node;
   }
 
@@ -504,6 +507,7 @@ public final class Views {
     node.set("currentBasket", basket(context.getCurrentBasket()));
     node.put("currentTotal", moneyOrZero(context.getCurrentTotal()));
     node.put("defaultTransactionId", context.getDefaultTransactionId());
+    Json.putText(node, "serviceId", context.getServiceId());
     ArrayNode prior = node.putArray("priorSteps");
     for (CommittedStep step : context.getPriorSteps()) {
       ObjectNode s = prior.addObject();
@@ -513,6 +517,13 @@ public final class Views {
       Json.putInstant(s, "poiTransactionTimestamp", step.getPoiTransactionTimestamp());
       s.put("success", step.isSuccess());
     }
+    return node;
+  }
+
+  public static ObjectNode reversalContext(ReversalContext context) {
+    ObjectNode node = Json.object();
+    node.put("step", context.getStep().name());
+    node.put("serviceId", context.getServiceId());
     return node;
   }
 

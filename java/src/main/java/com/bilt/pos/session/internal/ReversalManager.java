@@ -120,14 +120,15 @@ public final class ReversalManager {
    * @param decider per-step failure resolution; {@code null} for the default policy (tender aborts,
    *     award is best-effort)
    * @param beforeStep told each leg's freshly minted {@code ServiceID} before it is sent, or {@code
-   *     null}; not called for a tender sent with {@code refundServiceId}
+   *     null}; not called for a first tender attempt sent with {@code refundServiceId}
    * @param onRefunded invoked the moment the tender refund completes, before the award reversal —
    *     the caller's void guard must rise as soon as money moves, even if a later step aborts the
    *     flow — and only then: a tender skipped by decision leaves the sale voidable
    * @param onAwardReversed invoked when the award reversal completes, so the caller records it as
    *     reversal progress — a later void must not re-credit it
-   * @param refundServiceId the {@code ServiceID} the tender refund is sent with, already minted by
-   *     {@link NexoMessageFactory#mintServiceId}, or {@code null} to mint one per attempt
+   * @param refundServiceId the {@code ServiceID} the first tender attempt is sent with, already
+   *     minted by {@link NexoMessageFactory#mintServiceId}, or {@code null}; every other attempt
+   *     mints its own and tells {@code beforeStep}
    */
   public RefundResult refund(
       BigDecimal amount,
@@ -146,23 +147,26 @@ public final class ReversalManager {
     // the tender refund anchors the flow, so the award is best-effort
     StepDecider effective = decider != null ? decider : defaultPolicy(true);
     SessionException[] lastFailure = new SessionException[1];
+    String[] presetServiceId = {refundServiceId};
 
     PaymentResponse body =
         runStep(
             ReversalStep.CARD,
             effective,
             decider == null,
-            () ->
-                sendRefund(
-                    amount,
-                    saleItems,
-                    originalPoiTxnId,
-                    originalPoiTimestamp,
-                    saleTransaction,
-                    refundServiceId != null
-                        ? refundServiceId
-                        : mintServiceId(
-                            ReversalStep.CARD, MessageCategoryType.PAYMENT, beforeStep)),
+            () -> {
+              String serviceId = presetServiceId[0];
+              presetServiceId[0] = null;
+              return sendRefund(
+                  amount,
+                  saleItems,
+                  originalPoiTxnId,
+                  originalPoiTimestamp,
+                  saleTransaction,
+                  serviceId != null
+                      ? serviceId
+                      : mintServiceId(ReversalStep.CARD, MessageCategoryType.PAYMENT, beforeStep));
+            },
             e -> {
               lastFailure[0] = e;
               LOGGER.warning(

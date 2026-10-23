@@ -16,6 +16,7 @@ import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.session.basket.BasketItem;
+import com.bilt.pos.session.internal.PresetServiceIds;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.SettlementMovement;
@@ -407,6 +408,28 @@ class ServiceIdTest {
     assertEquals("REG0000003", requests.get(0).getMessageHeader().getServiceID());
     assertEquals("REG0000004", requests.get(1).getMessageHeader().getServiceID());
     assertTrue(assigned.contains(Map.entry("REG0000004", MessageCategoryType.PAYMENT)));
+  }
+
+  @Test
+  void presetUnlinkedRefundIdIsSentOnceAndARetryMintsAFreshIdForBeforeStep() throws Exception {
+    TerminalShopperSession session = session(null);
+    server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(15.00)));
+    List<ReversalContext> contexts = new ArrayList<>();
+
+    ((PresetServiceIds) session)
+        .withPresetServiceId("PRESET01", () -> session.refundUnlinked(new BigDecimal("15.00")))
+        .beforeStep(contexts::add)
+        .onError((step, error) -> ReversalDecision.RETRY)
+        .get();
+
+    List<SaleToPOIRequest> requests = drainRequests();
+    assertEquals(2, requests.size());
+    assertEquals("PRESET01", requests.get(0).getMessageHeader().getServiceID());
+    assertEquals("REG0000002", requests.get(1).getMessageHeader().getServiceID());
+    assertEquals(
+        List.of("REG0000002"),
+        contexts.stream().map(ReversalContext::getServiceId).collect(Collectors.toList()));
   }
 
   @Test
