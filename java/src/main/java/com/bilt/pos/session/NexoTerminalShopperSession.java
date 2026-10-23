@@ -971,6 +971,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                   allocation.getMemberId(),
                   saleTransaction,
                   null,
+                  null,
                   () -> {},
                   () -> {},
                   serviceId);
@@ -1402,6 +1403,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         linked ? paid.getMemberId() : null,
         currentSaleTransaction(),
         flow.decider(),
+        flow.beforeStepHandler(),
         linked ? guards::markRefunded : () -> {},
         linked ? () -> guards.markAwardReversed(paid.getAwardPoiTransactionId()) : () -> {},
         null);
@@ -1491,6 +1493,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
               paid.getMemberId(),
               currentSaleTransaction(),
               flow.decider(),
+              flow.beforeStepHandler(),
               guards.reversedMovements());
       if (!resumeRollback) {
         guards.completeVoid();
@@ -1530,6 +1533,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
               originalSale.getMemberId(),
               currentSaleTransaction(),
               flow.decider(),
+              flow.beforeStepHandler(),
               reversedMovements);
       clearPriorSaleVoidProgress(originalSale);
       return result;

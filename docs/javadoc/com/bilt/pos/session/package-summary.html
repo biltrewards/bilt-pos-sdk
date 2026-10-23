@@ -133,122 +133,126 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="RefundResult.html" title="class in com.bilt.pos.session"><code>RefundResult</code></a>.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab3"><a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab3">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="ReversalContext.html" title="class in com.bilt.pos.session">ReversalContext</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="block">Context handed to the <a href="ReversalFlow.html#beforeStep(java.util.function.Consumer)"><code>ReversalFlow.beforeStep(java.util.function.Consumer&lt;com.bilt.pos.session.ReversalContext&gt;)</code></a> handler before each reversal leg.</div>
+</div>
+<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab3">
 <div class="block">How a reversal flow proceeds after one of its steps failed, returned by the handler registered
  with <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;T&gt;</div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;T&gt;</div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">The reversal chain returned by <a href="TerminalShopperSession.html#voidTransaction()"><code>TerminalShopperSession.voidTransaction()</code></a>, prior-sale
  voids, and same-session refund operations.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab3"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab3">
+<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab3">
 <div class="block">One reversible leg of a sale, as reported to <a href="ReversalFlow.html#onError(java.util.function.BiFunction)"><code>ReversalFlow.onError(java.util.function.BiFunction&lt;com.bilt.pos.session.ReversalStep, com.bilt.pos.session.SessionError, com.bilt.pos.session.ReversalDecision&gt;)</code></a> when a reversal step
  fails.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="ReversedMovement.html" title="class in com.bilt.pos.session">ReversedMovement</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="ReversedMovement.html" title="class in com.bilt.pos.session">ReversedMovement</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">A movement that completed before a whole-sale void stopped.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab1"><a href="ServiceIdListener.html" title="interface in com.bilt.pos.session">ServiceIdListener</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab1">
+<div class="col-first odd-row-color class-summary class-summary-tab1"><a href="ServiceIdListener.html" title="interface in com.bilt.pos.session">ServiceIdListener</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab1">
 <div class="block">Observes every <code>ServiceID</code> the SDK assigns, whether minted by the default generator or a
  <a href="ServiceIdProvider.html" title="interface in com.bilt.pos.session"><code>ServiceIdProvider</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab1"><a href="ServiceIdProvider.html" title="interface in com.bilt.pos.session">ServiceIdProvider</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab1">
+<div class="col-first even-row-color class-summary class-summary-tab1"><a href="ServiceIdProvider.html" title="interface in com.bilt.pos.session">ServiceIdProvider</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab1">
 <div class="block">Mints the Nexo <code>ServiceID</code> of every request the SDK sends to the terminal: settlement legs
  and their retries, Transaction Status recovery polls, aborts, input updates, displays, session
  signals, and terminal services.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SessionBasket.html" title="class in com.bilt.pos.session">SessionBasket</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">The basket surface of a shopper session: item and tax mutations, batch edits, whole-basket
  replacement, and immutable snapshots.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab1"><a href="SessionContext.html" title="interface in com.bilt.pos.session">SessionContext</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab1">
+<div class="col-first even-row-color class-summary class-summary-tab1"><a href="SessionContext.html" title="interface in com.bilt.pos.session">SessionContext</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab1">
 <div class="block">What the POS knows about the checkout that any widget may use: the <a href="CheckoutPhase.html" title="enum class in com.bilt.pos.session"><code>CheckoutPhase</code></a> and
  free-form attributes, alongside the lane identifiers the session was built with.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SessionContextSnapshot.html" title="class in com.bilt.pos.session">SessionContextSnapshot</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SessionContextSnapshot.html" title="class in com.bilt.pos.session">SessionContextSnapshot</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">A point-in-time copy of a <a href="SessionContext.html" title="interface in com.bilt.pos.session"><code>SessionContext</code></a>: the phase, the attributes, and the lane
  identifiers, frozen together so that a widget or observer reasons about one consistent state
  while the live context keeps changing.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SessionContextSnapshot.Builder.html" title="class in com.bilt.pos.session">SessionContextSnapshot.Builder</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SessionContextSnapshot.Builder.html" title="class in com.bilt.pos.session">SessionContextSnapshot.Builder</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Builder for a <a href="SessionContextSnapshot.html" title="class in com.bilt.pos.session"><code>SessionContextSnapshot</code></a>; the phase defaults to <code>SCANNING</code>.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SessionError.html" title="class in com.bilt.pos.session">SessionError</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Describes why a session operation failed.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab3"><a href="SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab3">
+<div class="col-first even-row-color class-summary class-summary-tab3"><a href="SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab3">
 <div class="block">High-level error category for a failed session operation.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab5"><a href="SessionException.html" title="class in com.bilt.pos.session">SessionException</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab5">
+<div class="col-first odd-row-color class-summary class-summary-tab5"><a href="SessionException.html" title="class in com.bilt.pos.session">SessionException</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab5">
 <div class="block">Unchecked exception thrown when a failed session operation is unwrapped via <a href="SessionResult.html#get()"><code>SessionResult.get()</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;T&gt;</div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;T&gt;</div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">A lazy, single-shot session operation.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">The settlement orchestration chain returned by <code>TerminalShopperSession.settle()</code>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab1"><a href="ShopperSession.html" title="interface in com.bilt.pos.session">ShopperSession</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab1">
+<div class="col-first even-row-color class-summary class-summary-tab1"><a href="ShopperSession.html" title="interface in com.bilt.pos.session">ShopperSession</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab1">
 <div class="block">One shopper's visit at a lane, with or without a terminal.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="ShopperSession.Builder.html" title="class in com.bilt.pos.session">ShopperSession.Builder</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="ShopperSession.Builder.html" title="class in com.bilt.pos.session">ShopperSession.Builder</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Builder for a local <a href="ShopperSession.html" title="interface in com.bilt.pos.session"><code>ShopperSession</code></a>: a session with the basket, member state, and
  lifecycle of every shopper session, but no terminal.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="Terminal.html" title="class in com.bilt.pos.session">Terminal</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="Terminal.html" title="class in com.bilt.pos.session">Terminal</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">A terminal's device and admin operations — diagnostics, totals, reconciliation, printing, sound —
  outside any session.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="Terminal.html" title="class in com.bilt.pos.session"><code>Terminal</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab1"><a href="TerminalShopperSession.html" title="interface in com.bilt.pos.session">TerminalShopperSession</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab1">
+<div class="col-first even-row-color class-summary class-summary-tab1"><a href="TerminalShopperSession.html" title="interface in com.bilt.pos.session">TerminalShopperSession</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab1">
 <div class="block">A shopper session with a Bilt terminal attached: a <a href="ShopperSession.html" title="interface in com.bilt.pos.session"><code>ShopperSession</code></a> whose loyalty, prompts,
  customer display, and settlement run on the terminal over a <a href="../nexo/client/TerminalClient.html" title="interface in com.bilt.pos.nexo.client"><code>TerminalClient</code></a>.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="TerminalShopperSession.Builder.html" title="class in com.bilt.pos.session">TerminalShopperSession.Builder</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Builder for a <a href="TerminalShopperSession.html" title="interface in com.bilt.pos.session"><code>TerminalShopperSession</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="TransactionStatusOptions.html" title="class in com.bilt.pos.session">TransactionStatusOptions</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="TransactionStatusOptions.html" title="class in com.bilt.pos.session">TransactionStatusOptions</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Options for <a href="TerminalShopperSession.html#getTransactionStatus(java.lang.String)"><code>TerminalShopperSession.getTransactionStatus(java.lang.String)</code></a>.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="TransactionStatusOptions.Builder.html" title="class in com.bilt.pos.session">TransactionStatusOptions.Builder</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="TransactionStatusOptions.Builder.html" title="class in com.bilt.pos.session">TransactionStatusOptions.Builder</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="TransactionStatusOptions.html" title="class in com.bilt.pos.session"><code>TransactionStatusOptions</code></a>.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="TransactionStatusResult.html" title="class in com.bilt.pos.session">TransactionStatusResult</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="TransactionStatusResult.html" title="class in com.bilt.pos.session">TransactionStatusResult</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Outcome of <a href="TerminalShopperSession.html#getTransactionStatus(java.lang.String)"><code>TerminalShopperSession.getTransactionStatus(String)</code></a>.</div>
 </div>
-<div class="col-first even-row-color class-summary class-summary-tab2"><a href="VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a></div>
-<div class="col-last even-row-color class-summary class-summary-tab2">
+<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a></div>
+<div class="col-last odd-row-color class-summary class-summary-tab2">
 <div class="block">Outcome of <code>voidTransaction()</code>: the payment reversal plus a best-effort loyalty award
  reversal.</div>
 </div>
-<div class="col-first odd-row-color class-summary class-summary-tab2"><a href="VoidResult.Builder.html" title="class in com.bilt.pos.session">VoidResult.Builder</a></div>
-<div class="col-last odd-row-color class-summary class-summary-tab2">
+<div class="col-first even-row-color class-summary class-summary-tab2"><a href="VoidResult.Builder.html" title="class in com.bilt.pos.session">VoidResult.Builder</a></div>
+<div class="col-last even-row-color class-summary class-summary-tab2">
 <div class="block">Builder for <a href="VoidResult.html" title="class in com.bilt.pos.session"><code>VoidResult</code></a>.</div>
 </div>
 </div>

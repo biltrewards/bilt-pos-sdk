@@ -16,6 +16,7 @@ import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.session.basket.BasketItem;
+import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
@@ -32,6 +33,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -291,6 +293,208 @@ class ServiceIdTest {
     assertEquals(List.of("REG0000002"), beforeStepIds);
     assertEquals("REG0000002", refund.getMessageHeader().getServiceID());
     assertEquals("REG0000002", result.getMovements().get(0).getServiceId());
+  }
+
+  private static final Instant ORIGINAL_TIME = Instant.parse("2026-07-20T10:00:00Z");
+  private static final String REVERSAL_UNREACHABLE =
+      "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
+          + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnreachableHost\"}}}}";
+
+  private static OriginalSaleRecord cardAndGiftCardSale() {
+    return OriginalSaleRecord.builder()
+        .cardPoiTransactionId("POI-CARD-9")
+        .cardPoiTransactionTimestamp(ORIGINAL_TIME)
+        .storedValuePoiTransactionId("POI-SV-9")
+        .storedValuePoiTransactionTimestamp(ORIGINAL_TIME)
+        .build();
+  }
+
+  @Test
+  void eachVoidLegIsSentWithTheIdBeforeStepReported() throws Exception {
+    TerminalShopperSession session = session(null);
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.REVERSAL_OK));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.REVERSAL_OK));
+    List<ReversalContext> contexts = new ArrayList<>();
+
+    VoidResult result =
+        session.voidTransaction(cardAndGiftCardSale()).beforeStep(contexts::add).get();
+
+    List<SaleToPOIRequest> requests = drainRequests();
+    assertEquals(2, requests.size());
+    assertEquals(
+        List.of(ReversalStep.CARD, ReversalStep.STORED_VALUE),
+        contexts.stream().map(ReversalContext::getStep).collect(Collectors.toList()));
+    assertEquals(
+        List.of("REG0000002", "REG0000003"),
+        contexts.stream().map(ReversalContext::getServiceId).collect(Collectors.toList()));
+    assertEquals("REG0000002", requests.get(0).getMessageHeader().getServiceID());
+    assertEquals("REG0000003", requests.get(1).getMessageHeader().getServiceID());
+    assertEquals("REG0000002", result.getServiceId());
+    assertTrue(assigned.contains(Map.entry("REG0000003", MessageCategoryType.REVERSAL)));
+  }
+
+  @Test
+  void retriedVoidLegMintsAFreshIdAndCallsBeforeStepAgain() throws Exception {
+    TerminalShopperSession session = session(null);
+    server.enqueue(new MockResponse().setBody(REVERSAL_UNREACHABLE));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.REVERSAL_OK));
+    List<String> beforeStepIds = new ArrayList<>();
+
+    VoidResult result =
+        session
+            .voidTransaction(
+                OriginalSaleRecord.builder()
+                    .cardPoiTransactionId("POI-CARD-9")
+                    .cardPoiTransactionTimestamp(ORIGINAL_TIME)
+                    .build())
+            .beforeStep(ctx -> beforeStepIds.add(ctx.getServiceId()))
+            .onError((step, error) -> ReversalDecision.RETRY)
+            .get();
+
+    List<SaleToPOIRequest> requests = drainRequests();
+    assertEquals(List.of("REG0000002", "REG0000003"), beforeStepIds);
+    assertEquals(2, requests.size());
+    assertEquals("REG0000002", requests.get(0).getMessageHeader().getServiceID());
+    assertEquals("REG0000003", requests.get(1).getMessageHeader().getServiceID());
+    assertEquals("REG0000003", result.getServiceId());
+  }
+
+  @Test
+  void partialVoidReportsTheIdOfEachReversedMovement() throws Exception {
+    TerminalShopperSession session = session(null);
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.REVERSAL_OK));
+    server.enqueue(new MockResponse().setBody(REVERSAL_UNREACHABLE));
+
+    SessionException failure =
+        assertThrows(
+            SessionException.class,
+            () ->
+                session
+                    .voidTransaction(cardAndGiftCardSale())
+                    .onError((step, error) -> ReversalDecision.ABORT)
+                    .get());
+
+    assertEquals(
+        List.of(new ReversedMovement(ReversalStep.CARD, "POI-CARD-9", "REG0000002")),
+        failure.getError().getReversedMovements());
+  }
+
+  @Test
+  void retriedRefundMintsAFreshIdAndCallsBeforeStepAgain() throws Exception {
+    TerminalShopperSession session = session(null);
+    addHundredDollarItem(session);
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+    session.settle().get();
+    nextRequest();
+    server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(15.00)));
+    List<ReversalContext> contexts = new ArrayList<>();
+
+    session
+        .refund(new BigDecimal("15.00"))
+        .beforeStep(contexts::add)
+        .onError((step, error) -> ReversalDecision.RETRY)
+        .get();
+
+    List<SaleToPOIRequest> requests = drainRequests();
+    assertEquals(2, requests.size());
+    assertEquals(
+        List.of(ReversalStep.CARD, ReversalStep.CARD),
+        contexts.stream().map(ReversalContext::getStep).collect(Collectors.toList()));
+    assertEquals(
+        List.of("REG0000003", "REG0000004"),
+        contexts.stream().map(ReversalContext::getServiceId).collect(Collectors.toList()));
+    assertEquals("REG0000003", requests.get(0).getMessageHeader().getServiceID());
+    assertEquals("REG0000004", requests.get(1).getMessageHeader().getServiceID());
+    assertTrue(assigned.contains(Map.entry("REG0000004", MessageCategoryType.PAYMENT)));
+  }
+
+  @Test
+  void throwingBeforeStepSendsNoLegAndGoesToOnError() throws Exception {
+    TerminalShopperSession session = session(null);
+    List<ReversalStep> failedSteps = new ArrayList<>();
+
+    SessionException failure =
+        assertThrows(
+            SessionException.class,
+            () ->
+                session
+                    .voidTransaction(cardAndGiftCardSale())
+                    .beforeStep(
+                        ctx -> {
+                          throw new IllegalStateException("register could not persist");
+                        })
+                    .onError(
+                        (step, error) -> {
+                          failedSteps.add(step);
+                          return ReversalDecision.ABORT;
+                        })
+                    .get());
+
+    assertEquals(SessionErrorCode.UNKNOWN, failure.getError().getCode());
+    assertEquals(List.of(ReversalStep.CARD), failedSteps);
+    assertEquals(0, drainRequests().size());
+  }
+
+  @Test
+  void throwingBeforeStepOnALoyaltyLegAbortsUnderTheDefaultPolicy() throws Exception {
+    TerminalShopperSession session = session(null);
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.REVERSAL_OK));
+
+    SessionException failure =
+        assertThrows(
+            SessionException.class,
+            () ->
+                session
+                    .voidTransaction(
+                        OriginalSaleRecord.builder()
+                            .cardPoiTransactionId("POI-CARD-9")
+                            .cardPoiTransactionTimestamp(ORIGINAL_TIME)
+                            .redemptionPoiTransactionId("POI-RED-9")
+                            .redemptionPoiTransactionTimestamp(ORIGINAL_TIME)
+                            .memberId("member-1")
+                            .build())
+                    .beforeStep(
+                        ctx -> {
+                          if (ctx.getStep() == ReversalStep.REDEMPTION) {
+                            throw new IllegalStateException("register could not persist");
+                          }
+                        })
+                    .get());
+
+    assertEquals(SessionErrorCode.UNKNOWN, failure.getError().getCode());
+    assertEquals(
+        List.of(ReversalStep.CARD),
+        failure.getError().getReversedMovements().stream()
+            .map(ReversedMovement::getStep)
+            .collect(Collectors.toList()));
+    assertEquals(1, drainRequests().size());
+  }
+
+  @Test
+  void retryAfterAThrowingBeforeStepMintsAFreshId() throws Exception {
+    TerminalShopperSession session = session(null);
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.REVERSAL_OK));
+    AtomicInteger calls = new AtomicInteger();
+
+    session
+        .voidTransaction(
+            OriginalSaleRecord.builder()
+                .cardPoiTransactionId("POI-CARD-9")
+                .cardPoiTransactionTimestamp(ORIGINAL_TIME)
+                .build())
+        .beforeStep(
+            ctx -> {
+              if (calls.incrementAndGet() == 1) {
+                throw new IllegalStateException("register could not persist");
+              }
+            })
+        .onError((step, error) -> ReversalDecision.RETRY)
+        .get();
+
+    List<SaleToPOIRequest> requests = drainRequests();
+    assertEquals(1, requests.size());
+    assertEquals("REG0000003", requests.get(0).getMessageHeader().getServiceID());
   }
 
   @Test

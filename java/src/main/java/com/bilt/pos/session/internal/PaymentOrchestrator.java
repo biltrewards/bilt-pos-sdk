@@ -2002,7 +2002,10 @@ public final class PaymentOrchestrator {
       SaleToPOIRequest wireRequest =
           exchange
               .factory()
-              .reversalRequest(Wire.originalTransaction(originalPoiTxn), saleTransaction);
+              .reversalRequest(
+                  Wire.originalTransaction(originalPoiTxn),
+                  saleTransaction,
+                  exchange.factory().mintServiceId(MessageCategoryType.REVERSAL));
       SaleToPOIResponse response =
           exchange.sendExpectingBody(MessageCategoryType.REVERSAL, wireRequest);
       if (response.getReversalResponse() != null) {
