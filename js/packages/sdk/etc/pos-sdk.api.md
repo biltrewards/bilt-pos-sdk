@@ -97,12 +97,6 @@ export interface AttachSessionOptions {
     readonly widgets?: readonly WidgetOptions[];
 }
 
-// @public
-export interface AttachTerminalSessionOptions extends AttachSessionOptions {
-    readonly reversal?: ReversalHandlers;
-    readonly settlement?: SettlementHandlers;
-}
-
 export { Basket }
 
 export { BasketChange }
@@ -181,7 +175,7 @@ export interface BiltPos {
     // (undocumented)
     [Symbol.asyncDispose](): Promise<void>;
     attachShopperSession(sessionId: string, options?: AttachSessionOptions): Promise<ShopperSession>;
-    attachTerminalSession(sessionId: string, options?: AttachTerminalSessionOptions): Promise<TerminalShopperSession>;
+    attachTerminalSession(sessionId: string, options?: AttachSessionOptions): Promise<TerminalShopperSession>;
     // (undocumented)
     readonly capabilities: EngineCapabilities;
     close(): Promise<void>;
@@ -354,6 +348,7 @@ export { Offer }
 // @public
 export interface Operation<T> extends Promise<T> {
     abort(): Promise<void>;
+    guide(handlers: SettlementHandlers | ReversalHandlers): void;
     readonly id: string;
     readonly status: OperationStatus;
     readonly type: OperationType;
@@ -582,9 +577,6 @@ export type SettlementRecoveryAction = Exclude<SettlementRecovery['action'], 'EX
 export { SettlementResult }
 
 // @public
-export type SettleOptions = SettlementOptions & SettlementHandlers;
-
-// @public
 export interface ShopperSession {
     [Symbol.asyncDispose](): Promise<void>;
     readonly basket: SessionBasket;
@@ -712,7 +704,7 @@ export interface TerminalShopperSession extends ShopperSession {
     requestSignature(prompt: string): Operation<Signature>;
     requestTextString(prompt: string, options?: InputOptions): Operation<string>;
     setStoredValueCard(card: StoredValueCard | string | null): Promise<void>;
-    settle(options?: SettleOptions): Operation<SettlementResult>;
+    settle(options?: SettlementOptions, handlers?: SettlementHandlers): Operation<SettlementResult>;
     storedValueActivate(card: StoredValueCard, initialAmount: Money): Operation<StoredValueOperationResult>;
     // (undocumented)
     storedValueBalance(card: StoredValueCard): Operation<StoredValueBalance>;

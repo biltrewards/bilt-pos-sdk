@@ -8,7 +8,7 @@ import type {
   TerminalSessionOptions,
 } from './session';
 import type { Terminal, TerminalInfo } from './terminal';
-import type { AttachTerminalSessionOptions, TerminalShopperSession } from './terminal-session';
+import type { TerminalShopperSession } from './terminal-session';
 
 /**
  * What differs between engines, reported as data rather than as different method signatures.
@@ -97,12 +97,12 @@ export interface BiltPos {
   /**
    * Reattaches to a `terminal` session, as `attachShopperSession` does for a `local` one.
    * Operations still in flight are adopted: they can be listed through
-   * `session.operations()` and answered or aborted as if this page had started them, with
-   * the step handlers `options` carries.
+   * `session.operations()`, and `guide()` registers the handlers that answer their pending
+   * steps, as if this page had started them.
    */
   attachTerminalSession(
     sessionId: string,
-    options?: AttachTerminalSessionOptions,
+    options?: AttachSessionOptions,
   ): Promise<TerminalShopperSession>;
 
   /** The terminal the host drives, or `null` when it has none and only local sessions work. */

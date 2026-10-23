@@ -12,7 +12,8 @@ import type {
 import {
   SessionError,
   type Operation,
-  type SettleOptions,
+  type SettlementHandlers,
+  type SettlementOptions,
   type SettlementRecoveryAction,
   type StepInfo,
   type TerminalShopperSession,
@@ -81,11 +82,11 @@ export type SettlementStepReply =
 /** What `useSettlement` returns. */
 export interface UseSettlementResult {
   /**
-   * Starts a settlement with `session.settle(options)` and tracks it. Handlers in `options` run
-   * as they would on the session; steps listed in `interactive` and not handled there become
+   * Starts a settlement with `session.settle(options, handlers)` and tracks it. Handlers run as
+   * they would on the session; steps listed in `interactive` and not handled there become
    * `pendingStep`. Throws without an open terminal session or while one settlement is running.
    */
-  settle(options?: SettleOptions): Operation<SettlementResult>;
+  settle(options?: SettlementOptions, handlers?: SettlementHandlers): Operation<SettlementResult>;
 
   readonly status: SettlementStatus;
 
@@ -240,7 +241,10 @@ export function useSettlement(
   );
 
   const settle = useCallback(
-    (settleOptions: SettleOptions = {}): Operation<SettlementResult> => {
+    (
+      settleOptions: SettlementOptions = {},
+      settleHandlers: SettlementHandlers = {},
+    ): Operation<SettlementResult> => {
       if (!current) throw new Error('settle() called without an open terminal session');
       // `live` is a ref so two calls in one turn, before any render, cannot both pass.
       if (
@@ -252,7 +256,7 @@ export function useSettlement(
         throw new Error('a settlement is already running on this hook');
       }
       const wants = (kind: InteractiveStepKind) => interactiveRef.current.includes(kind);
-      const wrapped: SettleOptions = { ...settleOptions };
+      const wrapped: SettlementHandlers = { ...settleHandlers };
 
       const run: { operation?: Operation<SettlementResult> } = {};
       live.current = run;
@@ -260,7 +264,7 @@ export function useSettlement(
       wrapped.onMovement = (movement) => {
         if (live.current === run)
           setState((previous) => ({ ...previous, movements: [...previous.movements, movement] }));
-        settleOptions.onMovement?.(movement);
+        settleHandlers.onMovement?.(movement);
       };
 
       const totalStep =
@@ -291,16 +295,16 @@ export function useSettlement(
               return reply.total;
             },
           );
-      if (!settleOptions.onRebatesRedeemed && wants('TOTAL_REQUIRED')) {
+      if (!settleHandlers.onRebatesRedeemed && wants('TOTAL_REQUIRED')) {
         wrapped.onRebatesRedeemed = totalStep('REBATE_REDEMPTION');
       }
-      if (!settleOptions.onPointsRedeemed && wants('TOTAL_REQUIRED')) {
+      if (!settleHandlers.onPointsRedeemed && wants('TOTAL_REQUIRED')) {
         wrapped.onPointsRedeemed = totalStep('POINT_REDEMPTION');
       }
-      if (!settleOptions.onGiftCardPayment && wants('TOTAL_REQUIRED')) {
+      if (!settleHandlers.onGiftCardPayment && wants('TOTAL_REQUIRED')) {
         wrapped.onGiftCardPayment = totalStep('STORED_VALUE_CHARGE');
       }
-      if (!settleOptions.onError && wants('RECOVERY_REQUIRED')) {
+      if (!settleHandlers.onError && wants('RECOVERY_REQUIRED')) {
         wrapped.onError = (failure, info) =>
           ask<SettlementRecovery | SettlementRecoveryAction>(
             {
@@ -319,7 +323,7 @@ export function useSettlement(
             },
           );
       }
-      if (!settleOptions.beforeStep && wants('BEFORE_STEP')) {
+      if (!settleHandlers.beforeStep && wants('BEFORE_STEP')) {
         wrapped.beforeStep = (context, info) =>
           ask<string | null | undefined>(
             { kind: 'BEFORE_STEP', context, deadline: info.deadline, signal: info.signal },
@@ -336,7 +340,7 @@ export function useSettlement(
 
       let operation: Operation<SettlementResult>;
       try {
-        operation = current.settle(wrapped);
+        operation = current.settle(settleOptions, wrapped);
       } catch (error) {
         if (live.current === run) live.current = null;
         throw error;

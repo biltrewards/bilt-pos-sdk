@@ -184,8 +184,8 @@ describe('useSettlement', () => {
     let releaseAbort: () => void = () => undefined;
     let aborted = false;
     let finished = false;
-    first.settle = (options) => {
-      const operation = settle(options);
+    first.settle = (options, handlers) => {
+      const operation = settle(options, handlers);
       void operation.then(
         () => (finished = true),
         () => (finished = true),

@@ -12,7 +12,6 @@ import type {
   MenuSelection,
   Money,
   OperationRequest,
-  OperationType,
   OriginalSaleRecord,
   PinOptions,
   PinResult,
@@ -32,63 +31,15 @@ import type { Operation } from '../operation';
 import type { TerminalSessionOptions } from '../session';
 import type { Terminal } from '../terminal';
 import type {
-  AttachTerminalSessionOptions,
   ReversalHandlers,
-  SettleOptions,
   SettlementHandlers,
   TerminalShopperSession,
 } from '../terminal-session';
+import type { AttachSessionOptions } from '../session';
 import { newIdempotencyKey } from './ids';
 import { ShopperSessionImpl, type SessionRuntime } from './session';
 import { handledSteps, type StepHandlers } from './steps';
 import { TerminalImpl } from './terminal';
-
-const SETTLEMENT_OPTION_KEYS = [
-  'disableRebates',
-  'disablePoints',
-  'disableAward',
-  'cashback',
-  'paymentProcessingDisplay',
-  'refunds',
-  'fulfillments',
-  'settlementType',
-] as const satisfies readonly (keyof SettlementOptions)[];
-
-const SETTLEMENT_HANDLER_KEYS = [
-  'beforeStep',
-  'onRebatesRedeemed',
-  'onPointsRedeemed',
-  'onGiftCardPayment',
-  'onMovement',
-  'onCardCharged',
-  'onExternallyPaid',
-  'onAwarded',
-  'onStoredValueLoaded',
-  'onCardRefunded',
-  'onGiftCardRefunded',
-  'onExternalRefunded',
-  'onPointsRefunded',
-  'onRebateRefunded',
-  'onAwardRefunded',
-  'onError',
-  'onAbandoned',
-] as const satisfies readonly (keyof SettlementHandlers)[];
-
-/** Splits `settle()`'s one options object into the wire options and the handlers. */
-export function splitSettleOptions(options: SettleOptions): {
-  options: SettlementOptions;
-  handlers: SettlementHandlers;
-} {
-  const wire: Record<string, unknown> = {};
-  for (const key of SETTLEMENT_OPTION_KEYS) {
-    if (options[key] !== undefined) wire[key] = options[key];
-  }
-  const handlers: Record<string, unknown> = {};
-  for (const key of SETTLEMENT_HANDLER_KEYS) {
-    if (options[key] !== undefined) handlers[key] = options[key];
-  }
-  return { options: wire as SettlementOptions, handlers: handlers as SettlementHandlers };
-}
 
 /** A bare card number is a keyed PAN, as in Java. */
 function toStoredValueCard(card: StoredValueCard | string): StoredValueCard {
@@ -113,31 +64,13 @@ export class TerminalShopperSessionImpl
   override readonly kind = 'terminal' as const;
   readonly poiId: string;
 
-  private readonly attachHandlers: AttachTerminalSessionOptions | undefined;
-
   constructor(
     runtime: SessionRuntime,
     session: Session,
-    options: TerminalSessionOptions | AttachTerminalSessionOptions,
+    options: TerminalSessionOptions | AttachSessionOptions,
   ) {
     super(runtime, session, options);
     this.poiId = session.poiId ?? ('poiId' in options ? options.poiId : undefined) ?? '';
-    this.attachHandlers = 'settlement' in options || 'reversal' in options ? options : undefined;
-  }
-
-  /** The handlers an adopted `settle` or reversal answers its steps with, from the attach options. */
-  protected override stepHandlersFor(type: OperationType): StepHandlers | undefined {
-    const handlers = this.attachHandlers;
-    if (type === 'settle' && handlers?.settlement) {
-      return { kind: 'settlement', handlers: handlers.settlement };
-    }
-    if (
-      (type === 'refund' || type === 'refundUnlinked' || type === 'voidTransaction') &&
-      handlers?.reversal
-    ) {
-      return { kind: 'reversal', handlers: handlers.reversal };
-    }
-    return undefined;
   }
 
   private request<T>(request: OperationRequest, steps?: StepHandlers): Operation<T> {
@@ -286,11 +219,13 @@ export class TerminalShopperSessionImpl
     return this.request({ type: 'storedValueDuplicate', card });
   }
 
-  settle(options: SettleOptions = {}): Operation<SettlementResult> {
-    const split = splitSettleOptions(options);
-    const steps: StepHandlers = { kind: 'settlement', handlers: split.handlers };
+  settle(
+    options: SettlementOptions = {},
+    handlers: SettlementHandlers = {},
+  ): Operation<SettlementResult> {
+    const steps: StepHandlers = { kind: 'settlement', handlers };
     const request: OperationRequest = { type: 'settle' };
-    if (Object.keys(split.options).length > 0) request.options = split.options;
+    if (Object.keys(options).length > 0) request.options = options;
     const declared = handledSteps(steps);
     if (declared.length > 0) request.handledSteps = declared;
     return this.request(request, steps);

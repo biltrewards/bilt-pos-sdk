@@ -35,6 +35,7 @@ async function signInWith(
           type: op.type,
           status: op.status,
           abort: () => op.abort(),
+          guide: (h: Parameters<typeof op.guide>[0]) => op.guide(h),
         },
       );
     });
@@ -325,6 +326,7 @@ describe('the Sale tab and the basket card', () => {
             type: 'identifyMember' as const,
             status: 'succeeded' as const,
             abort: async () => undefined,
+            guide: () => undefined,
           },
         ),
       );

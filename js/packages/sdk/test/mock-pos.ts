@@ -18,13 +18,13 @@ import type {
   Money,
   Rendering,
   SessionContext,
+  SettlementOptions,
   SessionEventPayload,
   SessionEventType,
 } from '@biltorg/pos-protocol';
 import { SessionError } from '../src/index';
 import {
   type AttachSessionOptions,
-  type AttachTerminalSessionOptions,
   type BasketMutationBuilder,
   type BiltPos,
   type EngineCapabilities,
@@ -37,7 +37,7 @@ import {
   type SessionContextApi,
   type SessionEventHandler,
   type SessionMember,
-  type SettleOptions,
+  type SettlementHandlers,
   type ShopperSession,
   type ShopperSessionOptions,
   type Terminal,
@@ -68,6 +68,7 @@ function operation<T>(type: OperationType, run: () => Promise<T>): Operation<T> 
     type: { value: type, enumerable: true },
     status: { get: () => status, enumerable: true },
     abort: { value: async () => undefined, enumerable: true },
+    guide: { value: () => undefined, enumerable: true },
   });
   return handle as Operation<T>;
 }
@@ -639,7 +640,7 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
     return this.storedValue('storedValueDuplicate', 'DUPLICATE');
   }
 
-  settle(options: SettleOptions = {}) {
+  settle(options: SettlementOptions = {}, handlers: SettlementHandlers = {}) {
     return this.op('settle', async () => {
       const step = {
         deadline: new Date(Date.now() + 30_000),
@@ -647,8 +648,8 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
       };
       await this.context.setPhase('TENDERING');
       let total: Money = this.basket.current.grandTotal;
-      if (options.beforeStep) {
-        await options.beforeStep(
+      if (handlers.beforeStep) {
+        await handlers.beforeStep(
           {
             step: 'REBATE_REDEMPTION',
             currentBasket: this.basket.current,
@@ -659,15 +660,15 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
           step,
         );
       }
-      if (!options.disableRebates && options.onRebatesRedeemed) {
+      if (!options.disableRebates && handlers.onRebatesRedeemed) {
         const result = fx.rebates(this.basket.current, '2.00');
-        total = await options.onRebatesRedeemed(result, step);
+        total = await handlers.onRebatesRedeemed(result, step);
       }
       if (this.failNextChargeWith) {
         const error = this.failNextChargeWith;
         this.failNextChargeWith = null;
-        const answer = options.onError
-          ? await options.onError(
+        const answer = handlers.onError
+          ? await handlers.onError(
               {
                 step: 'CARD_CHARGE',
                 error: error.toJSON(),
@@ -690,8 +691,8 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
         target: { type: 'SALES' as const },
         amount: total,
       };
-      options.onMovement?.(movement);
-      options.onCardCharged?.(movement);
+      handlers.onMovement?.(movement);
+      handlers.onCardCharged?.(movement);
       await this.context.setPhase('COMPLETE');
       return fx.settlementResult(this.basket.current, total);
     });
@@ -800,7 +801,7 @@ export class MockBiltPos implements BiltPos {
 
   async attachTerminalSession(
     sessionId: string,
-    _options?: AttachTerminalSessionOptions,
+    _options?: AttachSessionOptions,
   ): Promise<TerminalShopperSession> {
     return this.attach(sessionId, 'terminal') as unknown as TerminalShopperSession;
   }

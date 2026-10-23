@@ -110,7 +110,7 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
     session.on('operation.step', (step) => steps.push(step.kind));
     const failures: SettlementFailure[] = [];
     const transactionIds: string[] = [];
-    const result = await session.settle({
+    const result = await session.settle(undefined, {
       beforeStep: (context) => {
         transactionIds.push(context.defaultTransactionId);
         return context.defaultTransactionId;
@@ -164,15 +164,19 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
     await session.setStoredValueCard(CARD);
 
     let giftCardSuggested: string | undefined;
-    const result = await session.settle({
-      disableRebates: true,
-      disablePoints: true,
-      disableAward: true,
-      onGiftCardPayment: (giftCard) => {
-        giftCardSuggested = giftCard.suggestedTotal;
-        return giftCard.suggestedTotal;
+    const result = await session.settle(
+      {
+        disableRebates: true,
+        disablePoints: true,
+        disableAward: true,
       },
-    });
+      {
+        onGiftCardPayment: (giftCard) => {
+          giftCardSuggested = giftCard.suggestedTotal;
+          return giftCard.suggestedTotal;
+        },
+      },
+    );
 
     expect(Number(result.storedValueAmountUsed)).toBe(3.75);
     expect(Number(giftCardSuggested)).toBe(0);

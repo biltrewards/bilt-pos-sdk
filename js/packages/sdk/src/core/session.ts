@@ -1,7 +1,6 @@
 import type {
   CreateSessionRequest,
   Operation as OperationResource,
-  OperationType,
   Session,
   SessionEvent,
   SessionEventType,
@@ -373,7 +372,8 @@ export class ShopperSessionImpl implements ShopperSession {
    * at attach — so its promise, `abort()` and step replies work as if this page had. Its
    * earlier events replay from the held buffer; a held step the replay already moved past is
    * skipped, and a step resolved since its event was buffered draws a `notPending`, which the
-   * reply path treats as redundant rather than a failure.
+   * reply path treats as redundant rather than a failure. Steps stay open until `guide()`
+   * registers the handlers that answer them, as a Java flow would.
    */
   private adopt(resource: OperationResource): Operation<unknown> {
     const tracked = this.pending.get(resource.id);
@@ -389,13 +389,14 @@ export class ShopperSessionImpl implements ShopperSession {
     const operation = new PendingOperation<unknown>(
       resource.type,
       resource.id,
-      this.stepHandlersFor(resource.type),
+      undefined,
       {
         reply: (operationId, reply) => this.reply(operationId, reply),
         abort: (operationId) =>
           this.engine.abort(this.id, operationId, { idempotencyKey: newIdempotencyKey() }),
         reportStep: (context, error) => this.reportStep(context, error),
       },
+      true,
     );
     this.pending.set(resource.id, operation);
     operation.accept(resource);
@@ -442,11 +443,6 @@ export class ShopperSessionImpl implements ShopperSession {
     return !held
       .slice(index + 1)
       .some((event) => event.type === 'operation.step' || event.type === 'operation.completed');
-  }
-
-  /** The handlers an adopted operation of the type answers steps with; a terminal session maps them by operation type. */
-  protected stepHandlersFor(_type: OperationType): StepHandlers | undefined {
-    return undefined;
   }
 
   private reply(operationId: string, reply: StepReply): Promise<unknown> {

@@ -37,7 +37,7 @@ import type {
 } from '@biltorg/pos-protocol';
 import type { SessionError } from './errors';
 import type { Operation } from './operation';
-import type { AttachSessionOptions, ShopperSession } from './session';
+import type { ShopperSession } from './session';
 import type { Terminal } from './terminal';
 
 /** A handler may answer synchronously or with a promise. */
@@ -113,9 +113,6 @@ export interface SettlementHandlers {
   onAbandoned?(record: AbandonedSettlementRecord): void;
 }
 
-/** `settle()` takes the Java `SettlementOptions` and the handlers in one object. */
-export type SettleOptions = SettlementOptions & SettlementHandlers;
-
 /**
  * The register's handler for a refund or void — `ReversalFlow.onError` in Java. `step` is
  * `null` for a failure before any step ran or after every step was skipped; the decision is
@@ -134,20 +131,6 @@ export interface ReversalHandlers {
 
 /** What a refund or void resolves with. */
 export type ReversalResult = RefundResult | VoidResult;
-
-/**
- * Options for `BiltPos.attachTerminalSession`: the per-page pieces of a session's options —
- * `widgets` for the surfaces this page renders, and the step handlers an operation still in
- * flight will consult from now on: `settlement` answers a `settle`, `reversal` a `refund`,
- * `refundUnlinked` or `voidTransaction`, as if this page had started them.
- */
-export interface AttachTerminalSessionOptions extends AttachSessionOptions {
-  /** The handlers an adopted `settle` answers its steps and reports its movements to. */
-  readonly settlement?: SettlementHandlers;
-
-  /** The handler an adopted `refund`, `refundUnlinked` or `voidTransaction` asks on a failure. */
-  readonly reversal?: ReversalHandlers;
-}
 
 /**
  * A shopper session with a Bilt terminal attached — the Java `TerminalShopperSession`: loyalty
@@ -262,12 +245,12 @@ export interface TerminalShopperSession extends ShopperSession {
    * Runs the settlement: refund allocations, rebate redemption, point redemption, stored value
    * fulfillment and tender, card charge, award — or only the signed difference with
    * `settlementType: "NET"`. The session must be open with a non-empty, unconsumed basket.
-   * Handlers steer the sequence as the `SettlementFlow` handlers do in Java; each is consulted
-   * within a deadline, after which its default applies (see `StepInfo`). Rejects with a
-   * `SessionError` whose `code` is `ABORTED` after an abort, with `abandonedSettlement` set
-   * after an `ABANDON` recovery.
+   * `handlers` steer the sequence as the `SettlementFlow` handlers do in Java; each is
+   * consulted within a deadline, after which its default applies (see `StepInfo`). Rejects
+   * with a `SessionError` whose `code` is `ABORTED` after an abort, with
+   * `abandonedSettlement` set after an `ABANDON` recovery.
    */
-  settle(options?: SettleOptions): Operation<SettlementResult>;
+  settle(options?: SettlementOptions, handlers?: SettlementHandlers): Operation<SettlementResult>;
 
   /**
    * Full (no `amount`) or partial linked refund of this session's completed payment, also

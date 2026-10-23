@@ -59,6 +59,7 @@ describe('the Stored Value tab', () => {
           type: 'acquireCard' as const,
           status: 'succeeded' as const,
           abort: async () => undefined,
+          guide: () => undefined,
         },
       ),
     );

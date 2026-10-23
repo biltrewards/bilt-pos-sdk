@@ -42,7 +42,7 @@ describe('the design sketch against the public surface', () => {
     expect(session.member.current?.resolver?.type).toBe('PHONE');
 
     const totals: string[] = [];
-    const settlement = session.settle({
+    const settlement = session.settle(undefined, {
       onRebatesRedeemed: (step) => {
         totals.push(step.suggestedTotal);
         return step.suggestedTotal;
@@ -78,7 +78,7 @@ describe('the design sketch against the public surface', () => {
     session.failNextChargeWith = new SessionError({ code: 'DECLINED', message: 'declined' });
 
     const failure = await session
-      .settle({
+      .settle(undefined, {
         onError: (f) => ({ action: f.outcomeCertainty === 'DEFINITIVE' ? 'ABORT' : 'RETRY' }),
       })
       .catch((e: unknown) => e);

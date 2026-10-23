@@ -8,6 +8,7 @@ import type {
 } from '@biltorg/pos-protocol';
 import { SessionError } from '../errors';
 import type { Operation } from '../operation';
+import type { ReversalHandlers, SettlementHandlers } from '../terminal-session';
 import { answerStep, fanOutMovement, type StepHandlers } from './steps';
 
 /** What a pending operation needs from its session. */
@@ -39,13 +40,17 @@ export class PendingOperation<T> {
   private readonly mirrors = new Set<PendingOperation<unknown>>();
   /** Set once this tracker follows another: mirrored updates still apply, only the owner replies. */
   private owner: PendingOperation<unknown> | undefined;
+  /** A step that arrived before `guide()` registered the handlers that answer it. */
+  private deferredStep: OperationStep | undefined;
 
   constructor(
     readonly type: OperationType,
     /** The client's id for the request, its idempotency key; `id` reports it until the engine assigned one. */
     readonly requestId: string,
-    private readonly steps: StepHandlers | undefined,
+    private steps: StepHandlers | undefined,
     private readonly links: OperationLinks,
+    /** An adopted operation holds its steps open until `guide()` wires handlers for them. */
+    private readonly deferStepAnswers = false,
   ) {
     this.promise = new Promise<T>((resolve, reject) => {
       this.resolvePromise = resolve;
@@ -62,6 +67,10 @@ export class PendingOperation<T> {
       type: { value: type, enumerable: true },
       status: { get: () => this.currentStatus, enumerable: true },
       abort: { value: () => this.abort(), enumerable: true },
+      guide: {
+        value: (handlers: SettlementHandlers | ReversalHandlers) => this.guide(handlers),
+        enumerable: true,
+      },
     }) as Operation<T>;
   }
 
@@ -143,14 +152,44 @@ export class PendingOperation<T> {
     owner.mirrors.add(this as PendingOperation<unknown>);
   }
 
+  /**
+   * Registers the handlers the operation answers its steps and reports its movements with —
+   * the `SettlementFlow`/`ReversalFlow` handler calls in Java, taken here on the handle: an
+   * adopted operation's pending step is answered with them right away. Calling `guide` on a
+   * handle that follows another forwards to the owner, whose handlers are the replying ones.
+   */
+  guide(handlers: SettlementHandlers | ReversalHandlers): void {
+    if (this.owner !== undefined) {
+      this.owner.guide(handlers);
+      return;
+    }
+    this.steps = {
+      kind: this.type === 'settle' ? 'settlement' : 'reversal',
+      handlers,
+    } as StepHandlers;
+    const step = this.deferredStep;
+    this.deferredStep = undefined;
+    if (step !== undefined && !this.settled && !this.answeredSteps.has(step.stepId)) {
+      this.answeredSteps.add(step.stepId);
+      void this.answer(step);
+    }
+  }
+
   /** An `operation.step` for this operation, from the stream or a poll; each step is answered once. */
   step(step: OperationStep): void {
     for (const mirror of this.mirrors) mirror.step(step);
     if (this.settled || this.answeredSteps.has(step.stepId)) return;
-    this.answeredSteps.add(step.stepId);
     this.currentStatus = 'awaitingReply';
     // A followed tracker records the step but leaves the reply to the owner's handlers.
-    if (this.owner === undefined) void this.answer(step);
+    if (this.owner !== undefined) return;
+    // An adopted operation keeps a step the previous page's handlers would have answered open
+    // until `guide()` registers this page's — otherwise it would resolve with defaults first.
+    if (this.deferStepAnswers && this.steps === undefined) {
+      this.deferredStep = step;
+      return;
+    }
+    this.answeredSteps.add(step.stepId);
+    void this.answer(step);
   }
 
   movement(movement: SettlementMovement): void {

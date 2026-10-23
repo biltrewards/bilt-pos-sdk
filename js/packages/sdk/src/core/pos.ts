@@ -9,7 +9,7 @@ import type {
   TerminalSessionOptions,
 } from '../session';
 import type { Terminal, TerminalInfo } from '../terminal';
-import type { AttachTerminalSessionOptions, TerminalShopperSession } from '../terminal-session';
+import type { TerminalShopperSession } from '../terminal-session';
 import { consoleReporter, type Reporter } from './report';
 import { ShopperSessionImpl, toCreateSessionRequest, type SessionRuntime } from './session';
 import { TerminalShopperSessionImpl } from './terminal-session';
@@ -92,7 +92,7 @@ export class BiltPosImpl implements BiltPosInterface {
 
   async attachTerminalSession(
     sessionId: string,
-    options: AttachTerminalSessionOptions = {},
+    options: AttachSessionOptions = {},
   ): Promise<TerminalShopperSession> {
     const session = await this.attachable(sessionId, 'terminal');
     return this.track(

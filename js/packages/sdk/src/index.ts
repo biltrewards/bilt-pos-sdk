@@ -36,11 +36,9 @@ export type {
   WidgetType,
 } from './session';
 export type {
-  AttachTerminalSessionOptions,
   MaybePromise,
   ReversalHandlers,
   ReversalResult,
-  SettleOptions,
   SettlementHandlers,
   SettlementRecoveryAction,
   StepInfo,

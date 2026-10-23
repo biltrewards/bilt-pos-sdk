@@ -29,13 +29,14 @@ afterEach(() => {
 describe('starting an operation', () => {
   it('posts the request with a fresh UUID v4 idempotency key and declares handledSteps', async () => {
     const { engine, session } = await lane();
-    const op = session.settle({
-      disableAward: true,
-      cashback: '5.00',
-      onRebatesRedeemed: (r) => r.suggestedTotal,
-      onError: () => 'RETRY',
-      onMovement: () => undefined,
-    });
+    const op = session.settle(
+      { disableAward: true, cashback: '5.00' },
+      {
+        onRebatesRedeemed: (r) => r.suggestedTotal,
+        onError: () => 'RETRY',
+        onMovement: () => undefined,
+      },
+    );
     expect(op.type).toBe('settle');
     expect(op.status).toBe('queued');
     await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
@@ -92,7 +93,7 @@ describe('starting an operation', () => {
       release = resolve;
     });
     const { session } = await lane(engine);
-    const op = session.settle({ onRebatesRedeemed: () => '80.00' });
+    const op = session.settle({}, { onRebatesRedeemed: () => '80.00' });
     const heard: unknown[] = [];
     session.on('operation.step', (step) => heard.push(step));
     await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
@@ -116,7 +117,7 @@ describe('starting an operation', () => {
     });
     const { session } = await lane(engine);
     const onMovement = vi.fn();
-    const op = session.settle({ onMovement });
+    const op = session.settle({}, { onMovement });
     await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
     const id = engine.lastOperation(session.id).id;
     engine.movement(session.id, id, {
@@ -172,12 +173,15 @@ describe('starting an operation', () => {
     const errors: unknown[] = [];
     session.on('background.error', (e) => errors.push(e));
     const onCardCharged = vi.fn();
-    const op = session.settle({
-      onMovement: () => {
-        throw new Error('observer broke');
+    const op = session.settle(
+      {},
+      {
+        onMovement: () => {
+          throw new Error('observer broke');
+        },
+        onCardCharged,
       },
-      onCardCharged,
-    });
+    );
     await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
     const id = engine.lastOperation(session.id).id;
     engine.movement(session.id, id, {
@@ -389,7 +393,7 @@ describe('starting an operation', () => {
   it('hands the abandoned settlement record to onAbandoned and the error', async () => {
     const { engine, session } = await lane();
     const onAbandoned = vi.fn();
-    const op = session.settle({ onAbandoned });
+    const op = session.settle({}, { onAbandoned });
     await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
     const id = engine.lastOperation(session.id).id;
     const record = {
@@ -446,7 +450,7 @@ describe('starting an operation', () => {
     const onAwarded = vi.fn();
     const seen: unknown[] = [];
     session.on('operation.movement', (m) => seen.push(m.movement.step));
-    const op = session.settle({ onMovement, onCardCharged, onAwarded });
+    const op = session.settle({}, { onMovement, onCardCharged, onAwarded });
     await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
     const id = engine.lastOperation(session.id).id;
     engine.movement(session.id, id, {
@@ -541,9 +545,9 @@ describe('steps', () => {
   async function settleWith(
     engine: ScriptedEngine,
     session: TerminalShopperSession,
-    handlers: Parameters<TerminalShopperSession['settle']>[0],
+    handlers: Parameters<TerminalShopperSession['settle']>[1],
   ) {
-    const op = session.settle(handlers);
+    const op = session.settle({}, handlers);
     await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
     return { op, id: engine.lastOperation(session.id).id };
   }
@@ -733,7 +737,7 @@ describe('losing the event stream', () => {
   it('polls pending operations, answers a step found there and resubscribes with since', async () => {
     const { engine, session } = await lane();
     const poll = vi.spyOn(engine, 'operation');
-    const op = session.settle({ onRebatesRedeemed: () => '42.00' });
+    const op = session.settle({}, { onRebatesRedeemed: () => '42.00' });
     await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
     const id = engine.lastOperation(session.id).id;
 

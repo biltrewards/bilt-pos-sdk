@@ -197,7 +197,7 @@ describe('operations on an attached session', () => {
     expect(engine.aborts).toEqual([{ sessionId: session.id, operationId: opId }]);
   });
 
-  it('answers an adopted settle’s pending step with the attach handlers, not old ones twice', async () => {
+  it('answers an adopted settle’s pending step once guide() registers the handlers', async () => {
     const { engine, pos, session } = await lane();
     const op = session.settle(); // no handlers on the original page
     await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
@@ -210,9 +210,13 @@ describe('operations on an attached session', () => {
     engine.step(session.id, opId, rebateStep('s1', '88.00'));
 
     const pos2 = await BiltPos.connect(() => engine);
-    await pos2.attachTerminalSession(session.id, {
-      settlement: { onRebatesRedeemed: () => '80.00' },
-    });
+    const attached = await pos2.attachTerminalSession(session.id);
+    // The step waits unanswered until the new page guides the adopted operation.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(engine.replies).toHaveLength(1);
+    const [handle] = await attached.operations({ status: ['awaitingReply'] });
+    expect(handle?.type).toBe('settle');
+    handle!.guide({ onRebatesRedeemed: () => '80.00' });
     await vi.waitFor(() => expect(engine.replies).toHaveLength(2));
     expect(engine.replies[1]).toMatchObject({
       sessionId: session.id,
