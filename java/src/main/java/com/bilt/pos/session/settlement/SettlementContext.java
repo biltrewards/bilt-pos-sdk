@@ -27,13 +27,15 @@ public final class SettlementContext {
   private final BigDecimal currentTotal;
   private final String defaultTransactionId;
   private final List<CommittedStep> priorSteps;
+  private final String serviceId;
 
   public SettlementContext(
       SettlementStep step,
       Basket currentBasket,
       BigDecimal currentTotal,
       String defaultTransactionId,
-      List<CommittedStep> priorSteps) {
+      List<CommittedStep> priorSteps,
+      String serviceId) {
     this.step = step;
     this.currentBasket = currentBasket;
     this.currentTotal = currentTotal;
@@ -41,6 +43,7 @@ public final class SettlementContext {
     this.priorSteps =
         Collections.unmodifiableList(
             new ArrayList<>(Objects.requireNonNull(priorSteps, "priorSteps")));
+    this.serviceId = serviceId;
   }
 
   /**
@@ -50,12 +53,16 @@ public final class SettlementContext {
    * override returning a different ID is stamped with the send time. The basket's transaction —
    * including its timestamp — is kept unchanged when the handler returns {@code null}, an empty
    * string, or the default ID itself, since nexo treats ID and timestamp as one identity.
+   *
+   * @param serviceId the {@code ServiceID} the step's request will be sent with, or {@code null}
+   *     when the step sends no terminal request
    */
   public static TransactionIdentificationType resolveSaleTransactionId(
       SettlementStep step,
       Basket currentBasket,
       BigDecimal currentTotal,
       List<CommittedStep> priorSteps,
+      String serviceId,
       Function<SettlementContext, String> handler) {
     TransactionIdentificationType defaultTransaction = currentBasket.getSaleTransactionID();
     if (handler == null) {
@@ -68,7 +75,8 @@ public final class SettlementContext {
                 currentBasket,
                 currentTotal,
                 defaultTransaction.getTransactionID(),
-                priorSteps));
+                priorSteps,
+                serviceId));
     return transactionId == null
             || transactionId.isEmpty()
             || transactionId.equals(defaultTransaction.getTransactionID())
@@ -102,5 +110,16 @@ public final class SettlementContext {
   /** Steps committed so far in this payment. */
   public List<CommittedStep> getPriorSteps() {
     return priorSteps;
+  }
+
+  /**
+   * The Nexo {@code ServiceID} this step's terminal request will be sent with — minted for this
+   * attempt before the handler runs, so the register can record it before anything is sent and
+   * resolve the request with Transaction Status after a crash. Each retry of a step mints a new id
+   * and calls the handler again. {@code null} for steps that send no terminal request ({@code
+   * EXTERNAL_PAYMENT}, {@code EXTERNAL_REFUND}).
+   */
+  public String getServiceId() {
+    return serviceId;
   }
 }

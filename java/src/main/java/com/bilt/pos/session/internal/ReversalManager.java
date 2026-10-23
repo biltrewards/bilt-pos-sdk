@@ -122,6 +122,8 @@ public final class ReversalManager {
    *     flow — and only then: a tender skipped by decision leaves the sale voidable
    * @param onAwardReversed invoked when the award reversal completes, so the caller records it as
    *     reversal progress — a later void must not re-credit it
+   * @param refundServiceId the {@code ServiceID} the tender refund is sent with, already minted by
+   *     {@link NexoMessageFactory#mintServiceId}, or {@code null} to mint one per attempt
    */
   public RefundResult refund(
       BigDecimal amount,
@@ -134,7 +136,8 @@ public final class ReversalManager {
       TransactionIdentificationType saleTransaction,
       StepDecider decider,
       Runnable onRefunded,
-      Runnable onAwardReversed) {
+      Runnable onAwardReversed,
+      String refundServiceId) {
     // the tender refund anchors the flow, so the award is best-effort
     StepDecider effective = decider != null ? decider : defaultPolicy(true);
     SessionException[] lastFailure = new SessionException[1];
@@ -145,7 +148,14 @@ public final class ReversalManager {
             effective,
             () ->
                 sendRefund(
-                    amount, saleItems, originalPoiTxnId, originalPoiTimestamp, saleTransaction),
+                    amount,
+                    saleItems,
+                    originalPoiTxnId,
+                    originalPoiTimestamp,
+                    saleTransaction,
+                    refundServiceId != null
+                        ? refundServiceId
+                        : exchange.factory().mintServiceId(MessageCategoryType.PAYMENT)),
             e -> {
               lastFailure[0] = e;
               LOGGER.warning(
@@ -171,7 +181,8 @@ public final class ReversalManager {
                       awardPoiTxnId,
                       awardPoiTimestamp,
                       memberId,
-                      saleTransaction),
+                      saleTransaction,
+                      exchange.factory().mintServiceId(MessageCategoryType.LOYALTY)),
               e -> {
                 lastFailure[0] = e;
                 LOGGER.warning(
@@ -230,7 +241,8 @@ public final class ReversalManager {
       List<SaleItem> saleItems,
       String originalPoiTxnId,
       Instant originalPoiTimestamp,
-      TransactionIdentificationType saleTransaction) {
+      TransactionIdentificationType saleTransaction,
+      String serviceId) {
     AmountsReq.Builder amounts = AmountsReq.builder().currency(currency);
     if (amount != null) {
       amounts.requestedAmount(amount.doubleValue());
@@ -247,7 +259,9 @@ public final class ReversalManager {
     SaleToPOIRequest request =
         SaleToPOIRequest.builder()
             .messageHeader(
-                exchange.factory().header(MessageClassType.SERVICE, MessageCategoryType.PAYMENT))
+                exchange
+                    .factory()
+                    .header(MessageClassType.SERVICE, MessageCategoryType.PAYMENT, serviceId))
             .paymentRequest(
                 PaymentRequest.builder()
                     .saleData(exchange.factory().saleData(saleTransaction))
@@ -265,20 +279,29 @@ public final class ReversalManager {
     return body;
   }
 
-  /** Runs a single loyalty refund movement and returns its parsed reversal result. */
+  /**
+   * Runs a single loyalty refund movement, sent with {@code serviceId} (minted by {@link
+   * NexoMessageFactory#mintServiceId}), and returns its parsed reversal result.
+   */
   public VoidResult refundLoyalty(
       ReversalStep step,
       String originalPoiTxnId,
       Instant originalPoiTimestamp,
       String memberId,
-      TransactionIdentificationType saleTransaction) {
+      TransactionIdentificationType saleTransaction,
+      String serviceId) {
     LoyaltyTransactionTypeEnum refundType = LOYALTY_REFUND_TYPES.get(step);
     if (refundType == null || isMoneyLeg(step)) {
       throw new IllegalArgumentException(step + " is not a loyalty refund movement");
     }
     LoyaltyResponse body =
         loyaltyRefund(
-            refundType, originalPoiTxnId, originalPoiTimestamp, memberId, saleTransaction);
+            refundType,
+            originalPoiTxnId,
+            originalPoiTimestamp,
+            memberId,
+            saleTransaction,
+            serviceId);
     LoyaltyReversal reversal = parseReversal(body);
     return VoidResult.builder()
         .success(true)
@@ -458,7 +481,8 @@ public final class ReversalManager {
             movement.poiTransactionId,
             movement.poiTransactionTimestamp,
             memberId,
-            saleTransaction));
+            saleTransaction,
+            exchange.factory().mintServiceId(MessageCategoryType.LOYALTY)));
   }
 
   private static VoidResult buildVoidResult(
@@ -634,7 +658,8 @@ public final class ReversalManager {
       String originalPoiTxnId,
       Instant originalPoiTimestamp,
       String memberId,
-      TransactionIdentificationType saleTransaction) {
+      TransactionIdentificationType saleTransaction,
+      String serviceId) {
     SaleToPOIRequest request =
         exchange
             .factory()
@@ -642,7 +667,8 @@ public final class ReversalManager {
                 refundType,
                 Wire.originalTransaction(originalPoiTxnId, originalPoiTimestamp),
                 memberId,
-                saleTransaction);
+                saleTransaction,
+                serviceId);
     SaleToPOIResponse response = exchange.sendExpectingBody(MessageCategoryType.LOYALTY, request);
     LoyaltyResponse body = response.getLoyaltyResponse();
     if (body == null) {

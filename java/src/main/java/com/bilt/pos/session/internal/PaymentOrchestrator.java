@@ -203,7 +203,10 @@ public final class PaymentOrchestrator {
 
   @FunctionalInterface
   private interface StepAttempt<T> {
-    T run(TransactionIdentificationType saleTransaction, SaleToPOIResponse recoveredResponse);
+    T run(
+        TransactionIdentificationType saleTransaction,
+        String serviceId,
+        SaleToPOIResponse recoveredResponse);
   }
 
   private static final class StepOutcome<T> {
@@ -286,12 +289,13 @@ public final class PaymentOrchestrator {
               stepTotal,
               true,
               false,
-              (saleTransaction, response) ->
+              (saleTransaction, serviceId, response) ->
                   rebateStep(
                       request,
                       stepBasket,
                       stepTotal,
                       saleTransaction,
+                      serviceId,
                       committed,
                       movements,
                       response));
@@ -337,12 +341,13 @@ public final class PaymentOrchestrator {
               stepTotal,
               true,
               false,
-              (saleTransaction, response) ->
+              (saleTransaction, serviceId, response) ->
                   pointsStep(
                       request,
                       stepBasket,
                       stepTotal,
                       saleTransaction,
+                      serviceId,
                       committed,
                       movements,
                       result,
@@ -386,12 +391,13 @@ public final class PaymentOrchestrator {
               amount,
               false,
               false,
-              (saleTransaction, response) ->
+              (saleTransaction, serviceId, response) ->
                   storedValueLoadStep(
                       request,
                       fulfillment,
                       amount,
                       saleTransaction,
+                      serviceId,
                       committed,
                       movements,
                       response));
@@ -411,9 +417,16 @@ public final class PaymentOrchestrator {
               stepTotal,
               true,
               false,
-              (saleTransaction, response) ->
+              (saleTransaction, serviceId, response) ->
                   storedValueStep(
-                      request, stepTotal, saleTransaction, committed, movements, result, response));
+                      request,
+                      stepTotal,
+                      saleTransaction,
+                      serviceId,
+                      committed,
+                      movements,
+                      result,
+                      response));
       if (!recovered.skipped) {
         GiftCardPaymentResult giftCard = recovered.value;
         storedValueCharged = giftCard.getAmountCharged();
@@ -447,13 +460,14 @@ public final class PaymentOrchestrator {
               stepTotal,
               false,
               options.cashback == null,
-              (saleTransaction, response) ->
+              (saleTransaction, serviceId, response) ->
                   cardStep(
                       request,
                       stepBasket,
                       stepTotal,
                       options,
                       saleTransaction,
+                      serviceId,
                       committed,
                       movements,
                       result,
@@ -479,8 +493,9 @@ public final class PaymentOrchestrator {
           awardTotal,
           false,
           false,
-          (saleTransaction, response) -> {
-            awardStep(request, awardBasket, saleTransaction, committed, movements, result);
+          (saleTransaction, serviceId, response) -> {
+            awardStep(
+                request, awardBasket, saleTransaction, serviceId, committed, movements, result);
             return Boolean.TRUE;
           });
     }
@@ -548,10 +563,13 @@ public final class PaymentOrchestrator {
             new SessionError(SessionErrorCode.ABORTED, "the payment was aborted"));
       }
       TransactionIdentificationType saleTransaction;
+      String serviceId;
       int commitCheckpoint = committed.size();
       int movementCheckpoint = movements.size();
       try {
-        saleTransaction = beforeStep(request, step, basket, amountDue, committed);
+        MessageCategoryType category = stepCategory(step);
+        serviceId = category == null ? null : exchange.factory().mintServiceId(category);
+        saleTransaction = beforeStep(request, step, basket, amountDue, committed, serviceId);
       } catch (RuntimeException e) {
         StepFailure failure = normalizeFailure(e, step);
         StepOutcome<T> outcome =
@@ -575,7 +593,7 @@ public final class PaymentOrchestrator {
         continue;
       }
       try {
-        return StepOutcome.completed(attempt.run(saleTransaction, null));
+        return StepOutcome.completed(attempt.run(saleTransaction, serviceId, null));
       } catch (RuntimeException e) {
         StepFailure failure = normalizeFailure(e, step);
         if (failure.aborted
@@ -689,7 +707,8 @@ public final class PaymentOrchestrator {
         try {
           // A recovered success is the step result. The register is
           // consulted only if processing the repeated response fails.
-          return StepOutcome.completed(attempt.run(saleTransaction, recovered));
+          return StepOutcome.completed(
+              attempt.run(saleTransaction, originalFailure.serviceId, recovered));
         } catch (RuntimeException e) {
           // The attempt builds a fresh request object for parsing, but
           // that request is never sent. Keep the repeated response tied
@@ -760,7 +779,7 @@ public final class PaymentOrchestrator {
                 amountDue,
                 false,
                 false,
-                (externalTxnId, response) ->
+                (externalTxnId, serviceId, response) ->
                     externalPaymentStep(request, payment, externalTxnId, movements));
         return StepOutcome.external(external.value);
       case ABORT:
@@ -982,6 +1001,7 @@ public final class PaymentOrchestrator {
       Basket basket,
       BigDecimal currentTotal,
       TransactionIdentificationType saleTransaction,
+      String serviceId,
       List<Commit> committed,
       List<SettlementMovement> movements,
       SaleToPOIResponse recoveredResponse) {
@@ -992,6 +1012,7 @@ public final class PaymentOrchestrator {
             request,
             basket,
             saleTransaction,
+            serviceId,
             null,
             recoveredResponse);
 
@@ -1054,6 +1075,7 @@ public final class PaymentOrchestrator {
             SettlementStep.REBATE_REDEMPTION,
             totalRebate,
             saleTransaction,
+            serviceId,
             body.getPoiData(),
             request.member.getMemberId(),
             null,
@@ -1085,6 +1107,7 @@ public final class PaymentOrchestrator {
       Basket basket,
       BigDecimal currentTotal,
       TransactionIdentificationType saleTransaction,
+      String serviceId,
       List<Commit> committed,
       List<SettlementMovement> movements,
       SettlementResult.Builder result,
@@ -1097,6 +1120,7 @@ public final class PaymentOrchestrator {
             request,
             basket,
             saleTransaction,
+            serviceId,
             rewardRefsPayload,
             recoveredResponse);
 
@@ -1145,6 +1169,7 @@ public final class PaymentOrchestrator {
             SettlementStep.POINT_REDEMPTION,
             monetaryValue,
             saleTransaction,
+            serviceId,
             body.getPoiData(),
             request.member.getMemberId(),
             pointsUsed,
@@ -1165,6 +1190,7 @@ public final class PaymentOrchestrator {
       Request request,
       BigDecimal currentTotal,
       TransactionIdentificationType saleTransaction,
+      String serviceId,
       List<Commit> committed,
       List<SettlementMovement> movements,
       SettlementResult.Builder result,
@@ -1172,7 +1198,9 @@ public final class PaymentOrchestrator {
     SaleToPOIRequest wireRequest =
         SaleToPOIRequest.builder()
             .messageHeader(
-                exchange.factory().header(MessageClassType.SERVICE, MessageCategoryType.PAYMENT))
+                exchange
+                    .factory()
+                    .header(MessageClassType.SERVICE, MessageCategoryType.PAYMENT, serviceId))
             .paymentRequest(
                 PaymentRequest.builder()
                     .saleData(exchange.factory().saleData(saleTransaction))
@@ -1218,6 +1246,7 @@ public final class PaymentOrchestrator {
             SettlementStep.STORED_VALUE_CHARGE,
             charged,
             saleTransaction,
+            serviceId,
             body.getPoiData(),
             null,
             null,
@@ -1244,6 +1273,7 @@ public final class PaymentOrchestrator {
       StoredValueLoad fulfillment,
       BigDecimal amount,
       TransactionIdentificationType saleTransaction,
+      String serviceId,
       List<Commit> committed,
       List<SettlementMovement> movements,
       SaleToPOIResponse recoveredResponse) {
@@ -1253,7 +1283,7 @@ public final class PaymentOrchestrator {
             : StoredValueTransactionTypeEnum.LOAD;
     SaleToPOIRequest wireRequest =
         storedValueManager.operationRequest(
-            type, fulfillment.getCard(), amount, null, null, saleTransaction);
+            type, fulfillment.getCard(), amount, null, null, saleTransaction, serviceId);
     StoredValueOperationResult loaded;
     boolean responseReceived = recoveredResponse != null;
     try {
@@ -1300,6 +1330,7 @@ public final class PaymentOrchestrator {
             fulfillment.getTarget(),
             actualAmount,
             saleTransaction,
+            serviceId,
             loaded.getPoiTransactionId(),
             loaded.getPoiTransactionTimestamp(),
             null,
@@ -1324,6 +1355,7 @@ public final class PaymentOrchestrator {
       BigDecimal currentTotal,
       AttemptOptions options,
       TransactionIdentificationType saleTransaction,
+      String serviceId,
       List<Commit> committed,
       List<SettlementMovement> movements,
       SettlementResult.Builder result,
@@ -1341,7 +1373,9 @@ public final class PaymentOrchestrator {
     SaleToPOIRequest wireRequest =
         SaleToPOIRequest.builder()
             .messageHeader(
-                exchange.factory().header(MessageClassType.SERVICE, MessageCategoryType.PAYMENT))
+                exchange
+                    .factory()
+                    .header(MessageClassType.SERVICE, MessageCategoryType.PAYMENT, serviceId))
             .paymentRequest(
                 PaymentRequest.builder()
                     .saleData(exchange.factory().saleData(saleTransaction))
@@ -1376,6 +1410,7 @@ public final class PaymentOrchestrator {
             SettlementStep.CARD_CHARGE,
             charged,
             saleTransaction,
+            serviceId,
             body.getPoiData(),
             null,
             null,
@@ -1443,6 +1478,7 @@ public final class PaymentOrchestrator {
       Request request,
       Basket basket,
       TransactionIdentificationType saleTransaction,
+      String serviceId,
       List<Commit> committed,
       List<SettlementMovement> movements,
       SettlementResult.Builder result) {
@@ -1455,6 +1491,7 @@ public final class PaymentOrchestrator {
               request,
               basket,
               saleTransaction,
+              serviceId,
               null,
               null);
     } catch (SessionException | StepFailure e) {
@@ -1505,6 +1542,7 @@ public final class PaymentOrchestrator {
             SettlementStep.AWARD,
             BigDecimal.ZERO,
             saleTransaction,
+            serviceId,
             body.getPoiData(),
             request.member.getMemberId(),
             pointsEarned,
@@ -1553,6 +1591,7 @@ public final class PaymentOrchestrator {
       Request request,
       Basket basket,
       TransactionIdentificationType saleTransaction,
+      String serviceId,
       String saleToPoiData,
       SaleToPOIResponse recoveredResponse) {
     SaleData saleData = exchange.factory().saleData(saleTransaction);
@@ -1595,7 +1634,9 @@ public final class PaymentOrchestrator {
     SaleToPOIRequest wireRequest =
         SaleToPOIRequest.builder()
             .messageHeader(
-                exchange.factory().header(MessageClassType.SERVICE, MessageCategoryType.LOYALTY))
+                exchange
+                    .factory()
+                    .header(MessageClassType.SERVICE, MessageCategoryType.LOYALTY, serviceId))
             .loyaltyRequest(loyaltyRequest.build())
             .build();
     boolean responseReceived = recoveredResponse != null;
@@ -1700,14 +1741,32 @@ public final class PaymentOrchestrator {
       SettlementStep step,
       Basket basket,
       BigDecimal currentTotal,
-      List<Commit> committed) {
+      List<Commit> committed,
+      String serviceId) {
     List<CommittedStep> prior = new ArrayList<>();
     prior.addAll(request.priorSteps);
     for (Commit commit : committed) {
       prior.add(commit.info);
     }
     return SettlementContext.resolveSaleTransactionId(
-        step, basket, currentTotal, prior, request.handlers.beforeStep);
+        step, basket, currentTotal, prior, serviceId, request.handlers.beforeStep);
+  }
+
+  /** The category of the wire request a charge-side step sends, or {@code null} for none. */
+  private static MessageCategoryType stepCategory(SettlementStep step) {
+    switch (step) {
+      case REBATE_REDEMPTION:
+      case POINT_REDEMPTION:
+      case AWARD:
+        return MessageCategoryType.LOYALTY;
+      case STORED_VALUE_CHARGE:
+      case CARD_CHARGE:
+        return MessageCategoryType.PAYMENT;
+      case STORED_VALUE_LOAD:
+        return MessageCategoryType.STORED_VALUE;
+      default:
+        return null;
+    }
   }
 
   private <R> BigDecimal applyHandlerTotal(
@@ -1811,6 +1870,7 @@ public final class PaymentOrchestrator {
       SettlementStep step,
       BigDecimal amount,
       TransactionIdentificationType saleTransaction,
+      String serviceId,
       com.bilt.pos.nexo.model.POIData poiData,
       String memberId,
       Integer points,
@@ -1821,6 +1881,7 @@ public final class PaymentOrchestrator {
         SettlementTarget.sales(),
         amount,
         saleTransaction,
+        serviceId,
         poiTxn == null ? null : poiTxn.getTransactionID(),
         poiTxn == null ? null : Wire.instant(poiTxn.getTimeStamp()),
         memberId,
@@ -1833,6 +1894,7 @@ public final class PaymentOrchestrator {
       SettlementTarget target,
       BigDecimal amount,
       TransactionIdentificationType saleTransaction,
+      String serviceId,
       String poiTransactionId,
       Instant poiTransactionTimestamp,
       String memberId,
@@ -1843,6 +1905,7 @@ public final class PaymentOrchestrator {
         .target(target)
         .amount(amount)
         .saleTransactionId(saleTransaction.getTransactionID())
+        .serviceId(serviceId)
         .poiTransactionId(poiTransactionId)
         .poiTransactionTimestamp(poiTransactionTimestamp)
         .memberId(memberId)
@@ -1919,7 +1982,11 @@ public final class PaymentOrchestrator {
           exchange
               .factory()
               .loyaltyRefundRequest(
-                  refundType, Wire.originalTransaction(originalPoiTxn), memberId, saleTransaction);
+                  refundType,
+                  Wire.originalTransaction(originalPoiTxn),
+                  memberId,
+                  saleTransaction,
+                  exchange.factory().mintServiceId(MessageCategoryType.LOYALTY));
       SaleToPOIResponse response =
           exchange.sendExpectingBody(MessageCategoryType.LOYALTY, wireRequest);
       if (response.getLoyaltyResponse() != null) {
