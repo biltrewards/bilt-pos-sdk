@@ -3,6 +3,9 @@
 
 # Nexo Terminal API Java Client — Integration Guide
 
+* TOC
+{:toc}
+
 ## Overview
 
 The Nexo Terminal API Java client (`BiltNexoTerminalClient`) is a client library for communicating with a Bilt Terminal Application via the **Nexo Sale to POI protocol (version 3.0)**. The Nexo standard defines a message-based API between a Sale System (e.g. a POS application) and a POI terminal (the payment device). All messages are JSON-serialised and follow a common envelope structure: a `SaleToPOIRequest` or `SaleToPOIResponse` wrapping a `MessageHeader` plus one typed request/response body.

@@ -7,6 +7,9 @@ baseurl: "/bilt-pos-sdk"
 url: "https://biltrewards.github.io"
 
 # Build settings
+kramdown:
+  toc_levels: 2..3
+
 plugins:
   - jekyll-feed
 

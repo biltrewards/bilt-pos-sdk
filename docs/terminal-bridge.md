@@ -9,6 +9,9 @@ The design is in Notion: *Bilt POS SDK — Terminal Bridge, Session Protocol & J
 
 > **Development mode.** The bridge in this iteration allows any browser origin by default (`allowedOrigins: ["*"]`), accepts no bearer tokens, and lets the terminal run unencrypted with certificate checks off. Use it against development terminals on a trusted network only.
 
+* TOC
+{:toc}
+
 ---
 
 ## What it does

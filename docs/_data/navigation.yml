@@ -13,6 +13,8 @@
       url: /javascript-sdk-integration.html
     - name: Terminal Bridge
       url: /terminal-bridge.html
+    - name: Session Host
+      url: /session-host.html
     - name: Session Protocol Reference
       url: /session-protocol-reference.html
 
@@ -152,7 +154,5 @@
       url: /payment-brands.html
     - name: API Reference
       url: /api-reference.html
-    - name: Session Host
-      url: /session-host.html
     - name: SDK Javadoc
       url: /javadoc/index.html
