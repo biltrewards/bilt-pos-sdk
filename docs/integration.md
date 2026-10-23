@@ -110,6 +110,25 @@ BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
 
 When a `SecurityKey` is provided, all requests are encrypted using CMS `EnvelopedData` (AES-256-CBC with per-message session keys wrapped via AES Key Wrap) and authenticated with HMAC-SHA256 via a CMS `SecurityTrailer`. Responses are detected and decrypted automatically — if the terminal responds with an unencrypted message (e.g. an error), the client handles it gracefully.
 
+### Testing without hardware
+
+`SimulatedTerminalClient` is an in-memory terminal that implements the same `TerminalClient`
+interface, so it can replace `BiltNexoTerminalClient` in tests and local development:
+
+```java
+import com.bilt.pos.nexo.client.TerminalClient;
+import com.bilt.pos.nexo.sim.SimulatedTerminalClient;
+
+TerminalClient client = SimulatedTerminalClient.builder().build();
+```
+
+It keeps a ledger of payments, loyalty, and stored-value transactions, so refunds, voids, and
+transaction status behave like a real terminal. Use `members(Path)` to load your own member
+fixture, and `timeoutNextRequest()` or `dropConnectionAfterNextApproval()` to exercise recovery
+paths. To run the simulator behind the Session Host or Terminal Bridge instead, see
+[Session Host — Simulated terminal](./session-host.md#simulated-terminal) (fixture format and
+decline rule) and [Terminal Bridge](./terminal-bridge.md#simulated-terminal).
+
 ---
 
 ## Example — Make a payment
