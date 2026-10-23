@@ -3,6 +3,7 @@ package com.bilt.pos.host;
 import static com.bilt.pos.host.HostClient.json;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.bilt.pos.nexo.client.BiltNexoClientException;
@@ -11,7 +12,9 @@ import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.sim.SimulatedTerminalClient;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -24,7 +27,12 @@ import org.junit.jupiter.api.Test;
  */
 class ServiceIdBridgeTest {
 
+  private static final String PAYMENT_DECLINED =
+      "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+          + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}";
+
   private final List<SaleToPOIRequest> sent = new CopyOnWriteArrayList<>();
+  private volatile boolean declineNextPayment;
   private SessionHost host;
   private HostClient client;
 
@@ -35,15 +43,28 @@ class ServiceIdBridgeTest {
         new TerminalClient() {
           @Override
           public NexoTerminalAPI request(NexoTerminalAPI request) throws BiltNexoClientException {
-            sent.add(request.getSaleToPOIRequest());
-            return simulated.request(request);
+            return request(request, null);
           }
 
           @Override
           public NexoTerminalAPI request(NexoTerminalAPI request, Duration timeout)
               throws BiltNexoClientException {
-            sent.add(request.getSaleToPOIRequest());
-            return simulated.request(request, timeout);
+            SaleToPOIRequest body = request.getSaleToPOIRequest();
+            sent.add(body);
+            if (declineNextPayment
+                && body.getMessageHeader().getMessageCategory() == MessageCategoryType.PAYMENT) {
+              declineNextPayment = false;
+              try {
+                return new ObjectMapper()
+                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                    .readValue(PAYMENT_DECLINED, NexoTerminalAPI.class);
+              } catch (java.io.IOException e) {
+                throw new BiltNexoClientException("malformed decline", e);
+              }
+            }
+            return timeout == null
+                ? simulated.request(request)
+                : simulated.request(request, timeout);
           }
         };
     host =
@@ -116,6 +137,38 @@ class ServiceIdBridgeTest {
   }
 
   @Test
+  void aRetriedUnlinkedRefundAsksBeforeStepWithTheFreshIdItIsThenSentWith() throws Exception {
+    String id = sessionWithItem();
+    declineNextPayment = true;
+    HostClient.Response accepted =
+        submit(
+            id,
+            "{'type':'refundUnlinked','amount':'5.00',"
+                + "'handledSteps':['BEFORE_STEP','REVERSAL_DECISION_REQUIRED']}");
+    String operationId = accepted.text("id");
+    String acceptedId = accepted.text("serviceId");
+
+    JsonNode decision = awaitStep(id, operationId, "REVERSAL_DECISION_REQUIRED");
+    assertEquals(acceptedId, lastOf(MessageCategoryType.PAYMENT));
+    client
+        .post(
+            "/v1/sessions/" + id + "/operations/" + operationId + "/reply",
+            json("{'stepId':'" + decision.path("stepId").asText() + "','decision':'RETRY'}"))
+        .expect(200);
+
+    JsonNode step = awaitStep(id, operationId, "BEFORE_STEP");
+    assertEquals("CARD", step.path("context").path("step").asText());
+    String retryId = step.path("context").path("serviceId").asText();
+    assertFalse(retryId.isEmpty());
+    assertNotEquals(acceptedId, retryId);
+    assertEquals(acceptedId, lastOf(MessageCategoryType.PAYMENT), "the retry waits for the reply");
+    reply(id, operationId, step);
+
+    client.awaitOperation(id, operationId, "succeeded", Duration.ofSeconds(10));
+    assertEquals(retryId, lastOf(MessageCategoryType.PAYMENT));
+  }
+
+  @Test
   void aStoredValueLoadIsAcceptedWithTheServiceIdItIsSentWith() throws Exception {
     String id = sessionWithItem();
     HostClient.Response accepted =
@@ -159,9 +212,22 @@ class ServiceIdBridgeTest {
   }
 
   private JsonNode awaitStep(String id, String operationId) throws Exception {
-    return client
-        .awaitOperation(id, operationId, "awaitingReply", Duration.ofSeconds(10))
-        .path("pendingStep");
+    return awaitStep(id, operationId, "BEFORE_STEP");
+  }
+
+  private JsonNode awaitStep(String id, String operationId, String kind) throws Exception {
+    long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+    JsonNode last = null;
+    while (System.nanoTime() < deadline) {
+      last = client.get("/v1/sessions/" + id + "/operations/" + operationId).expect(200).body;
+      JsonNode step = last.path("pendingStep");
+      if ("awaitingReply".equals(last.path("status").asText())
+          && kind.equals(step.path("kind").asText())) {
+        return step;
+      }
+      Thread.sleep(25);
+    }
+    throw new AssertionError("no pending " + kind + " step; last: " + last);
   }
 
   private void reply(String id, String operationId, JsonNode step) throws Exception {

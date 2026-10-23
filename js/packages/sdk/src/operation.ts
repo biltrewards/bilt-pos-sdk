@@ -38,8 +38,9 @@ export interface Operation<T> extends Promise<T> {
   /**
    * The Nexo `ServiceID` the engine assigned when it accepted a single-request money operation
    * (`refundUnlinked`, the stored value changes) and sends its terminal request with; known once
-   * the operation is accepted, before anything is sent. `undefined` for other operations, whose
-   * legs report theirs through `beforeStep`.
+   * the operation is accepted, before anything is sent. A retried `refundUnlinked` is sent with a
+   * fresh id, reported through `beforeStep`. `undefined` for other operations, whose legs report
+   * theirs through `beforeStep`.
    */
   readonly serviceId?: string;
 

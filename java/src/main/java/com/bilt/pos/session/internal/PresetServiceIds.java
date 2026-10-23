@@ -29,8 +29,9 @@ public interface PresetServiceIds {
 
   /**
    * Runs {@code create} on this thread with {@code serviceId} preset: the operation {@code create}
-   * makes sends its request with exactly that id. Operations other than {@code refundUnlinked} and
-   * the stored value changes ignore it.
+   * makes sends its request with exactly that id. A retried {@code refundUnlinked} tender mints a
+   * fresh id for each later attempt and reports it through {@code ReversalFlow.beforeStep}.
+   * Operations other than {@code refundUnlinked} and the stored value changes ignore it.
    */
   <T> T withPresetServiceId(String serviceId, Supplier<T> create);
 }

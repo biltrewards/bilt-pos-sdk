@@ -122,6 +122,7 @@ export interface SettlementHandlers {
  * `beforeStep` is called before each leg is sent with the `ServiceID` the leg's terminal request
  * is then sent with, so the register can record it first; a retried leg is asked again with a new
  * id. A handler that throws leaves the step to the host's deadline, after which the leg is sent.
+ * On `refundUnlinked` only retries ask: the first attempt goes out with `Operation.serviceId`.
  *
  * `onError`: `step` is `null` for a failure before any step ran or after every step was skipped;
  * the decision is then informational. `null` or `undefined` counts as `ABORT`. Without a handler
