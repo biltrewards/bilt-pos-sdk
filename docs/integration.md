@@ -125,9 +125,17 @@ TerminalClient client = SimulatedTerminalClient.builder().build();
 It keeps a ledger of payments, loyalty, and stored-value transactions, so refunds, voids, and
 transaction status behave like a real terminal. Use `members(Path)` to load your own member
 fixture, and `timeoutNextRequest()` or `dropConnectionAfterNextApproval()` to exercise recovery
-paths. To run the simulator behind the Session Host or Terminal Bridge instead, see
-[Session Host — Simulated terminal](./session-host.md#simulated-terminal) (fixture format and
-decline rule) and [Terminal Bridge](./terminal-bridge.md#simulated-terminal).
+paths.
+
+If your register does not run this Java client directly, you can still use the simulator by
+setting `"simulated": true` in the `terminal` object of whichever process talks to the terminal:
+
+- the **Terminal Bridge** (the desktop app a browser register connects to): its `config.json`, see
+  [Terminal Bridge — Simulated terminal](./terminal-bridge.md#simulated-terminal);
+- the **development Session Host** (`DevMain`, started from this repository with
+  `./gradlew :host:run`): the JSON file you pass it, see
+  [Session Host — Simulated terminal](./session-host.md#simulated-terminal), which also covers the
+  members file format and the decline rule.
 
 ---
 

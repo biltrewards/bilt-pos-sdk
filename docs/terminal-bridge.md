@@ -125,9 +125,26 @@ The file is created on first start with a commented example (JSON has no comment
 
 ### Simulated terminal
 
-For a hardware-free bridge, configure `"terminal": {"simulated": true}`. You may also provide a
-`members` path; when omitted, the simulator loads its built-in fixture. Member data, the decline
-rule, and simulator defaults are described in [Session Host — Simulated terminal](session-host.md#simulated-terminal).
+To run the bridge without terminal hardware, edit the bridge's `config.json` (its location per
+platform is in the table at the top of [Configuration file](#configuration-file); start the bridge
+once to create it) so its `terminal` object looks like this:
+
+```json
+{
+  "port": 48333,
+  "allowedOrigins": ["*"],
+  "terminal": {
+    "label": "Simulated terminal",
+    "simulated": true
+  }
+}
+```
+
+Save the file; the bridge reloads it, and the next session uses the simulator. `host`, `port` and
+the TLS keys can be left out. `curl -X POST http://127.0.0.1:48333/v1/terminal/diagnose` succeeds
+without contacting any device. To use your own test members, add `"members": "/absolute/path/members.json"`;
+when omitted, the simulator loads its built-in fixture. The members file format, the decline rule,
+and simulator defaults are described in [Session Host — Simulated terminal](session-host.md#simulated-terminal).
 
 A config file from before this change, with a `terminals` list or a `poiId` on the terminal, is refused with a message saying what to change: replace the list with its one entry as `terminal` and delete the `poiId`. The bridge keeps running on its previous configuration (or the defaults) and shows the error in the menu until the file is fixed.
 

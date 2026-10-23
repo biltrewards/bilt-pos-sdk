@@ -109,8 +109,34 @@ answers CORS for every origin unless the file narrows it with
 
 ### Simulated terminal
 
-For checkout without hardware, set `terminal.simulated` to `true`; host, port, and TLS settings
-are not needed. `terminal.members` optionally names a readable JSON fixture. Omit it to use the
+To run checkout with no terminal hardware, point the dev host at the built-in simulator. "Dev host"
+here means `DevMain`, a small launcher in this repository that starts the Session Host from a JSON
+file you write yourself; it is separate from the Terminal Bridge (to simulate a terminal behind the
+bridge, see [Terminal Bridge — Simulated terminal](terminal-bridge.md#simulated-terminal)).
+
+1. Create a file anywhere, for example `dev-host.json` in the repository root:
+
+   ```json
+   {
+     "port": 48333,
+     "terminal": {
+       "simulated": true
+     }
+   }
+   ```
+
+2. Start the host with that file (use an absolute path; Gradle runs it from the `host/` directory):
+
+   ```sh
+   ./gradlew :host:run --args="$PWD/dev-host.json"
+   ```
+
+3. Check it is up: `curl http://127.0.0.1:48333/health` reports a `terminal` labelled
+   `Simulated terminal`. A page or register pointed at `http://127.0.0.1:48333` can now open
+   `terminal` sessions, and every terminal request is answered in memory.
+
+With `"simulated": true`, host, port, and TLS settings are not needed. `terminal.members`
+optionally names a readable JSON file of test members (again, an absolute path). Omit it to use the
 built-in fixture, which contains two sample members (one Gold member with 12,000 points and a
 500-point, $5 reward, plus one member without rewards). The file shape is:
 
