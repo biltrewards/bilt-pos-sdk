@@ -103,6 +103,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Network-error recovery for `BiltNexoTerminalClient` (on by default): re-sends an in-flight request under an `X-Bilt-Request-Id` correlation header across transient network failures, with at-most-once execution guaranteed by terminal-side dedupe. Includes a configurable keep-alive ping and HTTP protocol / pong diagnostics, mirrored across the Java and Kotlin clients and the CLI ([#83](https://github.com/biltrewards/bilt-pos-sdk/pull/83))
 - Receipt Requirements documentation with Fiserv EMV guidelines and Bilt Platform fields
 
+## [0.37.0]
+
+### Added
+
+- `ReversalFlow.beforeStep(Consumer<ReversalContext>)`: called before each `voidTransaction` / `refund` leg is sent, with `ReversalContext.getStep()` and `ReversalContext.getServiceId()` — the `ServiceID` the leg's request is sent with. Each retry mints a new id and calls the handler again; a throwing handler fails the leg before it is sent and goes to `onError` like any other failed step.
+- `ReversedMovement.getServiceId()` and `VoidResult.getServiceId()`: the `ServiceID` of the reversal request behind the movement / the result's POI transaction.
+
+### Changed (breaking)
+
+- `ReversedMovement`'s constructor takes the movement's `serviceId`.
+
 ## [0.36.0]
 
 ### Added

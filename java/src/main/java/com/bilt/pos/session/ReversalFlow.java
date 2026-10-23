@@ -50,6 +50,7 @@ public final class ReversalFlow<T> extends SessionFlow<T> {
 
   private final Function<ReversalFlow<T>, T> executor;
 
+  private Consumer<ReversalContext> beforeStepHandler;
   private BiFunction<ReversalStep, SessionError, ReversalDecision> errorHandler;
   private boolean failureResolved;
 
@@ -75,6 +76,16 @@ public final class ReversalFlow<T> extends SessionFlow<T> {
   public ReversalFlow<T> callbackOn(Executor executor) {
     Objects.requireNonNull(executor, "executor");
     return register(() -> overrideCallback(executor));
+  }
+
+  /**
+   * Called before each leg's terminal request is sent, with the {@code ServiceID} it will be sent
+   * with, so the register can record it first. A retried leg calls the handler again with a new id.
+   * A throwing handler fails the leg before it is sent; the {@code onError} decision then applies
+   * as for any other failed step.
+   */
+  public ReversalFlow<T> beforeStep(Consumer<ReversalContext> handler) {
+    return register(() -> this.beforeStepHandler = requireHandler(handler));
   }
 
   /** Called after every step completed (or was skipped by decision). */
@@ -152,6 +163,14 @@ public final class ReversalFlow<T> extends SessionFlow<T> {
   }
 
   // ─── SDK-internal accessors ───
+
+  /** The {@code beforeStep} handler, delivered like {@link #decider()}; {@code null} when unset. */
+  Consumer<ReversalContext> beforeStepHandler() {
+    if (beforeStepHandler == null) {
+      return null;
+    }
+    return context -> awaitHandlerRun(() -> beforeStepHandler.accept(context));
+  }
 
   /**
    * The registered handler as a step decider, or {@code null} to select the default policy.

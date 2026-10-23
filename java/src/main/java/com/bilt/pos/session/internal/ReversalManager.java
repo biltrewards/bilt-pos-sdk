@@ -31,10 +31,12 @@ import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.RefundResult;
+import com.bilt.pos.session.ReversalContext;
 import com.bilt.pos.session.ReversalDecision;
 import com.bilt.pos.session.ReversalStep;
 import com.bilt.pos.session.ReversedMovement;
 import com.bilt.pos.session.SessionError;
+import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.VoidResult;
 import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
@@ -117,6 +119,8 @@ public final class ReversalManager {
    *     when no award is to be reversed
    * @param decider per-step failure resolution; {@code null} for the default policy (tender aborts,
    *     award is best-effort)
+   * @param beforeStep told each leg's freshly minted {@code ServiceID} before it is sent, or {@code
+   *     null}; not called for a tender sent with {@code refundServiceId}
    * @param onRefunded invoked the moment the tender refund completes, before the award reversal —
    *     the caller's void guard must rise as soon as money moves, even if a later step aborts the
    *     flow — and only then: a tender skipped by decision leaves the sale voidable
@@ -135,6 +139,7 @@ public final class ReversalManager {
       String memberId,
       TransactionIdentificationType saleTransaction,
       StepDecider decider,
+      Consumer<ReversalContext> beforeStep,
       Runnable onRefunded,
       Runnable onAwardReversed,
       String refundServiceId) {
@@ -155,7 +160,8 @@ public final class ReversalManager {
                     saleTransaction,
                     refundServiceId != null
                         ? refundServiceId
-                        : exchange.factory().mintServiceId(MessageCategoryType.PAYMENT)),
+                        : mintServiceId(
+                            ReversalStep.CARD, MessageCategoryType.PAYMENT, beforeStep)),
             e -> {
               lastFailure[0] = e;
               LOGGER.warning(
@@ -182,7 +188,7 @@ public final class ReversalManager {
                       awardPoiTimestamp,
                       memberId,
                       saleTransaction,
-                      exchange.factory().mintServiceId(MessageCategoryType.LOYALTY)),
+                      mintServiceId(ReversalStep.AWARD, MessageCategoryType.LOYALTY, beforeStep)),
               e -> {
                 lastFailure[0] = e;
                 LOGGER.warning(
@@ -307,6 +313,7 @@ public final class ReversalManager {
         .success(true)
         .reversedAmount(sumLoyaltyAmounts(body))
         .poiTransactionId(Wire.txnId(body.getPoiData()))
+        .serviceId(serviceId)
         .poiTransactionTimestamp(Wire.txnTimestamp(body.getPoiData()))
         .pointsReversed(reversal.pointsReversed)
         .remainingPointBalance(reversal.remainingBalance)
@@ -340,6 +347,7 @@ public final class ReversalManager {
       String memberId,
       TransactionIdentificationType saleTransaction,
       StepDecider decider,
+      Consumer<ReversalContext> beforeStep,
       Set<ReversalMovement.Key> reversedMovements) {
     StepDecider effective =
         decider != null
@@ -357,22 +365,31 @@ public final class ReversalManager {
     Map<ReversalStep, ReversalResponse> money = new EnumMap<>(ReversalStep.class);
     Map<ReversalStep, LoyaltyResponse> loyalty = new EnumMap<>(ReversalStep.class);
     List<StoredValueOperationResult> storedValueLoads = new ArrayList<>();
-    List<ReversalMovement> reversed = new ArrayList<>();
+    List<ReversedMovement> reversed = new ArrayList<>();
     List<ReversalMovement> skippedMoneyLegs = new ArrayList<>();
     SessionException[] lastFailure = new SessionException[1];
     SessionException[] moneyFailure = new SessionException[1];
     StepDecider progressAware =
         (step, error) ->
-            effective.decide(step, Wire.withReversedMovements(error, reversedMovements(reversed)));
+            effective.decide(step, Wire.withReversedMovements(error, List.copyOf(reversed)));
 
     for (ReversalMovement movement : remaining) {
-      Boolean sent =
+      String sentServiceId =
           runStep(
               movement.getStep(),
               progressAware,
               () -> {
-                execute(movement, memberId, saleTransaction, money, loyalty, storedValueLoads);
-                return true;
+                String serviceId =
+                    mintServiceId(movement.getStep(), category(movement.getStep()), beforeStep);
+                execute(
+                    movement,
+                    memberId,
+                    saleTransaction,
+                    money,
+                    loyalty,
+                    storedValueLoads,
+                    serviceId);
+                return serviceId;
               },
               e -> {
                 lastFailure[0] = e;
@@ -393,8 +410,9 @@ public final class ReversalManager {
                         + e.getError());
               },
               e -> abortError(reversed, movement, e));
-      if (sent != null) {
-        reversed.add(movement);
+      if (sentServiceId != null) {
+        reversed.add(
+            new ReversedMovement(movement.getStep(), movement.poiTransactionId, sentServiceId));
         reversedMovements.add(movement.key());
       }
     }
@@ -418,7 +436,7 @@ public final class ReversalManager {
       // skip in a single-attempt void
       return VoidResult.builder().success(true).build();
     }
-    return buildVoidResult(money, loyalty, storedValueLoads);
+    return buildVoidResult(money, loyalty, storedValueLoads, reversed);
   }
 
   /**
@@ -426,7 +444,7 @@ public final class ReversalManager {
    * recorded, and the retry sends only what is still standing.
    */
   private static SessionException standingMoneyError(
-      List<ReversalMovement> skipped, List<ReversalMovement> reversed, SessionException cause) {
+      List<ReversalMovement> skipped, List<ReversedMovement> reversed, SessionException cause) {
     String legs =
         skipped.stream()
             .map(movement -> label(movement.getStep()) + " " + movement.poiTransactionId)
@@ -442,7 +460,7 @@ public final class ReversalManager {
                 + ": "
                 + cause.getError().getMessage(),
             cause,
-            reversedMovements(reversed)));
+            List.copyOf(reversed)));
   }
 
   private void execute(
@@ -451,7 +469,8 @@ public final class ReversalManager {
       TransactionIdentificationType saleTransaction,
       Map<ReversalStep, ReversalResponse> money,
       Map<ReversalStep, LoyaltyResponse> loyalty,
-      List<StoredValueOperationResult> storedValueLoads) {
+      List<StoredValueOperationResult> storedValueLoads,
+      String serviceId) {
     ReversalStep step = movement.getStep();
     if (step == ReversalStep.STORED_VALUE_LOAD) {
       storedValueLoads.add(
@@ -461,13 +480,18 @@ public final class ReversalManager {
               null,
               movement.poiTransactionId,
               movement.poiTransactionTimestamp,
-              saleTransaction));
+              saleTransaction,
+              serviceId));
       return;
     }
     if (isMoneyLeg(step)) {
       money.put(
           step,
-          reverse(movement.poiTransactionId, movement.poiTransactionTimestamp, saleTransaction));
+          reverse(
+              movement.poiTransactionId,
+              movement.poiTransactionTimestamp,
+              saleTransaction,
+              serviceId));
       return;
     }
     LoyaltyTransactionTypeEnum refundType = LOYALTY_REFUND_TYPES.get(step);
@@ -482,13 +506,14 @@ public final class ReversalManager {
             movement.poiTransactionTimestamp,
             memberId,
             saleTransaction,
-            exchange.factory().mintServiceId(MessageCategoryType.LOYALTY)));
+            serviceId));
   }
 
   private static VoidResult buildVoidResult(
       Map<ReversalStep, ReversalResponse> money,
       Map<ReversalStep, LoyaltyResponse> loyalty,
-      List<StoredValueOperationResult> storedValueLoads) {
+      List<StoredValueOperationResult> storedValueLoads,
+      List<ReversedMovement> reversed) {
     ReversalResponse cardLeg = money.get(ReversalStep.CARD);
     ReversalResponse storedValueLeg = money.get(ReversalStep.STORED_VALUE);
     ReversalResponse primaryMoney = cardLeg != null ? cardLeg : storedValueLeg;
@@ -517,20 +542,36 @@ public final class ReversalManager {
       result
           .poiTransactionId(Wire.txnId(primaryMoney.getPoiData()))
           .poiTransactionTimestamp(Wire.txnTimestamp(primaryMoney.getPoiData()))
+          .serviceId(
+              serviceIdOf(
+                  reversed, cardLeg != null ? ReversalStep.CARD : ReversalStep.STORED_VALUE))
           .customerReceipt(ReceiptMapper.customerReceipt(primaryMoney.getPaymentReceipt()))
           .merchantReceipt(ReceiptMapper.merchantReceipt(primaryMoney.getPaymentReceipt()));
     } else if (!loyalty.isEmpty()) {
-      LoyaltyResponse primary = loyalty.values().iterator().next();
+      ReversalStep primaryStep = loyalty.keySet().iterator().next();
+      LoyaltyResponse primary = loyalty.get(primaryStep);
       result
           .poiTransactionId(Wire.txnId(primary.getPoiData()))
-          .poiTransactionTimestamp(Wire.txnTimestamp(primary.getPoiData()));
+          .poiTransactionTimestamp(Wire.txnTimestamp(primary.getPoiData()))
+          .serviceId(serviceIdOf(reversed, primaryStep));
     } else if (!storedValueLoads.isEmpty()) {
       StoredValueOperationResult primary = storedValueLoads.get(0);
       result
           .poiTransactionId(primary.getPoiTransactionId())
-          .poiTransactionTimestamp(primary.getPoiTransactionTimestamp());
+          .poiTransactionTimestamp(primary.getPoiTransactionTimestamp())
+          .serviceId(serviceIdOf(reversed, ReversalStep.STORED_VALUE_LOAD));
     }
     return result.build();
+  }
+
+  /** The {@code ServiceID} of this attempt's first reversed movement of {@code step}. */
+  private static String serviceIdOf(List<ReversedMovement> reversed, ReversalStep step) {
+    for (ReversedMovement movement : reversed) {
+      if (movement.getStep() == step) {
+        return movement.getServiceId();
+      }
+    }
+    return null;
   }
 
   private static BigDecimal sumStoredValueAmounts(
@@ -592,6 +633,40 @@ public final class ReversalManager {
     };
   }
 
+  /**
+   * Mints the leg's {@code ServiceID} and hands it to {@code beforeStep} before anything is sent. A
+   * throwing handler fails the leg like a terminal failure, so the decider resolves it.
+   */
+  private String mintServiceId(
+      ReversalStep step, MessageCategoryType category, Consumer<ReversalContext> beforeStep) {
+    String serviceId = exchange.factory().mintServiceId(category);
+    if (beforeStep != null) {
+      try {
+        beforeStep.accept(new ReversalContext(step, serviceId));
+      } catch (SessionException e) {
+        throw e;
+      } catch (RuntimeException e) {
+        throw new SessionException(
+            new SessionError(
+                SessionErrorCode.UNKNOWN, "beforeStep failed for " + step + ": " + e, null, e));
+      }
+    }
+    return serviceId;
+  }
+
+  /** The category of the wire request a void leg sends. */
+  private static MessageCategoryType category(ReversalStep step) {
+    switch (step) {
+      case STORED_VALUE_LOAD:
+        return MessageCategoryType.STORED_VALUE;
+      case CARD:
+      case STORED_VALUE:
+        return MessageCategoryType.REVERSAL;
+      default: // Redemption, rebate, or award refund
+        return MessageCategoryType.LOYALTY;
+    }
+  }
+
   private static boolean isMoneyLeg(ReversalStep step) {
     return step == ReversalStep.STORED_VALUE_LOAD
         || step == ReversalStep.CARD
@@ -603,13 +678,13 @@ public final class ReversalManager {
    * so the register can retry (reversed steps are skipped on retry) or escalate.
    */
   private static SessionException abortError(
-      List<ReversalMovement> reversed, ReversalMovement failed, SessionException cause) {
+      List<ReversedMovement> reversed, ReversalMovement failed, SessionException cause) {
     if (reversed.isEmpty()) {
       return cause;
     }
     String done =
         reversed.stream()
-            .map(movement -> label(movement.getStep()) + " " + movement.poiTransactionId)
+            .map(movement -> label(movement.getStep()) + " " + movement.getPoiTransactionId())
             .collect(Collectors.joining(" and "));
     return new SessionException(
         Wire.annotated(
@@ -623,14 +698,7 @@ public final class ReversalManager {
                 + " was not: "
                 + cause.getError().getMessage(),
             cause,
-            reversedMovements(reversed)));
-  }
-
-  /** Public, persistence-safe view of internal reversal progress. */
-  private static List<ReversedMovement> reversedMovements(List<ReversalMovement> movements) {
-    return movements.stream()
-        .map(movement -> new ReversedMovement(movement.getStep(), movement.poiTransactionId))
-        .collect(Collectors.toList());
+            List.copyOf(reversed)));
   }
 
   private static String label(ReversalStep step) {
@@ -681,12 +749,15 @@ public final class ReversalManager {
   private ReversalResponse reverse(
       String originalPoiTxnId,
       Instant originalPoiTimestamp,
-      TransactionIdentificationType saleTransaction) {
+      TransactionIdentificationType saleTransaction,
+      String serviceId) {
     SaleToPOIRequest request =
         exchange
             .factory()
             .reversalRequest(
-                Wire.originalTransaction(originalPoiTxnId, originalPoiTimestamp), saleTransaction);
+                Wire.originalTransaction(originalPoiTxnId, originalPoiTimestamp),
+                saleTransaction,
+                serviceId);
     SaleToPOIResponse response = exchange.sendExpectingBody(MessageCategoryType.REVERSAL, request);
     ReversalResponse body = response.getReversalResponse();
     if (body == null) {

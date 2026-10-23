@@ -507,8 +507,15 @@ class TerminalShopperSessionStoredValuePurchaseTest {
                         })
                     .get());
 
+    String sentServiceId =
+        drainRequests().stream()
+            .filter(request -> "POI-LOAD-10".equals(originalStoredValueTransaction(request)))
+            .findFirst()
+            .orElseThrow()
+            .getMessageHeader()
+            .getServiceID();
     List<ReversedMovement> expected =
-        List.of(new ReversedMovement(ReversalStep.STORED_VALUE_LOAD, "POI-LOAD-10"));
+        List.of(new ReversedMovement(ReversalStep.STORED_VALUE_LOAD, "POI-LOAD-10", sentServiceId));
     assertEquals(expected, reportedToHandler);
     assertEquals(expected, failure.getError().getReversedMovements());
   }

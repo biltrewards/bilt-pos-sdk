@@ -486,6 +486,11 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The line as it was in <a href="com/bilt/pos/session/basket/BasketChange.html#previous()"><code>BasketChange.previous()</code></a>.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/ReversalFlow.html#beforeStep(java.util.function.Consumer)" class="member-name-link">beforeStep(Consumer&lt;ReversalContext&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a></dt>
+<dd>
+<div class="block">Called before each leg's terminal request is sent, with the <code>ServiceID</code> it will be sent
+ with, so the register can record it first.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#beforeStep(java.util.function.Function)" class="member-name-link">beforeStep(Function&lt;SettlementContext, String&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
 <div class="block">Called before each step; returns the <code>SaleTransactionID</code> to use for that step.</div>
@@ -3193,6 +3198,17 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Pass type identifier, e.g.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/ReversalContext.html#getServiceId()" class="member-name-link">getServiceId()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalContext.html" title="class in com.bilt.pos.session">ReversalContext</a></dt>
+<dd>
+<div class="block">The Nexo <code>ServiceID</code> this leg's terminal request will be sent with — minted for this
+ attempt before the handler runs, so the register can record it before anything is sent and
+ resolve the request with Transaction Status after a crash.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ReversedMovement.html#getServiceId()" class="member-name-link">getServiceId()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversedMovement.html" title="class in com.bilt.pos.session">ReversedMovement</a></dt>
+<dd>
+<div class="block">The Nexo <code>ServiceID</code> of the reversal request that reversed the movement — the id the
+ <a href="com/bilt/pos/session/ReversalFlow.html#beforeStep(java.util.function.Consumer)"><code>ReversalFlow.beforeStep(java.util.function.Consumer&lt;com.bilt.pos.session.ReversalContext&gt;)</code></a> context reported for that attempt.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#getServiceId()" class="member-name-link">getServiceId()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
 <dd>
 <div class="block">The Nexo <code>ServiceID</code> this step's terminal request will be sent with — minted for this
@@ -3207,6 +3223,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The Nexo <code>ServiceID</code> of the terminal request that committed this movement — the id the
  step's <code>beforeStep</code> context reported.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/VoidResult.html#getServiceId()" class="member-name-link">getServiceId()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/VoidResult.html" title="class in com.bilt.pos.session">VoidResult</a></dt>
+<dd>
+<div class="block">The Nexo <code>ServiceID</code> of the request whose terminal reference <a href="com/bilt/pos/session/VoidResult.html#getPoiTransactionId()"><code>VoidResult.getPoiTransactionId()</code></a> reports; <code>null</code> when that is absent.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/identity/VasData.html#getServices()" class="member-name-link">getServices()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasData.html" title="class in com.bilt.pos.session.identity">VasData</a></dt>
 <dd>
@@ -3264,6 +3284,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/identity/VasService.html#getStatusWord()" class="member-name-link">getStatusWord()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/VasService.html" title="class in com.bilt.pos.session.identity">VasService</a></dt>
 <dd>
 <div class="block">ISO 7816 status word of the pass read, e.g.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ReversalContext.html#getStep()" class="member-name-link">getStep()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalContext.html" title="class in com.bilt.pos.session">ReversalContext</a></dt>
+<dd>
+<div class="block">The leg about to be sent.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/ReversedMovement.html#getStep()" class="member-name-link">getStep()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversedMovement.html" title="class in com.bilt.pos.session">ReversedMovement</a></dt>
 <dd>
@@ -5480,6 +5504,12 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Positive amount represented by all return lines.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/ReversalContext.html" class="type-name-link" title="class in com.bilt.pos.session">ReversalContext</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
+<dd>
+<div class="block">Context handed to the <a href="com/bilt/pos/session/ReversalFlow.html#beforeStep(java.util.function.Consumer)"><code>ReversalFlow.beforeStep(java.util.function.Consumer&lt;com.bilt.pos.session.ReversalContext&gt;)</code></a> handler before each reversal leg.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/ReversalContext.html#%3Cinit%3E(com.bilt.pos.session.ReversalStep,java.lang.String)" class="member-name-link">ReversalContext(ReversalStep, String)</a> - Constructor for class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalContext.html" title="class in com.bilt.pos.session">ReversalContext</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/ReversalDecision.html" class="type-name-link" title="enum class in com.bilt.pos.session">ReversalDecision</a> - Enum Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">How a reversal flow proceeds after one of its steps failed, returned by the handler registered
@@ -5501,7 +5531,7 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">A movement that completed before a whole-sale void stopped.</div>
 </dd>
-<dt><a href="com/bilt/pos/session/ReversedMovement.html#%3Cinit%3E(com.bilt.pos.session.ReversalStep,java.lang.String)" class="member-name-link">ReversedMovement(ReversalStep, String)</a> - Constructor for class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversedMovement.html" title="class in com.bilt.pos.session">ReversedMovement</a></dt>
+<dt><a href="com/bilt/pos/session/ReversedMovement.html#%3Cinit%3E(com.bilt.pos.session.ReversalStep,java.lang.String,java.lang.String)" class="member-name-link">ReversedMovement(ReversalStep, String, String)</a> - Constructor for class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversedMovement.html" title="class in com.bilt.pos.session">ReversedMovement</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/Reward.html" class="type-name-link" title="class in com.bilt.pos.session.identity">Reward</a> - Class in <a href="com/bilt/pos/session/identity/package-summary.html">com.bilt.pos.session.identity</a></dt>
 <dd>
@@ -5649,6 +5679,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#serviceId(java.lang.String)" class="member-name-link">serviceId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html#serviceId(java.lang.String)" class="member-name-link">serviceId(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/VoidResult.Builder.html#serviceId(java.lang.String)" class="member-name-link">serviceId(String)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/VoidResult.Builder.html" title="class in com.bilt.pos.session">VoidResult.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/ServiceIdListener.html#serviceIdAssigned(java.lang.String,com.bilt.pos.nexo.model.MessageCategoryType)" class="member-name-link">serviceIdAssigned(String, MessageCategoryType)</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/ServiceIdListener.html" title="interface in com.bilt.pos.session">ServiceIdListener</a></dt>
 <dd>

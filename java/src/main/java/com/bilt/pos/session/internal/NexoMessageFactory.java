@@ -221,11 +221,16 @@ public final class NexoMessageFactory {
         .build();
   }
 
-  /** A {@code ReversalRequest} (merchant cancel) against a prior transaction. */
+  /**
+   * A {@code ReversalRequest} (merchant cancel) against a prior transaction, sent with {@code
+   * serviceId}, minted by {@link #mintServiceId(MessageCategoryType)}.
+   */
   public SaleToPOIRequest reversalRequest(
-      OriginalPOITransaction original, TransactionIdentificationType saleTransaction) {
+      OriginalPOITransaction original,
+      TransactionIdentificationType saleTransaction,
+      String serviceId) {
     return SaleToPOIRequest.builder()
-        .messageHeader(header(MessageClassType.SERVICE, MessageCategoryType.REVERSAL))
+        .messageHeader(header(MessageClassType.SERVICE, MessageCategoryType.REVERSAL, serviceId))
         .reversalRequest(
             ReversalRequest.builder()
                 .saleData(saleData(saleTransaction))
