@@ -45,6 +45,8 @@ export class PendingOperation<T> {
   private deferredSeq: number | undefined;
   /** The newest stream `seq` a step arrived with; replayed steps older than it are resolved. */
   private latestStepSeq: number | undefined;
+  /** Every stepId this tracker ever saw, so a stale snapshot can't pose as new information. */
+  private readonly seenStepIds = new Set<string>();
 
   constructor(
     readonly type: OperationType,
@@ -104,12 +106,7 @@ export class PendingOperation<T> {
     for (const mirror of this.mirrors) mirror.update(resource);
     this.currentStatus = resource.status;
     if (resource.status === 'awaitingReply' && resource.pendingStep) {
-      // The snapshot's step is a fallback for adopted trackers: once the stream delivered a
-      // step, injecting this (possibly older) `pendingStep` would clobber the one `guide()`
-      // must answer.
-      if (!this.deferStepAnswers || this.deferredStep === undefined) {
-        this.step(resource.pendingStep);
-      }
+      this.step(resource.pendingStep);
     }
     if (resource.status === 'succeeded') {
       this.settled = true;
@@ -161,6 +158,7 @@ export class PendingOperation<T> {
     // Handlers and a step deferred on this second handle belong to the owner, the replying one.
     if (this.steps !== undefined && owner.steps === undefined) owner.steps = this.steps;
     owner.noteSeq(this.latestStepSeq);
+    for (const stepId of this.seenStepIds) owner.seenStepIds.add(stepId);
     const step = this.deferredStep;
     const seq = this.deferredSeq;
     this.deferredStep = undefined;
@@ -204,6 +202,8 @@ export class PendingOperation<T> {
    * one seen is a replay the host already resolved, not something to answer.
    */
   step(step: OperationStep, seq?: number): void {
+    const unseen = !this.seenStepIds.has(step.stepId);
+    this.seenStepIds.add(step.stepId);
     if (seq !== undefined && this.latestStepSeq !== undefined && seq < this.latestStepSeq) {
       return;
     }
@@ -216,6 +216,11 @@ export class PendingOperation<T> {
     // An adopted operation keeps a step the previous page's handlers would have answered open
     // until `guide()` registers this page's — otherwise it would resolve with defaults first.
     if (this.deferStepAnswers && this.steps === undefined) {
+      // A snapshot injection has no seq: it may displace the held step only when it names one
+      // the stream never delivered — a poll's read of what the host awaits beats the last
+      // event we saw. A seen id is the same step or a stale one; it must not drop the answer
+      // `guide()` still owes.
+      if (seq === undefined && this.deferredStep !== undefined && !unseen) return;
       this.deferredStep = step;
       this.deferredSeq = seq;
       return;

@@ -229,6 +229,35 @@ describe('operations on an attached session', () => {
     void op.catch(() => undefined);
   });
 
+  it('lets a fresh listing replace a deferred step the stream never delivered', async () => {
+    const { engine, pos, session } = await lane();
+    const op = session.settle();
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    const opId = engine.lastOperation(session.id).id;
+    // s1 is pending in the host's snapshot but its step event never reached the page.
+    engine.patch(session.id, opId, {
+      status: 'awaitingReply',
+      pendingStep: { ...rebateStep('s1', '88.00'), operationId: opId },
+    } as never);
+    await pos.close();
+
+    const pos2 = await BiltPos.connect(() => engine);
+    const attached = await pos2.attachTerminalSession(session.id);
+    const [handle] = await attached.operations({ status: ['awaitingReply'] });
+    expect(handle).toBeDefined();
+
+    // The host moved to s2 — also unseen. A fresh listing is the only word on what the host
+    // awaits, so the snapshot's step displaces the deferred s1.
+    engine.patch(session.id, opId, {
+      pendingStep: { ...rebateStep('s2', '85.00'), operationId: opId },
+    } as never);
+    await attached.operations();
+    handle!.guide({ onRebatesRedeemed: () => '80.00' });
+    await vi.waitFor(() => expect(engine.replies).toHaveLength(1));
+    expect(engine.replies[0]!.reply).toEqual({ stepId: 's2', total: '80.00' });
+    void op.catch(() => undefined);
+  });
+
   it('returns the same handle for an operation this session started', async () => {
     const { engine, pos, session } = await lane();
     await pos.close();
