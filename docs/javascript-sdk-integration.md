@@ -9,6 +9,9 @@ This guide covers `@biltorg/pos-sdk` (framework-free) and `@biltorg/pos-react` (
 
 > **Using React?** The core, `@biltorg/pos-sdk`, works in any framework or none; the [plain TypeScript example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/vanilla-ts) uses nothing else. React apps add `@biltorg/pos-react` for `BiltPosProvider`, the session, basket, member and settlement hooks, `BridgeGate` and `InstallBridgePrompt`, and `RetailMediaSurface` (see [React](#react)). The [browser POS example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) and the [browser emulator](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) are the React references.
 
+* TOC
+{:toc}
+
 ---
 
 ## Before you begin

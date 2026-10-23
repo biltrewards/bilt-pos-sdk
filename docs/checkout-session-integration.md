@@ -9,6 +9,9 @@ You keep working with one object for the whole transaction instead of hand-assem
 
 `TerminalShopperSession` extends `ShopperSession`. The basket, member, context, and widget API that both session types share, and the `RetailMedia` widget, are covered in the [ShopperSession Integration Guide](./shopper-session-integration.md).
 
+* TOC
+{:toc}
+
 ---
 
 ## Before you begin

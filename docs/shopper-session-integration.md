@@ -9,6 +9,9 @@ There are two session types. A plain `ShopperSession` runs on the register alone
 
 > **Release status.** The session, basket, member, context and widget APIs described here are complete. `RetailMedia` ships its public API and session bookkeeping in this release, but it does not yet request or draw ads: decisioning, caching and rendering arrive in a later release behind the same API. The [retail media section](#what-works-in-this-release) says exactly what runs today.
 
+* TOC
+{:toc}
+
 ---
 
 ## Before you begin
