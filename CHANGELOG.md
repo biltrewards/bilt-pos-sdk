@@ -107,7 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `ReversalFlow.beforeStep(Consumer<ReversalContext>)`: called before each `voidTransaction` / `refund` leg is sent, with `ReversalContext.getStep()` and `ReversalContext.getServiceId()` — the `ServiceID` the leg's request is sent with. Each retry mints a new id and calls the handler again; a throwing handler fails the leg before it is sent and goes to `onError` like any other failed step.
+- `ReversalFlow.beforeStep(Consumer<ReversalContext>)`: called before each `voidTransaction` / `refund` leg is sent, with `ReversalContext.getStep()` and `ReversalContext.getServiceId()` — the `ServiceID` the leg's request is sent with. Each retry mints a new id and calls the handler again; a throwing handler fails the leg before it is sent and goes to `onError` like any other failed step. Without `onError`, a leg that failed before it was sent (throwing handler, invalid or failed `ServiceID`) aborts the reversal, including loyalty legs the default policy otherwise skips.
 - `ReversedMovement.getServiceId()` and `VoidResult.getServiceId()`: the `ServiceID` of the reversal request behind the movement / the result's POI transaction.
 
 ### Changed (breaking)

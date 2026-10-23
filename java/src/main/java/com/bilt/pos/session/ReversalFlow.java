@@ -82,7 +82,8 @@ public final class ReversalFlow<T> extends SessionFlow<T> {
    * Called before each leg's terminal request is sent, with the {@code ServiceID} it will be sent
    * with, so the register can record it first. A retried leg calls the handler again with a new id.
    * A throwing handler fails the leg before it is sent; the {@code onError} decision then applies
-   * as for any other failed step.
+   * as for any other failed step. Without {@code onError}, such a leg aborts the reversal — even a
+   * loyalty leg the default policy would otherwise skip — since the terminal never saw it.
    */
   public ReversalFlow<T> beforeStep(Consumer<ReversalContext> handler) {
     return register(() -> this.beforeStepHandler = requireHandler(handler));

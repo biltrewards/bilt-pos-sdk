@@ -151,6 +151,7 @@ public final class ReversalManager {
         runStep(
             ReversalStep.CARD,
             effective,
+            decider == null,
             () ->
                 sendRefund(
                     amount,
@@ -181,6 +182,7 @@ public final class ReversalManager {
           runStep(
               ReversalStep.AWARD,
               effective,
+              decider == null,
               () ->
                   loyaltyRefund(
                       LoyaltyTransactionTypeEnum.AWARD_REFUND,
@@ -378,6 +380,7 @@ public final class ReversalManager {
           runStep(
               movement.getStep(),
               progressAware,
+              decider == null,
               () -> {
                 String serviceId =
                     mintServiceId(movement.getStep(), category(movement.getStep()), beforeStep);
@@ -590,28 +593,47 @@ public final class ReversalManager {
   /**
    * Runs one reversal step under the decider: {@code RETRY} re-sends, {@code SKIP} invokes {@code
    * onSkip} and returns {@code null}, {@code ABORT} (or a {@code null} decision) throws via {@code
-   * onAbort}.
+   * onAbort}. Under the default policy ({@code defaulted}) a leg that failed before it was sent
+   * aborts instead of skipping: the terminal never saw it, so store-and-forward cannot finish it.
    */
   private static <T> T runStep(
       ReversalStep step,
       StepDecider decider,
+      boolean defaulted,
       Supplier<T> action,
       Consumer<SessionException> onSkip,
       UnaryOperator<SessionException> onAbort) {
     while (true) {
+      SessionException failure;
+      boolean sent = true;
       try {
         return action.get();
+      } catch (NotSent e) {
+        failure = e.failure;
+        sent = false;
       } catch (SessionException e) {
-        ReversalDecision decision = decider.decide(step, e.getError());
-        if (decision == ReversalDecision.RETRY) {
-          continue;
-        }
-        if (decision == ReversalDecision.SKIP) {
-          onSkip.accept(e);
-          return null;
-        }
-        throw onAbort.apply(e);
+        failure = e;
       }
+      ReversalDecision decision = decider.decide(step, failure.getError());
+      if (decision == ReversalDecision.RETRY) {
+        continue;
+      }
+      if (decision == ReversalDecision.SKIP && (sent || !defaulted)) {
+        onSkip.accept(failure);
+        return null;
+      }
+      throw onAbort.apply(failure);
+    }
+  }
+
+  /** A leg's failure before its request was sent (minting or {@code beforeStep}). */
+  private static final class NotSent extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+    final transient SessionException failure;
+
+    NotSent(SessionException failure) {
+      super(failure);
+      this.failure = failure;
     }
   }
 
@@ -639,19 +661,20 @@ public final class ReversalManager {
    */
   private String mintServiceId(
       ReversalStep step, MessageCategoryType category, Consumer<ReversalContext> beforeStep) {
-    String serviceId = exchange.factory().mintServiceId(category);
-    if (beforeStep != null) {
-      try {
+    try {
+      String serviceId = exchange.factory().mintServiceId(category);
+      if (beforeStep != null) {
         beforeStep.accept(new ReversalContext(step, serviceId));
-      } catch (SessionException e) {
-        throw e;
-      } catch (RuntimeException e) {
-        throw new SessionException(
-            new SessionError(
-                SessionErrorCode.UNKNOWN, "beforeStep failed for " + step + ": " + e, null, e));
       }
+      return serviceId;
+    } catch (SessionException e) {
+      throw new NotSent(e);
+    } catch (RuntimeException e) {
+      throw new NotSent(
+          new SessionException(
+              new SessionError(
+                  SessionErrorCode.UNKNOWN, "beforeStep failed for " + step + ": " + e, null, e)));
     }
-    return serviceId;
   }
 
   /** The category of the wire request a void leg sends. */

@@ -437,6 +437,41 @@ class ServiceIdTest {
   }
 
   @Test
+  void throwingBeforeStepOnALoyaltyLegAbortsUnderTheDefaultPolicy() throws Exception {
+    TerminalShopperSession session = session(null);
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.REVERSAL_OK));
+
+    SessionException failure =
+        assertThrows(
+            SessionException.class,
+            () ->
+                session
+                    .voidTransaction(
+                        OriginalSaleRecord.builder()
+                            .cardPoiTransactionId("POI-CARD-9")
+                            .cardPoiTransactionTimestamp(ORIGINAL_TIME)
+                            .redemptionPoiTransactionId("POI-RED-9")
+                            .redemptionPoiTransactionTimestamp(ORIGINAL_TIME)
+                            .memberId("member-1")
+                            .build())
+                    .beforeStep(
+                        ctx -> {
+                          if (ctx.getStep() == ReversalStep.REDEMPTION) {
+                            throw new IllegalStateException("register could not persist");
+                          }
+                        })
+                    .get());
+
+    assertEquals(SessionErrorCode.UNKNOWN, failure.getError().getCode());
+    assertEquals(
+        List.of(ReversalStep.CARD),
+        failure.getError().getReversedMovements().stream()
+            .map(ReversedMovement::getStep)
+            .collect(Collectors.toList()));
+    assertEquals(1, drainRequests().size());
+  }
+
+  @Test
   void retryAfterAThrowingBeforeStepMintsAFreshId() throws Exception {
     TerminalShopperSession session = session(null);
     server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.REVERSAL_OK));
