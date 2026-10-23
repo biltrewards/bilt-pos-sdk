@@ -13,6 +13,8 @@
       url: /javascript-sdk-integration.html
     - name: Terminal Bridge
       url: /terminal-bridge.html
+    - name: Terminal Bridge Recovery
+      url: /terminal-bridge-recovery.html
     - name: Session Host
       url: /session-host.html
     - name: Session Protocol Reference

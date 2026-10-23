@@ -183,11 +183,17 @@ Two browser-side caveats in this iteration:
 
 **Starting a terminal session fails with `UNSUPPORTED`, or `GET /v1/terminal` answers `404`.** The bridge has no terminal configured, so only `local` sessions work. Add a `terminal` object to the config file (the menu says *No terminal configured* until it loads); if the file still has the old `terminals` list, the menu shows the config error explaining the change. The `poiId` the page sends never causes this: it is passed through to the one terminal whatever its value.
 
-**A terminal session cannot be started because one is already open on the terminal (`INVALID_STATE`).** A session the register did not end is still alive on the bridge: a page that was closed or reloaded without `end()`, or a crashed register. Sessions outlive the page by design (the bridge is where settlement runs). End the stale one through the bridge, `curl -X DELETE http://127.0.0.1:48333/v1/sessions/<id>`, and if it refuses because money is unresolved, finish the unwind or force-end it as the SDK guide's [session section](./javascript-sdk-integration.md#start-and-end-a-session) describes. Restarting the bridge drops its sessions and tells the terminal to discard its session data on the next start.
+**A terminal session cannot be started because one is already open on the terminal (`INVALID_STATE`).** A session the register did not end is still alive on the bridge: a page that was closed or reloaded without `end()`, or a crashed register. Sessions outlive the page by design (the bridge is where settlement runs). See [A stuck lane](./terminal-bridge-recovery.md#a-stuck-lane-invalid_state) in the recovery guide.
 
 **`BridgeOutdatedError` / the update prompt.** The bridge's `protocolVersions` does not include the version the SDK was generated from. Install the newer bridge; there is no update feed in the development build, so download the `.dmg` and reinstall.
 
 **Where are the logs?** `~/Library/Logs/Bilt Terminal Bridge/` on macOS (**Open logs** in the menu); the diagnostics summary from the menu is safe to paste into a ticket, it redacts passphrases.
+
+---
+
+## Recovery
+
+What to do after a page reload, a bridge restart or a stuck lane, and what the register has to keep so it can, is on its own page: [Terminal Bridge — Recovery](./terminal-bridge-recovery.md).
 
 ---
 
