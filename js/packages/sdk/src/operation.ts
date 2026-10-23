@@ -1,6 +1,16 @@
 import type { OperationStatus, OperationType } from '@biltorg/pos-protocol';
+import type { ReversalHandlers, SettlementHandlers } from './terminal-session';
 
 export type { OperationStatus, OperationType };
+
+/**
+ * Narrows `ShopperSession.operations`: only operations in one of these states come back, so
+ * `{ status: ['running', 'awaitingReply'] }` lists what is still in flight. No filter lists
+ * every operation, newest first either way.
+ */
+export interface OperationFilter {
+  readonly status?: readonly OperationStatus[];
+}
 
 /**
  * A session operation in flight: the JavaScript form of a Java `SessionResult`,
@@ -34,4 +44,16 @@ export interface Operation<T> extends Promise<T> {
    * abort was issued, not when the operation finished; await the operation itself for that.
    */
   abort(): Promise<void>;
+
+  /**
+   * Registers the handlers this operation answers its steps and reports its movements with:
+   * `SettlementHandlers` on a `settle`, `ReversalHandlers` on a `refund`, `refundUnlinked`
+   * or `voidTransaction` — the calls a Java `SettlementFlow`/`ReversalFlow` takes, in one
+   * object. Its main use is taking over an operation the page did not start — one
+   * `operations()` listed or an attach adopted: such an operation holds a pending step open
+   * until `guide` registers the handlers, which then answer it right away. Calling it on an
+   * operation the page started replaces the handlers its method call registered. Without it
+   * a pending step simply stays unanswered; the host's step deadline resolves it in time.
+   */
+  guide(handlers: SettlementHandlers | ReversalHandlers): void;
 }

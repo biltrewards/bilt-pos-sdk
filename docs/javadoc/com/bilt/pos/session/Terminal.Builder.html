@@ -138,6 +138,16 @@ loadScripts(document, 'script');</script>
 <div class="block">POS identifier sent as <code>SaleID</code>.</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#serviceIdListener(com.bilt.pos.session.ServiceIdListener)" class="member-name-link">serviceIdListener</a><wbr>(<a href="ServiceIdListener.html" title="interface in com.bilt.pos.session">ServiceIdListener</a>&nbsp;serviceIdListener)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Notified of every <code>ServiceID</code> this terminal assigns, before the request is sent.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#serviceIdProvider(com.bilt.pos.session.ServiceIdProvider)" class="member-name-link">serviceIdProvider</a><wbr>(<a href="ServiceIdProvider.html" title="interface in com.bilt.pos.session">ServiceIdProvider</a>&nbsp;serviceIdProvider)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Mints the <code>ServiceID</code> of every request this terminal sends.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#storeLocation(java.lang.String)" class="member-name-link">storeLocation</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;storeLocation)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Store location identifier: the <code>TotalsGroupID</code> that <a href="Terminal.html#getTotals()"><code>Terminal.getTotals()</code></a>
@@ -196,6 +206,22 @@ loadScripts(document, 'script');</script>
 <div class="block">Where asynchronously executed operations deliver their handlers — see <code>
  TerminalShopperSession.Builder#callbackExecutor</code>. Applies to <code>execute()</code>; <code>
  executeSync()</code> and the blocking accessors are unaffected.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="serviceIdProvider(com.bilt.pos.session.ServiceIdProvider)">
+<h3>serviceIdProvider</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></span>&nbsp;<span class="element-name">serviceIdProvider</span><wbr><span class="parameters">(<a href="ServiceIdProvider.html" title="interface in com.bilt.pos.session">ServiceIdProvider</a>&nbsp;serviceIdProvider)</span></div>
+<div class="block">Mints the <code>ServiceID</code> of every request this terminal sends. Optional: random
+ 10-character alphanumeric ids by default. See <a href="ServiceIdProvider.html" title="interface in com.bilt.pos.session"><code>ServiceIdProvider</code></a>.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="serviceIdListener(com.bilt.pos.session.ServiceIdListener)">
+<h3>serviceIdListener</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Terminal.Builder.html" title="class in com.bilt.pos.session">Terminal.Builder</a></span>&nbsp;<span class="element-name">serviceIdListener</span><wbr><span class="parameters">(<a href="ServiceIdListener.html" title="interface in com.bilt.pos.session">ServiceIdListener</a>&nbsp;serviceIdListener)</span></div>
+<div class="block">Notified of every <code>ServiceID</code> this terminal assigns, before the request is sent.
+ Optional. See <a href="ServiceIdListener.html" title="interface in com.bilt.pos.session"><code>ServiceIdListener</code></a>.</div>
 </section>
 </li>
 <li>

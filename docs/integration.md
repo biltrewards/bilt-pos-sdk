@@ -3,6 +3,9 @@
 
 # Nexo Terminal API Java Client — Integration Guide
 
+* TOC
+{:toc}
+
 ## Overview
 
 The Nexo Terminal API Java client (`BiltNexoTerminalClient`) is a client library for communicating with a Bilt Terminal Application via the **Nexo Sale to POI protocol (version 3.0)**. The Nexo standard defines a message-based API between a Sale System (e.g. a POS application) and a POI terminal (the payment device). All messages are JSON-serialised and follow a common envelope structure: a `SaleToPOIRequest` or `SaleToPOIResponse` wrapping a `MessageHeader` plus one typed request/response body.
@@ -109,6 +112,33 @@ BiltNexoTerminalClient client = BiltNexoTerminalClient.builder()
 ```
 
 When a `SecurityKey` is provided, all requests are encrypted using CMS `EnvelopedData` (AES-256-CBC with per-message session keys wrapped via AES Key Wrap) and authenticated with HMAC-SHA256 via a CMS `SecurityTrailer`. Responses are detected and decrypted automatically — if the terminal responds with an unencrypted message (e.g. an error), the client handles it gracefully.
+
+### Testing without hardware
+
+`SimulatedTerminalClient` is an in-memory terminal that implements the same `TerminalClient`
+interface, so it can replace `BiltNexoTerminalClient` in tests and local development:
+
+```java
+import com.bilt.pos.nexo.client.TerminalClient;
+import com.bilt.pos.nexo.sim.SimulatedTerminalClient;
+
+TerminalClient client = SimulatedTerminalClient.builder().build();
+```
+
+It keeps a ledger of payments, loyalty, and stored-value transactions, so refunds, voids, and
+transaction status behave like a real terminal. Use `members(Path)` to load your own member
+fixture, and `timeoutNextRequest()` or `dropConnectionAfterNextApproval()` to exercise recovery
+paths.
+
+If your register does not run this Java client directly, you can still use the simulator by
+setting `"simulated": true` in the `terminal` object of whichever process talks to the terminal:
+
+- the **Terminal Bridge** (the desktop app a browser register connects to): its `config.json`, see
+  [Terminal Bridge — Simulated terminal](./terminal-bridge.md#simulated-terminal);
+- the **development Session Host** (`DevMain`, started from this repository with
+  `./gradlew :host:run`): the JSON file you pass it, see
+  [Session Host — Simulated terminal](./session-host.md#simulated-terminal), which also covers the
+  members file format and the decline rule.
 
 ---
 

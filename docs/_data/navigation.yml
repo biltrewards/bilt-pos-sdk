@@ -15,6 +15,8 @@
       url: /terminal-bridge.html
     - name: Terminal Bridge Recovery
       url: /terminal-bridge-recovery.html
+    - name: Session Host
+      url: /session-host.html
     - name: Session Protocol Reference
       url: /session-protocol-reference.html
 
@@ -154,7 +156,5 @@
       url: /payment-brands.html
     - name: API Reference
       url: /api-reference.html
-    - name: Session Host
-      url: /session-host.html
     - name: SDK Javadoc
       url: /javadoc/index.html

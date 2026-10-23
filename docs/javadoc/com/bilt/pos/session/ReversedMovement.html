@@ -108,8 +108,9 @@ loadScripts(document, 'script');</script>
 <div class="summary-table two-column-summary">
 <div class="table-header col-first">Constructor</div>
 <div class="table-header col-last">Description</div>
-<div class="col-constructor-name even-row-color"><code><a href="#%3Cinit%3E(com.bilt.pos.session.ReversalStep,java.lang.String)" class="member-name-link">ReversedMovement</a><wbr>(<a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a>&nbsp;step,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;poiTransactionId)</code></div>
+<div class="col-constructor-name even-row-color"><code><a href="#%3Cinit%3E(com.bilt.pos.session.ReversalStep,java.lang.String,java.lang.String)" class="member-name-link">ReversedMovement</a><wbr>(<a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a>&nbsp;step,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;poiTransactionId,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;serviceId)</code></div>
 <div class="col-last even-row-color">&nbsp;</div>
 </div>
 </section>
@@ -133,17 +134,23 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">The original movement's POI transaction ID.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getStep()" class="member-name-link">getStep</a>()</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getServiceId()" class="member-name-link">getServiceId</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The Nexo <code>ServiceID</code> of the reversal request that reversed the movement — the id the
+ <a href="ReversalFlow.html#beforeStep(java.util.function.Consumer)"><code>ReversalFlow.beforeStep(java.util.function.Consumer&lt;com.bilt.pos.session.ReversalContext&gt;)</code></a> context reported for that attempt.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getStep()" class="member-name-link">getStep</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">The kind of sale movement that was reversed.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#hashCode()" class="member-name-link">hashCode</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#toString()" class="member-name-link">toString</a>()</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#hashCode()" class="member-name-link">hashCode</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#toString()" class="member-name-link">toString</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 </div>
 </div>
 </div>
@@ -162,10 +169,11 @@ loadScripts(document, 'script');</script>
 <h2>Constructor Details</h2>
 <ul class="member-list">
 <li>
-<section class="detail" id="&lt;init&gt;(com.bilt.pos.session.ReversalStep,java.lang.String)">
+<section class="detail" id="&lt;init&gt;(com.bilt.pos.session.ReversalStep,java.lang.String,java.lang.String)">
 <h3>ReversedMovement</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="element-name">ReversedMovement</span><wbr><span class="parameters">(<a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a>&nbsp;step,
- <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;poiTransactionId)</span></div>
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;poiTransactionId,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;serviceId)</span></div>
 </section>
 </li>
 </ul>
@@ -188,6 +196,14 @@ loadScripts(document, 'script');</script>
 <h3>getPoiTransactionId</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">getPoiTransactionId</span>()</div>
 <div class="block">The original movement's POI transaction ID.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getServiceId()">
+<h3>getServiceId</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">getServiceId</span>()</div>
+<div class="block">The Nexo <code>ServiceID</code> of the reversal request that reversed the movement — the id the
+ <a href="ReversalFlow.html#beforeStep(java.util.function.Consumer)"><code>ReversalFlow.beforeStep(java.util.function.Consumer&lt;com.bilt.pos.session.ReversalContext&gt;)</code></a> context reported for that attempt.</div>
 </section>
 </li>
 <li>

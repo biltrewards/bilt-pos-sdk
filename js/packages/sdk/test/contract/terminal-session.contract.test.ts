@@ -110,7 +110,7 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
       return '89.50';
     });
 
-    const settlement = session.settle({
+    const settlement = session.settle(undefined, {
       onRebatesRedeemed: handler,
       onMovement: (m) => movements.push(m),
       onCardCharged: (m) => charged.push(m),
@@ -146,7 +146,7 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
 
   it('aborts a settlement waiting on the register and keeps the session open', async () => {
     const session = await lane();
-    const settlement = session.settle({
+    const settlement = session.settle(undefined, {
       onRebatesRedeemed: (_result, step) =>
         new Promise<string>((resolve) => {
           step.signal.addEventListener('abort', () => resolve('0'));
@@ -168,7 +168,7 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
     const session = await lane();
     const rebateReached = terminal.hold('Loyalty/Rebate');
     const handler = vi.fn(() => '85.00');
-    const settlement = session.settle({ onRebatesRedeemed: handler });
+    const settlement = session.settle(undefined, { onRebatesRedeemed: handler });
     await rebateReached;
 
     const linesBefore = proxy.requestLines.length;

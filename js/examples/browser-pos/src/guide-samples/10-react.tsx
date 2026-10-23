@@ -94,7 +94,9 @@ function Lane(): ReactNode {
       ) : (
         <button
           disabled={settlement.status !== 'idle'}
-          onClick={() => settlement.settle({ onRebatesRedeemed: (r) => retax(r.updatedBasket) })}
+          onClick={() =>
+            settlement.settle(undefined, { onRebatesRedeemed: (r) => retax(r.updatedBasket) })
+          }
         >
           Pay
         </button>

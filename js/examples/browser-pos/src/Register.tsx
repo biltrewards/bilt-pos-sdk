@@ -131,7 +131,7 @@ export function Register({ settings }: RegisterProps): ReactNode {
   const pay = () => {
     try {
       run(
-        settlement.settle({
+        settlement.settle(undefined, {
           // Rebates lower the price, so the register re-taxes the rebated lines rather than
           // accepting the suggested total, which keeps tax on the undiscounted amount.
           onRebatesRedeemed: (result) => recomputeTotal(result.updatedBasket),

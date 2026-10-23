@@ -44,6 +44,7 @@ val publicApiJavadoc =
         include(
             "com/bilt/pos/session/**",
             "com/bilt/pos/nexo/client/**",
+            "com/bilt/pos/nexo/sim/**",
             "com/bilt/pos/nexo/security/**",
             "com/bilt/pos/platform/**",
             "com/bilt/pos/display/**",

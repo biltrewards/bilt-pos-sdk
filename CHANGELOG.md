@@ -96,11 +96,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Emulator: the Events, Detailed and Nexo log tabs are one selectable text block, so a drag selection keeps extending while the log scrolls, a click places a caret that Shift+click / Shift+arrows extend, Ctrl/Cmd+A selects the whole tab and copy works; the selection stays on the same text while new lines arrive.
 - The automatic basket display (receipt built on `addItem`) printed the ISO currency code next to every amount (`USD 79.99`); it now renders the currency symbol (`$79.99`), falling back to the code for currencies without a known symbol.
 - `docs/refund-referenced.md` placed `OriginalPOITransaction` under `PaymentData`; per the nexo schema it belongs under `PaymentTransaction`.
 
 - Network-error recovery for `BiltNexoTerminalClient` (on by default): re-sends an in-flight request under an `X-Bilt-Request-Id` correlation header across transient network failures, with at-most-once execution guaranteed by terminal-side dedupe. Includes a configurable keep-alive ping and HTTP protocol / pong diagnostics, mirrored across the Java and Kotlin clients and the CLI ([#83](https://github.com/biltrewards/bilt-pos-sdk/pull/83))
 - Receipt Requirements documentation with Fiserv EMV guidelines and Bilt Platform fields
+
+## [0.37.0]
+
+### Added
+
+- `ReversalFlow.beforeStep(Consumer<ReversalContext>)`: called before each `voidTransaction` / `refund` leg is sent, with `ReversalContext.getStep()` and `ReversalContext.getServiceId()` — the `ServiceID` the leg's request is sent with. Each retry mints a new id and calls the handler again; a throwing handler fails the leg before it is sent and goes to `onError` like any other failed step. Without `onError`, a leg that failed before it was sent (throwing handler, invalid or failed `ServiceID`) aborts the reversal, including loyalty legs the default policy otherwise skips.
+- `ReversedMovement.getServiceId()` and `VoidResult.getServiceId()`: the `ServiceID` of the reversal request behind the movement / the result's POI transaction.
+
+### Changed (breaking)
+
+- `ReversedMovement`'s constructor takes the movement's `serviceId`.
+
+## [0.36.0]
+
+### Added
+
+- `ServiceIdProvider` and `ServiceIdListener`, set with `serviceIdProvider(..)` / `serviceIdListener(..)` on `TerminalShopperSession.Builder` and `Terminal.Builder`. The provider mints the Nexo `ServiceID` of every request the SDK sends (settlement legs and retries, Transaction Status recovery polls, aborts, displays, input, session signals, terminal services); ids must be 1–10 characters `[A-Za-z0-9]`. The listener is told each id before its request is sent. An invalid id, a failing provider, or a throwing listener fails the request with a `SessionException` and nothing is sent. Without a provider, ids stay random 10-character uppercase alphanumeric.
+- `SettlementContext.getServiceId()`: the `ServiceID` the step's request will be sent with, minted before `beforeStep` runs; each retry mints a new id and calls `beforeStep` again. Refund allocations get theirs the same way. `SettlementMovement.getServiceId()` reports the id of the request that committed the movement.
+
+### Changed (breaking)
+
+- `SettlementContext`'s constructor and `SettlementContext.resolveSaleTransactionId(..)` take the step's `serviceId`.
+
+## [0.35.0]
+
+### Added
+
+- Stateful in-memory `SimulatedTerminalClient`, selectable from the host development config and Terminal Bridge, for hardware-free Nexo sessions.
 
 ## [0.5.10] - 2025
 

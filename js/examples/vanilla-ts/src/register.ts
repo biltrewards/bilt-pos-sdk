@@ -196,7 +196,7 @@ export async function mountRegister(root: HTMLElement, deps: RegisterDeps): Prom
     pay.onclick = () =>
       void run('Paying', async () => {
         if (!terminal) return;
-        const paid = await terminal.settle({
+        const paid = await terminal.settle(undefined, {
           // TOTAL_REQUIRED after rebates: re-tax the rebated lines rather than take the suggestion.
           onRebatesRedeemed: (rebates) => recomputeTotal(rebates.updatedBasket),
         });

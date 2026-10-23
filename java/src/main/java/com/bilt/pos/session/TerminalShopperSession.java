@@ -501,6 +501,8 @@ public interface TerminalShopperSession extends ShopperSession {
     final List<Widget> widgets = new ArrayList<>();
     BiltCredentials credentials;
     BiltEnvironment environment = BiltEnvironment.PRODUCTION;
+    ServiceIdProvider serviceIdProvider;
+    ServiceIdListener serviceIdListener;
 
     private Builder() {}
 
@@ -556,6 +558,28 @@ public interface TerminalShopperSession extends ShopperSession {
      */
     public Builder externalDisplayClient(TerminalClient externalDisplayClient) {
       this.externalDisplayClient = externalDisplayClient;
+      return this;
+    }
+
+    /**
+     * Mints the {@code ServiceID} of every request the session sends — settlement legs and their
+     * retries, Transaction Status recovery polls, aborts, displays, input, session signals, and
+     * {@link TerminalShopperSession#terminal()} operations. Optional: random 10-character
+     * alphanumeric ids by default. Settlement legs report their id to {@code beforeStep} ({@link
+     * com.bilt.pos.session.settlement.SettlementContext#getServiceId()}) before they are sent. See
+     * {@link ServiceIdProvider}.
+     */
+    public Builder serviceIdProvider(ServiceIdProvider serviceIdProvider) {
+      this.serviceIdProvider = serviceIdProvider;
+      return this;
+    }
+
+    /**
+     * Notified of every {@code ServiceID} the session assigns, before the request is sent.
+     * Optional. See {@link ServiceIdListener}.
+     */
+    public Builder serviceIdListener(ServiceIdListener serviceIdListener) {
+      this.serviceIdListener = serviceIdListener;
       return this;
     }
 

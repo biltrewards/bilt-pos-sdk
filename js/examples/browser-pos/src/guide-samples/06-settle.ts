@@ -30,7 +30,7 @@ declare function print(text: string | undefined): void;
 declare function showError(code: string, message: string): void;
 
 export function pay(session: TerminalShopperSession): Promise<SettlementResult> {
-  return session.settle({
+  return session.settle(undefined, {
     // TOTAL_REQUIRED after rebates: re-tax the rebated lines, within the step's deadline.
     onRebatesRedeemed: (rebates, step) => taxService.total(rebates.updatedBasket, step.signal),
     // Points and a gift card are tender, not price changes: the suggested total is right.

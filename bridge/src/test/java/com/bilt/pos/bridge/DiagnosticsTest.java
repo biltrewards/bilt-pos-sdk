@@ -62,4 +62,18 @@ class DiagnosticsTest {
     assertTrue(text.contains("(not loaded)"), text);
     assertTrue(text.contains("Not listening"), text);
   }
+
+  @Test
+  void rendersSimulatedConfigWithoutAnEndpoint() throws Exception {
+    BridgeConfig config = BridgeConfig.parse("{\"terminal\":{\"simulated\":true}}");
+    BridgeStatus status = new BridgeStatus("0.34.0", "0.34.0", "127.0.0.1", 48333, true, 0, false);
+    AppDirs dirs = AppDirs.detect("Linux", Path.of("/home/c"), Map.of(), null);
+
+    String text =
+        Diagnostics.render(
+            status, Optional.of(config), Optional.empty(), Optional.empty(), dirs, List.of());
+
+    assertTrue(text.contains("\"simulated\" : true"), text);
+    assertFalse(text.contains("https://"), text);
+  }
 }

@@ -28,6 +28,7 @@ public final class VoidResult {
   private final BigDecimal reversedAmount;
   private final String poiTransactionId;
   private final Instant poiTransactionTimestamp;
+  private final String serviceId;
   private final Receipt customerReceipt;
   private final Receipt merchantReceipt;
   private final int pointsReversed;
@@ -38,6 +39,7 @@ public final class VoidResult {
     this.reversedAmount = builder.reversedAmount;
     this.poiTransactionId = builder.poiTransactionId;
     this.poiTransactionTimestamp = builder.poiTransactionTimestamp;
+    this.serviceId = builder.serviceId;
     this.customerReceipt = builder.customerReceipt;
     this.merchantReceipt = builder.merchantReceipt;
     this.pointsReversed = builder.pointsReversed;
@@ -66,6 +68,14 @@ public final class VoidResult {
     return poiTransactionTimestamp;
   }
 
+  /**
+   * The Nexo {@code ServiceID} of the request whose terminal reference {@link
+   * #getPoiTransactionId()} reports; {@code null} when that is absent.
+   */
+  public String getServiceId() {
+    return serviceId;
+  }
+
   public Receipt getCustomerReceipt() {
     return customerReceipt;
   }
@@ -91,6 +101,7 @@ public final class VoidResult {
     private BigDecimal reversedAmount;
     private String poiTransactionId;
     private Instant poiTransactionTimestamp;
+    private String serviceId;
     private Receipt customerReceipt;
     private Receipt merchantReceipt;
     private int pointsReversed;
@@ -115,6 +126,11 @@ public final class VoidResult {
 
     public Builder poiTransactionTimestamp(Instant poiTransactionTimestamp) {
       this.poiTransactionTimestamp = poiTransactionTimestamp;
+      return this;
+    }
+
+    public Builder serviceId(String serviceId) {
+      this.serviceId = serviceId;
       return this;
     }
 

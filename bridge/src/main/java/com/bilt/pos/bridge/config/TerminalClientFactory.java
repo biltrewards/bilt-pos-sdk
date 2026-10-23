@@ -1,7 +1,9 @@
 package com.bilt.pos.bridge.config;
 
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.client.TerminalClient;
 import com.bilt.pos.nexo.security.SecurityKey;
+import com.bilt.pos.nexo.sim.SimulatedTerminalClient;
 import java.nio.file.Path;
 
 /** Turns a {@link TerminalConfig} into the SDK client that speaks to that terminal. */
@@ -15,7 +17,12 @@ public final class TerminalClientFactory {
    * environment), and {@link BridgeConfig#parse} already rejected the combinations it would refuse,
    * so an {@code IllegalStateException} here means the two drifted apart.
    */
-  public static BiltNexoTerminalClient build(TerminalConfig terminal) {
+  public static TerminalClient build(TerminalConfig terminal) {
+    if (terminal.simulated()) {
+      SimulatedTerminalClient.Builder builder = SimulatedTerminalClient.builder();
+      terminal.members().ifPresent(builder::members);
+      return builder.build();
+    }
     BiltNexoTerminalClient.Builder builder =
         BiltNexoTerminalClient.builder().endpoint(terminal.endpoint());
     if (terminal.trustAll()) {

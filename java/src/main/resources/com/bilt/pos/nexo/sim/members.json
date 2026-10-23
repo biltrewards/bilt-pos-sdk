@@ -1,0 +1,32 @@
+{
+  "members": [
+    {
+      "memberId": "mbr_sim_1",
+      "accountId": "acct_sim_1",
+      "phone": "+15550000001",
+      "firstName": "Sam",
+      "lastName": "Simpson",
+      "tierName": "Gold",
+      "points": 12000,
+      "rewards": [
+        {
+          "rewardRef": "rwd_sim_1",
+          "type": "reward",
+          "name": "$5 off",
+          "points": 500,
+          "value": 5.00
+        }
+      ]
+    },
+    {
+      "memberId": "mbr_sim_2",
+      "accountId": "acct_sim_2",
+      "phone": "+15550000002",
+      "firstName": "Alex",
+      "lastName": "Sample",
+      "tierName": "Blue",
+      "points": 250,
+      "rewards": []
+    }
+  ]
+}

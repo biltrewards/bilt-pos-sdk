@@ -24,11 +24,12 @@ import type { SessionEventHandler } from '@biltorg/pos-sdk';
 import type { SessionEventType } from '@biltorg/pos-protocol';
 import type { SettlementContext } from '@biltorg/pos-protocol';
 import type { SettlementFailure } from '@biltorg/pos-protocol';
+import { SettlementHandlers } from '@biltorg/pos-sdk';
 import type { SettlementMovement } from '@biltorg/pos-protocol';
+import { SettlementOptions } from '@biltorg/pos-sdk';
 import type { SettlementRecovery } from '@biltorg/pos-protocol';
 import { SettlementRecoveryAction } from '@biltorg/pos-sdk';
 import type { SettlementResult } from '@biltorg/pos-protocol';
-import { SettleOptions } from '@biltorg/pos-sdk';
 import type { ShopperSession } from '@biltorg/pos-sdk';
 import type { ShopperSessionOptions } from '@biltorg/pos-sdk';
 import { StepInfo } from '@biltorg/pos-sdk';
@@ -233,7 +234,7 @@ export interface UseSettlementResult {
     reply(answer: SettlementStepReply): void;
     reset(): void;
     readonly result: SettlementResult | null;
-    settle(options?: SettleOptions): Operation<SettlementResult>;
+    settle(options?: SettlementOptions, handlers?: SettlementHandlers): Operation<SettlementResult>;
     // (undocumented)
     readonly status: SettlementStatus;
 }

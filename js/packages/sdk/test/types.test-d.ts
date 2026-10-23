@@ -8,7 +8,8 @@ import type {
   EngineFactory,
   Operation,
   SessionError,
-  SettleOptions,
+  SettlementHandlers,
+  SettlementOptions,
   ShopperSession,
   SettlementRecoveryAction,
   StepInfo,
@@ -42,7 +43,7 @@ describe('the design sketch', () => {
     });
     await session.member.set({ resolver: { type: 'PHONE', value: '+12015550123' } });
 
-    const result = await session.settle({
+    const result = await session.settle(undefined, {
       onRebatesRedeemed: async (step) => recomputeTax(step.suggestedTotal),
       // The design page writes `async (failure) => "RETRY"`; TypeScript widens that literal to
       // `string` inside an async arrow, so a recovery is answered synchronously or `as const`.
@@ -71,17 +72,17 @@ describe('the public surface', () => {
   });
 
   it('types the settlement handlers and their step info', () => {
-    expectTypeOf<NonNullable<SettleOptions['onRebatesRedeemed']>>()
+    expectTypeOf<NonNullable<SettlementHandlers['onRebatesRedeemed']>>()
       .parameter(1)
       .toEqualTypeOf<StepInfo>();
-    expectTypeOf<NonNullable<SettleOptions['onError']>>().returns.resolves.toMatchTypeOf<
+    expectTypeOf<NonNullable<SettlementHandlers['onError']>>().returns.resolves.toMatchTypeOf<
       { action: string } | 'RETRY' | 'SKIP' | 'ABORT' | 'ABANDON'
     >();
     // External recovery must carry the payment that records the tender, so it has no short form.
     expectTypeOf<SettlementRecoveryAction>().toEqualTypeOf<
       'RETRY' | 'SKIP' | 'ABORT' | 'ABANDON'
     >();
-    expectTypeOf<SettleOptions['settlementType']>().toEqualTypeOf<
+    expectTypeOf<SettlementOptions['settlementType']>().toEqualTypeOf<
       'REFUND_THEN_CHARGE' | 'NET' | undefined
     >();
   });

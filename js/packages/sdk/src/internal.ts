@@ -31,6 +31,7 @@ import type {
   WidgetState,
   WidgetConfig,
 } from '@biltorg/pos-protocol';
+import type { OperationFilter } from './operation';
 import type { EngineCapabilities, EngineContext, EngineFactory } from './pos';
 
 export type { EngineCapabilities, EngineContext, EngineFactory };
@@ -140,8 +141,15 @@ export interface Engine {
     options?: RequestOptions,
   ): Promise<Operation>;
 
-  /** The operations of a session, newest first. */
-  operations(sessionId: string, options?: RequestOptions): Promise<readonly Operation[]>;
+  /**
+   * The operations of a session, newest first; `filter.status` maps to the host's
+   * comma-separated `?status=` list.
+   */
+  operations(
+    sessionId: string,
+    filter?: OperationFilter,
+    options?: RequestOptions,
+  ): Promise<readonly Operation[]>;
 
   /** One operation's current state. */
   operation(sessionId: string, operationId: string, options?: RequestOptions): Promise<Operation>;

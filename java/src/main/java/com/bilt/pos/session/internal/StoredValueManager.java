@@ -63,22 +63,46 @@ public final class StoredValueManager {
       String originalPoiTxnId,
       Instant originalPoiTimestamp,
       TransactionIdentificationType saleTransaction) {
+    return operation(
+        type,
+        card,
+        amount,
+        originalPoiTxnId,
+        originalPoiTimestamp,
+        saleTransaction,
+        exchange.factory().mintServiceId(MessageCategoryType.STORED_VALUE));
+  }
+
+  /**
+   * Like {@link #operation(StoredValueTransactionTypeEnum, StoredValueCard, BigDecimal, String,
+   * Instant, TransactionIdentificationType)}, sent with {@code serviceId} — already minted by
+   * {@link NexoMessageFactory#mintServiceId}.
+   */
+  public StoredValueOperationResult operation(
+      StoredValueTransactionTypeEnum type,
+      StoredValueCard card,
+      BigDecimal amount,
+      String originalPoiTxnId,
+      Instant originalPoiTimestamp,
+      TransactionIdentificationType saleTransaction,
+      String serviceId) {
     SaleToPOIRequest request =
         operationRequest(
-            type, card, amount, originalPoiTxnId, originalPoiTimestamp, saleTransaction);
+            type, card, amount, originalPoiTxnId, originalPoiTimestamp, saleTransaction, serviceId);
     SaleToPOIResponse response =
         exchange.sendExpectingBody(MessageCategoryType.STORED_VALUE, request);
     return operationResult(type, amount, response);
   }
 
-  /** Builds a stored-value request for checkpointed settlement orchestration. */
+  /** Builds a stored-value request carrying {@code serviceId}. */
   public SaleToPOIRequest operationRequest(
       StoredValueTransactionTypeEnum type,
       StoredValueCard card,
       BigDecimal amount,
       String originalPoiTxnId,
       Instant originalPoiTimestamp,
-      TransactionIdentificationType saleTransaction) {
+      TransactionIdentificationType saleTransaction,
+      String serviceId) {
     StoredValueData.Builder data =
         StoredValueData.builder()
             .storedValueTransactionType(type)
@@ -95,7 +119,9 @@ public final class StoredValueManager {
     }
     return SaleToPOIRequest.builder()
         .messageHeader(
-            exchange.factory().header(MessageClassType.SERVICE, MessageCategoryType.STORED_VALUE))
+            exchange
+                .factory()
+                .header(MessageClassType.SERVICE, MessageCategoryType.STORED_VALUE, serviceId))
         .storedValueRequest(
             StoredValueRequest.builder()
                 .saleData(exchange.factory().saleData(saleTransaction))

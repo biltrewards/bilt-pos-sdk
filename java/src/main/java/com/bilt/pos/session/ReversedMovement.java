@@ -22,10 +22,12 @@ public final class ReversedMovement {
 
   private final ReversalStep step;
   private final String poiTransactionId;
+  private final String serviceId;
 
-  public ReversedMovement(ReversalStep step, String poiTransactionId) {
+  public ReversedMovement(ReversalStep step, String poiTransactionId, String serviceId) {
     this.step = Objects.requireNonNull(step, "step");
     this.poiTransactionId = Objects.requireNonNull(poiTransactionId, "poiTransactionId");
+    this.serviceId = Objects.requireNonNull(serviceId, "serviceId");
   }
 
   /** The kind of sale movement that was reversed. */
@@ -38,6 +40,14 @@ public final class ReversedMovement {
     return poiTransactionId;
   }
 
+  /**
+   * The Nexo {@code ServiceID} of the reversal request that reversed the movement — the id the
+   * {@link ReversalFlow#beforeStep} context reported for that attempt.
+   */
+  public String getServiceId() {
+    return serviceId;
+  }
+
   @Override
   public boolean equals(Object other) {
     if (this == other) {
@@ -47,16 +57,18 @@ public final class ReversedMovement {
       return false;
     }
     ReversedMovement that = (ReversedMovement) other;
-    return step == that.step && poiTransactionId.equals(that.poiTransactionId);
+    return step == that.step
+        && poiTransactionId.equals(that.poiTransactionId)
+        && serviceId.equals(that.serviceId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(step, poiTransactionId);
+    return Objects.hash(step, poiTransactionId, serviceId);
   }
 
   @Override
   public String toString() {
-    return "ReversedMovement[" + step + ": " + poiTransactionId + ']';
+    return "ReversedMovement[" + step + ": " + poiTransactionId + ", " + serviceId + ']';
   }
 }

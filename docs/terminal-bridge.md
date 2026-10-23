@@ -9,6 +9,9 @@ The design is in Notion: *Bilt POS SDK — Terminal Bridge, Session Protocol & J
 
 > **Development mode.** The bridge in this iteration allows any browser origin by default (`allowedOrigins: ["*"]`), accepts no bearer tokens, and lets the terminal run unencrypted with certificate checks off. Use it against development terminals on a trusted network only.
 
+* TOC
+{:toc}
+
 ---
 
 ## What it does
@@ -120,6 +123,31 @@ The file is created on first start with a commented example (JSON has no comment
 | `terminal.encryption` | `false` | Nexo payload encryption. When `true`, `passphrase` and `keyId` are required; `keyVersion` defaults to `0`. |
 | `terminal.trustAll` | `false` | Skip TLS verification (development terminals). Cannot be combined with `caCertificatePath` or `environment`. |
 | `terminal.caCertificatePath`, `environment` | required unless `trustAll` | The Bilt CA PEM and `PRODUCTION` or `STAGING`, which selects the certificate hostname pattern. |
+| `terminal.simulated` | `false` | Use the in-memory terminal instead of a network device; `host` and TLS settings are not required. |
+| `terminal.members` | built-in fixture | Optional JSON file used by the simulated terminal; only valid with `simulated: true`. |
+
+### Simulated terminal
+
+To run the bridge without terminal hardware, edit the bridge's `config.json` (its location per
+platform is in the table at the top of [Configuration file](#configuration-file); start the bridge
+once to create it) so its `terminal` object looks like this:
+
+```json
+{
+  "port": 48333,
+  "allowedOrigins": ["*"],
+  "terminal": {
+    "label": "Simulated terminal",
+    "simulated": true
+  }
+}
+```
+
+Save the file; the bridge reloads it, and the next session uses the simulator. `host`, `port` and
+the TLS keys can be left out. `curl -X POST http://127.0.0.1:48333/v1/terminal/diagnose` succeeds
+without contacting any device. To use your own test members, add `"members": "/absolute/path/members.json"`;
+when omitted, the simulator loads its built-in fixture. The members file format, the decline rule,
+and simulator defaults are described in [Session Host — Simulated terminal](session-host.md#simulated-terminal).
 
 A config file from before this change, with a `terminals` list or a `poiId` on the terminal, is refused with a message saying what to change: replace the list with its one entry as `terminal` and delete the `poiId`. The bridge keeps running on its previous configuration (or the defaults) and shows the error in the menu until the file is fixed.
 
