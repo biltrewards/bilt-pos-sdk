@@ -560,6 +560,17 @@ class SimulatedTerminalClientTest {
   }
 
   @Test
+  void returnsSuccessfulDiagnosisStatus() throws Exception {
+    SaleToPOIResponse response =
+        SimulatedTerminalClient.builder()
+            .build()
+            .request(request("Diagnosis", "diagnose", "{\"DiagnosisRequest\":{}}"))
+            .getSaleToPOIResponse();
+    assertEquals("Success", response.getDiagnosisResponse().getResponse().getResult().toValue());
+    assertEquals("OK", response.getDiagnosisResponse().getPoiStatus().getGlobalStatus().toValue());
+  }
+
+  @Test
   void acquiresCardDataWhenLoyaltyIsForbidden() throws Exception {
     SaleToPOIResponse response =
         SimulatedTerminalClient.builder()
@@ -771,6 +782,84 @@ class SimulatedTerminalClientTest {
             .getSaleToPOIResponse();
     assertEquals(
         "Refusal", duplicate.getStoredValueResponse().getResponse().getErrorCondition().toValue());
+  }
+
+  @Test
+  void refusesUnloadAboveBalanceWithoutChangingStoredValue() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    terminal.request(
+        request(
+            "StoredValue",
+            "load-before-unload",
+            "{\"StoredValueRequest\":{\"StoredValueData\":[{"
+                + "\"StoredValueTransactionType\":\"Load\",\"Currency\":\"USD\","
+                + "\"ItemAmount\":10.00,\"StoredValueAccountID\":"
+                + "{\"StoredValueID\":\"gift-unload\"}}]}}"));
+
+    SaleToPOIResponse unload =
+        terminal
+            .request(
+                request(
+                    "StoredValue",
+                    "unload-above-balance",
+                    "{\"StoredValueRequest\":{\"StoredValueData\":[{"
+                        + "\"StoredValueTransactionType\":\"Unload\",\"Currency\":\"USD\","
+                        + "\"ItemAmount\":15.00,\"StoredValueAccountID\":"
+                        + "{\"StoredValueID\":\"gift-unload\"}}]}}"))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "Refusal", unload.getStoredValueResponse().getResponse().getErrorCondition().toValue());
+    assertEquals(10.0, storedValueBalance(terminal, "gift-unload"));
+
+    SaleToPOIResponse payment =
+        terminal
+            .request(
+                request(
+                    "Payment",
+                    "gift-unload-payment",
+                    storedValuePaymentBody("10.00", "gift-unload")))
+            .getSaleToPOIResponse();
+    assertEquals("Success", payment.getPaymentResponse().getResponse().getResult().toValue());
+    assertEquals(
+        10.0,
+        payment.getPaymentResponse().getPaymentResult().getAmountsResp().getAuthorizedAmount());
+  }
+
+  @Test
+  void refusesLoadReversalAfterStoredValueWasSpent() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    SaleToPOIResponse load =
+        terminal
+            .request(
+                request(
+                    "StoredValue",
+                    "load-before-reverse",
+                    "{\"StoredValueRequest\":{\"StoredValueData\":[{"
+                        + "\"StoredValueTransactionType\":\"Load\",\"Currency\":\"USD\","
+                        + "\"ItemAmount\":10.00,\"StoredValueAccountID\":"
+                        + "{\"StoredValueID\":\"gift-reverse-spent\"}}]}}"))
+            .getSaleToPOIResponse();
+    String loadPoiId =
+        load.getStoredValueResponse().getPoiData().getPoiTransactionID().getTransactionID();
+
+    SaleToPOIResponse payment =
+        terminal
+            .request(
+                request(
+                    "Payment",
+                    "spend-before-reverse",
+                    storedValuePaymentBody("10.00", "gift-reverse-spent")))
+            .getSaleToPOIResponse();
+    assertEquals("Success", payment.getPaymentResponse().getResponse().getResult().toValue());
+
+    SaleToPOIResponse reverse =
+        terminal
+            .request(
+                request("StoredValue", "reverse-spent-load", storedValueReverseBody(loadPoiId)))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "Refusal", reverse.getStoredValueResponse().getResponse().getErrorCondition().toValue());
+    assertEquals(0.0, storedValueBalance(terminal, "gift-reverse-spent"));
   }
 
   private static double storedValueBalance(SimulatedTerminalClient terminal, String storedValueId)

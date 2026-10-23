@@ -170,6 +170,8 @@ public final class SimulatedTerminalClient implements TerminalClient {
             return balanceInquiry(body, header);
           case CARD_ACQUISITION:
             return cardAcquisition(body, header);
+          case DIAGNOSIS:
+            return diagnosis(header);
           case DISPLAY:
             return display(body, header);
           case INPUT:
@@ -798,6 +800,21 @@ public final class SimulatedTerminalClient implements TerminalClient {
       amount = original.amount;
     }
     BigDecimal balance = storedValueBalances.getOrDefault(key, BigDecimal.ZERO);
+    if (type == StoredValueTransactionTypeEnum.UNLOAD && amount.compareTo(balance) > 0) {
+      return failure(
+          requestHeader(header, MessageCategoryType.STORED_VALUE),
+          MessageCategoryType.STORED_VALUE,
+          "Refusal");
+    }
+    if (type == StoredValueTransactionTypeEnum.REVERSE
+        && (original.storedValueType == StoredValueTransactionTypeEnum.ACTIVATE
+            || original.storedValueType == StoredValueTransactionTypeEnum.LOAD)
+        && amount.compareTo(balance) > 0) {
+      return failure(
+          requestHeader(header, MessageCategoryType.STORED_VALUE),
+          MessageCategoryType.STORED_VALUE,
+          "Refusal");
+    }
     if (type == StoredValueTransactionTypeEnum.ACTIVATE
         || type == StoredValueTransactionTypeEnum.LOAD) {
       balance = balance.add(amount);
@@ -892,6 +909,12 @@ public final class SimulatedTerminalClient implements TerminalClient {
       }
     }
     return envelope(header, MessageCategoryType.DISPLAY, "DisplayResponse", body);
+  }
+
+  private NexoTerminalAPI diagnosis(MessageHeader header) {
+    ObjectNode body = successBody();
+    body.putObject("POIStatus").put("GlobalStatus", "OK");
+    return envelope(header, MessageCategoryType.DIAGNOSIS, "DiagnosisResponse", body);
   }
 
   private NexoTerminalAPI input(SaleToPOIRequest request, MessageHeader header) {
