@@ -36,6 +36,27 @@ A few principles explain most of the behavior:
 - **`settle()` supports separate and net movement,** with explicit callbacks for committed refund/charge movements and blocking callbacks after each loyalty/stored-value charge step so the register can update its own model and recompute tax, then return the total that feeds the next step. `SettlementType.REFUND_THEN_CHARGE` is the backward-compatible default. `SettlementType.NET` sends only the signed basket difference: a charge, a refund, or no monetary movement. Loyalty runs only for identified members and can be disabled; stored value runs only when a gift card is registered; card runs whenever a positive balance remains.
 - **Errors and aborts roll back cleanly.** If a charge-side step fails or `abort()` is called mid-sequence, everything already committed by that charge sequence (rebates, points, stored value) is reversed in the opposite order — basket intact, `settle()` retryable. Refund allocation failures are not recovered in-run; committed refund allocation movements stand, and the register retries `settle()` with the same committed allocation prefix. An abort is a register maneuver, not an abandonment; `end()` closes a recovered session, while `forceEnd(reason)` is the explicit last resort when recovery cannot be completed.
 
+### ServiceIDs for crash recovery
+
+Every Nexo request carries a `ServiceID`, which [Transaction Status](./verify-transaction-status.md) uses to look the request up after a crash. By default the SDK mints random 10-character alphanumeric ids. To know them yourself, set either or both on the builder (`Terminal.builder()` takes the same two):
+
+```java
+TerminalShopperSession.builder()
+    // ...
+    .serviceIdProvider(() -> laneIds.next())                       // 1-10 alphanumeric characters
+    .serviceIdListener((serviceId, category) -> journal.append(serviceId, category))
+```
+
+- `serviceIdProvider` mints the id of every request the session sends: settlement legs and their retries, reversal legs, Transaction Status polls, aborts, displays, input and session signals. It only mints; it does not track what the id is used for.
+- `serviceIdListener` is told each id and its message category after it is minted and before the request is sent.
+- An id that is not 1-10 alphanumeric characters, or a provider or listener that throws, fails the call with `INVALID_STATE`, and the request is not sent.
+- Both can be called from threads other than the operation thread (abort, input updates, `terminal()` operations), so they must be thread-safe.
+
+The money-moving steps also hand you their id before they are sent, which is usually all a register has to persist:
+
+- settlement: `beforeStep` sees `ctx.getServiceId()`, the id the step is then sent with. A retry calls `beforeStep` again with a new id. Committed movements report it as `SettlementMovement.getServiceId()` (`null` for external tenders the SDK did not send), and failures as `SettlementFailure.getServiceId()`;
+- refund and void: `ReversalFlow.beforeStep` (see [Refund and void](#refund-and-void)).
+
 ### Built-in loyalty handling
 
 Loyalty is where a checkout gets complicated: identifying the member, looking up their offers and point balance, deciding what applies, committing rebates and redemptions, interleaving all of that with the actual payment, awarding points at the end, and unwinding everything correctly if anything fails. Most of that complexity is handled for you — it happens seamlessly as part of the normal session and `settle()` flow. Concretely:
@@ -122,7 +143,7 @@ Treat charge-side movement callbacks as provisional until settlement succeeds. `
 
 | Step | Default |
 | --- | --- |
-| `beforeStep` | Returns the basket's shared sale transaction ID (`ctx.getDefaultTransactionId()`). Every checkout carries one sale transaction tuple — transaction ID and timestamp minted once per basket — and returning it keeps the step on that shared identity; a returned override applies to that step only. |
+| `beforeStep` | Returns the basket's shared sale transaction ID (`ctx.getDefaultTransactionId()`). Every checkout carries one sale transaction tuple — transaction ID and timestamp minted once per basket — and returning it keeps the step on that shared identity; a returned override applies to that step only. `ctx.getServiceId()` is the `ServiceID` the step is then sent with. |
 | `onRebatesRedeemed` | Accept rebates. New total = previous − rebate amount. |
 | `onPointsRedeemed` | Accept points. New total = previous − monetary value. |
 | `onGiftCardPayment` | Accept charge. New total = previous − amount charged. |
@@ -529,6 +550,16 @@ session.voidTransaction()
     .onSuccess(result -> register.printVoidReceipt(result))
     .execute();
 ```
+
+To record each leg's `ServiceID` before it is sent, add `beforeStep`. It runs before every void or refund leg, and again with a new id before a retry:
+
+```java
+session.voidTransaction()
+    .beforeStep(ctx -> journal.append(ctx.getStep(), ctx.getServiceId()))
+    .execute();
+```
+
+If `beforeStep` throws, that leg fails without being sent and goes to `onError`; without a handler the flow aborts. `ReversedMovement.getServiceId()` and `VoidResult.getServiceId()` report the ids afterwards.
 
 `RETRY` re-sends the failed step, `SKIP` leaves the movement standing and continues, `ABORT` stops the flow (already-reversed steps always stand — there is no compensating re-commit; a later `voidTransaction()` resumes at the first movement still standing). While a same-session void has this resume progress, `basket().clear()`, another `settle()`, and `end()` are refused. Without a handler the default policy applies: money-leg failures abort; loyalty failures are skipped when a money leg anchors the void, and abort when the loyalty movements are the substance of the void.
 
