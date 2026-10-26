@@ -56,6 +56,7 @@ import com.bilt.pos.session.internal.NexoExchange;
 import com.bilt.pos.session.internal.NexoMessageFactory;
 import com.bilt.pos.session.internal.PaymentOrchestrator;
 import com.bilt.pos.session.internal.PoiRef;
+import com.bilt.pos.session.internal.PresetServiceIds;
 import com.bilt.pos.session.internal.ReversalManager;
 import com.bilt.pos.session.internal.ReversalMovement;
 import com.bilt.pos.session.internal.SaleItemMapper;
@@ -97,7 +98,7 @@ import java.util.logging.Logger;
  * to Sale to POI 3.0 messages exchanged through the configured {@link TerminalClient}.
  */
 final class NexoTerminalShopperSession extends AbstractShopperSession
-    implements TerminalShopperSession {
+    implements TerminalShopperSession, PresetServiceIds {
 
   private static final Logger LOGGER = Logger.getLogger(NexoTerminalShopperSession.class.getName());
   private static final OriginalSaleRecord NO_SETTLEMENT = OriginalSaleRecord.builder().build();
@@ -113,6 +114,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
 
   private final TerminalClient client;
   private final NexoMessageFactory factory;
+  private final ThreadLocal<String> presetServiceId = new ThreadLocal<>();
   private final ServiceIdProvider serviceIdProvider;
   private final ServiceIdListener serviceIdListener;
   private final NexoExchange exchange;
@@ -667,6 +669,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   public SessionResult<StoredValueOperationResult> storedValueReverse(
       String originalPoiTransactionId, Instant originalPoiTransactionTimestamp) {
     Objects.requireNonNull(originalPoiTransactionId, "originalPoiTransactionId");
+    String serviceId = takePresetServiceId();
     return operation(
         "storedValueReverse",
         () -> {
@@ -677,7 +680,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
               null,
               originalPoiTransactionId,
               originalPoiTransactionTimestamp,
-              currentSaleTransaction());
+              currentSaleTransaction(),
+              storedValueServiceId(serviceId));
         });
   }
 
@@ -690,13 +694,47 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   private SessionResult<StoredValueOperationResult> storedValueOperation(
       String name, StoredValueTransactionTypeEnum type, StoredValueCard card, BigDecimal amount) {
     Objects.requireNonNull(card, "card");
+    String serviceId =
+        type == StoredValueTransactionTypeEnum.DUPLICATE ? null : takePresetServiceId();
     return operation(
         name,
         () -> {
           requireOpen(name);
           return storedValueManager.operation(
-              type, card, amount, null, null, currentSaleTransaction());
+              type,
+              card,
+              amount,
+              null,
+              null,
+              currentSaleTransaction(),
+              storedValueServiceId(serviceId));
         });
+  }
+
+  private String storedValueServiceId(String preset) {
+    return preset != null ? preset : factory.mintServiceId(MessageCategoryType.STORED_VALUE);
+  }
+
+  @Override
+  public String mintServiceId(MessageCategoryType category) {
+    return factory.mintServiceId(category);
+  }
+
+  @Override
+  public <T> T withPresetServiceId(String serviceId, Supplier<T> create) {
+    presetServiceId.set(Objects.requireNonNull(serviceId, "serviceId"));
+    try {
+      return create.get();
+    } finally {
+      presetServiceId.remove();
+    }
+  }
+
+  /** The id a host preset for the operation being created on this thread, consumed once. */
+  private String takePresetServiceId() {
+    String serviceId = presetServiceId.get();
+    presetServiceId.remove();
+    return serviceId;
   }
 
   private static void requirePositiveAmount(BigDecimal amount) {
@@ -1355,7 +1393,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   @Override
   public ReversalFlow<RefundResult> refund() {
     operations.track("refund");
-    return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", null, true))
+    return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", null, true, null))
         .session(operations);
   }
 
@@ -1364,7 +1402,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     Objects.requireNonNull(amount, "amount");
     requirePositive(amount);
     operations.track("refund");
-    return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", amount, true))
+    return new ReversalFlow<RefundResult>(flow -> executeRefund(flow, "refund", amount, true, null))
         .session(operations);
   }
 
@@ -1373,13 +1411,18 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     Objects.requireNonNull(amount, "amount");
     requirePositive(amount);
     operations.track("refundUnlinked");
+    String serviceId = takePresetServiceId();
     return new ReversalFlow<RefundResult>(
-            flow -> executeRefund(flow, "refundUnlinked", amount, false))
+            flow -> executeRefund(flow, "refundUnlinked", amount, false, serviceId))
         .session(operations);
   }
 
   private RefundResult executeRefund(
-      ReversalFlow<RefundResult> flow, String name, BigDecimal amount, boolean linked) {
+      ReversalFlow<RefundResult> flow,
+      String name,
+      BigDecimal amount,
+      boolean linked,
+      String refundServiceId) {
     operations.begin(name);
     requireRefundable(name);
     if (linked) {
@@ -1406,7 +1449,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         flow.beforeStepHandler(),
         linked ? guards::markRefunded : () -> {},
         linked ? () -> guards.markAwardReversed(paid.getAwardPoiTransactionId()) : () -> {},
-        null);
+        refundServiceId);
   }
 
   private void requireRefundable(String operationName) {

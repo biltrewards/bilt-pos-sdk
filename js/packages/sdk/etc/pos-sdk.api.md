@@ -53,6 +53,7 @@ import { Receipt } from '@biltorg/pos-protocol';
 import { ReconciliationResult } from '@biltorg/pos-protocol';
 import { RefundResult } from '@biltorg/pos-protocol';
 import { Rendering } from '@biltorg/pos-protocol';
+import { ReversalContext } from '@biltorg/pos-protocol';
 import { ReversalDecision } from '@biltorg/pos-protocol';
 import { ReversalStep } from '@biltorg/pos-protocol';
 import { ReversedMovement } from '@biltorg/pos-protocol';
@@ -350,6 +351,7 @@ export interface Operation<T> extends Promise<T> {
     abort(): Promise<void>;
     guide(handlers: SettlementHandlers | ReversalHandlers): void;
     readonly id: string;
+    readonly serviceId?: string;
     readonly status: OperationStatus;
     readonly type: OperationType;
 }
@@ -423,10 +425,14 @@ export interface RetailMediaWidget extends WidgetHandle {
     viewed(rendering: Rendering): Promise<void>;
 }
 
+export { ReversalContext }
+
 export { ReversalDecision }
 
 // @public
 export interface ReversalHandlers {
+    // (undocumented)
+    beforeStep?(context: ReversalContext, step: StepInfo): MaybePromise<void>;
     // (undocumented)
     onError?(step: ReversalStep | null, error: SessionError, info: StepInfo): MaybePromise<ReversalDecision | null | undefined>;
 }

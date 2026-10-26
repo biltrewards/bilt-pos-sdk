@@ -1,5 +1,7 @@
 import type {
   OperationStep,
+  ReversalContext,
+  SettlementContext,
   SettlementMovement,
   SettlementRecovery,
   StepKind,
@@ -21,7 +23,10 @@ export type StepHandlers =
 export function handledSteps(steps: StepHandlers | undefined): StepKind[] {
   if (!steps) return [];
   if (steps.kind === 'reversal') {
-    return steps.handlers.onError ? ['REVERSAL_DECISION_REQUIRED'] : [];
+    const kinds: StepKind[] = [];
+    if (steps.handlers.beforeStep) kinds.push('BEFORE_STEP');
+    if (steps.handlers.onError) kinds.push('REVERSAL_DECISION_REQUIRED');
+    return kinds;
   }
   const h = steps.handlers;
   const kinds: StepKind[] = [];
@@ -123,7 +128,17 @@ type Invoke = (info: StepInfo) => Promise<StepReply>;
 function pickHandler(step: OperationStep, steps: StepHandlers | undefined): Invoke | undefined {
   if (!steps) return undefined;
   const stepId = step.stepId;
+  // A BEFORE_STEP's context is a ReversalContext on a refund or void, a SettlementContext on a settle.
   if (steps.kind === 'reversal') {
+    if (step.kind === 'BEFORE_STEP') {
+      const beforeStep = steps.handlers.beforeStep;
+      if (!beforeStep) return undefined;
+      const context = step.context as ReversalContext;
+      return async (info) => {
+        await beforeStep(context, info);
+        return { stepId };
+      };
+    }
     if (step.kind !== 'REVERSAL_DECISION_REQUIRED') return undefined;
     const onError = steps.handlers.onError;
     if (!onError) return undefined;
@@ -139,7 +154,7 @@ function pickHandler(step: OperationStep, steps: StepHandlers | undefined): Invo
       const beforeStep = h.beforeStep;
       if (!beforeStep) return undefined;
       return async (info) => {
-        const id = await beforeStep(step.context, info);
+        const id = await beforeStep(step.context as SettlementContext, info);
         return id ? { stepId, saleTransactionId: id } : step.default;
       };
     }

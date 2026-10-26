@@ -44,6 +44,8 @@ export class ScriptedEngine extends MockEngine {
 
   /** Completes an accepted operation before `request` returns, as a setter-like operation does. */
   completeImmediatelyWith: Partial<Operation> | undefined;
+  /** The `serviceId` the next accepted operation carries, as the host assigns for single-request money operations. */
+  nextServiceId: string | undefined;
 
   /** Delays the acceptance response so events can arrive before the core learns the id. */
   acceptanceDelay: Promise<void> | undefined;
@@ -74,7 +76,9 @@ export class ScriptedEngine extends MockEngine {
       type: operation.type,
       status: 'queued',
       createdAt: new Date().toISOString(),
+      ...(this.nextServiceId === undefined ? {} : { serviceId: this.nextServiceId }),
     } as Operation;
+    this.nextServiceId = undefined;
     state.operations.unshift(resource);
     this.requests.push({ sessionId, operation, options, resource });
     if (this.completeImmediatelyWith) {

@@ -55,6 +55,7 @@ public final class HostedOperation {
   private volatile JsonNode result;
   private volatile ObjectNode error;
   private volatile ObjectNode abandonedSettlement;
+  private volatile String serviceId;
   private final java.util.concurrent.atomic.AtomicBoolean completionPublished =
       new java.util.concurrent.atomic.AtomicBoolean();
 
@@ -165,6 +166,15 @@ public final class HostedOperation {
     abandonedSettlement = record;
   }
 
+  /** The {@code ServiceID} assigned at accept, for a single-request money operation. */
+  public String serviceId() {
+    return serviceId;
+  }
+
+  void assignServiceId(String id) {
+    serviceId = id;
+  }
+
   public ObjectNode toJson() {
     ObjectNode node = Json.object();
     node.put("id", id);
@@ -182,6 +192,7 @@ public final class HostedOperation {
     if (abandonedSettlement != null) {
       node.set("abandonedSettlement", abandonedSettlement);
     }
+    Json.putText(node, "serviceId", serviceId);
     PendingStep<?> step = pendingStep;
     if (step != null && !step.isSettled()) {
       node.set("pendingStep", step.toJson());
