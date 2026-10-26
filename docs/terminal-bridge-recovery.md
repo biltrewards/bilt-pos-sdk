@@ -10,6 +10,8 @@ Settlement runs on the bridge, not in the page, so what can be recovered depends
 - the lane's `saleId` and the session `id` (for example in `sessionStorage`);
 - the `OriginalSaleRecord` of every successful sale, built when `settle()` resolves (below). A later session needs it to void the sale;
 - `failure.serviceId` from a `RECOVERY_REQUIRED` step (`SettlementFailure`), and the `abandonedSettlement` record after an `ABANDON`.
+- the `ServiceID` of every money request: `context.serviceId` from each settlement `beforeStep` and each refund/void `beforeStep`. These run before the request is sent, and again with a new id on a retry.
+- `op.serviceId` of `refundUnlinked` and stored value changes. The bridge assigns it when it accepts the operation, but it starts the operation before the page receives that response. If the bridge crashes in between, the terminal may already have the request while the page never learned its id. That request can only be found by hand (step 4 of [The bridge stopped or crashed](#the-bridge-stopped-or-crashed)).
 
 The record is the result's per-leg POI references plus the member. The JavaScript SDK has no helper for this (Java has `OriginalSaleRecord.from(result, memberId)`), so copy the fields:
 
@@ -94,7 +96,7 @@ The terminal is not affected. The next terminal session started with the same `s
 3. If the sale completed, `session.voidTransaction(record)` with its persisted `OriginalSaleRecord` reverses it from the new session.
 4. If you have neither a `ServiceID` nor a result, use `pos.terminal().totals()` (or `curl -X POST http://127.0.0.1:48333/v1/terminal/totals`) and the terminal's and acquirer's reports to find the transaction, and reconcile it by hand.
 
-The bridge itself does not expose the `ServiceID` of an operation in flight. The protocol describes a `serviceId` on the operation resource, but the host does not fill it in yet, and the bridge log does not record it. A request that never produced a `RECOVERY_REQUIRED` step or a result therefore ends in step 4.
+The bridge keeps no record of these ids across a restart, so they are only available if the register stored them when `beforeStep` or the operation handed them out. A request with no stored `ServiceID` and no result ends in step 4.
 
 ## A stuck lane (`INVALID_STATE`)
 
