@@ -96,7 +96,9 @@ loadScripts(document, 'script');</script>
 
  <p>By default the referenced request is assumed to be a payment and no receipt data is requested.
  Enable <code>TransactionStatusOptions.Builder.receiptReprint</code> to have the terminal include the original receipts in the
- repeated response — used to reprint after a crash or connection loss.</div>
+ repeated response — used to reprint after a crash or connection loss. The original is looked up
+ by its <code>ServiceID</code> and this session's <code>SaleID</code> unless <code>TransactionStatusOptions.Builder.originalSaleId</code>
+ names the <code>SaleID</code> it was sent with.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -147,9 +149,15 @@ loadScripts(document, 'script');</script>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Message category of the original request.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isReceiptReprint()" class="member-name-link">isReceiptReprint</a>()</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getOriginalSaleId()" class="member-name-link">getOriginalSaleId</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block"><code>SaleID</code> the original request was sent with, or <code>null</code> for this session's <code>
+ SaleID</code>.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isReceiptReprint()" class="member-name-link">isReceiptReprint</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Whether the terminal should include receipt data in the response.</div>
 </div>
 </div>
@@ -187,6 +195,14 @@ loadScripts(document, 'script');</script>
 <h3>getOriginalCategory</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">com.bilt.pos.nexo.model.MessageCategoryType</span>&nbsp;<span class="element-name">getOriginalCategory</span>()</div>
 <div class="block">Message category of the original request. Default <code>Payment</code>.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getOriginalSaleId()">
+<h3>getOriginalSaleId</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">getOriginalSaleId</span>()</div>
+<div class="block"><code>SaleID</code> the original request was sent with, or <code>null</code> for this session's <code>
+ SaleID</code>.</div>
 </section>
 </li>
 <li>

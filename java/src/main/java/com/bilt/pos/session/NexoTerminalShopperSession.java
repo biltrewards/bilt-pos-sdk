@@ -1850,7 +1850,10 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                       MessageReference.builder()
                           .messageCategory(options.getOriginalCategory())
                           .serviceID(originalServiceId)
-                          .saleID(factory.getSaleId())
+                          .saleID(
+                              options.getOriginalSaleId() != null
+                                  ? options.getOriginalSaleId()
+                                  : factory.getSaleId())
                           .build());
           if (options.isReceiptReprint()) {
             statusRequest

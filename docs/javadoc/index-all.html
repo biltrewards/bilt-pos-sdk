@@ -2791,6 +2791,11 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#getOriginalPoiTransactionTimestamp()" class="member-name-link">getOriginalPoiTransactionTimestamp()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/TransactionStatusOptions.html#getOriginalSaleId()" class="member-name-link">getOriginalSaleId()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TransactionStatusOptions.html" title="class in com.bilt.pos.session">TransactionStatusOptions</a></dt>
+<dd>
+<div class="block"><code>SaleID</code> the original request was sent with, or <code>null</code> for this session's <code>
+ SaleID</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/basket/Basket.html#getOriginalTotal()" class="member-name-link">getOriginalTotal()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a></dt>
 <dd>
 <div class="block">Signed gross item value before register discounts and tax.</div>
@@ -4692,6 +4697,11 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html#originalPoiTransactionTimestamp(java.time.Instant)" class="member-name-link">originalPoiTransactionTimestamp(Instant)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html" title="class in com.bilt.pos.session.settlement">RefundAllocation.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/TransactionStatusOptions.Builder.html#originalSaleId(java.lang.String)" class="member-name-link">originalSaleId(String)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TransactionStatusOptions.Builder.html" title="class in com.bilt.pos.session">TransactionStatusOptions.Builder</a></dt>
+<dd>
+<div class="block"><code>SaleID</code> the original request was sent with, when it differs from this session's — for
+ example a lookup from another lane or after a restart under a new <code>SaleID</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
 <div class="block">References from a completed sale that a later checkout session can use to void the whole original

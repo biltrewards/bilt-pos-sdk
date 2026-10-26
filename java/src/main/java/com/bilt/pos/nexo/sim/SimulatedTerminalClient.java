@@ -874,8 +874,15 @@ public final class SimulatedTerminalClient implements TerminalClient {
           MessageCategoryType.TRANSACTION_STATUS,
           "InProgress");
     }
+    String saleId =
+        serviceId == null
+            ? null
+            : request.getTransactionStatusRequest().getMessageReference().getSaleID();
     LedgerEntry entry = ledgerByServiceId.get(serviceId);
-    if (entry == null) {
+    if (entry == null
+        || (saleId != null
+            && entry.messageHeader.getSaleID() != null
+            && !saleId.equals(entry.messageHeader.getSaleID()))) {
       return failure(
           requestHeader(header, MessageCategoryType.TRANSACTION_STATUS),
           MessageCategoryType.TRANSACTION_STATUS,

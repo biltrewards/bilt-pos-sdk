@@ -103,6 +103,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Network-error recovery for `BiltNexoTerminalClient` (on by default): re-sends an in-flight request under an `X-Bilt-Request-Id` correlation header across transient network failures, with at-most-once execution guaranteed by terminal-side dedupe. Includes a configurable keep-alive ping and HTTP protocol / pong diagnostics, mirrored across the Java and Kotlin clients and the CLI ([#83](https://github.com/biltrewards/bilt-pos-sdk/pull/83))
 - Receipt Requirements documentation with Fiserv EMV guidelines and Bilt Platform fields
 
+## [0.39.0]
+
+### Added
+
+- `TransactionStatusOptions.Builder.originalSaleId(String)` (`getOriginalSaleId()`): the `SaleID` the original request was sent with, sent as the Transaction Status `MessageReference.SaleID`. Nexo requires the original's `SaleID` when the status is not asked by the Sale Terminal that sent it, so a register can now look up a request after restarting under another `saleId`, or from another lane. Unset (the default), the reference carries the session's `SaleID` as before; a blank value is rejected. The SDK's own Transaction Status polls inside a settlement and the `Abort` reference keep the session's `SaleID`, which is the original's.
+- Session Protocol: `TransactionStatusOptions.originalSaleId` on `getTransactionStatus`, parsed by the host; `@biltorg/pos-sdk` takes it as `session.getTransactionStatus(serviceId, { originalSaleId })`.
+- `SimulatedTerminalClient` answers a Transaction Status whose reference names another `SaleID` than the original's with `NotFound`.
+
 ## [0.38.0]
 
 ### Added

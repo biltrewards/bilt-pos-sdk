@@ -720,6 +720,7 @@ public final class Parsers {
     if (category != null) {
       builder.originalCategory(category);
     }
+    builder.originalSaleId(Json.text(node, "originalSaleId"));
     builder.receiptReprint(Json.bool(node, "receiptReprint", false));
     List<String> qualifiers = Json.strings(node, "documentQualifiers");
     if (qualifiers != null) {

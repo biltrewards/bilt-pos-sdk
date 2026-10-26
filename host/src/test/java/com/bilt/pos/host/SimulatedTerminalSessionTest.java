@@ -2,6 +2,7 @@ package com.bilt.pos.host;
 
 import static com.bilt.pos.host.HostClient.json;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.bilt.pos.nexo.client.BiltNexoClientException;
@@ -95,6 +96,22 @@ class SimulatedTerminalSessionTest {
     assertEquals(
         "Success",
         status.path("result").path("paymentResponse").path("Response").path("Result").asText());
+    JsonNode otherLane =
+        complete(
+            secondSession,
+            json(
+                "{'type':'getTransactionStatus','originalServiceId':'"
+                    + firstPaymentServiceId
+                    + "'}"));
+    assertFalse(otherLane.path("result").path("found").asBoolean());
+    JsonNode originalLane =
+        complete(
+            secondSession,
+            json(
+                "{'type':'getTransactionStatus','originalServiceId':'"
+                    + firstPaymentServiceId
+                    + "','options':{'originalSaleId':'LANE-1'}}"));
+    assertTrue(originalLane.path("result").path("found").asBoolean());
   }
 
   private String createSession(String saleId) throws Exception {

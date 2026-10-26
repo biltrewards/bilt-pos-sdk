@@ -82,6 +82,40 @@ class SimulatedTerminalClientTest {
   }
 
   @Test
+  void transactionStatusMatchesTheOriginalSaleIdWhenReferenced() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    terminal.request(
+        request(
+            "Payment",
+            "payment-1",
+            "{\"PaymentRequest\":{\"PaymentData\":{\"PaymentType\":\"Normal\"},"
+                + "\"PaymentTransaction\":{\"AmountsReq\":{\"RequestedAmount\":10.00,"
+                + "\"Currency\":\"USD\"}}}}"));
+
+    assertEquals("Success", statusResult(terminal, "{\"ServiceID\":\"payment-1\"}"));
+    assertEquals(
+        "Success", statusResult(terminal, "{\"ServiceID\":\"payment-1\",\"SaleID\":\"SIM-SALE\"}"));
+    assertEquals(
+        "Failure",
+        statusResult(terminal, "{\"ServiceID\":\"payment-1\",\"SaleID\":\"OTHER-LANE\"}"));
+  }
+
+  private static String statusResult(SimulatedTerminalClient terminal, String reference)
+      throws Exception {
+    return terminal
+        .request(
+            request(
+                "TransactionStatus",
+                "status-1",
+                "{\"TransactionStatusRequest\":{\"MessageReference\":" + reference + "}}"))
+        .getSaleToPOIResponse()
+        .getTransactionStatusResponse()
+        .getResponse()
+        .getResult()
+        .toValue();
+  }
+
+  @Test
   void enforcesRefundAndReversalRules() throws Exception {
     SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
     SaleToPOIResponse sale =

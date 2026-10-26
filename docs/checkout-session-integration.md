@@ -57,6 +57,14 @@ The money-moving steps also hand you their id before they are sent, which is usu
 - settlement: `beforeStep` sees `ctx.getServiceId()`, the id the step is then sent with. A retry calls `beforeStep` again with a new id. Committed movements report it as `SettlementMovement.getServiceId()` (`null` for external tenders the SDK did not send), and failures as `SettlementFailure.getServiceId()`;
 - refund and void: `ReversalFlow.beforeStep` (see [Refund and void](#refund-and-void)).
 
+Transaction Status looks the original up by `ServiceID` and `SaleID`, so store the session's `saleId` with each id. `getTransactionStatus(serviceId)` references this session's `SaleID`; from a session with another one, name the original's:
+
+```java
+session.getTransactionStatus(
+        serviceId, TransactionStatusOptions.builder().originalSaleId("POS-LANE-3").build())
+    .executeSync();
+```
+
 ### Built-in loyalty handling
 
 Loyalty is where a checkout gets complicated: identifying the member, looking up their offers and point balance, deciding what applies, committing rebates and redemptions, interleaving all of that with the actual payment, awarding points at the end, and unwinding everything correctly if anything fails. Most of that complexity is handled for you — it happens seamlessly as part of the normal session and `settle()` flow. Concretely:
