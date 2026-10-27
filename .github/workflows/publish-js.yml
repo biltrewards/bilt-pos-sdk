@@ -40,18 +40,23 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # Lockstep: every publishable package gets the release tag's version. pnpm publish turns
-      # their workspace:* dependencies into that version.
-      - name: Stamp the version from the release tag
+      # One version source for Maven and npm: gradle.properties VERSION is what the Maven
+      # publish ships, so the release tag must equal it (the v prefix is optional).
+      # pnpm publish turns the packages' workspace:* dependencies into that version.
+      - name: Stamp the version from gradle.properties
         id: version
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Release tag '$TAG' is not vX.Y.Z"
+          VERSION="$(sed -n 's/^VERSION=//p' "$GITHUB_WORKSPACE/gradle.properties")"
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::No VERSION in gradle.properties"
             exit 1
           fi
-          VERSION="${TAG#v}"
+          if [[ "${TAG#v}" != "$VERSION" ]]; then
+            echo "::error::Release tag '$TAG' does not match gradle.properties VERSION '$VERSION' — tag 'v$VERSION' or bump VERSION first"
+            exit 1
+          fi
           pnpm -r --filter './packages/*' exec npm pkg set "version=$VERSION"
           sed -i "s/^export const SDK_VERSION = '.*';/export const SDK_VERSION = '$VERSION';/" "$GITHUB_WORKSPACE/js/packages/sdk/src/core/version.ts"
           grep -q "SDK_VERSION = '$VERSION'" "$GITHUB_WORKSPACE/js/packages/sdk/src/core/version.ts"
