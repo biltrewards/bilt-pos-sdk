@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.bilt.pos.nexo.client.BiltNexoClientException;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
+import com.bilt.pos.nexo.model.Response;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -79,6 +80,42 @@ class SimulatedTerminalClientTest {
             .getPoiData()
             .getPoiTransactionID()
             .getTransactionID());
+  }
+
+  @Test
+  void transactionStatusMatchesTheOriginalSaleIdWhenReferenced() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    terminal.request(
+        request(
+            "Payment",
+            "payment-1",
+            "{\"PaymentRequest\":{\"PaymentData\":{\"PaymentType\":\"Normal\"},"
+                + "\"PaymentTransaction\":{\"AmountsReq\":{\"RequestedAmount\":10.00,"
+                + "\"Currency\":\"USD\"}}}}"));
+
+    assertEquals("Success", statusResult(terminal, "{\"ServiceID\":\"payment-1\"}"));
+    assertEquals(
+        "Success", statusResult(terminal, "{\"ServiceID\":\"payment-1\",\"SaleID\":\"SIM-SALE\"}"));
+    assertEquals(
+        "NotFound",
+        statusResult(terminal, "{\"ServiceID\":\"payment-1\",\"SaleID\":\"OTHER-LANE\"}"));
+  }
+
+  private static String statusResult(SimulatedTerminalClient terminal, String reference)
+      throws Exception {
+    Response response =
+        terminal
+            .request(
+                request(
+                    "TransactionStatus",
+                    "status-1",
+                    "{\"TransactionStatusRequest\":{\"MessageReference\":" + reference + "}}"))
+            .getSaleToPOIResponse()
+            .getTransactionStatusResponse()
+            .getResponse();
+    return response.getErrorCondition() != null
+        ? response.getErrorCondition().toValue()
+        : response.getResult().toValue();
   }
 
   @Test
@@ -295,6 +332,12 @@ class SimulatedTerminalClientTest {
               },
               executor);
       assertEquals("InProgress", awaitStatus(terminal, "waiting", "InProgress"));
+      assertEquals(
+          "InProgress",
+          statusResult(terminal, "{\"ServiceID\":\"waiting\",\"SaleID\":\"SIM-SALE\"}"));
+      assertEquals(
+          "NotFound",
+          statusResult(terminal, "{\"ServiceID\":\"waiting\",\"SaleID\":\"OTHER-LANE\"}"));
 
       assertEquals(
           null,

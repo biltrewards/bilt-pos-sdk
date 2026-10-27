@@ -46,7 +46,7 @@ And the following `TransactionStatusRequest` fields:
 - **`DocumentQualifier`** — Array of receipt types to include, e.g. `["CashierReceipt", "CustomerReceipt"]`. Only relevant when `ReceiptReprintFlag` is `true`.
 - **`MessageReference.MessageCategory`** — The message category of the original request, e.g. `Payment`.
 - **`MessageReference.ServiceID`** — The `ServiceID` of the original request.
-- **`MessageReference.SaleID`** — The `SaleID` of the original request.
+- **`MessageReference.SaleID`** — The `SaleID` of the original request. Nexo requires it when the status request is sent from another Sale Terminal than the original.
 
 Example request:
 
@@ -235,3 +235,5 @@ When the transaction is not found it can be because:
 - [Timeout handling](./timeout-handling.md) — detailed guide to timeout scenarios.
 - [Make a payment](./make-payment.md) — initiate a new payment.
 - [Terminal Bridge recovery](./terminal-bridge-recovery.md) — the same lookup from a browser register, through `getTransactionStatus` on the bridge.
+
+With the SDK, `getTransactionStatus(serviceId, options)` sends this request. `MessageReference.SaleID` is the session's `SaleID` unless the options name another: `TransactionStatusOptions.builder().originalSaleId("BiltPOS-Lane3")` in Java, `{ originalSaleId: 'BiltPOS-Lane3' }` in JavaScript.

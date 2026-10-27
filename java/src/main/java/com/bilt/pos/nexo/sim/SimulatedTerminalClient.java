@@ -230,7 +230,7 @@ public final class SimulatedTerminalClient implements TerminalClient {
 
   private WaitState waitForCustomer(MessageHeader header, Duration timeout)
       throws BiltNexoClientException {
-    WaitState waitState = new WaitState();
+    WaitState waitState = new WaitState(header.getSaleID());
     String serviceId = header.getServiceID();
     synchronized (lock) {
       if (serviceId != null) {
@@ -867,15 +867,19 @@ public final class SimulatedTerminalClient implements TerminalClient {
                 || request.getTransactionStatusRequest().getMessageReference() == null
             ? null
             : request.getTransactionStatusRequest().getMessageReference().getServiceID();
+    String saleId =
+        serviceId == null
+            ? null
+            : request.getTransactionStatusRequest().getMessageReference().getSaleID();
     WaitState waiting = waitingByServiceId.get(serviceId);
-    if (waiting != null) {
+    if (waiting != null && !otherSaleId(saleId, waiting.saleId)) {
       return failure(
           requestHeader(header, MessageCategoryType.TRANSACTION_STATUS),
           MessageCategoryType.TRANSACTION_STATUS,
           "InProgress");
     }
-    LedgerEntry entry = ledgerByServiceId.get(serviceId);
-    if (entry == null) {
+    LedgerEntry entry = waiting != null ? null : ledgerByServiceId.get(serviceId);
+    if (entry == null || otherSaleId(saleId, entry.messageHeader.getSaleID())) {
       return failure(
           requestHeader(header, MessageCategoryType.TRANSACTION_STATUS),
           MessageCategoryType.TRANSACTION_STATUS,
@@ -1465,9 +1469,18 @@ public final class SimulatedTerminalClient implements TerminalClient {
     }
   }
 
+  private static boolean otherSaleId(String referenced, String original) {
+    return referenced != null && original != null && !referenced.equals(original);
+  }
+
   private static final class WaitState {
     private final CountDownLatch signal = new CountDownLatch(1);
+    private final String saleId;
     private boolean aborted;
+
+    private WaitState(String saleId) {
+      this.saleId = saleId;
+    }
   }
 
   private static final class LedgerEntry {

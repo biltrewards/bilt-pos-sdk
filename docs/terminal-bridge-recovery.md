@@ -7,7 +7,7 @@ Settlement runs on the bridge, not in the page, so what can be recovered depends
 
 **Keep on the register side**, before and during each settlement:
 
-- the lane's `saleId` and the session `id` (for example in `sessionStorage`);
+- the lane's `saleId` and the session `id` (for example in `sessionStorage`). Keep the `saleId` with every `ServiceID` you store: a status lookup from a session with another `saleId` has to name it as `originalSaleId`;
 - the `OriginalSaleRecord` of every successful sale, built when `settle()` resolves (below). A later session needs it to void the sale;
 - `failure.serviceId` from a `RECOVERY_REQUIRED` step (`SettlementFailure`), and the `abandonedSettlement` record after an `ABANDON`.
 - the `ServiceID` of every money request: `context.serviceId` from each settlement `beforeStep` and each refund/void `beforeStep`. These run before the request is sent, and again with a new id on a retry.
@@ -78,11 +78,12 @@ Quitting from the menu, Ctrl-C and a normal OS shutdown all run the bridge's shu
 
 The terminal is not affected. The next terminal session started with the same `saleId` and `poiId` counts as an implicit end of the old one on the terminal (see [Session start and end](./session-start-end.md#terminal-behavior)). To settle what happened to money that was moving when the bridge went down:
 
-1. Start a terminal session with the **same `saleId`**. The status request references the original by `ServiceID` and this session's `SaleID`.
+1. Start a terminal session. The status request references the original by its `ServiceID` and `SaleID`; the `SaleID` is this session's `saleId` unless you pass `originalSaleId`. So keep the lane's `saleId` next to each `ServiceID`, and pass it when the new session uses a different one (another lane, a per-session `saleId`, another device).
 2. If you have the `ServiceID` of the uncertain request, ask the terminal for it:
 
    ```ts
-   const status = await session.getTransactionStatus(serviceId);
+   const status = await session.getTransactionStatus(serviceId, { originalSaleId: 'LANE-3' });
+   // originalSaleId can be left out when this session has the original's saleId
    // to reprint: { receiptReprint: true }; for a non-payment original: { originalCategory: 'LOYALTY' } etc.
    if (!status.found) {
      // the terminal has no transaction under that ServiceID: it was never processed

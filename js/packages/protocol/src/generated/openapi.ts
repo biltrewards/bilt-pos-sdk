@@ -1643,6 +1643,8 @@ export interface components {
         TransactionStatusOptions: {
             /** @default PAYMENT */
             originalCategory?: components["schemas"]["MessageCategory"];
+            /** @description The `saleId` the original request was sent with, when it differs from this session's (another lane, or a restart under a new `saleId`). Nexo requires it whenever the status is not asked by the Sale Terminal that sent the original. Defaults to this session's `saleId`. */
+            originalSaleId?: string;
             /**
              * @description Whether the terminal should include the original receipts, to reprint after a crash or connection loss.
              * @default false

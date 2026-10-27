@@ -20,16 +20,20 @@ import java.util.List;
  *
  * <p>By default the referenced request is assumed to be a payment and no receipt data is requested.
  * Enable {@link Builder#receiptReprint} to have the terminal include the original receipts in the
- * repeated response — used to reprint after a crash or connection loss.
+ * repeated response — used to reprint after a crash or connection loss. The original is looked up
+ * by its {@code ServiceID} and this session's {@code SaleID} unless {@link Builder#originalSaleId}
+ * names the {@code SaleID} it was sent with.
  */
 public final class TransactionStatusOptions {
 
   private final MessageCategoryType originalCategory;
+  private final String originalSaleId;
   private final boolean receiptReprint;
   private final List<DocumentQualifierEnum> documentQualifiers;
 
   private TransactionStatusOptions(Builder builder) {
     this.originalCategory = builder.originalCategory;
+    this.originalSaleId = builder.originalSaleId;
     this.receiptReprint = builder.receiptReprint;
     this.documentQualifiers =
         Collections.unmodifiableList(new ArrayList<>(builder.documentQualifiers));
@@ -49,6 +53,14 @@ public final class TransactionStatusOptions {
     return originalCategory;
   }
 
+  /**
+   * {@code SaleID} the original request was sent with, or {@code null} for this session's {@code
+   * SaleID}.
+   */
+  public String getOriginalSaleId() {
+    return originalSaleId;
+  }
+
   /** Whether the terminal should include receipt data in the response. */
   public boolean isReceiptReprint() {
     return receiptReprint;
@@ -66,6 +78,7 @@ public final class TransactionStatusOptions {
   public static final class Builder {
 
     private MessageCategoryType originalCategory = MessageCategoryType.PAYMENT;
+    private String originalSaleId;
     private boolean receiptReprint;
     private List<DocumentQualifierEnum> documentQualifiers =
         new ArrayList<>(
@@ -75,6 +88,22 @@ public final class TransactionStatusOptions {
 
     public Builder originalCategory(MessageCategoryType originalCategory) {
       this.originalCategory = originalCategory;
+      return this;
+    }
+
+    /**
+     * {@code SaleID} the original request was sent with, when it differs from this session's — for
+     * example a lookup from another lane or after a restart under a new {@code SaleID}. Nexo
+     * requires it whenever the status is not asked by the Sale Terminal that sent the original.
+     * {@code null} (the default) uses this session's {@code SaleID}.
+     *
+     * @throws IllegalArgumentException if blank
+     */
+    public Builder originalSaleId(String originalSaleId) {
+      if (originalSaleId != null && originalSaleId.isBlank()) {
+        throw new IllegalArgumentException("originalSaleId must not be blank");
+      }
+      this.originalSaleId = originalSaleId;
       return this;
     }
 

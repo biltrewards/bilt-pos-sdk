@@ -189,11 +189,41 @@ class TerminalShopperSessionDeviceOpsTest {
     session.getTransactionStatus("SVC0000001").executeSync();
 
     SaleToPOIRequest sent = recordedRequest();
+    assertEquals(
+        "POS-LANE-3", sent.getTransactionStatusRequest().getMessageReference().getSaleID());
     assertNull(sent.getTransactionStatusRequest().getReceiptReprintFlag());
     assertNull(sent.getTransactionStatusRequest().getDocumentQualifier());
     assertEquals(
         "Payment",
         sent.getTransactionStatusRequest().getMessageReference().getMessageCategory().toValue());
+  }
+
+  @Test
+  void transactionStatusReferencesTheOriginalSaleId() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{"
+                    + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
+
+    session
+        .getTransactionStatus(
+            "SVC0000001", TransactionStatusOptions.builder().originalSaleId("POS-LANE-1").build())
+        .executeSync();
+
+    SaleToPOIRequest sent = recordedRequest();
+    assertEquals(
+        "POS-LANE-1", sent.getTransactionStatusRequest().getMessageReference().getSaleID());
+    assertEquals(
+        "SVC0000001", sent.getTransactionStatusRequest().getMessageReference().getServiceID());
+    assertEquals("POS-LANE-3", sent.getMessageHeader().getSaleID());
+  }
+
+  @Test
+  void blankOriginalSaleIdIsRejected() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> TransactionStatusOptions.builder().originalSaleId(" "));
   }
 
   // ─── InputUpdate ───

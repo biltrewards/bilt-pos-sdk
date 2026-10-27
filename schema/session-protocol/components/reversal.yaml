@@ -104,6 +104,10 @@ TransactionStatusOptions:
     originalCategory:
       $ref: '#/MessageCategory'
       default: PAYMENT
+    originalSaleId:
+      type: string
+      minLength: 1
+      description: The `saleId` the original request was sent with, when it differs from this session's (another lane, or a restart under a new `saleId`). Nexo requires it whenever the status is not asked by the Sale Terminal that sent the original. Defaults to this session's `saleId`.
     receiptReprint:
       type: boolean
       default: false
