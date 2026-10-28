@@ -7,6 +7,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.BindException;
 import java.net.InetAddress;
+import java.util.List;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 /**
@@ -24,6 +26,7 @@ public final class SessionHostListener implements Closeable {
   private final int fallbackPorts;
   private final TerminalClientProvider terminal;
   private final HostAuth auth;
+  private final Supplier<List<String>> allowedOrigins;
 
   private SessionHost host;
 
@@ -32,12 +35,14 @@ public final class SessionHostListener implements Closeable {
       int preferredPort,
       int fallbackPorts,
       TerminalClientProvider terminal,
-      HostAuth auth) {
+      HostAuth auth,
+      Supplier<List<String>> allowedOrigins) {
     this.bindAddress = bindAddress;
     this.preferredPort = preferredPort;
     this.fallbackPorts = fallbackPorts;
     this.terminal = terminal;
     this.auth = auth;
+    this.allowedOrigins = allowedOrigins;
   }
 
   /** Starts the host, returning the port it bound. */
@@ -57,6 +62,7 @@ public final class SessionHostListener implements Closeable {
             .port(port)
             .terminal(terminal)
             .auth(auth)
+            .allowedOrigins(allowedOrigins)
             .hostKind("bridge")
             .build();
     try {

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.41.0]
+
+### Fixed
+
+- Terminal Bridge: the bridge now sends CORS response headers (`Access-Control-Allow-Origin`, and `Access-Control-Allow-Private-Network` on Chrome's local-network preflight) for the origins in `allowedOrigins`, so a page served from another origin can call it from a browser. Before, it checked the origin but never handed the list to the Session Host, which therefore answered no origin. A config reload applies to CORS at once, like the origin check. `SessionHost.Builder.allowedOrigins(Supplier<? extends Collection<String>>)` is the new overload that reads the list per request; origins now match case-insensitively, as the bridge's origin check already did.
+
 ### Changed (breaking)
 
 - The JavaScript packages are renamed from `@bilt/pos-*` to `@biltorg/pos-*` and are published from GitHub releases by the new `publish-js` workflow.

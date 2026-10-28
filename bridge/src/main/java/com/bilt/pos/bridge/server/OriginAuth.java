@@ -12,9 +12,8 @@ import java.util.function.Supplier;
  * at once.
  *
  * <p>This enforces the allow-list on the server side. The CORS <em>response</em> headers a browser
- * also needs come from the Session Host, which owns the HTTP layer; until it exposes a CORS option
- * the page must be served from an origin the browser does not treat as cross-origin, see {@code
- * docs/terminal-bridge.md}.
+ * also needs come from the Session Host, which owns the HTTP layer; the bridge hands it the same
+ * list.
  */
 public final class OriginAuth implements HostAuth {
 
