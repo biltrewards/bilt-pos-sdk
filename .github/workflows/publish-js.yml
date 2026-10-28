@@ -11,6 +11,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: release
 
     # id-token: write lets google-github-actions/auth federate the job's OIDC token.
     permissions:
@@ -26,6 +27,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
@@ -67,7 +70,7 @@ jobs:
 
       # Direct Workload Identity Federation: no service account. The provider only grants
       # trusted refs, which a published release is.
-      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: ${{ vars.GH_ACTIONS_GCP_WORKLOAD_IDENTITY_ID_CICD }}
 
@@ -96,16 +99,19 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  # The npmjs environment is where repo admins add required reviewers and limit deploys
-  # to v* tags. NPM_TOKEN is only visible to this job, and this job never unpacks or
-  # runs package code.
+  # Two environments, both where repo admins add required reviewers and limit deploys to
+  # v* tags: release gates the Artifact Registry publish job above, and npmjs gates this
+  # job. NPM_TOKEN is an npmjs environment secret, so only this job can read it, and this
+  # job never unpacks or runs package code.
   publish-npmjs:
     needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: npmjs
+    # id-token: write lets npm publish --provenance sign the sigstore attestation.
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -133,7 +139,7 @@ jobs:
               skipped+=("$spec")
               continue
             fi
-            if npm publish "$OUT/$tgz" --access public --ignore-scripts; then
+            if npm publish "$OUT/$tgz" --access public --ignore-scripts --provenance; then
               published+=("$spec")
             elif [ -n "$(npm view "$spec" version 2>/dev/null || true)" ]; then
               echo "$spec publish failed but the version is already on npmjs, treating as skipped"
