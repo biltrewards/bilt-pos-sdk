@@ -35,7 +35,7 @@ SessionHost host = SessionHost.builder()
     .bindAddress("127.0.0.1")
     .port(48333)
     .terminal(myTerminal)                    // TerminalClientProvider: the one terminal
-    .allowedOrigins(List.of("https://pos.example.com")) // CORS; "*" for a dev host
+    .allowedOrigins(List.of("https://pos.example.com")) // CORS; "*" for a dev host; a Supplier is read per request
     .auth(HostAuth.permitAll())              // default; the bridge plugs pairing in here
     .stepDeadlines(StepDeadlines.defaults()) // 30 s totals, 120 s recovery decisions
     .build();

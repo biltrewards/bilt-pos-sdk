@@ -70,7 +70,8 @@ public final class Bridge implements Closeable {
             config.port(),
             PortSelector.DEFAULT_FALLBACK_PORTS,
             new BridgeTerminalProvider(this),
-            new OriginAuth(() -> config.allowedOrigins()));
+            new OriginAuth(() -> config.allowedOrigins()),
+            () -> config.allowedOrigins());
     host.start();
     watch = source.watch(this::reload);
   }

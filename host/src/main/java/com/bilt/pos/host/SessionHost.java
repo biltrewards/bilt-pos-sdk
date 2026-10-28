@@ -43,6 +43,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -57,6 +58,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -684,7 +686,8 @@ public final class SessionHost implements AutoCloseable {
   }
 
   private boolean originAllowed(String origin) {
-    return config.allowedOrigins.contains("*") || config.allowedOrigins.contains(origin);
+    Collection<String> allowed = config.allowedOrigins.get();
+    return allowed.contains("*") || allowed.stream().anyMatch(origin::equalsIgnoreCase);
   }
 
   private void authorize(Context ctx) {
@@ -857,7 +860,7 @@ public final class SessionHost implements AutoCloseable {
     private int eventReplayCapacity = 1000;
     private Duration eventReplayWindow = Duration.ofMinutes(10);
     private int idempotencyCapacity = 256;
-    private Set<String> allowedOrigins = Set.of();
+    private Supplier<? extends Collection<String>> allowedOrigins = Set::of;
 
     private Builder() {}
 
@@ -867,8 +870,18 @@ public final class SessionHost implements AutoCloseable {
      * cross-origin pages are blocked by their own browser's preflight even though the host would
      * permit the request.
      */
-    public Builder allowedOrigins(java.util.Collection<String> origins) {
-      this.allowedOrigins = Set.copyOf(Objects.requireNonNull(origins, "origins"));
+    public Builder allowedOrigins(Collection<String> origins) {
+      Set<String> fixed = Set.copyOf(Objects.requireNonNull(origins, "origins"));
+      this.allowedOrigins = () -> fixed;
+      return this;
+    }
+
+    /**
+     * Like {@link #allowedOrigins(Collection)}, but read on every request, so a host whose
+     * configuration reloads (the Terminal Bridge) answers CORS for the current list.
+     */
+    public Builder allowedOrigins(Supplier<? extends Collection<String>> origins) {
+      this.allowedOrigins = Objects.requireNonNull(origins, "origins");
       return this;
     }
 

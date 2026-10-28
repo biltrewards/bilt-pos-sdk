@@ -70,6 +70,61 @@ class BridgeTest {
   }
 
   @Test
+  void answersCorsForTheConfiguredOriginsAcrossReloads(@TempDir Path dir) throws Exception {
+    Path file = dir.resolve("config.json");
+    int free;
+    try (java.net.ServerSocket s = new java.net.ServerSocket(0)) {
+      free = s.getLocalPort();
+    }
+    Files.writeString(
+        file, "{\"port\": " + free + ", \"allowedOrigins\": [\"https://a.example\"]}");
+
+    try (Bridge bridge = new Bridge(new FileBridgeConfigSource(file))) {
+      bridge.start();
+      HttpResponse<String> allowed = preflight(free, "https://a.example");
+      assertEquals(204, allowed.statusCode());
+      assertEquals(
+          "https://a.example",
+          allowed.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
+      assertEquals(
+          "true",
+          allowed.headers().firstValue("Access-Control-Allow-Private-Network").orElse(null));
+      assertTrue(
+          preflight(free, "https://b.example")
+              .headers()
+              .firstValue("Access-Control-Allow-Origin")
+              .isEmpty());
+
+      Files.writeString(
+          file, "{\"port\": " + free + ", \"allowedOrigins\": [\"https://b.example\"]}");
+      bridge.reload();
+      assertEquals(
+          "https://b.example",
+          preflight(free, "https://b.example")
+              .headers()
+              .firstValue("Access-Control-Allow-Origin")
+              .orElse(null));
+      assertTrue(
+          preflight(free, "https://a.example")
+              .headers()
+              .firstValue("Access-Control-Allow-Origin")
+              .isEmpty());
+    }
+  }
+
+  private static HttpResponse<String> preflight(int port, String origin) throws Exception {
+    return HttpClient.newHttpClient()
+        .send(
+            HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/v1/sessions"))
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .header("Origin", origin)
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Private-Network", "true")
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+  }
+
+  @Test
   void writesStarterFileWhenMissing(@TempDir Path dir) throws Exception {
     Path file = dir.resolve("nested").resolve("config.json");
     FileBridgeConfigSource source = new FileBridgeConfigSource(file);
