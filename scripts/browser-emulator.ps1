@@ -286,7 +286,7 @@ try {
     }
     $bridgeConfig.terminal = [ordered]@{ host = $hostName; port = $tPort; encryption = $false; trustAll = $true }
   }
-  [IO.File]::WriteAllText($config, ($bridgeConfig | ConvertTo-Json -Depth 4))
+  [IO.File]::WriteAllText($config, (ConvertTo-Json -InputObject $bridgeConfig -Depth 4))
 
   Write-Host "Starting the Terminal Bridge on 127.0.0.1:$bridgePort (log: $bridgeLog)..."
   $env:JAVA_OPTS = "$env:JAVA_OPTS -Djava.awt.headless=true".Trim()
