@@ -56,7 +56,8 @@ pnpm build                              # the app resolves its siblings through 
 pnpm --filter @biltorg/pos-emulator dev    # http://localhost:5173
 ```
 
-The development bridge sends no CORS headers yet, so in development the page reaches the bridge
+The bridge sends CORS headers only for the origins in its `allowedOrigins` (and none before
+0.41.0), so in development the page reaches the bridge
 through its own origin ("Via page origin" on the connection card): Vite proxies `/health` and `/v1`
 (HTTP and WebSocket) to `http://127.0.0.1:48333`, and `BRIDGE_URL=http://127.0.0.1:48334 pnpm dev`
 retargets it. Unchecked, the page probes `127.0.0.1:<Bridge port>` the way a deployed register does.

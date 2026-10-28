@@ -40,7 +40,7 @@ A sale that loaded a gift card (a `STORED_VALUE_LOAD` movement) also needs `stor
 The bridge is still running, and so are the session and any operation in flight:
 
 - The operation finishes on its own. A step the page declared in `handledSteps` takes its default when its deadline passes: 30 s for totals and before-step, 120 s for recovery and reversal decisions. The default for a recovery decision is `ABORT`, which unwinds what the settlement had committed.
-- The JavaScript SDK cannot reattach to the old session yet, so the new page reads its state over HTTP. Read requests need no `Idempotency-Key`:
+- The new page can reattach to the old session with the JavaScript SDK (below), or read its state over HTTP. Read requests need no `Idempotency-Key`:
 
   ```bash
   curl -s http://127.0.0.1:48333/v1/sessions/<id>                          # basket, member, context, ended?
@@ -56,18 +56,16 @@ The bridge is still running, and so are the session and any operation in flight:
   import { localBridge } from '@biltorg/pos-sdk/bridge';
 
   const pos = await BiltPos.connect(localBridge());
-  const session = await pos.attachTerminalSession(sessionId, {
-    settlement: settlementHandlers,                        // answer the steps of a settle still in flight
-    reversal: reversalHandlers,
-  });
+  const session = await pos.attachTerminalSession(sessionId); // { widgets } if this page has widget surfaces
 
   const operations = await session.operations();           // every operation, newest first
   const settle = operations.find((operation) => operation.type === 'settle');
   const inFlight = await session.operations({ status: ['running', 'awaitingReply'] });
+  settle?.guide(settlementHandlers);                        // answer the steps of a settle still in flight
   const result = settle && (await settle);                 // finished: settles at once; running: when the bridge finishes it
   ```
 
-  The handle rejects with the `SessionError` for a `failed` or `aborted` settle. An already-ended session still attaches, with `state` `ended`.
+  Handlers go on each adopted operation with `guide()`, not on the attach call: a pending step of an adopted operation stays open until `guide()` registers the handlers that answer it (`SettlementHandlers` for a settle, `ReversalHandlers` for a refund or void), or until its deadline gives it the default. The handle rejects with the `SessionError` for a `failed` or `aborted` settle. An already-ended session still attaches, with `state` `ended`.
 
   A `succeeded` settle carries its `SettlementResult` in `result`; store it as if the page had received it. A `failed` or `aborted` one carries the `SessionError` in `error`, and `abandonedSettlement` when recovery was abandoned. Ended sessions stay readable for a while (the last 100), and the event stream replays from `?since=<seq>` for 10 minutes or 1000 events.
 - Then end the old session so the lane is free, as in [A stuck lane](#a-stuck-lane-invalid_state).
@@ -101,7 +99,7 @@ The bridge keeps no record of these ids across a restart, so they are only avail
 
 ## A stuck lane (`INVALID_STATE`)
 
-A new terminal session is refused while the old one is still open on the bridge. End it:
+An old session the register did not end stays open on the bridge. It does not block a new session by itself: the terminal treats the new start as the implicit end of the old one on its side. But while the old session's payment is still in flight on the terminal, the new start fails with `TERMINAL_ERROR` (`Admin request failed: Busy`), and the old session keeps its unresolved money until someone finishes it. Reattach to it ([above](#the-page-reloaded-or-the-register-crashed)) or end it:
 
 ```bash
 curl -X DELETE http://127.0.0.1:48333/v1/sessions/<id> -H "Idempotency-Key: $(uuidgen)"

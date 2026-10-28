@@ -162,10 +162,10 @@ const res = await fetch("http://127.0.0.1:48333/health", { signal: AbortSignal.t
 const health = await res.json();   // health.protocolVersions tells the SDK what it can speak
 ```
 
-Two browser-side caveats in this iteration:
+Browser-side notes:
 
-- **CORS response headers are not sent yet.** The Session Host owns the HTTP layer and does not expose a CORS option, so a page on another origin can reach the bridge only where the browser does not enforce CORS for it: a page served from `http://127.0.0.1`/`http://localhost` itself (same-origin), a page whose dev server proxies `/health` and `/v1` to the bridge (what the [browser POS example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) does), a browser launched with web security disabled for development, or an Electron/WebView host. Adding an `allowedOrigins` CORS option to the host is the follow-up that lifts this.
-- Chrome asks once per origin for permission to reach loopback (its Local Network Access check); that preflight needs `Access-Control-Allow-Private-Network: true`, which lands with the same host follow-up.
+- **CORS.** From 0.41.0 the bridge answers CORS for the origins in `allowedOrigins`: a listed origin gets `Access-Control-Allow-Origin` on every response, and `Access-Control-Allow-Private-Network: true` on Chrome's local-network preflight, so a page on that origin calls `http://127.0.0.1:48333` directly. An origin must match scheme, host and port (`http://localhost:5173` is not `http://127.0.0.1:5173`); `"*"` answers every origin. An edit to `allowedOrigins` in `config.json` applies when the bridge reloads the file, without a restart. A page whose origin is not listed gets no CORS headers, so its browser blocks it, and its requests are refused with `401`. Bridges before 0.41.0 send no CORS headers at all; with those, serve the page from `http://127.0.0.1`/`http://localhost` itself or proxy `/health` and `/v1` through the page's dev server (what the [browser POS example](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/examples/browser-pos) does in development).
+- Chrome asks once per origin for permission to reach loopback (its Local Network Access check); choose *Allow*.
 
 ---
 
@@ -177,13 +177,13 @@ Two browser-side caveats in this iteration:
 
 **`401` from the bridge, `UNAUTHORIZED` in the page.** The page's `Origin` is not in `allowedOrigins`. Add the exact origin (`https://pos.example.com`, scheme and port included) or, for development, `"*"`, and reload the config. Requests without an `Origin` header (curl, server-side tools) always pass.
 
-**The request succeeds in curl but fails in the browser with a CORS error.** The bridge does not send CORS headers in this iteration (see above). Serve the page same-origin, proxy `/health` and `/v1` through the page's own dev server, or wait for the host's CORS option.
+**The request succeeds in curl but fails in the browser with a CORS error.** The page's origin is not in `allowedOrigins` (curl sends no `Origin`, so the check does not apply to it), or the bridge is older than 0.41.0 and sends no CORS headers. Add the exact origin, scheme, host and port, to `allowedOrigins` in `config.json`; the bridge picks it up on reload.
 
 **Starting a terminal session fails with `TIMEOUT` or `NETWORK`.** The bridge is up but cannot reach the terminal: `POST /v1/terminal/diagnose` fails the same way. Check the `host` and `port` in the config against the terminal's network screen, that the register machine is on the same LAN or routed to it, and that a firewall is not dropping 8443. A TLS failure shows as `NETWORK` with a certificate message in the bridge log: for a lab device set `"trustAll": true`; for a boarded one give `caCertificatePath` and the right `environment`. A mismatch between `encryption` and the terminal's own setting fails the first exchange with a `TERMINAL_ERROR` or a decode failure in the log. The admin exchange that opens a session times out after about two minutes, so a wrong address looks like a hang before it fails.
 
 **Starting a terminal session fails with `UNSUPPORTED`, or `GET /v1/terminal` answers `404`.** The bridge has no terminal configured, so only `local` sessions work. Add a `terminal` object to the config file (the menu says *No terminal configured* until it loads); if the file still has the old `terminals` list, the menu shows the config error explaining the change. The `poiId` the page sends never causes this: it is passed through to the one terminal whatever its value.
 
-**A terminal session cannot be started because one is already open on the terminal (`INVALID_STATE`).** A session the register did not end is still alive on the bridge: a page that was closed or reloaded without `end()`, or a crashed register. Sessions outlive the page by design (the bridge is where settlement runs). See [A stuck lane](./terminal-bridge-recovery.md#a-stuck-lane-invalid_state) in the recovery guide.
+**A page reloaded mid-checkout and its old session is still open.** Sessions outlive the page by design (the bridge is where settlement runs), so a page that was closed or reloaded without `end()`, or a crashed register, leaves its session alive on the bridge. Neither the bridge nor the terminal refuses a new session because of it: the terminal treats a new session start as the implicit end of the old one on its side. The exception is a payment the old session still has in flight on the terminal: the new start then fails with `TERMINAL_ERROR` (`Admin request failed: Busy`) until that payment finishes. Reattach with `attachTerminalSession` to read or finish the old session, or end it; ending it answers `409` `INVALID_STATE` while money is unresolved. See [The page reloaded or the register crashed](./terminal-bridge-recovery.md#the-page-reloaded-or-the-register-crashed) and [A stuck lane](./terminal-bridge-recovery.md#a-stuck-lane-invalid_state) in the recovery guide.
 
 **`BridgeOutdatedError` / the update prompt.** The bridge's `protocolVersions` does not include the version the SDK was generated from. Install the newer bridge; there is no update feed in the development build, so download the `.dmg` and reinstall.
 
@@ -283,8 +283,6 @@ The Session Host alone, without the tray, runs from `./gradlew :host:run --args=
 - **Development mode only**: no pairing, no per-origin tokens, `allowedOrigins: ["*"]` by default, secrets stored in a plain JSON file.
 - **macOS packaging only** so far; the application code is platform-neutral (`AppDirs` already knows the Windows and Linux locations) but there is no MSI, deb or rpm, and *Start at login* is implemented for macOS only.
 - **Ad-hoc signed, not notarized**; Gatekeeper needs the one-time override above.
-- **No CORS response headers** until the Session Host exposes a CORS option (see above); `allowedOrigins` is enforced server-side in the meantime.
-- **Sessions do not reattach.** The bridge keeps a session alive when its page goes away, but this iteration of the JavaScript SDK has no call to pick an existing session up again; a reloaded page starts a new one and the old one must be ended (see [troubleshooting](#troubleshooting)).
 - **No retail media creatives.** Widgets attach when the embedding host has an ad decision service; the development host wires an in-memory one with no creatives, so placements stay empty.
 - No update feed, no cloud configuration.
 

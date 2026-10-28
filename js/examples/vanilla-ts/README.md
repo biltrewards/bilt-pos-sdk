@@ -34,7 +34,8 @@ pnpm build                          # the example resolves its siblings through 
 pnpm --filter vanilla-ts dev        # http://localhost:5173
 ```
 
-The development bridge sends no CORS headers yet, so under `pnpm dev` the page reaches it through
+The bridge sends CORS headers only for the origins in its `allowedOrigins` (and none before
+0.41.0), so under `pnpm dev` the page reaches it through
 its own origin and Vite proxies `/health` and `/v1` (HTTP and WebSocket) to
 `http://127.0.0.1:48333` (`BRIDGE_URL=http://127.0.0.1:48334 pnpm dev` if the bridge fell back to
 another port). A production build probes `127.0.0.1:48333` directly, as a deployed register does.
