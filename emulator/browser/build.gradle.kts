@@ -9,15 +9,21 @@ val jsDir = rootProject.layout.projectDirectory.dir("js")
 val lockFile = jsDir.file("pnpm-lock.yaml")
 val modulesMarker = jsDir.file("node_modules/.modules.yaml")
 
+val windows = System.getProperty("os.name").startsWith("Windows")
+
+// On Windows pnpm and corepack are .cmd shims, which only cmd resolves and runs.
+val shell = if (windows) listOf("cmd", "/c") else emptyList()
+
 // `pnpm` from PATH when installed outright, otherwise through corepack, which
 // resolves the version pinned by `packageManager` in js/package.json.
 val pnpm: List<String> = run {
+    val names = if (windows) listOf("pnpm.exe", "pnpm.cmd") else listOf("pnpm")
     val onPath =
         (System.getenv("PATH") ?: "")
             .split(File.pathSeparator)
-            .map { File(it, "pnpm") }
+            .flatMap { dir -> names.map { File(dir, it) } }
             .firstOrNull { it.isFile && it.canExecute() }
-    if (onPath != null) listOf(onPath.path) else listOf("corepack", "pnpm")
+    if (onPath != null) shell + onPath.path else shell + listOf("corepack", "pnpm")
 }
 
 val nodeVersion = providers.exec {
@@ -26,7 +32,7 @@ val nodeVersion = providers.exec {
 }
 
 val corepackVersion = providers.exec {
-    commandLine("corepack", "--version")
+    commandLine(shell + listOf("corepack", "--version"))
     isIgnoreExitValue = true
 }
 
@@ -67,7 +73,7 @@ val install by
         // this script.
         val node = nodeVersion
         val corepack = corepackVersion
-        val viaCorepack = pnpm.first() == "corepack"
+        val viaCorepack = "corepack" in pnpm
         doFirst {
             val version = node.standardOutput.asText.get().trim()
             val major = Regex("""^v(\d+)""").find(version)?.groupValues?.get(1)?.toIntOrNull()
@@ -133,9 +139,10 @@ val run by
         }
     }
 
-// The bridge is started by scripts/browser-emulator.sh, not as a Gradle
-// JavaExec: a daemon-run bridge cannot reach a LAN terminal on macOS 15+
-// (no Local Network grant), and the script owns startup ordering and cleanup.
+// The bridge is started by scripts/browser-emulator.sh (browser-emulator.ps1 on
+// Windows), not as a Gradle JavaExec: a daemon-run bridge cannot reach a LAN
+// terminal on macOS 15+ (no Local Network grant), and the script owns startup
+// ordering and cleanup.
 val runWithBridge by
     tasks.registering(Exec::class) {
         group = "emulator"
@@ -155,7 +162,17 @@ val runWithBridge by
         val local = providers.gradleProperty("local").isPresent
         val adb = providers.gradleProperty("adb").isPresent
         val noOpen = providers.gradleProperty("noOpen").isPresent
-        val args = mutableListOf("scripts/browser-emulator.sh")
+        val args =
+            if (windows)
+                mutableListOf(
+                    "powershell",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    "scripts/browser-emulator.ps1",
+                )
+            else mutableListOf("scripts/browser-emulator.sh")
         if (local) {
             args += "--local"
         } else if (adb) {

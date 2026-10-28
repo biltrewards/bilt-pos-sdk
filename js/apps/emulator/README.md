@@ -23,6 +23,11 @@ scripts/browser-emulator.sh --adb
 scripts/browser-emulator.sh --local
 ```
 
+On Windows, `gradlew.bat :emulator:browser:runWithBridge` takes the same properties and runs
+`scripts\browser-emulator.ps1`; without Gradle,
+`powershell -ExecutionPolicy Bypass -File scripts\browser-emulator.ps1 --terminal 192.168.4.108`
+(or `--adb`, `--local`).
+
 Both write a development bridge config with its one `terminal` (unencrypted with `trustAll`, as
 development terminals accept) or none, start the bridge, wait for its `/health`, start the dev
 server on `http://127.0.0.1:5173` and open it; Ctrl-C stops both. The page comes up in the session
@@ -36,7 +41,7 @@ the single attached device, or the one `-PterminalHost` / `--terminal` names by 
 ip, and removes the forward on exit. Options: `-PterminalPort` / `--terminal ip:port` (default 8443),
 `-PbridgePort` / `--port` (default 48333), `-Pport` / `--web-port` (default 5173),
 `-PnoOpen` / `--no-open`.
-`SKIP_BUILD=1 scripts/browser-emulator.sh ...` skips rebuilding the bridge and the JS packages.
+`SKIP_BUILD=1 scripts/browser-emulator.sh ...` (`$env:SKIP_BUILD = "1"` in PowerShell) skips rebuilding the bridge and the JS packages.
 
 `./gradlew :emulator:browser:run` starts only the dev server, next to
 `./gradlew :emulator:desktop:run` for the Compose emulator, when a bridge is already running.

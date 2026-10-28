@@ -257,7 +257,7 @@ On a desktop with a system tray (KDE, XFCE, GNOME with an AppIndicator extension
 
 ### With a register
 
-To try the bridge with a register right away, the browser emulator starts both: `./gradlew :emulator:browser:runWithBridge -PterminalHost=<terminal ip>` (or `-Padb` to reach it through `adb forward`, or `-Plocal` without a terminal), or `scripts/browser-emulator.sh --terminal <terminal ip>` without Gradle. Both run the bash script, so they are for macOS and Linux; on Windows start the bridge as above and the emulator's dev server by hand (the *Manually* steps in its README). See [`js/apps/emulator`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) for the options.
+To try the bridge with a register right away, the browser emulator starts both: `./gradlew :emulator:browser:runWithBridge -PterminalHost=<terminal ip>` (or `-Padb` to reach it through `adb forward`, or `-Plocal` without a terminal), or `scripts/browser-emulator.sh --terminal <terminal ip>` without Gradle. On Windows the same Gradle task runs `scripts\browser-emulator.ps1`, which takes the same options: `gradlew.bat :emulator:browser:runWithBridge -PterminalHost=<terminal ip>`, or `powershell -ExecutionPolicy Bypass -File scripts\browser-emulator.ps1 --terminal <terminal ip>` without Gradle. See [`js/apps/emulator`](https://github.com/biltrewards/bilt-pos-sdk/tree/main/js/apps/emulator) for the options.
 
 The Session Host alone, without the tray, runs from `./gradlew :host:run --args=dev-host.json`; its config format is the host's own and documented on the [Session Host](./session-host.html) page.
 
