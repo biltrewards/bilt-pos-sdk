@@ -33,7 +33,7 @@ jobs:
         env:
           REF: ${{ github.ref }}
         run: |
-          VERSION="$(grep '^VERSION=' gradle.properties | cut -d'=' -f2)"
+          VERSION="$(grep '^VERSION=' "$GITHUB_WORKSPACE/gradle.properties" | cut -d'=' -f2)"
           if [[ -z "$VERSION" ]]; then
             echo "::error::No VERSION in gradle.properties"
             exit 1
