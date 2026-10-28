@@ -50,6 +50,13 @@ function Show-Usage {
   $lines[$from..($to - 1)] | ForEach-Object { $_ -replace '^# ?', '' }
 }
 
+# Windows PowerShell 5.1 turns a native command's stderr into an error record, which
+# 'Stop' makes fatal even when the command succeeds (adb logs its daemon start there).
+function Invoke-Native([scriptblock]$command) {
+  $ErrorActionPreference = 'Continue'
+  & $command
+}
+
 function Fail([string]$message) {
   [Console]::Error.WriteLine($message)
   exit 1
@@ -142,7 +149,7 @@ function Invoke-Shell([string]$command, [string]$workDir) {
 function Stop-Tree($process) {
   if (-not $process -or $process.HasExited) { return }
   if ($onWindows) {
-    & taskkill.exe /T /F /PID $process.Id 2>&1 | Out-Null
+    Invoke-Native { & taskkill.exe /T /F /PID $process.Id 2>&1 | Out-Null }
   } else {
     $process.Kill($true)
   }
@@ -248,10 +255,11 @@ try {
       # The device whose serial is the address, or its wifi-adb serial ("<ip>:5555");
       # else the single attached device. USB devices take a moment to enumerate after
       # a cold server start, so an empty listing is retried for a few seconds.
-      & $adb start-server 2>&1 | Out-Null
+      Invoke-Native { & $adb start-server 2>&1 | Out-Null }
+      if ($LASTEXITCODE -ne 0) { Fail "--adb: '$adb start-server' failed ($LASTEXITCODE)." }
       $serials = @()
       for ($try = 0; $try -lt 6 -and $serials.Count -eq 0; $try++) {
-        $serials = @(& $adb devices 2>$null | Select-Object -Skip 1 |
+        $serials = @(Invoke-Native { & $adb devices 2>$null } | Select-Object -Skip 1 |
             ForEach-Object { $f = -split $_; if ($f.Count -ge 2 -and $f[1] -eq 'device') { $f[0] } })
         if ($serials.Count -eq 0) { Start-Sleep -Milliseconds 500 }
       }
@@ -269,7 +277,7 @@ try {
         Fail ("--adb: several adb devices attached and none matches '$terminal': $($serials -join ' ')`n" +
           'Pick one with --terminal <serial or wifi-adb ip>.')
       }
-      $forwarded = ((& $adb -s $adbSerial forward tcp:0 tcp:8443 2>&1) | Select-Object -Last 1 | Out-String).Trim()
+      $forwarded = ((Invoke-Native { & $adb -s $adbSerial forward tcp:0 tcp:8443 2>$null }) | Select-Object -Last 1 | Out-String).Trim()
       if ($forwarded -notmatch '^\d+$') { Fail "--adb: adb forward did not return a port: $forwarded" }
       $adbPort = $forwarded
       Write-Host "Forwarding 127.0.0.1:$adbPort to port 8443 of $adbSerial over adb."
@@ -319,7 +327,7 @@ try {
     if (-not $opened -and ((Get-Date) - $started).TotalSeconds -ge 2) {
       $opened = $true
       try {
-        if ($onWindows) { Start-Process $url } elseif (Get-Command open -ErrorAction SilentlyContinue) { & open $url } else { & xdg-open $url 2>&1 | Out-Null }
+        if ($onWindows) { Start-Process $url } elseif (Get-Command open -ErrorAction SilentlyContinue) { & open $url } else { Invoke-Native { & xdg-open $url 2>&1 | Out-Null } }
       } catch { }
     }
     Start-Sleep -Seconds 1
@@ -336,7 +344,7 @@ try {
   Stop-Tree $web
   Stop-Tree $bridge
   # A forward lives in the adb server and would outlive this script.
-  if ($adbPort) { & $adb -s $adbSerial forward --remove "tcp:$adbPort" 2>&1 | Out-Null }
+  if ($adbPort) { Invoke-Native { & $adb -s $adbSerial forward --remove "tcp:$adbPort" 2>&1 | Out-Null } }
   Remove-Item -Recurse -Force $workDir -ErrorAction SilentlyContinue
 }
 exit $status

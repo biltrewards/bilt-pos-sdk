@@ -102,7 +102,18 @@ val buildPackages by
         description = "Builds the workspace packages the emulator imports"
         dependsOn(install)
         workingDir = jsDir.asFile
-        commandLine(pnpm + listOf("--filter", "@biltorg/pos-emulator^...", "build"))
+        // The emulator's dependencies without itself; not `^...`, as cmd and the
+        // pnpm.cmd shim on Windows each strip carets.
+        commandLine(
+            pnpm +
+                listOf(
+                    "--filter",
+                    "@biltorg/pos-emulator...",
+                    "--filter",
+                    "!@biltorg/pos-emulator",
+                    "build",
+                )
+        )
     }
 
 val run by
