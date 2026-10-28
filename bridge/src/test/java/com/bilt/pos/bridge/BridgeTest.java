@@ -96,7 +96,7 @@ class BridgeTest {
               .isEmpty());
 
       Files.writeString(
-          file, "{\"port\": " + free + ", \"allowedOrigins\": [\"https://b.example\"]}");
+          file, "{\"port\": " + free + ", \"allowedOrigins\": [\"https://B.example\"]}");
       bridge.reload();
       assertEquals(
           "https://b.example",
