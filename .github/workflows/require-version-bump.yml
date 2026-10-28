@@ -9,6 +9,9 @@ on:
       - 'gradle.properties'
       - '!**/*.md'
 
+permissions:
+  contents: read
+
 jobs:
   check-version:
     runs-on: ubuntu-latest

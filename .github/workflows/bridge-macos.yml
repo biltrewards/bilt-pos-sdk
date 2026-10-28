@@ -25,6 +25,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   package:
     # arm64 runner; an x64 build needs a second job on macos-13 once there is a signing story
