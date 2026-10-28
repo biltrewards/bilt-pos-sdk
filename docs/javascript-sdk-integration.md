@@ -139,7 +139,7 @@ export function Register(): ReactNode {
 
 `BridgeGate` renders `InstallBridgePrompt` until the probe says `ready`, then its children. The prompt links the installer for the cashier's platform from the update manifest (`manifestUrl`) when there is one, else `downloadUrl`; until the update feed exists point it at the [Terminal Bridge setup guide](./terminal-bridge.md).
 
-Two development caveats, both lifted once the bridge passes its `allowedOrigins` to the Session Host's CORS option: the development bridge sends no CORS headers, so a page on another origin than the bridge must proxy `/health` and `/v1` through its own dev server (the example's `vite.config.ts` does); and the bridge enforces `allowedOrigins` server-side (`401`, surfacing as `UNAUTHORIZED`) rather than through CORS.
+The bridge answers CORS for the origins in its `allowedOrigins` (0.41.0 and later), so a page on a listed origin calls it directly. A page on an unlisted origin gets no CORS headers and its requests are refused with `401`, surfacing as `UNAUTHORIZED`. Bridges before 0.41.0 send no CORS headers; with those, a page on another origin than the bridge must proxy `/health` and `/v1` through its own dev server (the example's `vite.config.ts` does).
 
 ---
 

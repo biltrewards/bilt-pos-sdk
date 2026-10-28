@@ -35,7 +35,8 @@ pnpm build                          # the example resolves its siblings through 
 pnpm --filter browser-pos dev       # http://localhost:5173
 ```
 
-The development bridge sends no CORS headers yet, so the page defaults to the "through this
+The bridge sends CORS headers only for the origins in its `allowedOrigins` (and none before
+0.41.0), so the page defaults to the "through this
 page's origin" bridge route in development: Vite proxies `/health` and `/v1` (HTTP and
 WebSocket) to `http://127.0.0.1:48333` (`BRIDGE_URL=http://127.0.0.1:48334 pnpm dev` if the
 bridge fell back to another port). Switch the route to "direct" in the settings to probe
