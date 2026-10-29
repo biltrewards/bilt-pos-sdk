@@ -9,7 +9,7 @@ on:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-small
     timeout-minutes: 20
     environment: release
 
