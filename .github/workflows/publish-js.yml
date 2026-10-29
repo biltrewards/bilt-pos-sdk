@@ -105,7 +105,7 @@ jobs:
   # job never unpacks or runs package code.
   publish-npmjs:
     needs: publish
-    runs-on: namespace-profile-small
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: npmjs
     # id-token: write lets npm publish --provenance sign the sigstore attestation.
