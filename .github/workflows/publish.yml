@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-small
     timeout-minutes: 40
     # Repo admins add required reviewers and limit deploys to v* tags on this environment.
     environment: release

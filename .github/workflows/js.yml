@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   js:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-medium
     defaults:
       run:
         working-directory: js
@@ -62,7 +62,7 @@ jobs:
   # The SDK runtime against the real Session Host (`:host`). The host module lands on its own
   # branch, so on a checkout without it this job skips rather than fails.
   contract:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-medium
     defaults:
       run:
         working-directory: js
