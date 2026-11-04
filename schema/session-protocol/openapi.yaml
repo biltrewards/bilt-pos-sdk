@@ -69,7 +69,7 @@ info:
     ## Versioning
 
     Hosts advertise the protocol major versions they implement in `GET /health`; this document
-    is version `1`. Clients refuse to run against a host that does not list the version they were
+    is version `2`. Clients refuse to run against a host that does not list the version they were
     generated from.
   contact:
     name: Bilt POS SDK
