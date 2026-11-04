@@ -820,7 +820,7 @@ export interface components {
             hostVersion: string;
             /** @description The embedded Java SDK's version. */
             sdkVersion: string;
-            /** @description Protocol major versions the host implements; this document is `"1"`. */
+            /** @description Protocol major versions the host implements; this document is `"2"`. */
             protocolVersions: string[];
             /** @description The terminal the host drives; absent when none is configured, in which case only `local` sessions work. */
             terminal?: components["schemas"]["TerminalInfo"];

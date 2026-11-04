@@ -127,7 +127,7 @@ The state hooks each take the session (or `null`) and re-render on the matching 
 
 ```ts
 const settlement = useSettlement(session, { interactive: ['TOTAL_REQUIRED', 'RECOVERY_REQUIRED'] });
-settlement.settle({ settlementType: 'NET' }); // any SettleOptions; handlers passed here still run
+settlement.settle({ settlementType: 'NET' }); // any SettlementOptions; handlers passed here still run
 settlement.status; // idle | running | awaitingReply | succeeded | failed | aborted
 settlement.pendingStep; // the step waiting on reply(), or null
 settlement.reply({ total: '12.34' }); // or { recovery: 'RETRY' } or { saleTransactionId }

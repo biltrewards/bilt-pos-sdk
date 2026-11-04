@@ -143,7 +143,7 @@ When a payment fails, the result includes `Result: Failure` along with informati
 
     - **`POIData.POITransactionID.TransactionID`** — the transaction identifier for the failed attempt.
     - **`PaymentResponse.Response.Result`** — `Failure`.
-    - **`PaymentResponse.Response.ErrorCondition`** — the reason for failure. For example, `Refused` means the card issuer declined the transaction; `Cancel` means the transaction was cancelled on the terminal.
+    - **`PaymentResponse.Response.ErrorCondition`** — the reason for failure. For example, `Refusal` means the card issuer declined the transaction; `Cancel` means the transaction was cancelled on the terminal.
 
   Example response:
 

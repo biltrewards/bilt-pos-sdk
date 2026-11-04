@@ -33,7 +33,7 @@ const record: OriginalSaleRecord = {
 persist(record);
 ```
 
-A sale that loaded a gift card (a `STORED_VALUE_LOAD` movement) also needs `storedValueLoads`: one `{ basketReference, amount, poiTransactionId, poiTransactionTimestamp }` per loaded basket line. The result does not carry the basket reference, so build these from your basket line and the matching movement.
+A sale that loaded a gift card (a `STORED_VALUE_LOAD` movement) also needs `storedValueLoads`: one `{ basketReference, amount, poiTransactionId, poiTransactionTimestamp }` per loaded basket line. Build these from the matching movements, using `movements[i].target.basketReference` for each basket reference.
 
 ## The page reloaded or the register crashed
 

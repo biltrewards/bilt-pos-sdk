@@ -84,7 +84,7 @@ Health:
       description: The embedded Java SDK's version.
     protocolVersions:
       type: array
-      description: Protocol major versions the host implements; this document is `"1"`.
+      description: Protocol major versions the host implements; this document is `"2"`.
       items:
         type: string
       minItems: 1
