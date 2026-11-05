@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+## [0.42.0]
 
-- RET-7597: Breaking/removed: `phone()/accountId()/email()/custom()`, `keyedByCashier()`, `MemberIdResolver.Type`/`customType`, and session-protocol `ACCOUNT_ID`/`CUSTOM`/`customType`/`keyedByCashier`. Replace member lookup factories with `lookup(LookupType, value)` (PHONE, EMAIL, ACCOUNT_NUMBER), always sent Keyed. All lookup values are masked. Resolved loyalty ids attach immediately; terminal sessions enrich them in the background with AccountNumber/File and notify member changes on reply.
+### Changed (breaking)
+
+- Member lookup uses `Member.idResolver().lookup(LookupType, value)` with `PHONE`, `EMAIL`, or `ACCOUNT_NUMBER` instead of separate factories. Terminal lookups always use Keyed entry mode: `PHONE` maps to PhoneNumber; `EMAIL` and `ACCOUNT_NUMBER` map to AccountNumber. All lookup values are masked. Migration: `Member.idResolver().phone(x)` → `Member.idResolver().lookup(LookupType.PHONE, x)`, `accountId(x)` → `.lookup(LookupType.ACCOUNT_NUMBER, x)`, `email(x)` → `.lookup(LookupType.EMAIL, x)`; `custom(..)` and `keyedByCashier()` are removed, as are `MemberIdResolver.Type` and `customType`. The session-protocol resolver is now `{type: PHONE|EMAIL|ACCOUNT_NUMBER, value}`; `ACCOUNT_ID`, `CUSTOM`, `customType`, and `keyedByCashier` are removed. `Member.id(id)` attaches an already-resolved loyalty member id immediately. Terminal sessions also send a background BalanceInquiry with AccountNumber/File; a FOUND reply upgrades the member with balance, brand, and rewards and notifies `onMemberChanged`. A NOT_FOUND or SUSPENDED reply keeps the attached member and reports `DECLINED` via `onBackgroundError`; cancellation leaves it unchanged. Local sessions send no inquiry.
 
 ## [0.41.0]
 
