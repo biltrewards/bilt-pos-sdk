@@ -79,6 +79,7 @@ import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.MemberIdentity
+import com.bilt.pos.emulator.session.MemberLookupBy
 import com.bilt.pos.emulator.session.MemberRewardUi
 import com.bilt.pos.emulator.session.PaymentOutcome
 import com.bilt.pos.emulator.session.PaymentRecoveryPrompt
@@ -732,6 +733,10 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
     var encryptionOn by rememberSaveable { mutableStateOf(state.encryptionEnabled) }
     var passphrase by remember { mutableStateOf("") }
     var identifyOnStart by rememberSaveable { mutableStateOf(false) }
+    // The register-side lookup: an identifier the POS already has on file
+    var lookupIdentifier by rememberSaveable { mutableStateOf("") }
+    var lookupBy by rememberSaveable { mutableStateOf(MemberLookupBy.PHONE_NUMBER) }
+    var lookupKeyed by rememberSaveable { mutableStateOf(false) }
 
     // Adopt the autodetected address unless the operator already typed one
     LaunchedEffect(state.terminalAddress, state.addressAutodetected) {
@@ -859,6 +864,48 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         Text(if (state.identifyInProgress) "Signing in…" else "Loyalty Sign-In")
                     }
                 }
+                // The POS-driven alternative to the prompt: the register
+                // already knows the shopper (a customer search, a profile on
+                // file) and hands the terminal the identifier to resolve, so
+                // nobody types anything on the terminal
+                val lookupControls: @Composable (Modifier) -> Unit = { fieldModifier ->
+                    CompactTextField(
+                        value = lookupIdentifier,
+                        onValueChange = { lookupIdentifier = it },
+                        placeholder =
+                            if (lookupBy == MemberLookupBy.PHONE_NUMBER) "Phone on file"
+                            else "Account on file",
+                        enabled = state.canOperate,
+                        modifier = fieldModifier,
+                    )
+                    MemberLookupBy.entries.forEach { option ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = lookupBy == option,
+                                onClick = { lookupBy = option },
+                                enabled = state.canOperate,
+                            )
+                            Text(option.label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = lookupKeyed,
+                            onCheckedChange = { lookupKeyed = it },
+                            enabled = state.canOperate,
+                        )
+                        Text("Keyed by cashier", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Button(
+                        onClick = {
+                            controller.lookupMember(lookupIdentifier, lookupBy, lookupKeyed)
+                        },
+                        enabled = state.canOperate && lookupIdentifier.isNotBlank(),
+                        colors = ButtonDefaults.filledTonalButtonColors(),
+                    ) {
+                        Text(if (state.identifyInProgress) "Looking up…" else "Lookup Member")
+                    }
+                }
                 // Read at Start Checkout: prompts for member identification
                 // right after the session starts
                 val identifyToggle: @Composable () -> Unit = {
@@ -926,6 +973,14 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                             clearBasketButton(Modifier.weight(1f))
                             abortButton(Modifier.weight(1f))
                         }
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            itemVerticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            lookupControls(Modifier.fillMaxWidth())
+                        }
                     }
                 } else {
                     // Two flow rows, one per concern: reaching the terminal,
@@ -967,6 +1022,16 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                             Spacer(Modifier.width(16.dp))
                             clearBasketButton(Modifier)
                             abortButton(Modifier)
+                        }
+                        // The register-side lookup on its own row: it has a
+                        // field and options the sign-in row has no room for
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            itemVerticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            lookupControls(Modifier.width(200.dp))
                         }
                     }
                 }

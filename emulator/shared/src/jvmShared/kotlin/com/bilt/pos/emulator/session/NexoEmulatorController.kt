@@ -34,6 +34,7 @@ import com.bilt.pos.session.identity.ForceEntryMode
 import com.bilt.pos.session.identity.IdentifyOptions
 import com.bilt.pos.session.identity.IdentifyResult
 import com.bilt.pos.session.identity.IdentifyStatus
+import com.bilt.pos.session.identity.MemberIdentifier
 import com.bilt.pos.session.identity.Reward
 import com.bilt.pos.session.identity.RewardType
 import com.bilt.pos.session.settlement.ExternalPayment
@@ -1157,12 +1158,58 @@ class NexoEmulatorController(
         runIdentifyPrompt(conn, session)
     }
 
+    override fun lookupMember(identifier: String, by: MemberLookupBy, keyedByCashier: Boolean) {
+        val conn = connection
+        val session = conn?.session
+        if (conn == null || session == null) {
+            log("No active checkout session — press Start Checkout first")
+            return
+        }
+        val value = identifier.trim()
+        if (value.isEmpty()) {
+            log("Enter the member's ${by.label.lowercase()} to look up")
+            return
+        }
+        val memberIdentifier =
+            when (by) {
+                MemberLookupBy.PHONE_NUMBER -> MemberIdentifier.phoneNumber(value)
+                MemberLookupBy.ACCOUNT_NUMBER -> MemberIdentifier.accountNumber(value)
+            }.let { if (keyedByCashier) it.keyedByCashier() else it }
+        runIdentification(
+            conn,
+            session,
+            "Looking the member up on the terminal by ${by.label.lowercase()}…",
+        ) {
+            it.identifyMember(memberIdentifier)
+        }
+    }
+
     /**
      * The loyalty sign-in prompt — run right after the Start bracket when the operator asked for
      * it, and on demand from the Loyalty Sign-In button. Always its own operation, never part of
      * the bracket; a failed or declined prompt leaves the checkout without a member.
      */
     private fun runIdentifyPrompt(conn: Connection, session: TerminalShopperSession) {
+        // The terminal's keyed loyalty capture engages only with
+        // ForceEntryMode=Keyed; without it the terminal waits on the card
+        // reader instead of showing the input form
+        runIdentification(conn, session, "Loyalty sign-in on the terminal…") {
+            it.identifyMember(
+                IdentifyOptions.builder().forceEntryMode(ForceEntryMode.KEYED).build()
+            )
+        }
+    }
+
+    /**
+     * One member identification on the wire — the terminal prompt or the register's own lookup;
+     * both answer an [IdentifyResult] and attach (or detach) the session's member the same way.
+     */
+    private fun runIdentification(
+        conn: Connection,
+        session: TerminalShopperSession,
+        startLog: String,
+        identify: (TerminalShopperSession) -> SessionResult<IdentifyResult>,
+    ) {
         // Claimed like pay/acquireCard: without the claim, a Pay tapped
         // during the prompt would queue behind it on the session's
         // operation thread — and an abort would cancel only the prompt
@@ -1175,12 +1222,8 @@ class NexoEmulatorController(
         // A re-run starts from a blank card rather than leaving the previous
         // answer on screen while the terminal collects the next one
         _state.update { it.copy(identifyInProgress = true, member = null) }
-        log("Loyalty sign-in on the terminal…")
-        // The terminal's keyed loyalty capture engages only with
-        // ForceEntryMode=Keyed; without it the terminal waits on the card
-        // reader instead of showing the input form
-        session
-            .identifyMember(IdentifyOptions.builder().forceEntryMode(ForceEntryMode.KEYED).build())
+        log(startLog)
+        identify(session)
             .onSuccess { outcome ->
                 // a checkout that ended under a late-arriving prompt owns
                 // neither the card nor the display any more

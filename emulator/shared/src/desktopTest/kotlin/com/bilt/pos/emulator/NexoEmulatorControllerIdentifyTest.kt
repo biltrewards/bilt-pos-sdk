@@ -3,6 +3,7 @@ package com.bilt.pos.emulator
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorConfig
 import com.bilt.pos.emulator.session.MemberIdentity
+import com.bilt.pos.emulator.session.MemberLookupBy
 import com.bilt.pos.emulator.session.MemberRewardKind
 import com.bilt.pos.emulator.session.NexoEmulatorController
 import com.bilt.pos.emulator.store.JsonlSaleStore
@@ -59,6 +60,12 @@ class NexoEmulatorControllerIdentifyTest {
         const val CARD_ACQUISITION_NOT_FOUND =
             """{"SaleToPOIResponse":{"CardAcquisitionResponse":{
                 "Response":{"Result":"Failure","ErrorCondition":"NotFound"}}}}"""
+
+        /** The register's identifier matched nobody. */
+        const val BALANCE_INQUIRY_NOT_FOUND =
+            """{"SaleToPOIResponse":{"BalanceInquiryResponse":{
+                "Response":{"Result":"Failure","ErrorCondition":"NotFound",
+                    "AdditionalResponse":"failureReason=Member+not+found"}}}}"""
     }
 
     private lateinit var server: MockWebServer
@@ -81,6 +88,24 @@ class NexoEmulatorControllerIdentifyTest {
                 "Response":{"Result":"Success","AdditionalResponse":"$encoded"},
                 "LoyaltyAccount":[{"LoyaltyAccountID":{"LoyaltyID":"$memberId",
                     "IdentificationType":"PhoneNumber","EntryMode":["Keyed"]}}]}}}"""
+    }
+
+    /**
+     * The terminal's answer to a register lookup: the resolved member id as a PAN-typed LoyaltyID,
+     * the balance on the status, and the rewards as Base64 JSON — the same payload a sign-in
+     * carries.
+     */
+    private fun balanceInquiryFound(memberId: String, balance: Int): String {
+        val rewards =
+            """{"rewards":[{"rewardRef":"rwd:RWD-1","type":"reward","name":"${'$'}10 Off",""" +
+                """"expirationDate":"2026-12-31T00:00:00Z"}],"rewardCount":1}"""
+        val encoded = Base64.getEncoder().encodeToString(rewards.toByteArray())
+        return """{"SaleToPOIResponse":{"BalanceInquiryResponse":{
+                "Response":{"Result":"Success","AdditionalResponse":"$encoded"},
+                "LoyaltyAccountStatus":{"CurrentBalance":$balance,"LoyaltyUnit":"Point",
+                    "LoyaltyAccount":{"LoyaltyBrand":"K-Club",
+                        "LoyaltyAccountID":{"LoyaltyID":"$memberId","IdentificationType":"PAN",
+                            "IdentificationSupport":"NoCard","EntryMode":["File"]}}}}}}"""
     }
 
     @BeforeTest
@@ -148,6 +173,9 @@ class NexoEmulatorControllerIdentifyTest {
 
     private val cardAcquisitions: List<String>
         get() = requests.filter { "\"CardAcquisitionRequest\"" in it }
+
+    private val balanceInquiries: List<String>
+        get() = requests.filter { "\"BalanceInquiryRequest\"" in it }
 
     @Test
     fun signInAsksForKeyedLoyaltyAndPublishesTheMember() {
@@ -288,6 +316,121 @@ class NexoEmulatorControllerIdentifyTest {
                 member,
                 "NotFound detaches the member, so nothing may be shown as attached",
             )
+        }
+    }
+
+    /**
+     * The register-driven path: no prompt, a BalanceInquiry carrying the identifier the POS holds,
+     * and the terminal's answer — the resolved id, the balance it reports, the rewards — on the
+     * card.
+     */
+    @Test
+    fun lookupSendsTheIdentifierOnFileAndPublishesTheResolvedMember() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"BalanceInquiryRequest\"" in body) {
+                balanceInquiryFound("98234", balance = 1240)
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller()
+        runBlocking {
+            controller.connectAndStartCheckout()
+            controller.lookupMember(
+                "555-867-5309",
+                MemberLookupBy.PHONE_NUMBER,
+                keyedByCashier = false,
+            )
+            val member =
+                withTimeout(10_000) {
+                    controller.state.first { it.member != null && !it.identifyInProgress }.member
+                }
+
+            // the identifier travels as the LoyaltyID under its own type;
+            // "File" says it came from a profile, not the cashier's keypad
+            val request = balanceInquiries.single()
+            assertTrue("\"LoyaltyAccountReq\"" in request, request)
+            assertTrue("\"LoyaltyID\":\"555-867-5309\"" in request, request)
+            assertTrue("\"IdentificationType\":\"PhoneNumber\"" in request, request)
+            assertTrue("\"EntryMode\":[\"File\"]" in request, request)
+            assertTrue(cardAcquisitions.isEmpty(), "a lookup must not prompt on the terminal")
+
+            val found = assertIsFound(member)
+            // the resolved member id, not the phone number the register sent
+            assertEquals("98234", found.memberId)
+            assertEquals("K-Club", found.loyaltyBrand)
+            assertEquals(1240, found.pointBalance)
+            assertEquals(false, found.retained)
+            assertEquals("rwd:RWD-1", found.rewards.single().rewardRef)
+        }
+    }
+
+    @Test
+    fun keyedAccountLookupSaysTheCashierTypedIt() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"BalanceInquiryRequest\"" in body) {
+                balanceInquiryFound("98234", balance = 0)
+            } else {
+                defaultResponse(body)
+            }
+        }
+        val controller = controller()
+        runBlocking {
+            controller.connectAndStartCheckout()
+            controller.lookupMember(
+                " robin@example.com ",
+                MemberLookupBy.ACCOUNT_NUMBER,
+                keyedByCashier = true,
+            )
+            withTimeout(10_000) {
+                controller.state.first { it.member != null && !it.identifyInProgress }
+            }
+
+            val request = balanceInquiries.single()
+            assertTrue("\"LoyaltyID\":\"robin@example.com\"" in request, request)
+            assertTrue("\"IdentificationType\":\"AccountNumber\"" in request, request)
+            assertTrue("\"EntryMode\":[\"Keyed\"]" in request, request)
+        }
+    }
+
+    @Test
+    fun lookupThatMatchesNobodyReportsAnEmptyCheckout() {
+        server.dispatcher = respondingWith { body ->
+            if ("\"BalanceInquiryRequest\"" in body) BALANCE_INQUIRY_NOT_FOUND
+            else defaultResponse(body)
+        }
+        val controller = controller()
+        runBlocking {
+            controller.connectAndStartCheckout()
+            controller.lookupMember(
+                "5550000000",
+                MemberLookupBy.PHONE_NUMBER,
+                keyedByCashier = false,
+            )
+            val member =
+                withTimeout(10_000) {
+                    controller.state.first { it.member != null && !it.identifyInProgress }.member
+                }
+            assertEquals(MemberIdentity.Absent(MemberIdentity.Absent.Reason.NOT_FOUND), member)
+        }
+    }
+
+    @Test
+    fun blankLookupSendsNothing() {
+        val controller = controller()
+        runBlocking {
+            controller.connectAndStartCheckout()
+            controller.lookupMember("  ", MemberLookupBy.PHONE_NUMBER, keyedByCashier = false)
+            withTimeout(10_000) {
+                controller.state.first { state ->
+                    state.events.any { "Enter the member's phone" in it }
+                }
+            }
+            assertTrue(
+                balanceInquiries.isEmpty(),
+                "nothing to look up, so nothing may reach the terminal",
+            )
+            assertNull(controller.state.value.member)
         }
     }
 

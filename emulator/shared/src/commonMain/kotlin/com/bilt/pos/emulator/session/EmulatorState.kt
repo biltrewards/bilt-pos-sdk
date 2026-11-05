@@ -151,6 +151,15 @@ enum class MemberRewardKind {
     UNKNOWN,
 }
 
+/**
+ * Which identifier the register has on file for [EmulatorController.lookupMember] — the nexo
+ * `IdentificationType` the lookup travels under.
+ */
+enum class MemberLookupBy(val label: String) {
+    PHONE_NUMBER("Phone"),
+    ACCOUNT_NUMBER("Account"),
+}
+
 /** One reward or coupon the terminal returned for an identified member. */
 data class MemberRewardUi(
     /**
@@ -334,7 +343,10 @@ data class EmulatorState(
     val cardReadInProgress: Boolean = false,
     /** True while a balance inquiry or direct activation is on the wire. */
     val storedValueInProgress: Boolean = false,
-    /** True while the session-start member identification prompt is on the wire. */
+    /**
+     * True while a member identification — the terminal prompt or a register lookup — is on the
+     * wire.
+     */
     val identifyInProgress: Boolean = false,
     /** True while a referenced refund (ReversalSession) is on the wire. */
     val refundInProgress: Boolean = false,
@@ -499,6 +511,15 @@ interface EmulatorController {
      * answer lands in [EmulatorState.member].
      */
     fun identifyMember()
+
+    /**
+     * Identify a member from an [identifier] the register already has on file — a phone number or
+     * account number, keyed by the cashier or loaded from a customer profile — without prompting
+     * anyone on the terminal (nexo BalanceInquiry with a LoyaltyAccountReq). The terminal resolves
+     * it, shows the member as signed in, and answers with the resolved member id, point balance and
+     * rewards. Requires an active checkout session; the answer lands in [EmulatorState.member].
+     */
+    fun lookupMember(identifier: String, by: MemberLookupBy, keyedByCashier: Boolean)
 
     /**
      * Read a card on the terminal (nexo CardAcquisition request) without charging it. A read that
