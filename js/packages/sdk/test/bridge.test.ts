@@ -154,6 +154,27 @@ describe('BridgeEngine over HTTP', () => {
     return { engine: new BridgeEngine('http://127.0.0.1:48333', options), calls };
   }
 
+  it.each(['PHONE', 'EMAIL', 'ACCOUNT_NUMBER'] as const)(
+    'sends the %s resolver unchanged for member attachment and identification',
+    async (type) => {
+      const { engine: e, calls } = engine(() => json({}));
+      const resolver = { type, value: 'customer-handle' };
+      await e.member('s1', { kind: 'set', member: { resolver } });
+      expect(JSON.parse(calls.at(-1)!.init.body as string)).toEqual({ resolver });
+      await e.request('s1', { type: 'identifyMember', resolver });
+      expect(JSON.parse(calls.at(-1)!.init.body as string)).toEqual({
+        type: 'identifyMember',
+        resolver,
+      });
+    },
+  );
+
+  it('sends a resolved loyalty id without a resolver', async () => {
+    const { engine: e, calls } = engine(() => json({}));
+    await e.member('s1', { kind: 'set', member: { id: 'enterprise-member' } });
+    expect(JSON.parse(calls.at(-1)!.init.body as string)).toEqual({ id: 'enterprise-member' });
+  });
+
   it('sends JSON with the idempotency key and bearer token, and maps routes', async () => {
     const { engine: e, calls } = engine(
       (url) => {

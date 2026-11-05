@@ -178,9 +178,9 @@ export interface TerminalShopperSession extends ShopperSession {
   identifyMember(options?: IdentifyOptions): Operation<IdentifyResult>;
 
   /**
-   * POS-driven lookup by an identifier on file, with no terminal prompt. Account ids and phone
-   * numbers only; an email or custom identifier rejects with `UNSUPPORTED`. The same lookup runs
-   * in the background when such a member is attached through `member.set()`.
+   * POS-driven lookup by a customer-known identifier, with no terminal prompt.
+   * PHONE uses PhoneNumber; EMAIL and ACCOUNT_NUMBER use AccountNumber, always Keyed.
+   * The same lookup runs in the background when attached through `member.set()`.
    */
   identifyMember(pending: { resolver: MemberIdResolver }): Operation<IdentifyResult>;
 

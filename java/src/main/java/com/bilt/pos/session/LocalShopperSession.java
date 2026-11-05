@@ -44,6 +44,7 @@ final class LocalShopperSession extends AbstractShopperSession {
             lock,
             operations,
             memberResolver,
+            null,
             this::ended,
             builder.onMemberChanged,
             this::memberChanged,

@@ -230,10 +230,12 @@ export interface BasketMutationBuilder {
 /**
  * The member attached to a visit — `ShopperSession.member(..)` and `member()` in Java.
  *
- * A member with an `id` attaches at once. One with a `resolver` (a phone number, account id,
- * email or retailer identifier) attaches as pending and is resolved in the background; until
- * then the visit is a guest's. Every change, from the register, a terminal prompt or a completed
- * lookup, arrives as a `member.changed` event, and `current` follows it.
+ * An already-resolved loyalty member id attaches at once as FOUND. Terminal sessions also
+ * send AccountNumber/File in a background BalanceInquiry and upgrade it with balance, brand
+ * and rewards on reply. Local sessions send nothing for a resolved id.
+ * A resolver (PHONE, EMAIL, ACCOUNT_NUMBER) attaches as pending and uses Keyed entry mode:
+ * PHONE maps to PhoneNumber, the others to AccountNumber. Until resolved the visit is a guest's.
+ * Every change arrives as a `member.changed` event, and `current` follows it.
  */
 export interface SessionMember {
   /** The member as last announced: resolved, pending, or `null` for a guest. */

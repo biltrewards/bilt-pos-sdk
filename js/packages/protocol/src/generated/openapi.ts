@@ -452,14 +452,16 @@ export interface paths {
         get: operations["getMember"];
         /**
          * Attach the member for this visit
-         * @description Mirrors `ShopperSession.member(Member)`. A member with an `id` attaches immediately. A
-         *     member with a `resolver` attaches as pending and is resolved in the background on the
-         *     session's operation lane: on a terminal session by a Nexo `BalanceInquiry` (account id
-         *     and phone only — email and custom identifiers cannot be resolved there, are reported
-         *     through `background.error` and stay pending), on a local session not at all yet. Until it
-         *     resolves the visit is a guest's. A lookup that finds nobody clears the member; one that
-         *     fails leaves it pending. Whatever member is attached last wins. Every change is announced
-         *     through `member.changed`.
+         * @description Mirrors `ShopperSession.member(Member)`. An already-resolved loyalty member id attaches
+         *     immediately as FOUND. Terminal sessions also send AccountNumber/File in a background
+         *     BalanceInquiry and upgrade it with balance, brand and rewards on a FOUND reply.
+         *     NOT_FOUND or SUSPENDED leaves it attached and reports a DECLINED background.error;
+         *     cancellation leaves it unchanged. Local sessions send nothing for a resolved id.
+         *     A resolver attaches as pending and is looked up in the background on the operation
+         *     lane. Terminal lookups always use Keyed: PHONE maps to PhoneNumber, EMAIL and
+         *     ACCOUNT_NUMBER to AccountNumber. Until resolved a pending member is a guest.
+         *     Not found clears a pending member; errors leave it pending. The latest attachment wins.
+         *     Every change is announced through `member.changed`.
          *
          *     Allowed at any time on both session kinds, but refused (409) once the session has ended
          *     and on a terminal session while a settlement or void is moving money.
@@ -1145,12 +1147,12 @@ export interface components {
         };
         /**
          * @description The member attached to a visit, mirroring the Java `Member`. `resolved` is `true` once the
-         *     Bilt member id is known; a resolved member found by the terminal also carries the loyalty
-         *     brand, rewards and point balance it reported.
+         *     loyalty member id is known; a resolved member found by the terminal also carries the
+         *     loyalty brand, rewards and point balance it reported.
          */
         Member: {
             resolved: boolean;
-            /** @description The Bilt member id; absent while pending. */
+            /** @description The already-resolved loyalty member id; absent while pending. */
             memberId?: string;
             /** @description How the member is being looked up; absent once resolved. Masked. */
             resolver?: components["schemas"]["MemberIdResolver"];
@@ -1162,7 +1164,7 @@ export interface components {
             /** @description `0` when not reported. */
             pointBalance: number;
         };
-        /** @description Exactly one of `id` (a member the POS already knows the Bilt member id of) or `resolver` (a member pending resolution). */
+        /** @description Exactly one of `id` (the already-resolved loyalty member id) or `resolver` (a customer-known identifier pending lookup). An id attaches immediately as FOUND; terminal sessions also send AccountNumber/File in the background and upgrade it with the reply. */
         MemberInput: {
             id?: string;
             resolver?: components["schemas"]["MemberIdResolver"];
@@ -1172,20 +1174,15 @@ export interface components {
             resolver: components["schemas"]["MemberIdResolver"];
         });
         /**
-         * @description How a member that is not yet resolved is to be looked up: the kind of identifier the POS
-         *     has on file, its value, and whether the cashier typed it in (a terminal lookup then sends
-         *     `EntryMode=Keyed` instead of `File`). In responses and events the `value` is masked for
-         *     `PHONE`, `EMAIL` and `CUSTOM` (all but the last four characters); an `ACCOUNT_ID` is shown
-         *     in full.
+         * @description A customer-known identifier to look up in the background. Terminal lookups use
+         *     Keyed entry mode: PHONE maps to PhoneNumber; EMAIL and ACCOUNT_NUMBER map to
+         *     AccountNumber. ACCOUNT_NUMBER includes usernames, loyalty cards and retailer account
+         *     numbers. In responses and events every value is masked except its last four characters.
          */
         MemberIdResolver: {
             /** @enum {string} */
-            type: "ACCOUNT_ID" | "PHONE" | "EMAIL" | "CUSTOM";
-            /** @description The retailer-specific identifier kind; required for `CUSTOM`, absent otherwise. */
-            customType?: string;
+            type: "PHONE" | "EMAIL" | "ACCOUNT_NUMBER";
             value: string;
-            /** @default false */
-            keyedByCashier?: boolean;
         };
         /**
          * @description Outcome of a member identification attempt.
@@ -2414,8 +2411,8 @@ export interface components {
          * @description Without `resolver`, prompts the customer on the terminal (`identifyMember(options)`):
          *     outcomes that leave the checkout without a member (not found, suspended, cancelled) are
          *     successes with the matching `IdentifyStatus`. With `resolver`, a POS-driven lookup with no
-         *     terminal prompt (`identifyMember(Member pending)`); account id and phone only — email and
-         *     custom identifiers fail with `UNSUPPORTED`. Available after a failed settlement.
+         *     terminal prompt (`identifyMember(Member pending)`); PHONE uses PhoneNumber/Keyed;
+         *     EMAIL and ACCOUNT_NUMBER use AccountNumber/Keyed. Available after a failed settlement.
          */
         IdentifyMemberRequest: {
             /**

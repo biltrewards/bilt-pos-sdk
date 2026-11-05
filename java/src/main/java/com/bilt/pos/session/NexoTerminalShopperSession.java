@@ -209,6 +209,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
             lock,
             operations,
             this::resolveOnTerminal,
+            this::enrichOnTerminal,
             this::ended,
             builder.onMemberChanged,
             this::memberChanged,
@@ -356,6 +357,22 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       return Member.resolved(result);
     }
     return result.getStatus() == IdentifyStatus.CANCELLED ? pending : null;
+  }
+
+  private Member enrichOnTerminal(Member attached) {
+    requireOpen("member");
+    IdentifyResult result = identityManager.identifyByMemberId(attached.memberId());
+    if (result.getStatus() == IdentifyStatus.FOUND) {
+      return Member.resolved(result);
+    }
+    if (result.getStatus() != IdentifyStatus.CANCELLED) {
+      throw new SessionException(
+          new SessionError(
+              SessionErrorCode.DECLINED,
+              "the terminal did not confirm the attached loyalty member id: "
+                  + result.getStatus()));
+    }
+    return attached;
   }
 
   private IdentifyResult identifyStateChecked(Supplier<IdentifyResult> lookup) {

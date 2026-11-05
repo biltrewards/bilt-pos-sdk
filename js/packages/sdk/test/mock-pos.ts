@@ -311,7 +311,17 @@ class MockMember implements SessionMember {
     this.current =
       member.id !== undefined
         ? fx.resolvedMember(member.id)
-        : { resolved: false, resolver: member.resolver!, rewards: [], pointBalance: 0 };
+        : {
+            resolved: false,
+            resolver: {
+              ...member.resolver!,
+              value:
+                '*'.repeat(Math.max(0, member.resolver!.value.length - 4)) +
+                member.resolver!.value.slice(-4),
+            },
+            rewards: [],
+            pointBalance: 0,
+          };
     this.emitter.emit('member.changed', { member: this.current });
     return Promise.resolve(this.current);
   }

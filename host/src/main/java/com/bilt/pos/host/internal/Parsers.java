@@ -29,8 +29,8 @@ import com.bilt.pos.session.basket.BasketMutation;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
 import com.bilt.pos.session.identity.ForceEntryMode;
 import com.bilt.pos.session.identity.IdentifyOptions;
+import com.bilt.pos.session.identity.LookupType;
 import com.bilt.pos.session.identity.Member;
-import com.bilt.pos.session.identity.MemberIdResolver;
 import com.bilt.pos.session.input.ConfirmationOptions;
 import com.bilt.pos.session.input.InputOptions;
 import com.bilt.pos.session.input.MenuOptions;
@@ -354,30 +354,18 @@ public final class Parsers {
     if (resolver == null || !resolver.isObject()) {
       throw HostError.badRequest("resolver must be an object");
     }
-    MemberIdResolver.Type type = Json.enumValue(resolver, "type", MemberIdResolver.Type.class);
+    LookupType type = Json.enumValue(resolver, "type", LookupType.class);
     if (type == null) {
       throw HostError.badRequest("resolver.type is required");
     }
     String value = Json.requireText(resolver, "value");
     Member pending;
     try {
-      switch (type) {
-        case ACCOUNT_ID:
-          pending = Member.idResolver().accountId(value);
-          break;
-        case PHONE:
-          pending = Member.idResolver().phone(value);
-          break;
-        case EMAIL:
-          pending = Member.idResolver().email(value);
-          break;
-        default:
-          pending = Member.idResolver().custom(Json.requireText(resolver, "customType"), value);
-      }
+      pending = Member.idResolver().lookup(type, value);
     } catch (IllegalArgumentException | NullPointerException e) {
       throw HostError.badRequest("invalid resolver: " + e.getMessage());
     }
-    return Json.bool(resolver, "keyedByCashier", false) ? pending.keyedByCashier() : pending;
+    return pending;
   }
 
   public static CheckoutPhase phase(JsonNode node) {

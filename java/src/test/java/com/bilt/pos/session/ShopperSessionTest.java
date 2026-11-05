@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketItem;
+import com.bilt.pos.session.identity.IdentifyStatus;
+import com.bilt.pos.session.identity.LookupType;
 import com.bilt.pos.session.identity.Member;
 import java.math.BigDecimal;
 import java.util.List;
@@ -107,6 +109,24 @@ class ShopperSessionTest {
   }
 
   @Test
+  void resolvedMemberNeverCallsTheLocalResolver() {
+    ShopperSession.Builder builder =
+        ShopperSession.builder().saleId("POS").currency("USD").member(Member.id("seed"));
+    ShopperSession session =
+        new LocalShopperSession(
+            builder,
+            pending -> {
+              fail("resolved ids must not be looked up locally");
+              return null;
+            });
+    ((LocalShopperSession) session).start();
+    session.member(Member.id("attached"));
+    session.end().executeSync();
+    assertEquals("attached", session.member().memberId());
+    assertEquals(IdentifyStatus.FOUND, session.member().status());
+  }
+
+  @Test
   void pendingMemberStaysPendingWithoutAResolver() throws Exception {
     List<Member> changes = new CopyOnWriteArrayList<>();
     ShopperSession session =
@@ -116,7 +136,7 @@ class ShopperSessionTest {
             .onMemberChanged(changes::add)
             .start();
 
-    Member pending = Member.idResolver().phone("+12015550123");
+    Member pending = Member.idResolver().lookup(LookupType.PHONE, "+12015550123");
     session.member(pending);
     // the no-op resolver runs on the operation lane; end() queues behind it
     session.end().executeSync();
@@ -150,7 +170,7 @@ class ShopperSessionTest {
               return Member.id("mbr_" + pending.resolver().type().name().toLowerCase());
             });
 
-    Member pending = Member.idResolver().phone("+12015550123");
+    Member pending = Member.idResolver().lookup(LookupType.PHONE, "+12015550123");
     session.member(pending);
 
     assertTrue(resolved.await(5, TimeUnit.SECONDS));
@@ -180,7 +200,7 @@ class ShopperSessionTest {
                   new SessionError(SessionErrorCode.NETWORK, "the platform is unreachable"));
             });
 
-    Member pending = Member.idResolver().email("shopper@example.com");
+    Member pending = Member.idResolver().lookup(LookupType.EMAIL, "shopper@example.com");
     session.member(pending);
 
     assertTrue(reported.await(5, TimeUnit.SECONDS));
@@ -205,7 +225,7 @@ class ShopperSessionTest {
                 });
     ShopperSession session = new LocalShopperSession(builder, pending -> null);
 
-    Member pending = Member.idResolver().accountId("4823");
+    Member pending = Member.idResolver().lookup(LookupType.ACCOUNT_NUMBER, "4823");
     session.member(pending);
 
     assertTrue(cleared.await(5, TimeUnit.SECONDS));
@@ -236,7 +256,7 @@ class ShopperSessionTest {
         ShopperSession.builder()
             .saleId("POS-LANE-3")
             .currency("USD")
-            .member(Member.idResolver().accountId("4823"))
+            .member(Member.idResolver().lookup(LookupType.ACCOUNT_NUMBER, "4823"))
             .onMemberChanged(member -> resolved.countDown());
     ShopperSession session =
         new LocalShopperSession(builder, pending -> Member.id("mbr_4823")).start();
@@ -259,7 +279,7 @@ class ShopperSessionTest {
 
     assertThrows(
         IllegalStateException.class,
-        () -> session.member(Member.idResolver().phone("+12015550123")));
+        () -> session.member(Member.idResolver().lookup(LookupType.PHONE, "+12015550123")));
     assertThrows(IllegalStateException.class, () -> session.member(null));
 
     assertEquals(Member.id("mbr_8f2a"), session.member());

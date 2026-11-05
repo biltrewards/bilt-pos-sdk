@@ -47,7 +47,14 @@ class SessionBasketTest {
           BiltEnvironment.PRODUCTION);
       memberState =
           new SessionMember(
-              lock, operations, MemberResolver.NONE, this::ended, null, this::memberChanged, null);
+              lock,
+              operations,
+              MemberResolver.NONE,
+              null,
+              this::ended,
+              null,
+              this::memberChanged,
+              null);
     }
 
     @Override
