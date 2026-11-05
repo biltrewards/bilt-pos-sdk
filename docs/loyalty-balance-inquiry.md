@@ -13,7 +13,7 @@ A loyalty balance inquiry runs in one of two modes depending on `IdentificationT
 
 | `IdentificationType` | Behavior | Notes |
 |---|---|---|
-| `PAN` | Balance check for a known member. | `LoyaltyID` must be the resolved member ID from a prior [identification](./loyalty-identify-member.md) or enrollment. **Not yet served by the terminal:** it answers `Failure` / `NotAllowed` until a lookup-by-member-id route exists. The `TerminalShopperSession` API does not send this mode; `MemberIdentifier` offers phone and account number only. |
+| `PAN` | Balance check for a known member. | `LoyaltyID` must be the resolved member ID from a prior [identification](./loyalty-identify-member.md) or enrollment. The terminal reads the member by that id and answers like a lookup (balance, rewards); an id it cannot find answers `NotFound`. The `TerminalShopperSession` API does not send this mode yet — `MemberIdentifier` offers phone and account number — so it is reachable through the raw Terminal API client. |
 | `PhoneNumber` | Member lookup. Returns balance plus rewards. | `LoyaltyID` carries the phone number. |
 | `AccountNumber` | Member lookup. Returns balance plus rewards. | `LoyaltyID` carries the account number (typically an email or external account ID). |
 
