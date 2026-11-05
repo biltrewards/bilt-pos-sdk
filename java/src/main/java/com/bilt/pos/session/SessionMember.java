@@ -45,6 +45,7 @@ final class SessionMember {
   private final ReentrantLock lock;
   private final SessionOperations operations;
   private final MemberResolver resolver;
+  private final MemberResolver enricher;
   private final BooleanSupplier ended;
   private final Consumer<Member> onMemberChanged;
   private final Consumer<Member> observers;
@@ -55,7 +56,7 @@ final class SessionMember {
 
   /**
    * {@code seed} is the builder's pre-seeded member, or null; it is installed silently, as initial
-   * state rather than a change. A pending seed is resolved once the owner calls {@link
+   * state rather than a change. A seed is resolved or enriched once the owner calls {@link
    * #resolveSeed()}. {@code observers} is the session's internal fan-out to its observers, told of
    * every change before the register's {@code onMemberChanged} handler is dispatched.
    */
@@ -63,6 +64,7 @@ final class SessionMember {
       ReentrantLock lock,
       SessionOperations operations,
       MemberResolver resolver,
+      MemberResolver enricher,
       BooleanSupplier ended,
       Consumer<Member> onMemberChanged,
       Consumer<Member> observers,
@@ -70,6 +72,7 @@ final class SessionMember {
     this.lock = lock;
     this.operations = operations;
     this.resolver = Objects.requireNonNull(resolver, "resolver");
+    this.enricher = enricher;
     this.ended = ended;
     this.onMemberChanged = onMemberChanged;
     this.observers = Objects.requireNonNull(observers, "observers");
@@ -104,9 +107,9 @@ final class SessionMember {
 
   /**
    * The public setter: installs {@code next} (null clears), announces the change, and starts the
-   * lookup when {@code next} is pending. {@code precondition} runs first, under the lock, and
-   * refuses the change by throwing; the announcement and the lookup happen after the lock is
-   * released, so a handler never runs under it.
+   * lookup when pending, or enrichment when resolved and an enricher is configured. {@code
+   * precondition} runs first, under the lock, and refuses the change by throwing; the announcement
+   * and the lookup happen after the lock is released, so a handler never runs under it.
    */
   void set(Member next, Runnable precondition) {
     lock.lock();
@@ -118,15 +121,15 @@ final class SessionMember {
       lock.unlock();
     }
     flush();
-    if (next != null && !next.isResolved()) {
+    if (next != null && (!next.isResolved() || enricher != null)) {
       scheduleResolution(next);
     }
   }
 
-  /** Starts the lookup of a pending seed; a no-op for no seed or a resolved one. */
+  /** Starts seed lookup or terminal enrichment; a no-op when no work is configured. */
   void resolveSeed() {
     Member seed = member;
-    if (seed != null && !seed.isResolved()) {
+    if (seed != null && (!seed.isResolved() || enricher != null)) {
       scheduleResolution(seed);
     }
   }
@@ -225,12 +228,12 @@ final class SessionMember {
 
   private void resolve(Member pending) {
     // superseded before the lookup began — nothing to look up
-    if (member != pending) {
+    if (member != pending || ended.getAsBoolean()) {
       return;
     }
     Member outcome;
     try {
-      outcome = resolver.resolve(pending);
+      outcome = (pending.isResolved() ? enricher : resolver).resolve(pending);
     } catch (RuntimeException e) {
       operations.backgroundError("resolving " + pending, e);
       return;

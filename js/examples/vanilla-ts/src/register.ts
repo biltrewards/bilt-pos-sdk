@@ -188,7 +188,7 @@ export async function mountRegister(root: HTMLElement, deps: RegisterDeps): Prom
     signIn.onclick = () =>
       void run('Signing in', () =>
         session.member.set({
-          resolver: { type: 'PHONE', value: phone.value, keyedByCashier: true },
+          resolver: { type: 'PHONE', value: phone.value },
         }),
       );
 

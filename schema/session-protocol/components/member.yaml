@@ -6,30 +6,22 @@ IdentifyStatus:
 MemberIdResolver:
   type: object
   description: |
-    How a member that is not yet resolved is to be looked up: the kind of identifier the POS
-    has on file, its value, and whether the cashier typed it in (a terminal lookup then sends
-    `EntryMode=Keyed` instead of `File`). In responses and events the `value` is masked for
-    `PHONE`, `EMAIL` and `CUSTOM` (all but the last four characters); an `ACCOUNT_ID` is shown
-    in full.
+    A customer-known identifier to look up in the background. Terminal lookups use
+    Keyed entry mode: PHONE maps to PhoneNumber; EMAIL and ACCOUNT_NUMBER map to
+    AccountNumber. ACCOUNT_NUMBER includes usernames, loyalty cards and retailer account
+    numbers. In responses and events every value is masked except its last four characters.
   required: [type, value]
   properties:
     type:
       type: string
-      enum: [ACCOUNT_ID, PHONE, EMAIL, CUSTOM]
-    customType:
-      type: string
-      minLength: 1
-      description: The retailer-specific identifier kind; required for `CUSTOM`, absent otherwise.
+      enum: [PHONE, EMAIL, ACCOUNT_NUMBER]
     value:
       type: string
       minLength: 1
-    keyedByCashier:
-      type: boolean
-      default: false
 
 MemberInput:
   type: object
-  description: Exactly one of `id` (a member the POS already knows the Bilt member id of) or `resolver` (a member pending resolution).
+  description: Exactly one of `id` (the already-resolved loyalty member id) or `resolver` (a customer-known identifier pending lookup). An id attaches immediately as FOUND; terminal sessions also send AccountNumber/File in the background and upgrade it with the reply.
   properties:
     id:
       type: string
@@ -51,7 +43,7 @@ Member:
   type: object
   description: |
     The member attached to a visit, mirroring the Java `Member`. `resolved` is `true` once the
-    Bilt member id is known; a resolved member found by the terminal also carries the loyalty
+    already-resolved loyalty member id is known; a resolved member found by the terminal also carries the loyalty
     brand, rewards and point balance it reported.
   required: [resolved, rewards, pointBalance]
   properties:
@@ -59,7 +51,7 @@ Member:
       type: boolean
     memberId:
       type: string
-      description: The Bilt member id; absent while pending.
+      description: The already-resolved loyalty member id; absent while pending.
     resolver:
       description: How the member is being looked up; absent once resolved. Masked.
       $ref: '#/MemberIdResolver'

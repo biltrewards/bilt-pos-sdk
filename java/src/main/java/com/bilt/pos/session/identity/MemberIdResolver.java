@@ -12,114 +12,52 @@ package com.bilt.pos.session.identity;
 import java.util.Objects;
 
 /**
- * How a {@link Member} that is not yet resolved is to be looked up: the kind of identifier the POS
- * has on file, its value, and whether the cashier typed it in. Created through {@link
- * Member#idResolver()}; the session resolves it in the background when the member is attached.
- *
- * <p>The value is sensitive for {@link Type#PHONE}, {@link Type#EMAIL} and {@link Type#CUSTOM} (a
- * retailer's own identifier, such as a loyalty card number), so {@link #toString()} masks all but
- * its last few characters. A {@link Type#ACCOUNT_ID} is printed in full, like the resolved member
- * id in {@link Member#toString()}: it is the identifier the SDK already logs and reports, and is
- * the one that makes a failed lookup diagnosable.
+ * An identifier to look up in the background. All identifier values are masked in {@link
+ * #toString()}.
  */
 public final class MemberIdResolver {
-
-  /** The kind of identifier being resolved. */
-  public enum Type {
-    /** A loyalty account identifier. */
-    ACCOUNT_ID,
-    /** A phone number. */
-    PHONE,
-    /** An email address. */
-    EMAIL,
-    /** A retailer-specific identifier; {@link #customType()} names which. */
-    CUSTOM
-  }
-
-  private final Type type;
-  private final String customType;
+  private final LookupType type;
   private final String value;
-  private final boolean keyedByCashier;
 
-  private MemberIdResolver(Type type, String customType, String value, boolean keyedByCashier) {
+  private MemberIdResolver(LookupType type, String value) {
     this.type = type;
-    this.customType = customType;
     this.value = value;
-    this.keyedByCashier = keyedByCashier;
   }
 
-  static MemberIdResolver of(Type type, String customType, String value) {
+  static MemberIdResolver of(LookupType type, String value) {
     Objects.requireNonNull(type, "type");
-    if (type == Type.CUSTOM) {
-      requireText(customType, "type");
+    Objects.requireNonNull(value, "value");
+    if (value.isEmpty()) {
+      throw new IllegalArgumentException("value must not be empty");
     }
-    requireText(value, "value");
-    return new MemberIdResolver(type, type == Type.CUSTOM ? customType : null, value, false);
+    return new MemberIdResolver(type, value);
   }
 
-  private static void requireText(String text, String name) {
-    Objects.requireNonNull(text, name);
-    if (text.isEmpty()) {
-      throw new IllegalArgumentException(name + " must not be empty");
-    }
-  }
-
-  MemberIdResolver withKeyedByCashier() {
-    return new MemberIdResolver(type, customType, value, true);
-  }
-
-  public Type type() {
+  public LookupType type() {
     return type;
-  }
-
-  /** The retailer-specific identifier kind for {@link Type#CUSTOM}; {@code null} otherwise. */
-  public String customType() {
-    return customType;
   }
 
   public String value() {
     return value;
   }
 
-  /**
-   * {@code true} when the cashier typed the identifier rather than the POS loading it from a
-   * profile on file; a terminal lookup sends it as {@code EntryMode=Keyed} instead of {@code File}.
-   */
-  public boolean keyedByCashier() {
-    return keyedByCashier;
-  }
-
   @Override
   public boolean equals(Object other) {
-    if (this == other) {
-      return true;
-    }
     if (!(other instanceof MemberIdResolver)) {
       return false;
     }
     MemberIdResolver that = (MemberIdResolver) other;
-    return type == that.type
-        && Objects.equals(customType, that.customType)
-        && value.equals(that.value)
-        && keyedByCashier == that.keyedByCashier;
+    return type == that.type && value.equals(that.value);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(type, customType, value, keyedByCashier);
+    return Objects.hash(type, value);
   }
 
   @Override
   public String toString() {
-    StringBuilder text = new StringBuilder(type.name());
-    if (customType != null) {
-      text.append('(').append(customType).append(')');
-    }
-    text.append(' ').append(type == Type.ACCOUNT_ID ? value : redact(value));
-    if (keyedByCashier) {
-      text.append(", keyed by cashier");
-    }
-    return text.toString();
+    return type.name() + " " + redact(value);
   }
 
   /** Masks all but the last four characters (two for short values, none for very short ones). */

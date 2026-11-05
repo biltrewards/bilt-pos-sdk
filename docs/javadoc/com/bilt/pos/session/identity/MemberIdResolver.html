@@ -38,7 +38,7 @@ loadScripts(document, 'script');</script>
 <li>
 <p>Summary:</p>
 <ul>
-<li><a href="#nested-class-summary">Nested</a></li>
+<li>Nested</li>
 <li>Field</li>
 <li>Constr</li>
 <li><a href="#method-summary">Method</a></li>
@@ -58,7 +58,7 @@ loadScripts(document, 'script');</script>
 <div id="navbar-sub-list">
 <ul class="sub-nav-list">
 <li>Summary:&nbsp;</li>
-<li><a href="#nested-class-summary">Nested</a>&nbsp;|&nbsp;</li>
+<li>Nested&nbsp;|&nbsp;</li>
 <li>Field&nbsp;|&nbsp;</li>
 <li>Constr&nbsp;|&nbsp;</li>
 <li><a href="#method-summary">Method</a></li>
@@ -92,34 +92,10 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">MemberIdResolver</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">How a <a href="Member.html" title="class in com.bilt.pos.session.identity"><code>Member</code></a> that is not yet resolved is to be looked up: the kind of identifier the POS
- has on file, its value, and whether the cashier typed it in. Created through <a href="Member.html#idResolver()"><code>Member.idResolver()</code></a>; the session resolves it in the background when the member is attached.
-
- <p>The value is sensitive for <a href="MemberIdResolver.Type.html#PHONE"><code>MemberIdResolver.Type.PHONE</code></a>, <a href="MemberIdResolver.Type.html#EMAIL"><code>MemberIdResolver.Type.EMAIL</code></a> and <a href="MemberIdResolver.Type.html#CUSTOM"><code>MemberIdResolver.Type.CUSTOM</code></a> (a
- retailer's own identifier, such as a loyalty card number), so <a href="#toString()"><code>toString()</code></a> masks all but
- its last few characters. A <a href="MemberIdResolver.Type.html#ACCOUNT_ID"><code>MemberIdResolver.Type.ACCOUNT_ID</code></a> is printed in full, like the resolved member
- id in <a href="Member.html#toString()"><code>Member.toString()</code></a>: it is the identifier the SDK already logs and reports, and is
- the one that makes a failed lookup diagnosable.</div>
+<div class="block">An identifier to look up in the background. All identifier values are masked in <a href="#toString()"><code>toString()</code></a>.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
-<!-- ======== NESTED CLASS SUMMARY ======== -->
-<li>
-<section class="nested-class-summary" id="nested-class-summary">
-<h2>Nested Class Summary</h2>
-<div class="caption"><span>Nested Classes</span></div>
-<div class="summary-table three-column-summary">
-<div class="table-header col-first">Modifier and Type</div>
-<div class="table-header col-second">Class</div>
-<div class="table-header col-last">Description</div>
-<div class="col-first even-row-color"><code>static enum&nbsp;</code></div>
-<div class="col-second even-row-color"><code><a href="MemberIdResolver.Type.html" class="type-name-link" title="enum class in com.bilt.pos.session.identity">MemberIdResolver.Type</a></code></div>
-<div class="col-last even-row-color">
-<div class="block">The kind of identifier being resolved.</div>
-</div>
-</div>
-</section>
-</li>
 <!-- ========== METHOD SUMMARY =========== -->
 <li>
 <section class="method-summary" id="method-summary">
@@ -131,27 +107,16 @@ loadScripts(document, 'script');</script>
 <div class="table-header col-first">Modifier and Type</div>
 <div class="table-header col-second">Method</div>
 <div class="table-header col-last">Description</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#customType()" class="member-name-link">customType</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">The retailer-specific identifier kind for <a href="MemberIdResolver.Type.html#CUSTOM"><code>MemberIdResolver.Type.CUSTOM</code></a>; <code>null</code> otherwise.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#equals(java.lang.Object)" class="member-name-link">equals</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a>&nbsp;other)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#hashCode()" class="member-name-link">hashCode</a>()</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#equals(java.lang.Object)" class="member-name-link">equals</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a>&nbsp;other)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#keyedByCashier()" class="member-name-link">keyedByCashier</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block"><code>true</code> when the cashier typed the identifier rather than the POS loading it from a
- profile on file; a terminal lookup sends it as <code>EntryMode=Keyed</code> instead of <code>File</code>.</div>
-</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#hashCode()" class="member-name-link">hashCode</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#toString()" class="member-name-link">toString</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="MemberIdResolver.Type.html" title="enum class in com.bilt.pos.session.identity">MemberIdResolver.Type</a></code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="LookupType.html" title="enum class in com.bilt.pos.session.identity">LookupType</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#type()" class="member-name-link">type</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
@@ -177,28 +142,13 @@ loadScripts(document, 'script');</script>
 <li>
 <section class="detail" id="type()">
 <h3>type</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="MemberIdResolver.Type.html" title="enum class in com.bilt.pos.session.identity">MemberIdResolver.Type</a></span>&nbsp;<span class="element-name">type</span>()</div>
-</section>
-</li>
-<li>
-<section class="detail" id="customType()">
-<h3>customType</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">customType</span>()</div>
-<div class="block">The retailer-specific identifier kind for <a href="MemberIdResolver.Type.html#CUSTOM"><code>MemberIdResolver.Type.CUSTOM</code></a>; <code>null</code> otherwise.</div>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="LookupType.html" title="enum class in com.bilt.pos.session.identity">LookupType</a></span>&nbsp;<span class="element-name">type</span>()</div>
 </section>
 </li>
 <li>
 <section class="detail" id="value()">
 <h3>value</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">value</span>()</div>
-</section>
-</li>
-<li>
-<section class="detail" id="keyedByCashier()">
-<h3>keyedByCashier</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">keyedByCashier</span>()</div>
-<div class="block"><code>true</code> when the cashier typed the identifier rather than the POS loading it from a
- profile on file; a terminal lookup sends it as <code>EntryMode=Keyed</code> instead of <code>File</code>.</div>
 </section>
 </li>
 <li>

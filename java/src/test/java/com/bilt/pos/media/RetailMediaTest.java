@@ -27,6 +27,7 @@ import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketChange;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.basket.BasketLineItem;
+import com.bilt.pos.session.identity.LookupType;
 import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.widget.Action;
 import com.bilt.pos.widget.ActionSink;
@@ -431,7 +432,7 @@ class RetailMediaTest {
 
     Basket one = basketOf(line("SKU-1", 2));
     widget.basketChanged(BasketChange.between(basketOf(), one, BasketChange.Source.INCREMENTAL));
-    widget.memberChanged(Member.idResolver().phone("+12015550123"));
+    widget.memberChanged(Member.idResolver().lookup(LookupType.PHONE, "+12015550123"));
     widget.memberChanged(Member.id("mbr_8f2a"));
     widget.contextChanged(context(CheckoutPhase.TENDERING));
     widget.memberChanged(null);

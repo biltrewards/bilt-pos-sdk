@@ -47,6 +47,28 @@ describe('the double basket', () => {
   });
 });
 
+describe('the double member', () => {
+  it.each(['PHONE', 'EMAIL', 'ACCOUNT_NUMBER'] as const)(
+    'masks %s lookup values without changing the input',
+    async (type) => {
+      const resolver = { type, value: 'ABC12345' };
+      const member = await session().member.set({ resolver });
+      expect(member).toMatchObject({
+        resolved: false,
+        resolver: { type, value: '****2345' },
+      });
+      expect(resolver.value).toBe('ABC12345');
+    },
+  );
+
+  it('keeps a resolved loyalty id intact', async () => {
+    await expect(session().member.set({ id: 'enterprise-member' })).resolves.toMatchObject({
+      resolved: true,
+      memberId: 'enterprise-member',
+    });
+  });
+});
+
 describe('the double identify', () => {
   const lane = () => new MockTerminalSession({ saleId: 'LANE-1', currency: 'USD' });
 

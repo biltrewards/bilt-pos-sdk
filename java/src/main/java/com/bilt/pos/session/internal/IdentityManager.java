@@ -32,8 +32,6 @@ import com.bilt.pos.nexo.model.ResultType;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
-import com.bilt.pos.session.SessionError;
-import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.identity.CardAcquisitionOptions;
 import com.bilt.pos.session.identity.CardAcquisitionResult;
@@ -42,6 +40,7 @@ import com.bilt.pos.session.identity.ForceEntryMode;
 import com.bilt.pos.session.identity.IdentifyOptions;
 import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
+import com.bilt.pos.session.identity.LookupType;
 import com.bilt.pos.session.identity.MemberIdResolver;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.LinkedHashMap;
@@ -120,13 +119,18 @@ public final class IdentityManager {
         LoyaltyPayloadCodec.parseShopperContext(payload));
   }
 
-  /**
-   * POS-driven identification (Nexo {@code BalanceInquiry}). The terminal resolves account ids and
-   * phone numbers; email and custom identifiers have no Nexo identification type and fail with
-   * {@link SessionErrorCode#UNSUPPORTED} before anything is sent.
-   */
+  /** POS-driven lookup using Keyed entry mode. */
   public IdentifyResult identifyByIdentifier(MemberIdResolver resolver) {
-    IdentificationTypeEnum identificationType = identificationType(resolver);
+    return balanceInquiry(resolver.value(), identificationType(resolver), EntryModeType.KEYED);
+  }
+
+  /** Enriches an already-resolved loyalty member id using File entry mode. */
+  public IdentifyResult identifyByMemberId(String memberId) {
+    return balanceInquiry(memberId, IdentificationTypeEnum.ACCOUNT_NUMBER, EntryModeType.FILE);
+  }
+
+  private IdentifyResult balanceInquiry(
+      String value, IdentificationTypeEnum identificationType, EntryModeType entryMode) {
     SaleToPOIRequest request =
         SaleToPOIRequest.builder()
             .messageHeader(
@@ -139,14 +143,9 @@ public final class IdentityManager {
                         LoyaltyAccountReq.builder()
                             .loyaltyAccountID(
                                 LoyaltyAccountID.builder()
-                                    .loyaltyID(resolver.value())
+                                    .loyaltyID(value)
                                     .identificationType(identificationType)
-                                    .entryMode(
-                                        new EntryModeType[] {
-                                          resolver.keyedByCashier()
-                                              ? EntryModeType.KEYED
-                                              : EntryModeType.FILE
-                                        })
+                                    .entryMode(new EntryModeType[] {entryMode})
                                     .build())
                             .build())
                     .build())
@@ -238,19 +237,9 @@ public final class IdentityManager {
   // ─── Internals ───
 
   private static IdentificationTypeEnum identificationType(MemberIdResolver resolver) {
-    switch (resolver.type()) {
-      case ACCOUNT_ID:
-        return IdentificationTypeEnum.ACCOUNT_NUMBER;
-      case PHONE:
-        return IdentificationTypeEnum.PHONE_NUMBER;
-      default:
-        throw new SessionException(
-            new SessionError(
-                SessionErrorCode.UNSUPPORTED,
-                "the terminal cannot resolve a member by "
-                    + resolver.type()
-                    + "; only ACCOUNT_ID and PHONE identifiers are looked up on the terminal"));
-    }
+    return resolver.type() == LookupType.PHONE
+        ? IdentificationTypeEnum.PHONE_NUMBER
+        : IdentificationTypeEnum.ACCOUNT_NUMBER;
   }
 
   /**
