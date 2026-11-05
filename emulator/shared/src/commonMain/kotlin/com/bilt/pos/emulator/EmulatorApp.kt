@@ -874,7 +874,7 @@ private fun ConnectionPanel(state: EmulatorState, controller: EmulatorController
                         onValueChange = { lookupIdentifier = it },
                         placeholder =
                             if (lookupBy == MemberLookupBy.PHONE_NUMBER) "Phone on file"
-                            else "Account on file",
+                            else "Email on file",
                         enabled = state.canOperate,
                         modifier = fieldModifier,
                     )

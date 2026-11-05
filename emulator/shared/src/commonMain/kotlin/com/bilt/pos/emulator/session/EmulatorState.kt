@@ -153,11 +153,12 @@ enum class MemberRewardKind {
 
 /**
  * Which identifier the register has on file for [EmulatorController.lookupMember] — the nexo
- * `IdentificationType` the lookup travels under.
+ * `IdentificationType` the lookup travels under. An email rides as `AccountNumber`, which the
+ * terminal resolves by email.
  */
 enum class MemberLookupBy(val label: String) {
     PHONE_NUMBER("Phone"),
-    ACCOUNT_NUMBER("Account"),
+    ACCOUNT_NUMBER("Email"),
 }
 
 /** One reward or coupon the terminal returned for an identified member. */
