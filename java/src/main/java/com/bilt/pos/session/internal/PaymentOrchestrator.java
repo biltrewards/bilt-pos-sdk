@@ -15,6 +15,7 @@ import com.bilt.pos.display.DisplayPayload;
 import com.bilt.pos.nexo.model.AmountsReq;
 import com.bilt.pos.nexo.model.LoyaltyAmount;
 import com.bilt.pos.nexo.model.LoyaltyData;
+import com.bilt.pos.nexo.model.LoyaltyHandlingEnum;
 import com.bilt.pos.nexo.model.LoyaltyRequest;
 import com.bilt.pos.nexo.model.LoyaltyResponse;
 import com.bilt.pos.nexo.model.LoyaltyResult;
@@ -36,6 +37,7 @@ import com.bilt.pos.nexo.model.SaleItemRebate;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
+import com.bilt.pos.nexo.model.TransactionConditions;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.Receipt;
 import com.bilt.pos.session.SessionError;
@@ -270,6 +272,7 @@ public final class PaymentOrchestrator {
     BigDecimal rebateTotal = BigDecimal.ZERO;
     int pointsRedeemed = 0;
     BigDecimal pointsValue = BigDecimal.ZERO;
+    boolean pointRedemptionRan = false;
     BigDecimal storedValueCharged = BigDecimal.ZERO;
     BigDecimal cardCharged = BigDecimal.ZERO;
     BigDecimal externalPaid = BigDecimal.ZERO;
@@ -354,6 +357,7 @@ public final class PaymentOrchestrator {
                       response));
       if (!recovered.skipped) {
         PointRedemptionResult points = recovered.value;
+        pointRedemptionRan = true;
         pointsRedeemed = points.getPointsUsed();
         pointsValue = points.getMonetaryValue();
         result.pointsBalance(points.getRemainingPointBalance());
@@ -450,6 +454,7 @@ public final class PaymentOrchestrator {
       }
       Basket stepBasket = workingBasket;
       BigDecimal stepTotal = currentTotal;
+      LoyaltyHandlingEnum loyaltyHandling = cardLoyaltyHandling(options, pointRedemptionRan);
       StepOutcome<BigDecimal> recovered =
           runStep(
               request,
@@ -466,6 +471,7 @@ public final class PaymentOrchestrator {
                       stepBasket,
                       stepTotal,
                       options,
+                      loyaltyHandling,
                       saleTransaction,
                       serviceId,
                       committed,
@@ -1354,6 +1360,7 @@ public final class PaymentOrchestrator {
       Basket basket,
       BigDecimal currentTotal,
       AttemptOptions options,
+      LoyaltyHandlingEnum loyaltyHandling,
       TransactionIdentificationType saleTransaction,
       String serviceId,
       List<Commit> committed,
@@ -1370,6 +1377,14 @@ public final class PaymentOrchestrator {
     if (options.cashback != null) {
       amounts.cashBackAmount(options.cashback.doubleValue());
     }
+    PaymentTransaction.Builder transaction =
+        PaymentTransaction.builder()
+            .amountsReq(amounts.build())
+            .saleItem(SaleItemMapper.toAdjustedSaleItems(basket).toArray(new SaleItem[0]));
+    if (loyaltyHandling != null) {
+      transaction.transactionConditions(
+          TransactionConditions.builder().loyaltyHandling(loyaltyHandling).build());
+    }
     SaleToPOIRequest wireRequest =
         SaleToPOIRequest.builder()
             .messageHeader(
@@ -1379,12 +1394,7 @@ public final class PaymentOrchestrator {
             .paymentRequest(
                 PaymentRequest.builder()
                     .saleData(exchange.factory().saleData(saleTransaction))
-                    .paymentTransaction(
-                        PaymentTransaction.builder()
-                            .amountsReq(amounts.build())
-                            .saleItem(
-                                SaleItemMapper.toAdjustedSaleItems(basket).toArray(new SaleItem[0]))
-                            .build())
+                    .paymentTransaction(transaction.build())
                     .build())
             .build();
 
@@ -1430,6 +1440,18 @@ public final class PaymentOrchestrator {
 
     copyPaymentArtifacts(body, result);
     return charged;
+  }
+
+  /**
+   * The card Payment's {@code LoyaltyHandling}: {@code Forbidden} when points and award are both
+   * disabled, {@code Processed} when points are disabled or a point redemption already ran, else
+   * absent so the terminal may offer hosted checkout.
+   */
+  private static LoyaltyHandlingEnum cardLoyaltyHandling(AttemptOptions options, boolean redeemed) {
+    if (options.disablePoints && options.disableAward) {
+      return LoyaltyHandlingEnum.FORBIDDEN;
+    }
+    return options.disablePoints || redeemed ? LoyaltyHandlingEnum.PROCESSED : null;
   }
 
   /**

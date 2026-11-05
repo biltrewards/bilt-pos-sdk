@@ -60,12 +60,25 @@ public final class SettlementOptions {
     return disableRebates;
   }
 
-  /** Whether point/reward redemption is disabled. */
+  /**
+   * Whether point/reward redemption is disabled.
+   *
+   * <p>Also sets the card Payment's {@code TransactionConditions.LoyaltyHandling}: {@code
+   * Processed} (no hosted checkout, points still earned), or {@code Forbidden} together with {@link
+   * #isDisableAward()}. A point redemption earlier in the settlement also sends {@code Processed};
+   * otherwise the field is absent.
+   */
   public boolean isDisablePoints() {
     return disablePoints;
   }
 
-  /** Whether the post-payment loyalty award is disabled. */
+  /**
+   * Whether the post-payment loyalty award is disabled.
+   *
+   * <p>Combined with {@link #isDisablePoints()}, the card Payment is sent with {@code
+   * TransactionConditions.LoyaltyHandling=Forbidden}: no hosted checkout and no automatic earn.
+   * Alone it leaves {@code LoyaltyHandling} unchanged.
+   */
   public boolean isDisableAward() {
     return disableAward;
   }
@@ -115,13 +128,19 @@ public final class SettlementOptions {
       return this;
     }
 
-    /** Disables point/reward redemption for this settlement. */
+    /**
+     * Disables point/reward redemption for this settlement and sends the card Payment with {@code
+     * LoyaltyHandling=Processed} ({@code Forbidden} together with {@link #disableAward}).
+     */
     public Builder disablePoints(boolean disablePoints) {
       this.disablePoints = disablePoints;
       return this;
     }
 
-    /** Disables the post-payment loyalty award for this settlement. */
+    /**
+     * Disables the post-payment loyalty award for this settlement. Together with {@link
+     * #disablePoints} the card Payment is sent with {@code LoyaltyHandling=Forbidden}.
+     */
     public Builder disableAward(boolean disableAward) {
       this.disableAward = disableAward;
       return this;
