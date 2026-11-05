@@ -13,7 +13,7 @@ A loyalty balance inquiry runs in one of two modes depending on `IdentificationT
 
 | `IdentificationType` | Behavior | Notes |
 |---|---|---|
-| `PAN` | Balance check for a known member. | `LoyaltyID` must be the resolved member ID from a prior [identification](./loyalty-identify-member.md) or enrollment. |
+| `PAN` | Balance check for a known member. | `LoyaltyID` must be the resolved member ID from a prior [identification](./loyalty-identify-member.md) or enrollment. **Not yet served by the terminal:** it answers `Failure` / `NotAllowed` until a lookup-by-member-id route exists. The `TerminalShopperSession` API does not send this mode; `MemberIdentifier` offers phone and account number only. |
 | `PhoneNumber` | Member lookup. Returns balance plus rewards. | `LoyaltyID` carries the phone number. |
 | `AccountNumber` | Member lookup. Returns balance plus rewards. | `LoyaltyID` carries the account number (typically an email or external account ID). |
 
@@ -67,7 +67,7 @@ Use this mode when you already have the resolved `LoyaltyID` and just need the c
        "BalanceInquiryRequest": {
          "LoyaltyAccountReq": {
            "LoyaltyAccountID": {
-             "EntryMode": "Keyed",
+             "EntryMode": ["Keyed"],
              "IdentificationType": "PAN",
              "LoyaltyID": "98234"
            }
@@ -87,7 +87,7 @@ When the inquiry succeeds, your integration receives:
 - **`LoyaltyAccountStatus.LoyaltyAccount.LoyaltyAccountID.LoyaltyID`** — echo of the member's loyalty ID.
 - **`LoyaltyAccountStatus.LoyaltyAccount.LoyaltyAccountID.IdentificationSupport`** — medium that supplied the identifier (`LoyaltyCard`, `MobileApplication`, `NoCard`, `HybridCard`, `LinkedCard`).
 - **`LoyaltyAccountStatus.LoyaltyAccount.LoyaltyBrand`** — the loyalty program (e.g. `K-Club`).
-- **`LoyaltyAccountStatus.LoyaltyAccount.CurrentBalance`** — the member's available point balance.
+- **`LoyaltyAccountStatus.CurrentBalance`** — the member's available point balance (`LoyaltyUnit` is `Point`).
 
   Example response:
 
@@ -110,14 +110,15 @@ When the inquiry succeeds, your integration receives:
         "LoyaltyAccountStatus": {
           "LoyaltyAccount": {
             "LoyaltyAccountID": {
-              "EntryMode": "Keyed",
+              "EntryMode": ["Keyed"],
               "IdentificationType": "PAN",
               "IdentificationSupport": "NoCard",
               "LoyaltyID": "98234"
             },
-            "LoyaltyBrand": "K-Club",
-            "CurrentBalance": 1240
-          }
+            "LoyaltyBrand": "K-Club"
+          },
+          "CurrentBalance": 1240,
+          "LoyaltyUnit": "Point"
         }
       }
     }
@@ -164,7 +165,11 @@ For general guidance on handling failed requests, see [Handle responses](./error
 
 ## Look up a member by phone number or account number
 
-Use this mode when the POS already has the shopper's identifier on file and you want to resolve it into a `LoyaltyID` without prompting the shopper at the terminal. The response carries the resolved member, their balance, and their active rewards — the same data returned by a [CardAcquisition member identification](./loyalty-identify-member.md).
+Use this mode when the POS already has the shopper's identifier on file and you want to resolve it into a `LoyaltyID` without prompting the shopper at the terminal. The terminal signs the resolved member into the open checkout session exactly as a terminal sign-in would — the customer display shows them as signed in and a later Redemption can burn their points — so:
+
+- Send it **after** the session `Start`. With no session open the terminal answers `Failure` / `NotAllowed` and looks nobody up.
+- A session holds **one identified shopper**. Looking up the member who is already identified (a retry, or the shopper who just tapped their wallet pass) answers `Success` again; looking up a different member answers `Failure` / `NotAllowed` and the first member stays.
+- `EntryMode` is informational and echoed back: `File` for an identifier loaded from a profile, `Keyed` when the cashier typed it (`MemberIdentifier.keyedByCashier()`). The response carries the resolved member, their balance, and their active rewards — the same data returned by a [CardAcquisition member identification](./loyalty-identify-member.md).
 
 1. Send a Terminal API request with the following `MessageHeader` fields:
 
@@ -199,7 +204,7 @@ Use this mode when the POS already has the shopper's identifier on file and you 
        "BalanceInquiryRequest": {
          "LoyaltyAccountReq": {
            "LoyaltyAccountID": {
-             "EntryMode": "File",
+             "EntryMode": ["File"],
              "IdentificationType": "PhoneNumber",
              "LoyaltyID": "555-867-5309"
            }
@@ -219,7 +224,7 @@ When the lookup succeeds, your integration receives:
 - **`LoyaltyAccountStatus.LoyaltyAccount.LoyaltyAccountID.LoyaltyID`** — the **resolved member ID** (not the original phone number or account number). Cache this and use it for subsequent loyalty requests.
 - **`LoyaltyAccountStatus.LoyaltyAccount.LoyaltyAccountID.IdentificationType`** — flips to `PAN` to reflect the resolved member ID.
 - **`LoyaltyAccountStatus.LoyaltyAccount.LoyaltyBrand`** — the loyalty program (e.g. `K-Club`).
-- **`LoyaltyAccountStatus.LoyaltyAccount.CurrentBalance`** — the member's available point balance.
+- **`LoyaltyAccountStatus.CurrentBalance`** — the member's available point balance (`LoyaltyUnit` is `Point`).
 - **`Response.AdditionalResponse`** — base64-encoded JSON containing the member's active rewards. Decode and parse to obtain a `rewards` array (each entry has `rewardRef`, `type`, `name`, `expirationDate`) and a `rewardCount`. Use these to show the member's available rewards at the register; rewards and coupons are applied to the sale via a [rebate](./loyalty-apply-rebates.md).
 
   Example response:
@@ -244,14 +249,15 @@ When the lookup succeeds, your integration receives:
         "LoyaltyAccountStatus": {
           "LoyaltyAccount": {
             "LoyaltyAccountID": {
-              "EntryMode": "File",
+              "EntryMode": ["File"],
               "IdentificationType": "PAN",
               "IdentificationSupport": "NoCard",
               "LoyaltyID": "98234"
             },
-            "LoyaltyBrand": "K-Club",
-            "CurrentBalance": 1240
-          }
+            "LoyaltyBrand": "K-Club"
+          },
+          "CurrentBalance": 1240,
+          "LoyaltyUnit": "Point"
         }
       }
     }
