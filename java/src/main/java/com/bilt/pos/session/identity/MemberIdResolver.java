@@ -43,6 +43,9 @@ public final class MemberIdResolver {
 
   @Override
   public boolean equals(Object other) {
+    if (this == other) {
+      return true;
+    }
     if (!(other instanceof MemberIdResolver)) {
       return false;
     }

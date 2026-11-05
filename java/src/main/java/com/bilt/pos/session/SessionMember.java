@@ -228,7 +228,7 @@ final class SessionMember {
 
   private void resolve(Member pending) {
     // superseded before the lookup began — nothing to look up
-    if (member != pending || ended.getAsBoolean()) {
+    if (member != pending) {
       return;
     }
     Member outcome;

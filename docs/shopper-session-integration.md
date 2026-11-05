@@ -211,10 +211,13 @@ Currency is set once on the session; `BasketItem` has no currency of its own. Mu
 A member can be attached at any time, before or after items are scanned, and replaced or removed later. `session.member(...)` takes one of three forms:
 
 ```java
-session.member(Member.id("mbr_8f2a"));                               // a known already-resolved loyalty member id: attached immediately
-session.member(Member.idResolver().lookup(LookupType.PHONE, "+12015550123"));           // resolved in the background
+// An already-resolved loyalty member id: attached immediately
+session.member(Member.id("mbr_8f2a"));
+// Resolved in the background
+session.member(Member.idResolver().lookup(LookupType.PHONE, "+12015550123"));
 session.member(Member.idResolver().lookup(LookupType.ACCOUNT_NUMBER, "4823"));
-session.member(null);                                                // signs the member out
+// Signs the member out
+session.member(null);
 ```
 
 - `Member.id(memberId)` attaches the already-resolved loyalty member id immediately as FOUND. For an enterprise loyalty program, this is the same id used with that program's API. On terminal sessions a background `BalanceInquiry` sends `AccountNumber` + `File`; a FOUND reply upgrades the member with balance, brand and rewards. NOT_FOUND or SUSPENDED leaves it attached and reports `DECLINED` through `onBackgroundError`; cancellation leaves it unchanged. Local sessions send nothing.
@@ -226,7 +229,7 @@ session.member(null);                                                // signs th
 A pending member resolves in the background, on the session's operation lane, so it never blocks the register. It runs in order with other session work: a `settle()` executed after attaching a member waits for the lookup.
 
 - **Terminal session:** resolved with a `BalanceInquiry` through the terminal, always `Keyed`: PHONE → PhoneNumber; EMAIL and ACCOUNT_NUMBER → AccountNumber. A lookup that finds nobody clears the pending member; a failed lookup reports through `onBackgroundError` and leaves it pending. `identifyMember(pendingMember)` uses the same lookup and returns a `SessionResult`.
-- **Local session:** there is no resolution yet, so a pending member stays pending. Pass `Member.id(...)` when the POS already knows the already-resolved loyalty member id.
+- **Local session:** there is no resolution yet, so a pending member stays pending. Pass `Member.id(...)` when the POS already has the member's loyalty id.
 
 Until a member resolves, the visit is treated as a guest's. The last member attached wins, so a late lookup never overwrites a newer choice.
 

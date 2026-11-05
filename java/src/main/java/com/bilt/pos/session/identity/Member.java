@@ -18,18 +18,21 @@ import java.util.Objects;
  * The member attached to a shopper session, as the POS provides it or as identification resolved
  * it.
  *
- * <p>A member is in one of two states. <em>Resolved</em>: the already-resolved loyalty member id is
- * known — {@link #id(String)} when the POS already has it, or what an identification reported
- * ({@link #resolved(IdentifyResult)}), which additionally carries the loyalty brand, rewards, and
- * point balance the terminal returned. <em>Pending resolution</em>: the POS has an identifier the
- * shopper is known by — an account id, phone number, email, or a retailer-specific value — and the
- * session resolves it in the background once the member is attached:
+ * <p>A member is in one of two states. <em>Resolved</em>: the loyalty member id is known — {@link
+ * #id(String)} when the POS already has it, or what an identification reported ({@link
+ * #resolved(IdentifyResult)}), which additionally carries the loyalty brand, rewards, and point
+ * balance the terminal returned. <em>Pending resolution</em>: the POS has an identifier the shopper
+ * is known by — an account id, phone number, email, or a retailer-specific value — and the session
+ * resolves it in the background once the member is attached:
  *
  * <pre>{@code
- * session.member(Member.id("mbr_8f2a"));                              // attaches immediately
- * session.member(Member.idResolver().lookup(LookupType.PHONE, "+12015550123"));          // resolved in the background
+ * // Attaches immediately
+ * session.member(Member.id("mbr_8f2a"));
+ * // Resolved in the background
+ * session.member(Member.idResolver().lookup(LookupType.PHONE, "+12015550123"));
  * session.member(Member.idResolver().lookup(LookupType.ACCOUNT_NUMBER, "4823"));
- * session.member(null);                                               // signed out
+ * // Signed out
+ * session.member(null);
  * }</pre>
  *
  * <p>Immutable, with value semantics. {@link #toString()} masks every lookup identifier.
@@ -109,14 +112,13 @@ public final class Member {
   }
 
   /**
-   * {@code true} once the already-resolved loyalty member id is known; {@code false} while a lookup
-   * is outstanding.
+   * {@code true} once the loyalty member id is known; {@code false} while a lookup is outstanding.
    */
   public boolean isResolved() {
     return resolver == null;
   }
 
-  /** The already-resolved loyalty member id, or {@code null} while pending resolution. */
+  /** The loyalty member id, or {@code null} while pending. */
   public String memberId() {
     return memberId;
   }

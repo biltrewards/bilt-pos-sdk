@@ -369,7 +369,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       throw new SessionException(
           new SessionError(
               SessionErrorCode.DECLINED,
-              "resolved member enrichment returned " + result.getStatus()));
+              "the terminal did not confirm the attached loyalty member id: "
+                  + result.getStatus()));
     }
     return attached;
   }

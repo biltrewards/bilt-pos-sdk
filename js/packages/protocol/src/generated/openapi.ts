@@ -1147,8 +1147,8 @@ export interface components {
         };
         /**
          * @description The member attached to a visit, mirroring the Java `Member`. `resolved` is `true` once the
-         *     already-resolved loyalty member id is known; a resolved member found by the terminal also carries the loyalty
-         *     brand, rewards and point balance it reported.
+         *     loyalty member id is known; a resolved member found by the terminal also carries the
+         *     loyalty brand, rewards and point balance it reported.
          */
         Member: {
             resolved: boolean;
