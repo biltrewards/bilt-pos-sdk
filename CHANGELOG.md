@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.0]
+
+### Changed
+
+- The settlement card charge now sends Nexo `PaymentTransaction.TransactionConditions.LoyaltyHandling`: `Forbidden` when `SettlementOptions.disablePoints` and `disableAward` are both set, `Processed` when `disablePoints` is set or a point redemption ran earlier in the settlement, and nothing otherwise. `Processed` stops the terminal offering Bilt hosted checkout; `Forbidden` also stops the automatic earn.
+
 ## [0.41.0]
 
 ### Fixed

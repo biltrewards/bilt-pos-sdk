@@ -3,8 +3,10 @@ package com.bilt.pos.session;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
+import com.bilt.pos.nexo.model.LoyaltyHandlingEnum;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
+import com.bilt.pos.nexo.model.TransactionConditions;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketItem;
@@ -4467,5 +4469,69 @@ class TerminalShopperSessionPaymentTest {
             .getOriginalPOITransaction()
             .getPoiTransactionID()
             .getTransactionID());
+  }
+
+  // ─── Card payment LoyaltyHandling ───
+
+  private TransactionConditions cardPaymentConditions() throws Exception {
+    List<SaleToPOIRequest> payments = new ArrayList<>();
+    for (SaleToPOIRequest request : drainRequests()) {
+      if (request.getPaymentRequest() != null) {
+        payments.add(request);
+      }
+    }
+    assertEquals(1, payments.size(), "expected exactly one card payment");
+    return payments.get(0).getPaymentRequest().getPaymentTransaction().getTransactionConditions();
+  }
+
+  @Test
+  void cardPaymentOmitsLoyaltyHandlingByDefault() throws Exception {
+    addHundredDollarItem();
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+
+    session.settle().get();
+
+    assertNull(cardPaymentConditions(), "no TransactionConditions unless loyalty is restricted");
+  }
+
+  @Test
+  void cardPaymentIsProcessedAfterAPointRedemption() throws Exception {
+    identifyMember();
+    addHundredDollarItem();
+    server.enqueue(new MockResponse().setBody(REBATE_OK));
+    server.enqueue(new MockResponse().setBody(REDEEM_OK));
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 85.00)));
+    server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+    session.settle().get();
+
+    assertEquals(LoyaltyHandlingEnum.PROCESSED, cardPaymentConditions().getLoyaltyHandling());
+  }
+
+  @Test
+  void cardPaymentIsProcessedWhenPointsAreDisabled() throws Exception {
+    identifyMember();
+    addHundredDollarItem();
+    server.enqueue(new MockResponse().setBody(REBATE_OK));
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 90.00)));
+    server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+    session.settle(SettlementOptions.builder().disablePoints(true).build()).get();
+
+    assertEquals(LoyaltyHandlingEnum.PROCESSED, cardPaymentConditions().getLoyaltyHandling());
+  }
+
+  @Test
+  void cardPaymentForbidsLoyaltyWhenPointsAndAwardAreDisabled() throws Exception {
+    identifyMember();
+    addHundredDollarItem();
+    server.enqueue(new MockResponse().setBody(REBATE_OK));
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 90.00)));
+
+    session
+        .settle(SettlementOptions.builder().disablePoints(true).disableAward(true).build())
+        .get();
+
+    assertEquals(LoyaltyHandlingEnum.FORBIDDEN, cardPaymentConditions().getLoyaltyHandling());
   }
 }

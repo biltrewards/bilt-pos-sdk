@@ -217,14 +217,22 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="isDisablePoints()">
 <h3>isDisablePoints</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">isDisablePoints</span>()</div>
-<div class="block">Whether point/reward redemption is disabled.</div>
+<div class="block">Whether point/reward redemption is disabled.
+
+ <p>Also sets the card Payment's <code>TransactionConditions.LoyaltyHandling</code>: <code>
+ Processed</code> (no hosted checkout, points still earned), or <code>Forbidden</code> together with <a href="#isDisableAward()"><code>isDisableAward()</code></a>. A point redemption earlier in the settlement also sends <code>Processed</code>;
+ otherwise the field is absent.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="isDisableAward()">
 <h3>isDisableAward</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">isDisableAward</span>()</div>
-<div class="block">Whether the post-payment loyalty award is disabled.</div>
+<div class="block">Whether the post-payment loyalty award is disabled.
+
+ <p>Combined with <a href="#isDisablePoints()"><code>isDisablePoints()</code></a>, the card Payment is sent with <code>
+ TransactionConditions.LoyaltyHandling=Forbidden</code>: no hosted checkout and no automatic earn.
+ Alone it leaves <code>LoyaltyHandling</code> unchanged.</div>
 </section>
 </li>
 <li>
