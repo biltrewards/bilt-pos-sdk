@@ -459,6 +459,11 @@ class WidgetSessionTest {
 
     session.end().executeSync();
     assertTrue(widget.detached.await(5, TimeUnit.SECONDS));
+    // The host closes its client just after detach returns, so wait for it.
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+    while (widget.host.platformClient() != null && System.nanoTime() < deadline) {
+      Thread.sleep(10);
+    }
     assertNull(widget.host.platformClient(), "closed with the session");
   }
 
