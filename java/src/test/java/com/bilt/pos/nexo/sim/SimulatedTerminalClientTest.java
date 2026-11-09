@@ -36,6 +36,32 @@ class SimulatedTerminalClientTest {
       new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
   @Test
+  void resolvedMemberIdWithFileEntryModeReturnsItsBalanceAndRewards() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    var response =
+        terminal
+            .request(
+                request(
+                    "BalanceInquiry",
+                    "resolved",
+                    "{\"BalanceInquiryRequest\":{\"LoyaltyAccountReq\":{\"LoyaltyAccountID\":{"
+                        + "\"IdentificationType\":\"AccountNumber\",\"EntryMode\":[\"File\"],"
+                        + "\"LoyaltyID\":\"mbr_sim_1\"}}}}"))
+            .getSaleToPOIResponse()
+            .getBalanceInquiryResponse();
+    assertEquals("Success", response.getResponse().getResult().toValue());
+    assertEquals(
+        "mbr_sim_1",
+        response
+            .getLoyaltyAccountStatus()
+            .getLoyaltyAccount()
+            .getLoyaltyAccountID()
+            .getLoyaltyID());
+    assertEquals(12000.0, response.getLoyaltyAccountStatus().getCurrentBalance());
+    assertNotNull(response.getResponse().getAdditionalResponse());
+  }
+
+  @Test
   void recordsPaymentsAndResolvesThemByServiceId() throws Exception {
     SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
 

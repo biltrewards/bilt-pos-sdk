@@ -118,14 +118,10 @@ public interface TerminalShopperSession extends ShopperSession {
 
   /**
    * POS-driven member lookup by an identifier on file (Nexo {@code BalanceInquiry}); no terminal
-   * prompt. Takes a member pending resolution — {@code Member.idResolver().phone("...")} or {@code
-   * .accountId("...")}, optionally {@code .keyedByCashier()} — and delivers the outcome like {@link
-   * #identifyMember(IdentifyOptions)} does: a found member attaches to the session, not found and
-   * suspended detach any previous one. The same lookup runs in the background, without a result to
-   * observe, when such a member is attached through {@link #member(Member)}.
-   *
-   * <p>The terminal resolves account ids and phone numbers only; an email or custom identifier
-   * fails with {@link SessionErrorCode#UNSUPPORTED}.
+   * prompt. Takes a pending member created with {@code Member.idResolver().lookup(type, value)}.
+   * PHONE uses PhoneNumber; EMAIL and ACCOUNT_NUMBER use AccountNumber. Entry mode is always Keyed.
+   * A found member attaches; not found and suspended detach any previous member. The same lookup
+   * runs in the background when a pending member is attached through {@link #member(Member)}.
    *
    * @throws IllegalArgumentException for a member that is already resolved — attach it with {@link
    *     #member(Member)} instead

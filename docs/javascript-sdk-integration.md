@@ -302,7 +302,7 @@ export function watchBasket(session: ShopperSession): () => void {
 
 ## Identify the member
 
-A member attaches with an `id` the register knows, or with a **resolver**: an identifier on file (`PHONE`, `ACCOUNT_ID`, `EMAIL`, or a retailer `CUSTOM` type) that the host looks up in the background, on the terminal for a terminal session. Until the lookup completes the member is pending and the visit is a guest's. `keyedByCashier` says the cashier typed it (the terminal lookup then sends `EntryMode=Keyed`). In events and responses the value comes back masked.
+A member attaches with the already-resolved loyalty member `id`, or with a **resolver**: a customer-known identifier (`PHONE`, `EMAIL`, or `ACCOUNT_NUMBER`, including usernames, loyalty cards and retailer account numbers). A resolved id attaches immediately as FOUND. On terminal sessions the host additionally sends AccountNumber/File in a background BalanceInquiry and upgrades the member with balance, brand and rewards on reply; NOT_FOUND or SUSPENDED leaves it attached and reports a DECLINED background error, and cancellation leaves it unchanged. Local sessions send nothing for a resolved id. For an enterprise loyalty program this is the same id used with that program's API. Lookup requests always use Keyed entry mode: PHONE → PhoneNumber, otherwise AccountNumber. Pending members are guests until resolved. Every lookup value comes back masked in events and responses.
 
 ```ts
 export async function knownShopper(session: TerminalShopperSession): Promise<void> {
@@ -310,7 +310,7 @@ export async function knownShopper(session: TerminalShopperSession): Promise<voi
   await session.member.set({ id: 'mbr_8f2a' });
   // A resolver attaches as pending; the host looks it up and announces the result.
   await session.member.set({
-    resolver: { type: 'PHONE', value: '+12015550123', keyedByCashier: true },
+    resolver: { type: 'PHONE', value: '+12015550123' },
   });
   // Sign out.
   await session.member.clear();
@@ -340,11 +340,11 @@ export async function identifyOnTerminal(session: TerminalShopperSession): Promi
 }
 
 export function lookupWithoutPrompt(session: TerminalShopperSession): Promise<IdentifyResult> {
-  return session.identifyMember({ resolver: { type: 'ACCOUNT_ID', value: 'ACC-77' } });
+  return session.identifyMember({ resolver: { type: 'ACCOUNT_NUMBER', value: 'ACC-77' } });
 }
 ```
 
-The prompt-less lookup takes account ids and phone numbers; an email or custom identifier rejects with `UNSUPPORTED`. `identifyMember()` is available after a failed settlement too, so a declined guest checkout can attach a member and retry with loyalty.
+The prompt-less lookup accepts all three lookup types with the mapping above. `identifyMember()` is available after a failed settlement too, so a declined guest checkout can attach a member and retry with loyalty.
 
 ---
 
@@ -589,7 +589,7 @@ Every rejected operation rejects with a `SessionError`, the JavaScript form of t
 | `ABANDONED` | The register answered `ABANDON`; `abandonedSettlement` carries the record. |
 | `LOYALTY_UNAVAILABLE`, `STORED_VALUE_INSUFFICIENT` | The loyalty host is down, or the gift card cannot cover its share. |
 | `INVALID_STATE` | A guard: a mutation while money moves, `end()` with money unresolved, `settle()` on a consumed basket, a terminal that already has a session. |
-| `UNSUPPORTED` | An email or custom resolver in a prompt-less lookup; a provider without the stored value operation. |
+| `UNSUPPORTED` | A provider without the requested operation, such as stored value. |
 | `TERMINAL_ERROR`, `UNKNOWN` | The terminal refused (see `nexoErrorCondition`) or failed unexpectedly. |
 | `VALIDATION`, `NOT_FOUND`, `UNAUTHORIZED` | The host rejected the request: a malformed body, an unknown session, an origin the bridge does not allow. A terminal session on a host with no terminal configured is refused with `UNSUPPORTED`. |
 

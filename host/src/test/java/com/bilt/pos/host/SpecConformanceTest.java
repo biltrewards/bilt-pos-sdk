@@ -448,16 +448,22 @@ class SpecConformanceTest {
         .expect(200);
     client.post(base + "/basket/clear", "{}").expect(200);
 
-    JsonNode pending =
-        client
-            .put(
-                base + "/member",
-                json(
-                    "{'resolver':{'type':'CUSTOM','customType':'loyalty-card','value':'ABC12345',"
-                        + "'keyedByCashier':true}}"))
-            .expect(200)
-            .body;
-    assertEquals("****2345", pending.path("resolver").path("value").asText());
+    for (String type : List.of("PHONE", "EMAIL", "ACCOUNT_NUMBER")) {
+      JsonNode pending =
+          client
+              .put(
+                  base + "/member", json("{'resolver':{'type':'" + type + "','value':'ABC12345'}}"))
+              .expect(200)
+              .body;
+      assertEquals(type, pending.path("resolver").path("type").asText());
+      assertEquals("****2345", pending.path("resolver").path("value").asText());
+      assertEquals(2, pending.path("resolver").size());
+    }
+    client.put(base + "/member", json("{'resolver':{'value':'ABC12345'}}")).expect(400);
+    client.put(base + "/member", json("{'resolver':{'type':'PHONE','value':''}}")).expect(400);
+    client
+        .put(base + "/member", json("{'resolver':{'type':'UNKNOWN','value':'ABC12345'}}"))
+        .expect(400);
     client
         .put(base + "/member", json("{'id':'1','resolver':{'type':'PHONE','value':'1'}}"))
         .expect(400);

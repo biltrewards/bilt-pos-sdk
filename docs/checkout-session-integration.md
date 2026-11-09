@@ -430,27 +430,29 @@ session.identifyMember()                     // terminal prompts the customer
 
 Identification is optional — the flow works for guests. Outcomes that simply leave the checkout without a member (`NOT_FOUND`, `SUSPENDED`, `CANCELLED`) are delivered to `onSuccess` with the corresponding `IdentifyStatus`; `onError` fires only for real failures.
 
-For a POS-driven lookup without a terminal prompt (identifier already on file), hand the session a member pending resolution. The terminal resolves account ids and phone numbers; `keyedByCashier()` marks an identifier the cashier typed rather than one loaded from a profile:
+For a POS-driven lookup without a terminal prompt (identifier already on file), hand the session a member pending resolution. All lookups use `Keyed` entry mode: PHONE → PhoneNumber; EMAIL and ACCOUNT_NUMBER → AccountNumber. ACCOUNT_NUMBER covers any other customer-known handle, including usernames and loyalty card numbers.
 
 ```java
-session.identifyMember(Member.idResolver().phone("555-867-5309")).execute();
-session.identifyMember(Member.idResolver().accountId("98234").keyedByCashier()).execute();
+session.identifyMember(Member.idResolver().lookup(LookupType.PHONE, "555-867-5309")).execute();
+session.identifyMember(Member.idResolver().lookup(LookupType.ACCOUNT_NUMBER, "98234")).execute();
 ```
 
 ### POS-provided member
 
-When the register already knows who the shopper is, attach the member directly — at any time, before or after scanning, on a terminal session or a local one. A known Bilt member id attaches immediately with no roundtrip; a member pending resolution attaches as pending and is resolved in the background on the session's operation lane (on a terminal session through the same `BalanceInquiry` as above), so a `settle()` executed afterwards charges against the resolved member. Until it resolves, the visit is a guest's. `null` signs the shopper out.
+When the register already knows who the shopper is, attach the member directly — at any time, before or after scanning, on a terminal session or a local one. The already-resolved loyalty member id attaches immediately as FOUND; on a terminal session a background `BalanceInquiry` sends `AccountNumber` + `File` and upgrades it with balance, brand and rewards on a FOUND reply. A NOT_FOUND or SUSPENDED reply leaves it attached and reports `DECLINED` through `onBackgroundError`; cancellation leaves it unchanged. Local sessions send nothing for a resolved id. For an enterprise loyalty program this is the id used with that program's API.
+
+A pending member is resolved in the background on the session's operation lane (on a terminal session through the same `BalanceInquiry` as above), so a `settle()` executed afterwards charges against the resolved member. Until it resolves, the visit is a guest's. `null` signs the shopper out.
 
 ```java
 session.member(Member.id("mbr_8f2a"));                          // attaches immediately
-session.member(Member.idResolver().phone("+12015550123"));      // resolved in the background
+session.member(Member.idResolver().lookup(LookupType.PHONE, "+12015550123"));      // resolved in the background
 session.member(null);                                           // signed out
 
 Member current = session.member();                              // resolved or pending, null when none
 if (current != null && current.isResolved()) { register.showMember(current.memberId()); }
 ```
 
-Every change of the member — attached by the register, found by a terminal prompt or lookup, resolved in the background, or cleared — is announced through the builder's `onMemberChanged(member -> ...)` handler on the callback executor, with `null` for a sign-out. A lookup that finds nobody clears the member; one that fails reports through `onBackgroundError` and leaves the member pending. Whatever member is attached last wins, so a stale lookup never overwrites a member set after it. Email and custom identifiers cannot be resolved on the terminal today and stay pending (`SessionErrorCode.UNSUPPORTED` through `onBackgroundError`).
+Every change of the member — attached by the register, found by a terminal prompt or lookup, resolved in the background, or cleared — is announced through the builder's `onMemberChanged(member -> ...)` handler on the callback executor, with `null` for a sign-out. A lookup that finds nobody clears the member; one that fails reports through `onBackgroundError` and leaves the member pending. Whatever member is attached last wins, so a stale lookup never overwrites a member set after it.
 
 ---
 
@@ -838,8 +840,8 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | End the session (terminal discards its data) | `session.end()` |
 | Abandon an unrecoverable session | `session.forceEnd(reason)` |
 | Prompt customer to identify | `session.identifyMember()` |
-| POS-driven member lookup (no prompt) | `session.identifyMember(Member.idResolver().phone("..."))` |
-| Attach a member the register knows | `session.member(Member.id("..."))`, `session.member(Member.idResolver().accountId("..."))`, `session.member(null)` |
+| POS-driven member lookup (no prompt) | `session.identifyMember(Member.idResolver().lookup(LookupType.PHONE, "..."))` |
+| Attach a member the register knows | `session.member(Member.id("..."))`, `session.member(Member.idResolver().lookup(LookupType.ACCOUNT_NUMBER, "..."))`, `session.member(null)` |
 | Current member (resolved or pending) | `session.member()` |
 | Add / remove / update item | `session.basket().addItem(item)`, `.removeItemBySku(sku)`, `.updateItemQuantityBySku(sku, qty)` |
 | Apply or clear line discounts | `session.basket().setDiscountsBySku(sku, discounts)` / `.setDiscounts(itemId, List.of())` |

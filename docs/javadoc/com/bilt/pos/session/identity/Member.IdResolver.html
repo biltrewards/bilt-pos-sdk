@@ -112,25 +112,10 @@ loadScripts(document, 'script');</script>
 <div class="table-header col-second">Method</div>
 <div class="table-header col-last">Description</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Member.html" title="class in com.bilt.pos.session.identity">Member</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#accountId(java.lang.String)" class="member-name-link">accountId</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;accountId)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">A member known by a loyalty account id.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Member.html" title="class in com.bilt.pos.session.identity">Member</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#custom(java.lang.String,java.lang.String)" class="member-name-link">custom</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;type,
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#lookup(com.bilt.pos.session.identity.LookupType,java.lang.String)" class="member-name-link">lookup</a><wbr>(<a href="LookupType.html" title="enum class in com.bilt.pos.session.identity">LookupType</a>&nbsp;type,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;value)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">A member known by a retailer-specific identifier, e.g.</div>
-</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Member.html" title="class in com.bilt.pos.session.identity">Member</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#email(java.lang.String)" class="member-name-link">email</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;email)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">A member known by an email address.</div>
-</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Member.html" title="class in com.bilt.pos.session.identity">Member</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#phone(java.lang.String)" class="member-name-link">phone</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;phoneNumber)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">A member known by a phone number.</div>
+<div class="block">A member known by a customer identifier; terminal lookups use Keyed entry mode.</div>
 </div>
 </div>
 </div>
@@ -150,33 +135,11 @@ loadScripts(document, 'script');</script>
 <h2>Method Details</h2>
 <ul class="member-list">
 <li>
-<section class="detail" id="accountId(java.lang.String)">
-<h3>accountId</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Member.html" title="class in com.bilt.pos.session.identity">Member</a></span>&nbsp;<span class="element-name">accountId</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;accountId)</span></div>
-<div class="block">A member known by a loyalty account id.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="phone(java.lang.String)">
-<h3>phone</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Member.html" title="class in com.bilt.pos.session.identity">Member</a></span>&nbsp;<span class="element-name">phone</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;phoneNumber)</span></div>
-<div class="block">A member known by a phone number.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="email(java.lang.String)">
-<h3>email</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Member.html" title="class in com.bilt.pos.session.identity">Member</a></span>&nbsp;<span class="element-name">email</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;email)</span></div>
-<div class="block">A member known by an email address.</div>
-</section>
-</li>
-<li>
-<section class="detail" id="custom(java.lang.String,java.lang.String)">
-<h3>custom</h3>
-<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Member.html" title="class in com.bilt.pos.session.identity">Member</a></span>&nbsp;<span class="element-name">custom</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;type,
+<section class="detail" id="lookup(com.bilt.pos.session.identity.LookupType,java.lang.String)">
+<h3>lookup</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Member.html" title="class in com.bilt.pos.session.identity">Member</a></span>&nbsp;<span class="element-name">lookup</span><wbr><span class="parameters">(<a href="LookupType.html" title="enum class in com.bilt.pos.session.identity">LookupType</a>&nbsp;type,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;value)</span></div>
-<div class="block">A member known by a retailer-specific identifier, e.g. <code>custom("retailer-card",
- "99-1234")</code>; <code>type</code> names the identifier kind the resolving platform understands.</div>
+<div class="block">A member known by a customer identifier; terminal lookups use Keyed entry mode.</div>
 </section>
 </li>
 </ul>

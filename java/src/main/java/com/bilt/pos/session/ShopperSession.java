@@ -116,16 +116,18 @@ public interface ShopperSession extends AutoCloseable {
    * moving money: those throw {@link IllegalStateException}, so the member a settlement charges is
    * the one it started with.
    *
-   * <p>A resolved member ({@link Member#id(String)}) attaches immediately with no roundtrip. A
-   * member pending resolution ({@link Member#idResolver()}) attaches as pending and is resolved in
-   * the background on the session's operation lane: on a terminal session by looking the identifier
-   * up on the terminal (Nexo {@code BalanceInquiry}; account id and phone number only — email and
-   * custom identifiers cannot be resolved there, report through {@code onBackgroundError}, and stay
-   * pending), on a local session not at all yet (the member stays pending). Until a pending member
-   * resolves, the visit is treated as a guest's: settlement does not send a member id and {@link
-   * #getMember()} is {@code null}. A lookup that finds nobody clears the member; a lookup that
-   * fails reports through {@code onBackgroundError} and leaves the member pending. Whatever member
-   * is attached last wins, so a stale lookup never overwrites a member set after it.
+   * <p>The already-resolved loyalty member id ({@link Member#id(String)}) attaches immediately as
+   * FOUND. On terminal sessions it is also sent as AccountNumber/File in a background
+   * BalanceInquiry; a found reply upgrades the member with balance, brand and rewards. Not found or
+   * suspended leaves it attached and reports through {@code onBackgroundError}; cancellation leaves
+   * it unchanged. Local sessions send nothing for a resolved id.
+   *
+   * <p>A pending member ({@link Member#idResolver()}) is looked up in the background on the
+   * operation lane. Terminal lookups use Keyed entry mode: PHONE maps to PhoneNumber, EMAIL and
+   * ACCOUNT_NUMBER to AccountNumber. A local session uses its configured resolver, if any. Until
+   * resolved, a pending member is a guest. Not found clears a pending member; errors leave it
+   * pending and report through {@code onBackgroundError}. A stale reply never replaces a newer
+   * attachment.
    *
    * <p>Every change to the member — from this method, a terminal identification, or a completed
    * lookup — is announced through the builder's {@code onMemberChanged} handler.

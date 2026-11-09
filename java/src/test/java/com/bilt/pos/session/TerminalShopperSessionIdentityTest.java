@@ -12,6 +12,7 @@ import com.bilt.pos.session.identity.ForceEntryMode;
 import com.bilt.pos.session.identity.IdentifyOptions;
 import com.bilt.pos.session.identity.IdentifyResult;
 import com.bilt.pos.session.identity.IdentifyStatus;
+import com.bilt.pos.session.identity.LookupType;
 import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.session.identity.RewardType;
 import com.bilt.pos.session.identity.ShopperContext;
@@ -493,7 +494,10 @@ class TerminalShopperSessionIdentityTest {
     SessionException e =
         assertThrows(
             SessionException.class,
-            () -> session.identifyMember(Member.idResolver().phone("555-867-5309")).get());
+            () ->
+                session
+                    .identifyMember(Member.idResolver().lookup(LookupType.PHONE, "555-867-5309"))
+                    .get());
     assertTrue(
         e.getError().getMessage().startsWith("BalanceInquiry"),
         "the error must name the operation that failed: " + e.getError().getMessage());
@@ -514,7 +518,8 @@ class TerminalShopperSessionIdentityTest {
                     + "\"LoyaltyAccountID\":{\"IdentificationType\":\"PAN\",\"LoyaltyID\":\"98234\"},"
                     + "\"LoyaltyBrand\":\"K-Club\"},\"CurrentBalance\":1240}}}}"));
 
-    IdentifyResult result = session.identifyMember(Member.idResolver().phone("555-867-5309")).get();
+    IdentifyResult result =
+        session.identifyMember(Member.idResolver().lookup(LookupType.PHONE, "555-867-5309")).get();
 
     assertEquals(IdentifyStatus.FOUND, result.getStatus());
     assertEquals("98234", result.getMemberId());
@@ -539,7 +544,7 @@ class TerminalShopperSessionIdentityTest {
             .getIdentificationType()
             .toValue());
     assertEquals(
-        "File",
+        "Keyed",
         sent.getBalanceInquiryRequest()
             .getLoyaltyAccountReq()
             .getLoyaltyAccountID()
@@ -548,14 +553,16 @@ class TerminalShopperSessionIdentityTest {
   }
 
   @Test
-  void keyedByCashierSetsKeyedEntryMode() throws Exception {
+  void accountNumberUsesKeyedEntryMode() throws Exception {
     server.enqueue(
         new MockResponse()
             .setBody(
                 "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{"
                     + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
 
-    session.identifyMember(Member.idResolver().accountId("98234").keyedByCashier()).executeSync();
+    session
+        .identifyMember(Member.idResolver().lookup(LookupType.ACCOUNT_NUMBER, "98234"))
+        .executeSync();
 
     SaleToPOIRequest sent = recordedRequest();
     assertEquals(
@@ -581,32 +588,70 @@ class TerminalShopperSessionIdentityTest {
   }
 
   @Test
-  void identifyMemberByEmailIsUnsupportedOnTheTerminal() {
-    SessionException e =
-        assertThrows(
-            SessionException.class,
-            () -> session.identifyMember(Member.idResolver().email("shopper@example.com")).get());
-    assertEquals(SessionErrorCode.UNSUPPORTED, e.getError().getCode());
-    assertEquals(1, server.getRequestCount(), "nothing but the start signal reached the terminal");
+  void identifyMemberByEmailUsesAccountNumberKeyed() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
+    assertEquals(
+        IdentifyStatus.NOT_FOUND,
+        session
+            .identifyMember(Member.idResolver().lookup(LookupType.EMAIL, "shopper@example.com"))
+            .get()
+            .getStatus());
+    var account =
+        recordedRequest().getBalanceInquiryRequest().getLoyaltyAccountReq().getLoyaltyAccountID();
+    assertEquals("AccountNumber", account.getIdentificationType().toValue());
+    assertEquals("Keyed", account.getEntryMode()[0].toValue());
+    assertEquals("shopper@example.com", account.getLoyaltyID());
   }
 
   // ─── POS-provided member ───
 
   @Test
-  void resolvedMemberAttachesImmediatelyWithoutARoundtrip() {
-    session.member(Member.id("mbr_8f2a"));
+  void resolvedMemberAttachesImmediatelyAndUpgradesOnReply() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{"
+                    + "\"Response\":{\"Result\":\"Success\",\"AdditionalResponse\":\""
+                    + REWARDS_B64
+                    + "\"},"
+                    + "\"LoyaltyAccountStatus\":{\"LoyaltyAccount\":{"
+                    + "\"LoyaltyAccountID\":{\"LoyaltyID\":\"mbr_8f2a\"},"
+                    + "\"LoyaltyBrand\":\"K-Club\"},\"CurrentBalance\":1240}}}}")
+            .setBodyDelay(100, TimeUnit.MILLISECONDS));
+    Member attached = Member.id("mbr_8f2a");
+    session.member(attached);
+    assertSame(attached, session.member());
+    assertEquals(IdentifyStatus.FOUND, session.member().status());
+    var account =
+        recordedRequest().getBalanceInquiryRequest().getLoyaltyAccountReq().getLoyaltyAccountID();
+    assertEquals("mbr_8f2a", account.getLoyaltyID());
+    assertEquals("AccountNumber", account.getIdentificationType().toValue());
+    assertEquals("File", account.getEntryMode()[0].toValue());
+    Member upgraded = awaitResolution();
+    assertEquals(1240, upgraded.pointBalance());
+    assertEquals("K-Club", upgraded.loyaltyBrand());
+    assertEquals(2, upgraded.rewards().size());
+    assertEquals(List.of(attached, upgraded), memberChanges);
+    assertSame(upgraded, session.member());
+    assertTrue(backgroundErrors.isEmpty());
+    assertEquals(2, server.getRequestCount());
+  }
 
-    assertEquals(Member.id("mbr_8f2a"), session.member());
-    assertTrue(session.member().isResolved());
-    assertEquals("mbr_8f2a", session.getMember().getMemberId());
-    assertEquals(List.of(Member.id("mbr_8f2a")), memberChanges);
-    assertEquals(1, server.getRequestCount(), "only the start signal went to the terminal");
-
-    session.member(null);
-    assertNull(session.member());
-    assertNull(session.getMember());
-    assertEquals(2, memberChanges.size());
-    assertNull(memberChanges.get(1));
+  @Test
+  void resolvedMemberNotFoundStaysAttachedAndReportsDeclined() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
+    Member attached = Member.id("missing");
+    session.member(attached);
+    assertEquals(SessionErrorCode.DECLINED, awaitBackgroundError().getCode());
+    assertSame(attached, session.member());
+    assertEquals(IdentifyStatus.FOUND, attached.status());
+    assertEquals(List.of(attached), memberChanges);
   }
 
   @Test
@@ -622,7 +667,7 @@ class TerminalShopperSessionIdentityTest {
                     + "\"LoyaltyAccountID\":{\"IdentificationType\":\"PAN\",\"LoyaltyID\":\"98234\"},"
                     + "\"LoyaltyBrand\":\"K-Club\"},\"CurrentBalance\":1240}}}}"));
 
-    Member pending = Member.idResolver().phone("555-867-5309");
+    Member pending = Member.idResolver().lookup(LookupType.PHONE, "555-867-5309");
     session.member(pending);
 
     assertSame(pending, session.member(), "attached as pending straight away");
@@ -645,7 +690,7 @@ class TerminalShopperSessionIdentityTest {
             .getIdentificationType()
             .toValue());
     assertEquals(
-        "File",
+        "Keyed",
         sent.getBalanceInquiryRequest()
             .getLoyaltyAccountReq()
             .getLoyaltyAccountID()
@@ -665,14 +710,14 @@ class TerminalShopperSessionIdentityTest {
   }
 
   @Test
-  void pendingKeyedAccountIdSendsKeyedEntryMode() throws Exception {
+  void pendingAccountNumberSendsKeyedEntryMode() throws Exception {
     server.enqueue(
         new MockResponse()
             .setBody(
                 "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{"
                     + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotFound\"}}}}"));
 
-    session.member(Member.idResolver().accountId("98234").keyedByCashier());
+    session.member(Member.idResolver().lookup(LookupType.ACCOUNT_NUMBER, "98234"));
 
     SaleToPOIRequest sent = recordedRequest();
     assertEquals(
@@ -699,22 +744,27 @@ class TerminalShopperSessionIdentityTest {
   }
 
   @Test
-  void pendingEmailReportsABackgroundErrorAndStaysPending() throws Exception {
-    Member pending = Member.idResolver().email("shopper@example.com");
+  void pendingEmailTransportFailureReportsBackgroundErrorAndStaysPending() throws Exception {
+    server.enqueue(new MockResponse().setBody("invalid response"));
+    Member pending = Member.idResolver().lookup(LookupType.EMAIL, "shopper@example.com");
     session.member(pending);
-
-    SessionError error = awaitBackgroundError();
-    assertEquals(SessionErrorCode.UNSUPPORTED, error.getCode());
-    assertTrue(error.getMessage().contains("EMAIL"), error.getMessage());
-    assertSame(pending, session.member(), "the member stays pending");
-    assertFalse(session.member().isResolved());
-    assertNull(session.getMember());
-    assertEquals(List.of(pending), memberChanges, "no resolution to announce");
-    assertEquals(1, server.getRequestCount(), "nothing reached the terminal");
+    awaitBackgroundError();
+    assertSame(pending, session.member());
+    assertEquals(List.of(pending), memberChanges);
   }
 
   @Test
   void aMemberAttachedDuringTheLookupIsNotOverwrittenByItsOutcome() throws Exception {
+    assertSupersededMemberIsNotOverwritten(
+        Member.idResolver().lookup(LookupType.PHONE, "555-867-5309"));
+  }
+
+  @Test
+  void aResolvedMemberSupersededDuringEnrichmentIsNotOverwritten() throws Exception {
+    assertSupersededMemberIsNotOverwritten(Member.id("old-resolved"));
+  }
+
+  private void assertSupersededMemberIsNotOverwritten(Member original) throws Exception {
     CountDownLatch lookupOnTheWire = new CountDownLatch(1);
     CountDownLatch release = new CountDownLatch(1);
     server.setDispatcher(
@@ -723,6 +773,11 @@ class TerminalShopperSessionIdentityTest {
           public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
             if (request.getBody().clone().readUtf8().contains("\"AdminRequest\"")) {
               return new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK);
+            }
+            if (request.getBody().clone().readUtf8().contains("mbr_direct")) {
+              return new MockResponse()
+                  .setBody(
+                      "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Cancel\"}}}}");
             }
             lookupOnTheWire.countDown();
             release.await(5, TimeUnit.SECONDS);
@@ -735,7 +790,7 @@ class TerminalShopperSessionIdentityTest {
           }
         });
 
-    session.member(Member.idResolver().phone("555-867-5309"));
+    session.member(original);
     assertTrue(lookupOnTheWire.await(5, TimeUnit.SECONDS));
     session.member(Member.id("mbr_direct"));
     release.countDown();
@@ -747,6 +802,79 @@ class TerminalShopperSessionIdentityTest {
     assertEquals(Member.id("mbr_direct"), session.member(), "latest attached member wins");
     assertEquals(2, memberChanges.size());
     assertEquals(Member.id("mbr_direct"), memberChanges.get(1));
+  }
+
+  @Test
+  void resolvedMemberCancellationLeavesItAttached() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Cancel\"}}}}"));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
+    Member attached = Member.id("cancelled");
+    session.member(attached);
+    session.end().executeSync();
+    assertSame(attached, session.member());
+    assertEquals(List.of(attached), memberChanges);
+    assertTrue(backgroundErrors.isEmpty());
+  }
+
+  @Test
+  void resolvedMemberSuspendedLeavesItAttached() throws Exception {
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotAllowed\"}}}}"));
+    Member attached = Member.id("suspended");
+    session.member(attached);
+    assertEquals(SessionErrorCode.DECLINED, awaitBackgroundError().getCode());
+    assertSame(attached, session.member());
+    assertEquals(List.of(attached), memberChanges);
+  }
+
+  @Test
+  void resolvedMemberMalformedReplyReportsBackgroundError() throws Exception {
+    server.enqueue(new MockResponse().setBody("invalid response"));
+    Member attached = Member.id("malformed");
+    session.member(attached);
+    awaitBackgroundError();
+    assertSame(attached, session.member());
+    assertEquals(List.of(attached), memberChanges);
+  }
+
+  @Test
+  void builderSeedIsEnrichedWithoutAnnouncingInitialAttachment() throws Exception {
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.ADMIN_OK));
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"BalanceInquiryResponse\":{\"Response\":{\"Result\":\"Success\"},"
+                    + "\"LoyaltyAccountStatus\":{\"LoyaltyAccount\":{\"LoyaltyAccountID\":{\"LoyaltyID\":\"seed\"}},"
+                    + "\"CurrentBalance\":42}}}}"));
+    session =
+        TerminalShopperSession.builder()
+            .client(
+                BiltNexoTerminalClient.builder().endpoint(server.url("/nexo").toString()).build())
+            .saleId("POS")
+            .poiId("POI")
+            .currency("USD")
+            .autoDisplay(false)
+            .member(Member.id("seed"))
+            .onMemberChanged(memberChanges::add)
+            .start()
+            .get();
+    recordedRequest(); // start signal
+    var account =
+        recordedRequest().getBalanceInquiryRequest().getLoyaltyAccountReq().getLoyaltyAccountID();
+    assertEquals("seed", account.getLoyaltyID());
+    assertEquals("AccountNumber", account.getIdentificationType().toValue());
+    assertEquals("File", account.getEntryMode()[0].toValue());
+    long deadline = System.currentTimeMillis() + 5000;
+    while (memberChanges.isEmpty() && System.currentTimeMillis() < deadline) {
+      Thread.sleep(10);
+    }
+    assertEquals(1, memberChanges.size());
+    assertEquals(42, memberChanges.get(0).pointBalance());
   }
 
   private Member awaitResolution() throws Exception {

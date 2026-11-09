@@ -486,13 +486,10 @@ extends <a href="ShopperSession.html" title="interface in com.bilt.pos.session">
 <h3>identifyMember</h3>
 <div class="member-signature"><span class="return-type"><a href="SessionResult.html" title="class in com.bilt.pos.session">SessionResult</a>&lt;<a href="identity/IdentifyResult.html" title="class in com.bilt.pos.session.identity">IdentifyResult</a>&gt;</span>&nbsp;<span class="element-name">identifyMember</span><wbr><span class="parameters">(<a href="identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a>&nbsp;pending)</span></div>
 <div class="block">POS-driven member lookup by an identifier on file (Nexo <code>BalanceInquiry</code>); no terminal
- prompt. Takes a member pending resolution — <code>Member.idResolver().phone("...")</code> or <code>
- .accountId("...")</code>, optionally <code>.keyedByCashier()</code> — and delivers the outcome like <a href="#identifyMember(com.bilt.pos.session.identity.IdentifyOptions)"><code>identifyMember(IdentifyOptions)</code></a> does: a found member attaches to the session, not found and
- suspended detach any previous one. The same lookup runs in the background, without a result to
- observe, when such a member is attached through <a href="ShopperSession.html#member(com.bilt.pos.session.identity.Member)"><code>ShopperSession.member(Member)</code></a>.
-
- <p>The terminal resolves account ids and phone numbers only; an email or custom identifier
- fails with <a href="SessionErrorCode.html#UNSUPPORTED"><code>SessionErrorCode.UNSUPPORTED</code></a>.</div>
+ prompt. Takes a pending member created with <code>Member.idResolver().lookup(type, value)</code>.
+ PHONE uses PhoneNumber; EMAIL and ACCOUNT_NUMBER use AccountNumber. Entry mode is always Keyed.
+ A found member attaches; not found and suspended detach any previous member. The same lookup
+ runs in the background when a pending member is attached through <a href="ShopperSession.html#member(com.bilt.pos.session.identity.Member)"><code>ShopperSession.member(Member)</code></a>.</div>
 <dl class="notes">
 <dt>Throws:</dt>
 <dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link">IllegalArgumentException</a></code> - for a member that is already resolved — attach it with <a href="ShopperSession.html#member(com.bilt.pos.session.identity.Member)"><code>ShopperSession.member(Member)</code></a> instead</dd>
