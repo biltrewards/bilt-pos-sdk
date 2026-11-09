@@ -18,7 +18,7 @@ import java.util.Objects;
  * The member attached to a shopper session, as the POS provides it or as identification resolved
  * it.
  *
- * <p>A member is in one of two states. <em>Resolved</em>: the Bilt member id is known — {@link
+ * <p>A member is in one of two states. <em>Resolved</em>: the loyalty member id is known — {@link
  * #id(String)} when the POS already has it, or what an identification reported ({@link
  * #resolved(IdentifyResult)}), which additionally carries the loyalty brand, rewards, and point
  * balance the terminal returned. <em>Pending resolution</em>: the POS has an identifier the shopper
@@ -26,14 +26,16 @@ import java.util.Objects;
  * resolves it in the background once the member is attached:
  *
  * <pre>{@code
- * session.member(Member.id("mbr_8f2a"));                              // attaches immediately
- * session.member(Member.idResolver().phone("+12015550123"));          // resolved in the background
- * session.member(Member.idResolver().accountId("4823").keyedByCashier());
- * session.member(null);                                               // signed out
+ * // Attaches immediately
+ * session.member(Member.id("mbr_8f2a"));
+ * // Resolved in the background
+ * session.member(Member.idResolver().lookup(LookupType.PHONE, "+12015550123"));
+ * session.member(Member.idResolver().lookup(LookupType.ACCOUNT_NUMBER, "4823"));
+ * // Signed out
+ * session.member(null);
  * }</pre>
  *
- * <p>Immutable, with value semantics. {@link #toString()} masks phone numbers, email addresses and
- * custom identifiers.
+ * <p>Immutable, with value semantics. {@link #toString()} masks every lookup identifier.
  */
 public final class Member {
 
@@ -62,7 +64,11 @@ public final class Member {
     this.resolver = resolver;
   }
 
-  /** A member the POS already knows the Bilt member id of. Attaches without any roundtrip. */
+  /**
+   * The already-resolved loyalty member id supplied by the POS. Attaches immediately; terminal
+   * sessions send AccountNumber/File and upgrade it with balance, brand and rewards on reply. For
+   * an enterprise loyalty program, this is the same id used with that program's API.
+   */
   public static Member id(String memberId) {
     Objects.requireNonNull(memberId, "memberId");
     if (memberId.isEmpty()) {
@@ -105,12 +111,14 @@ public final class Member {
     return new Member(null, null, null, 0, null, resolver);
   }
 
-  /** {@code true} once the Bilt member id is known; {@code false} while a lookup is outstanding. */
+  /**
+   * {@code true} once the loyalty member id is known; {@code false} while a lookup is outstanding.
+   */
   public boolean isResolved() {
     return resolver == null;
   }
 
-  /** The Bilt member id, or {@code null} while pending resolution. */
+  /** The loyalty member id, or {@code null} while pending. */
   public String memberId() {
     return memberId;
   }
@@ -138,19 +146,6 @@ public final class Member {
   /** The point balance the terminal reported; {@code 0} when not reported. */
   public int pointBalance() {
     return pointBalance;
-  }
-
-  /**
-   * A copy whose identifier is marked as typed in by the cashier rather than loaded from a profile;
-   * a terminal lookup then sends {@code EntryMode=Keyed}.
-   *
-   * @throws IllegalStateException on a resolved member, which has no identifier to resolve
-   */
-  public Member keyedByCashier() {
-    if (resolver == null) {
-      throw new IllegalStateException("a resolved member has no identifier to mark as keyed");
-    }
-    return pending(resolver.withKeyedByCashier());
   }
 
   @Override
@@ -200,27 +195,9 @@ public final class Member {
 
     private IdResolver() {}
 
-    /** A member known by a loyalty account id. */
-    public Member accountId(String accountId) {
-      return pending(MemberIdResolver.of(MemberIdResolver.Type.ACCOUNT_ID, null, accountId));
-    }
-
-    /** A member known by a phone number. */
-    public Member phone(String phoneNumber) {
-      return pending(MemberIdResolver.of(MemberIdResolver.Type.PHONE, null, phoneNumber));
-    }
-
-    /** A member known by an email address. */
-    public Member email(String email) {
-      return pending(MemberIdResolver.of(MemberIdResolver.Type.EMAIL, null, email));
-    }
-
-    /**
-     * A member known by a retailer-specific identifier, e.g. {@code custom("retailer-card",
-     * "99-1234")}; {@code type} names the identifier kind the resolving platform understands.
-     */
-    public Member custom(String type, String value) {
-      return pending(MemberIdResolver.of(MemberIdResolver.Type.CUSTOM, type, value));
+    /** A member known by a customer identifier; terminal lookups use Keyed entry mode. */
+    public Member lookup(LookupType type, String value) {
+      return pending(MemberIdResolver.of(type, value));
     }
   }
 }

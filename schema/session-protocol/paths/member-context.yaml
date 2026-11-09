@@ -25,14 +25,16 @@ member:
     operationId: setMember
     summary: Attach the member for this visit
     description: |
-      Mirrors `ShopperSession.member(Member)`. A member with an `id` attaches immediately. A
-      member with a `resolver` attaches as pending and is resolved in the background on the
-      session's operation lane: on a terminal session by a Nexo `BalanceInquiry` (account id
-      and phone only — email and custom identifiers cannot be resolved there, are reported
-      through `background.error` and stay pending), on a local session not at all yet. Until it
-      resolves the visit is a guest's. A lookup that finds nobody clears the member; one that
-      fails leaves it pending. Whatever member is attached last wins. Every change is announced
-      through `member.changed`.
+      Mirrors `ShopperSession.member(Member)`. An already-resolved loyalty member id attaches
+      immediately as FOUND. Terminal sessions also send AccountNumber/File in a background
+      BalanceInquiry and upgrade it with balance, brand and rewards on a FOUND reply.
+      NOT_FOUND or SUSPENDED leaves it attached and reports a DECLINED background.error;
+      cancellation leaves it unchanged. Local sessions send nothing for a resolved id.
+      A resolver attaches as pending and is looked up in the background on the operation
+      lane. Terminal lookups always use Keyed: PHONE maps to PhoneNumber, EMAIL and
+      ACCOUNT_NUMBER to AccountNumber. Until resolved a pending member is a guest.
+      Not found clears a pending member; errors leave it pending. The latest attachment wins.
+      Every change is announced through `member.changed`.
 
       Allowed at any time on both session kinds, but refused (409) once the session has ended
       and on a terminal session while a settlement or void is moving money.

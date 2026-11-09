@@ -86,8 +86,8 @@ Use `ShopperSession` for lanes without a Bilt terminal, or for a register that o
 | `CheckoutSession` | `TerminalShopperSession` |
 | `CheckoutSession.builder()` | `TerminalShopperSession.builder()` (same builder surface; `start()` yields a `SessionResult<TerminalShopperSession>`) |
 | `CheckoutSession.Builder` | `TerminalShopperSession.Builder` |
-| `MemberIdentifier.phoneNumber("...")` | `Member.idResolver().phone("...")` |
-| `MemberIdentifier.accountNumber("...")` | `Member.idResolver().accountId("...")` |
+| `MemberIdentifier.phoneNumber("...")` | `Member.idResolver().lookup(LookupType.PHONE, "...")` |
+| `MemberIdentifier.accountNumber("...")` | `Member.idResolver().lookup(LookupType.ACCOUNT_NUMBER, "...")` |
 | `session.getMember()` | `session.member()` (`getMember()` is deprecated) |
 
 `member()` is not a drop-in for `getMember()`. `getMember()` returned an `IdentifyResult`, and was `null` for a guest *and* while a member was still pending resolution. `member()` returns a `Member`, which is `null` only when nothing is attached and otherwise also covers a member the POS attached or one still pending. Read the fields through the `Member` accessors (`memberId()`, `status()`, `loyaltyBrand()`, `rewards()`, `pointBalance()`), and where you tested `getMember() != null` for "a member is identified", test `member() != null && member().isResolved()`. Skipping the `isResolved()` check would treat a pending member as identified, though settlement still treats the visit as a guest's until it resolves.
@@ -211,22 +211,25 @@ Currency is set once on the session; `BasketItem` has no currency of its own. Mu
 A member can be attached at any time, before or after items are scanned, and replaced or removed later. `session.member(...)` takes one of three forms:
 
 ```java
-session.member(Member.id("mbr_8f2a"));                               // a known Bilt member id: attached immediately
-session.member(Member.idResolver().phone("+12015550123"));           // resolved in the background
-session.member(Member.idResolver().accountId("4823").keyedByCashier());
-session.member(null);                                                // signs the member out
+// An already-resolved loyalty member id: attached immediately
+session.member(Member.id("mbr_8f2a"));
+// Resolved in the background
+session.member(Member.idResolver().lookup(LookupType.PHONE, "+12015550123"));
+session.member(Member.idResolver().lookup(LookupType.ACCOUNT_NUMBER, "4823"));
+// Signs the member out
+session.member(null);
 ```
 
-- `Member.id(memberId)` is already resolved and needs no lookup.
-- `Member.idResolver()` builds a *pending* member from what the shopper gave you: `accountId`, `phone`, `email` or `custom(type, value)`. Add `keyedByCashier()` when the cashier typed it rather than the shopper.
+- `Member.id(memberId)` attaches the already-resolved loyalty member id immediately as FOUND. For an enterprise loyalty program, this is the same id used with that program's API. On terminal sessions a background `BalanceInquiry` sends `AccountNumber` + `File`; a FOUND reply upgrades the member with balance, brand and rewards. NOT_FOUND or SUSPENDED leaves it attached and reports `DECLINED` through `onBackgroundError`; cancellation leaves it unchanged. Local sessions send nothing.
+- `Member.idResolver().lookup(type, value)` builds a pending member from a customer-known identifier: `LookupType.PHONE`, `EMAIL`, or `ACCOUNT_NUMBER` (including usernames, loyalty card numbers and retailer account numbers). Every lookup value is masked in logs and protocol responses.
 - `session.member()` returns the attached member, resolved or pending, or `null` for a guest.
 
 ### Where resolution runs
 
 A pending member resolves in the background, on the session's operation lane, so it never blocks the register. It runs in order with other session work: a `settle()` executed after attaching a member waits for the lookup.
 
-- **Terminal session:** resolved with a `BalanceInquiry` through the terminal. Account id and phone are supported; email and custom identifiers report `UNSUPPORTED` through `onBackgroundError` and stay pending. A lookup that finds nobody clears the member; a lookup that fails reports through `onBackgroundError` and leaves it pending. If you need the result directly, `identifyMember(pendingMember)` runs the same lookup as a `SessionResult`.
-- **Local session:** there is no resolution yet, so a pending member stays pending. Pass `Member.id(...)` when the POS already knows the Bilt member id.
+- **Terminal session:** resolved with a `BalanceInquiry` through the terminal, always `Keyed`: PHONE → PhoneNumber; EMAIL and ACCOUNT_NUMBER → AccountNumber. A lookup that finds nobody clears the pending member; a failed lookup reports through `onBackgroundError` and leaves it pending. `identifyMember(pendingMember)` uses the same lookup and returns a `SessionResult`.
+- **Local session:** there is no resolution yet, so a pending member stays pending. Pass `Member.id(...)` when the POS already has the member's loyalty id.
 
 Until a member resolves, the visit is treated as a guest's. The last member attached wins, so a late lookup never overwrites a newer choice.
 
@@ -514,7 +517,7 @@ ShopperSession session = ShopperSession.builder()
 | Add a widget | `.widget(RetailMedia.builder()...build())` on either builder |
 | Platform credentials | `.credentials(BiltCredentials.clientCredentials(id, secret))`, `.environment(BiltEnvironment.STAGING)` |
 | Update the basket | `basket().addItem(..)`, `basket().mutate(m -> ..)`, `basket().replace(items)` |
-| Attach a member | `member(Member.id(..))`, `member(Member.idResolver().phone(..))` |
+| Attach a member | `member(Member.id(..))`, `member(Member.idResolver().lookup(LookupType.PHONE, ..))` |
 | Sign out | `member(null)` |
 | Watch member changes | `.onMemberChanged(member -> ..)` on the builder |
 | Set the phase | `context().phase(CheckoutPhase.TENDERING)` |

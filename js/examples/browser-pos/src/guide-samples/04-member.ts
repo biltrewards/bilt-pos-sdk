@@ -8,7 +8,7 @@ export async function knownShopper(session: TerminalShopperSession): Promise<voi
   await session.member.set({ id: 'mbr_8f2a' });
   // A resolver attaches as pending; the host looks it up and announces the result.
   await session.member.set({
-    resolver: { type: 'PHONE', value: '+12015550123', keyedByCashier: true },
+    resolver: { type: 'PHONE', value: '+12015550123' },
   });
   // Sign out.
   await session.member.clear();
@@ -32,5 +32,5 @@ export async function identifyOnTerminal(session: TerminalShopperSession): Promi
 }
 
 export function lookupWithoutPrompt(session: TerminalShopperSession): Promise<IdentifyResult> {
-  return session.identifyMember({ resolver: { type: 'ACCOUNT_ID', value: 'ACC-77' } });
+  return session.identifyMember({ resolver: { type: 'ACCOUNT_NUMBER', value: 'ACC-77' } });
 }

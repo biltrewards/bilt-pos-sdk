@@ -71,7 +71,7 @@ import java.util.function.Consumer;
  *     .start();
  *
  * session.basket().replace(toBasket(pos.cart()));          // on every cart change
- * session.member(Member.idResolver().phone("+12015550123")); // when the shopper signs in
+ * session.member(Member.idResolver().lookup(LookupType.PHONE, "+12015550123")); // when the shopper signs in
  * session.widget(RetailMedia.class).pause();                 // while the screen shows PIN entry
  * session.widget(RetailMedia.class).resume();
  * }</pre>

@@ -7,11 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.42.0]
+## [0.43.0]
 
 ### Changed
 
 - The settlement card charge now sends Nexo `PaymentTransaction.TransactionConditions.LoyaltyHandling`: `Forbidden` when `SettlementOptions.disablePoints` and `disableAward` are both set, `Processed` when `disablePoints` is set or a point redemption ran earlier in the settlement, and nothing otherwise. `Processed` stops the terminal offering Bilt hosted checkout; `Forbidden` also stops the automatic earn.
+
+## [0.42.0]
+
+### Changed (breaking)
+
+- Member lookup uses `Member.idResolver().lookup(LookupType, value)` with `PHONE`, `EMAIL`, or `ACCOUNT_NUMBER` instead of separate factories. Terminal lookups always use Keyed entry mode: `PHONE` maps to PhoneNumber; `EMAIL` and `ACCOUNT_NUMBER` map to AccountNumber. All lookup values are masked. Migration: `Member.idResolver().phone(x)` → `Member.idResolver().lookup(LookupType.PHONE, x)`, `accountId(x)` → `.lookup(LookupType.ACCOUNT_NUMBER, x)`, `email(x)` → `.lookup(LookupType.EMAIL, x)`; `custom(..)` and `keyedByCashier()` are removed, as are `MemberIdResolver.Type` and `customType`. The session-protocol resolver is now `{type: PHONE|EMAIL|ACCOUNT_NUMBER, value}`; `ACCOUNT_ID`, `CUSTOM`, `customType`, and `keyedByCashier` are removed. `Member.id(id)` attaches an already-resolved loyalty member id immediately. Terminal sessions also send a background BalanceInquiry with AccountNumber/File; a FOUND reply upgrades the member with balance, brand, and rewards and notifies `onMemberChanged`. A NOT_FOUND or SUSPENDED reply keeps the attached member and reports `DECLINED` via `onBackgroundError`; cancellation leaves it unchanged. Local sessions send no inquiry.
 
 ## [0.41.0]
 

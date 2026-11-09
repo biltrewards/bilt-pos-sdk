@@ -30,7 +30,7 @@ export function MemberPanel({ session, terminalSession, onError }: MemberPanelPr
   const signIn = () => {
     const value = phone.trim();
     if (!value) return;
-    set({ resolver: { type: 'PHONE', value, keyedByCashier: true } }).catch(onError);
+    set({ resolver: { type: 'PHONE', value } }).catch(onError);
   };
 
   return (

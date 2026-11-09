@@ -83,8 +83,8 @@ IdentifyMemberRequest:
     Without `resolver`, prompts the customer on the terminal (`identifyMember(options)`):
     outcomes that leave the checkout without a member (not found, suspended, cancelled) are
     successes with the matching `IdentifyStatus`. With `resolver`, a POS-driven lookup with no
-    terminal prompt (`identifyMember(Member pending)`); account id and phone only — email and
-    custom identifiers fail with `UNSUPPORTED`. Available after a failed settlement.
+    terminal prompt (`identifyMember(Member pending)`); PHONE uses PhoneNumber/Keyed;
+    EMAIL and ACCOUNT_NUMBER use AccountNumber/Keyed. Available after a failed settlement.
   required: [type]
   properties:
     type:

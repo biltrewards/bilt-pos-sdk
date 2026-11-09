@@ -196,13 +196,7 @@ public final class Views {
   private static ObjectNode resolver(MemberIdResolver resolver) {
     ObjectNode node = Json.object();
     node.put("type", resolver.type().name());
-    Json.putText(node, "customType", resolver.customType());
-    node.put(
-        "value",
-        resolver.type() == MemberIdResolver.Type.ACCOUNT_ID
-            ? resolver.value()
-            : mask(resolver.value()));
-    node.put("keyedByCashier", resolver.keyedByCashier());
+    node.put("value", mask(resolver.value()));
     return node;
   }
 
