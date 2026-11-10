@@ -38,10 +38,13 @@ import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -87,6 +90,7 @@ import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.MemberIdentity
+import com.bilt.pos.emulator.session.MemberLookupKind
 import com.bilt.pos.emulator.session.MemberRewardUi
 import com.bilt.pos.emulator.session.PaymentOutcome
 import com.bilt.pos.emulator.session.PaymentRecoveryPrompt
@@ -762,6 +766,11 @@ private fun ConnectionPanel(
     var passphrase by remember { mutableStateOf("") }
     var identifyOnStart by rememberSaveable { mutableStateOf(false) }
     var readVas by rememberSaveable { mutableStateOf(false) }
+    // by name: an enum is not saveable on every platform
+    var lookupKindName by rememberSaveable { mutableStateOf(MemberLookupKind.PHONE.name) }
+    val lookupKind = MemberLookupKind.valueOf(lookupKindName)
+    var lookupValue by rememberSaveable { mutableStateOf("") }
+    var lookupMenuOpen by remember { mutableStateOf(false) }
 
     // Adopt the autodetected address unless the operator already typed one
     LaunchedEffect(state.terminalAddress, state.addressAutodetected) {
@@ -889,6 +898,57 @@ private fun ConnectionPanel(
                         Text(if (state.identifyInProgress) "Signing in…" else "Loyalty Sign-In")
                     }
                 }
+                // The register supplies the identity instead of the shopper
+                // keying it on the terminal
+                val lookupKindPicker: @Composable () -> Unit = {
+                    Box {
+                        OutlinedButton(
+                            onClick = { lookupMenuOpen = true },
+                            enabled = state.canOperate,
+                        ) {
+                            Text("${lookupKind.label} ▾")
+                        }
+                        DropdownMenu(
+                            expanded = lookupMenuOpen,
+                            onDismissRequest = { lookupMenuOpen = false },
+                        ) {
+                            MemberLookupKind.entries.forEach { kind ->
+                                DropdownMenuItem(
+                                    text = { Text(kind.label) },
+                                    onClick = {
+                                        lookupKindName = kind.name
+                                        lookupMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                val lookupField: @Composable (Modifier) -> Unit = { modifier ->
+                    CompactTextField(
+                        value = lookupValue,
+                        onValueChange = { lookupValue = it },
+                        placeholder = lookupKind.label,
+                        enabled = state.canOperate,
+                        modifier = modifier,
+                    )
+                }
+                val lookupButton: @Composable (Modifier) -> Unit = { modifier ->
+                    Button(
+                        onClick = { controller.identifyMemberBy(lookupKind, lookupValue) },
+                        enabled = state.canOperate,
+                        colors = ButtonDefaults.filledTonalButtonColors(),
+                        modifier = modifier,
+                    ) {
+                        Text(
+                            if (lookupKind == MemberLookupKind.RESOLVED_ID) {
+                                "Attach Member"
+                            } else {
+                                "Look Up Member"
+                            }
+                        )
+                    }
+                }
                 // Read at Start Checkout: prompts for member identification
                 // right after the session starts
                 val identifyToggle: @Composable () -> Unit = {
@@ -961,14 +1021,24 @@ private fun ConnectionPanel(
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            lookupKindPicker()
+                            lookupField(Modifier.weight(1f))
+                        }
+                        lookupButton(Modifier.fillMaxWidth())
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             clearBasketButton(Modifier.weight(1f))
                             abortButton(Modifier.weight(1f))
                         }
                     }
                 } else {
-                    // Two flow rows, one per concern: reaching the terminal,
-                    // then driving the checkout. FlowRow, not Row — a plain
+                    // Flow rows, one per concern: reaching the terminal,
+                    // driving the checkout, then identifying the member from a
+                    // register-supplied value. FlowRow, not Row — a plain
                     // Row squeezes its last children into word-per-line
                     // buttons that blow the panel up vertically, and neither
                     // row's width is predictable (the passphrase field comes
@@ -1007,6 +1077,16 @@ private fun ConnectionPanel(
                             Spacer(Modifier.width(16.dp))
                             clearBasketButton(Modifier)
                             abortButton(Modifier)
+                        }
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            itemVerticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            lookupKindPicker()
+                            lookupField(Modifier.width(240.dp))
+                            lookupButton(Modifier)
                         }
                     }
                 }

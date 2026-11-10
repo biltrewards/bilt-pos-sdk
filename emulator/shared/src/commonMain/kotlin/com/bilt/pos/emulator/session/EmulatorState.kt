@@ -141,6 +141,17 @@ data class StoredValueOptions(
     val cardNumber: String = ""
 )
 
+/**
+ * What a register-entered member identity is: a customer-known handle the terminal looks up, or a
+ * member id already resolved elsewhere.
+ */
+enum class MemberLookupKind(val label: String) {
+    PHONE("Phone"),
+    EMAIL("Email"),
+    ACCOUNT_NUMBER("Account number"),
+    RESOLVED_ID("Resolved member id"),
+}
+
 /** Kind of a [MemberRewardUi], mirroring the SDK's `RewardType`. */
 enum class MemberRewardKind {
     REWARD,
@@ -558,6 +569,15 @@ interface EmulatorController {
      * lands in [MemberIdentity.Found.vas].
      */
     fun identifyMember(readVas: Boolean = false)
+
+    /**
+     * Identify the member from a [value] the register supplies, with no terminal prompt. A phone,
+     * email or account number is looked up on the terminal and the answer lands in
+     * [EmulatorState.member] like a sign-in. A resolved member id attaches at once; the terminal
+     * then confirms it in the background, upgrading the member with balance, brand and rewards, or
+     * logging the decline. Requires an active checkout session; a blank [value] sends nothing.
+     */
+    fun identifyMemberBy(kind: MemberLookupKind, value: String)
 
     /**
      * Read a card on the terminal (nexo CardAcquisition request) without charging it. A read that

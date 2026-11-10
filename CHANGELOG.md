@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.0]
+
+### Added
+
+- Emulator (desktop/Android): the register can identify the member from a value it supplies, with no terminal prompt. Pick Phone, Email, Account number, or Resolved member id, type the value, and press Look Up Member (Attach Member for a resolved id). Phone, email, and account number go through `identifyMember(Member.idResolver().lookup(..))`, a Keyed BalanceInquiry (PhoneNumber for a phone, AccountNumber otherwise), and land on the sign-in card like a sign-in. A resolved id attaches through `member(Member.id(..))`; the card updates when the terminal's background AccountNumber/File BalanceInquiry confirms it, and a decline is logged with the member left attached. Background errors are now logged with their code and message rather than as a customer-display failure.
+
 ## [0.43.0]
 
 ### Changed

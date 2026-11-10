@@ -34,6 +34,7 @@ import com.bilt.pos.session.identity.ForceEntryMode
 import com.bilt.pos.session.identity.IdentifyOptions
 import com.bilt.pos.session.identity.IdentifyResult
 import com.bilt.pos.session.identity.IdentifyStatus
+import com.bilt.pos.session.identity.LookupType
 import com.bilt.pos.session.identity.Member
 import com.bilt.pos.session.identity.Reward
 import com.bilt.pos.session.identity.RewardType
@@ -706,11 +707,10 @@ class NexoEmulatorController(
             .poiId(config.poiId)
             .currency(config.currency)
             .callbackExecutor(callbackExecutor)
-            // auto-display pushes fail out-of-band (no result to hold);
-            // surface them like any other event
-            .onBackgroundError { error ->
-                log("Customer display update failed: ${error.message}")
-            }
+            // display pushes and a resolved member id's confirmation fail
+            // out-of-band (no result to hold); surface them like any other event
+            .onBackgroundError(::logBackgroundError)
+            .onMemberChanged { member -> publishMemberChange(conn, member) }
             .start()
             .onSuccess { started ->
                 if (connection !== conn) {
@@ -1190,15 +1190,87 @@ class NexoEmulatorController(
         runIdentifyPrompt(conn, session, readVas)
     }
 
+    override fun identifyMemberBy(kind: MemberLookupKind, value: String) {
+        val conn = connection
+        val session = conn?.session
+        if (conn == null || session == null) {
+            log("No active checkout session — press Start Checkout first")
+            return
+        }
+        val trimmed = value.trim()
+        if (trimmed.isEmpty()) {
+            log("Enter a ${kind.label.lowercase()} to identify the member")
+            return
+        }
+        val lookupType =
+            when (kind) {
+                MemberLookupKind.PHONE -> LookupType.PHONE
+                MemberLookupKind.EMAIL -> LookupType.EMAIL
+                MemberLookupKind.ACCOUNT_NUMBER -> LookupType.ACCOUNT_NUMBER
+                MemberLookupKind.RESOLVED_ID -> {
+                    attachResolvedMember(session, trimmed)
+                    return
+                }
+            }
+        runIdentifyPrompt(
+            conn,
+            session,
+            readVas = false,
+            lookup = Member.idResolver().lookup(lookupType, trimmed),
+            lookupLabel = kind.label.lowercase(),
+        )
+    }
+
+    /**
+     * Attaches an already-resolved member id. The SDK confirms it on the terminal in the
+     * background: the upgrade arrives through [publishMemberChange], a decline through
+     * [logBackgroundError].
+     */
+    private fun attachResolvedMember(session: TerminalShopperSession, memberId: String) {
+        try {
+            session.member(Member.id(memberId))
+            log("Attached member $memberId — confirming it on the terminal…")
+        } catch (e: Exception) {
+            log("Failed to attach member $memberId: ${e.message}")
+            detailedLog(e.stackTraceToString())
+        }
+    }
+
+    /**
+     * A member change the session announced. A sign-in prompt or lookup publishes its own, richer
+     * card when it completes, so only changes outside one — a resolved id attached and then
+     * confirmed — are published here.
+     */
+    private fun publishMemberChange(conn: Connection, member: Member?) {
+        if (connection !== conn || _state.value.identifyInProgress) return
+        val session = conn.session ?: return
+        // superseded since it was queued; the newer change follows
+        if (session.member() !== member) return
+        val identity = member?.toUi()
+        _state.update { it.copy(member = identity) }
+        log(identity?.let { "Member attached: ${it.summary()}" } ?: "Member cleared")
+    }
+
+    private fun logBackgroundError(error: SessionError) {
+        log("Background operation failed (${error.code}): ${error.message}")
+        error.cause?.let { detailedLog(it.stackTraceToString()) }
+    }
+
+    private fun MemberIdentity.Found.summary(): String =
+        "$headline, " + (pointBalance?.let { "$it pts, " } ?: "") + "${rewards.size} reward(s)"
+
     /**
      * The loyalty sign-in prompt — run right after the Start bracket when the operator asked for
      * it, and on demand from the Loyalty Sign-In button. Always its own operation, never part of
-     * the bracket; a failed or declined prompt leaves the checkout without a member.
+     * the bracket; a failed or declined prompt leaves the checkout without a member. With [lookup],
+     * the register-supplied identifier is looked up instead, with no prompt.
      */
     private fun runIdentifyPrompt(
         conn: Connection,
         session: TerminalShopperSession,
         readVas: Boolean,
+        lookup: Member? = null,
+        lookupLabel: String? = null,
     ) {
         // Claimed like pay/acquireCard: without the claim, a Pay tapped
         // during the prompt would queue behind it on the session's
@@ -1214,16 +1286,19 @@ class NexoEmulatorController(
         val previous = _state.value.member as? MemberIdentity.Found
         _state.update { it.copy(identifyInProgress = true, member = null) }
         log(
-            if (readVas) {
-                "Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…"
-            } else {
-                "Loyalty sign-in on the terminal…"
+            when {
+                lookup != null -> "Looking up the member by $lookupLabel on the terminal…"
+                readVas -> "Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…"
+                else -> "Loyalty sign-in on the terminal…"
             }
         )
         vasAdditionalResponse = null
         vasPromptActive = readVas
-        session
-            .identifyMember(identifyOptions(readVas))
+        (if (lookup != null) {
+                session.identifyMember(lookup)
+            } else {
+                session.identifyMember(identifyOptions(readVas))
+            })
             .onSuccess { outcome ->
                 // a checkout that ended under a late-arriving prompt owns
                 // neither the card nor the display any more
@@ -1296,12 +1371,9 @@ class NexoEmulatorController(
         _state.update { it.copy(member = identity) }
         when (identity) {
             is MemberIdentity.Found ->
-                log(
-                        "Member identified: ${identity.headline}, " +
-                            (identity.pointBalance?.let { "$it pts, " } ?: "") +
-                            "${identity.rewards.size} reward(s)"
-                    )
-                    .also { identity.vas?.lines?.forEach { log("VAS: $it") } }
+                log("Member identified: ${identity.summary()}").also {
+                    identity.vas?.lines?.forEach { log("VAS: $it") }
+                }
             is MemberIdentity.Absent -> log("${identity.headline} — loyalty steps will be skipped")
             // either an Absent/Failed with no member left attached, or a
             // Success the emulator could not read; the headline covers the
@@ -2288,9 +2360,7 @@ class NexoEmulatorController(
                     .saleId(sale.saleId)
                     .poiId(sale.poiId)
                     .currency(sale.currency)
-                    .onBackgroundError { error ->
-                        log("Customer display update failed: ${error.message}")
-                    }
+                    .onBackgroundError(::logBackgroundError)
                     .start()
                     .get()
             conn.refundSession = session
