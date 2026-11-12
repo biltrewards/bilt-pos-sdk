@@ -116,6 +116,11 @@ internal enum class SaleTabPane(val label: String) {
  */
 private const val MAX_KEYPAD_MINOR = 99_999_999L
 
+/** The saved identify-picker name for the terminal's own sign-in prompt. */
+private const val PIN_PAD_SIGN_IN = "PIN_PAD"
+
+private const val PIN_PAD_LABEL = "Terminal PIN pad"
+
 /**
  * The keypad's entry state: the amount typed so far and, once the operator taps a custom line in
  * the basket, the SKU that amount live-edits.
@@ -766,9 +771,10 @@ private fun ConnectionPanel(
     var passphrase by remember { mutableStateOf("") }
     var identifyOnStart by rememberSaveable { mutableStateOf(false) }
     var readVas by rememberSaveable { mutableStateOf(false) }
-    // by name: an enum is not saveable on every platform
-    var lookupKindName by rememberSaveable { mutableStateOf(MemberLookupKind.PHONE.name) }
-    val lookupKind = MemberLookupKind.valueOf(lookupKindName)
+    // by name: an enum is not saveable on every platform; PIN_PAD_SIGN_IN is the
+    // terminal's own prompt, which is not a register-supplied MemberLookupKind
+    var lookupKindName by rememberSaveable { mutableStateOf(PIN_PAD_SIGN_IN) }
+    val lookupKind = MemberLookupKind.entries.firstOrNull { it.name == lookupKindName }
     var lookupValue by rememberSaveable { mutableStateOf("") }
     var lookupMenuOpen by remember { mutableStateOf(false) }
 
@@ -885,33 +891,27 @@ private fun ConnectionPanel(
                         Text(if (sessionActive) "End Checkout" else "Start Checkout")
                     }
                 }
-                // The same prompt the Identify toggle runs at Start
-                // Checkout, on demand: a customer who declined or mistyped
-                // can sign in again without restarting the checkout
-                val signInButton: @Composable (Modifier) -> Unit = { modifier ->
-                    Button(
-                        onClick = { controller.identifyMember(readVas) },
-                        enabled = state.canOperate,
-                        colors = ButtonDefaults.filledTonalButtonColors(),
-                        modifier = modifier,
-                    ) {
-                        Text(if (state.identifyInProgress) "Signing in…" else "Loyalty Sign-In")
-                    }
-                }
-                // The register supplies the identity instead of the shopper
-                // keying it on the terminal
+                // Who supplies the member: the shopper on the terminal's PIN
+                // pad, or the register (a handle to look up, or a resolved id)
                 val lookupKindPicker: @Composable () -> Unit = {
                     Box {
                         OutlinedButton(
                             onClick = { lookupMenuOpen = true },
                             enabled = state.canOperate,
                         ) {
-                            Text("${lookupKind.label} ▾")
+                            Text("${lookupKind?.label ?: PIN_PAD_LABEL} ▾")
                         }
                         DropdownMenu(
                             expanded = lookupMenuOpen,
                             onDismissRequest = { lookupMenuOpen = false },
                         ) {
+                            DropdownMenuItem(
+                                text = { Text(PIN_PAD_LABEL) },
+                                onClick = {
+                                    lookupKindName = PIN_PAD_SIGN_IN
+                                    lookupMenuOpen = false
+                                },
+                            )
                             MemberLookupKind.entries.forEach { kind ->
                                 DropdownMenuItem(
                                     text = { Text(kind.label) },
@@ -924,27 +924,40 @@ private fun ConnectionPanel(
                         }
                     }
                 }
+                // the PIN pad prompt takes no value: the shopper keys it
                 val lookupField: @Composable (Modifier) -> Unit = { modifier ->
-                    CompactTextField(
-                        value = lookupValue,
-                        onValueChange = { lookupValue = it },
-                        placeholder = lookupKind.label,
-                        enabled = state.canOperate,
-                        modifier = modifier,
-                    )
+                    if (lookupKind != null) {
+                        CompactTextField(
+                            value = lookupValue,
+                            onValueChange = { lookupValue = it },
+                            placeholder = lookupKind.label,
+                            enabled = state.canOperate,
+                            modifier = modifier,
+                        )
+                    }
                 }
+                // The PIN pad entry runs the same prompt the Identify toggle
+                // runs at Start Checkout, on demand: a customer who declined
+                // or mistyped can sign in again without restarting the checkout
                 val lookupButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
-                        onClick = { controller.identifyMemberBy(lookupKind, lookupValue) },
+                        onClick = {
+                            if (lookupKind == null) {
+                                controller.identifyMember(readVas)
+                            } else {
+                                controller.identifyMemberBy(lookupKind, lookupValue)
+                            }
+                        },
                         enabled = state.canOperate,
                         colors = ButtonDefaults.filledTonalButtonColors(),
                         modifier = modifier,
                     ) {
                         Text(
-                            if (lookupKind == MemberLookupKind.RESOLVED_ID) {
-                                "Attach Member"
-                            } else {
-                                "Look Up Member"
+                            when {
+                                lookupKind == null && state.identifyInProgress -> "Signing in…"
+                                lookupKind == null -> "Loyalty Sign-In"
+                                lookupKind == MemberLookupKind.RESOLVED_ID -> "Attach Member"
+                                else -> "Look Up Member"
                             }
                         )
                     }
@@ -1011,13 +1024,7 @@ private fun ConnectionPanel(
                         connectButton(Modifier.fillMaxWidth())
                         identifyToggle()
                         vasToggle()
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            sessionButton(Modifier.weight(1f))
-                            signInButton(Modifier.weight(1f))
-                        }
+                        sessionButton(Modifier.fillMaxWidth())
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1068,7 +1075,6 @@ private fun ConnectionPanel(
                             itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
                             sessionButton(Modifier)
-                            signInButton(Modifier)
                             identifyToggle()
                             vasToggle()
                             // a fixed gap, not weight(1f): a weighted spacer
