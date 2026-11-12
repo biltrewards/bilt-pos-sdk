@@ -770,7 +770,6 @@ private fun ConnectionPanel(
     var encryptionOn by rememberSaveable { mutableStateOf(state.encryptionEnabled) }
     var passphrase by remember { mutableStateOf("") }
     var identifyOnStart by rememberSaveable { mutableStateOf(false) }
-    var readVas by rememberSaveable { mutableStateOf(false) }
     // by name: an enum is not saveable on every platform; PIN_PAD_SIGN_IN is the
     // terminal's own prompt, which is not a register-supplied MemberLookupKind
     var lookupKindName by rememberSaveable { mutableStateOf(PIN_PAD_SIGN_IN) }
@@ -882,7 +881,7 @@ private fun ConnectionPanel(
                             if (sessionActive) {
                                 controller.endSession()
                             } else {
-                                controller.startSession(identifyOnStart, readVas)
+                                controller.startSession(identifyOnStart)
                             }
                         },
                         enabled = connected,
@@ -943,7 +942,7 @@ private fun ConnectionPanel(
                     Button(
                         onClick = {
                             if (lookupKind == null) {
-                                controller.identifyMember(readVas)
+                                controller.identifyMember()
                             } else {
                                 controller.identifyMemberBy(lookupKind, lookupValue)
                             }
@@ -972,14 +971,6 @@ private fun ConnectionPanel(
                             enabled = state.sessionId == null,
                         )
                         Text("Identify", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-                // Applies to every sign-in prompt, at Start Checkout or from
-                // the button, so it stays enabled mid-checkout
-                val vasToggle: @Composable () -> Unit = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = readVas, onCheckedChange = { readVas = it })
-                        Text("Read VAS", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 // Aborts whatever is on the terminal (payment, identify
@@ -1023,7 +1014,6 @@ private fun ConnectionPanel(
                         }
                         connectButton(Modifier.fillMaxWidth())
                         identifyToggle()
-                        vasToggle()
                         sessionButton(Modifier.fillMaxWidth())
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1076,7 +1066,6 @@ private fun ConnectionPanel(
                         ) {
                             sessionButton(Modifier)
                             identifyToggle()
-                            vasToggle()
                             // a fixed gap, not weight(1f): a weighted spacer
                             // eats the rest of its line and forces everything
                             // after it onto the next one, every time

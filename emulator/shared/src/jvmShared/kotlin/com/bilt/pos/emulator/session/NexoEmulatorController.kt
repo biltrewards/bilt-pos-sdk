@@ -264,13 +264,20 @@ class NexoEmulatorController(
     private val nexoLogMapper = ObjectMapper()
 
     /**
-     * True while a Read VAS sign-in prompt is on the wire, so the Nexo listener knows which
-     * response carries the encrypted VAS data the SDK does not expose raw.
+     * True while a sign-in prompt is on the wire, so the Nexo listener knows which response carries
+     * the encrypted VAS data the SDK does not expose raw.
      */
     @Volatile private var vasPromptActive = false
 
-    /** The last Read VAS response's `AdditionalResponse`, held until the prompt completes. */
+    /** The last sign-in response's `AdditionalResponse`, held until the prompt completes. */
     @Volatile private var vasAdditionalResponse: String? = null
+
+    /**
+     * The terminal's register sign-in shows the keyed form and reads a tapped wallet pass whatever
+     * the entry mode; Keyed keeps the form on terminal builds that still need it to show one.
+     */
+    private val signInOptions: IdentifyOptions =
+        IdentifyOptions.builder().forceEntryMode(ForceEntryMode.KEYED).build()
 
     /**
      * Logged once when the prompt completes rather than when the response arrives, so a prompt that
@@ -678,7 +685,7 @@ class NexoEmulatorController(
         }
     }
 
-    override fun startSession(identifyOnStart: Boolean, readVas: Boolean) {
+    override fun startSession(identifyOnStart: Boolean) {
         val conn =
             connection
                 ?: run {
@@ -735,7 +742,7 @@ class NexoEmulatorController(
                 }
                 log("Checkout session started (id ${started.sessionId})")
                 if (identifyOnStart) {
-                    runIdentifyPrompt(conn, started, readVas)
+                    runIdentifyPrompt(conn, started)
                 } else {
                     refreshCustomerDisplay(started)
                 }
@@ -1181,14 +1188,14 @@ class NexoEmulatorController(
         }
     }
 
-    override fun identifyMember(readVas: Boolean) {
+    override fun identifyMember() {
         val conn = connection
         val session = conn?.session
         if (conn == null || session == null) {
             log("No active checkout session — press Start Checkout first")
             return
         }
-        runIdentifyPrompt(conn, session, readVas)
+        runIdentifyPrompt(conn, session)
     }
 
     override fun identifyMemberBy(kind: MemberLookupKind, value: String) {
@@ -1216,7 +1223,6 @@ class NexoEmulatorController(
         runIdentifyPrompt(
             conn,
             session,
-            readVas = false,
             lookup = Member.idResolver().lookup(lookupType, trimmed),
             lookupLabel = kind.label.lowercase(),
         )
@@ -1269,7 +1275,6 @@ class NexoEmulatorController(
     private fun runIdentifyPrompt(
         conn: Connection,
         session: TerminalShopperSession,
-        readVas: Boolean,
         lookup: Member? = null,
         lookupLabel: String? = null,
     ) {
@@ -1289,16 +1294,16 @@ class NexoEmulatorController(
         log(
             when {
                 lookup != null -> "Looking up the member by $lookupLabel on the terminal…"
-                readVas -> "Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…"
-                else -> "Loyalty sign-in on the terminal…"
+                else -> "Loyalty sign-in on the terminal (key it in or tap a wallet pass)…"
             }
         )
+        val readsVas = lookup == null
         vasAdditionalResponse = null
-        vasPromptActive = readVas
+        vasPromptActive = readsVas
         (if (lookup != null) {
                 session.identifyMember(lookup)
             } else {
-                session.identifyMember(identifyOptions(readVas))
+                session.identifyMember(signInOptions)
             })
             .onSuccess { outcome ->
                 // a checkout that ended under a late-arriving prompt owns
@@ -1312,7 +1317,7 @@ class NexoEmulatorController(
                 error.cause?.let { detailedLog(it.stackTraceToString()) }
             }
             .onComplete {
-                if (readVas) {
+                if (readsVas) {
                     vasPromptActive = false
                     logVasAdditionalResponse()
                 }
@@ -1326,20 +1331,6 @@ class NexoEmulatorController(
             }
             .execute()
     }
-
-    /**
-     * The terminal's keyed loyalty capture engages only with ForceEntryMode=Keyed; without it the
-     * terminal waits on the card reader instead of showing the input form. Keyed is also the one
-     * mode that keeps a wallet pass from being read, so VAS mode leaves the entry mode unforced.
-     */
-    private fun identifyOptions(readVas: Boolean): IdentifyOptions =
-        IdentifyOptions.builder()
-            .apply {
-                if (!readVas) {
-                    forceEntryMode(ForceEntryMode.KEYED)
-                }
-            }
-            .build()
 
     /**
      * Report the sign-in as the account the checkout will actually settle against, which is not the

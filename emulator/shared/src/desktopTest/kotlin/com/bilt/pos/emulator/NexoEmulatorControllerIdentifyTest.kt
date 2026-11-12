@@ -36,9 +36,9 @@ import okhttp3.tls.HeldCertificate
  * The Loyalty Sign-In button through the real controller against a scripted terminal, the same
  * MockWebServer rig the refund tests use.
  *
- * The load-bearing fact these pin down is that the terminal only engages its keyed loyalty capture
- * when the request carries `LoyaltyHandling` **and** `ForceEntryMode=["Keyed"]` together — drop
- * either and it arms the card reader and shows no loyalty UI at all, which no compiler catches.
+ * The load-bearing facts these pin down are that every sign-in carries `LoyaltyHandling` with
+ * `ForceEntryMode=["Keyed"]`, so the terminal shows its keyed loyalty form, and that every sign-in
+ * reads a tapped wallet pass, publishing its VAS data — there is no opt-in any more.
  */
 class NexoEmulatorControllerIdentifyTest {
 
@@ -251,7 +251,7 @@ class NexoEmulatorControllerIdentifyTest {
     }
 
     @Test
-    fun vasModeLeavesTheEntryModeOpenAndPublishesThePassData() {
+    fun signInPublishesTheWalletPassData() {
         server.dispatcher = respondingWith { body ->
             if ("\"CardAcquisitionRequest\"" in body) {
                 cardAcquisitionFound("pass-123", vasJson = VAS_JSON)
@@ -262,16 +262,16 @@ class NexoEmulatorControllerIdentifyTest {
         val controller = controller()
         runBlocking {
             controller.connectAndStartCheckout()
-            controller.identifyMember(readVas = true)
+            controller.identifyMember()
             val member =
                 withTimeout(10_000) {
                     controller.state.first { it.member != null && !it.identifyInProgress }.member
                 }
 
-            // still Required, but no Keyed, or the terminal never reads a pass
+            // the terminal reads the pass even with Keyed forced
             val request = cardAcquisitions.single()
             assertTrue("\"LoyaltyHandling\":\"Required\"" in request, request)
-            assertTrue("ForceEntryMode" !in request, request)
+            assertTrue("\"ForceEntryMode\":[\"Keyed\"]" in request, request)
 
             val vas = assertNotNull(assertIsFound(member).vas)
             assertEquals("ApplePay", vas.source)
@@ -293,7 +293,7 @@ class NexoEmulatorControllerIdentifyTest {
     }
 
     @Test
-    fun vasModeOffKeepsTheKeyedFormAndCarriesNoVas() {
+    fun signInWithoutAPassCarriesNoVas() {
         server.dispatcher = respondingWith { body ->
             if ("\"CardAcquisitionRequest\"" in body) {
                 cardAcquisitionFound("98234")
@@ -311,13 +311,13 @@ class NexoEmulatorControllerIdentifyTest {
                 }
             assertTrue("\"ForceEntryMode\":[\"Keyed\"]" in cardAcquisitions.single())
             assertNull(assertIsFound(member).vas)
-            assertTrue(controller.vasLogLines().isEmpty())
+            assertEquals(listOf("No encrypted VAS data"), controller.vasLogLines())
         }
     }
 
     /** No CardAcquisitionResponse payload at all: the prompt still reports there was nothing. */
     @Test
-    fun vasModeWithoutAnAdditionalResponseSaysThereWasNoData() {
+    fun signInWithoutAnAdditionalResponseSaysThereWasNoVasData() {
         server.dispatcher = respondingWith { body ->
             if ("\"CardAcquisitionRequest\"" in body) {
                 CARD_ACQUISITION_CANCELLED
@@ -328,7 +328,7 @@ class NexoEmulatorControllerIdentifyTest {
         val controller = controller()
         runBlocking {
             controller.connectAndStartCheckout()
-            controller.identifyMember(readVas = true)
+            controller.identifyMember()
             withTimeout(10_000) {
                 controller.state.first { cardAcquisitions.size == 1 && !it.identifyInProgress }
             }
@@ -343,7 +343,7 @@ class NexoEmulatorControllerIdentifyTest {
             .map { it.substringAfter("VAS AdditionalResponse: ") }
 
     @Test
-    fun vasModeOnStartRidesTheStartCheckoutPrompt() {
+    fun startCheckoutPromptReadsTheWalletPass() {
         server.dispatcher = respondingWith { body ->
             if ("\"CardAcquisitionRequest\"" in body) {
                 cardAcquisitionFound("pass-123", vasJson = VAS_JSON)
@@ -357,12 +357,11 @@ class NexoEmulatorControllerIdentifyTest {
             withTimeout(10_000) {
                 controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
             }
-            controller.startSession(identifyOnStart = true, readVas = true)
+            controller.startSession(identifyOnStart = true)
             val member =
                 withTimeout(10_000) {
                     controller.state.first { it.member != null && !it.identifyInProgress }.member
                 }
-            assertTrue("ForceEntryMode" !in cardAcquisitions.single())
             assertNotNull(assertIsFound(member).vas)
         }
     }
@@ -379,7 +378,7 @@ class NexoEmulatorControllerIdentifyTest {
         val controller = controller()
         runBlocking {
             controller.connectAndStartCheckout()
-            controller.identifyMember(readVas = true)
+            controller.identifyMember()
             val member =
                 withTimeout(10_000) {
                     controller.state.first { it.member != null && !it.identifyInProgress }.member
