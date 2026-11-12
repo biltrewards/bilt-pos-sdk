@@ -1,9 +1,7 @@
 {
   "type": "settle",
   "options": {
-    "disableRebates": false,
-    "disablePoints": false,
-    "disableAward": false,
+    "loyalty": { "handling": "EXPLICIT", "steps": ["REBATES", "POINTS", "AWARD"] },
     "refunds": [],
     "fulfillments": [],
     "settlementType": "REFUND_THEN_CHARGE"

@@ -126,6 +126,8 @@ data class LoyaltyOptions(
     val redemption: Boolean = true,
     /** Point award on the completed purchase. */
     val award: Boolean = true,
+    /** The terminal handles loyalty during the card payment; the three steps above are skipped. */
+    val implicit: Boolean = false,
 )
 
 /**

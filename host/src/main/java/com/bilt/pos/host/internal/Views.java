@@ -47,6 +47,7 @@ import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
+import com.bilt.pos.session.settlement.SettlementLoyalty;
 import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementResult;
@@ -432,9 +433,12 @@ public final class Views {
 
   public static ObjectNode settlementOptions(SettlementOptions options) {
     ObjectNode node = Json.object();
-    node.put("disableRebates", options.isDisableRebates());
-    node.put("disablePoints", options.isDisablePoints());
-    node.put("disableAward", options.isDisableAward());
+    ObjectNode loyalty = node.putObject("loyalty");
+    loyalty.put("handling", options.getLoyalty().getHandling().name());
+    if (options.getLoyalty().getHandling() == SettlementLoyalty.Handling.EXPLICIT) {
+      ArrayNode steps = loyalty.putArray("steps");
+      options.getLoyalty().getSteps().forEach(step -> steps.add(step.name()));
+    }
     Json.putMoney(node, "cashback", options.getCashback());
     if (options.getPaymentProcessingDisplay() != null) {
       node.set(

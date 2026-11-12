@@ -366,7 +366,7 @@ export async function markTendering(session: ShopperSession): Promise<void> {
 
 ## Settle
 
-`session.settle(options, handlers)` runs the settlement sequence the [TerminalShopperSession guide](./checkout-session-integration.md#the-settlement-sequence-explained) describes: refund allocations, rebate redemption, point redemption, stored value, card charge, award. `options` takes the Java `SettlementOptions` (`settlementType`, `disableRebates`, `disablePoints`, `disableAward`, `cashback`, `refunds`, `fulfillments`, `paymentProcessingDisplay`) and `handlers` the `SettlementFlow` handlers. `disablePoints` and `disableAward` also set the card payment's Nexo `LoyaltyHandling` as [the mapping table](./checkout-session-integration.md#the-settlement-sequence-explained) shows.
+`session.settle(options, handlers)` runs the settlement sequence the [TerminalShopperSession guide](./checkout-session-integration.md#the-settlement-sequence-explained) describes: refund allocations, rebate redemption, point redemption, stored value, card charge, award. `options` takes the Java `SettlementOptions` (`settlementType`, `loyalty`, `cashback`, `refunds`, `fulfillments`, `paymentProcessingDisplay`) and `handlers` the `SettlementFlow` handlers. `loyalty` is `{ handling: 'EXPLICIT' | 'IMPLICIT' | 'FORBIDDEN', steps?: ('REBATES' | 'POINTS' | 'AWARD')[] }` and also sets the card payment's Nexo `LoyaltyHandling` as [the mapping table](./checkout-session-integration.md#the-settlement-sequence-explained) shows.
 
 ### Steps, deadlines and defaults
 
@@ -452,7 +452,10 @@ export async function payWithProgress(session: TerminalShopperSession): Promise<
 }
 
 export function netSettlement(session: TerminalShopperSession): Promise<SettlementResult> {
-  return session.settle({ settlementType: 'NET', disableAward: true });
+  return session.settle({
+    settlementType: 'NET',
+    loyalty: { handling: 'EXPLICIT', steps: ['REBATES', 'POINTS'] },
+  });
 }
 ```
 

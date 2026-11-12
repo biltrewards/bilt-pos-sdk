@@ -183,9 +183,7 @@ describe('the Sale tab and the basket card', () => {
     expect(within(outcome).getByText(/Settled \$35\.31/)).toBeTruthy();
     expect(settle.mock.calls[0]?.[0]).toMatchObject({
       settlementType: 'REFUND_THEN_CHARGE',
-      disableRebates: false,
-      disablePoints: true,
-      disableAward: true,
+      loyalty: { handling: 'EXPLICIT', steps: ['REBATES'] },
     });
     fireEvent.click(within(outcome).getByRole('button', { name: 'OK' }));
     expect(screen.queryByRole('dialog')).toBeNull();
