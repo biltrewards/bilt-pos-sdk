@@ -38,10 +38,13 @@ import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -87,6 +90,7 @@ import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.MemberIdentity
+import com.bilt.pos.emulator.session.MemberLookupKind
 import com.bilt.pos.emulator.session.MemberRewardUi
 import com.bilt.pos.emulator.session.PaymentOutcome
 import com.bilt.pos.emulator.session.PaymentRecoveryPrompt
@@ -111,6 +115,11 @@ internal enum class SaleTabPane(val label: String) {
  * wrapping the accumulator.
  */
 private const val MAX_KEYPAD_MINOR = 99_999_999L
+
+/** The saved identify-picker name for the terminal's own sign-in prompt. */
+private const val PIN_PAD_SIGN_IN = "PIN_PAD"
+
+private const val PIN_PAD_LABEL = "Terminal PIN pad"
 
 /**
  * The keypad's entry state: the amount typed so far and, once the operator taps a custom line in
@@ -760,8 +769,12 @@ private fun ConnectionPanel(
     var adbTunnel by rememberSaveable { mutableStateOf(false) }
     var encryptionOn by rememberSaveable { mutableStateOf(state.encryptionEnabled) }
     var passphrase by remember { mutableStateOf("") }
-    var identifyOnStart by rememberSaveable { mutableStateOf(false) }
-    var readVas by rememberSaveable { mutableStateOf(false) }
+    // by name: an enum is not saveable on every platform; PIN_PAD_SIGN_IN is the
+    // terminal's own prompt, which is not a register-supplied MemberLookupKind
+    var lookupKindName by rememberSaveable { mutableStateOf(PIN_PAD_SIGN_IN) }
+    val lookupKind = MemberLookupKind.entries.firstOrNull { it.name == lookupKindName }
+    var lookupValue by rememberSaveable { mutableStateOf("") }
+    var lookupMenuOpen by remember { mutableStateOf(false) }
 
     // Adopt the autodetected address unless the operator already typed one
     LaunchedEffect(state.terminalAddress, state.addressAutodetected) {
@@ -867,7 +880,7 @@ private fun ConnectionPanel(
                             if (sessionActive) {
                                 controller.endSession()
                             } else {
-                                controller.startSession(identifyOnStart, readVas)
+                                controller.startSession()
                             }
                         },
                         enabled = connected,
@@ -876,37 +889,75 @@ private fun ConnectionPanel(
                         Text(if (sessionActive) "End Checkout" else "Start Checkout")
                     }
                 }
-                // The same prompt the Identify toggle runs at Start
-                // Checkout, on demand: a customer who declined or mistyped
-                // can sign in again without restarting the checkout
-                val signInButton: @Composable (Modifier) -> Unit = { modifier ->
+                // Who supplies the member: the shopper on the terminal's PIN
+                // pad, or the register (a handle to look up, or a resolved id)
+                val lookupKindPicker: @Composable () -> Unit = {
+                    Box {
+                        OutlinedButton(
+                            onClick = { lookupMenuOpen = true },
+                            enabled = state.canOperate,
+                        ) {
+                            Text("${lookupKind?.label ?: PIN_PAD_LABEL} ▾")
+                        }
+                        DropdownMenu(
+                            expanded = lookupMenuOpen,
+                            onDismissRequest = { lookupMenuOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(PIN_PAD_LABEL) },
+                                onClick = {
+                                    lookupKindName = PIN_PAD_SIGN_IN
+                                    lookupMenuOpen = false
+                                },
+                            )
+                            MemberLookupKind.entries.forEach { kind ->
+                                DropdownMenuItem(
+                                    text = { Text(kind.label) },
+                                    onClick = {
+                                        lookupKindName = kind.name
+                                        lookupMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                // the PIN pad prompt takes no value: the shopper keys it
+                val lookupField: @Composable (Modifier) -> Unit = { modifier ->
+                    if (lookupKind != null) {
+                        CompactTextField(
+                            value = lookupValue,
+                            onValueChange = { lookupValue = it },
+                            placeholder = lookupKind.label,
+                            enabled = state.canOperate,
+                            modifier = modifier,
+                        )
+                    }
+                }
+                // The PIN pad entry prompts the shopper on the terminal; a
+                // customer who declined or mistyped can sign in again without
+                // restarting the checkout
+                val lookupButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
-                        onClick = { controller.identifyMember(readVas) },
+                        onClick = {
+                            if (lookupKind == null) {
+                                controller.identifyMember()
+                            } else {
+                                controller.identifyMemberBy(lookupKind, lookupValue)
+                            }
+                        },
                         enabled = state.canOperate,
                         colors = ButtonDefaults.filledTonalButtonColors(),
                         modifier = modifier,
                     ) {
-                        Text(if (state.identifyInProgress) "Signing in…" else "Loyalty Sign-In")
-                    }
-                }
-                // Read at Start Checkout: prompts for member identification
-                // right after the session starts
-                val identifyToggle: @Composable () -> Unit = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = identifyOnStart,
-                            onCheckedChange = { identifyOnStart = it },
-                            enabled = state.sessionId == null,
+                        Text(
+                            when {
+                                lookupKind == null && state.identifyInProgress -> "Signing in…"
+                                lookupKind == null -> "Loyalty Sign-In"
+                                lookupKind == MemberLookupKind.RESOLVED_ID -> "Attach Member"
+                                else -> "Look Up Member"
+                            }
                         )
-                        Text("Identify", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-                // Applies to every sign-in prompt, at Start Checkout or from
-                // the button, so it stays enabled mid-checkout
-                val vasToggle: @Composable () -> Unit = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = readVas, onCheckedChange = { readVas = it })
-                        Text("Read VAS", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 // Aborts whatever is on the terminal (payment, identify
@@ -949,15 +1000,16 @@ private fun ConnectionPanel(
                             passphraseField(Modifier.fillMaxWidth())
                         }
                         connectButton(Modifier.fillMaxWidth())
-                        identifyToggle()
-                        vasToggle()
+                        sessionButton(Modifier.fillMaxWidth())
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            sessionButton(Modifier.weight(1f))
-                            signInButton(Modifier.weight(1f))
+                            lookupKindPicker()
+                            lookupField(Modifier.weight(1f))
                         }
+                        lookupButton(Modifier.fillMaxWidth())
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -967,8 +1019,8 @@ private fun ConnectionPanel(
                         }
                     }
                 } else {
-                    // Two flow rows, one per concern: reaching the terminal,
-                    // then driving the checkout. FlowRow, not Row — a plain
+                    // Flow rows, one per concern: reaching the terminal, then
+                    // driving the checkout and identifying the member. FlowRow, not Row — a plain
                     // Row squeezes its last children into word-per-line
                     // buttons that blow the panel up vertically, and neither
                     // row's width is predictable (the passphrase field comes
@@ -998,9 +1050,9 @@ private fun ConnectionPanel(
                             itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
                             sessionButton(Modifier)
-                            signInButton(Modifier)
-                            identifyToggle()
-                            vasToggle()
+                            lookupKindPicker()
+                            lookupField(Modifier.width(240.dp))
+                            lookupButton(Modifier)
                             // a fixed gap, not weight(1f): a weighted spacer
                             // eats the rest of its line and forces everything
                             // after it onto the next one, every time
@@ -1807,12 +1859,12 @@ private val EmulatorState.canOperate: Boolean
 @Composable
 private fun PaymentControls(state: EmulatorState, controller: EmulatorController) {
     // Toggles for the next payment; the loyalty steps run only for an
-    // identified member (at Start Checkout, or self-identified on the
-    // terminal during the flow)
+    // identified member (signed in or looked up from the register, or
+    // self-identified on the terminal during the flow)
     var rebates by rememberSaveable { mutableStateOf(false) }
     var redemption by rememberSaveable { mutableStateOf(false) }
     var award by rememberSaveable { mutableStateOf(false) }
-    var implicitLoyalty by rememberSaveable { mutableStateOf(false) }
+    var implicitLoyalty by rememberSaveable { mutableStateOf(true) }
     // Gift card tender: charged first, remainder goes to the card payment
     var giftCard by rememberSaveable { mutableStateOf(false) }
     // Net by default: a mixed basket moves only the signed difference;
@@ -1834,7 +1886,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // implicit: the terminal handles all loyalty in the card payment, so no SDK steps
-            LoyaltyCheckbox("Implicit", implicitLoyalty, !state.paymentInProgress) {
+            LoyaltyCheckbox("Implicit Loyalty", implicitLoyalty, !state.paymentInProgress) {
                 implicitLoyalty = it
             }
             val stepsEnabled = !state.paymentInProgress && !implicitLoyalty

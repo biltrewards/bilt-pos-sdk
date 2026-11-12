@@ -13,6 +13,7 @@ import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.MemberIdentity
+import com.bilt.pos.emulator.session.MemberLookupKind
 import com.bilt.pos.emulator.session.MemberRewardKind
 import com.bilt.pos.emulator.session.MemberRewardUi
 import com.bilt.pos.emulator.session.PaymentRecoveryAction
@@ -52,7 +53,7 @@ class ScreenshotGenerator {
 
         override fun disconnect() = Unit
 
-        override fun startSession(identifyOnStart: Boolean, readVas: Boolean) = Unit
+        override fun startSession() = Unit
 
         override fun endSession() = Unit
 
@@ -80,7 +81,9 @@ class ScreenshotGenerator {
             net: Boolean,
         ) = Unit
 
-        override fun identifyMember(readVas: Boolean) = Unit
+        override fun identifyMember() = Unit
+
+        override fun identifyMemberBy(kind: MemberLookupKind, value: String) = Unit
 
         override fun acquireCard() = Unit
 

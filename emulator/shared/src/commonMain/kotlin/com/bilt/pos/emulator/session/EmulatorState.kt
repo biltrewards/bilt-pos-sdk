@@ -116,8 +116,8 @@ data class PaymentOutcome(
 
 /**
  * Payment configuration. The SDK-side loyalty steps run only for a member attached to the session —
- * identified at Start Checkout, or by the customer self-identifying on the terminal during the
- * flow.
+ * signed in or looked up from the register, or self-identified by the customer on the terminal
+ * during the flow.
  */
 data class LoyaltyOptions(
     /** Rebate (coupon) redemption. */
@@ -142,6 +142,17 @@ data class StoredValueOptions(
      */
     val cardNumber: String = ""
 )
+
+/**
+ * What a register-entered member identity is: a customer-known handle the terminal looks up, or a
+ * member id already resolved elsewhere.
+ */
+enum class MemberLookupKind(val label: String) {
+    PHONE("Phone"),
+    EMAIL("Email"),
+    ACCOUNT_NUMBER("Account number"),
+    RESOLVED_ID("Resolved member id"),
+}
 
 /** Kind of a [MemberRewardUi], mirroring the SDK's `RewardType`. */
 enum class MemberRewardKind {
@@ -459,14 +470,8 @@ interface EmulatorController {
 
     fun disconnect()
 
-    /**
-     * Start a new checkout session (terminal Start bracket) on the connection. With
-     * [identifyOnStart], the terminal prompts for member identification right after the start
-     * acknowledges — its own operation, not part of the bracket; a failed or declined prompt
-     * degrades to a guest checkout. With [readVas] that prompt lets the shopper tap a wallet pass
-     * (see [identifyMember]).
-     */
-    fun startSession(identifyOnStart: Boolean = false, readVas: Boolean = false)
+    /** Start a new checkout session (terminal Start bracket) on the connection. */
+    fun startSession()
 
     /** End the active checkout session (terminal End bracket). */
     fun endSession()
@@ -552,14 +557,22 @@ interface EmulatorController {
     )
 
     /**
-     * Prompt the customer to sign in to loyalty on the terminal — the same member identification
-     * [startSession] can run, offered on demand so it can follow a declined or mistyped first
-     * attempt without restarting the checkout. Requires an active checkout session; the terminal's
-     * answer lands in [EmulatorState.member]. By default only the keyed entry form is offered; with
-     * [readVas] the terminal also accepts a tapped Apple Wallet pass, and the VAS data it reads
-     * lands in [MemberIdentity.Found.vas].
+     * Prompt the customer to sign in to loyalty on the terminal, as often as needed, so a declined
+     * or mistyped attempt can be retried without restarting the checkout. Requires an active
+     * checkout session; the terminal's answer lands in [EmulatorState.member]. The terminal offers
+     * its keyed entry form and also reads a tapped Apple Wallet pass; the VAS data it reads lands
+     * in [MemberIdentity.Found.vas].
      */
-    fun identifyMember(readVas: Boolean = false)
+    fun identifyMember()
+
+    /**
+     * Identify the member from a [value] the register supplies, with no terminal prompt. A phone,
+     * email or account number is looked up on the terminal and the answer lands in
+     * [EmulatorState.member] like a sign-in. A resolved member id attaches at once; the terminal
+     * then confirms it in the background, upgrading the member with balance, brand and rewards, or
+     * logging the decline. Requires an active checkout session; a blank [value] sends nothing.
+     */
+    fun identifyMemberBy(kind: MemberLookupKind, value: String)
 
     /**
      * Read a card on the terminal (nexo CardAcquisition request) without charging it. A read that

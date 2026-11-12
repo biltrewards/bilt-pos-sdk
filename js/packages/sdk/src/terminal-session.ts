@@ -168,12 +168,12 @@ export interface TerminalShopperSession extends ShopperSession {
    * a member and retry with loyalty.
    *
    * The terminal lets the shopper tap a mobile wallet pass (for example an Apple Wallet loyalty
-   * pass) whenever `forceEntryModes` is omitted or does not restrict entry to `KEYED`; there is
-   * no separate flag. A pass read arrives as `IdentifyResult.vasData`, absent when the terminal
+   * pass) during a loyalty sign-in whatever `forceEntryModes` lists, `KEYED` included, and still
+   * shows its on-screen entry form (current terminal behaviour; it may change); there is no
+   * separate flag. A pass read arrives as `IdentifyResult.vasData`, absent when the terminal
    * returned none. Its `encryptedData` stays encrypted: nothing in the SDK, the host or the
    * terminal decrypts it, so a register that needs the pass contents forwards it to whoever
-   * holds the merchant's VAS private key. Passing `forceEntryModes: ['KEYED']` shows the
-   * on-screen entry only and returns no `vasData`.
+   * holds the merchant's VAS private key.
    */
   identifyMember(options?: IdentifyOptions): Operation<IdentifyResult>;
 
