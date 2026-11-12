@@ -43,6 +43,7 @@ import com.bilt.pos.session.settlement.ExternalPayment
 import com.bilt.pos.session.settlement.OriginalSaleRecord
 import com.bilt.pos.session.settlement.RefundAllocation
 import com.bilt.pos.session.settlement.SettlementFailure
+import com.bilt.pos.session.settlement.SettlementLoyalty
 import com.bilt.pos.session.settlement.SettlementOptions
 import com.bilt.pos.session.settlement.SettlementRecovery
 import com.bilt.pos.session.settlement.SettlementResult
@@ -1544,9 +1545,7 @@ class NexoEmulatorController(
         val optionsBuilder =
             SettlementOptions.builder()
                 .settlementType(settlementType)
-                .disableRebates(!loyalty.rebates)
-                .disablePoints(!loyalty.redemption)
-                .disableAward(!loyalty.award)
+                .loyalty(loyalty.toSettlementLoyalty())
         returns.forEach { planned ->
             if (planned.allocated.signum() > 0) {
                 optionsBuilder.addRefund(
@@ -1568,8 +1567,11 @@ class NexoEmulatorController(
         }
         val options = optionsBuilder.build()
         log(
-            "Starting ${if (net) "net " else ""}settlement — rebates ${onOff(loyalty.rebates)}, " +
-                "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}" +
+            "Starting ${if (net) "net " else ""}settlement — " +
+                (if (loyalty.implicit) "loyalty implicit"
+                else
+                    "rebates ${onOff(loyalty.rebates)}, " +
+                        "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}") +
                 (card?.let { ", gift card ${it.storedValueId ?: "(swipe on terminal)"}" } ?: "") +
                 (if (giftCards.isEmpty()) ""
                 else ", ${giftCards.size} gift card purchase(s) to load") +
@@ -3128,3 +3130,16 @@ internal fun cardAcquisitionAdditionalResponse(tree: JsonNode): String? =
         .path("AdditionalResponse")
         .takeIf { it.isTextual }
         ?.asText()
+
+private fun LoyaltyOptions.toSettlementLoyalty(): SettlementLoyalty =
+    if (implicit) {
+        SettlementLoyalty.implicit()
+    } else {
+        SettlementLoyalty.explicit(
+            buildSet {
+                if (rebates) add(SettlementLoyalty.Step.REBATES)
+                if (redemption) add(SettlementLoyalty.Step.POINTS)
+                if (award) add(SettlementLoyalty.Step.AWARD)
+            }
+        )
+    }

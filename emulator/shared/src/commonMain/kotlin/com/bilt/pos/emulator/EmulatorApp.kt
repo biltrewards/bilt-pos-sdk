@@ -1898,6 +1898,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
     var rebates by rememberSaveable { mutableStateOf(false) }
     var redemption by rememberSaveable { mutableStateOf(false) }
     var award by rememberSaveable { mutableStateOf(false) }
+    var implicitLoyalty by rememberSaveable { mutableStateOf(false) }
     // Gift card tender: charged first, remainder goes to the card payment
     var giftCard by rememberSaveable { mutableStateOf(false) }
     // Net by default: a mixed basket moves only the signed difference;
@@ -1918,9 +1919,14 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            LoyaltyCheckbox("Rebates", rebates, !state.paymentInProgress) { rebates = it }
-            LoyaltyCheckbox("Redemption", redemption, !state.paymentInProgress) { redemption = it }
-            LoyaltyCheckbox("Award", award, !state.paymentInProgress) { award = it }
+            // implicit: the terminal handles all loyalty in the card payment, so no SDK steps
+            LoyaltyCheckbox("Implicit", implicitLoyalty, !state.paymentInProgress) {
+                implicitLoyalty = it
+            }
+            val stepsEnabled = !state.paymentInProgress && !implicitLoyalty
+            LoyaltyCheckbox("Rebates", rebates, stepsEnabled) { rebates = it }
+            LoyaltyCheckbox("Redemption", redemption, stepsEnabled) { redemption = it }
+            LoyaltyCheckbox("Award", award, stepsEnabled) { award = it }
             LoyaltyCheckbox("Gift card", giftCard, !state.paymentInProgress) { giftCard = it }
             LoyaltyCheckbox("Net settlement", netSettlement, !state.paymentInProgress) {
                 netSettlement = it
@@ -1981,6 +1987,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                         rebates = rebates,
                         redemption = redemption,
                         award = award,
+                        implicit = implicitLoyalty,
                     ),
                     if (giftCard) StoredValueOptions(cardNumber = giftCardNumber) else null,
                     net = netSettlement,

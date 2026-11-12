@@ -80,5 +80,8 @@ export async function payWithProgress(session: TerminalShopperSession): Promise<
 }
 
 export function netSettlement(session: TerminalShopperSession): Promise<SettlementResult> {
-  return session.settle({ settlementType: 'NET', disableAward: true });
+  return session.settle({
+    settlementType: 'NET',
+    loyalty: { handling: 'EXPLICIT', steps: ['REBATES', 'POINTS'] },
+  });
 }

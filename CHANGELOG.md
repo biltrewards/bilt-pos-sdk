@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.44.0]
+## [0.45.0]
 
 ### Added
 
 - Emulator (desktop/Android): Loyalty Sign-In and a new register-supplied identity share one control: a picker, a value field, and one button. Terminal PIN pad, the default, hides the field and runs the existing Loyalty Sign-In prompt (Read VAS still applies). Phone, Email, Account number, or Resolved member id identify the member from a value the register supplies, with no terminal prompt: type it and press Look Up Member (Attach Member for a resolved id). Phone, email, and account number go through `identifyMember(Member.idResolver().lookup(..))`, a Keyed BalanceInquiry (PhoneNumber for a phone, AccountNumber otherwise), and land on the sign-in card like a sign-in. A resolved id attaches through `member(Member.id(..))`; the card updates when the terminal's background AccountNumber/File BalanceInquiry confirms it, and a decline is logged with the member left attached. Background errors are now logged with their code and message rather than as a customer-display failure.
+
+## [0.44.0]
+
+### Changed
+
+- **Breaking:** `SettlementOptions.disableRebates`, `disablePoints` and `disableAward` are replaced by `SettlementOptions.loyalty(SettlementLoyalty)`. `SettlementLoyalty.explicit()` (the default) runs the SDK's rebate, point and award steps, `explicit(steps)` runs only the given `SettlementLoyalty.Step`s, `forbidden()` runs none, and `implicit()` runs none and leaves loyalty to the terminal during the card payment. The settlement card payment's Nexo `LoyaltyHandling` is now `Forbidden` for explicit and forbidden loyalty, and absent for implicit; `Processed` is no longer sent. The session protocol's `SettlementOptions` replaces the three booleans with `loyalty: { handling, steps }`.
+- Emulator (desktop/Android): an Implicit loyalty checkbox settles with `SettlementLoyalty.implicit()`; the Rebates, Redemption and Award checkboxes pick the explicit steps.
 
 ## [0.43.0]
 

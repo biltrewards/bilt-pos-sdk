@@ -16,6 +16,7 @@ import com.bilt.pos.session.settlement.ExternalPayment;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.SettlementFailure;
+import com.bilt.pos.session.settlement.SettlementLoyalty;
 import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementRecovery;
@@ -26,6 +27,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -2455,7 +2457,10 @@ class TerminalShopperSessionPaymentTest {
 
     SettlementResult result =
         session
-            .settle(SettlementOptions.builder().disablePoints(true).disableAward(true).build())
+            .settle(
+                SettlementOptions.builder()
+                    .loyalty(SettlementLoyalty.explicit(EnumSet.of(SettlementLoyalty.Step.REBATES)))
+                    .build())
             .onMovement(
                 movement -> {
                   if (movement.getStep() == SettlementStep.REBATE_REDEMPTION) {
@@ -3469,7 +3474,10 @@ class TerminalShopperSessionPaymentTest {
     server.enqueue(new MockResponse().setBody(AWARD_OK));
     assertTrue(
         session
-            .settle(SettlementOptions.builder().disableRebates(true).disablePoints(true).build())
+            .settle(
+                SettlementOptions.builder()
+                    .loyalty(SettlementLoyalty.explicit(EnumSet.of(SettlementLoyalty.Step.AWARD)))
+                    .build())
             .get()
             .isSuccess());
   }
@@ -3486,7 +3494,10 @@ class TerminalShopperSessionPaymentTest {
     AtomicReference<SettlementFailure> seen = new AtomicReference<>();
     SettlementFlow flow =
         session
-            .settle(SettlementOptions.builder().disableRebates(true).disablePoints(true).build())
+            .settle(
+                SettlementOptions.builder()
+                    .loyalty(SettlementLoyalty.explicit(EnumSet.of(SettlementLoyalty.Step.AWARD)))
+                    .build())
             .onAwarded(
                 movement -> {
                   throw new IllegalStateException("register award bug");
@@ -3536,7 +3547,10 @@ class TerminalShopperSessionPaymentTest {
     AtomicReference<SettlementFailure> seen = new AtomicReference<>();
     SettlementFlow flow =
         session
-            .settle(SettlementOptions.builder().disableRebates(true).disablePoints(true).build())
+            .settle(
+                SettlementOptions.builder()
+                    .loyalty(SettlementLoyalty.explicit(EnumSet.of(SettlementLoyalty.Step.AWARD)))
+                    .build())
             .beforeStep(
                 context -> {
                   if (context.getStep() == SettlementStep.AWARD) {
@@ -3762,7 +3776,7 @@ class TerminalShopperSessionPaymentTest {
   }
 
   @Test
-  void disableAwardSkipsTheAwardStepButKeepsRedemptions() throws Exception {
+  void explicitStepsWithoutAwardSkipTheAwardStepButKeepRedemptions() throws Exception {
     identifyMember();
     addHundredDollarItem();
 
@@ -3771,7 +3785,15 @@ class TerminalShopperSessionPaymentTest {
     server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 85.00)));
 
     SettlementResult result =
-        session.settle(SettlementOptions.builder().disableAward(true).build()).get();
+        session
+            .settle(
+                SettlementOptions.builder()
+                    .loyalty(
+                        SettlementLoyalty.explicit(
+                            EnumSet.of(
+                                SettlementLoyalty.Step.REBATES, SettlementLoyalty.Step.POINTS)))
+                    .build())
+            .get();
 
     assertEquals(0, result.getTotalPointsEarned());
     assertNull(result.getAwardPoiTransactionId());
@@ -4093,7 +4115,10 @@ class TerminalShopperSessionPaymentTest {
     server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
     server.enqueue(new MockResponse().setBody(AWARD_OK));
     session
-        .settle(SettlementOptions.builder().disableRebates(true).disablePoints(true).build())
+        .settle(
+            SettlementOptions.builder()
+                .loyalty(SettlementLoyalty.explicit(EnumSet.of(SettlementLoyalty.Step.AWARD)))
+                .build())
         .executeSync();
     drainRequests();
 
@@ -4125,7 +4150,10 @@ class TerminalShopperSessionPaymentTest {
     server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
     server.enqueue(new MockResponse().setBody(AWARD_OK)); // POI-AW-1
     session
-        .settle(SettlementOptions.builder().disableRebates(true).disablePoints(true).build())
+        .settle(
+            SettlementOptions.builder()
+                .loyalty(SettlementLoyalty.explicit(EnumSet.of(SettlementLoyalty.Step.AWARD)))
+                .build())
         .executeSync();
     drainRequests();
 
@@ -4167,7 +4195,10 @@ class TerminalShopperSessionPaymentTest {
     server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
     server.enqueue(new MockResponse().setBody(AWARD_OK)); // POI-AW-1
     session
-        .settle(SettlementOptions.builder().disableRebates(true).disablePoints(true).build())
+        .settle(
+            SettlementOptions.builder()
+                .loyalty(SettlementLoyalty.explicit(EnumSet.of(SettlementLoyalty.Step.AWARD)))
+                .build())
         .executeSync();
     drainRequests();
 
@@ -4414,7 +4445,10 @@ class TerminalShopperSessionPaymentTest {
     server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
     server.enqueue(new MockResponse().setBody(AWARD_OK)); // POI-AW-1
     session
-        .settle(SettlementOptions.builder().disableRebates(true).disablePoints(true).build())
+        .settle(
+            SettlementOptions.builder()
+                .loyalty(SettlementLoyalty.explicit(EnumSet.of(SettlementLoyalty.Step.AWARD)))
+                .build())
         .executeSync();
     drainRequests();
 
@@ -4485,17 +4519,17 @@ class TerminalShopperSessionPaymentTest {
   }
 
   @Test
-  void cardPaymentOmitsLoyaltyHandlingByDefault() throws Exception {
+  void cardPaymentForbidsLoyaltyByDefault() throws Exception {
     addHundredDollarItem();
     server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
 
     session.settle().get();
 
-    assertNull(cardPaymentConditions(), "no TransactionConditions unless loyalty is restricted");
+    assertEquals(LoyaltyHandlingEnum.FORBIDDEN, cardPaymentConditions().getLoyaltyHandling());
   }
 
   @Test
-  void cardPaymentIsProcessedAfterAPointRedemption() throws Exception {
+  void cardPaymentForbidsLoyaltyAfterExplicitLoyaltySteps() throws Exception {
     identifyMember();
     addHundredDollarItem();
     server.enqueue(new MockResponse().setBody(REBATE_OK));
@@ -4505,33 +4539,30 @@ class TerminalShopperSessionPaymentTest {
 
     session.settle().get();
 
-    assertEquals(LoyaltyHandlingEnum.PROCESSED, cardPaymentConditions().getLoyaltyHandling());
+    assertEquals(LoyaltyHandlingEnum.FORBIDDEN, cardPaymentConditions().getLoyaltyHandling());
   }
 
   @Test
-  void cardPaymentIsProcessedWhenPointsAreDisabled() throws Exception {
+  void forbiddenLoyaltySkipsTheStepsAndForbidsLoyaltyOnThePayment() throws Exception {
     identifyMember();
     addHundredDollarItem();
-    server.enqueue(new MockResponse().setBody(REBATE_OK));
-    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 90.00)));
-    server.enqueue(new MockResponse().setBody(AWARD_OK));
-
-    session.settle(SettlementOptions.builder().disablePoints(true).build()).get();
-
-    assertEquals(LoyaltyHandlingEnum.PROCESSED, cardPaymentConditions().getLoyaltyHandling());
-  }
-
-  @Test
-  void cardPaymentForbidsLoyaltyWhenPointsAndAwardAreDisabled() throws Exception {
-    identifyMember();
-    addHundredDollarItem();
-    server.enqueue(new MockResponse().setBody(REBATE_OK));
-    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 90.00)));
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
 
     session
-        .settle(SettlementOptions.builder().disablePoints(true).disableAward(true).build())
+        .settle(SettlementOptions.builder().loyalty(SettlementLoyalty.forbidden()).build())
         .get();
 
     assertEquals(LoyaltyHandlingEnum.FORBIDDEN, cardPaymentConditions().getLoyaltyHandling());
+  }
+
+  @Test
+  void implicitLoyaltySkipsTheStepsAndLeavesLoyaltyToTheTerminal() throws Exception {
+    identifyMember();
+    addHundredDollarItem();
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 100.00)));
+
+    session.settle(SettlementOptions.builder().loyalty(SettlementLoyalty.implicit()).build()).get();
+
+    assertNull(cardPaymentConditions(), "no TransactionConditions for implicit loyalty");
   }
 }

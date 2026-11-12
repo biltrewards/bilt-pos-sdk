@@ -1431,12 +1431,7 @@ export interface components {
         };
         /** @description The register's plan for resolving a basket, mirroring `SettlementOptions`; all fields optional. */
         SettlementOptions: {
-            /** @default false */
-            disableRebates?: boolean;
-            /** @default false */
-            disablePoints?: boolean;
-            /** @default false */
-            disableAward?: boolean;
+            loyalty?: components["schemas"]["SettlementLoyalty"];
             /** @description Positive cashback requested with the card payment. */
             cashback?: components["schemas"]["Money"];
             /** @description Overrides the display shown while the card payment is processing. */
@@ -2144,6 +2139,16 @@ export interface components {
             description?: string;
             quantity: number;
             rewardRef?: string;
+        };
+        /** @description Who handles loyalty, mirroring `SettlementLoyalty`. `EXPLICIT` runs the listed SDK loyalty steps (all three when `steps` is omitted) and sends the card payment with `LoyaltyHandling=Forbidden`. `IMPLICIT` runs no SDK loyalty steps and omits `LoyaltyHandling`, so the terminal handles loyalty during the card payment. `FORBIDDEN` runs no loyalty steps and sends `LoyaltyHandling=Forbidden`. Omitted, the settlement is `EXPLICIT` with all steps. */
+        SettlementLoyalty: {
+            /**
+             * @default EXPLICIT
+             * @enum {string}
+             */
+            handling?: "EXPLICIT" | "IMPLICIT" | "FORBIDDEN";
+            /** @description The SDK loyalty steps to run; only with `EXPLICIT`. An empty list is `FORBIDDEN`. */
+            steps?: ("REBATES" | "POINTS" | "AWARD")[];
         };
         DisplayHeaderFooter: {
             text: string;

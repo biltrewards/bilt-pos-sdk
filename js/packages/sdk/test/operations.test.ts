@@ -30,7 +30,7 @@ describe('starting an operation', () => {
   it('posts the request with a fresh UUID v4 idempotency key and declares handledSteps', async () => {
     const { engine, session } = await lane();
     const op = session.settle(
-      { disableAward: true, cashback: '5.00' },
+      { loyalty: { handling: 'FORBIDDEN' }, cashback: '5.00' },
       {
         onRebatesRedeemed: (r) => r.suggestedTotal,
         onError: () => 'RETRY',
@@ -43,7 +43,7 @@ describe('starting an operation', () => {
     const request = engine.requests[0]!;
     expect(request.operation).toEqual({
       type: 'settle',
-      options: { disableAward: true, cashback: '5.00' },
+      options: { loyalty: { handling: 'FORBIDDEN' }, cashback: '5.00' },
       handledSteps: ['TOTAL_REQUIRED', 'RECOVERY_REQUIRED'],
     });
     expect(request.options?.idempotencyKey).toMatch(UUID_V4);
