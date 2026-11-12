@@ -470,14 +470,8 @@ interface EmulatorController {
 
     fun disconnect()
 
-    /**
-     * Start a new checkout session (terminal Start bracket) on the connection. With
-     * [identifyOnStart], the terminal prompts for member identification right after the start
-     * acknowledges — its own operation, not part of the bracket; a failed or declined prompt
-     * degrades to a guest checkout. That prompt also reads a tapped wallet pass (see
-     * [identifyMember]).
-     */
-    fun startSession(identifyOnStart: Boolean = false)
+    /** Start a new checkout session (terminal Start bracket) on the connection. */
+    fun startSession()
 
     /** End the active checkout session (terminal End bracket). */
     fun endSession()
@@ -563,11 +557,11 @@ interface EmulatorController {
     )
 
     /**
-     * Prompt the customer to sign in to loyalty on the terminal — the same member identification
-     * [startSession] can run, offered on demand so it can follow a declined or mistyped first
-     * attempt without restarting the checkout. Requires an active checkout session; the terminal's
-     * answer lands in [EmulatorState.member]. The terminal offers its keyed entry form and also
-     * reads a tapped Apple Wallet pass; the VAS data it reads lands in [MemberIdentity.Found.vas].
+     * Prompt the customer to sign in to loyalty on the terminal, as often as needed, so a declined
+     * or mistyped attempt can be retried without restarting the checkout. Requires an active
+     * checkout session; the terminal's answer lands in [EmulatorState.member]. The terminal offers
+     * its keyed entry form and also reads a tapped Apple Wallet pass; the VAS data it reads lands
+     * in [MemberIdentity.Found.vas].
      */
     fun identifyMember()
 

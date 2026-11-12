@@ -53,7 +53,7 @@ class ScreenshotGenerator {
 
         override fun disconnect() = Unit
 
-        override fun startSession(identifyOnStart: Boolean) = Unit
+        override fun startSession() = Unit
 
         override fun endSession() = Unit
 

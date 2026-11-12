@@ -343,30 +343,6 @@ class NexoEmulatorControllerIdentifyTest {
             .map { it.substringAfter("VAS AdditionalResponse: ") }
 
     @Test
-    fun startCheckoutPromptReadsTheWalletPass() {
-        server.dispatcher = respondingWith { body ->
-            if ("\"CardAcquisitionRequest\"" in body) {
-                cardAcquisitionFound("pass-123", vasJson = VAS_JSON)
-            } else {
-                defaultResponse(body)
-            }
-        }
-        val controller = controller()
-        runBlocking {
-            controller.connect("127.0.0.1", encryptionEnabled = false)
-            withTimeout(10_000) {
-                controller.state.first { it.connection.phase == ConnectionPhase.CONNECTED }
-            }
-            controller.startSession(identifyOnStart = true)
-            val member =
-                withTimeout(10_000) {
-                    controller.state.first { it.member != null && !it.identifyInProgress }.member
-                }
-            assertNotNull(assertIsFound(member).vas)
-        }
-    }
-
-    @Test
     fun unparsedVasReportSurfacesAsRaw() {
         server.dispatcher = respondingWith { body ->
             if ("\"CardAcquisitionRequest\"" in body) {

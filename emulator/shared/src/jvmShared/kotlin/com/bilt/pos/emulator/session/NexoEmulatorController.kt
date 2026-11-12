@@ -685,7 +685,7 @@ class NexoEmulatorController(
         }
     }
 
-    override fun startSession(identifyOnStart: Boolean) {
+    override fun startSession() {
         val conn =
             connection
                 ?: run {
@@ -741,11 +741,7 @@ class NexoEmulatorController(
                     it.withCheckoutCleared(sessionId = started.sessionId, lastPayment = null)
                 }
                 log("Checkout session started (id ${started.sessionId})")
-                if (identifyOnStart) {
-                    runIdentifyPrompt(conn, started)
-                } else {
-                    refreshCustomerDisplay(started)
-                }
+                refreshCustomerDisplay(started)
             }
             .onError { error ->
                 if (connection === conn) {

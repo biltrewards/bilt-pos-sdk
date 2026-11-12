@@ -769,7 +769,6 @@ private fun ConnectionPanel(
     var adbTunnel by rememberSaveable { mutableStateOf(false) }
     var encryptionOn by rememberSaveable { mutableStateOf(state.encryptionEnabled) }
     var passphrase by remember { mutableStateOf("") }
-    var identifyOnStart by rememberSaveable { mutableStateOf(false) }
     // by name: an enum is not saveable on every platform; PIN_PAD_SIGN_IN is the
     // terminal's own prompt, which is not a register-supplied MemberLookupKind
     var lookupKindName by rememberSaveable { mutableStateOf(PIN_PAD_SIGN_IN) }
@@ -881,7 +880,7 @@ private fun ConnectionPanel(
                             if (sessionActive) {
                                 controller.endSession()
                             } else {
-                                controller.startSession(identifyOnStart)
+                                controller.startSession()
                             }
                         },
                         enabled = connected,
@@ -935,9 +934,9 @@ private fun ConnectionPanel(
                         )
                     }
                 }
-                // The PIN pad entry runs the same prompt the Identify toggle
-                // runs at Start Checkout, on demand: a customer who declined
-                // or mistyped can sign in again without restarting the checkout
+                // The PIN pad entry prompts the shopper on the terminal; a
+                // customer who declined or mistyped can sign in again without
+                // restarting the checkout
                 val lookupButton: @Composable (Modifier) -> Unit = { modifier ->
                     Button(
                         onClick = {
@@ -959,18 +958,6 @@ private fun ConnectionPanel(
                                 else -> "Look Up Member"
                             }
                         )
-                    }
-                }
-                // Read at Start Checkout: prompts for member identification
-                // right after the session starts
-                val identifyToggle: @Composable () -> Unit = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = identifyOnStart,
-                            onCheckedChange = { identifyOnStart = it },
-                            enabled = state.sessionId == null,
-                        )
-                        Text("Identify", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 // Aborts whatever is on the terminal (payment, identify
@@ -1013,7 +1000,6 @@ private fun ConnectionPanel(
                             passphraseField(Modifier.fillMaxWidth())
                         }
                         connectButton(Modifier.fillMaxWidth())
-                        identifyToggle()
                         sessionButton(Modifier.fillMaxWidth())
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1033,9 +1019,8 @@ private fun ConnectionPanel(
                         }
                     }
                 } else {
-                    // Flow rows, one per concern: reaching the terminal,
-                    // driving the checkout, then identifying the member from a
-                    // register-supplied value. FlowRow, not Row — a plain
+                    // Flow rows, one per concern: reaching the terminal, then
+                    // driving the checkout and identifying the member. FlowRow, not Row — a plain
                     // Row squeezes its last children into word-per-line
                     // buttons that blow the panel up vertically, and neither
                     // row's width is predictable (the passphrase field comes
@@ -1065,23 +1050,15 @@ private fun ConnectionPanel(
                             itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
                             sessionButton(Modifier)
-                            identifyToggle()
+                            lookupKindPicker()
+                            lookupField(Modifier.width(240.dp))
+                            lookupButton(Modifier)
                             // a fixed gap, not weight(1f): a weighted spacer
                             // eats the rest of its line and forces everything
                             // after it onto the next one, every time
                             Spacer(Modifier.width(16.dp))
                             clearBasketButton(Modifier)
                             abortButton(Modifier)
-                        }
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            itemVerticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            lookupKindPicker()
-                            lookupField(Modifier.width(240.dp))
-                            lookupButton(Modifier)
                         }
                     }
                 }

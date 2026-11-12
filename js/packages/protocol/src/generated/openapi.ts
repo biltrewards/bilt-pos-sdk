@@ -1260,12 +1260,10 @@ export interface components {
         /** @description Options for the terminal-prompted identification. Defaults are any entry mode, any brand, member required. */
         IdentifyOptions: {
             /**
-             * @description Restricts how the identifier is captured; the terminal accepts only the listed modes.
-             *     This is also how a client requests a wallet pass (VAS) read: omit the option, or include
-             *     a tap-capable mode (`TAPPED` or `CONTACTLESS`), to let the shopper tap a pass. A list
-             *     without one, such as `["KEYED"]` (on-screen entry only) or `["SCANNED"]`, rules tapping
-             *     out and returns no `vasData`. There is no separate VAS flag; the host passes the modes
-             *     through as `ForceEntryMode`.
+             * @description Restricts how the identifier is captured; the host passes the modes through as
+             *     `ForceEntryMode`. During a loyalty sign-in the terminal reads a tapped wallet pass (VAS)
+             *     whatever the modes list, `KEYED` included, and still shows its on-screen entry form; this
+             *     is current terminal behaviour and may change. There is no separate VAS flag.
              */
             forceEntryModes?: components["schemas"]["ForceEntryMode"][];
             allowedLoyaltyBrands?: string[];

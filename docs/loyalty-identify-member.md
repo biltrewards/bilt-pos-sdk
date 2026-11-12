@@ -100,7 +100,7 @@ When the member is found, your integration receives:
     - **`LoyaltyBrand`** *(optional)* — the loyalty program name (e.g. `K-Club`).
 - **`Response.AdditionalResponse`** — base64-encoded JSON containing the member's active rewards. Decode and parse to obtain a `rewards` array (each entry has `rewardRef`, `type`, `name`, `expirationDate`) and a `rewardCount`. Use these to show the member's available rewards at the register; rewards and coupons are applied to the sale via a [rebate](./loyalty-apply-rebates.md).
 
-  When the shopper tapped a mobile wallet pass (e.g. an Apple Wallet loyalty pass), the same JSON also carries a `vas` object with the Value Added Services data the terminal read. `LoyaltyAccountID.LoyaltyID` holds the pass value, `EntryMode` is `Mobile`, and `IdentificationType` is `AccountNumber`. To let the shopper tap a pass, omit `ForceEntryMode` or include a tap-capable mode (`Tapped` or `Contactless`). The terminal accepts only the listed modes, so a list without one, such as `["Keyed"]` (on-screen entry only), rules tapping out.
+  When the shopper tapped a mobile wallet pass (e.g. an Apple Wallet loyalty pass), the same JSON also carries a `vas` object with the Value Added Services data the terminal read. `LoyaltyAccountID.LoyaltyID` holds the pass value, `EntryMode` is `Mobile`, and `IdentificationType` is `AccountNumber`. During a loyalty sign-in the terminal reads a tapped pass whatever `ForceEntryMode` lists, `["Keyed"]` included, and still shows its on-screen entry form; this is current terminal behaviour and may change.
 
   ```json
   {

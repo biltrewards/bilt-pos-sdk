@@ -208,8 +208,9 @@ the deadline apply the suggested total. Leave `handledSteps` out to take every
 default without being asked.
 
 `identifyMember` takes `options.forceEntryModes` (names of the SDK's
-`ForceEntryMode`) and passes them straight to the terminal; leave it unset, or
-omit `KEYED`, and the terminal may read an Apple Wallet pass. A pass comes back
+`ForceEntryMode`) and passes them straight to the terminal. The terminal reads a
+tapped Apple Wallet pass during a loyalty sign-in whatever the entry modes,
+`KEYED` included (current terminal behaviour; it may change). A pass comes back
 as `result.vasData` (`services[]`, plus `source`, `merchantId` and `raw` when the
 terminal reported them), still encrypted; the key is absent when there is none.
 A pass sign-in may also resolve a `result.shopperContext` — `kind` (`MEMBER`,
