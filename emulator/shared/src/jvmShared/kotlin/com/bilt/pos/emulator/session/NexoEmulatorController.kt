@@ -1495,8 +1495,11 @@ class NexoEmulatorController(
         }
         val options = optionsBuilder.build()
         log(
-            "Starting ${if (net) "net " else ""}settlement — rebates ${onOff(loyalty.rebates)}, " +
-                "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}" +
+            "Starting ${if (net) "net " else ""}settlement — " +
+                (if (loyalty.implicit) "loyalty implicit"
+                else
+                    "rebates ${onOff(loyalty.rebates)}, " +
+                        "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}") +
                 (card?.let { ", gift card ${it.storedValueId ?: "(swipe on terminal)"}" } ?: "") +
                 (if (giftCards.isEmpty()) ""
                 else ", ${giftCards.size} gift card purchase(s) to load") +
