@@ -116,8 +116,8 @@ data class PaymentOutcome(
 
 /**
  * Payment configuration. The SDK-side loyalty steps run only for a member attached to the session —
- * identified at Start Checkout, or by the customer self-identifying on the terminal during the
- * flow.
+ * signed in or looked up from the register, or self-identified by the customer on the terminal
+ * during the flow.
  */
 data class LoyaltyOptions(
     /** Rebate (coupon) redemption. */

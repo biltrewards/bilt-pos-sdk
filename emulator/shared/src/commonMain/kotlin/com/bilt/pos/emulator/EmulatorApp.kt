@@ -1859,12 +1859,12 @@ private val EmulatorState.canOperate: Boolean
 @Composable
 private fun PaymentControls(state: EmulatorState, controller: EmulatorController) {
     // Toggles for the next payment; the loyalty steps run only for an
-    // identified member (at Start Checkout, or self-identified on the
-    // terminal during the flow)
+    // identified member (signed in or looked up from the register, or
+    // self-identified on the terminal during the flow)
     var rebates by rememberSaveable { mutableStateOf(false) }
     var redemption by rememberSaveable { mutableStateOf(false) }
     var award by rememberSaveable { mutableStateOf(false) }
-    var implicitLoyalty by rememberSaveable { mutableStateOf(false) }
+    var implicitLoyalty by rememberSaveable { mutableStateOf(true) }
     // Gift card tender: charged first, remainder goes to the card payment
     var giftCard by rememberSaveable { mutableStateOf(false) }
     // Net by default: a mixed basket moves only the signed difference;
