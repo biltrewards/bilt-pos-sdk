@@ -56,6 +56,7 @@ import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.ExternalPayment;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
+import com.bilt.pos.session.settlement.SettlementLoyalty;
 import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementRecovery;
@@ -193,13 +194,19 @@ public final class PaymentOrchestrator {
     final boolean disableRebates;
     final boolean disablePoints;
     final boolean disableAward;
+    final LoyaltyHandlingEnum cardLoyaltyHandling;
 
     AttemptOptions(SettlementOptions request) {
       this.cashback = request.getCashback();
       this.paymentProcessingDisplay = request.getPaymentProcessingDisplay();
-      this.disableRebates = request.isDisableRebates();
-      this.disablePoints = request.isDisablePoints();
-      this.disableAward = request.isDisableAward();
+      SettlementLoyalty loyalty = request.getLoyalty();
+      this.disableRebates = !loyalty.runs(SettlementLoyalty.Step.REBATES);
+      this.disablePoints = !loyalty.runs(SettlementLoyalty.Step.POINTS);
+      this.disableAward = !loyalty.runs(SettlementLoyalty.Step.AWARD);
+      this.cardLoyaltyHandling =
+          loyalty.getHandling() == SettlementLoyalty.Handling.IMPLICIT
+              ? null
+              : LoyaltyHandlingEnum.FORBIDDEN;
     }
   }
 
@@ -272,7 +279,6 @@ public final class PaymentOrchestrator {
     BigDecimal rebateTotal = BigDecimal.ZERO;
     int pointsRedeemed = 0;
     BigDecimal pointsValue = BigDecimal.ZERO;
-    boolean pointRedemptionRan = false;
     BigDecimal storedValueCharged = BigDecimal.ZERO;
     BigDecimal cardCharged = BigDecimal.ZERO;
     BigDecimal externalPaid = BigDecimal.ZERO;
@@ -357,7 +363,6 @@ public final class PaymentOrchestrator {
                       response));
       if (!recovered.skipped) {
         PointRedemptionResult points = recovered.value;
-        pointRedemptionRan = true;
         pointsRedeemed = points.getPointsUsed();
         pointsValue = points.getMonetaryValue();
         result.pointsBalance(points.getRemainingPointBalance());
@@ -454,7 +459,7 @@ public final class PaymentOrchestrator {
       }
       Basket stepBasket = workingBasket;
       BigDecimal stepTotal = currentTotal;
-      LoyaltyHandlingEnum loyaltyHandling = cardLoyaltyHandling(options, pointRedemptionRan);
+      LoyaltyHandlingEnum loyaltyHandling = options.cardLoyaltyHandling;
       StepOutcome<BigDecimal> recovered =
           runStep(
               request,
@@ -1440,18 +1445,6 @@ public final class PaymentOrchestrator {
 
     copyPaymentArtifacts(body, result);
     return charged;
-  }
-
-  /**
-   * The card Payment's {@code LoyaltyHandling}: {@code Forbidden} when points and award are both
-   * disabled, {@code Processed} when points are disabled or a point redemption already ran, else
-   * absent so the terminal may offer hosted checkout.
-   */
-  private static LoyaltyHandlingEnum cardLoyaltyHandling(AttemptOptions options, boolean redeemed) {
-    if (options.disablePoints && options.disableAward) {
-      return LoyaltyHandlingEnum.FORBIDDEN;
-    }
-    return options.disablePoints || redeemed ? LoyaltyHandlingEnum.PROCESSED : null;
   }
 
   /**

@@ -39,6 +39,7 @@ import com.bilt.pos.session.settlement.ExternalPayment;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.RefundAllocationType;
+import com.bilt.pos.session.settlement.SettlementLoyalty;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementRecovery;
 import com.bilt.pos.session.settlement.SettlementType;
@@ -52,6 +53,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -550,15 +552,37 @@ public final class Parsers {
 
   // ─── Settlement and reversal ───
 
+  static SettlementLoyalty settlementLoyalty(JsonNode node) {
+    if (node == null) {
+      return SettlementLoyalty.explicit();
+    }
+    SettlementLoyalty.Handling handling =
+        Json.enumValue(node, "handling", SettlementLoyalty.Handling.class);
+    List<String> steps = Json.strings(node, "steps");
+    if (handling != null && handling != SettlementLoyalty.Handling.EXPLICIT) {
+      if (steps != null) {
+        throw HostError.badRequest("loyalty.steps applies only to EXPLICIT handling");
+      }
+      return handling == SettlementLoyalty.Handling.IMPLICIT
+          ? SettlementLoyalty.implicit()
+          : SettlementLoyalty.forbidden();
+    }
+    if (steps == null) {
+      return SettlementLoyalty.explicit();
+    }
+    EnumSet<SettlementLoyalty.Step> selected = EnumSet.noneOf(SettlementLoyalty.Step.class);
+    for (String step : steps) {
+      selected.add(Json.enumValue(step, "loyalty.steps", SettlementLoyalty.Step.class));
+    }
+    return SettlementLoyalty.explicit(selected);
+  }
+
   public static SettlementOptions settlementOptions(JsonNode node) {
     if (node == null || node.isNull()) {
       return SettlementOptions.defaults();
     }
     SettlementOptions.Builder builder =
-        SettlementOptions.builder()
-            .disableRebates(Json.bool(node, "disableRebates", false))
-            .disablePoints(Json.bool(node, "disablePoints", false))
-            .disableAward(Json.bool(node, "disableAward", false));
+        SettlementOptions.builder().loyalty(settlementLoyalty(Json.objectField(node, "loyalty")));
     BigDecimal cashback = Json.decimal(node, "cashback");
     if (cashback != null) {
       try {

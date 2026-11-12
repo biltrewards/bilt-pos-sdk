@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.0]
+
+### Changed
+
+- **Breaking:** `SettlementOptions.disableRebates`, `disablePoints` and `disableAward` are replaced by `SettlementOptions.loyalty(SettlementLoyalty)`. `SettlementLoyalty.explicit()` (the default) runs the SDK's rebate, point and award steps, `explicit(steps)` runs only the given `SettlementLoyalty.Step`s, `forbidden()` runs none, and `implicit()` runs none and leaves loyalty to the terminal during the card payment. The settlement card payment's Nexo `LoyaltyHandling` is now `Forbidden` for explicit and forbidden loyalty, and absent for implicit; `Processed` is no longer sent. The session protocol's `SettlementOptions` replaces the three booleans with `loyalty: { handling, steps }`.
+- Emulator (desktop/Android): an Implicit loyalty checkbox settles with `SettlementLoyalty.implicit()`; the Rebates, Redemption and Award checkboxes pick the explicit steps.
+
 ## [0.43.0]
 
 ### Changed

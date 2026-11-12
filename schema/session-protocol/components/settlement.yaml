@@ -98,19 +98,32 @@ ExternalPayment:
       type: string
       description: A register transaction reference.
 
+SettlementLoyalty:
+  type: object
+  description: >-
+    Who handles loyalty, mirroring `SettlementLoyalty`. `EXPLICIT` runs the listed SDK loyalty steps
+    (all three when `steps` is omitted) and sends the card payment with `LoyaltyHandling=Forbidden`.
+    `IMPLICIT` runs no SDK loyalty steps and omits `LoyaltyHandling`, so the terminal handles loyalty
+    during the card payment. `FORBIDDEN` runs no loyalty steps and sends `LoyaltyHandling=Forbidden`.
+    Omitted, the settlement is `EXPLICIT` with all steps.
+  properties:
+    handling:
+      type: string
+      enum: [EXPLICIT, IMPLICIT, FORBIDDEN]
+      default: EXPLICIT
+    steps:
+      type: array
+      description: The SDK loyalty steps to run; only with `EXPLICIT`. An empty list is `FORBIDDEN`.
+      items:
+        type: string
+        enum: [REBATES, POINTS, AWARD]
+
 SettlementOptions:
   type: object
   description: The register's plan for resolving a basket, mirroring `SettlementOptions`; all fields optional.
   properties:
-    disableRebates:
-      type: boolean
-      default: false
-    disablePoints:
-      type: boolean
-      default: false
-    disableAward:
-      type: boolean
-      default: false
+    loyalty:
+      $ref: '#/SettlementLoyalty'
     cashback:
       description: Positive cashback requested with the card payment.
       $ref: './common.yaml#/Money'

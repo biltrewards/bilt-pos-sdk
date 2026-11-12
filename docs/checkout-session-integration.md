@@ -141,16 +141,16 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 7. **Award** — terminal submits the loyalty award (Store-and-Forward if loyalty is down) → `onAwarded`
 8. `onSuccess` / `onError` / `onAbandoned`
 
-The card charge's Nexo `PaymentRequest` carries `PaymentTransaction.TransactionConditions.LoyaltyHandling` derived from `SettlementOptions`:
+`SettlementOptions.loyalty(SettlementLoyalty)` chooses who handles loyalty, and with it the card charge's Nexo `PaymentTransaction.TransactionConditions.LoyaltyHandling`:
 
-| Settlement | `LoyaltyHandling` | Terminal behaviour |
-| --- | --- | --- |
-| Default, no point redemption ran | absent | May offer Bilt hosted checkout at amount confirmation when the shopper is Bilt-identified; points are earned |
-| A point redemption ran earlier in this settlement | `Processed` | No hosted checkout; points are earned |
-| `disablePoints` | `Processed` | No hosted checkout; points are earned |
-| `disablePoints` + `disableAward` | `Forbidden` | No hosted checkout and no automatic earn (an explicit loyalty Award can still earn) |
+| `SettlementLoyalty` | SDK loyalty steps | `LoyaltyHandling` | Terminal behaviour |
+| --- | --- | --- | --- |
+| `explicit()` (default) | rebates, points, award | `Forbidden` | No hosted checkout and no automatic earn; the SDK's Award earns |
+| `explicit(steps)` | only `steps` (`REBATES`, `POINTS`, `AWARD`) | `Forbidden` | As above |
+| `forbidden()` (= `explicit` with no steps) | none | `Forbidden` | No loyalty |
+| `implicit()` | none | absent | May offer Bilt hosted checkout at amount confirmation when the shopper is Bilt-identified; points are earned automatically |
 
-`disableAward` alone leaves `LoyaltyHandling` absent (or `Processed` after a point redemption).
+The Nexo payment cannot tell rebates, points and award apart, so implicit handling always covers all three.
 
 With `SettlementType.NET`, the SDK uses the complete signed basket instead. A positive total enters the loyalty/stored-value/card charge sequence for only that difference. A negative total skips the charge sequence and executes refund allocations for only the absolute difference. A zero total sends no monetary movement. Award-reversal allocations remain bookkeeping movements and are retained even when the return value is fully absorbed by a net charge.
 

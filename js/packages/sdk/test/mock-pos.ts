@@ -670,7 +670,10 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
           step,
         );
       }
-      if (!options.disableRebates && handlers.onRebatesRedeemed) {
+      const loyalty = options.loyalty ?? { handling: 'EXPLICIT' };
+      const rebates =
+        loyalty.handling === 'EXPLICIT' && (loyalty.steps?.includes('REBATES') ?? true);
+      if (rebates && handlers.onRebatesRedeemed) {
         const result = fx.rebates(this.basket.current, '2.00');
         total = await handlers.onRebatesRedeemed(result, step);
       }

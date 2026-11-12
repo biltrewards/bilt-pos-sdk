@@ -26,9 +26,7 @@ import java.util.Objects;
  */
 public final class SettlementOptions {
 
-  private final boolean disableRebates;
-  private final boolean disablePoints;
-  private final boolean disableAward;
+  private final SettlementLoyalty loyalty;
   private final BigDecimal cashback;
   private final DisplayPayload paymentProcessingDisplay;
   private final List<RefundAllocation> refunds;
@@ -36,9 +34,7 @@ public final class SettlementOptions {
   private final SettlementType settlementType;
 
   private SettlementOptions(Builder builder) {
-    this.disableRebates = builder.disableRebates;
-    this.disablePoints = builder.disablePoints;
-    this.disableAward = builder.disableAward;
+    this.loyalty = builder.loyalty;
     this.cashback = builder.cashback;
     this.paymentProcessingDisplay = builder.paymentProcessingDisplay;
     this.refunds = Collections.unmodifiableList(new ArrayList<>(builder.refunds));
@@ -55,32 +51,9 @@ public final class SettlementOptions {
     return builder().build();
   }
 
-  /** Whether terminal offer/rebate redemption is disabled. */
-  public boolean isDisableRebates() {
-    return disableRebates;
-  }
-
-  /**
-   * Whether point/reward redemption is disabled.
-   *
-   * <p>Also sets the card Payment's {@code TransactionConditions.LoyaltyHandling}: {@code
-   * Processed} (no hosted checkout, points still earned), or {@code Forbidden} together with {@link
-   * #isDisableAward()}. A point redemption earlier in the settlement also sends {@code Processed};
-   * otherwise the field is absent.
-   */
-  public boolean isDisablePoints() {
-    return disablePoints;
-  }
-
-  /**
-   * Whether the post-payment loyalty award is disabled.
-   *
-   * <p>Combined with {@link #isDisablePoints()}, the card Payment is sent with {@code
-   * TransactionConditions.LoyaltyHandling=Forbidden}: no hosted checkout and no automatic earn.
-   * Alone it leaves {@code LoyaltyHandling} unchanged.
-   */
-  public boolean isDisableAward() {
-    return disableAward;
+  /** Who handles loyalty; default {@link SettlementLoyalty#explicit()}. */
+  public SettlementLoyalty getLoyalty() {
+    return loyalty;
   }
 
   /** Cashback to request with the card payment, or {@code null}. */
@@ -111,9 +84,7 @@ public final class SettlementOptions {
   /** Builder for {@link SettlementOptions}. */
   public static final class Builder {
 
-    private boolean disableRebates;
-    private boolean disablePoints;
-    private boolean disableAward;
+    private SettlementLoyalty loyalty = SettlementLoyalty.explicit();
     private BigDecimal cashback;
     private DisplayPayload paymentProcessingDisplay;
     private List<RefundAllocation> refunds = new ArrayList<>();
@@ -122,27 +93,12 @@ public final class SettlementOptions {
 
     private Builder() {}
 
-    /** Disables terminal offer/rebate redemption for this settlement. */
-    public Builder disableRebates(boolean disableRebates) {
-      this.disableRebates = disableRebates;
-      return this;
-    }
-
     /**
-     * Disables point/reward redemption for this settlement and sends the card Payment with {@code
-     * LoyaltyHandling=Processed} ({@code Forbidden} together with {@link #disableAward}).
+     * Who handles loyalty: the SDK's loyalty steps, the terminal during the card payment, or
+     * nobody. Default {@link SettlementLoyalty#explicit()}.
      */
-    public Builder disablePoints(boolean disablePoints) {
-      this.disablePoints = disablePoints;
-      return this;
-    }
-
-    /**
-     * Disables the post-payment loyalty award for this settlement. Together with {@link
-     * #disablePoints} the card Payment is sent with {@code LoyaltyHandling=Forbidden}.
-     */
-    public Builder disableAward(boolean disableAward) {
-      this.disableAward = disableAward;
+    public Builder loyalty(SettlementLoyalty loyalty) {
+      this.loyalty = Objects.requireNonNull(loyalty, "loyalty");
       return this;
     }
 

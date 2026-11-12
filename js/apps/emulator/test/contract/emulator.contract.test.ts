@@ -166,9 +166,7 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
     let giftCardSuggested: string | undefined;
     const result = await session.settle(
       {
-        disableRebates: true,
-        disablePoints: true,
-        disableAward: true,
+        loyalty: { handling: 'FORBIDDEN' },
       },
       {
         onGiftCardPayment: (giftCard) => {
@@ -224,9 +222,7 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
     const result = await session.settle({
       settlementType: 'REFUND_THEN_CHARGE',
       refunds: allocations,
-      disableRebates: true,
-      disablePoints: true,
-      disableAward: true,
+      loyalty: { handling: 'FORBIDDEN' },
     });
 
     expect(Number(result.cardRefundedAmount)).toBe(26.65);

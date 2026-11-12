@@ -1082,9 +1082,15 @@ export class BrowserEmulatorController implements EmulatorController {
         session.settle(
           {
             settlementType: net ? 'NET' : 'REFUND_THEN_CHARGE',
-            disableRebates: !loyalty.rebates,
-            disablePoints: !loyalty.redemption,
-            disableAward: !loyalty.award,
+            loyalty: {
+              handling: 'EXPLICIT',
+              steps: (['REBATES', 'POINTS', 'AWARD'] as const).filter(
+                (step) =>
+                  ({ REBATES: loyalty.rebates, POINTS: loyalty.redemption, AWARD: loyalty.award })[
+                    step
+                  ],
+              ),
+            },
             ...(allocations.length ? { refunds: allocations } : {}),
             ...(giftCards.length
               ? {
