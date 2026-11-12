@@ -1886,7 +1886,7 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // implicit: the terminal handles all loyalty in the card payment, so no SDK steps
-            LoyaltyCheckbox("Implicit", implicitLoyalty, !state.paymentInProgress) {
+            LoyaltyCheckbox("Implicit Loyalty", implicitLoyalty, !state.paymentInProgress) {
                 implicitLoyalty = it
             }
             val stepsEnabled = !state.paymentInProgress && !implicitLoyalty
