@@ -71,7 +71,8 @@ VoidResult:
   description: |
     Outcome of `voidTransaction`: the movements *this call* reversed. A resumed void after a
     partial abort does not restate what earlier attempts reversed; its amount, reference and
-    receipts cover only the legs sent this time and may all be absent.
+    receipts cover only the legs sent this time and may all be absent. Also returned by
+    `releaseReservation` for releasing a hold without reversing committed movements.
   required: [success, pointsReversed, remainingPointBalance]
   properties:
     success:

@@ -345,6 +345,12 @@ components:
       $ref: './components/storedvalue.yaml#/StoredValueBalance'
     StoredValueOperationResult:
       $ref: './components/storedvalue.yaml#/StoredValueOperationResult'
+    AuthorizationMode:
+      $ref: './components/settlement.yaml#/AuthorizationMode'
+    ReservationReference:
+      $ref: './components/settlement.yaml#/ReservationReference'
+    Authorization:
+      $ref: './components/settlement.yaml#/Authorization'
     SettlementOptions:
       $ref: './components/settlement.yaml#/SettlementOptions'
     SettlementResult:

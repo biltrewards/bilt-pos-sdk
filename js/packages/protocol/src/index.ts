@@ -84,6 +84,9 @@ export type StoredValueCard = Schemas['StoredValueCard'];
 export type StoredValueBalance = Schemas['StoredValueBalance'];
 export type StoredValueOperationResult = Schemas['StoredValueOperationResult'];
 
+export type AuthorizationMode = Schemas['AuthorizationMode'];
+export type ReservationReference = Schemas['ReservationReference'];
+export type Authorization = Schemas['Authorization'];
 export type SettlementOptions = Schemas['SettlementOptions'];
 export type SettlementResult = Schemas['SettlementResult'];
 export type SettlementMovement = Schemas['SettlementMovement'];
