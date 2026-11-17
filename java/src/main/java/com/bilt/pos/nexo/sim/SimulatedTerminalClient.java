@@ -28,12 +28,17 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.SocketTimeoutException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
@@ -42,6 +47,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -67,6 +73,7 @@ public final class SimulatedTerminalClient implements TerminalClient {
   private final Map<String, BigDecimal> storedValueBalances = new HashMap<>();
   private final Map<String, LedgerEntry> ledgerByPoiId = new HashMap<>();
   private final Map<String, LedgerEntry> ledgerByServiceId = new HashMap<>();
+  private final Map<String, LedgerEntry> reservationsBySaleReference = new HashMap<>();
   private final Map<String, WaitState> waitingByServiceId = new HashMap<>();
 
   private boolean timeoutNextRequest;
@@ -219,10 +226,15 @@ public final class SimulatedTerminalClient implements TerminalClient {
       case INPUT:
         return true;
       case PAYMENT:
-        return request.getPaymentRequest() == null
-            || request.getPaymentRequest().getPaymentData() == null
-            || request.getPaymentRequest().getPaymentData().getPaymentType()
-                != PaymentTypeEnum.REFUND;
+        PaymentTypeEnum type =
+            request.getPaymentRequest() == null
+                    || request.getPaymentRequest().getPaymentData() == null
+                ? null
+                : request.getPaymentRequest().getPaymentData().getPaymentType();
+        return type == null
+            || type == PaymentTypeEnum.NORMAL
+            || type == PaymentTypeEnum.FIRST_RESERVATION
+            || type == PaymentTypeEnum.ONE_TIME_RESERVATION;
       default:
         return false;
     }
@@ -404,6 +416,12 @@ public final class SimulatedTerminalClient implements TerminalClient {
     if (type == PaymentTypeEnum.REFUND) {
       return refund(request, header);
     }
+    if (isReservation(type) || type == PaymentTypeEnum.COMPLETION) {
+      return reservationPayment(request, header, type);
+    }
+    if (type != null && type != PaymentTypeEnum.NORMAL) {
+      return failure(header, MessageCategoryType.PAYMENT, "NotAllowed");
+    }
     BigDecimal amount = paymentAmount(request);
     if (declines(amount)) {
       return failure(
@@ -475,12 +493,160 @@ public final class SimulatedTerminalClient implements TerminalClient {
     return approved(header, MessageCategoryType.PAYMENT, "PaymentResponse", body);
   }
 
+  private NexoTerminalAPI reservationPayment(
+      SaleToPOIRequest request, MessageHeader header, PaymentTypeEnum type)
+      throws BiltNexoClientException {
+    var sale = request.getPaymentRequest().getSaleData();
+    String saleReference = sale == null ? null : sale.getSaleReferenceID();
+    BigDecimal amount = paymentAmount(request);
+    if (amount.signum() <= 0
+        || (type == PaymentTypeEnum.FIRST_RESERVATION
+            && (saleReference == null || saleReference.isBlank()))) {
+      return reservationFailure(
+          header, "NotAllowed", "Invalid Payment Reservation: amount or sale reference missing");
+    }
+    boolean followUp =
+        type == PaymentTypeEnum.UPDATE_RESERVATION || type == PaymentTypeEnum.COMPLETION;
+    LedgerEntry original =
+        followUp
+            ? findReservation(header, paymentRequestParts(request).original, saleReference)
+            : null;
+    if (followUp) {
+      if (original == null || !isReservation(original.paymentType)) {
+        return reservationFailure(header, "NotFound", "Payment Reservation not found");
+      }
+      if (type == PaymentTypeEnum.UPDATE_RESERVATION
+          && original.paymentType == PaymentTypeEnum.ONE_TIME_RESERVATION) {
+        return reservationFailure(
+            header, "NotAllowed", "Invalid Payment Reservation: one-time hold cannot be updated");
+      }
+      if (!original.holdAuthorized || original.reversed || original.completed) {
+        return reservationFailure(
+            header, "NotAllowed", "Invalid Payment Reservation: already closed");
+      }
+      if (original.expiresAt != null
+          && original.expiresAt.isBefore(LocalDate.now(ZoneOffset.UTC))) {
+        return reservationFailure(
+            header, "NotAllowed", "Invalid Payment Reservation: period closed");
+      }
+      if (type == PaymentTypeEnum.COMPLETION && amount.compareTo(original.amount) > 0) {
+        return reservationFailure(
+            header, "NotAllowed", "Invalid Payment Reservation: amount too high");
+      }
+      if (saleReference == null || saleReference.isBlank()) {
+        saleReference = original.saleReferenceId;
+      }
+    }
+    LocalDate expiresAt = original == null ? null : original.expiresAt;
+    String validity = request.getPaymentRequest().getPaymentData().getRequestedValidityDate();
+    if (validity != null && type != PaymentTypeEnum.COMPLETION) {
+      try {
+        expiresAt = LocalDate.parse(validity);
+      } catch (DateTimeParseException e) {
+        return reservationFailure(
+            header, "NotAllowed", "Invalid Payment Reservation: invalid validity date");
+      }
+    }
+    if (declines(amount)) {
+      return failure(header, MessageCategoryType.PAYMENT, "Refusal");
+    }
+    String transactionId =
+        sale == null || sale.getSaleTransactionID() == null
+            ? null
+            : sale.getSaleTransactionID().getTransactionID();
+    boolean partial =
+        type != PaymentTypeEnum.COMPLETION
+            && transactionId != null
+            && transactionId.startsWith("TEST-PARTIAL");
+    if (partial) {
+      amount = amount.divide(BigDecimal.valueOf(2), 2, RoundingMode.DOWN);
+      if (amount.signum() == 0) {
+        return failure(header, MessageCategoryType.PAYMENT, "Refusal");
+      }
+    }
+    ObjectNode body = successBody();
+    if (partial) {
+      ((ObjectNode) body.get("Response")).put("Result", "Partial");
+    }
+    ObjectNode result = body.putObject("PaymentResult");
+    result.put("PaymentType", type.toValue());
+    if (expiresAt != null) {
+      result.put("ValidityDate", expiresAt.toString());
+    }
+    result
+        .putObject("AmountsResp")
+        .put("AuthorizedAmount", amount.doubleValue())
+        .put("Currency", paymentCurrency(request));
+    addPoiData(body);
+    LedgerEntry entry =
+        new LedgerEntry(
+            poiId(body),
+            header.getServiceID(),
+            MessageCategoryType.PAYMENT,
+            body.deepCopy(),
+            responseHeader(header, MessageCategoryType.PAYMENT),
+            amount,
+            paymentCurrency(request));
+    entry.paymentType = type;
+    entry.saleReferenceId = saleReference;
+    entry.expiresAt = expiresAt;
+    entry.holdAuthorized = type != PaymentTypeEnum.COMPLETION;
+    if (original != null) {
+      original.holdAuthorized = false;
+      original.completed = type == PaymentTypeEnum.COMPLETION;
+      entry.originalPoiId = original.poiId;
+    }
+    if (entry.holdAuthorized && saleReference != null && !saleReference.isBlank()) {
+      reservationsBySaleReference.put(reservationKey(header, saleReference), entry);
+    }
+    record(entry);
+    return approved(header, MessageCategoryType.PAYMENT, "PaymentResponse", body);
+  }
+
+  private LedgerEntry findReservation(
+      MessageHeader header, OriginalTransactionRef reference, String saleReference) {
+    if (reference == null && (saleReference == null || saleReference.isBlank())) {
+      return null;
+    }
+    LedgerEntry entry =
+        reference == null
+            ? reservationsBySaleReference.get(reservationKey(header, saleReference))
+            : ledgerByPoiId.get(reference.poiId);
+    return entry != null && Objects.equals(header.getPoiid(), entry.messageHeader.getPoiid())
+        ? entry
+        : null;
+  }
+
+  private static String reservationKey(MessageHeader header, String saleReference) {
+    return header.getPoiid() + "\u0000" + saleReference;
+  }
+
+  private static boolean isReservation(PaymentTypeEnum type) {
+    return type == PaymentTypeEnum.FIRST_RESERVATION
+        || type == PaymentTypeEnum.ONE_TIME_RESERVATION
+        || type == PaymentTypeEnum.UPDATE_RESERVATION;
+  }
+
+  private NexoTerminalAPI reservationFailure(MessageHeader header, String error, String reason) {
+    NexoTerminalAPI response = failure(header, MessageCategoryType.PAYMENT, error);
+    response
+        .getSaleToPOIResponse()
+        .getPaymentResponse()
+        .getResponse()
+        .setAdditionalResponse(
+            "failureReason=" + URLEncoder.encode(reason, StandardCharsets.UTF_8));
+    return response;
+  }
+
   private NexoTerminalAPI refund(SaleToPOIRequest request, MessageHeader header)
       throws BiltNexoClientException {
     PaymentRequestParts parts = paymentRequestParts(request);
     OriginalTransactionRef originalRef = parts.original;
     LedgerEntry original = originalRef == null ? null : ledgerByPoiId.get(originalRef.poiId);
     BigDecimal amount = parts.amount;
+    if (original != null && isReservation(original.paymentType)) {
+      return failure(header, MessageCategoryType.PAYMENT, "NotAllowed");
+    }
     if (originalRef != null) {
       if (original == null || original.category != MessageCategoryType.PAYMENT) {
         return failure(
@@ -701,7 +867,15 @@ public final class SimulatedTerminalClient implements TerminalClient {
         request.getReversalRequest() == null
             ? null
             : originalRef(request.getReversalRequest().getOriginalPOITransaction());
-    LedgerEntry original = reference == null ? null : ledgerByPoiId.get(reference.poiId);
+    LedgerEntry original =
+        reference == null
+            ? findReservation(
+                header,
+                null,
+                request.getReversalRequest() == null
+                    ? null
+                    : request.getReversalRequest().getSaleReferenceID())
+            : ledgerByPoiId.get(reference.poiId);
     if (original == null
         || (original.category != MessageCategoryType.PAYMENT
             && original.category != MessageCategoryType.STORED_VALUE)) {
@@ -716,7 +890,11 @@ public final class SimulatedTerminalClient implements TerminalClient {
           MessageCategoryType.REVERSAL,
           "Refusal");
     }
+    if (isReservation(original.paymentType) && !original.holdAuthorized) {
+      return failure(header, MessageCategoryType.REVERSAL, "NotAllowed");
+    }
     original.reversed = true;
+    original.holdAuthorized = false;
     if (original.category == MessageCategoryType.STORED_VALUE) {
       BigDecimal change =
           original.storedValueType == StoredValueTransactionTypeEnum.UNLOAD
@@ -1502,6 +1680,10 @@ public final class SimulatedTerminalClient implements TerminalClient {
     private int pointsUsed;
     private boolean reversed;
     private boolean loyaltyRefunded;
+    private String saleReferenceId;
+    private LocalDate expiresAt;
+    private boolean holdAuthorized;
+    private boolean completed;
 
     private LedgerEntry(
         String poiId,

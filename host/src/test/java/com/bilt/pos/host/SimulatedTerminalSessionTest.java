@@ -51,6 +51,51 @@ class SimulatedTerminalSessionTest {
   }
 
   @Test
+  void persistsHoldsAcrossHostSessionsForCompletionOrRelease() throws Exception {
+    for (boolean capture : new boolean[] {true, false}) {
+      String first = createSession("DROP-OFF-" + capture);
+      addItem(first, "HOLD", "100.00");
+      JsonNode held =
+          complete(
+              first,
+              json(
+                  "{'type':'settle','options':{'authorization':{'mode':'PRE_AUTH','saleReferenceId':'ORDER-"
+                      + capture
+                      + "','requestedValidityDate':'2099-12-31'}}}"));
+      assertTrue(held.path("result").path("success").asBoolean());
+      assertEquals(0, held.path("result").path("totalPointsEarned").asInt());
+      JsonNode movement = held.path("result").path("movements").get(0);
+      assertEquals("FirstReservation", movement.path("paymentType").asText());
+      JsonNode reference = movement.path("reservation");
+      assertEquals("100.00", reference.path("authorizedAmount").asText());
+      assertEquals("2099-12-31", reference.path("validityDate").asText());
+      client.delete("/v1/sessions/" + first).expect(202);
+
+      String second = createSession("PICKUP-" + capture);
+      if (capture) {
+        addItem(second, "FINAL", "150.00");
+        JsonNode completed =
+            complete(
+                second,
+                json(
+                    "{'type':'settle','options':{'authorization':{'mode':'PRE_AUTH_COMPLETE','reference':"
+                        + reference
+                        + "}}}"));
+        assertTrue(completed.path("result").path("success").asBoolean());
+        assertEquals("150.00", completed.path("result").path("cardAmountCharged").asText());
+        JsonNode movements = completed.path("result").path("movements");
+        assertEquals("UpdateReservation", movements.get(0).path("paymentType").asText());
+        assertEquals("Completion", movements.get(1).path("paymentType").asText());
+      } else {
+        JsonNode released =
+            complete(second, json("{'type':'releaseReservation','reference':" + reference + "}"));
+        assertTrue(released.path("result").path("success").asBoolean());
+      }
+      client.delete("/v1/sessions/" + second).expect(202);
+    }
+  }
+
+  @Test
   void completesMemberSaleRefundVoidAndTransactionStatusFlows() throws Exception {
     String firstSession = createSession("LANE-1");
     JsonNode identified = complete(firstSession, json("{'type':'identifyMember'}"));
