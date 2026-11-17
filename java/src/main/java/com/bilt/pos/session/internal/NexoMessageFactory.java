@@ -51,6 +51,8 @@ import java.util.regex.Pattern;
  * validated and reported to the {@link ServiceIdListener} before the request carrying it is built.
  */
 public final class NexoMessageFactory {
+  // TODO(D4): the terminal advertises the Reservation profile; the SDK keeps Session.Start, not
+  // Login.
 
   private static final String PROTOCOL_VERSION = "3.0";
   private static final char[] SERVICE_ID_ALPHABET =
@@ -180,11 +182,16 @@ public final class NexoMessageFactory {
    * transactions for totals and reconciliation.
    */
   public SaleData saleData(TransactionIdentificationType saleTransaction) {
+    return saleDataBuilder(saleTransaction).build();
+  }
+
+  /** Sale data builder for payment-specific references, retaining the session's totals group. */
+  public SaleData.Builder saleDataBuilder(TransactionIdentificationType saleTransaction) {
     SaleData.Builder saleData = SaleData.builder().saleTransactionID(saleTransaction);
     if (totalsGroupId != null) {
       saleData.saleTerminalData(SaleTerminalData.builder().totalsGroupID(totalsGroupId).build());
     }
-    return saleData.build();
+    return saleData;
   }
 
   /**
@@ -229,12 +236,22 @@ public final class NexoMessageFactory {
       OriginalPOITransaction original,
       TransactionIdentificationType saleTransaction,
       String serviceId) {
+    return reversalRequest(original, saleTransaction, serviceId, null);
+  }
+
+  /** Merchant cancellation of a hold, also addressed by the register's order reference. */
+  public SaleToPOIRequest reversalRequest(
+      OriginalPOITransaction original,
+      TransactionIdentificationType saleTransaction,
+      String serviceId,
+      String saleReferenceId) {
     return SaleToPOIRequest.builder()
         .messageHeader(header(MessageClassType.SERVICE, MessageCategoryType.REVERSAL, serviceId))
         .reversalRequest(
             ReversalRequest.builder()
                 .saleData(saleData(saleTransaction))
                 .originalPOITransaction(original)
+                .saleReferenceID(saleReferenceId)
                 .reversalReason(ReversalReasonEnum.MERCHANT_CANCEL)
                 .build())
         .build();

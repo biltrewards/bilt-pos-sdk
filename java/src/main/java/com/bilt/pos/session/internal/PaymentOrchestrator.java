@@ -30,6 +30,7 @@ import com.bilt.pos.nexo.model.PaymentInstrumentTypeEnum;
 import com.bilt.pos.nexo.model.PaymentRequest;
 import com.bilt.pos.nexo.model.PaymentResponse;
 import com.bilt.pos.nexo.model.PaymentTransaction;
+import com.bilt.pos.nexo.model.PaymentTypeEnum;
 import com.bilt.pos.nexo.model.Rebates;
 import com.bilt.pos.nexo.model.SaleData;
 import com.bilt.pos.nexo.model.SaleItem;
@@ -52,8 +53,10 @@ import com.bilt.pos.session.payment.PointRedemptionResult;
 import com.bilt.pos.session.payment.RebateRedemptionResult;
 import com.bilt.pos.session.payment.RedeemedRebate;
 import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
+import com.bilt.pos.session.settlement.Authorization;
 import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.ExternalPayment;
+import com.bilt.pos.session.settlement.ReservationReference;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementLoyalty;
@@ -189,6 +192,8 @@ public final class PaymentOrchestrator {
 
   /** Retry-varying charge policy; basket obligations remain on the request. */
   private static final class AttemptOptions {
+    final Authorization authorization;
+    final boolean cardOnly;
     final BigDecimal cashback;
     final DisplayPayload paymentProcessingDisplay;
     final boolean disableRebates;
@@ -197,12 +202,20 @@ public final class PaymentOrchestrator {
     final LoyaltyHandlingEnum cardLoyaltyHandling;
 
     AttemptOptions(SettlementOptions request) {
+      this(request, request.getAuthorization());
+    }
+
+    AttemptOptions(SettlementOptions request, Authorization authorization) {
+      this.authorization = authorization;
+      this.cardOnly =
+          authorization.getMode() == Authorization.Mode.PRE_AUTH
+              || authorization.getMode() == Authorization.Mode.PRE_AUTH_UPDATE;
       this.cashback = request.getCashback();
       this.paymentProcessingDisplay = request.getPaymentProcessingDisplay();
       SettlementLoyalty loyalty = request.getLoyalty();
-      this.disableRebates = !loyalty.runs(SettlementLoyalty.Step.REBATES);
-      this.disablePoints = !loyalty.runs(SettlementLoyalty.Step.POINTS);
-      this.disableAward = !loyalty.runs(SettlementLoyalty.Step.AWARD);
+      this.disableRebates = cardOnly || !loyalty.runs(SettlementLoyalty.Step.REBATES);
+      this.disablePoints = cardOnly || !loyalty.runs(SettlementLoyalty.Step.POINTS);
+      this.disableAward = cardOnly || !loyalty.runs(SettlementLoyalty.Step.AWARD);
       this.cardLoyaltyHandling =
           loyalty.getHandling() == SettlementLoyalty.Handling.IMPLICIT
               ? null
@@ -381,7 +394,8 @@ public final class PaymentOrchestrator {
 
     // 3. Fulfill each stored value line before collecting its funding. The
     // register can retry a failed load or abort the whole charge side.
-    for (StoredValueLoad fulfillment : request.options.getFulfillments()) {
+    for (StoredValueLoad fulfillment :
+        options.cardOnly ? List.<StoredValueLoad>of() : request.options.getFulfillments()) {
       BasketLineItem line =
           Objects.requireNonNull(
               request.basket.getItemByReference(fulfillment.getBasketReference()),
@@ -414,7 +428,7 @@ public final class PaymentOrchestrator {
     }
 
     // 4. Stored value
-    if (request.storedValueCard != null && currentTotal.signum() > 0) {
+    if (!options.cardOnly && request.storedValueCard != null && currentTotal.signum() > 0) {
       BigDecimal stepTotal = currentTotal;
       StepOutcome<GiftCardPaymentResult> recovered =
           runStep(
@@ -460,6 +474,38 @@ public final class PaymentOrchestrator {
       Basket stepBasket = workingBasket;
       BigDecimal stepTotal = currentTotal;
       LoyaltyHandlingEnum loyaltyHandling = options.cardLoyaltyHandling;
+      Authorization cardAuthorization = options.authorization;
+      if (cardAuthorization.getMode() == Authorization.Mode.PRE_AUTH_COMPLETE
+          && stepTotal.compareTo(cardAuthorization.getReference().getAuthorizedAmount()) > 0) {
+        AttemptOptions updateOptions =
+            new AttemptOptions(
+                request.options, Authorization.update(cardAuthorization.getReference()));
+        runStep(
+            request,
+            committed,
+            movements,
+            SettlementStep.CARD_CHARGE,
+            stepBasket,
+            stepTotal,
+            false,
+            false,
+            (saleTransaction, serviceId, response) ->
+                cardStep(
+                    request,
+                    stepBasket,
+                    stepTotal,
+                    updateOptions,
+                    loyaltyHandling,
+                    saleTransaction,
+                    serviceId,
+                    committed,
+                    movements,
+                    result,
+                    response));
+        cardAuthorization =
+            Authorization.complete(movements.get(movements.size() - 1).getReservation());
+      }
+      AttemptOptions cardOptions = new AttemptOptions(request.options, cardAuthorization);
       StepOutcome<BigDecimal> recovered =
           runStep(
               request,
@@ -469,13 +515,14 @@ public final class PaymentOrchestrator {
               stepBasket,
               stepTotal,
               false,
-              options.cashback == null,
+              options.cashback == null
+                  && options.authorization.getMode() == Authorization.Mode.SALE,
               (saleTransaction, serviceId, response) ->
                   cardStep(
                       request,
                       stepBasket,
                       stepTotal,
-                      options,
+                      cardOptions,
                       loyaltyHandling,
                       saleTransaction,
                       serviceId,
@@ -1377,6 +1424,17 @@ public final class PaymentOrchestrator {
     // one amount, with CashBackAmount identifying the cash portion
     BigDecimal grossTotal =
         options.cashback != null ? currentTotal.add(options.cashback) : currentTotal;
+    Authorization authorization = options.authorization;
+    Authorization.Mode mode = authorization.getMode();
+    ReservationReference reference = authorization.getReference();
+    if (mode == Authorization.Mode.PRE_AUTH_COMPLETE
+        && grossTotal.compareTo(reference.getAuthorizedAmount()) > 0) {
+      throw new StepFailure(
+          new SessionError(
+              SessionErrorCode.DECLINED,
+              "the updated reservation does not cover the completion amount"),
+          false);
+    }
     AmountsReq.Builder amounts =
         AmountsReq.builder().currency(currency).requestedAmount(grossTotal.doubleValue());
     if (options.cashback != null) {
@@ -1390,6 +1448,32 @@ public final class PaymentOrchestrator {
       transaction.transactionConditions(
           TransactionConditions.builder().loyaltyHandling(loyaltyHandling).build());
     }
+    PaymentData.Builder paymentData = PaymentData.builder();
+    SaleData.Builder sale = exchange.factory().saleDataBuilder(saleTransaction);
+    PaymentTypeEnum paymentType = PaymentTypeEnum.NORMAL;
+    if (mode == Authorization.Mode.PRE_AUTH) {
+      paymentType = PaymentTypeEnum.FIRST_RESERVATION;
+      sale.saleReferenceID(authorization.getSaleReferenceId());
+    } else if (mode == Authorization.Mode.PRE_AUTH_UPDATE
+        || mode == Authorization.Mode.PRE_AUTH_COMPLETE) {
+      paymentType =
+          mode == Authorization.Mode.PRE_AUTH_UPDATE
+              ? PaymentTypeEnum.UPDATE_RESERVATION
+              : PaymentTypeEnum.COMPLETION;
+      sale.saleReferenceID(reference.getSaleReferenceId());
+      transaction.originalPOITransaction(Wire.originalTransaction(reference));
+    }
+    if (mode != Authorization.Mode.SALE) {
+      paymentData.paymentType(paymentType);
+      // The terminal must not run an implicit loyalty flow while placing or adjusting a hold.
+      if (options.cardOnly) {
+        transaction.transactionConditions(
+            TransactionConditions.builder().loyaltyHandling(LoyaltyHandlingEnum.FORBIDDEN).build());
+      }
+      if (mode == Authorization.Mode.PRE_AUTH || mode == Authorization.Mode.PRE_AUTH_UPDATE) {
+        paymentData.requestedValidityDate(authorization.getRequestedValidityDate());
+      }
+    }
     SaleToPOIRequest wireRequest =
         SaleToPOIRequest.builder()
             .messageHeader(
@@ -1398,13 +1482,19 @@ public final class PaymentOrchestrator {
                     .header(MessageClassType.SERVICE, MessageCategoryType.PAYMENT, serviceId))
             .paymentRequest(
                 PaymentRequest.builder()
-                    .saleData(exchange.factory().saleData(saleTransaction))
+                    .saleData(sale.build())
+                    .paymentData(mode == Authorization.Mode.SALE ? null : paymentData.build())
                     .paymentTransaction(transaction.build())
                     .build())
             .build();
 
     PaymentResponse body =
-        sendPayment(SettlementStep.CARD_CHARGE, wireRequest, grossTotal, recoveredResponse);
+        sendCardPayment(
+            wireRequest,
+            grossTotal,
+            recoveredResponse,
+            mode == Authorization.Mode.PRE_AUTH_UPDATE
+                || mode == Authorization.Mode.PRE_AUTH_COMPLETE);
     BigDecimal charged =
         body.getPaymentResult() != null && body.getPaymentResult().getAmountsResp() != null
             ? Wire.money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
@@ -1417,25 +1507,61 @@ public final class PaymentOrchestrator {
         SettlementStep.CARD_CHARGE,
         saleTransaction,
         body.getPoiData(),
-        reversalRollback(Wire.poiRef(body.getPoiData()), saleTransaction));
+        mode == Authorization.Mode.SALE
+            ? reversalRollback(Wire.poiRef(body.getPoiData()), saleTransaction)
+            : mode == Authorization.Mode.PRE_AUTH
+                ? reversalRollback(
+                    Wire.poiRef(body.getPoiData()),
+                    saleTransaction,
+                    authorization.getSaleReferenceId())
+                : () -> {});
+    ReservationReference reservation = null;
+    if (mode != Authorization.Mode.SALE) {
+      if (Wire.txnId(body.getPoiData()) == null
+          || Wire.txnTimestamp(body.getPoiData()) == null
+          || body.getPaymentResult() == null
+          || body.getPaymentResult().getAmountsResp() == null) {
+        throw Wire.missing("reservation POI transaction id/timestamp or authorized amount");
+      }
+      String validityDate =
+          body.getPaymentResult() == null ? null : body.getPaymentResult().getValidityDate();
+      reservation =
+          ReservationReference.builder()
+              .saleReferenceId(
+                  mode == Authorization.Mode.PRE_AUTH
+                      ? authorization.getSaleReferenceId()
+                      : reference.getSaleReferenceId())
+              .poiTransactionId(Wire.txnId(body.getPoiData()))
+              .poiTransactionTimestamp(Wire.txnTimestamp(body.getPoiData()))
+              .authorizedAmount(charged)
+              .validityDate(
+                  validityDate != null
+                      ? validityDate
+                      : reference == null ? null : reference.getValidityDate())
+              .merchantId(reference == null ? null : reference.getMerchantId())
+              .poiId(exchange.factory().getPoiId())
+              .saleId(exchange.factory().getSaleId())
+              .build();
+    }
     publishMovement(
         request,
         movements,
-        movement(
-            SettlementStep.CARD_CHARGE,
-            charged,
-            saleTransaction,
-            serviceId,
-            body.getPoiData(),
-            null,
-            null,
-            null));
+        SettlementMovement.builder()
+            .step(SettlementStep.CARD_CHARGE)
+            .amount(charged)
+            .saleTransactionId(saleTransaction.getTransactionID())
+            .serviceId(wireRequest.getMessageHeader().getServiceID())
+            .poiTransactionId(Wire.txnId(body.getPoiData()))
+            .poiTransactionTimestamp(Wire.txnTimestamp(body.getPoiData()))
+            .paymentType(paymentType.toValue())
+            .reservation(reservation)
+            .build());
 
     // a partial authorization on the stored value step is the split
     // tender mechanism, but the card step is the FINAL tender — an
     // under-authorization here would complete a short-paid sale (or
     // hand out cashback the sale never collected)
-    if (charged.compareTo(grossTotal) < 0) {
+    if (!options.cardOnly && charged.compareTo(grossTotal) < 0) {
       throw new StepFailure(
           new SessionError(
               SessionErrorCode.DECLINED,
@@ -1727,6 +1853,36 @@ public final class PaymentOrchestrator {
     }
   }
 
+  private PaymentResponse sendCardPayment(
+      SaleToPOIRequest request, BigDecimal amount, SaleToPOIResponse recovered, boolean followUp) {
+    for (int retries = 0; ; retries++) {
+      try {
+        return sendPayment(SettlementStep.CARD_CHARGE, request, amount, recovered);
+      } catch (StepFailure failure) {
+        if (!followUp || retries == 3 || !"Busy".equals(failure.error.getNexoErrorCondition())) {
+          throw failure;
+        }
+        try {
+          Thread.sleep(2000L << retries);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new StepFailure(
+              new SessionError(
+                  SessionErrorCode.CANCELLED, "reservation retry interrupted", null, e),
+              false);
+        }
+        recovered = null;
+        request
+            .getMessageHeader()
+            .setServiceID(exchange.factory().mintServiceId(MessageCategoryType.PAYMENT));
+        TransactionIdentificationType transaction =
+            request.getPaymentRequest().getSaleData().getSaleTransactionID();
+        transaction.setTransactionID(java.util.UUID.randomUUID().toString());
+        transaction.setTimeStamp(java.time.Instant.now().toString());
+      }
+    }
+  }
+
   private static StepFailure wireFailure(
       SettlementStep step,
       MessageCategoryType category,
@@ -1764,7 +1920,19 @@ public final class PaymentOrchestrator {
       prior.add(commit.info);
     }
     return SettlementContext.resolveSaleTransactionId(
-        step, basket, currentTotal, prior, serviceId, request.handlers.beforeStep);
+        step,
+        basket,
+        currentTotal,
+        prior,
+        serviceId,
+        step == SettlementStep.CARD_CHARGE
+                && request.options.getAuthorization().getMode() != Authorization.Mode.SALE
+            ? TransactionIdentificationType.builder()
+                .transactionID(java.util.UUID.randomUUID().toString())
+                .timeStamp(java.time.Instant.now().toString())
+                .build()
+            : basket.getSaleTransactionID(),
+        request.handlers.beforeStep);
   }
 
   /** The category of the wire request a charge-side step sends, or {@code null} for none. */
@@ -2013,6 +2181,13 @@ public final class PaymentOrchestrator {
 
   private Runnable reversalRollback(
       TransactionIdentificationType originalPoiTxn, TransactionIdentificationType saleTransaction) {
+    return reversalRollback(originalPoiTxn, saleTransaction, null);
+  }
+
+  private Runnable reversalRollback(
+      TransactionIdentificationType originalPoiTxn,
+      TransactionIdentificationType saleTransaction,
+      String saleReferenceId) {
     return () -> {
       SaleToPOIRequest wireRequest =
           exchange
@@ -2020,7 +2195,8 @@ public final class PaymentOrchestrator {
               .reversalRequest(
                   Wire.originalTransaction(originalPoiTxn),
                   saleTransaction,
-                  exchange.factory().mintServiceId(MessageCategoryType.REVERSAL));
+                  exchange.factory().mintServiceId(MessageCategoryType.REVERSAL),
+                  saleReferenceId);
       SaleToPOIResponse response =
           exchange.sendExpectingBody(MessageCategoryType.REVERSAL, wireRequest);
       if (response.getReversalResponse() != null) {

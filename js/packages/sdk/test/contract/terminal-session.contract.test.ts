@@ -88,6 +88,41 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
     expect(terminal.requestsOf('Admin')).toHaveLength(2);
   });
 
+  it('persists a hold across sessions, updates, completes, and releases a separate hold', async () => {
+    const first = await lane();
+    const hold = await first.settle({
+      authorization: { mode: 'PRE_AUTH', saleReferenceId: 'ORDER-1' },
+    });
+    const reference = hold.movements.find((m) => m.paymentType === 'FirstReservation')?.reservation;
+    expect(reference).toMatchObject({ saleReferenceId: 'ORDER-1', authorizedAmount: '100.00' });
+    if (!reference) throw new Error('hold reference missing');
+    await first.end();
+    const second = await lane();
+    const update = await second.settle({ authorization: { mode: 'PRE_AUTH_UPDATE', reference } });
+    const updated = update.movements[0]?.reservation;
+    if (!updated) throw new Error('updated reference missing');
+    await second.basket.clear();
+    await second.basket.addItem({ sku: 'SKU-1', description: 'Cleaning', unitPrice: '80.00' });
+    const completion = await second.settle({
+      authorization: { mode: 'PRE_AUTH_COMPLETE', reference: updated },
+      loyalty: { handling: 'FORBIDDEN' },
+    });
+    expect(completion.movements[0]?.paymentType).toBe('Completion');
+    await second.basket.clear();
+    await second.basket.addItem({ sku: 'SKU-2', description: 'Deposit', unitPrice: '20.00' });
+    const other = await second.settle({
+      authorization: { mode: 'PRE_AUTH', saleReferenceId: 'ORDER-2' },
+    });
+    const release = other.movements[0]?.reservation;
+    if (!release) throw new Error('release reference missing');
+    terminal.reply(
+      'Reversal',
+      '{"SaleToPOIResponse":{"ReversalResponse":{"Response":{"Result":"Success"}}}}',
+    );
+    expect((await second.releaseReservation(release)).success).toBe(true);
+    expect(JSON.stringify(terminal.requestsOf('Reversal').at(-1))).toContain('MerchantCancel');
+  });
+
   it('runs a session without a poiId on the same terminal under the host default', async () => {
     const session = await pos.startTerminalSession({
       saleId: 'LANE-1',

@@ -19,6 +19,7 @@ import type {
   PointRedemptionResult,
   RebateRedemptionResult,
   RefundResult,
+  ReservationReference,
   ReversalContext,
   ReversalDecision,
   ReversalStep,
@@ -256,12 +257,17 @@ export interface TerminalShopperSession extends ShopperSession {
    * Runs the settlement: refund allocations, rebate redemption, point redemption, stored value
    * fulfillment and tender, card charge, award — or only the signed difference with
    * `settlementType: "NET"`. The session must be open with a non-empty, unconsumed basket.
+   * `authorization` selects a pre-auth hold, update or completion. Persist each movement's
+   * `reservation` for later sessions; over-amount completion raises the hold before capture.
    * `handlers` steer the sequence as the `SettlementFlow` handlers do in Java; each is
    * consulted within a deadline, after which its default applies (see `StepInfo`). Rejects
    * with a `SessionError` whose `code` is `ABORTED` after an abort, with
    * `abandonedSettlement` set after an `ABANDON` recovery.
    */
   settle(options?: SettlementOptions, handlers?: SettlementHandlers): Operation<SettlementResult>;
+
+  /** Releases an open pre-auth hold, independently of voiding a captured sale. */
+  releaseReservation(reference: ReservationReference): Operation<VoidResult>;
 
   /**
    * Full (no `amount`) or partial linked refund of this session's completed payment, also

@@ -39,6 +39,7 @@ import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.VoidResult;
+import com.bilt.pos.session.settlement.ReservationReference;
 import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -105,6 +106,58 @@ public final class ReversalManager {
   }
 
   // ─── Refund ───
+
+  /** Releases an open hold independently of captured-sale voiding. */
+  public VoidResult releaseReservation(
+      ReservationReference reference,
+      TransactionIdentificationType saleTransaction,
+      StepDecider decider,
+      Consumer<ReversalContext> beforeStep) {
+    SessionException[] failure = new SessionException[1];
+    VoidResult result =
+        runStep(
+            ReversalStep.CARD,
+            decider != null ? decider : defaultPolicy(true),
+            decider == null,
+            () -> {
+              String serviceId =
+                  mintServiceId(ReversalStep.CARD, MessageCategoryType.REVERSAL, beforeStep);
+              SaleToPOIRequest request =
+                  exchange
+                      .factory()
+                      .reversalRequest(
+                          Wire.originalTransaction(reference),
+                          saleTransaction,
+                          serviceId,
+                          reference.getSaleReferenceId());
+              ReversalResponse body =
+                  exchange
+                      .sendExpectingBody(MessageCategoryType.REVERSAL, request)
+                      .getReversalResponse();
+              if (body == null) {
+                throw Wire.missing("ReversalResponse");
+              }
+              exchange.requireSuccess(MessageCategoryType.REVERSAL, body.getResponse());
+              return VoidResult.builder()
+                  .success(true)
+                  .serviceId(serviceId)
+                  .reversedAmount(
+                      body.getReversedAmount() == null
+                          ? null
+                          : Wire.money(body.getReversedAmount()))
+                  .poiTransactionId(Wire.txnId(body.getPoiData()))
+                  .poiTransactionTimestamp(Wire.txnTimestamp(body.getPoiData()))
+                  .customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()))
+                  .merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()))
+                  .build();
+            },
+            e -> failure[0] = e,
+            e -> e);
+    if (result == null) {
+      throw failure[0];
+    }
+    return result;
+  }
 
   /**
    * Linked or unlinked refund: the tender refund, then — when the award reference of a linked
@@ -355,6 +408,19 @@ public final class ReversalManager {
       StepDecider decider,
       Consumer<ReversalContext> beforeStep,
       Set<ReversalMovement.Key> reversedMovements) {
+    return voidMovements(
+        movements, memberId, saleTransaction, decider, beforeStep, reversedMovements, null);
+  }
+
+  /** Same-session reversal also retains the card movement's reservation reference. */
+  public VoidResult voidMovements(
+      List<ReversalMovement> movements,
+      String memberId,
+      TransactionIdentificationType saleTransaction,
+      StepDecider decider,
+      Consumer<ReversalContext> beforeStep,
+      Set<ReversalMovement.Key> reversedMovements,
+      ReservationReference reservation) {
     StepDecider effective =
         decider != null
             ? decider
@@ -395,7 +461,8 @@ public final class ReversalManager {
                     money,
                     loyalty,
                     storedValueLoads,
-                    serviceId);
+                    serviceId,
+                    reservation);
                 return serviceId;
               },
               e -> {
@@ -477,7 +544,8 @@ public final class ReversalManager {
       Map<ReversalStep, ReversalResponse> money,
       Map<ReversalStep, LoyaltyResponse> loyalty,
       List<StoredValueOperationResult> storedValueLoads,
-      String serviceId) {
+      String serviceId,
+      ReservationReference reservation) {
     ReversalStep step = movement.getStep();
     if (step == ReversalStep.STORED_VALUE_LOAD) {
       storedValueLoads.add(
@@ -498,7 +566,8 @@ public final class ReversalManager {
               movement.poiTransactionId,
               movement.poiTransactionTimestamp,
               saleTransaction,
-              serviceId));
+              serviceId,
+              step == ReversalStep.CARD ? reservation : null));
       return;
     }
     LoyaltyTransactionTypeEnum refundType = LOYALTY_REFUND_TYPES.get(step);
@@ -777,14 +846,18 @@ public final class ReversalManager {
       String originalPoiTxnId,
       Instant originalPoiTimestamp,
       TransactionIdentificationType saleTransaction,
-      String serviceId) {
+      String serviceId,
+      ReservationReference reservation) {
     SaleToPOIRequest request =
         exchange
             .factory()
             .reversalRequest(
-                Wire.originalTransaction(originalPoiTxnId, originalPoiTimestamp),
+                reservation == null
+                    ? Wire.originalTransaction(originalPoiTxnId, originalPoiTimestamp)
+                    : Wire.originalTransaction(reservation),
                 saleTransaction,
-                serviceId);
+                serviceId,
+                reservation == null ? null : reservation.getSaleReferenceId());
     SaleToPOIResponse response = exchange.sendExpectingBody(MessageCategoryType.REVERSAL, request);
     ReversalResponse body = response.getReversalResponse();
     if (body == null) {

@@ -53,6 +53,7 @@ import { Receipt } from '@biltorg/pos-protocol';
 import { ReconciliationResult } from '@biltorg/pos-protocol';
 import { RefundResult } from '@biltorg/pos-protocol';
 import { Rendering } from '@biltorg/pos-protocol';
+import type { ReservationReference } from '@biltorg/pos-protocol';
 import { ReversalContext } from '@biltorg/pos-protocol';
 import { ReversalDecision } from '@biltorg/pos-protocol';
 import { ReversalStep } from '@biltorg/pos-protocol';
@@ -699,6 +700,7 @@ export interface TerminalShopperSession extends ShopperSession {
     readonly poiId: string;
     refund(amount?: Money, handlers?: ReversalHandlers): Operation<RefundResult>;
     refundUnlinked(amount: Money, handlers?: ReversalHandlers): Operation<RefundResult>;
+    releaseReservation(reference: ReservationReference): Operation<VoidResult>;
     requestAmountConfirmation(amount: Money, prompt: string): Operation<boolean>;
     requestConfirmation(prompt: string, options?: ConfirmationOptions): Operation<boolean>;
     requestDecimalString(prompt: string, options?: InputOptions): Operation<Money>;

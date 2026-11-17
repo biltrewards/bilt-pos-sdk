@@ -16,6 +16,7 @@ import type {
   PinOptions,
   PinResult,
   RefundResult,
+  ReservationReference,
   Session,
   SettlementOptions,
   SettlementResult,
@@ -258,6 +259,10 @@ export class TerminalShopperSessionImpl
     const declared = handledSteps(steps);
     if (declared.length > 0) request.handledSteps = declared;
     return this.request(request, steps);
+  }
+
+  releaseReservation(reference: ReservationReference): Operation<VoidResult> {
+    return this.request({ type: 'releaseReservation', reference });
   }
 
   getTransactionStatus(

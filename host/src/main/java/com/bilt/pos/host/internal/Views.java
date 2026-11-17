@@ -45,6 +45,7 @@ import com.bilt.pos.session.payment.RedeemedRebate;
 import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
 import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.RefundAllocation;
+import com.bilt.pos.session.settlement.ReservationReference;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementLoyalty;
@@ -414,6 +415,23 @@ public final class Views {
     Json.putText(node, "externalTenderType", movement.getExternalTenderType());
     Json.putText(node, "externalReference", movement.getExternalReference());
     Json.putText(node, "serviceId", movement.getServiceId());
+    Json.putText(node, "paymentType", movement.getPaymentType());
+    if (movement.getReservation() != null) {
+      node.set("reservation", reservationReference(movement.getReservation()));
+    }
+    return node;
+  }
+
+  public static ObjectNode reservationReference(ReservationReference reference) {
+    ObjectNode node = Json.object();
+    Json.putText(node, "saleReferenceId", reference.getSaleReferenceId());
+    Json.putText(node, "poiTransactionId", reference.getPoiTransactionId());
+    Json.putInstant(node, "poiTransactionTimestamp", reference.getPoiTransactionTimestamp());
+    Json.putMoney(node, "authorizedAmount", reference.getAuthorizedAmount());
+    Json.putText(node, "validityDate", reference.getValidityDate());
+    Json.putText(node, "merchantId", reference.getMerchantId());
+    Json.putText(node, "poiId", reference.getPoiId());
+    Json.putText(node, "saleId", reference.getSaleId());
     return node;
   }
 
@@ -433,6 +451,15 @@ public final class Views {
 
   public static ObjectNode settlementOptions(SettlementOptions options) {
     ObjectNode node = Json.object();
+    var authorization = options.getAuthorization();
+    ObjectNode auth = node.putObject("authorization");
+    auth.put("mode", authorization.getMode().name());
+    Json.putText(auth, "saleReferenceId", authorization.getSaleReferenceId());
+    Json.putText(auth, "requestedValidityDate", authorization.getRequestedValidityDate());
+    auth.put("displayCart", authorization.isDisplayCart());
+    if (authorization.getReference() != null) {
+      auth.set("reference", reservationReference(authorization.getReference()));
+    }
     ObjectNode loyalty = node.putObject("loyalty");
     loyalty.put("handling", options.getLoyalty().getHandling().name());
     if (options.getLoyalty().getHandling() == SettlementLoyalty.Handling.EXPLICIT) {

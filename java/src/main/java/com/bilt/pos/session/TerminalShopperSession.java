@@ -29,6 +29,7 @@ import com.bilt.pos.session.input.PinOptions;
 import com.bilt.pos.session.input.PinResult;
 import com.bilt.pos.session.input.Signature;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
+import com.bilt.pos.session.settlement.ReservationReference;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementType;
 import com.bilt.pos.session.storedvalue.StoredValueBalance;
@@ -272,6 +273,10 @@ public interface TerminalShopperSession extends ShopperSession {
    * calling {@code settle()} again with the same committed allocation prefix. Charge-side failures
    * after refund allocations use {@link SettlementFlow#onError} recovery decisions.
    *
+   * <p>{@link SettlementOptions#getAuthorization()} selects a pre-auth hold, update, or completion.
+   * Persist each movement's reservation reference for later sessions. An over-amount completion
+   * first raises the hold; use {@link #releaseReservation} to release an uncaptured hold.
+   *
    * <p>A same-session void that already reversed one or more movements must be retried to
    * completion before another settlement can replace its payment target.
    */
@@ -343,6 +348,12 @@ public interface TerminalShopperSession extends ShopperSession {
    * remain authoritative.
    */
   ReversalFlow<VoidResult> voidTransaction(OriginalSaleRecord originalSale);
+
+  /**
+   * Releases an open pre-authorization hold without voiding a captured sale (D1). Persist the
+   * reservation from the settlement movement to release it in a later session.
+   */
+  ReversalFlow<VoidResult> releaseReservation(ReservationReference reference);
 
   // ─── Display ───
 

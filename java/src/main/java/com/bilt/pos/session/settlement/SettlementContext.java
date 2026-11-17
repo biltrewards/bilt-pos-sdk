@@ -65,6 +65,19 @@ public final class SettlementContext {
       String serviceId,
       Function<SettlementContext, String> handler) {
     TransactionIdentificationType defaultTransaction = currentBasket.getSaleTransactionID();
+    return resolveSaleTransactionId(
+        step, currentBasket, currentTotal, priorSteps, serviceId, defaultTransaction, handler);
+  }
+
+  /** Resolves a step whose protocol requires its own fresh transaction identity. */
+  public static TransactionIdentificationType resolveSaleTransactionId(
+      SettlementStep step,
+      Basket currentBasket,
+      BigDecimal currentTotal,
+      List<CommittedStep> priorSteps,
+      String serviceId,
+      TransactionIdentificationType defaultTransaction,
+      Function<SettlementContext, String> handler) {
     if (handler == null) {
       return defaultTransaction;
     }
