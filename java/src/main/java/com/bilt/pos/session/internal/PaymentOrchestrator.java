@@ -600,8 +600,9 @@ public final class PaymentOrchestrator {
           false,
           MessageCategoryType.REVERSAL,
           (saleTransaction, serviceId, response) -> {
-            if (response == null) {
-              checkAbort(request, committed);
+            if (response == null && request.abortRequested.getAsBoolean()) {
+              throw new StepFailure(
+                  new SessionError(SessionErrorCode.ABORTED, "the payment was aborted"), true);
             }
             return releaseReservationStep(reference, saleTransaction, serviceId, response);
           });

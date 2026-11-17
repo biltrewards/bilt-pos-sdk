@@ -385,6 +385,55 @@ class TerminalShopperSessionPreAuthTest {
   }
 
   @Test
+  void abortJustBeforeReleaseUnwindsEachCommittedLegExactlyOnce() throws Exception {
+    reply(
+        "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{\"Response\":{\"Result\":\"Success\"},\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}");
+    session.identifyMember().get();
+    next();
+    basket("100.00");
+    session.setStoredValueCard("GC-1");
+    reply(payment("Success", "GIFT-1", "100.00"));
+    reply(
+        "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{\"Response\":{\"Result\":\"Success\"},\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"AWARD-1\"}}}}}");
+    reply(TerminalShopperSessionTest.LOYALTY_REFUND_OK);
+    reply(TerminalShopperSessionTest.REVERSAL_OK);
+    var flow =
+        session
+            .settle(
+                SettlementOptions.builder()
+                    .authorization(Authorization.complete(reference("100.00")))
+                    .loyalty(SettlementLoyalty.explicit(Set.of(SettlementLoyalty.Step.AWARD)))
+                    .build())
+            .beforeStep(
+                context -> {
+                  if (context.getStep() == SettlementStep.CARD_CHARGE) {
+                    session.abort().executeSync();
+                  }
+                  return context.getDefaultTransactionId();
+                })
+            .onError(
+                failure -> {
+                  fail("intentional cancellation must not consult onError");
+                  return SettlementRecovery.abort();
+                });
+    assertEquals(
+        SessionErrorCode.ABORTED,
+        assertThrows(SessionException.class, flow::get).getError().getCode());
+    assertTrue(next().has("PaymentRequest"));
+    assertEquals(
+        "Award", next().at("/LoyaltyRequest/LoyaltyTransaction/LoyaltyTransactionType").asText());
+    assertEquals(
+        "AwardRefund",
+        next().at("/LoyaltyRequest/LoyaltyTransaction/LoyaltyTransactionType").asText());
+    assertEquals(
+        "GIFT-1",
+        next()
+            .at("/ReversalRequest/OriginalPOITransaction/POITransactionID/TransactionID")
+            .asText());
+    assertNull(server.takeRequest(100, TimeUnit.MILLISECONDS));
+  }
+
+  @Test
   void failedOrPartialCompletionDoesNotReverseHold() throws Exception {
     for (String response :
         new String[] {failure("NotAllowed"), payment("Partial", "PART-CAPTURE", "20.00")}) {
