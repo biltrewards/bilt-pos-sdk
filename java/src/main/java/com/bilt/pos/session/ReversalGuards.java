@@ -30,12 +30,15 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>{@link #reversedMovements()} is the current void attempt's resume state — the sale's movements
  * already reversed, fed to and updated by {@code ReversalManager.voidMovements}. It is cleared when
- * the void completes; the terminal, not the SDK, decides whether a later void is a duplicate.
+ * the void completes; linked refunds are then refused, while the terminal decides whether a later
+ * void is a duplicate.
  */
 final class ReversalGuards {
 
   private final Set<ReversalMovement.Key> reversedMovements = ConcurrentHashMap.newKeySet();
   private volatile boolean refundIssued;
+  private volatile boolean voided;
+  private volatile boolean redemptionAllocated;
   private final String subject;
 
   /**
@@ -45,7 +48,7 @@ final class ReversalGuards {
     this.subject = subject;
   }
 
-  /** The sale's movements already reversed, by a void or a refund's award reversal. */
+  /** The sale's movements already reversed, by a void or a refund's loyalty reversal. */
   Set<ReversalMovement.Key> reversedMovements() {
     return reversedMovements;
   }
@@ -66,6 +69,10 @@ final class ReversalGuards {
 
   /** Guards {@code refund()}: refused while a void has a money leg reversed. */
   void requireNoReversedMoneyLeg() {
+    if (voided) {
+      throw new SessionException(
+          new SessionError(SessionErrorCode.INVALID_STATE, "the sale was voided"));
+    }
     if (hasReversed(ReversalStep.STORED_VALUE_LOAD)
         || hasReversed(ReversalStep.CARD)
         || hasReversed(ReversalStep.STORED_VALUE)) {
@@ -88,12 +95,35 @@ final class ReversalGuards {
   /** A new payment replaced the guarded sale and all of its reversal progress. */
   void reset() {
     refundIssued = false;
+    voided = false;
+    redemptionAllocated = false;
     reversedMovements.clear();
   }
 
   /** A completed void no longer needs in-memory resume progress. */
   void completeVoid() {
+    voided = true;
     reversedMovements.clear();
+  }
+
+  boolean redemptionReversed() {
+    return hasReversed(ReversalStep.REDEMPTION);
+  }
+
+  void markRedemptionReversed(String poiTransactionId) {
+    reversedMovements.add(ReversalMovement.key(ReversalStep.REDEMPTION, poiTransactionId));
+  }
+
+  void requireRedemptionNotFullyReturned() {
+    if (voided || (redemptionReversed() && !redemptionAllocated)) {
+      throw new SessionException(
+          new SessionError(SessionErrorCode.INVALID_STATE, "the redemption was already returned"));
+    }
+  }
+
+  void markRedemptionAllocated(String poiTransactionId) {
+    redemptionAllocated = true;
+    markRedemptionReversed(poiTransactionId);
   }
 
   /** Whether a refund flow already reversed the award. */

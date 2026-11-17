@@ -747,14 +747,14 @@ extends <a href="ShopperSession.html" title="interface in com.bilt.pos.session">
 
  <p>Linked refunds reference a single transaction: after a split tender this is the card leg —
  use <code>voidTransaction()</code> to reverse both legs, or the stored value operations to return
- funds to the gift card. A refund reverses the card leg and award only; the sale's committed
- rebate and redemption movements are reversed by <a href="#voidTransaction()"><code>voidTransaction()</code></a>. Once a refund has
- returned money the payment can no longer be voided; a tender skipped by an <code>onError</code>
- decision leaves it voidable, with an award the flow reversed remembered so nothing re-credits
- it. Once a void has partially reversed the payment's money legs, refunds are refused until the
- void is finished. To refund a sale taken by an earlier session, ring return lines into a new
- session and provide refund allocations on <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>. Loyalty reversals use the
- member attached when this payment settled, even if the session was subsequently re-identified.</div>
+ funds to the gift card. A full refund also returns the explicit redemption unless already
+ returned; rebates remain part of <a href="#voidTransaction()"><code>voidTransaction()</code></a>. Once a refund has returned money
+ the payment can no longer be voided; a tender skipped by an <code>onError</code> decision leaves it
+ voidable, with an award the flow reversed remembered so nothing re-credits it. Once a void has
+ partially reversed the payment's money legs, refunds are refused until the void is finished,
+ and after a completed void linked refunds are refused. To refund a sale taken by an earlier
+ session, ring return lines into a new session and provide refund allocations on <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>. Loyalty reversals use the member attached when this payment settled, even
+ if the session was subsequently re-identified.</div>
 </section>
 </li>
 <li>
@@ -762,7 +762,8 @@ extends <a href="ShopperSession.html" title="interface in com.bilt.pos.session">
 <h3>refund</h3>
 <div class="member-signature"><span class="return-type"><a href="ReversalFlow.html" title="class in com.bilt.pos.session">ReversalFlow</a>&lt;<a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a>&gt;</span>&nbsp;<span class="element-name">refund</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount)</span></div>
 <div class="block">Partial linked refund of this session's completed payment. Also reverses the loyalty award when
- one ran (best-effort by default).</div>
+ one ran (best-effort by default). Does not return the explicit redemption; select its monetary
+ share with a point-redemption allocation in <a href="settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement"><code>SettlementOptions</code></a>.</div>
 </section>
 </li>
 <li>

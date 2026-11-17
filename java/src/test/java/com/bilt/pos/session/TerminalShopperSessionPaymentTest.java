@@ -581,19 +581,11 @@ class TerminalShopperSessionPaymentTest {
             .getPoiTransactionID()
             .getTransactionID());
 
-    server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
-    assertThrows(SessionException.class, () -> session.refund(new BigDecimal("10.00")).get());
-
-    SaleToPOIRequest refund = nextRequest();
-    assertEquals("Refund", refund.getPaymentRequest().getPaymentData().getPaymentType().toValue());
-    assertEquals(
-        "POI-PAY-1",
-        refund
-            .getPaymentRequest()
-            .getPaymentTransaction()
-            .getOriginalPOITransaction()
-            .getPoiTransactionID()
-            .getTransactionID());
+    SessionException refund =
+        assertThrows(SessionException.class, () -> session.refund(new BigDecimal("10.00")).get());
+    assertEquals(SessionErrorCode.INVALID_STATE, refund.getError().getCode());
+    assertEquals("the sale was voided", refund.getError().getMessage());
+    assertTrue(drainRequests().isEmpty());
   }
 
   @Test
@@ -4079,6 +4071,228 @@ class TerminalShopperSessionPaymentTest {
   }
 
   // ─── Post-payment void uses the payment's references ───
+
+  private OriginalSaleRecord settleWithRedemption() throws Exception {
+    identifyMember();
+    addHundredDollarItem();
+    server.enqueue(new MockResponse().setBody(REDEEM_OK));
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-1", 95.00)));
+    SettlementResult result =
+        session
+            .settle(
+                SettlementOptions.builder()
+                    .loyalty(SettlementLoyalty.explicit(EnumSet.of(SettlementLoyalty.Step.POINTS)))
+                    .build())
+            .get();
+    drainRequests();
+    return result.toOriginalSaleRecord("98234");
+  }
+
+  @Test
+  void fullRefundReturnsRedemptionOnlyOnce() throws Exception {
+    settleWithRedemption();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(95.00)));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+    assertTrue(session.refund().get().isSuccess());
+    List<SaleToPOIRequest> requests = drainRequests();
+    assertEquals(2, requests.size());
+    var loyalty = requests.get(1).getLoyaltyRequest();
+    assertEquals(
+        "RedemptionRefund", loyalty.getLoyaltyTransaction().getLoyaltyTransactionType().toValue());
+    assertEquals(
+        "POI-RD-1",
+        loyalty
+            .getLoyaltyTransaction()
+            .getOriginalPOITransaction()
+            .getPoiTransactionID()
+            .getTransactionID());
+    assertEquals("98234", loyalty.getLoyaltyData()[0].getLoyaltyAccountID().getLoyaltyID());
+    assertNull(loyalty.getLoyaltyData()[0].getLoyaltyAmount());
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(95.00)));
+    assertTrue(session.refund().get().isSuccess());
+    assertEquals(1, drainRequests().size());
+  }
+
+  @Test
+  void fullRefundWithoutAwardReportsRedemptionPointsAndBalance() throws Exception {
+    settleWithRedemption();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(95.00)));
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                    + "\"Response\":{\"Result\":\"Success\"},"
+                    + "\"LoyaltyResult\":[{\"CurrentBalance\":750,"
+                    + "\"LoyaltyAmount\":{\"LoyaltyUnit\":\"Point\",\"AmountValue\":50}}]}}}"));
+
+    RefundResult result = session.refund().get();
+
+    assertTrue(result.isSuccess());
+    assertEquals(50, result.getPointsReversed());
+    assertEquals(750, result.getRemainingPointBalance());
+    assertEquals(2, drainRequests().size());
+  }
+
+  @Test
+  void partialRefundLeavesRedemptionForFullRefund() throws Exception {
+    settleWithRedemption();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(10.00)));
+    assertTrue(session.refund(BigDecimal.TEN).get().isSuccess());
+    assertEquals(1, drainRequests().size());
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(85.00)));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+    assertTrue(session.refund().get().isSuccess());
+    assertEquals(2, drainRequests().size());
+  }
+
+  @Test
+  void redemptionRefundRetriesThroughDecider() throws Exception {
+    settleWithRedemption();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(95.00)));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+    assertTrue(
+        session
+            .refund()
+            .onError(
+                (step, error) -> {
+                  assertEquals(ReversalStep.REDEMPTION, step);
+                  return ReversalDecision.RETRY;
+                })
+            .get()
+            .isSuccess());
+    assertEquals(3, drainRequests().size());
+  }
+
+  @Test
+  void redemptionRefundAbortIsAnnotatedAndNotMarkedReversed() throws Exception {
+    settleWithRedemption();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(95.00)));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));
+    SessionException error =
+        assertThrows(
+            SessionException.class,
+            () -> session.refund().onError((step, failure) -> ReversalDecision.ABORT).get());
+    assertTrue(
+        error
+            .getError()
+            .getMessage()
+            .contains("tender refund completed but the redemption POI-RD-1 was not reversed"));
+    drainRequests();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(95.00)));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+    assertTrue(session.refund().get().isSuccess());
+    assertEquals(2, drainRequests().size());
+  }
+
+  @Test
+  void redemptionRefundIsBestEffortByDefault() throws Exception {
+    settleWithRedemption();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(95.00)));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));
+    assertTrue(session.refund().get().isSuccess());
+    assertEquals(2, drainRequests().size());
+  }
+
+  @Test
+  void completedVoidRefusesLinkedRefunds() throws Exception {
+    settleWithRedemption();
+    server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+    assertTrue(session.voidTransaction().get().isSuccess());
+    drainRequests();
+    SessionException full = assertThrows(SessionException.class, () -> session.refund().get());
+    assertEquals(SessionErrorCode.INVALID_STATE, full.getError().getCode());
+    assertEquals("the sale was voided", full.getError().getMessage());
+    assertThrows(SessionException.class, () -> session.refund(BigDecimal.ONE).get());
+    assertTrue(drainRequests().isEmpty());
+  }
+
+  @Test
+  void skippedTenderWithReturnedRedemptionSucceedsWithoutRepeatingItOnVoid() throws Exception {
+    settleWithRedemption();
+    server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+    assertTrue(session.refund().onError((step, error) -> ReversalDecision.SKIP).get().isSuccess());
+    assertEquals(2, drainRequests().size());
+    server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+    assertTrue(session.voidTransaction().get().isSuccess());
+    assertEquals(1, drainRequests().size());
+  }
+
+  @Test
+  void refundWithEveryStepSkippedFails() throws Exception {
+    settleWithRedemption();
+    server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_FAILED));
+    assertThrows(
+        SessionException.class,
+        () -> session.refund().onError((step, error) -> ReversalDecision.SKIP).get());
+    assertEquals(2, drainRequests().size());
+  }
+
+  @Test
+  void priorSalePartialRedemptionAllocationSendsAmount() throws Exception {
+    session.basket().addItem(BasketItem.returnItem("RET", "Return", 1, new BigDecimal("2.00")));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+    assertTrue(
+        session
+            .settle(
+                SettlementOptions.builder()
+                    .addRefund(
+                        RefundAllocation.pointRedemption(
+                            new BigDecimal("2.00"), "PRIOR-REDEMPTION", ORIGINAL_TIME, "98234"))
+                    .build())
+            .get()
+            .isSuccess());
+    var data = nextRequest().getLoyaltyRequest().getLoyaltyData()[0];
+    assertEquals("98234", data.getLoyaltyAccountID().getLoyaltyID());
+    assertEquals(2.0, data.getLoyaltyAmount().getAmountValue());
+  }
+
+  private void addRedemptionReturn() {
+    session.basket().clear();
+    session.basket().addItem(BasketItem.returnItem("RET", "Return", 1, new BigDecimal("3.00")));
+  }
+
+  private SettlementOptions redemptionReturn(OriginalSaleRecord original) {
+    return SettlementOptions.builder()
+        .addRefund(RefundAllocation.pointRedemption(new BigDecimal("2.00"), original))
+        .addRefund(RefundAllocation.card(BigDecimal.ONE, original))
+        .build();
+  }
+
+  @Test
+  void explicitPartialRedemptionSuppressesAutomaticReturnAfterFailedSettlement() throws Exception {
+    OriginalSaleRecord original = settleWithRedemption();
+    addRedemptionReturn();
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+    server.enqueue(new MockResponse().setBody(PAYMENT_DECLINED));
+    assertThrows(SessionException.class, () -> session.settle(redemptionReturn(original)).get());
+    List<SaleToPOIRequest> requests = drainRequests();
+    var amount = requests.get(0).getLoyaltyRequest().getLoyaltyData()[0].getLoyaltyAmount();
+    assertEquals(2.0, amount.getAmountValue());
+    assertEquals("USD", amount.getCurrency());
+    assertEquals("Monetary", amount.getLoyaltyUnit().toValue());
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(95.00)));
+    assertTrue(session.refund().get().isSuccess());
+    assertEquals(1, drainRequests().size());
+  }
+
+  @Test
+  void explicitRedemptionAfterFullRefundIsRefused() throws Exception {
+    OriginalSaleRecord original = settleWithRedemption();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(95.00)));
+    server.enqueue(new MockResponse().setBody(LOYALTY_REFUND_OK));
+    session.refund().get();
+    drainRequests();
+    addRedemptionReturn();
+    SessionException error =
+        assertThrows(
+            SessionException.class, () -> session.settle(redemptionReturn(original)).get());
+    assertEquals(SessionErrorCode.INVALID_STATE, error.getError().getCode());
+    assertTrue(drainRequests().isEmpty());
+  }
 
   @Test
   void refundAfterCompletedPaymentUsesLastTransactionReference() throws Exception {

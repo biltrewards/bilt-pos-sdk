@@ -265,7 +265,9 @@ export interface TerminalShopperSession extends ShopperSession {
 
   /**
    * Full (no `amount`) or partial linked refund of this session's completed payment, also
-   * reversing the loyalty award best-effort. After a split tender this references the card leg;
+   * reversing the loyalty award best-effort. Full refunds also return the explicit redemption
+   * unless already returned; partial refunds leave points to explicit refund allocations.
+   * After a split tender this references the card leg;
    * use `voidTransaction()` to reverse both legs.
    */
   refund(amount?: Money, handlers?: ReversalHandlers): Operation<RefundResult>;

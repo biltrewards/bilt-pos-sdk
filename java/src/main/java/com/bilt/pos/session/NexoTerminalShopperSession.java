@@ -1023,10 +1023,13 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                   allocation.getOriginalPoiTransactionTimestamp(),
                   null,
                   null,
+                  null,
+                  null,
                   allocation.getMemberId(),
                   saleTransaction,
                   null,
                   null,
+                  () -> {},
                   () -> {},
                   () -> {},
                   serviceId);
@@ -1073,6 +1076,13 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
             null,
             null);
       case POINT_REDEMPTION:
+        boolean currentRedemption =
+            allocation
+                .getOriginalPoiTransactionId()
+                .equals(lastSettlementRecord.getRedemptionPoiTransactionId());
+        if (currentRedemption) {
+          guards.requireRedemptionNotFullyReturned();
+        }
         VoidResult points =
             reversalManager.refundLoyalty(
                 ReversalStep.REDEMPTION,
@@ -1080,7 +1090,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                 allocation.getOriginalPoiTransactionTimestamp(),
                 allocation.getMemberId(),
                 saleTransaction,
-                serviceId);
+                serviceId,
+                allocation.getAmount());
+        if (currentRedemption) {
+          guards.markRedemptionAllocated(allocation.getOriginalPoiTransactionId());
+        }
         return refundMovement(
             step,
             allocation,
@@ -1099,7 +1113,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                 allocation.getOriginalPoiTransactionTimestamp(),
                 allocation.getMemberId(),
                 saleTransaction,
-                serviceId);
+                serviceId,
+                null);
         return refundMovement(
             step,
             allocation,
@@ -1118,7 +1133,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                 allocation.getOriginalPoiTransactionTimestamp(),
                 allocation.getMemberId(),
                 saleTransaction,
-                serviceId);
+                serviceId,
+                null);
         return refundMovement(
             step,
             allocation,
@@ -1453,11 +1469,14 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
               + "and SettlementOptions refund allocations");
     }
     boolean awardReversed = linked && guards.awardReversed();
+    boolean reverseRedemption = linked && amount == null && !guards.redemptionReversed();
     return reversalManager.refund(
         amount,
         null,
         paid.getCardPoiTransactionId(),
         paid.getCardPoiTransactionTimestamp(),
+        reverseRedemption ? paid.getRedemptionPoiTransactionId() : null,
+        reverseRedemption ? paid.getRedemptionPoiTransactionTimestamp() : null,
         awardReversed ? null : paid.getAwardPoiTransactionId(),
         awardReversed ? null : paid.getAwardPoiTransactionTimestamp(),
         linked ? paid.getMemberId() : null,
@@ -1465,6 +1484,9 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         flow.decider(),
         flow.beforeStepHandler(),
         linked ? guards::markRefunded : () -> {},
+        linked
+            ? () -> guards.markRedemptionReversed(paid.getRedemptionPoiTransactionId())
+            : () -> {},
         linked ? () -> guards.markAwardReversed(paid.getAwardPoiTransactionId()) : () -> {},
         refundServiceId);
   }
