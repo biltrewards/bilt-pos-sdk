@@ -157,11 +157,13 @@ describe('the identify control', () => {
     expect(within(card()).getByText('500 pts · 0 reward(s)')).toBeTruthy();
     expect(events()).toContain('Member attached: 98234 · K-Club, 500 pts, 0 reward(s)');
 
-    // a later confirmation replaces the balance rather than keeping the shown one
+    // a later confirmation that reports no balance (0) does not keep the shown one
     const spent: Member = { ...confirmed, pointBalance: 0 };
     terminal().member.current = spent;
     terminal().emitter.emit('member.changed', { member: spent });
-    await waitFor(() => expect(within(card()).getByText('0 pts · 0 reward(s)')).toBeTruthy());
+    await waitFor(() =>
+      expect(within(card()).getByText('points not reported · 0 reward(s)')).toBeTruthy(),
+    );
   });
 
   it('holds other operations until the host has the resolved id', async () => {
