@@ -219,6 +219,58 @@ class TerminalShopperSessionPreAuthTest {
   }
 
   @Test
+  void completionWithNoCardRemainderReleasesHoldAndReportsIt() throws Exception {
+    basket("100.00");
+    session.setStoredValueCard("GC-1");
+    reply(payment("Success", "GIFT-1", "100.00"));
+    reply(TerminalShopperSessionTest.REVERSAL_OK);
+    var result = session.settle(options(Authorization.complete(reference("100.00")))).get();
+    assertTrue(result.isSuccess());
+    assertEquals(0, result.getCardAmountCharged().signum());
+    assertEquals(new BigDecimal("100.00"), result.getStoredValueAmountUsed());
+    assertEquals(
+        java.util.List.of("Reservation HOLD-1 released because no card balance remains"),
+        result.getWarnings());
+    assertEquals(1, result.getMovements().size());
+    assertEquals(
+        "StoredValue",
+        next()
+            .at("/PaymentRequest/PaymentData/PaymentInstrumentData/PaymentInstrumentType")
+            .asText());
+    JsonNode release = next().path("ReversalRequest");
+    assertEquals("MerchantCancel", release.path("ReversalReason").asText());
+    assertEquals("ORDER-1", release.path("SaleReferenceID").asText());
+    assertEquals(
+        "HOLD-1", release.at("/OriginalPOITransaction/POITransactionID/TransactionID").asText());
+    assertNull(server.takeRequest(100, TimeUnit.MILLISECONDS));
+  }
+
+  @Test
+  void failedZeroRemainderReleaseFailsSettlementAndUnwindsOtherTender() throws Exception {
+    basket("100.00");
+    session.setStoredValueCard("GC-1");
+    reply(payment("Success", "GIFT-1", "100.00"));
+    reply(
+        "{\"SaleToPOIResponse\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"NotAllowed\"}}}}");
+    reply(TerminalShopperSessionTest.REVERSAL_OK);
+    assertThrows(
+        SessionException.class,
+        () -> session.settle(options(Authorization.complete(reference("100.00")))).get());
+    next();
+    assertEquals(
+        "HOLD-1",
+        next()
+            .at("/ReversalRequest/OriginalPOITransaction/POITransactionID/TransactionID")
+            .asText());
+    assertEquals(
+        "GIFT-1",
+        next()
+            .at("/ReversalRequest/OriginalPOITransaction/POITransactionID/TransactionID")
+            .asText());
+    assertNull(server.takeRequest(100, TimeUnit.MILLISECONDS));
+  }
+
+  @Test
   void failedOrPartialCompletionDoesNotReverseHold() throws Exception {
     for (String response :
         new String[] {failure("NotAllowed"), payment("Partial", "PART-CAPTURE", "20.00")}) {

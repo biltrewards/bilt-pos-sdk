@@ -258,12 +258,17 @@ public final class PaymentOrchestrator {
   private final NexoExchange exchange;
   private final String currency;
   private final StoredValueManager storedValueManager;
+  private final ReversalManager reversalManager;
 
   public PaymentOrchestrator(
-      NexoExchange exchange, String currency, StoredValueManager storedValueManager) {
+      NexoExchange exchange,
+      String currency,
+      StoredValueManager storedValueManager,
+      ReversalManager reversalManager) {
     this.exchange = exchange;
     this.currency = currency;
     this.storedValueManager = Objects.requireNonNull(storedValueManager, "storedValueManager");
+    this.reversalManager = Objects.requireNonNull(reversalManager, "reversalManager");
   }
 
   /** Runs the checkpointed charge-side settlement sequence. */
@@ -535,6 +540,19 @@ public final class PaymentOrchestrator {
       } else {
         cardCharged = recovered.value;
       }
+    } else if (options.authorization.getMode() == Authorization.Mode.PRE_AUTH_COMPLETE) {
+      checkAbort(request, committed);
+      ReservationReference reference = options.authorization.getReference();
+      try {
+        reversalManager.releaseReservation(
+            reference, workingBasket.getSaleTransactionID(), null, null);
+      } catch (SessionException e) {
+        throw abort(request, committed, e.getError());
+      }
+      result.warning(
+          "Reservation "
+              + reference.getPoiTransactionId()
+              + " released because no card balance remains");
     }
 
     // 6. Award wire failures are best-effort; register callback failures

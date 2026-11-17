@@ -221,7 +221,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     this.storedValueManager = new StoredValueManager(exchange, builder.currency);
     this.reversalManager = new ReversalManager(exchange, builder.currency, storedValueManager);
     this.paymentOrchestrator =
-        new PaymentOrchestrator(exchange, builder.currency, storedValueManager);
+        new PaymentOrchestrator(exchange, builder.currency, storedValueManager, reversalManager);
     this.display = new BasketDisplay(exchange, displayRenderer, builder.currency);
     if (autoDisplay) {
       // first in line, so the customer display never waits behind a widget
