@@ -186,6 +186,7 @@ public final class ReversalManager {
     }
 
     LoyaltyReversal loyalty = NO_REVERSAL;
+    int remainingPointBalance = 0;
     boolean redemptionReversed = false;
     if (redemptionPoiTxnId != null) {
       LoyaltyResponse redemptionLeg =
@@ -219,6 +220,8 @@ public final class ReversalManager {
                                   + e.getError().getMessage(),
                               e)));
       if (redemptionLeg != null) {
+        loyalty = parseReversal(redemptionLeg);
+        remainingPointBalance = loyalty.remainingBalance;
         redemptionReversed = true;
         onRedemptionReversed.run();
       }
@@ -256,6 +259,10 @@ public final class ReversalManager {
                               e)));
       if (awardLeg != null) {
         loyalty = parseReversal(awardLeg);
+        LoyaltyResult awardResult = Wire.firstLoyaltyResult(awardLeg);
+        if (awardResult != null && awardResult.getCurrentBalance() != null) {
+          remainingPointBalance = loyalty.remainingBalance;
+        }
         awardReversed = true;
         onAwardReversed.run();
       }
@@ -271,7 +278,7 @@ public final class ReversalManager {
       return RefundResult.builder()
           .success(true)
           .pointsReversed(loyalty.pointsReversed)
-          .remainingPointBalance(loyalty.remainingBalance)
+          .remainingPointBalance(remainingPointBalance)
           .build();
     }
     Double authorized =
@@ -287,7 +294,7 @@ public final class ReversalManager {
         .customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()))
         .merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()))
         .pointsReversed(loyalty.pointsReversed)
-        .remainingPointBalance(loyalty.remainingBalance)
+        .remainingPointBalance(remainingPointBalance)
         .build();
   }
 

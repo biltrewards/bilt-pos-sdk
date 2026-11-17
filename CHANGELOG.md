@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Refund results retain the redemption response's points and balance unless a later award reversal reports newer values.
 - Full linked refunds also return the sale's explicit point redemption, best-effort with the existing reversal decisions. Partial linked refunds do not return points automatically; point-redemption allocations send their monetary amount for a partial return. Same-session reversal guards prevent duplicate automatic redemption returns and refuse linked refunds after a completed void.
 
 ## [0.46.0]

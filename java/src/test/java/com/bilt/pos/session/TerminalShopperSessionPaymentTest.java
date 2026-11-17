@@ -4114,6 +4114,26 @@ class TerminalShopperSessionPaymentTest {
   }
 
   @Test
+  void fullRefundWithoutAwardReportsRedemptionPointsAndBalance() throws Exception {
+    settleWithRedemption();
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(95.00)));
+    server.enqueue(
+        new MockResponse()
+            .setBody(
+                "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+                    + "\"Response\":{\"Result\":\"Success\"},"
+                    + "\"LoyaltyResult\":[{\"CurrentBalance\":750,"
+                    + "\"LoyaltyAmount\":{\"LoyaltyUnit\":\"Point\",\"AmountValue\":50}}]}}}"));
+
+    RefundResult result = session.refund().get();
+
+    assertTrue(result.isSuccess());
+    assertEquals(50, result.getPointsReversed());
+    assertEquals(750, result.getRemainingPointBalance());
+    assertEquals(2, drainRequests().size());
+  }
+
+  @Test
   void partialRefundLeavesRedemptionForFullRefund() throws Exception {
     settleWithRedemption();
     server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.refundOk(10.00)));
