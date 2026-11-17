@@ -56,7 +56,7 @@ not apply in a browser; see the deliberate differences below).
 | ------------------------------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------- |
 | `autodetectAddress()`                                                                | n/a                                              | bridge probe (`useBridge`) and auto-connect when ready  |
 | `connect(...)` / `disconnect()`                                                      | partial (implicit)                               | present (Connect / Disconnect over `localBridge`)       |
-| `startSession(identifyOnStart)`                                                      | missing (session auto-starts)                    | present (Start Checkout + Identify checkbox)            |
+| `startSession()`                                                                     | missing (session auto-starts)                    | present (Start Checkout)                                |
 | `endSession()`                                                                       | partial ("End session")                          | present (End Checkout)                                  |
 | `addProduct(product)` (upsert by SKU, NJ tax)                                        | present                                          | present                                                 |
 | `addCustomItem(priceMinor)` (keypad, untaxed)                                        | partial (form, optional tax)                     | present (keypad)                                        |
@@ -81,12 +81,11 @@ not apply in a browser; see the deliberate differences below).
 
 | Desktop control                                                                                                                                           | Main                             | Now                          |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------------- |
+| Implicit Loyalty checkbox (first, default on; disables Rebates / Redemption / Award; settles with `loyalty: { handling: 'IMPLICIT' }`)                    | n/a (added with desktop #191)    | present                      |
 | Rebates / Redemption / Award checkboxes (default off)                                                                                                     | partial (default on)             | present                      |
 | Gift card checkbox + card field + Read card                                                                                                               | partial (separate panel)         | present                      |
 | Net settlement checkbox (default on)                                                                                                                      | partial (default off)            | present                      |
 | "Settle $X" / "Settle (refund $X)" / "Settling…" / "Settled" button                                                                                       | partial ("Pay")                  | present                      |
-| Identify checkbox                                                                                                                                         | missing                          | present                      |
-| Read VAS checkbox (unforced entry mode; `Wallet pass (VAS)` on the sign-in card; `VAS:` log lines)                                                        | n/a (added with desktop #158)    | present                      |
 | Loyalty Sign-In / Clear basket / Abort operation buttons                                                                                                  | partial                          | present                      |
 | Identify picker (Terminal PIN pad / Phone / Email / Account number / Resolved member id) + value field + Loyalty Sign-In / Look Up Member / Attach Member | n/a (added with desktop #190)    | present                      |
 | Per-line Discount and Credit buttons + `BasketAdjustmentDialog`                                                                                           | partial (inline form)            | present                      |
@@ -108,8 +107,6 @@ an abandoned settlement (the desktop reports it in the outcome popup instead).
 
 ## Deliberate differences
 
-- The Identify and Read VAS checkboxes stay next to the identify picker; desktop #190 removed
-  them when the terminal began reading a wallet pass under keyed entry.
 - The log's Nexo tab is **Protocol**: the browser never sees Nexo, so it lists the HTTP requests to
   the bridge (method, path, status) and the session events from the event stream.
 - The connection row: Terminal IP, adb tunnel, Encrypt and the passphrase live in the bridge's own

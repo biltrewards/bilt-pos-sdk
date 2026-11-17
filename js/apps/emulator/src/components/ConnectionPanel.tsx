@@ -67,8 +67,6 @@ export function ConnectionPanel({
 }): ReactNode {
   const controller = useController();
   const state = useEmulatorState();
-  const [identifyOnStart, setIdentifyOnStart] = useState(false);
-  const [readVas, setReadVas] = useState(false);
   const [identifyBy, setIdentifyBy] = useState<typeof PIN_PAD | MemberLookupKind>(PIN_PAD);
   const [lookupValue, setLookupValue] = useState('');
   const connected = state.connection.phase !== 'DISCONNECTED';
@@ -133,11 +131,7 @@ export function ConnectionPanel({
         <button
           type="button"
           disabled={!connected}
-          onClick={() =>
-            sessionActive
-              ? controller.endSession()
-              : controller.startSession(identifyOnStart, readVas)
-          }
+          onClick={() => (sessionActive ? controller.endSession() : controller.startSession())}
         >
           {sessionActive ? 'End Checkout' : 'Start Checkout'}
         </button>
@@ -170,7 +164,7 @@ export function ConnectionPanel({
           disabled={!canOperateTerminal(state)}
           onClick={() =>
             identifyBy === PIN_PAD
-              ? controller.identifyMember(readVas)
+              ? controller.identifyMember()
               : controller.identifyMemberBy(identifyBy, lookupValue)
           }
         >
@@ -182,14 +176,6 @@ export function ConnectionPanel({
               ? 'Attach Member'
               : 'Look Up Member'}
         </button>
-        <LabeledCheckbox
-          label="Identify"
-          checked={identifyOnStart}
-          disabled={sessionActive || settings.mode === 'local'}
-          onChange={setIdentifyOnStart}
-        />
-        {/* applies to every sign-in prompt, so it stays enabled mid-checkout */}
-        <LabeledCheckbox label="Read VAS" checked={readVas} onChange={setReadVas} />
         <span className="gap" />
         <button
           type="button"

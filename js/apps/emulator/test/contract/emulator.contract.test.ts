@@ -276,7 +276,7 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
 
   // RET-6983: needs the host change (feature/ret-6983-vas-host) to map a wallet-pass read onto
   // IdentifyResult.vasData; the in-memory tests cover the emulator's rendering until it lands.
-  it.todo('shows the wallet pass on the sign-in card when Read VAS leaves the entry mode unforced');
+  it.todo('shows the wallet pass on the sign-in card when a keyed sign-in reads one');
 
   describe('the identify control', () => {
     const controllers: BrowserEmulatorController[] = [];
@@ -314,7 +314,7 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
         () => expect(controller.getState().connection.phase).toBe('CONNECTED'),
         30_000,
       );
-      controller.startSession(false);
+      controller.startSession();
       await vi.waitFor(() => expect(controller.getState().sessionId).not.toBeNull(), 30_000);
       const logged = (text: string) => events.snapshot().some((line) => line.includes(text));
       return { controller, logged };
@@ -323,6 +323,52 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
     function lastInquiry(): unknown {
       return accountOf(terminal.requestsOf('BalanceInquiry').at(-1)!);
     }
+
+    it('signs in from the PIN pad with a keyed CardAcquisition', async () => {
+      const { controller, logged } = await checkout();
+      const before = terminal.requestsOf('CardAcquisition').length;
+      controller.identifyMember();
+      // unscripted: the prompt fails once the request is on the wire
+      await vi.waitFor(() => expect(controller.getState().identifyInProgress).toBe(false), 30_000);
+      const requests = terminal.requestsOf('CardAcquisition').slice(before);
+      expect(requests).toHaveLength(1);
+      expect(JSON.stringify(requests[0])).toContain('"ForceEntryMode":["Keyed"]');
+      expect(logged('Loyalty sign-in on the terminal (key it in or tap a wallet pass)…')).toBe(
+        true,
+      );
+    });
+
+    it.each([
+      [true, undefined],
+      [false, 'Forbidden'],
+    ])(
+      'settles with implicit loyalty %s: the card payment carries LoyaltyHandling %s',
+      async (implicit, handling) => {
+        terminal.reply('Payment', paymentEcho);
+        const { controller, logged } = await checkout();
+        controller.addProduct(coffee);
+        await vi.waitFor(() => expect(controller.getState().basketTotal).toBe('3.75'));
+        const before = terminal.requestsOf('Payment').length;
+        controller.settle(
+          { implicit, rebates: false, redemption: false, award: false },
+          null,
+          true,
+        );
+        await vi.waitFor(() => expect(controller.getState().paymentOutcome).not.toBeNull(), 30_000);
+        const payments = terminal.requestsOf('Payment').slice(before);
+        expect(payments).toHaveLength(1);
+        const wire = JSON.stringify(payments[0]);
+        if (handling) expect(wire).toContain(`"LoyaltyHandling":"${handling}"`);
+        else expect(wire).not.toContain('"LoyaltyHandling"');
+        expect(
+          logged(
+            implicit
+              ? 'settlement — loyalty implicit'
+              : 'settlement — rebates off, redemption off, award off',
+          ),
+        ).toBe(true);
+      },
+    );
 
     it.each([
       ['PHONE', '2015550123', 'PhoneNumber'],

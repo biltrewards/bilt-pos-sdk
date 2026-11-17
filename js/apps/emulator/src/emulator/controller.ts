@@ -471,7 +471,7 @@ export class BrowserEmulatorController implements EmulatorController {
     return true;
   }
 
-  startSession(identifyOnStart: boolean, readVas = false): void {
+  startSession(): void {
     const pos = this.pos;
     if (!pos) {
       this.log('Not connected — connect before starting a session');
@@ -518,11 +518,6 @@ export class BrowserEmulatorController implements EmulatorController {
           this.checkoutCleared(session.id, false);
           this.publishBasket(session.basket.current);
           this.log(`Checkout session started (id ${session.id})`);
-          if (identifyOnStart && isTerminal(session)) {
-            this.runIdentifyPrompt(session, readVas);
-          } else if (identifyOnStart) {
-            this.log('Identify skipped — a local session has no terminal to prompt on');
-          }
         },
         (error: unknown) => {
           if (generation === this.generation) {
@@ -918,9 +913,9 @@ export class BrowserEmulatorController implements EmulatorController {
 
   // ---- loyalty and card read --------------------------------------------------------------
 
-  identifyMember(readVas = false): void {
+  identifyMember(): void {
     const session = this.terminalCheckout();
-    if (session) this.runIdentifyPrompt(session, readVas);
+    if (session) this.runIdentifyPrompt(session);
   }
 
   identifyMemberBy(kind: MemberLookupKind, value: string): void {
@@ -936,7 +931,7 @@ export class BrowserEmulatorController implements EmulatorController {
       this.attachResolvedMember(session, trimmed);
       return;
     }
-    this.runIdentifyPrompt(session, false, { resolver: { type: kind, value: trimmed }, label });
+    this.runIdentifyPrompt(session, { resolver: { type: kind, value: trimmed }, label });
   }
 
   /**
@@ -1012,7 +1007,6 @@ export class BrowserEmulatorController implements EmulatorController {
    */
   private runIdentifyPrompt(
     session: TerminalShopperSession,
-    readVas: boolean,
     lookup?: { readonly resolver: MemberIdResolver; readonly label: string },
   ): void {
     if (!this.claim()) return;
@@ -1022,15 +1016,12 @@ export class BrowserEmulatorController implements EmulatorController {
     this.log(
       lookup
         ? `Looking up the member by ${lookup.label} on the terminal…`
-        : readVas
-          ? 'Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…'
-          : 'Loyalty sign-in on the terminal…',
+        : 'Loyalty sign-in on the terminal (key it in or tap a wallet pass)…',
     );
     (lookup
       ? session.identifyMember({ resolver: lookup.resolver })
-      : // Keyed is the one entry mode that keeps a wallet pass from being read, so VAS mode
-        // leaves the entry mode unforced
-        session.identifyMember(readVas ? {} : { forceEntryModes: ['KEYED'] })
+      : // the terminal still reads a tapped wallet pass under keyed entry
+        session.identifyMember({ forceEntryModes: ['KEYED'] })
     )
       .then(
         (result) => {
@@ -1162,9 +1153,10 @@ export class BrowserEmulatorController implements EmulatorController {
     const { returns, allocations } = planAllocations(this.pendingReturns, required);
     const onOff = (on: boolean) => (on ? 'on' : 'off');
     this.log(
-      `Starting ${net ? 'net ' : ''}settlement — rebates ${onOff(loyalty.rebates)}, redemption ${onOff(
-        loyalty.redemption,
-      )}, award ${onOff(loyalty.award)}` +
+      `Starting ${net ? 'net ' : ''}settlement — ` +
+        (loyalty.implicit
+          ? 'loyalty implicit'
+          : `rebates ${onOff(loyalty.rebates)}, redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}`) +
         (card ? `, gift card ${card.storedValueId ?? '(swipe on terminal)'}` : '') +
         (giftCards.length ? `, ${giftCards.length} gift card purchase(s) to load` : '') +
         (returns.length
@@ -1182,15 +1174,19 @@ export class BrowserEmulatorController implements EmulatorController {
         session.settle(
           {
             settlementType: net ? 'NET' : 'REFUND_THEN_CHARGE',
-            loyalty: {
-              handling: 'EXPLICIT',
-              steps: (['REBATES', 'POINTS', 'AWARD'] as const).filter(
-                (step) =>
-                  ({ REBATES: loyalty.rebates, POINTS: loyalty.redemption, AWARD: loyalty.award })[
-                    step
-                  ],
-              ),
-            },
+            loyalty: loyalty.implicit
+              ? { handling: 'IMPLICIT' as const }
+              : {
+                  handling: 'EXPLICIT' as const,
+                  steps: (['REBATES', 'POINTS', 'AWARD'] as const).filter(
+                    (step) =>
+                      ({
+                        REBATES: loyalty.rebates,
+                        POINTS: loyalty.redemption,
+                        AWARD: loyalty.award,
+                      })[step],
+                  ),
+                },
             ...(allocations.length ? { refunds: allocations } : {}),
             ...(giftCards.length
               ? {

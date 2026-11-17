@@ -81,7 +81,7 @@ describe('the identify control', () => {
     fireEvent.click(button('Loyalty Sign-In'));
     await waitFor(() => expect(within(card()).getByTestId('member').textContent).toBe('mbr_8f2a'));
     expect(argOf(identify, 0)).toEqual({ forceEntryModes: ['KEYED'] });
-    expect(events()).toContain('Loyalty sign-in on the terminal…');
+    expect(events()).toContain('Loyalty sign-in on the terminal (key it in or tap a wallet pass)…');
   });
 
   it.each([

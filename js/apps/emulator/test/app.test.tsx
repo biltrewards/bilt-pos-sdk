@@ -33,7 +33,7 @@ describe('the emulator shell', () => {
     ]) {
       expect(button(name)).toBeTruthy();
     }
-    expect(screen.getByLabelText('Identify')).toBeTruthy();
+    expect(screen.getByLabelText('Identify by')).toBeTruthy();
     expect(screen.queryByText(/Companion display/)).toBeNull();
   });
 
