@@ -1431,6 +1431,9 @@ export interface components {
          * @description How the card leg is authorized. `SALE` (default) charges. `PRE_AUTH` places a hold for the
          *     basket total and returns a `ReservationReference`. `PRE_AUTH_UPDATE` changes a hold.
          *     `PRE_AUTH_COMPLETE` captures a hold for the basket total (raising it first when needed).
+         *     `PRE_AUTH` and `PRE_AUTH_UPDATE` are card-only: loyalty, stored value, rebates, points and
+         *     awards are skipped. Loyalty runs at `PRE_AUTH_COMPLETE`. Releasing a hold has no committed
+         *     loyalty or other movements to reverse.
          * @enum {string}
          */
         AuthorizationMode: "SALE" | "PRE_AUTH" | "PRE_AUTH_UPDATE" | "PRE_AUTH_COMPLETE";
@@ -1449,6 +1452,8 @@ export interface components {
             validityDate?: string;
             merchantId?: string;
             poiId?: string;
+            /** @description The `saleId` the original request was sent with, when it differs from this session's (another lane, or a restart under a new `saleId`). Nexo requires it in `OriginalPOITransaction.SaleID` whenever the hold is updated, completed or released by a Sale Terminal other than the one that sent the original. Defaults to this session's `saleId`. */
+            saleId?: string;
         };
         Authorization: {
             mode: components["schemas"]["AuthorizationMode"];
@@ -2039,7 +2044,7 @@ export interface components {
             /** @description The step awaiting a reply while `awaitingReply`. */
             pendingStep?: components["schemas"]["OperationStep"];
             /**
-             * @description Assigned at accept for single-request money operations (`refundUnlinked` and the stored
+             * @description Assigned at accept for single-request money operations (`refundUnlinked`, `releaseReservation` and the stored
              *     value changes `storedValueActivate`, `storedValueLoad`, `storedValueUnload`,
              *     `storedValueDeactivate`, `storedValueReserve`, `storedValueReverse`): the Nexo `ServiceID`
              *     the host minted through the session's provider and sends the operation's terminal request

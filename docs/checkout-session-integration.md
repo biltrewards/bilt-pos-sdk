@@ -43,6 +43,11 @@ support is delivered separately. Reservations require both the terminal-manageme
 pre-authorization flags. A hold is not a sale or a committed movement: persist its
 `ReservationReference`, not an `OriginalSaleRecord` for voiding it.
 
+`PRE_AUTH` and `PRE_AUTH_UPDATE` are card-only: loyalty, stored value, rebates, points and awards
+are skipped. Loyalty runs at `PRE_AUTH_COMPLETE`; releasing a hold has no committed loyalty or
+other movements to reverse. Persist the original lane's `saleId` in the reference when another
+register may update, complete or release the hold; it defaults to the current session's `saleId`.
+
 In session 1, build the basket for the hold amount and submit:
 
 ```json
@@ -59,6 +64,7 @@ Persist the returned reservation reference, for example:
 ```json
 {
   "saleReferenceId": "tab-42",
+  "saleId": "POS-LANE-3",
   "poiTransactionId": "hold-42",
   "poiTransactionTimestamp": "2026-06-25T12:00:00Z",
   "authorizedAmount": "50.00"
@@ -78,6 +84,7 @@ Alternatively, release the unused hold in session 2 without settling a basket:
   "type": "releaseReservation",
   "reference": {
     "saleReferenceId": "tab-42",
+    "saleId": "POS-LANE-3",
     "poiTransactionId": "hold-42",
     "poiTransactionTimestamp": "2026-06-25T12:00:00Z",
     "authorizedAmount": "50.00"

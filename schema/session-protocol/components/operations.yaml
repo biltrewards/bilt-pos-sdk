@@ -532,7 +532,7 @@ OperationBase:
     serviceId:
       type: string
       description: |
-        Assigned at accept for single-request money operations (`refundUnlinked` and the stored
+        Assigned at accept for single-request money operations (`refundUnlinked`, `releaseReservation` and the stored
         value changes `storedValueActivate`, `storedValueLoad`, `storedValueUnload`,
         `storedValueDeactivate`, `storedValueReserve`, `storedValueReverse`): the Nexo `ServiceID`
         the host minted through the session's provider and sends the operation's terminal request
