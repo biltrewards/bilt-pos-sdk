@@ -149,6 +149,19 @@ export const ABSENT_LABELS: Readonly<Record<AbsentReason, string>> = {
   CANCELLED: 'Cancelled on the terminal',
 };
 
+/**
+ * What a register-entered member identity is: a customer-known handle the terminal looks up, or a
+ * member id already resolved elsewhere.
+ */
+export type MemberLookupKind = 'PHONE' | 'EMAIL' | 'ACCOUNT_NUMBER' | 'RESOLVED_ID';
+
+export const MEMBER_LOOKUP_LABELS: Readonly<Record<MemberLookupKind, string>> = {
+  PHONE: 'Phone',
+  EMAIL: 'Email',
+  ACCOUNT_NUMBER: 'Account number',
+  RESOLVED_ID: 'Resolved member id',
+};
+
 /** The terminal's answer to the last loyalty sign-in on this checkout. */
 export type MemberIdentity =
   | {
@@ -337,6 +350,13 @@ export interface EmulatorController {
   applyDiscount(itemId: string, amount: string, label: string): void;
   settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions | null, net: boolean): void;
   identifyMember(readVas?: boolean): void;
+  /**
+   * Identifies the member from a value the register supplies, with no terminal prompt. A phone,
+   * email or account number is looked up on the terminal and lands on the card like a sign-in; a
+   * resolved member id attaches at once and the terminal confirms it in the background. A blank
+   * value sends nothing.
+   */
+  identifyMemberBy(kind: MemberLookupKind, value: string): void;
   acquireCard(): void;
   refundSale(saleId: string): void;
   addReturnToBasket(saleId: string, skus: ReadonlySet<string>): void;

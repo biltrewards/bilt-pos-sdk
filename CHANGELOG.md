@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.0]
+
+### Added
+
+- Emulator (browser): Loyalty Sign-In and a register-supplied identity share one control in the connection card, matching the desktop emulator: a picker, a value field, and one button. Terminal PIN pad, the default, hides the field and runs the existing Loyalty Sign-In prompt; the Identify and Read VAS checkboxes are unchanged. Phone, Email, Account number, or Resolved member id identify the member with no terminal prompt: type it and press Look Up Member (Attach Member for a resolved id). Phone, email, and account number go through `identifyMember({ resolver })`, a Keyed BalanceInquiry (PhoneNumber for a phone, AccountNumber otherwise), and land on the sign-in card like a sign-in. A resolved id attaches through `member.set({ id })`; the card updates on `member.changed` when the terminal's background AccountNumber/File BalanceInquiry confirms it, and a decline is logged with the member left attached. A blank value logs and sends nothing. Background errors are now logged with their code and message rather than as a customer-display failure.
+
 ## [0.45.0]
 
 ### Added

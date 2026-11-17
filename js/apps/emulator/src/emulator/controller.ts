@@ -5,6 +5,7 @@ import {
   type BiltPos,
   type IdentifyResult,
   type Member,
+  type MemberIdResolver,
   type VasData,
   type Money,
   type Operation,
@@ -46,6 +47,8 @@ import {
   type EmulatorState,
   type LoyaltyOptions,
   type MemberIdentity,
+  type MemberLookupKind,
+  MEMBER_LOOKUP_LABELS,
   type MemberRewardUi,
   type VasUi,
   vasLines,
@@ -420,9 +423,11 @@ export class BrowserEmulatorController implements EmulatorController {
       session.on('basket.changed', (change) => {
         if (this.session === session) this.publishBasket(change.current);
       }),
+      // display pushes and a resolved member id's confirmation fail out-of-band
       session.on('background.error', (error) =>
-        this.log(`Customer display update failed: ${error.message}`),
+        this.log(`Background operation failed (${error.code}): ${error.message}`),
       ),
+      session.on('member.changed', ({ member }) => this.publishMemberChange(session, member)),
       session.on('session.ended', ({ forced }) => {
         if (this.session !== session || !forced) return;
         this.detachSession();
@@ -918,20 +923,109 @@ export class BrowserEmulatorController implements EmulatorController {
     if (session) this.runIdentifyPrompt(session, readVas);
   }
 
-  private runIdentifyPrompt(session: TerminalShopperSession, readVas: boolean): void {
+  identifyMemberBy(kind: MemberLookupKind, value: string): void {
+    const session = this.terminalCheckout();
+    if (!session) return;
+    const label = MEMBER_LOOKUP_LABELS[kind].toLowerCase();
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      this.log(`Enter a ${label} to identify the member`);
+      return;
+    }
+    if (kind === 'RESOLVED_ID') {
+      this.attachResolvedMember(session, trimmed);
+      return;
+    }
+    this.runIdentifyPrompt(session, false, { resolver: { type: kind, value: trimmed }, label });
+  }
+
+  /**
+   * Attaches an already-resolved member id. The SDK confirms it on the terminal in the
+   * background: the upgrade arrives as `member.changed`, a decline as `background.error`.
+   */
+  private attachResolvedMember(session: TerminalShopperSession, memberId: string): void {
+    const generation = this.generation;
+    session.member.set({ id: memberId }).then(
+      () => {
+        if (generation === this.generation && this.session === session) {
+          this.log(`Attached member ${memberId} — confirming it on the terminal…`);
+        }
+      },
+      (error: unknown) => {
+        if (generation !== this.generation || this.session !== session) return;
+        this.log(`Failed to attach member ${memberId}: ${describeError(error)}`);
+        if (error instanceof Error && error.stack) this.detailedLog(error.stack);
+      },
+    );
+  }
+
+  /**
+   * A member change the session announced. A sign-in prompt or lookup publishes its own, richer
+   * card when it completes, so only changes outside one — a resolved id attached and then
+   * confirmed — are published here.
+   */
+  private publishMemberChange(session: ShopperSession, member: Member | null): void {
+    if (this.session !== session || this.state.identifyInProgress) return;
+    // superseded since it was queued; the newer change follows
+    if (session.member.current !== member) return;
+    const found = memberToUi(member);
+    const shown = this.state.member;
+    let identity: Extract<MemberIdentity, { kind: 'found' }> | null = found && {
+      ...found,
+      retained: false,
+    };
+    // The same member the card shows (a sign-in's own announcement, or a confirmation): keep the
+    // shopper context and pass data the card has, and take what the terminal newly reported.
+    if (found && shown?.kind === 'found' && shown.memberId === found.memberId) {
+      const upgraded = {
+        ...shown,
+        ...(found.loyaltyBrand ? { loyaltyBrand: found.loyaltyBrand } : {}),
+        pointBalance: found.pointBalance ?? shown.pointBalance,
+        rewards: found.rewards.length > 0 ? found.rewards : shown.rewards,
+      };
+      const unchanged =
+        upgraded.loyaltyBrand === shown.loyaltyBrand &&
+        upgraded.pointBalance === shown.pointBalance &&
+        JSON.stringify(upgraded.rewards) === JSON.stringify(shown.rewards);
+      if (unchanged) return;
+      identity = upgraded;
+    }
+    this.update({ member: identity });
+    this.log(
+      identity
+        ? `Member attached: ${memberHeadline(identity)}, ${
+            identity.pointBalance !== null ? `${identity.pointBalance} pts, ` : ''
+          }${identity.rewards.length} reward(s)`
+        : 'Member cleared',
+    );
+  }
+
+  /**
+   * The loyalty sign-in prompt, or with `lookup` the register-supplied identifier looked up on
+   * the terminal with no prompt.
+   */
+  private runIdentifyPrompt(
+    session: TerminalShopperSession,
+    readVas: boolean,
+    lookup?: { readonly resolver: MemberIdResolver; readonly label: string },
+  ): void {
     if (!this.claim()) return;
     const generation = this.generation;
     const shown = this.state.member;
     this.update({ identifyInProgress: true, member: null });
     this.log(
-      readVas
-        ? 'Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…'
-        : 'Loyalty sign-in on the terminal…',
+      lookup
+        ? `Looking up the member by ${lookup.label} on the terminal…`
+        : readVas
+          ? 'Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…'
+          : 'Loyalty sign-in on the terminal…',
     );
-    session
-      // Keyed is the one entry mode that keeps a wallet pass from being read, so VAS mode leaves
-      // the entry mode unforced
-      .identifyMember(readVas ? {} : { forceEntryModes: ['KEYED'] })
+    (lookup
+      ? session.identifyMember({ resolver: lookup.resolver })
+      : // Keyed is the one entry mode that keeps a wallet pass from being read, so VAS mode
+        // leaves the entry mode unforced
+        session.identifyMember(readVas ? {} : { forceEntryModes: ['KEYED'] })
+    )
       .then(
         (result) => {
           if (generation === this.generation && this.session === session) {
