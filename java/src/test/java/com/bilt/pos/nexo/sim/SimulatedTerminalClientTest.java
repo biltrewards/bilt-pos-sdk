@@ -21,6 +21,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -34,6 +36,357 @@ class SimulatedTerminalClientTest {
 
   private static final ObjectMapper MAPPER =
       new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+  @Test
+  void reservationUpdateAndCompletionPreserveTheLatestAuthorization() throws Exception {
+    var terminal = SimulatedTerminalClient.builder().build();
+    String expiry = LocalDate.now(ZoneOffset.UTC).plusDays(1).toString();
+    var request = reservationRequest("FirstReservation", "100", "ORDER-1", null);
+    request
+        .getSaleToPOIRequest()
+        .getPaymentRequest()
+        .getPaymentData()
+        .setRequestedValidityDate(expiry);
+    var hold = terminal.request(request).getSaleToPOIResponse().getPaymentResponse();
+    String holdId = hold.getPoiData().getPoiTransactionID().getTransactionID();
+    assertEquals("FirstReservation", hold.getPaymentResult().getPaymentType().toValue());
+    assertEquals(expiry, hold.getPaymentResult().getValidityDate());
+    var update =
+        terminal
+            .request(reservationRequest("UpdateReservation", "150", "ORDER-1", null))
+            .getSaleToPOIResponse()
+            .getPaymentResponse();
+    String updateId = update.getPoiData().getPoiTransactionID().getTransactionID();
+    assertFalse(holdId.equals(updateId));
+    assertEquals("UpdateReservation", update.getPaymentResult().getPaymentType().toValue());
+    assertEquals(expiry, update.getPaymentResult().getValidityDate());
+    for (String amount : new String[] {"0", "151"}) {
+      var rejected =
+          terminal
+              .request(reservationRequest("Completion", amount, null, updateId))
+              .getSaleToPOIResponse()
+              .getPaymentResponse();
+      assertEquals("NotAllowed", rejected.getResponse().getErrorCondition().toValue());
+    }
+    var completion =
+        terminal
+            .request(reservationRequest("Completion", "120", null, updateId))
+            .getSaleToPOIResponse()
+            .getPaymentResponse();
+    assertEquals("Success", completion.getResponse().getResult().toValue());
+    assertEquals("Completion", completion.getPaymentResult().getPaymentType().toValue());
+    assertEquals(expiry, completion.getPaymentResult().getValidityDate());
+    assertEquals(120.0, completion.getPaymentResult().getAmountsResp().getAuthorizedAmount());
+    assertEquals(
+        "NotAllowed",
+        terminal
+            .request(reservationRequest("Completion", "120", "ORDER-1", null))
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getResponse()
+            .getErrorCondition()
+            .toValue());
+    assertEquals(
+        "NotAllowed",
+        terminal
+            .request(request("Reversal", "completed-hold", reversalBody(updateId)))
+            .getSaleToPOIResponse()
+            .getReversalResponse()
+            .getResponse()
+            .getErrorCondition()
+            .toValue());
+    assertEquals(
+        "Success",
+        terminal
+            .request(
+                request(
+                    "Reversal",
+                    "captured-sale",
+                    reversalBody(completion.getPoiData().getPoiTransactionID().getTransactionID())))
+            .getSaleToPOIResponse()
+            .getReversalResponse()
+            .getResponse()
+            .getResult()
+            .toValue());
+  }
+
+  @Test
+  void oneTimeReservationCanBeCompletedOrReleasedWithoutASaleReference() throws Exception {
+    for (boolean release : new boolean[] {false, true}) {
+      var terminal = SimulatedTerminalClient.builder().build();
+      var hold =
+          terminal
+              .request(reservationRequest("OneTimeReservation", "100", null, null))
+              .getSaleToPOIResponse()
+              .getPaymentResponse();
+      assertEquals("Success", hold.getResponse().getResult().toValue());
+      assertEquals("OneTimeReservation", hold.getPaymentResult().getPaymentType().toValue());
+      String poiId = hold.getPoiData().getPoiTransactionID().getTransactionID();
+      if (release) {
+        assertEquals(
+            "Success",
+            terminal
+                .request(request("Reversal", "release", reversalBody(poiId)))
+                .getSaleToPOIResponse()
+                .getReversalResponse()
+                .getResponse()
+                .getResult()
+                .toValue());
+        assertEquals(
+            "NotAllowed",
+            terminal
+                .request(reservationRequest("Completion", "100", null, poiId))
+                .getSaleToPOIResponse()
+                .getPaymentResponse()
+                .getResponse()
+                .getErrorCondition()
+                .toValue());
+      } else {
+        assertEquals(
+            "Success",
+            terminal
+                .request(reservationRequest("Completion", "80", null, poiId))
+                .getSaleToPOIResponse()
+                .getPaymentResponse()
+                .getResponse()
+                .getResult()
+                .toValue());
+      }
+    }
+  }
+
+  @Test
+  void invalidReservationRequestsNeverBecomeSales() throws Exception {
+    var terminal = SimulatedTerminalClient.builder().build();
+    for (String type : new String[] {"FirstReservation", "UpdateReservation", "Completion"}) {
+      var response =
+          terminal
+              .request(reservationRequest(type, "100", null, null))
+              .getSaleToPOIResponse()
+              .getPaymentResponse();
+      assertEquals(
+          type.equals("FirstReservation") ? "NotAllowed" : "NotFound",
+          response.getResponse().getErrorCondition().toValue());
+      assertEquals(
+          "NotAllowed",
+          terminal
+              .request(reservationRequest(type, "-1", "ORDER-1", null))
+              .getSaleToPOIResponse()
+              .getPaymentResponse()
+              .getResponse()
+              .getErrorCondition()
+              .toValue());
+    }
+    assertEquals(
+        "NotAllowed",
+        terminal
+            .request(reservationRequest("CashAdvance", "100", null, null))
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getResponse()
+            .getErrorCondition()
+            .toValue());
+    var invalid = reservationRequest("FirstReservation", "100", "ORDER-1", null);
+    invalid
+        .getSaleToPOIRequest()
+        .getPaymentRequest()
+        .getPaymentData()
+        .setRequestedValidityDate("not-a-date");
+    assertEquals(
+        "NotAllowed",
+        terminal
+            .request(invalid)
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getResponse()
+            .getErrorCondition()
+            .toValue());
+  }
+
+  @Test
+  void expiredHoldsAndUnknownReferencesRejectCompletion() throws Exception {
+    var terminal = SimulatedTerminalClient.builder().build();
+    var expired = reservationRequest("FirstReservation", "100", "EXPIRED", null);
+    expired
+        .getSaleToPOIRequest()
+        .getPaymentRequest()
+        .getPaymentData()
+        .setRequestedValidityDate(LocalDate.now(ZoneOffset.UTC).minusDays(1).toString());
+    terminal.request(expired);
+    var failure =
+        terminal
+            .request(reservationRequest("Completion", "100", "EXPIRED", null))
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getResponse();
+    assertEquals("NotAllowed", failure.getErrorCondition().toValue());
+    assertTrue(
+        java.net.URLDecoder.decode(failure.getAdditionalResponse(), StandardCharsets.UTF_8)
+            .contains("Invalid Payment Reservation: period closed"));
+    assertEquals(
+        "NotFound",
+        terminal
+            .request(reservationRequest("Completion", "100", "MISSING", null))
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getResponse()
+            .getErrorCondition()
+            .toValue());
+  }
+
+  @Test
+  void partialHoldsAndUpdatesRecordOnlyTheAmountActuallyAuthorized() throws Exception {
+    var terminal = SimulatedTerminalClient.builder().build();
+    for (String type : new String[] {"FirstReservation", "UpdateReservation"}) {
+      var partial = reservationRequest(type, "100", "TEST-PARTIAL", null);
+      var response = terminal.request(partial).getSaleToPOIResponse().getPaymentResponse();
+      assertEquals("Partial", response.getResponse().getResult().toValue());
+      assertEquals(50.0, response.getPaymentResult().getAmountsResp().getAuthorizedAmount());
+    }
+    assertEquals(
+        "NotAllowed",
+        terminal
+            .request(reservationRequest("Completion", "51", "TEST-PARTIAL", null))
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getResponse()
+            .getErrorCondition()
+            .toValue());
+    assertEquals(
+        "Success",
+        terminal
+            .request(reservationRequest("Completion", "50", "TEST-PARTIAL", null))
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getResponse()
+            .getResult()
+            .toValue());
+  }
+
+  @Test
+  void missingFollowUpReferencesCannotSelectAnExistingHold() throws Exception {
+    var terminal = SimulatedTerminalClient.builder().build();
+    terminal.request(reservationRequest("FirstReservation", "100", "null", null));
+    for (String type : new String[] {"UpdateReservation", "Completion"}) {
+      assertEquals(
+          "NotFound",
+          terminal
+              .request(reservationRequest(type, "100", null, null))
+              .getSaleToPOIResponse()
+              .getPaymentResponse()
+              .getResponse()
+              .getErrorCondition()
+              .toValue());
+    }
+  }
+
+  @Test
+  void failedUpdatesPreserveTheHoldAndReleaseCanFindItBySaleReference() throws Exception {
+    var terminal = SimulatedTerminalClient.builder().build();
+    var hold =
+        terminal
+            .request(reservationRequest("FirstReservation", "100", "ORDER-1", null))
+            .getSaleToPOIResponse()
+            .getPaymentResponse();
+    String poiId = hold.getPoiData().getPoiTransactionID().getTransactionID();
+    assertEquals(
+        "Refusal",
+        terminal
+            .request(reservationRequest("UpdateReservation", "41.23", "ORDER-1", null))
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getResponse()
+            .getErrorCondition()
+            .toValue());
+    assertEquals(
+        "NotAllowed",
+        terminal
+            .request(request("Payment", "refund-hold", paymentBody("100", poiId)))
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getResponse()
+            .getErrorCondition()
+            .toValue());
+    var released =
+        terminal
+            .request(
+                request(
+                    "Reversal",
+                    "release-reference",
+                    "{\"ReversalRequest\":{\"SaleReferenceID\":\"ORDER-1\",\"ReversalReason\":\"MerchantCancel\"}}"))
+            .getSaleToPOIResponse()
+            .getReversalResponse();
+    assertEquals("Success", released.getResponse().getResult().toValue());
+    assertEquals(100.0, released.getReversedAmount());
+    assertEquals(
+        "NotAllowed",
+        terminal
+            .request(reservationRequest("UpdateReservation", "100", null, poiId))
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getResponse()
+            .getErrorCondition()
+            .toValue());
+  }
+
+  @Test
+  void followUpsDoNotWaitForCustomerButBothInitialHoldTypesDo() throws Exception {
+    var terminal = SimulatedTerminalClient.builder().customerDelay(Duration.ofMillis(100)).build();
+    terminal.request(reservationRequest("FirstReservation", "100", "ORDER-1", null));
+    for (String type : new String[] {"UpdateReservation", "Completion"}) {
+      assertEquals(
+          "Success",
+          terminal
+              .request(reservationRequest(type, "100", "ORDER-1", null), Duration.ofMillis(1))
+              .getSaleToPOIResponse()
+              .getPaymentResponse()
+              .getResponse()
+              .getResult()
+              .toValue());
+    }
+    for (String type : new String[] {"FirstReservation", "OneTimeReservation"}) {
+      assertThrows(
+          BiltNexoClientException.class,
+          () ->
+              terminal.request(
+                  reservationRequest(type, "100", "ORDER-2", null), Duration.ofMillis(1)));
+    }
+  }
+
+  @Test
+  void lostReservationResponsesRecoverFromTheLedgerWithoutRepeatingTheHold() throws Exception {
+    var terminal = SimulatedTerminalClient.builder().build();
+    terminal.dropConnectionAfterNextApproval();
+    assertThrows(
+        BiltNexoClientException.class,
+        () -> terminal.request(reservationRequest("FirstReservation", "100", "ORDER-1", null)));
+    var status =
+        terminal
+            .request(
+                request(
+                    "TransactionStatus",
+                    "recover-hold",
+                    "{\"TransactionStatusRequest\":{\"MessageReference\":{\"ServiceID\":\"reservation-FirstReservation\"}}}"))
+            .getSaleToPOIResponse()
+            .getTransactionStatusResponse();
+    var hold =
+        status.getRepeatedMessageResponse().getRepeatedResponseMessageBody().getPaymentResponse();
+    assertEquals("FirstReservation", hold.getPaymentResult().getPaymentType().toValue());
+    assertEquals(
+        "Success",
+        terminal
+            .request(
+                reservationRequest(
+                    "Completion",
+                    "100",
+                    null,
+                    hold.getPoiData().getPoiTransactionID().getTransactionID()))
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getResponse()
+            .getResult()
+            .toValue());
+  }
 
   @Test
   void resolvedMemberIdWithFileEntryModeReturnsItsBalanceAndRewards() throws Exception {
@@ -988,6 +1341,31 @@ class SimulatedTerminalClientTest {
     header.put("POIID", "SIM-POI");
     saleRequest.setAll((ObjectNode) MAPPER.readTree(body));
     return MAPPER.convertValue(root, NexoTerminalAPI.class);
+  }
+
+  private static NexoTerminalAPI reservationRequest(
+      String type, String amount, String saleReference, String originalPoiId) throws IOException {
+    ObjectNode body = MAPPER.createObjectNode();
+    ObjectNode payment = body.putObject("PaymentRequest");
+    ObjectNode sale = payment.putObject("SaleData");
+    sale.putObject("SaleTransactionID")
+        .put("TransactionID", saleReference == null ? "ORDER" : saleReference);
+    if (saleReference != null) {
+      sale.put("SaleReferenceID", saleReference);
+    }
+    payment.putObject("PaymentData").put("PaymentType", type);
+    ObjectNode transaction = payment.putObject("PaymentTransaction");
+    transaction
+        .putObject("AmountsReq")
+        .put("RequestedAmount", Double.parseDouble(amount))
+        .put("Currency", "USD");
+    if (originalPoiId != null) {
+      transaction
+          .putObject("OriginalPOITransaction")
+          .putObject("POITransactionID")
+          .put("TransactionID", originalPoiId);
+    }
+    return request("Payment", "reservation-" + type, body.toString());
   }
 
   private static String paymentBody(String amount, String originalPoiId) {
