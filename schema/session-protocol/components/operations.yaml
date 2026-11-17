@@ -42,6 +42,7 @@ OperationRequest:
     - $ref: '#/RefundRequest'
     - $ref: '#/RefundUnlinkedRequest'
     - $ref: '#/VoidTransactionRequest'
+    - $ref: '#/ReleaseReservationRequest'
     - $ref: '#/TransactionStatusRequest'
     - $ref: '#/UpdateDisplayRequest'
     - $ref: '#/UpdateInputDisplayRequest'
@@ -73,6 +74,7 @@ OperationRequest:
       refund: '#/RefundRequest'
       refundUnlinked: '#/RefundUnlinkedRequest'
       voidTransaction: '#/VoidTransactionRequest'
+      releaseReservation: '#/ReleaseReservationRequest'
       getTransactionStatus: '#/TransactionStatusRequest'
       updateDisplay: '#/UpdateDisplayRequest'
       updateInputDisplay: '#/UpdateInputDisplayRequest'
@@ -310,6 +312,17 @@ VoidTransactionRequest:
     handledSteps:
       $ref: '#/HandledSteps'
 
+ReleaseReservationRequest:
+  type: object
+  description: Releases an uncommitted hold by its persisted reference; unlike a void, there are no committed movements to reverse.
+  required: [type, reference]
+  properties:
+    type:
+      type: string
+      enum: [releaseReservation]
+    reference:
+      $ref: './settlement.yaml#/ReservationReference'
+
 TransactionStatusRequest:
   type: object
   description: Checks the status of a prior request by the `ServiceID` it was sent with; the terminal repeats the original response when found.
@@ -519,7 +532,7 @@ OperationBase:
     serviceId:
       type: string
       description: |
-        Assigned at accept for single-request money operations (`refundUnlinked` and the stored
+        Assigned at accept for single-request money operations (`refundUnlinked`, `releaseReservation` and the stored
         value changes `storedValueActivate`, `storedValueLoad`, `storedValueUnload`,
         `storedValueDeactivate`, `storedValueReserve`, `storedValueReverse`): the Nexo `ServiceID`
         the host minted through the session's provider and sends the operation's terminal request
@@ -548,6 +561,7 @@ Operation:
     - $ref: '#/SettleOperation'
     - $ref: '#/RefundOperation'
     - $ref: '#/VoidTransactionOperation'
+    - $ref: '#/ReleaseReservationOperation'
     - $ref: '#/TransactionStatusOperation'
     - $ref: '#/VoidResultOperation'
   discriminator:
@@ -577,6 +591,7 @@ Operation:
       refund: '#/RefundOperation'
       refundUnlinked: '#/RefundOperation'
       voidTransaction: '#/VoidTransactionOperation'
+      releaseReservation: '#/ReleaseReservationOperation'
       getTransactionStatus: '#/TransactionStatusOperation'
       setStoredValueCard: '#/VoidResultOperation'
       updateDisplay: '#/VoidResultOperation'
@@ -740,6 +755,18 @@ VoidTransactionOperation:
         type:
           type: string
           enum: [voidTransaction]
+        result:
+          $ref: './reversal.yaml#/VoidResult'
+
+ReleaseReservationOperation:
+  allOf:
+    - $ref: '#/OperationBase'
+    - type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [releaseReservation]
         result:
           $ref: './reversal.yaml#/VoidResult'
 

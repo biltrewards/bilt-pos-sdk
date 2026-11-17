@@ -36,6 +36,66 @@ A few principles explain most of the behavior:
 - **`settle()` supports separate and net movement,** with explicit callbacks for committed refund/charge movements and blocking callbacks after each loyalty/stored-value charge step so the register can update its own model and recompute tax, then return the total that feeds the next step. `SettlementType.REFUND_THEN_CHARGE` is the backward-compatible default. `SettlementType.NET` sends only the signed basket difference: a charge, a refund, or no monetary movement. Loyalty runs only for identified members and can be disabled; stored value runs only when a gift card is registered; card runs whenever a positive balance remains.
 - **Errors and aborts roll back cleanly.** If a charge-side step fails or `abort()` is called mid-sequence, everything already committed by that charge sequence (rebates, points, stored value) is reversed in the opposite order — basket intact, `settle()` retryable. Refund allocation failures are not recovered in-run; committed refund allocation movements stand, and the register retries `settle()` with the same committed allocation prefix. An abort is a register maneuver, not an abandonment; `end()` closes a recovered session, while `forceEnd(reason)` is the explicit last resort when recovery cannot be completed.
 
+### Reservations (pre-authorization)
+
+The following Session Protocol example describes the reservation contract; Java orchestration
+support is delivered separately. Reservations require both the terminal-management and merchant
+pre-authorization flags. A hold is not a sale or a committed movement: persist its
+`ReservationReference`, not an `OriginalSaleRecord` for voiding it.
+
+`PRE_AUTH` and `PRE_AUTH_UPDATE` are card-only: loyalty, stored value, rebates, points and awards
+are skipped. Loyalty runs at `PRE_AUTH_COMPLETE`; releasing a hold has no committed loyalty or
+other movements to reverse. Persist the original lane's `saleId` in the reference when another
+register may update, complete or release the hold; it defaults to the current session's `saleId`.
+
+In session 1, build the basket for the hold amount and submit:
+
+```json
+{
+  "type": "settle",
+  "options": {
+    "authorization": { "mode": "PRE_AUTH", "saleReferenceId": "tab-42" }
+  }
+}
+```
+
+Persist the returned reservation reference, for example:
+
+```json
+{
+  "saleReferenceId": "tab-42",
+  "saleId": "POS-LANE-3",
+  "poiTransactionId": "hold-42",
+  "poiTransactionTimestamp": "2026-06-25T12:00:00Z",
+  "authorizedAmount": "50.00"
+}
+```
+
+End session 1. In session 2, rebuild the basket for the final amount and submit a `settle`
+operation with `options.authorization.mode` set to `PRE_AUTH_COMPLETE` and
+`options.authorization.reference` set to the entire persisted reference above. Completion
+captures the final basket total, raising the authorization first if needed. To change the hold
+without capturing it, use `PRE_AUTH_UPDATE` instead and persist the new reference.
+
+Alternatively, release the unused hold in session 2 without settling a basket:
+
+```json
+{
+  "type": "releaseReservation",
+  "reference": {
+    "saleReferenceId": "tab-42",
+    "saleId": "POS-LANE-3",
+    "poiTransactionId": "hold-42",
+    "poiTransactionTimestamp": "2026-06-25T12:00:00Z",
+    "authorizedAmount": "50.00"
+  }
+}
+```
+
+`releaseReservation` returns `VoidResult` but is a separate operation from `voidTransaction`:
+release cancels a hold; void reverses committed movements. End session 2 after completion or
+release. `SALE` remains the default authorization mode when authorization is omitted.
+
 ### ServiceIDs for crash recovery
 
 Every Nexo request carries a `ServiceID`, which [Transaction Status](./verify-transaction-status.md) uses to look the request up after a crash. By default the SDK mints random 10-character alphanumeric ids. To know them yourself, set either or both on the builder (`Terminal.builder()` takes the same two):

@@ -1427,8 +1427,51 @@ export interface components {
             /** @description The stored value provider's transaction reference. */
             hostTransactionId?: string;
         };
+        /**
+         * @description How the card leg is authorized. `SALE` (default) charges. `PRE_AUTH` places a hold for the
+         *     basket total and returns a `ReservationReference`. `PRE_AUTH_UPDATE` changes a hold.
+         *     `PRE_AUTH_COMPLETE` captures a hold for the basket total (raising it first when needed).
+         *     `PRE_AUTH` and `PRE_AUTH_UPDATE` are card-only: loyalty, stored value, rebates, points and
+         *     awards are skipped. Loyalty runs at `PRE_AUTH_COMPLETE`. Releasing a hold has no committed
+         *     loyalty or other movements to reverse.
+         * @enum {string}
+         */
+        AuthorizationMode: "SALE" | "PRE_AUTH" | "PRE_AUTH_UPDATE" | "PRE_AUTH_COMPLETE";
+        /** @description What a register persists to update, complete or release a hold later, possibly in another session or from another register. */
+        ReservationReference: {
+            /** @description The register's id for the reservation sequence (nexo SaleReferenceID). */
+            saleReferenceId: string;
+            poiTransactionId: string;
+            /** Format: date-time */
+            poiTransactionTimestamp: string;
+            authorizedAmount: components["schemas"]["Money"];
+            /**
+             * Format: date
+             * @description End of the hold as reported by the terminal, when known.
+             */
+            validityDate?: string;
+            merchantId?: string;
+            poiId?: string;
+            /** @description The `saleId` the original request was sent with, when it differs from this session's (another lane, or a restart under a new `saleId`). Nexo requires it in `OriginalPOITransaction.SaleID` whenever the hold is updated, completed or released by a Sale Terminal other than the one that sent the original. Defaults to this session's `saleId`. */
+            saleId?: string;
+        };
+        Authorization: {
+            mode: components["schemas"]["AuthorizationMode"];
+            /** @description Required for PRE_AUTH; the register's order/ticket/tab id. */
+            saleReferenceId?: string;
+            /** @description Required for PRE_AUTH_UPDATE and PRE_AUTH_COMPLETE. */
+            reference?: components["schemas"]["ReservationReference"];
+            /**
+             * Format: date
+             * @description Requested end of the hold (PRE_AUTH / PRE_AUTH_UPDATE).
+             */
+            requestedValidityDate?: string;
+            /** @description Show the basket on the terminal during this settlement. Defaults to false for PRE_AUTH, true otherwise. */
+            displayCart?: boolean;
+        };
         /** @description The register's plan for resolving a basket, mirroring `SettlementOptions`; all fields optional. */
         SettlementOptions: {
+            authorization?: components["schemas"]["Authorization"];
             loyalty?: components["schemas"]["SettlementLoyalty"];
             /** @description Positive cashback requested with the card payment. */
             cashback?: components["schemas"]["Money"];
@@ -1490,6 +1533,8 @@ export interface components {
         };
         /** @description One money or loyalty movement committed as part of a settlement. */
         SettlementMovement: {
+            paymentType?: string;
+            reservation?: components["schemas"]["ReservationReference"];
             step: components["schemas"]["SettlementStep"];
             target: components["schemas"]["SettlementTarget"];
             amount: components["schemas"]["Money"];
@@ -1601,7 +1646,8 @@ export interface components {
         /**
          * @description Outcome of `voidTransaction`: the movements *this call* reversed. A resumed void after a
          *     partial abort does not restate what earlier attempts reversed; its amount, reference and
-         *     receipts cover only the legs sent this time and may all be absent.
+         *     receipts cover only the legs sent this time and may all be absent. Also returned by
+         *     `releaseReservation` for releasing a hold without reversing committed movements.
          */
         VoidResult: {
             success: boolean;
@@ -1662,12 +1708,12 @@ export interface components {
          *     the Java method of the same name; `end` and `forceEnd` are created through their own
          *     endpoints and are not accepted here.
          */
-        OperationRequest: components["schemas"]["IdentifyMemberRequest"] | components["schemas"]["AcquireCardRequest"] | components["schemas"]["InputPromptRequest"] | components["schemas"]["ConfirmationRequest"] | components["schemas"]["MenuEntryRequest"] | components["schemas"]["SignatureRequest"] | components["schemas"]["AmountConfirmationRequest"] | components["schemas"]["PinRequest"] | components["schemas"]["StoredValueCardRequest"] | components["schemas"]["StoredValueAmountRequest"] | components["schemas"]["StoredValueReverseRequest"] | components["schemas"]["SetStoredValueCardRequest"] | components["schemas"]["SettleRequest"] | components["schemas"]["RefundRequest"] | components["schemas"]["RefundUnlinkedRequest"] | components["schemas"]["VoidTransactionRequest"] | components["schemas"]["TransactionStatusRequest"] | components["schemas"]["UpdateDisplayRequest"] | components["schemas"]["UpdateInputDisplayRequest"];
+        OperationRequest: components["schemas"]["IdentifyMemberRequest"] | components["schemas"]["AcquireCardRequest"] | components["schemas"]["InputPromptRequest"] | components["schemas"]["ConfirmationRequest"] | components["schemas"]["MenuEntryRequest"] | components["schemas"]["SignatureRequest"] | components["schemas"]["AmountConfirmationRequest"] | components["schemas"]["PinRequest"] | components["schemas"]["StoredValueCardRequest"] | components["schemas"]["StoredValueAmountRequest"] | components["schemas"]["StoredValueReverseRequest"] | components["schemas"]["SetStoredValueCardRequest"] | components["schemas"]["SettleRequest"] | components["schemas"]["RefundRequest"] | components["schemas"]["RefundUnlinkedRequest"] | components["schemas"]["VoidTransactionRequest"] | components["schemas"]["ReleaseReservationRequest"] | components["schemas"]["TransactionStatusRequest"] | components["schemas"]["UpdateDisplayRequest"] | components["schemas"]["UpdateInputDisplayRequest"];
         /**
          * @description An operation resource, discriminated by `type` so `result` is typed per operation. The
          *     `type` set is `OperationRequest`'s plus `end` and `forceEnd`.
          */
-        Operation: components["schemas"]["IdentifyMemberOperation"] | components["schemas"]["AcquireCardOperation"] | components["schemas"]["StringOperation"] | components["schemas"]["DecimalOperation"] | components["schemas"]["BooleanOperation"] | components["schemas"]["MenuEntryOperation"] | components["schemas"]["SignatureOperation"] | components["schemas"]["PinOperation"] | components["schemas"]["StoredValueBalanceOperation"] | components["schemas"]["StoredValueOperation"] | components["schemas"]["SettleOperation"] | components["schemas"]["RefundOperation"] | components["schemas"]["VoidTransactionOperation"] | components["schemas"]["TransactionStatusOperation"] | components["schemas"]["VoidResultOperation"];
+        Operation: components["schemas"]["IdentifyMemberOperation"] | components["schemas"]["AcquireCardOperation"] | components["schemas"]["StringOperation"] | components["schemas"]["DecimalOperation"] | components["schemas"]["BooleanOperation"] | components["schemas"]["MenuEntryOperation"] | components["schemas"]["SignatureOperation"] | components["schemas"]["PinOperation"] | components["schemas"]["StoredValueBalanceOperation"] | components["schemas"]["StoredValueOperation"] | components["schemas"]["SettleOperation"] | components["schemas"]["RefundOperation"] | components["schemas"]["VoidTransactionOperation"] | components["schemas"]["ReleaseReservationOperation"] | components["schemas"]["TransactionStatusOperation"] | components["schemas"]["VoidResultOperation"];
         /**
          * @description `queued` until the lane reaches it, `running` while it executes, `awaitingReply` while a
          *     step waits on the register, then exactly one of `succeeded`, `failed` or `aborted`.
@@ -1998,7 +2044,7 @@ export interface components {
             /** @description The step awaiting a reply while `awaitingReply`. */
             pendingStep?: components["schemas"]["OperationStep"];
             /**
-             * @description Assigned at accept for single-request money operations (`refundUnlinked` and the stored
+             * @description Assigned at accept for single-request money operations (`refundUnlinked`, `releaseReservation` and the stored
              *     value changes `storedValueActivate`, `storedValueLoad`, `storedValueUnload`,
              *     `storedValueDeactivate`, `storedValueReserve`, `storedValueReverse`): the Nexo `ServiceID`
              *     the host minted through the session's provider and sends the operation's terminal request
@@ -2298,6 +2344,17 @@ export interface components {
              * @enum {string}
              */
             type: "voidTransaction";
+        };
+        ReleaseReservationOperation: components["schemas"]["OperationBase"] & {
+            /** @enum {string} */
+            type: "releaseReservation";
+            result?: components["schemas"]["VoidResult"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "releaseReservation";
         };
         TransactionStatusOperation: components["schemas"]["OperationBase"] & {
             /** @enum {string} */
@@ -2613,6 +2670,15 @@ export interface components {
             type: "voidTransaction";
             originalSale?: components["schemas"]["OriginalSaleRecord"];
             handledSteps?: components["schemas"]["HandledSteps"];
+        };
+        /** @description Releases an uncommitted hold by its persisted reference; unlike a void, there are no committed movements to reverse. */
+        ReleaseReservationRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "releaseReservation";
+            reference: components["schemas"]["ReservationReference"];
         };
         /**
          * @description The Nexo `MessageCategoryType`.

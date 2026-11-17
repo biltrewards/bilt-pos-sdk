@@ -118,10 +118,70 @@ SettlementLoyalty:
         type: string
         enum: [REBATES, POINTS, AWARD]
 
+AuthorizationMode:
+  type: string
+  description: |
+    How the card leg is authorized. `SALE` (default) charges. `PRE_AUTH` places a hold for the
+    basket total and returns a `ReservationReference`. `PRE_AUTH_UPDATE` changes a hold.
+    `PRE_AUTH_COMPLETE` captures a hold for the basket total (raising it first when needed).
+    `PRE_AUTH` and `PRE_AUTH_UPDATE` are card-only: loyalty, stored value, rebates, points and
+    awards are skipped. Loyalty runs at `PRE_AUTH_COMPLETE`. Releasing a hold has no committed
+    loyalty or other movements to reverse.
+  enum: [SALE, PRE_AUTH, PRE_AUTH_UPDATE, PRE_AUTH_COMPLETE]
+
+ReservationReference:
+  type: object
+  description: What a register persists to update, complete or release a hold later, possibly in another session or from another register.
+  required: [saleReferenceId, poiTransactionId, poiTransactionTimestamp, authorizedAmount]
+  properties:
+    saleReferenceId:
+      type: string
+      description: The register's id for the reservation sequence (nexo SaleReferenceID).
+    poiTransactionId:
+      type: string
+    poiTransactionTimestamp:
+      type: string
+      format: date-time
+    authorizedAmount:
+      $ref: './common.yaml#/Money'
+    validityDate:
+      type: string
+      format: date
+      description: End of the hold as reported by the terminal, when known.
+    merchantId:
+      type: string
+    poiId:
+      type: string
+    saleId:
+      type: string
+      description: The `saleId` the original request was sent with, when it differs from this session's (another lane, or a restart under a new `saleId`). Nexo requires it in `OriginalPOITransaction.SaleID` whenever the hold is updated, completed or released by a Sale Terminal other than the one that sent the original. Defaults to this session's `saleId`.
+
+Authorization:
+  type: object
+  required: [mode]
+  properties:
+    mode:
+      $ref: '#/AuthorizationMode'
+    saleReferenceId:
+      type: string
+      description: Required for PRE_AUTH; the register's order/ticket/tab id.
+    reference:
+      $ref: '#/ReservationReference'
+      description: Required for PRE_AUTH_UPDATE and PRE_AUTH_COMPLETE.
+    requestedValidityDate:
+      type: string
+      format: date
+      description: Requested end of the hold (PRE_AUTH / PRE_AUTH_UPDATE).
+    displayCart:
+      type: boolean
+      description: Show the basket on the terminal during this settlement. Defaults to false for PRE_AUTH, true otherwise.
+
 SettlementOptions:
   type: object
   description: The register's plan for resolving a basket, mirroring `SettlementOptions`; all fields optional.
   properties:
+    authorization:
+      $ref: '#/Authorization'
     loyalty:
       $ref: '#/SettlementLoyalty'
     cashback:
@@ -147,6 +207,10 @@ SettlementMovement:
   description: One money or loyalty movement committed as part of a settlement.
   required: [step, target, amount]
   properties:
+    paymentType:
+      type: string
+    reservation:
+      $ref: '#/ReservationReference'
     step:
       $ref: '#/SettlementStep'
     target:

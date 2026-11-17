@@ -58,6 +58,48 @@ describe('schema/session-protocol/examples', () => {
     expect(ok).toBe(false);
   });
 
+  it('accepts reservation settlement and release operations with a persisted reference', () => {
+    const reference = {
+      saleReferenceId: 'tab-42',
+      poiTransactionId: 'hold-42',
+      poiTransactionTimestamp: '2026-06-25T12:00:00Z',
+      authorizedAmount: '50.00',
+    };
+    for (const mode of ['SALE', 'PRE_AUTH', 'PRE_AUTH_UPDATE', 'PRE_AUTH_COMPLETE']) {
+      expect(
+        validate('OperationRequest', {
+          type: 'settle',
+          options: { authorization: { mode, saleReferenceId: 'tab-42', reference } },
+        }).ok,
+      ).toBe(true);
+    }
+    expect(validate('OperationRequest', { type: 'releaseReservation', reference }).ok).toBe(true);
+    expect(validate('SettlementOptions', {}).ok).toBe(true);
+    expect(validate('OperationRequest', { type: 'releaseReservation' }).ok).toBe(false);
+    expect(validate('ReservationReference', {}).ok).toBe(false);
+    expect(validate('ReservationReference', { ...reference, authorizedAmount: 50 }).ok).toBe(false);
+    expect(validate('Authorization', { mode: 'UNKNOWN' }).ok).toBe(false);
+  });
+
+  it('accepts an original lane saleId on a reservation reference', () => {
+    const reference = {
+      saleReferenceId: 'tab-42',
+      poiTransactionId: 'hold-42',
+      poiTransactionTimestamp: '2026-06-25T12:00:00Z',
+      authorizedAmount: '50.00',
+      saleId: 'POS-LANE-3',
+    };
+    expect(validate('ReservationReference', reference).ok).toBe(true);
+    expect(validate('OperationRequest', { type: 'releaseReservation', reference }).ok).toBe(true);
+    expect(
+      validate('OperationRequest', {
+        type: 'settle',
+        options: { authorization: { mode: 'PRE_AUTH_COMPLETE', reference } },
+      }).ok,
+    ).toBe(true);
+    expect(validate('ReservationReference', { ...reference, saleId: 3 }).ok).toBe(false);
+  });
+
   it('rejects a money value that is not a decimal string', () => {
     const { ok } = validate('Money', '12,34');
     expect(ok).toBe(false);
