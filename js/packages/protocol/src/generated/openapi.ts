@@ -1583,7 +1583,7 @@ export interface components {
             awardPoiTransactionTimestamp?: string;
             memberId?: string;
         };
-        /** @description Outcome of a refund. A linked refund also reverses loyalty points awarded on the original transaction, best-effort. */
+        /** @description Outcome of a refund. A linked refund also reverses the original loyalty award, best-effort. A full linked refund additionally returns the explicit point redemption unless already returned; partial linked refunds leave redemption returns to register-selected allocations. */
         RefundResult: {
             success: boolean;
             /** @description Absent when the terminal did not echo it. */
@@ -1625,7 +1625,7 @@ export interface components {
         /**
          * @description One reversible leg of a sale. A void reverses the known legs in this order:
          *     `STORED_VALUE_LOAD`, `CARD`, `STORED_VALUE`, `REDEMPTION`, `REBATE`, `AWARD`. A refund flow
-         *     has at most `CARD` (the tender refund) and `AWARD`.
+         *     has at most `CARD` (the tender refund), `REDEMPTION` (full linked refunds only), and `AWARD`.
          * @enum {string}
          */
         ReversalStep: "STORED_VALUE_LOAD" | "CARD" | "STORED_VALUE" | "REDEMPTION" | "REBATE" | "AWARD";

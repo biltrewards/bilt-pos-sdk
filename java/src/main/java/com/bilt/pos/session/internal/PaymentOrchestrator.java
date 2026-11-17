@@ -2001,7 +2001,9 @@ public final class PaymentOrchestrator {
                   Wire.originalTransaction(originalPoiTxn),
                   memberId,
                   saleTransaction,
-                  exchange.factory().mintServiceId(MessageCategoryType.LOYALTY));
+                  exchange.factory().mintServiceId(MessageCategoryType.LOYALTY),
+                  null,
+                  currency);
       SaleToPOIResponse response =
           exchange.sendExpectingBody(MessageCategoryType.LOYALTY, wireRequest);
       if (response.getLoyaltyResponse() != null) {

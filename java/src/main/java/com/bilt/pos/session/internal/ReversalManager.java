@@ -57,10 +57,11 @@ import java.util.stream.Collectors;
 /**
  * Refund and void flows. A void is a list of {@link ReversalMovement}s executed in order — money
  * legs as Nexo {@code ReversalRequest}s, loyalty legs as the matching {@code LoyaltyRequest} refund
- * types — and a refund is a {@code PaymentRequest(Refund)} followed by an award reversal when the
- * award reference is known. When a step fails, the caller-supplied {@link StepDecider} chooses
- * between retrying it, leaving it standing, or aborting the flow; already-reversed steps always
- * stand. A {@code null} decider selects the default policy (see {@link #defaultPolicy}).
+ * types — and a refund is a {@code PaymentRequest(Refund)} followed by redemption and award
+ * reversals when their references are supplied. When a step fails, the caller-supplied {@link
+ * StepDecider} chooses between retrying it, leaving it standing, or aborting the flow;
+ * already-reversed steps always stand. A {@code null} decider selects the default policy (see
+ * {@link #defaultPolicy}).
  */
 public final class ReversalManager {
 
@@ -107,14 +108,15 @@ public final class ReversalManager {
   // ─── Refund ───
 
   /**
-   * Linked or unlinked refund: the tender refund, then — when the award reference of a linked
-   * original is known — the award reversal.
+   * Linked or unlinked refund: the tender refund, then the supplied redemption and award reversals.
    *
    * @param amount the amount to refund, or {@code null} for a full linked refund
    * @param saleItems the refunded items, attached to the refund's {@code PaymentTransaction}
    *     (magnitudes only — the payment type carries the direction), or {@code null} for an
    *     amount-only refund
    * @param originalPoiTxnId original transaction reference; {@code null} for an unlinked refund
+   * @param redemptionPoiTxnId the original redemption reference, or {@code null} when no redemption
+   *     is to be returned (including partial linked refunds)
    * @param awardPoiTxnId the original sale's award reference (linked refunds only), or {@code null}
    *     when no award is to be reversed
    * @param decider per-step failure resolution; {@code null} for the default policy (tender aborts,
@@ -126,6 +128,7 @@ public final class ReversalManager {
    *     flow — and only then: a tender skipped by decision leaves the sale voidable
    * @param onAwardReversed invoked when the award reversal completes, so the caller records it as
    *     reversal progress — a later void must not re-credit it
+   * @param onRedemptionReversed invoked when the redemption reversal completes to record progress
    * @param refundServiceId the {@code ServiceID} the first tender attempt is sent with, already
    *     minted by {@link NexoMessageFactory#mintServiceId}, or {@code null}; every other attempt
    *     mints its own and tells {@code beforeStep}
@@ -135,6 +138,8 @@ public final class ReversalManager {
       List<SaleItem> saleItems,
       String originalPoiTxnId,
       Instant originalPoiTimestamp,
+      String redemptionPoiTxnId,
+      Instant redemptionPoiTimestamp,
       String awardPoiTxnId,
       Instant awardPoiTimestamp,
       String memberId,
@@ -142,6 +147,7 @@ public final class ReversalManager {
       StepDecider decider,
       Consumer<ReversalContext> beforeStep,
       Runnable onRefunded,
+      Runnable onRedemptionReversed,
       Runnable onAwardReversed,
       String refundServiceId) {
     // the tender refund anchors the flow, so the award is best-effort
@@ -180,6 +186,43 @@ public final class ReversalManager {
     }
 
     LoyaltyReversal loyalty = NO_REVERSAL;
+    boolean redemptionReversed = false;
+    if (redemptionPoiTxnId != null) {
+      LoyaltyResponse redemptionLeg =
+          runStep(
+              ReversalStep.REDEMPTION,
+              effective,
+              decider == null,
+              () ->
+                  loyaltyRefund(
+                      LoyaltyTransactionTypeEnum.REDEMPTION_REFUND,
+                      redemptionPoiTxnId,
+                      redemptionPoiTimestamp,
+                      memberId,
+                      saleTransaction,
+                      mintServiceId(
+                          ReversalStep.REDEMPTION, MessageCategoryType.LOYALTY, beforeStep)),
+              e -> {
+                lastFailure[0] = e;
+                LOGGER.warning(
+                    "RedemptionRefund failed (terminal may retry via SAF): " + e.getError());
+              },
+              e ->
+                  body == null
+                      ? e
+                      : new SessionException(
+                          Wire.annotated(
+                              e.getError(),
+                              "the tender refund completed but the redemption "
+                                  + redemptionPoiTxnId
+                                  + " was not reversed: "
+                                  + e.getError().getMessage(),
+                              e)));
+      if (redemptionLeg != null) {
+        redemptionReversed = true;
+        onRedemptionReversed.run();
+      }
+    }
     boolean awardReversed = false;
     if (awardPoiTxnId != null) {
       LoyaltyResponse awardLeg =
@@ -219,12 +262,12 @@ public final class ReversalManager {
     }
 
     if (body == null) {
-      if (!awardReversed) {
+      if (!awardReversed && !redemptionReversed) {
         // every step was skipped: nothing moved, so the refund
         // must not report success
         throw lastFailure[0];
       }
-      // the tender refund was skipped by decision; only the award moved
+      // the tender refund was skipped by decision; only loyalty moved
       return RefundResult.builder()
           .success(true)
           .pointsReversed(loyalty.pointsReversed)
@@ -301,7 +344,8 @@ public final class ReversalManager {
       Instant originalPoiTimestamp,
       String memberId,
       TransactionIdentificationType saleTransaction,
-      String serviceId) {
+      String serviceId,
+      BigDecimal amount) {
     LoyaltyTransactionTypeEnum refundType = LOYALTY_REFUND_TYPES.get(step);
     if (refundType == null || isMoneyLeg(step)) {
       throw new IllegalArgumentException(step + " is not a loyalty refund movement");
@@ -313,7 +357,8 @@ public final class ReversalManager {
             originalPoiTimestamp,
             memberId,
             saleTransaction,
-            serviceId);
+            serviceId,
+            amount);
     LoyaltyReversal reversal = parseReversal(body);
     return VoidResult.builder()
         .success(true)
@@ -755,6 +800,24 @@ public final class ReversalManager {
       String memberId,
       TransactionIdentificationType saleTransaction,
       String serviceId) {
+    return loyaltyRefund(
+        refundType,
+        originalPoiTxnId,
+        originalPoiTimestamp,
+        memberId,
+        saleTransaction,
+        serviceId,
+        null);
+  }
+
+  private LoyaltyResponse loyaltyRefund(
+      LoyaltyTransactionTypeEnum refundType,
+      String originalPoiTxnId,
+      Instant originalPoiTimestamp,
+      String memberId,
+      TransactionIdentificationType saleTransaction,
+      String serviceId,
+      BigDecimal amount) {
     SaleToPOIRequest request =
         exchange
             .factory()
@@ -763,7 +826,9 @@ public final class ReversalManager {
                 Wire.originalTransaction(originalPoiTxnId, originalPoiTimestamp),
                 memberId,
                 saleTransaction,
-                serviceId);
+                serviceId,
+                amount,
+                currency);
     SaleToPOIResponse response = exchange.sendExpectingBody(MessageCategoryType.LOYALTY, request);
     LoyaltyResponse body = response.getLoyaltyResponse();
     if (body == null) {

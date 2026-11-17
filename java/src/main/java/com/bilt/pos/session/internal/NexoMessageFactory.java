@@ -15,10 +15,12 @@ import com.bilt.pos.nexo.model.DeviceEnum;
 import com.bilt.pos.nexo.model.DisplayOutput;
 import com.bilt.pos.nexo.model.DisplayRequest;
 import com.bilt.pos.nexo.model.InfoQualifyEnum;
+import com.bilt.pos.nexo.model.LoyaltyAmount;
 import com.bilt.pos.nexo.model.LoyaltyData;
 import com.bilt.pos.nexo.model.LoyaltyRequest;
 import com.bilt.pos.nexo.model.LoyaltyTransaction;
 import com.bilt.pos.nexo.model.LoyaltyTransactionTypeEnum;
+import com.bilt.pos.nexo.model.LoyaltyUnitEnum;
 import com.bilt.pos.nexo.model.MessageCategoryType;
 import com.bilt.pos.nexo.model.MessageClassType;
 import com.bilt.pos.nexo.model.MessageHeader;
@@ -38,6 +40,7 @@ import com.bilt.pos.session.ServiceIdProvider;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
+import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.util.regex.Pattern;
 
@@ -200,7 +203,9 @@ public final class NexoMessageFactory {
       OriginalPOITransaction original,
       String memberId,
       TransactionIdentificationType saleTransaction,
-      String serviceId) {
+      String serviceId,
+      BigDecimal amount,
+      String currency) {
     LoyaltyRequest.Builder loyaltyRequest =
         LoyaltyRequest.builder()
             .saleData(saleData(saleTransaction))
@@ -209,11 +214,20 @@ public final class NexoMessageFactory {
                     .loyaltyTransactionType(refundType)
                     .originalPOITransaction(original)
                     .build());
-    if (memberId != null) {
-      loyaltyRequest.loyaltyData(
-          new LoyaltyData[] {
-            LoyaltyData.builder().loyaltyAccountID(Wire.memberAccount(memberId)).build()
-          });
+    if (memberId != null || amount != null) {
+      LoyaltyData.Builder data = LoyaltyData.builder();
+      if (memberId != null) {
+        data.loyaltyAccountID(Wire.memberAccount(memberId));
+      }
+      if (amount != null) {
+        data.loyaltyAmount(
+            LoyaltyAmount.builder()
+                .loyaltyUnit(LoyaltyUnitEnum.MONETARY)
+                .currency(currency)
+                .amountValue(amount.doubleValue())
+                .build());
+      }
+      loyaltyRequest.loyaltyData(new LoyaltyData[] {data.build()});
     }
     return SaleToPOIRequest.builder()
         .messageHeader(header(MessageClassType.SERVICE, MessageCategoryType.LOYALTY, serviceId))

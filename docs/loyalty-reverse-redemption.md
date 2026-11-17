@@ -23,6 +23,8 @@ Make sure you have:
 
 ## Make a redemption reversal request
 
+For the session's latest sale, full `refund()` sends `RedemptionRefund` automatically after the tender refund and before the award reversal, unless already returned. `refund(amount)` does not return points. For a register-selected partial return, use a `POINT_REDEMPTION` allocation in `settle()`: its amount is sent as a monetary `LoyaltyAmount` in the session currency. Full refund, void, and abort unwind requests omit `LoyaltyAmount`. Loyalty failures use the existing reversal decider (best-effort warning by default, immediate `RETRY`, or annotated `ABORT`). Same-session guards suppress automatic reversal after an explicit allocation and refuse an allocation after a full return; no remaining amount is tracked.
+
 To reverse a redemption, send a Terminal API request with `MessageCategory` set to `Loyalty` and `LoyaltyTransactionType` set to `RedemptionRefund`. Reference the original redemption via `OriginalPOITransaction`.
 
 1. Send a Terminal API request with the following `MessageHeader` fields:

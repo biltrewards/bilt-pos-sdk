@@ -465,11 +465,13 @@ export function netSettlement(session: TerminalShopperSession): Promise<Settleme
 
 ## Refund and void
 
+A full `session.refund()` also returns the sale's explicit point redemption, after the tender and before the award, unless already returned. `refund(amount)` leaves points untouched; choose their monetary share with a `POINT_REDEMPTION` allocation in `settle()`, sent as monetary `LoyaltyAmount` in the session currency. Successful explicit allocations suppress later automatic full redemption reversal of the current sale; allocations after a full return are refused. Linked refunds after a completed void are refused. These guards belong to the current sale and reset when a successful settlement replaces it. Default loyalty failure handling logs a warning and skips; use `onError` for immediate `RETRY` or annotated `ABORT`. Another refund call sends another tender refund, not a loyalty-only retry.
+
 Reversals take an optional `ReversalHandlers` with two step handlers. `onError(step, error, info)`, the Java `ReversalFlow.onError`, answers `RETRY`, `SKIP` or `ABORT` for the leg that failed (`REVERSAL_DECISION_REQUIRED`, default `ABORT`). Without it the Java default policy applies: a failed money leg aborts, a failed loyalty leg riding along is skipped, a failed loyalty leg that is the substance of the reversal aborts. `beforeStep(context, info)` (`BEFORE_STEP`), the Java `ReversalFlow.beforeStep`, is told each leg's `step` and the `serviceId` its terminal request is then sent with, before it is sent; record it so a crash mid-reversal can be resolved with `getTransactionStatus`. `refundUnlinked` and the stored value changes send a single request whose `ServiceID` is on the handle as `op.serviceId` as soon as the host has accepted the operation; a retried `refundUnlinked` is sent with a fresh id, which `beforeStep` reports first.
 
 ```ts
 export function refundLast(session: TerminalShopperSession, amount?: Money): Promise<RefundResult> {
-  return session.refund(amount); // full when amount is omitted; the award is reversed best-effort
+  return session.refund(amount); // full when omitted; loyalty reversals are best-effort
 }
 
 export function refundWithoutASale(session: TerminalShopperSession): Promise<RefundResult> {

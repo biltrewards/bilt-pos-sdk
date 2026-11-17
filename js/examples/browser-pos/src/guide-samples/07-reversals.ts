@@ -10,7 +10,7 @@ import type {
 declare function log(message: string): void;
 
 export function refundLast(session: TerminalShopperSession, amount?: Money): Promise<RefundResult> {
-  return session.refund(amount); // full when amount is omitted; the award is reversed best-effort
+  return session.refund(amount); // full when omitted; loyalty reversals are best-effort
 }
 
 export function refundWithoutASale(session: TerminalShopperSession): Promise<RefundResult> {

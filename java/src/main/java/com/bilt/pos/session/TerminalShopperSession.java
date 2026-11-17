@@ -285,20 +285,22 @@ public interface TerminalShopperSession extends ShopperSession {
    *
    * <p>Linked refunds reference a single transaction: after a split tender this is the card leg —
    * use {@code voidTransaction()} to reverse both legs, or the stored value operations to return
-   * funds to the gift card. A refund reverses the card leg and award only; the sale's committed
-   * rebate and redemption movements are reversed by {@link #voidTransaction()}. Once a refund has
-   * returned money the payment can no longer be voided; a tender skipped by an {@code onError}
-   * decision leaves it voidable, with an award the flow reversed remembered so nothing re-credits
-   * it. Once a void has partially reversed the payment's money legs, refunds are refused until the
-   * void is finished. To refund a sale taken by an earlier session, ring return lines into a new
-   * session and provide refund allocations on {@link SettlementOptions}. Loyalty reversals use the
-   * member attached when this payment settled, even if the session was subsequently re-identified.
+   * funds to the gift card. A full refund also returns the explicit redemption unless already
+   * returned; rebates remain part of {@link #voidTransaction()}. Once a refund has returned money
+   * the payment can no longer be voided; a tender skipped by an {@code onError} decision leaves it
+   * voidable, with an award the flow reversed remembered so nothing re-credits it. Once a void has
+   * partially reversed the payment's money legs, refunds are refused until the void is finished,
+   * and after a completed void linked refunds are refused. To refund a sale taken by an earlier
+   * session, ring return lines into a new session and provide refund allocations on {@link
+   * SettlementOptions}. Loyalty reversals use the member attached when this payment settled, even
+   * if the session was subsequently re-identified.
    */
   ReversalFlow<RefundResult> refund();
 
   /**
    * Partial linked refund of this session's completed payment. Also reverses the loyalty award when
-   * one ran (best-effort by default).
+   * one ran (best-effort by default). Does not return the explicit redemption; select its monetary
+   * share with a point-redemption allocation in {@link SettlementOptions}.
    */
   ReversalFlow<RefundResult> refund(BigDecimal amount);
 
