@@ -2,7 +2,12 @@ import { InstallBridgePrompt, type BridgeState } from '@biltorg/pos-react/bridge
 import type { TerminalInfo } from '@biltorg/pos-sdk';
 import { useState, type ReactNode } from 'react';
 import { useController, useEmulatorState } from '../emulator/context';
-import { canOperateTerminal, sessionOperationInProgress } from '../emulator/state';
+import {
+  canOperateTerminal,
+  MEMBER_LOOKUP_LABELS,
+  sessionOperationInProgress,
+  type MemberLookupKind,
+} from '../emulator/state';
 import type { Settings } from '../settings';
 import { LabeledCheckbox } from './common';
 
@@ -14,6 +19,19 @@ function describeTerminal(bridge: BridgeState, terminal: TerminalInfo | undefine
     terminal.reachable === undefined ? '' : terminal.reachable ? ' · reachable' : ' · unreachable';
   return `Terminal: ${name}${reach}`;
 }
+
+/** The identify picker's entries: the terminal's own sign-in prompt, then the register-supplied kinds. */
+const PIN_PAD = 'PIN_PAD';
+const IDENTIFY_BY: readonly {
+  readonly id: typeof PIN_PAD | MemberLookupKind;
+  readonly label: string;
+}[] = [
+  { id: PIN_PAD, label: 'Terminal PIN pad' },
+  ...(Object.keys(MEMBER_LOOKUP_LABELS) as MemberLookupKind[]).map((id) => ({
+    id,
+    label: MEMBER_LOOKUP_LABELS[id],
+  })),
+];
 
 function bridgeLabel(bridge: BridgeState): string {
   switch (bridge.status) {
@@ -49,8 +67,8 @@ export function ConnectionPanel({
 }): ReactNode {
   const controller = useController();
   const state = useEmulatorState();
-  const [identifyOnStart, setIdentifyOnStart] = useState(false);
-  const [readVas, setReadVas] = useState(false);
+  const [identifyBy, setIdentifyBy] = useState<typeof PIN_PAD | MemberLookupKind>(PIN_PAD);
+  const [lookupValue, setLookupValue] = useState('');
   const connected = state.connection.phase !== 'DISCONNECTED';
   const sessionActive = state.sessionId !== null;
   const terminal = bridge.health?.terminal;
@@ -113,30 +131,51 @@ export function ConnectionPanel({
         <button
           type="button"
           disabled={!connected}
-          onClick={() =>
-            sessionActive
-              ? controller.endSession()
-              : controller.startSession(identifyOnStart, readVas)
-          }
+          onClick={() => (sessionActive ? controller.endSession() : controller.startSession())}
         >
           {sessionActive ? 'End Checkout' : 'Start Checkout'}
         </button>
+        {/* who supplies the member: the shopper on the terminal's PIN pad, or the register */}
+        <select
+          aria-label="Identify by"
+          value={identifyBy}
+          disabled={!canOperateTerminal(state)}
+          onChange={(event) => setIdentifyBy(event.target.value as typeof identifyBy)}
+        >
+          {IDENTIFY_BY.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+        {identifyBy === PIN_PAD ? null : (
+          <input
+            className="compact lookup"
+            aria-label={MEMBER_LOOKUP_LABELS[identifyBy]}
+            placeholder={MEMBER_LOOKUP_LABELS[identifyBy]}
+            value={lookupValue}
+            disabled={!canOperateTerminal(state)}
+            onChange={(event) => setLookupValue(event.target.value)}
+          />
+        )}
         <button
           type="button"
           className="tonal"
           disabled={!canOperateTerminal(state)}
-          onClick={() => controller.identifyMember(readVas)}
+          onClick={() =>
+            identifyBy === PIN_PAD
+              ? controller.identifyMember()
+              : controller.identifyMemberBy(identifyBy, lookupValue)
+          }
         >
-          {state.identifyInProgress ? 'Signing in…' : 'Loyalty Sign-In'}
+          {identifyBy === PIN_PAD
+            ? state.identifyInProgress
+              ? 'Signing in…'
+              : 'Loyalty Sign-In'
+            : identifyBy === 'RESOLVED_ID'
+              ? 'Attach Member'
+              : 'Look Up Member'}
         </button>
-        <LabeledCheckbox
-          label="Identify"
-          checked={identifyOnStart}
-          disabled={sessionActive || settings.mode === 'local'}
-          onChange={setIdentifyOnStart}
-        />
-        {/* applies to every sign-in prompt, so it stays enabled mid-checkout */}
-        <LabeledCheckbox label="Read VAS" checked={readVas} onChange={setReadVas} />
         <span className="gap" />
         <button
           type="button"

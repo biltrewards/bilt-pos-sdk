@@ -103,6 +103,7 @@ function BasketAdjustmentDialog({
 function PaymentControls(): ReactNode {
   const controller = useController();
   const state = useEmulatorState();
+  const [implicit, setImplicit] = useState(true);
   const [rebates, setRebates] = useState(false);
   const [redemption, setRedemption] = useState(false);
   const [award, setAward] = useState(false);
@@ -132,14 +133,31 @@ function PaymentControls(): ReactNode {
   return (
     <div className="payment-controls">
       <div className="flow-row tight">
-        <LabeledCheckbox label="Rebates" checked={rebates} disabled={busy} onChange={setRebates} />
+        {/* implicit: the terminal handles all loyalty in the card payment, so no SDK steps */}
+        <LabeledCheckbox
+          label="Implicit Loyalty"
+          checked={implicit}
+          disabled={busy}
+          onChange={setImplicit}
+        />
+        <LabeledCheckbox
+          label="Rebates"
+          checked={rebates}
+          disabled={busy || implicit}
+          onChange={setRebates}
+        />
         <LabeledCheckbox
           label="Redemption"
           checked={redemption}
-          disabled={busy}
+          disabled={busy || implicit}
           onChange={setRedemption}
         />
-        <LabeledCheckbox label="Award" checked={award} disabled={busy} onChange={setAward} />
+        <LabeledCheckbox
+          label="Award"
+          checked={award}
+          disabled={busy || implicit}
+          onChange={setAward}
+        />
         <LabeledCheckbox
           label="Gift card"
           checked={giftCard}
@@ -186,7 +204,7 @@ function PaymentControls(): ReactNode {
         disabled={!canPay}
         onClick={() =>
           controller.settle(
-            { rebates, redemption, award },
+            { implicit, rebates, redemption, award },
             giftCard ? { cardNumber: giftCardNumber } : null,
             netSettlement,
           )

@@ -4,6 +4,7 @@
 import { SessionError, type IdentifyResult } from '@biltorg/pos-sdk';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { MOCK_VAS_DATA } from '../../../packages/sdk/test/mock-pos';
 import { addProduct, button, events, MockTerminalSession, region, renderApp } from './harness';
 
 function basketLines(): string[] {
@@ -12,7 +13,7 @@ function basketLines(): string[] {
   );
 }
 
-/** Signs in at Start Checkout against a terminal reporting `shopperContext`; returns the card. */
+/** Signs in from Loyalty Sign-In against a terminal reporting `shopperContext`; returns the card. */
 async function signInWith(
   pointBalance: number,
   shopperContext?: IdentifyResult['shopperContext'],
@@ -39,9 +40,8 @@ async function signInWith(
         },
       );
     });
-  await renderApp();
-  fireEvent.click(screen.getByLabelText('Identify'));
-  fireEvent.click(button('Start Checkout'));
+  await renderApp({ checkout: true });
+  fireEvent.click(button('Loyalty Sign-In'));
   try {
     return await screen.findByRole('region', { name: 'Loyalty sign-in' });
   } finally {
@@ -175,6 +175,7 @@ describe('the Sale tab and the basket card', () => {
     addProduct('Desk Lamp');
     await waitFor(() => expect(button('Settle $37.31').disabled).toBe(false));
     const settle = vi.spyOn(terminal(), 'settle');
+    fireEvent.click(screen.getByLabelText('Implicit Loyalty'));
     fireEvent.click(screen.getByLabelText('Rebates'));
     fireEvent.click(screen.getByLabelText('Net settlement'));
     fireEvent.click(button('Settle $37.31'));
@@ -246,15 +247,13 @@ describe('the Sale tab and the basket card', () => {
     await waitFor(() => expect(button('Settle $3.75').disabled).toBe(false));
   });
 
-  it('identifies the member at Start Checkout and shows the loyalty card', async () => {
-    await renderApp();
-    fireEvent.click(screen.getByLabelText('Identify'));
-    fireEvent.click(button('Start Checkout'));
+  it('identifies the member from Loyalty Sign-In and shows the loyalty card', async () => {
+    await renderApp({ checkout: true });
+    fireEvent.click(button('Loyalty Sign-In'));
     const card = await screen.findByRole('region', { name: 'Loyalty sign-in' });
     expect(within(card).getByTestId('member').textContent).toBe('mbr_8f2a');
     expect(within(card).getByText('120 pts · 0 reward(s)')).toBeTruthy();
     expect(events()).toContain('Member identified: mbr_8f2a, 120 pts, 0 reward(s)');
-    expect((screen.getByLabelText('Identify') as HTMLInputElement).disabled).toBe(true);
 
     fireEvent.click(button('End Checkout'));
     await waitFor(() =>
@@ -344,21 +343,46 @@ describe('the Sale tab and the basket card', () => {
     }
   });
 
-  it('shows no wallet pass by default: sign-in is forced to keyed entry', async () => {
-    await renderApp();
-    expect((screen.getByLabelText('Read VAS') as HTMLInputElement).checked).toBe(false);
-    fireEvent.click(screen.getByLabelText('Identify'));
-    fireEvent.click(button('Start Checkout'));
-    const card = await screen.findByRole('region', { name: 'Loyalty sign-in' });
-    expect(within(card).queryByText('Wallet pass (VAS)')).toBeNull();
-    expect(events()).not.toContain('VAS:');
+  it('settles with implicit loyalty by default, the steps disabled', async () => {
+    const { terminal } = await renderApp({ checkout: true });
+    addProduct('Desk Lamp');
+    await waitFor(() => expect(button('Settle $37.31').disabled).toBe(false));
+    expect((screen.getByLabelText('Implicit Loyalty') as HTMLInputElement).checked).toBe(true);
+    for (const step of ['Rebates', 'Redemption', 'Award']) {
+      expect((screen.getByLabelText(step) as HTMLInputElement).disabled).toBe(true);
+    }
+    const settle = vi.spyOn(terminal(), 'settle');
+    fireEvent.click(button('Settle $37.31'));
+    await screen.findByRole('dialog', { name: 'Settlement complete' });
+    expect(settle.mock.calls[0]?.[0]).toMatchObject({ loyalty: { handling: 'IMPLICIT' } });
+    expect(events()).toContain('Starting net settlement — loyalty implicit');
   });
 
-  it('reads the wallet pass at Start Checkout with Read VAS and logs it', async () => {
-    await renderApp();
-    fireEvent.click(screen.getByLabelText('Identify'));
-    fireEvent.click(screen.getByLabelText('Read VAS'));
-    fireEvent.click(button('Start Checkout'));
+  it('signs in keyed and shows no wallet pass when the terminal reads none', async () => {
+    const identify = vi.spyOn(MockTerminalSession.prototype, 'identifyMember');
+    await renderApp({ checkout: true });
+    fireEvent.click(button('Loyalty Sign-In'));
+    const card = await screen.findByRole('region', { name: 'Loyalty sign-in' });
+    expect(identify.mock.calls[0]?.[0]).toEqual({ forceEntryModes: ['KEYED'] });
+    expect(within(card).queryByText('Wallet pass (VAS)')).toBeNull();
+    expect(events()).toContain('Loyalty sign-in on the terminal (key it in or tap a wallet pass)…');
+    expect(screen.queryByLabelText('Read VAS')).toBeNull();
+    expect(screen.queryByLabelText('Identify')).toBeNull();
+    identify.mockRestore();
+  });
+
+  it('shows a wallet pass the terminal reads during a keyed sign-in and logs it', async () => {
+    const original = MockTerminalSession.prototype.identifyMember;
+    const identify = vi.spyOn(MockTerminalSession.prototype, 'identifyMember');
+    identify.mockImplementation(function (this: MockTerminalSession, arg) {
+      const op = original.call(this, arg as never);
+      return Object.assign(
+        op.then((result) => ({ ...result, vasData: MOCK_VAS_DATA })),
+        { id: op.id, type: op.type, status: op.status, abort: () => op.abort() },
+      ) as never;
+    });
+    await renderApp({ checkout: true });
+    fireEvent.click(button('Loyalty Sign-In'));
     const card = await screen.findByRole('region', { name: 'Loyalty sign-in' });
     expect(within(card).getByText('Wallet pass (VAS)')).toBeTruthy();
     expect(within(card).getByText('ApplePay · merchant VerifoneTestRix2')).toBeTruthy();
@@ -366,24 +390,6 @@ describe('the Sale tab and the basket card', () => {
       'pass.com.biltrewards.loyalty · Coupon1 · status 9000 · data 8ff4b4de0c11a7 (7 bytes) · timestamp 3006a261';
     expect(within(card).getByText(line)).toBeTruthy();
     expect(events()).toContain(`VAS: ${line}`);
-    expect(events()).toContain('Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…');
-  });
-
-  it('reads the pass from Loyalty Sign-In mid-checkout, where Read VAS stays enabled', async () => {
-    await renderApp({ checkout: true });
-    const toggle = screen.getByLabelText('Read VAS') as HTMLInputElement;
-    expect(toggle.disabled).toBe(false);
-    fireEvent.click(button('Loyalty Sign-In'));
-    const keyed = await screen.findByRole('region', { name: 'Loyalty sign-in' });
-    expect(within(keyed).queryByText('Wallet pass (VAS)')).toBeNull();
-    fireEvent.click(toggle);
-    fireEvent.click(button('Loyalty Sign-In'));
-    await waitFor(() =>
-      expect(
-        within(screen.getByRole('region', { name: 'Loyalty sign-in' })).getByText(
-          'Wallet pass (VAS)',
-        ),
-      ).toBeTruthy(),
-    );
+    identify.mockRestore();
   });
 });

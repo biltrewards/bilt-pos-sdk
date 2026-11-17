@@ -52,55 +52,56 @@ not apply in a browser; see the deliberate differences below).
 
 ## `EmulatorController` actions
 
-| Action                                                                         | Main                                             | Now                                                     |
-| ------------------------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------- |
-| `autodetectAddress()`                                                          | n/a                                              | bridge probe (`useBridge`) and auto-connect when ready  |
-| `connect(...)` / `disconnect()`                                                | partial (implicit)                               | present (Connect / Disconnect over `localBridge`)       |
-| `startSession(identifyOnStart)`                                                | missing (session auto-starts)                    | present (Start Checkout + Identify checkbox)            |
-| `endSession()`                                                                 | partial ("End session")                          | present (End Checkout)                                  |
-| `addProduct(product)` (upsert by SKU, NJ tax)                                  | present                                          | present                                                 |
-| `addCustomItem(priceMinor)` (keypad, untaxed)                                  | partial (form, optional tax)                     | present (keypad)                                        |
-| `updateCustomItemPrice(sku, minor)` (tap line, live re-price)                  | missing                                          | present                                                 |
-| `removeCustomItem(sku)` (✓ at zero)                                            | missing                                          | present                                                 |
-| `addGiftCardPurchase(amount, card)`                                            | partial (separate panel, activate/reload choice) | present (Stored Value → Purchase, reload fulfilment)    |
-| `inquireStoredValueBalance(card)`                                              | partial                                          | present (Stored Value → Balance inquiry, outcome popup) |
-| `activateStoredValue(card)`                                                    | partial                                          | present (Stored Value → Activation, zero balance)       |
-| `applyCredit(itemId, amount, label)`                                           | partial (no limits)                              | present (dialog, line and basket caps)                  |
-| `applyDiscount(itemId, amount, label)` (replace; 0 clears)                     | partial (appends discounts)                      | present (dialog, replace, 0 clears)                     |
-| `settle(loyalty, storedValue, net)`                                            | partial                                          | present                                                 |
-| `identifyMember()` (Loyalty Sign-In, keyed entry)                              | partial                                          | present                                                 |
-| `acquireCard()` (Read card)                                                    | missing                                          | present                                                 |
-| `refundSale(saleId)` (full refund = void on a fresh session, no checkout open) | partial (void on the open session)               | present                                                 |
-| `addReturnToBasket(saleId, skus)` (item returns into the active basket)        | missing                                          | present                                                 |
-| `clearBasket()`                                                                | partial                                          | present                                                 |
-| `abort()` (recovery prompt → ABORT, refund, operation)                         | partial (payment only)                           | present                                                 |
-| `dismissPaymentOutcome()`                                                      | missing                                          | present                                                 |
+| Action                                                                               | Main                                             | Now                                                     |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------- |
+| `autodetectAddress()`                                                                | n/a                                              | bridge probe (`useBridge`) and auto-connect when ready  |
+| `connect(...)` / `disconnect()`                                                      | partial (implicit)                               | present (Connect / Disconnect over `localBridge`)       |
+| `startSession()`                                                                     | missing (session auto-starts)                    | present (Start Checkout)                                |
+| `endSession()`                                                                       | partial ("End session")                          | present (End Checkout)                                  |
+| `addProduct(product)` (upsert by SKU, NJ tax)                                        | present                                          | present                                                 |
+| `addCustomItem(priceMinor)` (keypad, untaxed)                                        | partial (form, optional tax)                     | present (keypad)                                        |
+| `updateCustomItemPrice(sku, minor)` (tap line, live re-price)                        | missing                                          | present                                                 |
+| `removeCustomItem(sku)` (✓ at zero)                                                  | missing                                          | present                                                 |
+| `addGiftCardPurchase(amount, card)`                                                  | partial (separate panel, activate/reload choice) | present (Stored Value → Purchase, reload fulfilment)    |
+| `inquireStoredValueBalance(card)`                                                    | partial                                          | present (Stored Value → Balance inquiry, outcome popup) |
+| `activateStoredValue(card)`                                                          | partial                                          | present (Stored Value → Activation, zero balance)       |
+| `applyCredit(itemId, amount, label)`                                                 | partial (no limits)                              | present (dialog, line and basket caps)                  |
+| `applyDiscount(itemId, amount, label)` (replace; 0 clears)                           | partial (appends discounts)                      | present (dialog, replace, 0 clears)                     |
+| `settle(loyalty, storedValue, net)`                                                  | partial                                          | present                                                 |
+| `identifyMember()` (Loyalty Sign-In, keyed entry)                                    | partial                                          | present                                                 |
+| `identifyMemberBy(kind, value)` (phone / email / account number lookup, resolved id) | n/a (added with desktop #190)                    | present                                                 |
+| `acquireCard()` (Read card)                                                          | missing                                          | present                                                 |
+| `refundSale(saleId)` (full refund = void on a fresh session, no checkout open)       | partial (void on the open session)               | present                                                 |
+| `addReturnToBasket(saleId, skus)` (item returns into the active basket)              | missing                                          | present                                                 |
+| `clearBasket()`                                                                      | partial                                          | present                                                 |
+| `abort()` (recovery prompt → ABORT, refund, operation)                               | partial (payment only)                           | present                                                 |
+| `dismissPaymentOutcome()`                                                            | missing                                          | present                                                 |
 
 ## Toggles, dialogs, controls
 
-| Desktop control                                                                                                                                        | Main                             | Now                          |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- | ---------------------------- |
-| Rebates / Redemption / Award checkboxes (default off)                                                                                                  | partial (default on)             | present                      |
-| Gift card checkbox + card field + Read card                                                                                                            | partial (separate panel)         | present                      |
-| Net settlement checkbox (default on)                                                                                                                   | partial (default off)            | present                      |
-| "Settle $X" / "Settle (refund $X)" / "Settling…" / "Settled" button                                                                                    | partial ("Pay")                  | present                      |
-| Identify checkbox                                                                                                                                      | missing                          | present                      |
-| Read VAS checkbox (unforced entry mode; `Wallet pass (VAS)` on the sign-in card; `VAS:` log lines)                                                     | n/a (added with desktop #158)    | present                      |
-| Loyalty Sign-In / Clear basket / Abort operation buttons                                                                                               | partial                          | present                      |
-| Per-line Discount and Credit buttons + `BasketAdjustmentDialog`                                                                                        | partial (inline form)            | present                      |
-| Tap a custom line to edit it on the keypad                                                                                                             | missing                          | present                      |
-| `PaymentRecoveryDialog`: Retry, Skip step, Confirm cash received, Abort and roll back, Abandon recovery, with the desktop rules for which apply        | partial                          | present                      |
-| `PaymentOutcomeDialog` (title, message, receipt, OK)                                                                                                   | missing                          | present                      |
-| Refund tab: `SalesListCard` + `RefundDetailsCard`, Full amount / Selected items radios, per-item checkboxes with remaining quantities, the guard texts | partial (amount, void, unlinked) | present                      |
-| Stored Value tab: Balance inquiry / Activation / Purchase selector                                                                                     | partial                          | present                      |
-| Log tabs Events / Detailed / Nexo                                                                                                                      | partial (one filtered table)     | Events / Detailed / Protocol |
+| Desktop control                                                                                                                                           | Main                             | Now                          |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------------- |
+| Implicit Loyalty checkbox (first, default on; disables Rebates / Redemption / Award; settles with `loyalty: { handling: 'IMPLICIT' }`)                    | n/a (added with desktop #191)    | present                      |
+| Rebates / Redemption / Award checkboxes (default off)                                                                                                     | partial (default on)             | present                      |
+| Gift card checkbox + card field + Read card                                                                                                               | partial (separate panel)         | present                      |
+| Net settlement checkbox (default on)                                                                                                                      | partial (default off)            | present                      |
+| "Settle $X" / "Settle (refund $X)" / "Settling…" / "Settled" button                                                                                       | partial ("Pay")                  | present                      |
+| Loyalty Sign-In / Clear basket / Abort operation buttons                                                                                                  | partial                          | present                      |
+| Identify picker (Terminal PIN pad / Phone / Email / Account number / Resolved member id) + value field + Loyalty Sign-In / Look Up Member / Attach Member | n/a (added with desktop #190)    | present                      |
+| Per-line Discount and Credit buttons + `BasketAdjustmentDialog`                                                                                           | partial (inline form)            | present                      |
+| Tap a custom line to edit it on the keypad                                                                                                                | missing                          | present                      |
+| `PaymentRecoveryDialog`: Retry, Skip step, Confirm cash received, Abort and roll back, Abandon recovery, with the desktop rules for which apply           | partial                          | present                      |
+| `PaymentOutcomeDialog` (title, message, receipt, OK)                                                                                                      | missing                          | present                      |
+| Refund tab: `SalesListCard` + `RefundDetailsCard`, Full amount / Selected items radios, per-item checkboxes with remaining quantities, the guard texts    | partial (amount, void, unlinked) | present                      |
+| Stored Value tab: Balance inquiry / Activation / Purchase selector                                                                                        | partial                          | present                      |
+| Log tabs Events / Detailed / Nexo                                                                                                                         | partial (one filtered table)     | Events / Detailed / Protocol |
 
 ## Browser-only features removed
 
 These had no home in the desktop structure, so they went with it: the companion display and retail
 media (`RetailMediaSurface`, offer toasts, the widget at session start); the separate Log and
 Settings tabs; the lane phase control; quantity steppers and the POS-owned cart draft
-(`basket.replace`); sign-in by phone resolver or member id; the amount-based referenced refund,
+(`basket.replace`); the amount-based referenced refund,
 the unreferenced refund and the "void this payment" shortcut; and the "mark reconciled" gate after
 an abandoned settlement (the desktop reports it in the outcome popup instead).
 

@@ -139,6 +139,10 @@ input.compact.port {
   width: 6rem;
 }
 
+input.compact.lookup {
+  width: 15rem;
+}
+
 input.compact.grow {
   flex: 1;
 }

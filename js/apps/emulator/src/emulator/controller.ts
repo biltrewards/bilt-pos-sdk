@@ -5,6 +5,7 @@ import {
   type BiltPos,
   type IdentifyResult,
   type Member,
+  type MemberIdResolver,
   type VasData,
   type Money,
   type Operation,
@@ -46,6 +47,8 @@ import {
   type EmulatorState,
   type LoyaltyOptions,
   type MemberIdentity,
+  type MemberLookupKind,
+  MEMBER_LOOKUP_LABELS,
   type MemberRewardUi,
   type VasUi,
   vasLines,
@@ -420,9 +423,11 @@ export class BrowserEmulatorController implements EmulatorController {
       session.on('basket.changed', (change) => {
         if (this.session === session) this.publishBasket(change.current);
       }),
+      // display pushes and a resolved member id's confirmation fail out-of-band
       session.on('background.error', (error) =>
-        this.log(`Customer display update failed: ${error.message}`),
+        this.log(`Background operation failed (${error.code}): ${error.message}`),
       ),
+      session.on('member.changed', ({ member }) => this.publishMemberChange(session, member)),
       session.on('session.ended', ({ forced }) => {
         if (this.session !== session || !forced) return;
         this.detachSession();
@@ -466,7 +471,7 @@ export class BrowserEmulatorController implements EmulatorController {
     return true;
   }
 
-  startSession(identifyOnStart: boolean, readVas = false): void {
+  startSession(): void {
     const pos = this.pos;
     if (!pos) {
       this.log('Not connected — connect before starting a session');
@@ -513,11 +518,6 @@ export class BrowserEmulatorController implements EmulatorController {
           this.checkoutCleared(session.id, false);
           this.publishBasket(session.basket.current);
           this.log(`Checkout session started (id ${session.id})`);
-          if (identifyOnStart && isTerminal(session)) {
-            this.runIdentifyPrompt(session, readVas);
-          } else if (identifyOnStart) {
-            this.log('Identify skipped — a local session has no terminal to prompt on');
-          }
         },
         (error: unknown) => {
           if (generation === this.generation) {
@@ -913,25 +913,116 @@ export class BrowserEmulatorController implements EmulatorController {
 
   // ---- loyalty and card read --------------------------------------------------------------
 
-  identifyMember(readVas = false): void {
+  identifyMember(): void {
     const session = this.terminalCheckout();
-    if (session) this.runIdentifyPrompt(session, readVas);
+    if (session) this.runIdentifyPrompt(session);
   }
 
-  private runIdentifyPrompt(session: TerminalShopperSession, readVas: boolean): void {
+  identifyMemberBy(kind: MemberLookupKind, value: string): void {
+    const session = this.terminalCheckout();
+    if (!session) return;
+    const label = MEMBER_LOOKUP_LABELS[kind].toLowerCase();
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      this.log(`Enter a ${label} to identify the member`);
+      return;
+    }
+    if (kind === 'RESOLVED_ID') {
+      this.attachResolvedMember(session, trimmed);
+      return;
+    }
+    this.runIdentifyPrompt(session, { resolver: { type: kind, value: trimmed }, label });
+  }
+
+  /**
+   * Attaches an already-resolved member id. The SDK confirms it on the terminal in the
+   * background: the upgrade arrives as `member.changed`, a decline as `background.error`.
+   */
+  private attachResolvedMember(session: TerminalShopperSession, memberId: string): void {
+    // held until the host has the member, so a settle cannot run ahead of it
+    if (!this.claim()) return;
+    const generation = this.generation;
+    session.member.set({ id: memberId }).then(
+      () => {
+        if (generation !== this.generation) return;
+        this.operationClaimed = false;
+        if (this.session === session) {
+          this.log(`Attached member ${memberId} — confirming it on the terminal…`);
+        }
+      },
+      (error: unknown) => {
+        if (generation !== this.generation) return;
+        this.operationClaimed = false;
+        if (this.session !== session) return;
+        this.log(`Failed to attach member ${memberId}: ${describeError(error)}`);
+        if (error instanceof Error && error.stack) this.detailedLog(error.stack);
+      },
+    );
+  }
+
+  /**
+   * A member change the session announced. A sign-in prompt or lookup publishes its own, richer
+   * card when it completes, so only changes outside one — a resolved id attached and then
+   * confirmed — are published here.
+   */
+  private publishMemberChange(session: ShopperSession, member: Member | null): void {
+    if (this.session !== session || this.state.identifyInProgress) return;
+    // superseded since it was queued; the newer change follows
+    if (session.member.current !== member) return;
+    const found = memberToUi(member);
+    const shown = this.state.member;
+    let identity: Extract<MemberIdentity, { kind: 'found' }> | null = found && {
+      ...found,
+      retained: false,
+    };
+    // The same member the card shows (a sign-in's own announcement, or a confirmation): keep the
+    // shopper context and pass data the card has, and take the account as the terminal reported it.
+    if (found && shown?.kind === 'found' && shown.memberId === found.memberId) {
+      const upgraded = {
+        ...shown,
+        ...(found.loyaltyBrand ? { loyaltyBrand: found.loyaltyBrand } : {}),
+        pointBalance: found.pointBalance,
+        rewards: found.rewards,
+      };
+      const unchanged =
+        upgraded.loyaltyBrand === shown.loyaltyBrand &&
+        upgraded.pointBalance === shown.pointBalance &&
+        JSON.stringify(upgraded.rewards) === JSON.stringify(shown.rewards);
+      if (unchanged) return;
+      identity = upgraded;
+    }
+    this.update({ member: identity });
+    this.log(
+      identity
+        ? `Member attached: ${memberHeadline(identity)}, ${
+            identity.pointBalance !== null ? `${identity.pointBalance} pts, ` : ''
+          }${identity.rewards.length} reward(s)`
+        : 'Member cleared',
+    );
+  }
+
+  /**
+   * The loyalty sign-in prompt, or with `lookup` the register-supplied identifier looked up on
+   * the terminal with no prompt.
+   */
+  private runIdentifyPrompt(
+    session: TerminalShopperSession,
+    lookup?: { readonly resolver: MemberIdResolver; readonly label: string },
+  ): void {
     if (!this.claim()) return;
     const generation = this.generation;
     const shown = this.state.member;
     this.update({ identifyInProgress: true, member: null });
     this.log(
-      readVas
-        ? 'Loyalty sign-in on the terminal (tap a wallet pass to read VAS)…'
-        : 'Loyalty sign-in on the terminal…',
+      lookup
+        ? `Looking up the member by ${lookup.label} on the terminal…`
+        : 'Loyalty sign-in on the terminal (key it in or tap a wallet pass)…',
     );
-    session
-      // Keyed is the one entry mode that keeps a wallet pass from being read, so VAS mode leaves
-      // the entry mode unforced
-      .identifyMember(readVas ? {} : { forceEntryModes: ['KEYED'] })
+    (lookup
+      ? session.identifyMember({ resolver: lookup.resolver })
+      : // the terminal still reads a tapped wallet pass under keyed entry
+        session.identifyMember({ forceEntryModes: ['KEYED'] })
+    )
       .then(
         (result) => {
           if (generation === this.generation && this.session === session) {
@@ -1062,9 +1153,10 @@ export class BrowserEmulatorController implements EmulatorController {
     const { returns, allocations } = planAllocations(this.pendingReturns, required);
     const onOff = (on: boolean) => (on ? 'on' : 'off');
     this.log(
-      `Starting ${net ? 'net ' : ''}settlement — rebates ${onOff(loyalty.rebates)}, redemption ${onOff(
-        loyalty.redemption,
-      )}, award ${onOff(loyalty.award)}` +
+      `Starting ${net ? 'net ' : ''}settlement — ` +
+        (loyalty.implicit
+          ? 'loyalty implicit'
+          : `rebates ${onOff(loyalty.rebates)}, redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}`) +
         (card ? `, gift card ${card.storedValueId ?? '(swipe on terminal)'}` : '') +
         (giftCards.length ? `, ${giftCards.length} gift card purchase(s) to load` : '') +
         (returns.length
@@ -1082,15 +1174,19 @@ export class BrowserEmulatorController implements EmulatorController {
         session.settle(
           {
             settlementType: net ? 'NET' : 'REFUND_THEN_CHARGE',
-            loyalty: {
-              handling: 'EXPLICIT',
-              steps: (['REBATES', 'POINTS', 'AWARD'] as const).filter(
-                (step) =>
-                  ({ REBATES: loyalty.rebates, POINTS: loyalty.redemption, AWARD: loyalty.award })[
-                    step
-                  ],
-              ),
-            },
+            loyalty: loyalty.implicit
+              ? { handling: 'IMPLICIT' as const }
+              : {
+                  handling: 'EXPLICIT' as const,
+                  steps: (['REBATES', 'POINTS', 'AWARD'] as const).filter(
+                    (step) =>
+                      ({
+                        REBATES: loyalty.rebates,
+                        POINTS: loyalty.redemption,
+                        AWARD: loyalty.award,
+                      })[step],
+                  ),
+                },
             ...(allocations.length ? { refunds: allocations } : {}),
             ...(giftCards.length
               ? {
