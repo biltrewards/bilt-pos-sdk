@@ -216,6 +216,7 @@ public final class OperationRunner {
           "refund",
           "refundUnlinked",
           "voidTransaction",
+          "releaseReservation",
           "getTransactionStatus",
           "updateDisplay",
           "updateInputDisplay");
@@ -489,6 +490,17 @@ public final class OperationRunner {
               Views::voidResult,
               steps,
               moneyAnchored(originalSale));
+        }
+      case "releaseReservation":
+        {
+          var reference = Parsers.reservationReference(body.get("reference"));
+          return reversal(
+              hosted,
+              operation,
+              () -> terminal.releaseReservation(reference),
+              Views::voidResult,
+              handledSteps(body),
+              true);
         }
       case "getTransactionStatus":
         {

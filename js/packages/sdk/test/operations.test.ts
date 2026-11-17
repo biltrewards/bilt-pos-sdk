@@ -68,6 +68,29 @@ describe('starting an operation', () => {
     expect(engine.requests[1]!.operation).toEqual({ type: 'voidTransaction' });
   });
 
+  it('passes authorization and a standalone release reference without converting to void', async () => {
+    const { engine, session } = await lane();
+    const reference = {
+      saleReferenceId: 'ORDER-1',
+      poiTransactionId: 'HOLD-1',
+      poiTransactionTimestamp: '2026-07-20T10:00:00Z',
+      authorizedAmount: '100.00',
+    };
+    void session.settle({ authorization: { mode: 'PRE_AUTH', saleReferenceId: 'ORDER-1' } });
+    void session.releaseReservation(reference);
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(2));
+    expect(engine.requests[0]!.operation).toEqual({
+      type: 'settle',
+      options: {
+        authorization: { mode: 'PRE_AUTH', saleReferenceId: 'ORDER-1' },
+      },
+    });
+    expect(engine.requests[1]!.operation).toEqual({
+      type: 'releaseReservation',
+      reference,
+    });
+  });
+
   it('reports the engine id once accepted and resolves from operation.completed', async () => {
     const { engine, session } = await lane();
     const op = session.requestConfirmation('Receipt?');

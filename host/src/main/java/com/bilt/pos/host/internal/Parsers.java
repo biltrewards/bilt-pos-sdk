@@ -35,10 +35,12 @@ import com.bilt.pos.session.input.ConfirmationOptions;
 import com.bilt.pos.session.input.InputOptions;
 import com.bilt.pos.session.input.MenuOptions;
 import com.bilt.pos.session.input.PinOptions;
+import com.bilt.pos.session.settlement.Authorization;
 import com.bilt.pos.session.settlement.ExternalPayment;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.RefundAllocationType;
+import com.bilt.pos.session.settlement.ReservationReference;
 import com.bilt.pos.session.settlement.SettlementLoyalty;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementRecovery;
@@ -583,6 +585,9 @@ public final class Parsers {
     }
     SettlementOptions.Builder builder =
         SettlementOptions.builder().loyalty(settlementLoyalty(Json.objectField(node, "loyalty")));
+    if (node.has("authorization")) {
+      builder.authorization(authorization(node.get("authorization")));
+    }
     BigDecimal cashback = Json.decimal(node, "cashback");
     if (cashback != null) {
       try {
@@ -612,6 +617,60 @@ public final class Parsers {
       }
     }
     return builder.build();
+  }
+
+  public static Authorization authorization(JsonNode node) {
+    if (node == null || !node.isObject()) {
+      throw HostError.badRequest("authorization must be an object");
+    }
+    Authorization.Mode mode = Json.enumValue(node, "mode", Authorization.Mode.class);
+    if (mode == null) {
+      throw HostError.badRequest("authorization.mode is required");
+    }
+    Authorization.Builder builder =
+        Authorization.builder()
+            .mode(mode)
+            .saleReferenceId(Json.text(node, "saleReferenceId"))
+            .requestedValidityDate(Json.text(node, "requestedValidityDate"));
+    if (Json.has(node, "reference")) {
+      builder.reference(reservationReference(node.get("reference")));
+    }
+    Boolean display = Json.bool(node, "displayCart");
+    if (display != null) {
+      builder.displayCart(display);
+    }
+    if (mode == Authorization.Mode.PRE_AUTH
+        && (Json.text(node, "saleReferenceId") == null
+            || Json.text(node, "saleReferenceId").isBlank())) {
+      throw HostError.badRequest("pre-auth requires saleReferenceId");
+    }
+    if ((mode == Authorization.Mode.PRE_AUTH_UPDATE || mode == Authorization.Mode.PRE_AUTH_COMPLETE)
+        && !Json.has(node, "reference")) {
+      throw HostError.badRequest("authorization.reference is required");
+    }
+    return builder.build();
+  }
+
+  public static ReservationReference reservationReference(JsonNode node) {
+    if (node == null || !node.isObject()) {
+      throw HostError.badRequest("reference must be an object");
+    }
+    BigDecimal amount = Json.requireDecimal(node, "authorizedAmount");
+    Instant timestamp = Json.instant(node, "poiTransactionTimestamp");
+    if (amount.signum() <= 0 || timestamp == null) {
+      throw HostError.badRequest(
+          "reference requires positive authorizedAmount and poiTransactionTimestamp");
+    }
+    return ReservationReference.builder()
+        .saleReferenceId(Json.text(node, "saleReferenceId"))
+        .poiTransactionId(Json.requireText(node, "poiTransactionId"))
+        .poiTransactionTimestamp(timestamp)
+        .authorizedAmount(amount)
+        .validityDate(Json.text(node, "validityDate"))
+        .merchantId(Json.text(node, "merchantId"))
+        .poiId(Json.text(node, "poiId"))
+        .saleId(Json.text(node, "saleId"))
+        .build();
   }
 
   public static RefundAllocation refundAllocation(JsonNode node) {

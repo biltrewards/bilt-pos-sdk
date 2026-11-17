@@ -21,6 +21,7 @@ import type {
   SettlementOptions,
   SessionEventPayload,
   SessionEventType,
+  VoidResult,
 } from '@biltorg/pos-protocol';
 import { SessionError } from '../src/index';
 import {
@@ -732,6 +733,11 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
       pointsReversed: 0,
       remainingPointBalance: 0,
     }));
+  }
+  releaseReservation(): Operation<VoidResult> {
+    return this.op('releaseReservation', async () => {
+      throw new SessionError({ code: 'UNSUPPORTED', message: 'pre-auth simulation belongs to S3' });
+    });
   }
   getTransactionStatus() {
     return this.op('getTransactionStatus', async () => ({ found: false }));

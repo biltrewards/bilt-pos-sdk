@@ -27,6 +27,8 @@ public final class SettlementMovement {
   private final Integer pointBalance;
   private final String externalTenderType;
   private final String externalReference;
+  private final String paymentType;
+  private final ReservationReference reservation;
 
   private SettlementMovement(Builder builder) {
     this.step = builder.step;
@@ -41,6 +43,8 @@ public final class SettlementMovement {
     this.pointBalance = builder.pointBalance;
     this.externalTenderType = builder.externalTenderType;
     this.externalReference = builder.externalReference;
+    this.paymentType = builder.paymentType;
+    this.reservation = builder.reservation;
   }
 
   public static Builder builder() {
@@ -103,6 +107,14 @@ public final class SettlementMovement {
     return externalReference;
   }
 
+  public String getPaymentType() {
+    return paymentType;
+  }
+
+  public ReservationReference getReservation() {
+    return reservation;
+  }
+
   /** Builder for {@link SettlementMovement}. */
   public static final class Builder {
 
@@ -118,6 +130,18 @@ public final class SettlementMovement {
     private Integer pointBalance;
     private String externalTenderType;
     private String externalReference;
+    private String paymentType;
+    private ReservationReference reservation;
+
+    public Builder paymentType(String paymentType) {
+      this.paymentType = paymentType;
+      return this;
+    }
+
+    public Builder reservation(ReservationReference reservation) {
+      this.reservation = reservation;
+      return this;
+    }
 
     private Builder() {}
 

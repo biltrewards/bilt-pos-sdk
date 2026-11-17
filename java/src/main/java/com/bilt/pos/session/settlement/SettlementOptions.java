@@ -32,6 +32,7 @@ public final class SettlementOptions {
   private final List<RefundAllocation> refunds;
   private final List<StoredValueLoad> fulfillments;
   private final SettlementType settlementType;
+  private final Authorization authorization;
 
   private SettlementOptions(Builder builder) {
     this.loyalty = builder.loyalty;
@@ -40,6 +41,7 @@ public final class SettlementOptions {
     this.refunds = Collections.unmodifiableList(new ArrayList<>(builder.refunds));
     this.fulfillments = Collections.unmodifiableList(new ArrayList<>(builder.fulfillments));
     this.settlementType = builder.settlementType;
+    this.authorization = builder.authorization;
   }
 
   public static Builder builder() {
@@ -81,6 +83,11 @@ public final class SettlementOptions {
     return settlementType;
   }
 
+  /** Card policy; defaults to a normal sale. */
+  public Authorization getAuthorization() {
+    return authorization;
+  }
+
   /** Builder for {@link SettlementOptions}. */
   public static final class Builder {
 
@@ -90,6 +97,12 @@ public final class SettlementOptions {
     private List<RefundAllocation> refunds = new ArrayList<>();
     private List<StoredValueLoad> fulfillments = new ArrayList<>();
     private SettlementType settlementType = SettlementType.REFUND_THEN_CHARGE;
+    private Authorization authorization = Authorization.sale();
+
+    public Builder authorization(Authorization authorization) {
+      this.authorization = Objects.requireNonNull(authorization, "authorization");
+      return this;
+    }
 
     private Builder() {}
 

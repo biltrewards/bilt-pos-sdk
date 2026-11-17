@@ -24,6 +24,7 @@ import com.bilt.pos.session.ReversedMovement;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
+import com.bilt.pos.session.settlement.ReservationReference;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -125,6 +126,19 @@ public final class Wire {
   /** An {@code OriginalPOITransaction} referencing a prior transaction. */
   public static OriginalPOITransaction originalTransaction(TransactionIdentificationType poiTxn) {
     return OriginalPOITransaction.builder().poiTransactionID(poiTxn).build();
+  }
+
+  /** Retains the original lane when a hold moves between register sessions. */
+  public static OriginalPOITransaction originalTransaction(ReservationReference reference) {
+    return OriginalPOITransaction.builder()
+        .poiTransactionID(
+            TransactionIdentificationType.builder()
+                .transactionID(reference.getPoiTransactionId())
+                .timeStamp(reference.getPoiTransactionTimestamp().toString())
+                .build())
+        .saleID(reference.getSaleId())
+        .poiid(reference.getPoiId())
+        .build();
   }
 
   /** The first (on this wire, only) result of a loyalty response, or {@code null}. */

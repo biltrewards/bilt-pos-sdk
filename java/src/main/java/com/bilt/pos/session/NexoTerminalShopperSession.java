@@ -63,10 +63,12 @@ import com.bilt.pos.session.internal.SaleItemMapper;
 import com.bilt.pos.session.internal.SessionSignalCodec;
 import com.bilt.pos.session.internal.StoredValueManager;
 import com.bilt.pos.session.internal.Wire;
+import com.bilt.pos.session.settlement.Authorization;
 import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.RefundAllocationType;
+import com.bilt.pos.session.settlement.ReservationReference;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementMovement;
 import com.bilt.pos.session.settlement.SettlementOptions;
@@ -138,6 +140,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   // Compact reversal/refund metadata for the latest settlement. Keeping
   // the public result itself would retain its basket, receipts, and ledger.
   private volatile OriginalSaleRecord lastSettlementRecord = NO_SETTLEMENT;
+  private ReservationReference lastSettlementReservation;
   private volatile boolean lastSettlementIncludesRefunds;
   // Raised only when a same-session void reverses at least one movement
   // before failing. Replacing or ending the session would discard the
@@ -218,7 +221,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     this.storedValueManager = new StoredValueManager(exchange, builder.currency);
     this.reversalManager = new ReversalManager(exchange, builder.currency, storedValueManager);
     this.paymentOrchestrator =
-        new PaymentOrchestrator(exchange, builder.currency, storedValueManager);
+        new PaymentOrchestrator(exchange, builder.currency, storedValueManager, reversalManager);
     this.display = new BasketDisplay(exchange, displayRenderer, builder.currency);
     if (autoDisplay) {
       // first in line, so the customer display never waits behind a widget
@@ -809,6 +812,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                 + "before starting another settlement");
       }
       if (basketEngine().isEmpty()) {
+        if (options.getAuthorization().getMode() != Authorization.Mode.SALE) {
+          throw new SessionException(
+              new SessionError(
+                  SessionErrorCode.INVALID_STATE, "reservation requires a positive basket total"));
+        }
         throw invalidState("the basket is empty; settlement cannot start");
       }
       fullBasket = basketEngine().snapshot();
@@ -907,13 +915,21 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       SettlementResult purchaseResult = chargeSideWork ? paymentOrchestrator.run(request) : null;
       SettlementResult result =
           combineSettlementResult(fullBasket, purchaseResult, refundMovements, netSettlement);
-      showFinalSettlement(result.getFinalBasket());
+      if (options.getAuthorization().isDisplayCart()) {
+        showFinalSettlement(result.getFinalBasket());
+      }
       lock.lock();
       try {
         basketConsumed = true;
         lastSettlementRecord =
             result.toOriginalSaleRecord(
                 request.member == null ? null : request.member.getMemberId());
+        lastSettlementReservation =
+            result.getMovements().stream()
+                .filter(movement -> movement.getStep() == SettlementStep.CARD_CHARGE)
+                .reduce((first, last) -> last)
+                .map(SettlementMovement::getReservation)
+                .orElse(null);
         lastSettlementIncludesRefunds = returnTotal.signum() > 0;
         lastPaymentVoidIncomplete = false;
         clearCommittedRefundAllocations();
@@ -1216,6 +1232,28 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       BigDecimal returnTotal,
       BigDecimal netRefundAmount,
       SettlementOptions options) {
+    Authorization authorization = options.getAuthorization();
+    if (authorization.getMode() != Authorization.Mode.SALE) {
+      if (options.getCashback() != null
+          || basket.getGrandTotal().signum() <= 0
+          || chargePortion.getGrandTotal().signum() <= 0
+          || (options.getSettlementType() == SettlementType.NET && returnTotal.signum() > 0)) {
+        throw new SessionException(
+            new SessionError(
+                SessionErrorCode.INVALID_STATE,
+                "reservation requires a positive total, no cashback, and no NET refunds"));
+      }
+      if (authorization.getMode() == Authorization.Mode.PRE_AUTH) {
+        if (authorization.getSaleReferenceId() == null
+            || authorization.getSaleReferenceId().isBlank()) {
+          throw new SessionException(
+              new SessionError(
+                  SessionErrorCode.INVALID_STATE, "pre-auth requires saleReferenceId"));
+        }
+      } else {
+        validateReservationReference(authorization.getReference());
+      }
+    }
     if (chargePortion.getGrandTotal().signum() < 0) {
       throw invalidState(
           "credit lines exceed the sale-side value; credits cannot " + "create a customer payout");
@@ -1490,6 +1528,38 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   // ─── Void ───
 
   @Override
+  public ReversalFlow<VoidResult> releaseReservation(ReservationReference reference) {
+    operations.track("releaseReservation");
+    return new ReversalFlow<VoidResult>(
+            flow -> {
+              operations.begin("releaseReservation");
+              validateReservationReference(reference);
+              beginVoid();
+              try {
+                return reversalManager.releaseReservation(
+                    reference, currentSaleTransaction(), flow.decider(), flow.beforeStepHandler());
+              } finally {
+                endVoid();
+              }
+            })
+        .session(operations);
+  }
+
+  private static void validateReservationReference(ReservationReference reference) {
+    if (reference == null
+        || reference.getPoiTransactionId() == null
+        || reference.getPoiTransactionId().isBlank()
+        || reference.getPoiTransactionTimestamp() == null
+        || reference.getAuthorizedAmount() == null
+        || reference.getAuthorizedAmount().signum() <= 0) {
+      throw new SessionException(
+          new SessionError(
+              SessionErrorCode.INVALID_STATE,
+              "reservation reference requires POI transaction id, timestamp and positive authorized amount"));
+    }
+  }
+
+  @Override
   public ReversalFlow<VoidResult> voidTransaction() {
     operations.track("voidTransaction");
     return new ReversalFlow<VoidResult>(this::executeVoid).session(operations);
@@ -1554,7 +1624,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
               currentSaleTransaction(),
               flow.decider(),
               flow.beforeStepHandler(),
-              guards.reversedMovements());
+              guards.reversedMovements(),
+              lastSettlementReservation);
       if (!resumeRollback) {
         guards.completeVoid();
         lastPaymentVoidIncomplete = false;
