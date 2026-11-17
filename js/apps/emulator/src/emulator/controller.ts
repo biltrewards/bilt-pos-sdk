@@ -944,15 +944,21 @@ export class BrowserEmulatorController implements EmulatorController {
    * background: the upgrade arrives as `member.changed`, a decline as `background.error`.
    */
   private attachResolvedMember(session: TerminalShopperSession, memberId: string): void {
+    // held until the host has the member, so a settle cannot run ahead of it
+    if (!this.claim()) return;
     const generation = this.generation;
     session.member.set({ id: memberId }).then(
       () => {
-        if (generation === this.generation && this.session === session) {
+        if (generation !== this.generation) return;
+        this.operationClaimed = false;
+        if (this.session === session) {
           this.log(`Attached member ${memberId} — confirming it on the terminal…`);
         }
       },
       (error: unknown) => {
-        if (generation !== this.generation || this.session !== session) return;
+        if (generation !== this.generation) return;
+        this.operationClaimed = false;
+        if (this.session !== session) return;
         this.log(`Failed to attach member ${memberId}: ${describeError(error)}`);
         if (error instanceof Error && error.stack) this.detailedLog(error.stack);
       },
@@ -975,13 +981,13 @@ export class BrowserEmulatorController implements EmulatorController {
       retained: false,
     };
     // The same member the card shows (a sign-in's own announcement, or a confirmation): keep the
-    // shopper context and pass data the card has, and take what the terminal newly reported.
+    // shopper context and pass data the card has, and take the account as the terminal reported it.
     if (found && shown?.kind === 'found' && shown.memberId === found.memberId) {
       const upgraded = {
         ...shown,
         ...(found.loyaltyBrand ? { loyaltyBrand: found.loyaltyBrand } : {}),
-        pointBalance: found.pointBalance ?? shown.pointBalance,
-        rewards: found.rewards.length > 0 ? found.rewards : shown.rewards,
+        pointBalance: found.pointBalance,
+        rewards: found.rewards,
       };
       const unchanged =
         upgraded.loyaltyBrand === shown.loyaltyBrand &&

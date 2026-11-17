@@ -156,6 +156,38 @@ describe('the identify control', () => {
     );
     expect(within(card()).getByText('500 pts · 0 reward(s)')).toBeTruthy();
     expect(events()).toContain('Member attached: 98234 · K-Club, 500 pts, 0 reward(s)');
+
+    // a later confirmation replaces the balance rather than keeping the shown one
+    const spent: Member = { ...confirmed, pointBalance: 0 };
+    terminal().member.current = spent;
+    terminal().emitter.emit('member.changed', { member: spent });
+    await waitFor(() => expect(within(card()).queryByText('500 pts · 0 reward(s)')).toBeNull());
+  });
+
+  it('holds other operations until the host has the resolved id', async () => {
+    const { terminal } = await renderApp({ checkout: true });
+    let accept!: (member: Member) => void;
+    vi.spyOn(terminal().member, 'set').mockReturnValue(
+      new Promise<Member>((resolve) => {
+        accept = resolve;
+      }),
+    );
+    identifyBy('Resolved member id');
+    enter('Resolved member id', '98234');
+    fireEvent.click(button('Attach Member'));
+    fireEvent.click(button('Attach Member'));
+    await flush();
+    expect(events()).toContain('Another operation is already in progress');
+    accept({ resolved: false, memberId: '98234', rewards: [], pointBalance: 0 });
+    await waitFor(() =>
+      expect(events()).toContain('Attached member 98234 — confirming it on the terminal…'),
+    );
+    identifyBy('Phone');
+    enter('Phone', '2015550123');
+    fireEvent.click(button('Look Up Member'));
+    await waitFor(() =>
+      expect(events()).toContain('Looking up the member by phone on the terminal…'),
+    );
   });
 
   it('logs a declined confirmation and leaves the member attached', async () => {
