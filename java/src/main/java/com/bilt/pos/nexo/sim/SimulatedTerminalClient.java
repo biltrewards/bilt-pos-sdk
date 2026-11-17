@@ -515,6 +515,11 @@ public final class SimulatedTerminalClient implements TerminalClient {
       if (original == null || !isReservation(original.paymentType)) {
         return reservationFailure(header, "NotFound", "Payment Reservation not found");
       }
+      if (type == PaymentTypeEnum.UPDATE_RESERVATION
+          && original.paymentType == PaymentTypeEnum.ONE_TIME_RESERVATION) {
+        return reservationFailure(
+            header, "NotAllowed", "Invalid Payment Reservation: one-time hold cannot be updated");
+      }
       if (!original.holdAuthorized || original.reversed || original.completed) {
         return reservationFailure(
             header, "NotAllowed", "Invalid Payment Reservation: already closed");

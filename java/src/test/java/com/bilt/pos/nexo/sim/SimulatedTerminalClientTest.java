@@ -122,6 +122,15 @@ class SimulatedTerminalClientTest {
       assertEquals("Success", hold.getResponse().getResult().toValue());
       assertEquals("OneTimeReservation", hold.getPaymentResult().getPaymentType().toValue());
       String poiId = hold.getPoiData().getPoiTransactionID().getTransactionID();
+      assertEquals(
+          "NotAllowed",
+          terminal
+              .request(reservationRequest("UpdateReservation", "150", null, poiId))
+              .getSaleToPOIResponse()
+              .getPaymentResponse()
+              .getResponse()
+              .getErrorCondition()
+              .toValue());
       if (release) {
         assertEquals(
             "Success",
