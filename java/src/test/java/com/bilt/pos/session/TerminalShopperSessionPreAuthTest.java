@@ -6,13 +6,19 @@ import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.session.basket.BasketItem;
 import com.bilt.pos.session.settlement.Authorization;
 import com.bilt.pos.session.settlement.ReservationReference;
+import com.bilt.pos.session.settlement.SettlementLoyalty;
 import com.bilt.pos.session.settlement.SettlementOptions;
+import com.bilt.pos.session.settlement.SettlementRecovery;
 import com.bilt.pos.session.settlement.SettlementResult;
+import com.bilt.pos.session.settlement.SettlementStep;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
@@ -268,6 +274,114 @@ class TerminalShopperSessionPreAuthTest {
             .at("/ReversalRequest/OriginalPOITransaction/POITransactionID/TransactionID")
             .asText());
     assertNull(server.takeRequest(100, TimeUnit.MILLISECONDS));
+  }
+
+  @Test
+  void indeterminateReleaseRecoversReversalBeforeRetryingOrRollingBack() throws Exception {
+    reply(TerminalShopperSessionTest.ADMIN_OK);
+    session =
+        TerminalShopperSession.builder()
+            .client(
+                BiltNexoTerminalClient.builder()
+                    .endpoint(server.url("/nexo").toString())
+                    .readTimeout(Duration.ofMillis(100))
+                    .disableRecoveryOnNetworkError()
+                    .build())
+            .saleId("REGISTER-2")
+            .poiId("POI-1")
+            .currency("USD")
+            .autoDisplay(false)
+            .start()
+            .get();
+    next();
+    basket("100.00");
+    session.setStoredValueCard("GC-1");
+    reply(payment("Success", "GIFT-1", "100.00"));
+    server.enqueue(
+        new MockResponse()
+            .setBodyDelay(500, TimeUnit.MILLISECONDS)
+            .setBody(TerminalShopperSessionTest.REVERSAL_OK));
+    reply(
+        "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{\"Response\":{\"Result\":\"Success\"}}}}");
+    reply(
+        "{\"SaleToPOIResponse\":{\"TransactionStatusResponse\":{\"Response\":{\"Result\":\"Success\"},\"RepeatedMessageResponse\":{\"MessageHeader\":{\"MessageCategory\":\"Reversal\"},\"RepeatedResponseMessageBody\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Success\"}}}}}}}");
+    AtomicInteger errors = new AtomicInteger();
+    var result =
+        session
+            .settle(options(Authorization.complete(reference("100.00"))))
+            .onError(
+                failure -> {
+                  assertTrue(failure.isIndeterminate());
+                  errors.incrementAndGet();
+                  return SettlementRecovery.retry();
+                })
+            .get();
+    assertTrue(result.isSuccess());
+    assertEquals(1, errors.get());
+    assertEquals(1, result.getWarnings().size());
+    next();
+    JsonNode release = next();
+    for (int i = 0; i < 2; i++) {
+      JsonNode status = next().at("/TransactionStatusRequest/MessageReference");
+      assertEquals("Reversal", status.path("MessageCategory").asText());
+      assertEquals(
+          release.at("/MessageHeader/ServiceID").asText(), status.path("ServiceID").asText());
+    }
+    assertNull(server.takeRequest(100, TimeUnit.MILLISECONDS));
+  }
+
+  @Test
+  void awardFinishesBeforeZeroRemainderReleaseAndAbortKeepsHold() throws Exception {
+    reply(
+        "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{\"Response\":{\"Result\":\"Success\"},\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"}}]}}}");
+    session.identifyMember().get();
+    next();
+    for (boolean abort : new boolean[] {false, true}) {
+      session.basket().clear();
+      basket("100.00");
+      session.setStoredValueCard("GC-1");
+      reply(payment("Success", "GIFT-1", "100.00"));
+      reply(
+          "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{\"Response\":{\"Result\":\"Success\"},\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"AWARD-1\"}}}}}");
+      if (abort) {
+        reply(TerminalShopperSessionTest.LOYALTY_REFUND_OK);
+      }
+      reply(TerminalShopperSessionTest.REVERSAL_OK);
+      var flow =
+          session
+              .settle(
+                  SettlementOptions.builder()
+                      .authorization(Authorization.complete(reference("100.00")))
+                      .loyalty(SettlementLoyalty.explicit(Set.of(SettlementLoyalty.Step.AWARD)))
+                      .build())
+              .onMovement(
+                  movement -> {
+                    if (abort && movement.getStep() == SettlementStep.AWARD) {
+                      session.abort().executeSync();
+                    }
+                  });
+      if (abort) {
+        assertEquals(
+            SessionErrorCode.ABORTED,
+            assertThrows(SessionException.class, flow::get).getError().getCode());
+      } else {
+        assertTrue(flow.get().isSuccess());
+      }
+      assertTrue(next().has("PaymentRequest"));
+      assertEquals(
+          "Award", next().at("/LoyaltyRequest/LoyaltyTransaction/LoyaltyTransactionType").asText());
+      if (abort) {
+        assertEquals(
+            "AwardRefund",
+            next().at("/LoyaltyRequest/LoyaltyTransaction/LoyaltyTransactionType").asText());
+      }
+      assertEquals(
+          abort ? "GIFT-1" : "HOLD-1",
+          next()
+              .at("/ReversalRequest/OriginalPOITransaction/POITransactionID/TransactionID")
+              .asText());
+      assertNull(server.takeRequest(100, TimeUnit.MILLISECONDS));
+    }
   }
 
   @Test

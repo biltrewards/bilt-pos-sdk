@@ -123,33 +123,9 @@ public final class ReversalManager {
               String serviceId =
                   mintServiceId(ReversalStep.CARD, MessageCategoryType.REVERSAL, beforeStep);
               SaleToPOIRequest request =
-                  exchange
-                      .factory()
-                      .reversalRequest(
-                          Wire.originalTransaction(reference),
-                          saleTransaction,
-                          serviceId,
-                          reference.getSaleReferenceId());
-              ReversalResponse body =
-                  exchange
-                      .sendExpectingBody(MessageCategoryType.REVERSAL, request)
-                      .getReversalResponse();
-              if (body == null) {
-                throw Wire.missing("ReversalResponse");
-              }
-              exchange.requireSuccess(MessageCategoryType.REVERSAL, body.getResponse());
-              return VoidResult.builder()
-                  .success(true)
-                  .serviceId(serviceId)
-                  .reversedAmount(
-                      body.getReversedAmount() == null
-                          ? null
-                          : Wire.money(body.getReversedAmount()))
-                  .poiTransactionId(Wire.txnId(body.getPoiData()))
-                  .poiTransactionTimestamp(Wire.txnTimestamp(body.getPoiData()))
-                  .customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()))
-                  .merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()))
-                  .build();
+                  releaseReservationRequest(reference, saleTransaction, serviceId);
+              return releaseReservationResult(
+                  exchange.sendExpectingBody(MessageCategoryType.REVERSAL, request), serviceId);
             },
             e -> failure[0] = e,
             e -> e);
@@ -157,6 +133,37 @@ public final class ReversalManager {
       throw failure[0];
     }
     return result;
+  }
+
+  public SaleToPOIRequest releaseReservationRequest(
+      ReservationReference reference,
+      TransactionIdentificationType saleTransaction,
+      String serviceId) {
+    return exchange
+        .factory()
+        .reversalRequest(
+            Wire.originalTransaction(reference),
+            saleTransaction,
+            serviceId,
+            reference.getSaleReferenceId());
+  }
+
+  public VoidResult releaseReservationResult(SaleToPOIResponse response, String serviceId) {
+    ReversalResponse body = response.getReversalResponse();
+    if (body == null) {
+      throw Wire.missing("ReversalResponse");
+    }
+    exchange.requireSuccess(MessageCategoryType.REVERSAL, body.getResponse());
+    return VoidResult.builder()
+        .success(true)
+        .serviceId(serviceId)
+        .reversedAmount(
+            body.getReversedAmount() == null ? null : Wire.money(body.getReversedAmount()))
+        .poiTransactionId(Wire.txnId(body.getPoiData()))
+        .poiTransactionTimestamp(Wire.txnTimestamp(body.getPoiData()))
+        .customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()))
+        .merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()))
+        .build();
   }
 
   /**

@@ -44,6 +44,7 @@ import com.bilt.pos.session.Receipt;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
+import com.bilt.pos.session.VoidResult;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.identity.IdentifyResult;
@@ -540,19 +541,6 @@ public final class PaymentOrchestrator {
       } else {
         cardCharged = recovered.value;
       }
-    } else if (options.authorization.getMode() == Authorization.Mode.PRE_AUTH_COMPLETE) {
-      checkAbort(request, committed);
-      ReservationReference reference = options.authorization.getReference();
-      try {
-        reversalManager.releaseReservation(
-            reference, workingBasket.getSaleTransactionID(), null, null);
-      } catch (SessionException e) {
-        throw abort(request, committed, e.getError());
-      }
-      result.warning(
-          "Reservation "
-              + reference.getPoiTransactionId()
-              + " released because no card balance remains");
     }
 
     // 6. Award wire failures are best-effort; register callback failures
@@ -597,6 +585,32 @@ public final class PaymentOrchestrator {
     // and the completed payment stands (void it explicitly instead)
     checkAbort(request, committed);
 
+    // Release is irreversible; no abort gate may follow a successful response.
+    if (currentTotal.signum() == 0
+        && options.authorization.getMode() == Authorization.Mode.PRE_AUTH_COMPLETE) {
+      ReservationReference reference = options.authorization.getReference();
+      runStep(
+          request,
+          committed,
+          movements,
+          SettlementStep.CARD_CHARGE,
+          workingBasket,
+          BigDecimal.ZERO,
+          false,
+          false,
+          MessageCategoryType.REVERSAL,
+          (saleTransaction, serviceId, response) -> {
+            if (response == null) {
+              checkAbort(request, committed);
+            }
+            return releaseReservationStep(reference, saleTransaction, serviceId, response);
+          });
+      result.warning(
+          "Reservation "
+              + reference.getPoiTransactionId()
+              + " released because no card balance remains");
+    }
+
     // The working ledger starts with refund movements so recovery callbacks
     // see the full settlement. NexoTerminalShopperSession composes that prefix onto the
     // result separately, so this builder owns only the charge-side suffix.
@@ -631,6 +645,30 @@ public final class PaymentOrchestrator {
       boolean maySkip,
       boolean mayPayExternally,
       StepAttempt<T> attempt) {
+    return runStep(
+        request,
+        committed,
+        movements,
+        step,
+        basket,
+        amountDue,
+        maySkip,
+        mayPayExternally,
+        stepCategory(step),
+        attempt);
+  }
+
+  private <T> StepOutcome<T> runStep(
+      Request request,
+      List<Commit> committed,
+      List<SettlementMovement> movements,
+      SettlementStep step,
+      Basket basket,
+      BigDecimal amountDue,
+      boolean maySkip,
+      boolean mayPayExternally,
+      MessageCategoryType category,
+      StepAttempt<T> attempt) {
     while (true) {
       if (request.abortRequested.getAsBoolean()) {
         throw abort(
@@ -643,7 +681,6 @@ public final class PaymentOrchestrator {
       int commitCheckpoint = committed.size();
       int movementCheckpoint = movements.size();
       try {
-        MessageCategoryType category = stepCategory(step);
         serviceId = category == null ? null : exchange.factory().mintServiceId(category);
         saleTransaction = beforeStep(request, step, basket, amountDue, committed, serviceId);
       } catch (RuntimeException e) {
@@ -1423,6 +1460,31 @@ public final class PaymentOrchestrator {
           false);
     }
     return actualAmount;
+  }
+
+  private VoidResult releaseReservationStep(
+      ReservationReference reference,
+      TransactionIdentificationType saleTransaction,
+      String serviceId,
+      SaleToPOIResponse recoveredResponse) {
+    SaleToPOIRequest request =
+        reversalManager.releaseReservationRequest(reference, saleTransaction, serviceId);
+    boolean responseReceived = recoveredResponse != null;
+    try {
+      SaleToPOIResponse response = recoveredResponse;
+      if (response == null) {
+        response = exchange.sendExpectingBody(MessageCategoryType.REVERSAL, request);
+        responseReceived = true;
+      }
+      return reversalManager.releaseReservationResult(response, serviceId);
+    } catch (SessionException e) {
+      throw wireFailure(
+          SettlementStep.CARD_CHARGE,
+          MessageCategoryType.REVERSAL,
+          request,
+          e.getError(),
+          responseReceived);
+    }
   }
 
   private BigDecimal cardStep(
