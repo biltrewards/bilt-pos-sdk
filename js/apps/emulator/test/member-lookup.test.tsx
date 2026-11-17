@@ -161,7 +161,7 @@ describe('the identify control', () => {
     const spent: Member = { ...confirmed, pointBalance: 0 };
     terminal().member.current = spent;
     terminal().emitter.emit('member.changed', { member: spent });
-    await waitFor(() => expect(within(card()).queryByText('500 pts · 0 reward(s)')).toBeNull());
+    await waitFor(() => expect(within(card()).getByText('0 pts · 0 reward(s)')).toBeTruthy());
   });
 
   it('holds other operations until the host has the resolved id', async () => {

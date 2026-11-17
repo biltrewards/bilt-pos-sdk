@@ -986,7 +986,7 @@ export class BrowserEmulatorController implements EmulatorController {
       const upgraded = {
         ...shown,
         ...(found.loyaltyBrand ? { loyaltyBrand: found.loyaltyBrand } : {}),
-        pointBalance: found.pointBalance,
+        pointBalance: member?.pointBalance ?? null,
         rewards: found.rewards,
       };
       const unchanged =
