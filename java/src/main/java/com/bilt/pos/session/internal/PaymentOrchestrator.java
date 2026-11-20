@@ -184,14 +184,49 @@ public final class PaymentOrchestrator {
     }
   }
 
-  /** A committed step paired with the action that reverses it. */
+  /** The terminal request that reversed a committed step, as the terminal reported it. */
+  private static final class Reversal {
+    final String serviceId;
+    final String poiTransactionId;
+    final Instant poiTransactionTimestamp;
+
+    Reversal(String serviceId, String poiTransactionId, Instant poiTransactionTimestamp) {
+      this.serviceId = serviceId;
+      this.poiTransactionId = poiTransactionId;
+      this.poiTransactionTimestamp = poiTransactionTimestamp;
+    }
+
+    static Reversal of(String serviceId, com.bilt.pos.nexo.model.POIData poiData) {
+      TransactionIdentificationType poiTxn = Wire.poiRef(poiData);
+      return new Reversal(
+          serviceId,
+          poiTxn == null ? null : poiTxn.getTransactionID(),
+          poiTxn == null ? null : Wire.instant(poiTxn.getTimeStamp()));
+    }
+  }
+
+  /** Reverses a committed step; throws {@link SessionException} on failure. */
+  @FunctionalInterface
+  private interface Rollback {
+    Reversal reverse();
+  }
+
+  /**
+   * A committed step paired with the action that reverses it, and the movement it reported once
+   * that has been published.
+   */
   private static final class Commit {
     final CommittedStep info;
-    final Runnable rollback;
+    final Rollback rollback;
+    SettlementMovement movement;
 
-    Commit(CommittedStep info, Runnable rollback) {
+    Commit(CommittedStep info, Rollback rollback) {
       this.info = info;
       this.rollback = rollback;
+    }
+
+    StandingMovement standing() {
+      return new StandingMovement(info, rollback::reverse);
     }
   }
 
@@ -1121,7 +1156,7 @@ public final class PaymentOrchestrator {
   }
 
   private SessionException abort(Request request, List<Commit> committed, SessionError failure) {
-    List<StandingMovement> unreversed = unwind(committed);
+    List<StandingMovement> unreversed = unwind(request, committed);
     request.onUnreversed.accept(unreversed);
     SessionError error = withRollbackFailures(failure, unreversed);
     BigDecimal externalStanding = BigDecimal.ZERO;
@@ -1328,7 +1363,7 @@ public final class PaymentOrchestrator {
     List<StandingMovement> standing = new ArrayList<>();
     for (Commit commit : committed) {
       if (commit.rollback != null) {
-        standing.add(new StandingMovement(commit.info, commit.rollback));
+        standing.add(commit.standing());
       }
     }
     request.onUnreversed.accept(standing);
@@ -1346,13 +1381,15 @@ public final class PaymentOrchestrator {
     for (int i = committed.size() - 1; i >= commitCheckpoint; i--) {
       Commit commit = committed.get(i);
       if (commit.rollback != null) {
+        Reversal reversal;
         try {
-          commit.rollback.run();
+          reversal = commit.rollback.reverse();
         } catch (RuntimeException e) {
           LOGGER.log(Level.WARNING, "rollback of partially committed " + step + " failed", e);
-          unreversed.add(new StandingMovement(commit.info, commit.rollback));
+          unreversed.add(commit.standing());
           continue;
         }
+        notifyReversed(request, commit, reversal);
       }
       committed.remove(i);
     }
@@ -1453,8 +1490,9 @@ public final class PaymentOrchestrator {
                 request.member.getMemberId(),
                 saleTransaction)
             : null);
-    publishMovement(
+    publishCommitted(
         request,
+        committed,
         movements,
         movement(
             SettlementStep.REBATE_REDEMPTION,
@@ -1547,8 +1585,9 @@ public final class PaymentOrchestrator {
                 request.member.getMemberId(),
                 saleTransaction)
             : null);
-    publishMovement(
+    publishCommitted(
         request,
+        committed,
         movements,
         movement(
             SettlementStep.POINT_REDEMPTION,
@@ -1624,8 +1663,9 @@ public final class PaymentOrchestrator {
         saleTransaction,
         body.getPoiData(),
         reversalRollback(Wire.poiRef(body.getPoiData()), saleTransaction));
-    publishMovement(
+    publishCommitted(
         request,
+        committed,
         movements,
         movement(
             SettlementStep.STORED_VALUE_CHARGE,
@@ -1689,17 +1729,26 @@ public final class PaymentOrchestrator {
           responseReceived);
     }
     BigDecimal actualAmount = loaded.getAmount() == null ? amount : loaded.getAmount();
-    Runnable rollback =
+    Rollback rollback =
         loaded.getPoiTransactionId() == null
             ? null
-            : () ->
-                storedValueManager.operation(
-                    StoredValueTransactionTypeEnum.REVERSE,
-                    null,
-                    null,
-                    loaded.getPoiTransactionId(),
-                    loaded.getPoiTransactionTimestamp(),
-                    saleTransaction);
+            : () -> {
+              String reversalServiceId =
+                  exchange.factory().mintServiceId(MessageCategoryType.STORED_VALUE);
+              StoredValueOperationResult reversed =
+                  storedValueManager.operation(
+                      StoredValueTransactionTypeEnum.REVERSE,
+                      null,
+                      null,
+                      loaded.getPoiTransactionId(),
+                      loaded.getPoiTransactionTimestamp(),
+                      saleTransaction,
+                      reversalServiceId);
+              return new Reversal(
+                  reversalServiceId,
+                  reversed.getPoiTransactionId(),
+                  reversed.getPoiTransactionTimestamp());
+            };
     commit(
         committed,
         SettlementStep.STORED_VALUE_LOAD,
@@ -1707,8 +1756,9 @@ public final class PaymentOrchestrator {
         loaded.getPoiTransactionId(),
         loaded.getPoiTransactionTimestamp(),
         rollback);
-    publishMovement(
+    publishCommitted(
         request,
+        committed,
         movements,
         movement(
             SettlementStep.STORED_VALUE_LOAD,
@@ -1819,7 +1869,7 @@ public final class PaymentOrchestrator {
             null,
             null,
             null);
-    publishMovement(request, movements, cardMovement);
+    publishCommitted(request, committed, movements, cardMovement);
 
     // a partial authorization on the stored value step is the split
     // tender mechanism; a short card payment is kept only when the card
@@ -1974,8 +2024,9 @@ public final class PaymentOrchestrator {
         parsePromotionMessages(body.getResponse().getAdditionalResponse());
     List<EarnedReward> earnedRewards =
         LoyaltyPayloadCodec.parseEarnedRewards(body.getResponse().getAdditionalResponse());
-    publishMovement(
+    publishCommitted(
         request,
+        committed,
         movements,
         movement(
             SettlementStep.AWARD,
@@ -2300,7 +2351,7 @@ public final class PaymentOrchestrator {
       SettlementStep step,
       TransactionIdentificationType saleTransaction,
       com.bilt.pos.nexo.model.POIData poiData,
-      Runnable rollback) {
+      Rollback rollback) {
     TransactionIdentificationType poiTxn = poiData == null ? null : poiData.getPoiTransactionID();
     commit(
         committed,
@@ -2317,7 +2368,7 @@ public final class PaymentOrchestrator {
       TransactionIdentificationType saleTransaction,
       String poiTransactionId,
       Instant poiTransactionTimestamp,
-      Runnable rollback) {
+      Rollback rollback) {
     committed.add(
         new Commit(
             new CommittedStep(
@@ -2377,6 +2428,19 @@ public final class PaymentOrchestrator {
         .build();
   }
 
+  /**
+   * {@link #publishMovement} for the movement of the step just committed: links it to that commit
+   * first, so a later reversal of the commit can name it (see {@link #notifyReversed}).
+   */
+  private static void publishCommitted(
+      Request request,
+      List<Commit> committed,
+      List<SettlementMovement> movements,
+      SettlementMovement movement) {
+    committed.get(committed.size() - 1).movement = movement;
+    publishMovement(request, movements, movement);
+  }
+
   private static void publishMovement(
       Request request, List<SettlementMovement> movements, SettlementMovement movement) {
     movements.add(movement);
@@ -2392,7 +2456,7 @@ public final class PaymentOrchestrator {
    * stops the others. Returns every movement that could NOT be reversed and is still standing, with
    * its reversal action; the caller must surface those and must not retry over them.
    */
-  private List<StandingMovement> unwind(List<Commit> committed) {
+  private List<StandingMovement> unwind(Request request, List<Commit> committed) {
     List<StandingMovement> unreversed = new ArrayList<>();
     for (int i = committed.size() - 1; i >= 0; i--) {
       Commit commit = committed.get(i);
@@ -2400,7 +2464,7 @@ public final class PaymentOrchestrator {
         continue;
       }
       try {
-        commit.rollback.run();
+        notifyReversed(request, commit, commit.rollback.reverse());
       } catch (RuntimeException e) {
         LOGGER.log(
             Level.WARNING,
@@ -2408,10 +2472,44 @@ public final class PaymentOrchestrator {
                 + commit.info.getStep()
                 + " failed; manual reconciliation may be required",
             e);
-        unreversed.add(new StandingMovement(commit.info, commit.rollback));
+        unreversed.add(commit.standing());
       }
     }
     return unreversed;
+  }
+
+  /**
+   * Tells the register, through {@code onMovement}, that {@code commit}'s movement was reversed.
+   * Only a movement already reported gets a notice, and the notice stays out of the ledger: the
+   * caller drops the reversed movement from it. The settlement is already undoing work when this
+   * runs, so a handler that throws is logged and the unwind goes on.
+   */
+  private static void notifyReversed(Request request, Commit commit, Reversal reversal) {
+    SettlementMovement reversed = commit.movement;
+    if (reversed == null || request.handlers.onMovement == null) {
+      return;
+    }
+    SettlementMovement notice =
+        SettlementMovement.builder()
+            .step(reversed.getStep())
+            .target(reversed.getTarget())
+            .amount(reversed.getAmount())
+            .saleTransactionId(reversed.getSaleTransactionId())
+            .serviceId(reversal.serviceId)
+            .poiTransactionId(reversal.poiTransactionId)
+            .poiTransactionTimestamp(reversal.poiTransactionTimestamp)
+            .memberId(reversed.getMemberId())
+            .points(reversed.getPoints())
+            .reversedMovement(reversed)
+            .build();
+    try {
+      request.handlers.onMovement.accept(notice);
+    } catch (RuntimeException e) {
+      LOGGER.log(
+          Level.WARNING,
+          "reversal notification for " + reversed.getStep() + " failed in the register handler",
+          e);
+    }
   }
 
   /**
@@ -2435,12 +2533,13 @@ public final class PaymentOrchestrator {
         error.getCause());
   }
 
-  private Runnable loyaltyRollback(
+  private Rollback loyaltyRollback(
       LoyaltyTransactionTypeEnum refundType,
       TransactionIdentificationType originalPoiTxn,
       String memberId,
       TransactionIdentificationType saleTransaction) {
     return () -> {
+      String serviceId = exchange.factory().mintServiceId(MessageCategoryType.LOYALTY);
       SaleToPOIRequest wireRequest =
           exchange
               .factory()
@@ -2449,32 +2548,35 @@ public final class PaymentOrchestrator {
                   Wire.originalTransaction(originalPoiTxn),
                   memberId,
                   saleTransaction,
-                  exchange.factory().mintServiceId(MessageCategoryType.LOYALTY));
+                  serviceId);
       SaleToPOIResponse response =
           exchange.sendExpectingBody(MessageCategoryType.LOYALTY, wireRequest);
-      if (response.getLoyaltyResponse() != null) {
-        exchange.requireSuccess(
-            MessageCategoryType.LOYALTY, response.getLoyaltyResponse().getResponse());
+      if (response.getLoyaltyResponse() == null) {
+        return Reversal.of(serviceId, null);
       }
+      exchange.requireSuccess(
+          MessageCategoryType.LOYALTY, response.getLoyaltyResponse().getResponse());
+      return Reversal.of(serviceId, response.getLoyaltyResponse().getPoiData());
     };
   }
 
-  private Runnable reversalRollback(
+  private Rollback reversalRollback(
       TransactionIdentificationType originalPoiTxn, TransactionIdentificationType saleTransaction) {
     return () -> {
+      String serviceId = exchange.factory().mintServiceId(MessageCategoryType.REVERSAL);
       SaleToPOIRequest wireRequest =
           exchange
               .factory()
               .reversalRequest(
-                  Wire.originalTransaction(originalPoiTxn),
-                  saleTransaction,
-                  exchange.factory().mintServiceId(MessageCategoryType.REVERSAL));
+                  Wire.originalTransaction(originalPoiTxn), saleTransaction, serviceId);
       SaleToPOIResponse response =
           exchange.sendExpectingBody(MessageCategoryType.REVERSAL, wireRequest);
-      if (response.getReversalResponse() != null) {
-        exchange.requireSuccess(
-            MessageCategoryType.REVERSAL, response.getReversalResponse().getResponse());
+      if (response.getReversalResponse() == null) {
+        return Reversal.of(serviceId, null);
       }
+      exchange.requireSuccess(
+          MessageCategoryType.REVERSAL, response.getReversalResponse().getResponse());
+      return Reversal.of(serviceId, response.getReversalResponse().getPoiData());
     };
   }
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.0]
+
+### Added
+
+- Settlement now reports every movement it reverses itself. When a charge-side step's movement has already been delivered and the SDK then reverses it successfully, `onMovement` receives a reversal notice. This happens before `retry()`, `skip()` or `external()` replaces a failed step that had committed (a partial card approval the SDK could not keep, an `onCardCharged` or `onMovement` handler that threw after the commit, a TransactionStatus-recovered response whose processing failed), and for each movement an `abort()` unwind reverses. The notice is a `SettlementMovement` whose new `isReversal()` is true and whose new `getReversedMovement()` is the movement reversed. It carries that movement's step, target, amount and sale transaction, and the reversal request's own `ServiceID` and POI reference. Card payments, stored value charges and loads, rebate and point redemptions, and awards are all covered. The new `SettlementFlow.onCardChargeReversed(Consumer<SettlementMovement>)` receives the notices for card payments. A movement whose reversal fails gets no notice and stays standing for `voidTransaction()`, as before. Notices never enter `SettlementResult.getMovements()` or `SettlementFailure.getCommittedMovements()`. A notification handler that throws is logged, and the unwind goes on. The session host does not forward reversal notices as `operation.movement` events yet, since the protocol has no reversal notice.
+
 ## [0.49.0]
 
 ### Added

@@ -22,6 +22,7 @@ import com.bilt.pos.session.settlement.SettlementRecovery;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -72,10 +73,12 @@ import java.util.function.Function;
  *
  * <p>Movement callbacks are immediate observations, not the authoritative final ledger. An abort
  * may reverse charge-side movements, and retrying, skipping, or replacing a partially committed
- * failed step first reverses only that step's partial movements. Those reversals do not emit
- * compensating movement callbacks. Refund allocation movements are durable because settlement never
- * unwinds them. Treat {@link SettlementResult#getMovements()} from a successful result as the final
- * movement ledger.
+ * failed step first reverses only that step's partial movements. Each movement the SDK reverses
+ * successfully is reported again through {@link #onMovement} as a reversal notice ({@link
+ * SettlementMovement#isReversal()}), and a card payment also through {@link #onCardChargeReversed};
+ * a movement whose reversal failed stays standing, with no notice. Refund allocation movements are
+ * durable because settlement never unwinds them. Treat {@link SettlementResult#getMovements()} from
+ * a successful result as the final movement ledger.
  */
 public final class SettlementFlow extends SessionFlow<SettlementResult> {
 
@@ -98,6 +101,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
   private Function<PointRedemptionResult, BigDecimal> pointsHandler;
   private Function<GiftCardPaymentResult, BigDecimal> giftCardHandler;
   private Consumer<SettlementMovement> cardChargeHandler;
+  private Consumer<SettlementMovement> cardChargeReversedHandler;
   private Function<PartialCardApproval, PartialApprovalDecision> partialCardApprovalHandler;
   private Consumer<SettlementMovement> externalPaymentHandler;
   private Consumer<SettlementMovement> awardHandler;
@@ -187,6 +191,25 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
   }
 
   /**
+   * Called when the settlement itself successfully reverses a card payment it had already reported
+   * through {@link #onCardCharged}: before {@code retry()} or {@code external()} replaces a failed
+   * card step whose charge had committed (a partial approval the SDK could not keep, a handler that
+   * threw after the charge, a TransactionStatus-recovered charge whose processing failed), and for
+   * each card payment an {@code abort()} unwind reverses. The movement is a reversal notice ({@link
+   * SettlementMovement#isReversal()}): {@link SettlementMovement#getReversedMovement()} is the card
+   * payment, and its {@code ServiceID} and POI reference are the reversal's. A charge whose
+   * reversal failed gets no notice: it stays standing for {@code voidTransaction()}, as before.
+   * {@link #onMovement} receives every reversal notice too, those of the other charge-side steps
+   * included, and each of the two gets the notice even when the other throws. A handler that throws
+   * is logged and the reversal goes on. Reversals that run outside a settlement (a retried {@code
+   * settle()} finishing the standing movements an earlier unwind left, or {@code
+   * voidTransaction()}) report through their own results, not through this callback.
+   */
+  public SettlementFlow onCardChargeReversed(Consumer<SettlementMovement> handler) {
+    return register(() -> this.cardChargeReversedHandler = requireHandler(handler));
+  }
+
+  /**
    * Called when a card payment commits with less than it requested: the terminal answered {@code
    * Partial} with an {@code AuthorizedAmount} below the {@code RequestedAmount}. The payment's
    * movement and {@link #onCardCharged} fire first. The returned {@link PartialApprovalDecision}
@@ -263,10 +286,13 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
    * Called after any externally visible money or loyalty movement commits.
    *
    * <p>Charge-side movement callbacks are provisional: an abort can unwind them, and retrying,
-   * skipping, or replacing a partially committed failed step can reverse that step's movements
-   * without emitting a compensating callback. Earlier successful steps remain committed. Refund
-   * allocation movements are not unwound. Use {@link SettlementResult#getMovements()} from the
-   * successful result as the authoritative final ledger.
+   * skipping, or replacing a partially committed failed step can reverse that step's movements.
+   * Each successful reversal is delivered here as a reversal notice: a movement whose {@link
+   * SettlementMovement#isReversal()} is true and whose {@link
+   * SettlementMovement#getReversedMovement()} is the movement reversed, carrying the reversal's own
+   * {@code ServiceID} and POI reference. Notices never enter the ledger. Earlier successful steps
+   * remain committed. Refund allocation movements are not unwound. Use {@link
+   * SettlementResult#getMovements()} from the successful result as the authoritative final ledger.
    */
   public SettlementFlow onMovement(Consumer<SettlementMovement> handler) {
     return register(() -> this.movementHandler = requireHandler(handler));
@@ -398,6 +424,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
   Consumer<SettlementMovement> movementHandler() {
     if (movementHandler == null
         && cardChargeHandler == null
+        && cardChargeReversedHandler == null
         && externalPaymentHandler == null
         && awardHandler == null
         && storedValueLoadedHandler == null
@@ -412,6 +439,10 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
     return movement ->
         awaitHandlerRun(
             () -> {
+              if (movement.isReversal()) {
+                deliverReversal(movement);
+                return;
+              }
               if (movementHandler != null) {
                 movementHandler.accept(movement);
               }
@@ -420,6 +451,34 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
                 specific.accept(movement);
               }
             });
+  }
+
+  /**
+   * Hands a reversal notice to {@link #onMovement} and to {@link #onCardChargeReversed} for a card
+   * payment, each on its own: a handler that throws must not keep the notice from the other, or the
+   * register could go on showing a charge the terminal already reversed. The first failure is
+   * rethrown once both have run, and the settlement logs it.
+   */
+  private void deliverReversal(SettlementMovement movement) {
+    RuntimeException failure = null;
+    for (Consumer<SettlementMovement> handler :
+        Arrays.asList(movementHandler, reversalMovementHandler(movement.getStep()))) {
+      if (handler == null) {
+        continue;
+      }
+      try {
+        handler.accept(movement);
+      } catch (RuntimeException e) {
+        if (failure == null) {
+          failure = e;
+        } else {
+          failure.addSuppressed(e);
+        }
+      }
+    }
+    if (failure != null) {
+      throw failure;
+    }
   }
 
   Function<SettlementFailure, SettlementRecovery> errorHandler() {
@@ -449,6 +508,10 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
         .committedMovements(List.of())
         .outcomeCertainty(SettlementFailure.OutcomeCertainty.DEFINITIVE)
         .build();
+  }
+
+  private Consumer<SettlementMovement> reversalMovementHandler(SettlementStep step) {
+    return step == SettlementStep.CARD_CHARGE ? cardChargeReversedHandler : null;
   }
 
   private Consumer<SettlementMovement> specificMovementHandler(SettlementStep step) {

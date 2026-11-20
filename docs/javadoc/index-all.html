@@ -3470,6 +3470,10 @@ loadScripts(document, 'script');</script>
 <div class="block">The amount each money tender leg of this call returned, in the order the legs were sent: one
  entry per card payment and one for a stored value payment.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#getReversedMovement()" class="member-name-link">getReversedMovement()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
+<dd>
+<div class="block">The movement this notice reverses; <code>null</code> unless <a href="com/bilt/pos/session/settlement/SettlementMovement.html#isReversal()"><code>SettlementMovement.isReversal()</code></a>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/SessionError.html#getReversedMovements()" class="member-name-link">getReversedMovements()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionError.html" title="class in com.bilt.pos.session">SessionError</a></dt>
 <dd>
 <div class="block">Immutable movements that completed before this void failure.</div>
@@ -4376,6 +4380,11 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Whether this line returns value to the customer.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#isReversal()" class="member-name-link">isReversal()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
+<dd>
+<div class="block">Whether this is the notice that the SDK reversed <a href="com/bilt/pos/session/settlement/SettlementMovement.html#getReversedMovement()"><code>SettlementMovement.getReversedMovement()</code></a>, rather than a
+ movement of its own.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.html#isSale()" class="member-name-link">isSale()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></dt>
 <dd>
 <div class="block">Whether this line adds sale value to the basket.</div>
@@ -4928,6 +4937,14 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Called when a card charge leg commits: once per card payment, so several times for a split
  settlement (<code>SettlementOptions.cardPayments</code>).</div>
+</dd>
+<dt><a href="com/bilt/pos/session/SettlementFlow.html#onCardChargeReversed(java.util.function.Consumer)" class="member-name-link">onCardChargeReversed(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
+<dd>
+<div class="block">Called when the settlement itself successfully reverses a card payment it had already reported
+ through <a href="com/bilt/pos/session/SettlementFlow.html#onCardCharged(java.util.function.Consumer)"><code>SettlementFlow.onCardCharged(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a>: before <code>retry()</code> or <code>external()</code> replaces a failed
+ card step whose charge had committed (a partial approval the SDK could not keep, a handler that
+ threw after the charge, a TransactionStatus-recovered charge whose processing failed), and for
+ each card payment an <code>abort()</code> unwind reverses.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#onCardRefunded(java.util.function.Consumer)" class="member-name-link">onCardRefunded(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
@@ -5966,6 +5983,10 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/VoidResult.Builder.html#reversedAmountByTender(java.util.List)" class="member-name-link">reversedAmountByTender(List&lt;TenderAmount&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/VoidResult.Builder.html" title="class in com.bilt.pos.session">VoidResult.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html#reversedMovement(com.bilt.pos.session.settlement.SettlementMovement)" class="member-name-link">reversedMovement(SettlementMovement)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></dt>
+<dd>
+<div class="block">Makes this a reversal notice for <code>reversedMovement</code>; see <a href="com/bilt/pos/session/settlement/SettlementMovement.html#isReversal()"><code>SettlementMovement.isReversal()</code></a>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/ReversedMovement.html" class="type-name-link" title="class in com.bilt.pos.session">ReversedMovement</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">A movement that completed before a whole-sale void stopped.</div>
@@ -6683,7 +6704,8 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementMovement</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
-<div class="block">One money or loyalty movement committed as part of a settlement.</div>
+<div class="block">One money or loyalty movement committed as part of a settlement, or the notice that the SDK
+ reversed one.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>

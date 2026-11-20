@@ -12,7 +12,20 @@ package com.bilt.pos.session.settlement;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-/** One money or loyalty movement committed as part of a settlement. */
+/**
+ * One money or loyalty movement committed as part of a settlement, or the notice that the SDK
+ * reversed one.
+ *
+ * <p>A reversal notice ({@link #isReversal()}) is delivered through {@code
+ * SettlementFlow.onMovement} (and, for a card payment, {@code onCardChargeReversed}) when the
+ * settlement itself successfully reverses a movement it had already reported: before a {@code
+ * retry()}, {@code skip()} or {@code external()} replaces a failed step that had committed, and for
+ * each movement an {@code abort()} unwind reverses. It carries the reversed movement's step,
+ * target, amount and sale transaction, with the reversal request's own {@code ServiceID} and POI
+ * reference, and names the movement it reverses in {@link #getReversedMovement()}. Reversal notices
+ * never appear in a settlement's movement ledger ({@code SettlementResult.getMovements()}, {@code
+ * SettlementFailure.getCommittedMovements()}): the reversed movement leaves the ledger instead.
+ */
 public final class SettlementMovement {
 
   private final SettlementStep step;
@@ -27,6 +40,7 @@ public final class SettlementMovement {
   private final Integer pointBalance;
   private final String externalTenderType;
   private final String externalReference;
+  private final SettlementMovement reversedMovement;
 
   private SettlementMovement(Builder builder) {
     this.step = builder.step;
@@ -41,6 +55,7 @@ public final class SettlementMovement {
     this.pointBalance = builder.pointBalance;
     this.externalTenderType = builder.externalTenderType;
     this.externalReference = builder.externalReference;
+    this.reversedMovement = builder.reversedMovement;
   }
 
   public static Builder builder() {
@@ -103,6 +118,20 @@ public final class SettlementMovement {
     return externalReference;
   }
 
+  /**
+   * Whether this is the notice that the SDK reversed {@link #getReversedMovement()}, rather than a
+   * movement of its own. On a reversal notice, {@link #getServiceId()} and {@link
+   * #getPoiTransactionId()} identify the reversal request, as the terminal reported it.
+   */
+  public boolean isReversal() {
+    return reversedMovement != null;
+  }
+
+  /** The movement this notice reverses; {@code null} unless {@link #isReversal()}. */
+  public SettlementMovement getReversedMovement() {
+    return reversedMovement;
+  }
+
   /** Builder for {@link SettlementMovement}. */
   public static final class Builder {
 
@@ -118,6 +147,7 @@ public final class SettlementMovement {
     private Integer pointBalance;
     private String externalTenderType;
     private String externalReference;
+    private SettlementMovement reversedMovement;
 
     private Builder() {}
 
@@ -178,6 +208,12 @@ public final class SettlementMovement {
 
     public Builder externalReference(String externalReference) {
       this.externalReference = externalReference;
+      return this;
+    }
+
+    /** Makes this a reversal notice for {@code reversedMovement}; see {@link #isReversal()}. */
+    public Builder reversedMovement(SettlementMovement reversedMovement) {
+      this.reversedMovement = reversedMovement;
       return this;
     }
 
