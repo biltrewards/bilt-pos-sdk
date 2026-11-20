@@ -25,6 +25,7 @@ public final class SettlementContext {
   private final SettlementStep step;
   private final Basket currentBasket;
   private final BigDecimal currentTotal;
+  private final BigDecimal stepAmount;
   private final String defaultTransactionId;
   private final List<CommittedStep> priorSteps;
   private final String serviceId;
@@ -36,9 +37,32 @@ public final class SettlementContext {
       String defaultTransactionId,
       List<CommittedStep> priorSteps,
       String serviceId) {
+    this(
+        step,
+        currentBasket,
+        currentTotal,
+        currentTotal,
+        defaultTransactionId,
+        priorSteps,
+        serviceId);
+  }
+
+  /**
+   * A context whose step charges {@code stepAmount}, a share of {@code currentTotal}: a card
+   * payment of a split settlement.
+   */
+  public SettlementContext(
+      SettlementStep step,
+      Basket currentBasket,
+      BigDecimal currentTotal,
+      BigDecimal stepAmount,
+      String defaultTransactionId,
+      List<CommittedStep> priorSteps,
+      String serviceId) {
     this.step = step;
     this.currentBasket = currentBasket;
     this.currentTotal = currentTotal;
+    this.stepAmount = stepAmount;
     this.defaultTransactionId = defaultTransactionId;
     this.priorSteps =
         Collections.unmodifiableList(
@@ -64,7 +88,35 @@ public final class SettlementContext {
       List<CommittedStep> priorSteps,
       String serviceId,
       Function<SettlementContext, String> handler) {
-    TransactionIdentificationType defaultTransaction = currentBasket.getSaleTransactionID();
+    return resolveSaleTransactionId(
+        step,
+        currentBasket,
+        currentTotal,
+        currentTotal,
+        priorSteps,
+        serviceId,
+        handler,
+        currentBasket.getSaleTransactionID());
+  }
+
+  /**
+   * {@link #resolveSaleTransactionId(SettlementStep, Basket, BigDecimal, List, String, Function)}
+   * for a step that charges {@code stepAmount} out of {@code currentTotal} (see {@link
+   * #getStepAmount()}), with an explicit default transaction instead of the basket's: the handler
+   * sees its ID as {@link #getDefaultTransactionId()}, and {@code null}, an empty string, or that
+   * ID keep it, timestamp included. A split card payment passes its own share and the first card
+   * payment's transaction, which nexo requires every split payment of a sale to share.
+   */
+  public static TransactionIdentificationType resolveSaleTransactionId(
+      SettlementStep step,
+      Basket currentBasket,
+      BigDecimal currentTotal,
+      BigDecimal stepAmount,
+      List<CommittedStep> priorSteps,
+      String serviceId,
+      Function<SettlementContext, String> handler,
+      TransactionIdentificationType defaultTransaction) {
+    Objects.requireNonNull(defaultTransaction, "defaultTransaction");
     if (handler == null) {
       return defaultTransaction;
     }
@@ -74,6 +126,7 @@ public final class SettlementContext {
                 step,
                 currentBasket,
                 currentTotal,
+                stepAmount,
                 defaultTransaction.getTransactionID(),
                 priorSteps,
                 serviceId));
@@ -97,9 +150,23 @@ public final class SettlementContext {
     return currentBasket;
   }
 
-  /** The running total the step will be sent with. */
+  /**
+   * The running total still due as of this step. For a card payment of a split settlement ({@code
+   * SettlementOptions.cardPayments}), everything the card phase still owes, the same amount a
+   * failure of the payment reports as {@code SettlementFailure.getAmountDue()}; {@link
+   * #getStepAmount()} is that payment's own share.
+   */
   public BigDecimal getCurrentTotal() {
     return currentTotal;
+  }
+
+  /**
+   * What this step's request is about to charge. For a card payment of a split settlement, that
+   * payment's own share of {@link #getCurrentTotal()}; for every other step, the same as {@link
+   * #getCurrentTotal()}. Requested cashback comes on top of either.
+   */
+  public BigDecimal getStepAmount() {
+    return stepAmount;
   }
 
   /** The {@code SaleTransactionID} used if the handler returns nothing else. */

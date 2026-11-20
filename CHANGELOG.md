@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.0]
+
+### Added
+
+- Split card payments: `SettlementOptions.cardPayments(CardPayment...)` (or a `List`) splits the card amount of a settlement into several card payments planned up front. `CardPayment.of(amount)` charges a fixed, positive amount in whole cents on its own card, and one more card payment always follows for the remainder: `cardPayments(CardPayment.of(new BigDecimal("20.00")))` charges $20 on the first card and the rest on the next. Without `cardPayments`, settlement makes one card payment for the whole card amount, as before. `build()` refuses `cardPayments` together with `cashback`, and with `SettlementLoyalty.implicit()`: with implicit loyalty the terminal books the whole sale's earn when card payment 1 is approved, before the sale is paid, keeps it if a later card payment fails and the sale is aborted, and its hosted checkout can lower card payment 1 below its planned amount. Use `SettlementLoyalty.explicit()`, whose award runs once after every tender. `paymentProcessingDisplay` is shown before every card payment.
+- The plan is checked when the card step starts, after rebates, points and stored value: the planned amounts must add up to less than the card amount. Otherwise the card step fails before any card is charged, with the new `SessionErrorCode.CARD_PAYMENTS_EXCEED_TOTAL` and the whole card amount as `amountDue`; only `abort()` and `abandon()` are valid recoveries there.
+- Each card payment is its own `CARD_CHARGE` step, with its own `beforeStep`, `ServiceID`, TransactionStatus recovery, reversal on abort, movement and `onCardCharged`. Every card payment after the first is a nexo split payment: `PaymentData.SplitPaymentFlag=true`, `PaymentType=Normal`, and `AmountsReq.PaidAmount` set to what the earlier payment requests of the settlement authorized (stored value and card payments). Every card payment carries the whole adjusted basket and card payment 1's `SaleTransactionID`; a `beforeStep` that returns another ID for a later card payment fails the settlement with `INVALID_STATE`. The new `SettlementContext.getStepAmount()` is what the step's request is about to charge: a split card payment's own share, while `getCurrentTotal()` stays everything the card phase still owes. For every other step the two are equal. `SettlementContext.resolveSaleTransactionId` has an overload that takes the step amount and the default transaction.
+- A failure on a later card payment reaches `onError` with `amountDue` = that payment's amount plus everything still due after it. `retry()` resends that payment with the same split fields, `external(payment)` (equal to `amountDue`) keeps the earlier card payments and ends the card phase, `abort()` reverses every card payment, and `skip()` stays invalid. A card payment that approves less than its own amount still fails as `DECLINED`.
+- `SettlementResult.getCardPayments()` and the `OriginalSaleRecord` list every card payment of a split sale, so a same-session `voidTransaction()` reverses them all and `refund()` refunds each one. The session protocol doesn't expose `cardPayments` yet.
+
 ## [0.47.0]
 
 ### Added

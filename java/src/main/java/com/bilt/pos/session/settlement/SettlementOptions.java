@@ -28,6 +28,7 @@ public final class SettlementOptions {
 
   private final SettlementLoyalty loyalty;
   private final BigDecimal cashback;
+  private final List<CardPayment> cardPayments;
   private final DisplayPayload paymentProcessingDisplay;
   private final List<RefundAllocation> refunds;
   private final List<StoredValueLoad> fulfillments;
@@ -36,6 +37,7 @@ public final class SettlementOptions {
   private SettlementOptions(Builder builder) {
     this.loyalty = builder.loyalty;
     this.cashback = builder.cashback;
+    this.cardPayments = Collections.unmodifiableList(new ArrayList<>(builder.cardPayments));
     this.paymentProcessingDisplay = builder.paymentProcessingDisplay;
     this.refunds = Collections.unmodifiableList(new ArrayList<>(builder.refunds));
     this.fulfillments = Collections.unmodifiableList(new ArrayList<>(builder.fulfillments));
@@ -59,6 +61,15 @@ public final class SettlementOptions {
   /** Cashback to request with the card payment, or {@code null}. */
   public BigDecimal getCashback() {
     return cashback;
+  }
+
+  /**
+   * The planned card payments, in order, each followed by the next and the last by one more card
+   * payment for the remainder. Empty (the default) means one card payment for the whole card
+   * amount.
+   */
+  public List<CardPayment> getCardPayments() {
+    return cardPayments;
   }
 
   /** Display shown while the card payment is processing, or {@code null}. */
@@ -86,6 +97,7 @@ public final class SettlementOptions {
 
     private SettlementLoyalty loyalty = SettlementLoyalty.explicit();
     private BigDecimal cashback;
+    private List<CardPayment> cardPayments = new ArrayList<>();
     private DisplayPayload paymentProcessingDisplay;
     private List<RefundAllocation> refunds = new ArrayList<>();
     private List<StoredValueLoad> fulfillments = new ArrayList<>();
@@ -108,6 +120,38 @@ public final class SettlementOptions {
         throw new IllegalArgumentException("cashback must be positive");
       }
       this.cashback = cashback;
+      return this;
+    }
+
+    /**
+     * Splits the card amount into several card payments planned up front: each given payment
+     * charges its fixed amount on its own card, in order, and one more card payment always follows
+     * for the remainder. {@code cardPayments(CardPayment.of(new BigDecimal("20.00")))} charges $20
+     * on the first card and the rest on the next.
+     *
+     * <p>The card amount is known only when the card step starts, after rebates, points and stored
+     * value. The planned amounts must then add up to less than it, or the card step fails before
+     * any card is charged, with {@link
+     * com.bilt.pos.session.SessionErrorCode#CARD_PAYMENTS_EXCEED_TOTAL}. Every card payment after
+     * the first is sent as a nexo split payment. A split cannot carry cashback, and needs the SDK's
+     * own loyalty steps ({@link SettlementLoyalty#explicit()}, the default, or {@link
+     * SettlementLoyalty#forbidden()}): {@link #build()} refuses it with cashback or with {@link
+     * SettlementLoyalty#implicit()}. No card payments (the default) means one card payment for the
+     * whole card amount.
+     */
+    public Builder cardPayments(CardPayment... cardPayments) {
+      return cardPayments(cardPayments == null ? null : java.util.Arrays.asList(cardPayments));
+    }
+
+    /** Replaces the planned card payments; see {@link #cardPayments(CardPayment...)}. */
+    public Builder cardPayments(List<CardPayment> cardPayments) {
+      List<CardPayment> planned = new ArrayList<>();
+      if (cardPayments != null) {
+        for (CardPayment cardPayment : cardPayments) {
+          planned.add(Objects.requireNonNull(cardPayment, "cardPayment"));
+        }
+      }
+      this.cardPayments = planned;
       return this;
     }
 
@@ -147,7 +191,27 @@ public final class SettlementOptions {
       return this;
     }
 
+    /**
+     * Builds the options.
+     *
+     * @throws IllegalStateException when {@link #cardPayments} are planned together with {@link
+     *     #cashback}, which rides on a single card authorization that a split doesn't have, or with
+     *     {@link SettlementLoyalty#implicit()} loyalty. With implicit loyalty the terminal books
+     *     the whole sale's earn when card payment 1 is approved, before the sale is paid, and keeps
+     *     it if a later card payment fails and the sale is aborted; its hosted checkout can also
+     *     lower card payment 1 below its planned amount. Use explicit loyalty, whose award runs
+     *     once after every tender.
+     */
     public SettlementOptions build() {
+      if (cashback != null && !cardPayments.isEmpty()) {
+        throw new IllegalStateException("cashback cannot be combined with planned card payments");
+      }
+      if (!cardPayments.isEmpty() && loyalty.getHandling() == SettlementLoyalty.Handling.IMPLICIT) {
+        throw new IllegalStateException(
+            "planned card payments cannot use implicit loyalty: the terminal would book the whole"
+                + " sale's earn at card payment 1, before the sale is paid; use"
+                + " SettlementLoyalty.explicit(), whose award runs once after every tender");
+      }
       return new SettlementOptions(this);
     }
   }

@@ -111,6 +111,17 @@ loadScripts(document, 'script');</script>
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="CommittedStep.html" title="class in com.bilt.pos.session.settlement">CommittedStep</a>&gt;&nbsp;priorSteps,
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;serviceId)</code></div>
 <div class="col-last even-row-color">&nbsp;</div>
+<div class="col-constructor-name odd-row-color"><code><a href="#%3Cinit%3E(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.math.BigDecimal,java.lang.String,java.util.List,java.lang.String)" class="member-name-link">SettlementContext</a><wbr>(<a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a>&nbsp;step,
+ <a href="../basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;currentBasket,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;currentTotal,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;stepAmount,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;defaultTransactionId,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="CommittedStep.html" title="class in com.bilt.pos.session.settlement">CommittedStep</a>&gt;&nbsp;priorSteps,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;serviceId)</code></div>
+<div class="col-last odd-row-color">
+<div class="block">A context whose step charges <code>stepAmount</code>, a share of <code>currentTotal</code>: a card
+ payment of a split settlement.</div>
+</div>
 </div>
 </section>
 </li>
@@ -133,7 +144,7 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCurrentTotal()" class="member-name-link">getCurrentTotal</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">The running total the step will be sent with.</div>
+<div class="block">The running total still due as of this step.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getDefaultTransactionId()" class="member-name-link">getDefaultTransactionId</a>()</code></div>
@@ -156,6 +167,26 @@ loadScripts(document, 'script');</script>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getStep()" class="member-name-link">getStep</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">The step about to run.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getStepAmount()" class="member-name-link">getStepAmount</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">What this step's request is about to charge.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static com.bilt.pos.nexo.model.TransactionIdentificationType</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.math.BigDecimal,java.util.List,java.lang.String,java.util.function.Function,com.bilt.pos.nexo.model.TransactionIdentificationType)" class="member-name-link">resolveSaleTransactionId</a><wbr>(<a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a>&nbsp;step,
+ <a href="../basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;currentBasket,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;currentTotal,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;stepAmount,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="CommittedStep.html" title="class in com.bilt.pos.session.settlement">CommittedStep</a>&gt;&nbsp;priorSteps,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;serviceId,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;&nbsp;handler,
+ com.bilt.pos.nexo.model.TransactionIdentificationType&nbsp;defaultTransaction)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">
+<div class="block"><a href="#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.util.List,java.lang.String,java.util.function.Function)"><code>resolveSaleTransactionId(SettlementStep, Basket, BigDecimal, List, String, Function)</code></a>
+ for a step that charges <code>stepAmount</code> out of <code>currentTotal</code> (see <a href="#getStepAmount()"><code>getStepAmount()</code></a>), with an explicit default transaction instead of the basket's: the handler
+ sees its ID as <a href="#getDefaultTransactionId()"><code>getDefaultTransactionId()</code></a>, and <code>null</code>, an empty string, or that
+ ID keep it, timestamp included.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code>static com.bilt.pos.nexo.model.TransactionIdentificationType</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.util.List,java.lang.String,java.util.function.Function)" class="member-name-link">resolveSaleTransactionId</a><wbr>(<a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a>&nbsp;step,
@@ -198,6 +229,20 @@ loadScripts(document, 'script');</script>
  <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;serviceId)</span></div>
 </section>
 </li>
+<li>
+<section class="detail" id="&lt;init&gt;(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.math.BigDecimal,java.lang.String,java.util.List,java.lang.String)">
+<h3>SettlementContext</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="element-name">SettlementContext</span><wbr><span class="parameters">(<a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a>&nbsp;step,
+ <a href="../basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;currentBasket,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;currentTotal,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;stepAmount,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;defaultTransactionId,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="CommittedStep.html" title="class in com.bilt.pos.session.settlement">CommittedStep</a>&gt;&nbsp;priorSteps,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;serviceId)</span></div>
+<div class="block">A context whose step charges <code>stepAmount</code>, a share of <code>currentTotal</code>: a card
+ payment of a split settlement.</div>
+</section>
+</li>
 </ul>
 </section>
 </li>
@@ -229,6 +274,24 @@ loadScripts(document, 'script');</script>
 </section>
 </li>
 <li>
+<section class="detail" id="resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.math.BigDecimal,java.util.List,java.lang.String,java.util.function.Function,com.bilt.pos.nexo.model.TransactionIdentificationType)">
+<h3>resolveSaleTransactionId</h3>
+<div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type">com.bilt.pos.nexo.model.TransactionIdentificationType</span>&nbsp;<span class="element-name">resolveSaleTransactionId</span><wbr><span class="parameters">(<a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a>&nbsp;step,
+ <a href="../basket/Basket.html" title="class in com.bilt.pos.session.basket">Basket</a>&nbsp;currentBasket,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;currentTotal,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;stepAmount,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="CommittedStep.html" title="class in com.bilt.pos.session.settlement">CommittedStep</a>&gt;&nbsp;priorSteps,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;serviceId,
+ <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;&nbsp;handler,
+ com.bilt.pos.nexo.model.TransactionIdentificationType&nbsp;defaultTransaction)</span></div>
+<div class="block"><a href="#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.util.List,java.lang.String,java.util.function.Function)"><code>resolveSaleTransactionId(SettlementStep, Basket, BigDecimal, List, String, Function)</code></a>
+ for a step that charges <code>stepAmount</code> out of <code>currentTotal</code> (see <a href="#getStepAmount()"><code>getStepAmount()</code></a>), with an explicit default transaction instead of the basket's: the handler
+ sees its ID as <a href="#getDefaultTransactionId()"><code>getDefaultTransactionId()</code></a>, and <code>null</code>, an empty string, or that
+ ID keep it, timestamp included. A split card payment passes its own share and the first card
+ payment's transaction, which nexo requires every split payment of a sale to share.</div>
+</section>
+</li>
+<li>
 <section class="detail" id="getStep()">
 <h3>getStep</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a></span>&nbsp;<span class="element-name">getStep</span>()</div>
@@ -246,7 +309,17 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getCurrentTotal()">
 <h3>getCurrentTotal</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getCurrentTotal</span>()</div>
-<div class="block">The running total the step will be sent with.</div>
+<div class="block">The running total still due as of this step. For a card payment of a split settlement (<code>
+ SettlementOptions.cardPayments</code>), everything the card phase still owes, the same amount a
+ failure of the payment reports as <code>SettlementFailure.getAmountDue()</code>; <a href="#getStepAmount()"><code>getStepAmount()</code></a> is that payment's own share.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getStepAmount()">
+<h3>getStepAmount</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getStepAmount</span>()</div>
+<div class="block">What this step's request is about to charge. For a card payment of a split settlement, that
+ payment's own share of <a href="#getCurrentTotal()"><code>getCurrentTotal()</code></a>; for every other step, the same as <a href="#getCurrentTotal()"><code>getCurrentTotal()</code></a>. Requested cashback comes on top of either.</div>
 </section>
 </li>
 <li>

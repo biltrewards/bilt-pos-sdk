@@ -96,6 +96,7 @@ class SettlementContextTest {
               assertEquals(SettlementStep.STORED_VALUE_CHARGE, ctx.getStep());
               assertEquals(BASKET, ctx.getCurrentBasket());
               assertEquals(new BigDecimal("10.00"), ctx.getCurrentTotal());
+              assertEquals(new BigDecimal("10.00"), ctx.getStepAmount());
               assertEquals(List.of(priorStep), ctx.getPriorSteps());
               assertNotNull(ctx.getDefaultTransactionId());
               assertEquals("SVC1", ctx.getServiceId());
@@ -104,6 +105,61 @@ class SettlementContextTest {
 
     assertEquals("register-txn-1", id.getTransactionID());
     assertNotNull(id.getTimeStamp());
+  }
+
+  @Test
+  void resolveSaleTransactionIdCanDefaultToAnEarlierStepsTransaction() {
+    TransactionIdentificationType first =
+        TransactionIdentificationType.builder()
+            .transactionID("register-txn-1")
+            .timeStamp("2026-07-20T10:00:00Z")
+            .build();
+    AtomicReference<String> defaultId = new AtomicReference<>();
+
+    TransactionIdentificationType kept =
+        SettlementContext.resolveSaleTransactionId(
+            SettlementStep.CARD_CHARGE,
+            BASKET,
+            new BigDecimal("10.00"),
+            new BigDecimal("4.00"),
+            List.of(),
+            "SVC2",
+            ctx -> {
+              defaultId.set(ctx.getDefaultTransactionId());
+              assertEquals(new BigDecimal("10.00"), ctx.getCurrentTotal());
+              assertEquals(new BigDecimal("4.00"), ctx.getStepAmount());
+              return null;
+            },
+            first);
+    assertEquals("register-txn-1", defaultId.get());
+    assertEquals(first, kept);
+
+    TransactionIdentificationType same =
+        SettlementContext.resolveSaleTransactionId(
+            SettlementStep.CARD_CHARGE,
+            BASKET,
+            new BigDecimal("10.00"),
+            new BigDecimal("4.00"),
+            List.of(),
+            "SVC2",
+            ctx -> "register-txn-1",
+            first);
+    assertEquals("2026-07-20T10:00:00Z", same.getTimeStamp());
+
+    TransactionIdentificationType basketId =
+        SettlementContext.resolveSaleTransactionId(
+            SettlementStep.CARD_CHARGE,
+            BASKET,
+            new BigDecimal("10.00"),
+            new BigDecimal("4.00"),
+            List.of(),
+            "SVC2",
+            ctx -> BASKET.getSaleTransactionID().getTransactionID(),
+            first);
+    assertEquals(
+        BASKET.getSaleTransactionID().getTransactionID(),
+        basketId.getTransactionID(),
+        "any ID other than the default is an override, the basket's included");
   }
 
   @Test
