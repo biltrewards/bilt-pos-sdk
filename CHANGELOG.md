@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.49.0]
+
+### Added
+
+- `SettlementFlow.onPartialCardApproval(Function<PartialCardApproval, PartialApprovalDecision>)` lets the register decide at the counter what happens when a card payment approves less than it requested, instead of failing the card step. The partial payment's movement and `onCardCharged` fire first, then the handler receives a `PartialCardApproval` with `getApproved()`, `getRequested()`, `getShortfall()`, `getAmountDue()` (everything the card phase still owes), `getCardPayments()` (committed so far, this one included) and `getMovement()`. `PartialApprovalDecision.anotherCard()` charges the shortfall on another card and then continues the plan; `addToNext()` adds the shortfall to the next planned card payment or the remainder payment, and is refused on the last card payment, where `anotherCard()` is the way to collect it; `external(ExternalPayment)` records a register-managed payment for exactly `getAmountDue()` through the `EXTERNAL_PAYMENT` step and keeps every card payment; `abort()` reverses every committed step and fails the settlement as `DECLINED`. Card payments after a partial carry the nexo split fields (`SplitPaymentFlag`, `PaymentType=Normal`, `PaidAmount`) and the first card payment's `SaleTransactionID`. A decision the settlement cannot carry out is refused like an invalid `SettlementRecovery` (`INVALID_STATE`, committed steps left for `voidTransaction()`), and a handler that throws or returns `null` is reported to `onError` like a throwing step handler. The handler is never called on a sale with cashback (a partial there, including a refused cashback, fails as `DECLINED`) or for an authorization of zero, which is a decline. Docs: a "Partial card approval" variant in the checkout session guide, with the card-brand rule that an unpaid partial approval must be reversed.
+
+### Changed
+
+- **Breaking:** without an `onPartialCardApproval` handler, a card payment that approves less than it requested no longer fails the card step as `DECLINED` straight away. The SDK keeps the partial charge and sends another card request for the shortfall, as `anotherCard()` does, with at most `SettlementFlow.MAX_AUTOMATIC_CARD_REQUESTS` (3) card requests per settlement: the request that came back partial counts, so at most two automatic follow-ups. Planned card payments and register retries don't count. When the last request allowed is partial too, the card step fails as `DECLINED` to `onError`, with `amountDue` = that request's amount plus whatever is still due. The earlier card payments stay committed, so `abort()` (the default) reverses them all, and `retry()` or `external()` first reverse that last partial charge. Cashback sales keep failing as `DECLINED` with no follow-up. A registered handler replaces the automatic follow-ups and has no limit.
+
 ## [0.48.0]
 
 ### Added

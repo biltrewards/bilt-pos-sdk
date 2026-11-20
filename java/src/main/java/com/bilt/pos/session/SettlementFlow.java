@@ -13,6 +13,8 @@ import com.bilt.pos.session.payment.GiftCardPaymentResult;
 import com.bilt.pos.session.payment.PointRedemptionResult;
 import com.bilt.pos.session.payment.RebateRedemptionResult;
 import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
+import com.bilt.pos.session.settlement.PartialApprovalDecision;
+import com.bilt.pos.session.settlement.PartialCardApproval;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementMovement;
@@ -77,6 +79,18 @@ import java.util.function.Function;
  */
 public final class SettlementFlow extends SessionFlow<SettlementResult> {
 
+  /**
+   * How many card requests a settlement without {@link #onPartialCardApproval} sends for a
+   * shortfall: the request that came back partial counts as the first, so the SDK adds at most
+   * {@code MAX_AUTOMATIC_CARD_REQUESTS - 1} automatic follow-up requests per settlement. Planned
+   * card payments ({@code SettlementOptions.cardPayments}) and requests the register retries do not
+   * count. When the last request allowed comes back partial too, that card step fails as {@code
+   * DECLINED} to {@link #onError}, with the earlier card payments still committed: {@code abort()}
+   * (the default) reverses them all, and {@code retry()} or {@code external()} first reverse that
+   * last partial charge.
+   */
+  public static final int MAX_AUTOMATIC_CARD_REQUESTS = 3;
+
   private final Function<SettlementFlow, SettlementResult> executor;
 
   private Function<SettlementContext, String> beforeStepHandler;
@@ -84,6 +98,7 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
   private Function<PointRedemptionResult, BigDecimal> pointsHandler;
   private Function<GiftCardPaymentResult, BigDecimal> giftCardHandler;
   private Consumer<SettlementMovement> cardChargeHandler;
+  private Function<PartialCardApproval, PartialApprovalDecision> partialCardApprovalHandler;
   private Consumer<SettlementMovement> externalPaymentHandler;
   private Consumer<SettlementMovement> awardHandler;
   private Consumer<SettlementMovement> storedValueLoadedHandler;
@@ -169,6 +184,31 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
    */
   public SettlementFlow onCardCharged(Consumer<SettlementMovement> handler) {
     return register(() -> this.cardChargeHandler = requireHandler(handler));
+  }
+
+  /**
+   * Called when a card payment commits with less than it requested: the terminal answered {@code
+   * Partial} with an {@code AuthorizedAmount} below the {@code RequestedAmount}. The payment's
+   * movement and {@link #onCardCharged} fire first. The returned {@link PartialApprovalDecision}
+   * charges the shortfall on another card, adds it to the next card payment, records a
+   * register-managed payment for everything still due, or aborts and reverses every card payment.
+   * Card brand rules require an unpaid partial approval to be reversed, so a sale the shopper
+   * cannot finish must {@link PartialApprovalDecision#abort() abort}.
+   *
+   * <p>Without this handler, the SDK keeps a partial approval and sends another card request for
+   * the shortfall, as {@link PartialApprovalDecision#anotherCard()} does, up to {@link
+   * #MAX_AUTOMATIC_CARD_REQUESTS}. A registered handler replaces that default entirely and has no
+   * limit: it can count {@link PartialCardApproval#getCardPayments()} itself.
+   *
+   * <p>The handler is never called for a sale with cashback (a partial there, including a refused
+   * cashback, fails as {@code DECLINED}, with or without the handler), nor for an authorization of
+   * zero, which is a decline. A handler that throws or returns {@code null} is reported to {@link
+   * #onError} like a throwing step handler: {@code retry()} asks it again, {@code abort()} unwinds,
+   * {@code abandon()} hands the settlement to the register, and any other recovery is refused.
+   */
+  public SettlementFlow onPartialCardApproval(
+      Function<PartialCardApproval, PartialApprovalDecision> handler) {
+    return register(() -> this.partialCardApprovalHandler = requireHandler(handler));
   }
 
   /** Called when a register-managed payment such as cash is recorded. */
@@ -336,6 +376,23 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
 
   Function<GiftCardPaymentResult, BigDecimal> giftCardHandler() {
     return marshalled(giftCardHandler);
+  }
+
+  Function<PartialCardApproval, PartialApprovalDecision> partialCardApprovalHandler() {
+    if (partialCardApprovalHandler == null) {
+      return null;
+    }
+    // a partial-approval decision is a recovery decision too: like onError's, a nonterminal
+    // answer obliges us to tell the register if the settlement then fails (see deliverFailure),
+    // and an abort the register chose must not reach onError afterwards
+    return marshalled(
+        partial -> {
+          PartialApprovalDecision decision = partialCardApprovalHandler.apply(partial);
+          errorHandlerConsulted = true;
+          recoveryRequested =
+              decision != null && decision.getAction() != PartialApprovalDecision.Action.ABORT;
+          return decision;
+        });
   }
 
   Consumer<SettlementMovement> movementHandler() {

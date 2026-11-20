@@ -39,7 +39,7 @@ loadScripts(document, 'script');</script>
 <p>Summary:</p>
 <ul>
 <li>Nested</li>
-<li>Field</li>
+<li><a href="#field-summary">Field</a></li>
 <li>Constr</li>
 <li><a href="#method-summary">Method</a></li>
 </ul>
@@ -47,7 +47,7 @@ loadScripts(document, 'script');</script>
 <li>
 <p>Detail:</p>
 <ul>
-<li>Field</li>
+<li><a href="#field-detail">Field</a></li>
 <li>Constr</li>
 <li><a href="#method-detail">Method</a></li>
 </ul>
@@ -59,13 +59,13 @@ loadScripts(document, 'script');</script>
 <ul class="sub-nav-list">
 <li>Summary:&nbsp;</li>
 <li>Nested&nbsp;|&nbsp;</li>
-<li>Field&nbsp;|&nbsp;</li>
+<li><a href="#field-summary">Field</a>&nbsp;|&nbsp;</li>
 <li>Constr&nbsp;|&nbsp;</li>
 <li><a href="#method-summary">Method</a></li>
 </ul>
 <ul class="sub-nav-list">
 <li>Detail:&nbsp;</li>
-<li>Field&nbsp;|&nbsp;</li>
+<li><a href="#field-detail">Field</a>&nbsp;|&nbsp;</li>
 <li>Constr&nbsp;|&nbsp;</li>
 <li><a href="#method-detail">Method</a></li>
 </ul>
@@ -141,6 +141,25 @@ loadScripts(document, 'script');</script>
 </section>
 <section class="summary">
 <ul class="summary-list">
+<!-- =========== FIELD SUMMARY =========== -->
+<li>
+<section class="field-summary" id="field-summary">
+<h2>Field Summary</h2>
+<div class="caption"><span>Fields</span></div>
+<div class="summary-table three-column-summary">
+<div class="table-header col-first">Modifier and Type</div>
+<div class="table-header col-second">Field</div>
+<div class="table-header col-last">Description</div>
+<div class="col-first even-row-color"><code>static final int</code></div>
+<div class="col-second even-row-color"><code><a href="#MAX_AUTOMATIC_CARD_REQUESTS" class="member-name-link">MAX_AUTOMATIC_CARD_REQUESTS</a></code></div>
+<div class="col-last even-row-color">
+<div class="block">How many card requests a settlement without <a href="#onPartialCardApproval(java.util.function.Function)"><code>onPartialCardApproval(java.util.function.Function&lt;com.bilt.pos.session.settlement.PartialCardApproval, com.bilt.pos.session.settlement.PartialApprovalDecision&gt;)</code></a> sends for a
+ shortfall: the request that came back partial counts as the first, so the SDK adds at most
+ <code>MAX_AUTOMATIC_CARD_REQUESTS - 1</code> automatic follow-up requests per settlement.</div>
+</div>
+</div>
+</section>
+</li>
 <!-- ========== METHOD SUMMARY =========== -->
 <li>
 <section class="method-summary" id="method-summary">
@@ -251,33 +270,39 @@ loadScripts(document, 'script');</script>
 <div class="block">Called after any externally visible money or loyalty movement commits.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onPointsRedeemed(java.util.function.Function)" class="member-name-link">onPointsRedeemed</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="payment/PointRedemptionResult.html" title="class in com.bilt.pos.session.payment">PointRedemptionResult</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&gt;&nbsp;handler)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onPartialCardApproval(java.util.function.Function)" class="member-name-link">onPartialCardApproval</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="settlement/PartialCardApproval.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval</a>,<wbr><a href="settlement/PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement">PartialApprovalDecision</a>&gt;&nbsp;handler)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Called when a card payment commits with less than it requested: the terminal answered <code>
+ Partial</code> with an <code>AuthorizedAmount</code> below the <code>RequestedAmount</code>.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onPointsRedeemed(java.util.function.Function)" class="member-name-link">onPointsRedeemed</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="payment/PointRedemptionResult.html" title="class in com.bilt.pos.session.payment">PointRedemptionResult</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&gt;&nbsp;handler)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Called when points/rewards are redeemed for monetary value.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onPointsRefunded(java.util.function.Consumer)" class="member-name-link">onPointsRefunded</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onPointsRefunded(java.util.function.Consumer)" class="member-name-link">onPointsRefunded</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Called when a point/reward redemption refund allocation commits.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onRebateRefunded(java.util.function.Consumer)" class="member-name-link">onRebateRefunded</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onRebateRefunded(java.util.function.Consumer)" class="member-name-link">onRebateRefunded</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Called when a rebate/coupon refund allocation commits.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onRebatesRedeemed(java.util.function.Function)" class="member-name-link">onRebatesRedeemed</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="payment/RebateRedemptionResult.html" title="class in com.bilt.pos.session.payment">RebateRedemptionResult</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&gt;&nbsp;handler)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onRebatesRedeemed(java.util.function.Function)" class="member-name-link">onRebatesRedeemed</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="payment/RebateRedemptionResult.html" title="class in com.bilt.pos.session.payment">RebateRedemptionResult</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&gt;&nbsp;handler)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Called when rebates/coupons are committed.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onStoredValueLoaded(java.util.function.Consumer)" class="member-name-link">onStoredValueLoaded</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onStoredValueLoaded(java.util.function.Consumer)" class="member-name-link">onStoredValueLoaded</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Called when a purchased stored value line is activated or loaded.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onSuccess(java.util.function.Consumer)" class="member-name-link">onSuccess</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a>&gt;&nbsp;handler)</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onSuccess(java.util.function.Consumer)" class="member-name-link">onSuccess</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a>&gt;&nbsp;handler)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Called after the full sequence completes successfully.</div>
 </div>
 </div>
@@ -292,6 +317,36 @@ loadScripts(document, 'script');</script>
 </section>
 <section class="details">
 <ul class="details-list">
+<!-- ============ FIELD DETAIL =========== -->
+<li>
+<section class="field-details" id="field-detail">
+<h2>Field Details</h2>
+<ul class="member-list">
+<li>
+<section class="detail" id="MAX_AUTOMATIC_CARD_REQUESTS">
+<h3>MAX_AUTOMATIC_CARD_REQUESTS</h3>
+<div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type">int</span>&nbsp;<span class="element-name">MAX_AUTOMATIC_CARD_REQUESTS</span></div>
+<div class="block">How many card requests a settlement without <a href="#onPartialCardApproval(java.util.function.Function)"><code>onPartialCardApproval(java.util.function.Function&lt;com.bilt.pos.session.settlement.PartialCardApproval, com.bilt.pos.session.settlement.PartialApprovalDecision&gt;)</code></a> sends for a
+ shortfall: the request that came back partial counts as the first, so the SDK adds at most
+ <code>MAX_AUTOMATIC_CARD_REQUESTS - 1</code> automatic follow-up requests per settlement. Planned
+ card payments (<code>SettlementOptions.cardPayments</code>) and requests the register retries do not
+ count. When the last request allowed comes back partial too, that card step fails as <code>
+ DECLINED</code> to <a href="#onError(java.util.function.Function)"><code>onError(java.util.function.Function&lt;com.bilt.pos.session.settlement.SettlementFailure, com.bilt.pos.session.settlement.SettlementRecovery&gt;)</code></a>, with the earlier card payments still committed: <code>abort()</code>
+ (the default) reverses them all, and <code>retry()</code> or <code>external()</code> first reverse that
+ last partial charge.</div>
+<dl class="notes">
+<dt>See Also:</dt>
+<dd>
+<ul class="tag-list">
+<li><a href="../../../../constant-values.html#com.bilt.pos.session.SettlementFlow.MAX_AUTOMATIC_CARD_REQUESTS">Constant Field Values</a></li>
+</ul>
+</dd>
+</dl>
+</section>
+</li>
+</ul>
+</section>
+</li>
 <!-- ============ METHOD DETAIL ========== -->
 <li>
 <section class="method-details" id="method-detail">
@@ -351,6 +406,28 @@ loadScripts(document, 'script');</script>
 <div class="block">Called when a card charge leg commits: once per card payment, so several times for a split
  settlement (<code>SettlementOptions.cardPayments</code>). See <a href="#onMovement(java.util.function.Consumer)"><code>onMovement(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a> for the
  provisional charge-side callback contract.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="onPartialCardApproval(java.util.function.Function)">
+<h3>onPartialCardApproval</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onPartialCardApproval</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="settlement/PartialCardApproval.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval</a>,<wbr><a href="settlement/PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement">PartialApprovalDecision</a>&gt;&nbsp;handler)</span></div>
+<div class="block">Called when a card payment commits with less than it requested: the terminal answered <code>
+ Partial</code> with an <code>AuthorizedAmount</code> below the <code>RequestedAmount</code>. The payment's
+ movement and <a href="#onCardCharged(java.util.function.Consumer)"><code>onCardCharged(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a> fire first. The returned <a href="settlement/PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement"><code>PartialApprovalDecision</code></a>
+ charges the shortfall on another card, adds it to the next card payment, records a
+ register-managed payment for everything still due, or aborts and reverses every card payment.
+ Card brand rules require an unpaid partial approval to be reversed, so a sale the shopper
+ cannot finish must <a href="settlement/PartialApprovalDecision.html#abort()"><code>abort</code></a>.
+
+ <p>Without this handler, the SDK keeps a partial approval and sends another card request for
+ the shortfall, as <a href="settlement/PartialApprovalDecision.html#anotherCard()"><code>PartialApprovalDecision.anotherCard()</code></a> does, up to <a href="#MAX_AUTOMATIC_CARD_REQUESTS"><code>MAX_AUTOMATIC_CARD_REQUESTS</code></a>. A registered handler replaces that default entirely and has no
+ limit: it can count <a href="settlement/PartialCardApproval.html#getCardPayments()"><code>PartialCardApproval.getCardPayments()</code></a> itself.
+
+ <p>The handler is never called for a sale with cashback (a partial there, including a refused
+ cashback, fails as <code>DECLINED</code>, with or without the handler), nor for an authorization of
+ zero, which is a decline. A handler that throws or returns <code>null</code> is reported to <a href="#onError(java.util.function.Function)"><code>onError(java.util.function.Function&lt;com.bilt.pos.session.settlement.SettlementFailure, com.bilt.pos.session.settlement.SettlementRecovery&gt;)</code></a> like a throwing step handler: <code>retry()</code> asks it again, <code>abort()</code> unwinds,
+ <code>abandon()</code> hands the settlement to the register, and any other recovery is refused.</div>
 </section>
 </li>
 <li>

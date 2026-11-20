@@ -44,6 +44,7 @@ import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
+import com.bilt.pos.session.SettlementFlow;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.identity.IdentifyResult;
@@ -57,6 +58,8 @@ import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
 import com.bilt.pos.session.settlement.CardPayment;
 import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.ExternalPayment;
+import com.bilt.pos.session.settlement.PartialApprovalDecision;
+import com.bilt.pos.session.settlement.PartialCardApproval;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementLoyalty;
@@ -98,6 +101,7 @@ public final class PaymentOrchestrator {
     public Function<RebateRedemptionResult, BigDecimal> onRebatesRedeemed;
     public Function<PointRedemptionResult, BigDecimal> onPointsRedeemed;
     public Function<GiftCardPaymentResult, BigDecimal> onGiftCardPayment;
+    public Function<PartialCardApproval, PartialApprovalDecision> onPartialCardApproval;
     public Consumer<SettlementMovement> onMovement;
     public Function<SettlementFailure, SettlementRecovery> onError;
   }
@@ -287,21 +291,48 @@ public final class PaymentOrchestrator {
     void charged() {
       planned.pollFirst();
     }
+
+    /** Puts a card payment of {@code amount} before the rest of the plan. */
+    void insert(BigDecimal amount) {
+      planned.addFirst(amount);
+    }
+
+    /**
+     * Adds {@code amount} to the next planned payment. With no planned amount left, the remainder
+     * payment is the next one, and it already grows by whatever the last payment left unpaid.
+     */
+    void addToNext(BigDecimal amount) {
+      BigDecimal next = planned.pollFirst();
+      if (next != null) {
+        planned.addFirst(next.add(amount));
+      }
+    }
   }
 
-  /** One committed card payment, with what it asked for and the sale transaction it used. */
+  /**
+   * One committed card payment, with what it asked for, the sale transaction it used and its
+   * movement.
+   */
   private static final class CardCharge {
     final CardPaymentResult payment;
     final BigDecimal requested;
     final TransactionIdentificationType saleTransaction;
+    final SettlementMovement movement;
 
     CardCharge(
         CardPaymentResult payment,
         BigDecimal requested,
-        TransactionIdentificationType saleTransaction) {
+        TransactionIdentificationType saleTransaction,
+        SettlementMovement movement) {
       this.payment = payment;
       this.requested = requested;
       this.saleTransaction = saleTransaction;
+      this.movement = movement;
+    }
+
+    /** Whether the terminal authorized less than this payment requested. */
+    boolean partial() {
+      return payment.getAmount().compareTo(requested) < 0;
     }
   }
 
@@ -533,12 +564,23 @@ public final class PaymentOrchestrator {
       BigDecimal paidBefore = storedValueCharged;
       // nexo Rule 8: every split payment carries the first card payment's SaleTransactionID
       TransactionIdentificationType splitSaleTransaction = null;
+      boolean partialHandler = request.handlers.onPartialCardApproval != null;
+      // card requests the SDK added on its own for a shortfall (no onPartialCardApproval)
+      int automaticFollowUps = 0;
       while (cardDue.signum() > 0) {
         // before every card payment: the screen the previous card left must not linger while the
         // shopper presents the next one
         if (options.paymentProcessingDisplay != null) {
           showProcessingDisplay(options.paymentProcessingDisplay);
         }
+        // A partial approval is kept only on a sale without cashback: a partial there (including
+        // a refused cashback) fails as DECLINED. The register's handler decides on every one;
+        // without it the SDK sends another card request for the shortfall, until the request
+        // that comes back partial is the last of SettlementFlow.MAX_AUTOMATIC_CARD_REQUESTS.
+        boolean acceptPartial =
+            options.cashback == null
+                && (partialHandler
+                    || automaticFollowUps < SettlementFlow.MAX_AUTOMATIC_CARD_REQUESTS - 1);
         BigDecimal amount = plan.next(cardDue);
         BigDecimal stepDue = cardDue;
         BigDecimal paidAmount = splitSaleTransaction == null ? null : paidBefore;
@@ -560,6 +602,7 @@ public final class PaymentOrchestrator {
                         stepBasket,
                         amount,
                         paidAmount,
+                        acceptPartial,
                         options,
                         loyaltyHandling,
                         saleTransaction,
@@ -583,10 +626,28 @@ public final class PaymentOrchestrator {
         cardDue =
             cardDue.subtract(
                 options.cashback == null ? approved : approved.subtract(options.cashback));
-        // Partial approvals: cardStep fails a payment that authorized less than charge.requested
-        // as DECLINED, so every payment that reaches this point covered its share. A decision on
-        // a partial approval (another card, add the shortfall to the next planned payment, cash
-        // for the rest, abort) belongs here, between this payment and plan.next(cardDue).
+        if (charge.partial() && !partialHandler) {
+          // cardStep let it through only while the automatic limit allows another request
+          automaticFollowUps++;
+          plan.insert(charge.requested.subtract(approved));
+        } else if (charge.partial()) {
+          // the register's decision reshapes the plan before plan.next(cardDue)
+          ExternalPayment external =
+              decidePartialApproval(
+                  request,
+                  committed,
+                  movements,
+                  stepBasket,
+                  plan,
+                  charge,
+                  cardPayments,
+                  cardDue,
+                  stepDue);
+          if (external != null) {
+            externalPaid = external.getAmount();
+            break;
+          }
+        }
       }
     }
     for (CardPaymentResult cardPayment : cardPayments) {
@@ -1160,6 +1221,109 @@ public final class PaymentOrchestrator {
     }
   }
 
+  /**
+   * Asks the register what to do about a card payment that authorized less than it requested, and
+   * carries the decision out. Another card puts a payment for the shortfall before the rest of
+   * {@code plan}; add to next grows the next card payment by it; both return {@code null} so the
+   * card loop continues. An external payment for everything still due is recorded through the
+   * {@code EXTERNAL_PAYMENT} step and returned, ending the card phase with every card payment
+   * standing. Abort unwinds every committed step. A decision the plan cannot carry out is refused
+   * like an invalid recovery, and a handler that throws or answers {@code null} goes to {@code
+   * onError} like a throwing step handler.
+   *
+   * @param cardDue what the card phase still owes after this payment
+   * @param stepDue what the card phase owed before it; a payment that asked for all of it was the
+   *     last card payment of the plan
+   */
+  private ExternalPayment decidePartialApproval(
+      Request request,
+      List<Commit> committed,
+      List<SettlementMovement> movements,
+      Basket basket,
+      CardPlan plan,
+      CardCharge charge,
+      List<CardPaymentResult> cardPayments,
+      BigDecimal cardDue,
+      BigDecimal stepDue) {
+    PartialCardApproval partial =
+        PartialCardApproval.builder()
+            .approved(charge.payment.getAmount())
+            .requested(charge.requested)
+            .amountDue(cardDue)
+            .cardPayments(cardPayments)
+            .movement(charge.movement)
+            .build();
+    PartialApprovalDecision decision;
+    while (true) {
+      try {
+        decision = request.handlers.onPartialCardApproval.apply(partial);
+        if (decision == null) {
+          throw new IllegalArgumentException("onPartialCardApproval returned no decision");
+        }
+        break;
+      } catch (RuntimeException callbackFailure) {
+        recoverHandlerFailure(
+            request,
+            committed,
+            movements,
+            SettlementStep.CARD_CHARGE,
+            "onPartialCardApproval handler",
+            cardDue,
+            callbackFailure);
+      }
+    }
+    switch (decision.getAction()) {
+      case ANOTHER_CARD:
+        plan.insert(partial.getShortfall());
+        return null;
+      case ADD_TO_NEXT:
+        if (charge.requested.compareTo(stepDue) >= 0) {
+          throw invalidRecovery(
+              request,
+              committed,
+              SettlementStep.CARD_CHARGE,
+              "addToNext() needs a card payment after the partial one, but it was the last;"
+                  + " anotherCard() charges the shortfall on one more card");
+        }
+        plan.addToNext(partial.getShortfall());
+        return null;
+      case EXTERNAL:
+        ExternalPayment payment = decision.getExternalPayment();
+        if (payment.getAmount().compareTo(cardDue) != 0) {
+          throw invalidRecovery(
+              request,
+              committed,
+              SettlementStep.CARD_CHARGE,
+              "external payment " + payment.getAmount() + " must equal the outstanding " + cardDue);
+        }
+        return runStep(
+                request,
+                committed,
+                movements,
+                SettlementStep.EXTERNAL_PAYMENT,
+                basket,
+                cardDue,
+                false,
+                false,
+                (externalTxnId, serviceId, response) ->
+                    externalPaymentStep(request, payment, externalTxnId, movements))
+            .value;
+      case ABORT:
+        throw abort(
+            request,
+            committed,
+            new SessionError(
+                SessionErrorCode.DECLINED,
+                "the card payment authorized only "
+                    + partial.getApproved()
+                    + " of the requested "
+                    + partial.getRequested()
+                    + "; the register aborted the settlement"));
+      default:
+        throw new AssertionError("unknown partial approval decision " + decision.getAction());
+    }
+  }
+
   private static void preserveStanding(Request request, List<Commit> committed) {
     List<StandingMovement> standing = new ArrayList<>();
     for (Commit commit : committed) {
@@ -1582,6 +1746,7 @@ public final class PaymentOrchestrator {
       Basket basket,
       BigDecimal amount,
       BigDecimal paidAmount,
+      boolean acceptPartial,
       AttemptOptions options,
       LoyaltyHandlingEnum loyaltyHandling,
       TransactionIdentificationType saleTransaction,
@@ -1644,9 +1809,7 @@ public final class PaymentOrchestrator {
         saleTransaction,
         body.getPoiData(),
         reversalRollback(Wire.poiRef(body.getPoiData()), saleTransaction));
-    publishMovement(
-        request,
-        movements,
+    SettlementMovement cardMovement =
         movement(
             SettlementStep.CARD_CHARGE,
             charged,
@@ -1655,13 +1818,17 @@ public final class PaymentOrchestrator {
             body.getPoiData(),
             null,
             null,
-            null));
+            null);
+    publishMovement(request, movements, cardMovement);
 
     // a partial authorization on the stored value step is the split
-    // tender mechanism, but each card payment must cover its own share —
-    // an under-authorization here would complete a short-paid sale (or
-    // hand out cashback the sale never collected)
-    if (charged.compareTo(grossTotal) < 0) {
+    // tender mechanism; a short card payment is kept only when the card
+    // loop collects its shortfall (acceptPartial: the register's
+    // onPartialCardApproval, or an automatic follow-up request) —
+    // otherwise an under-authorization here would complete a short-paid
+    // sale (or hand out cashback the sale never collected). An
+    // authorization of zero is a decline.
+    if (charged.compareTo(grossTotal) < 0 && (!acceptPartial || charged.signum() <= 0)) {
       throw new StepFailure(
           new SessionError(
               SessionErrorCode.DECLINED,
@@ -1670,7 +1837,10 @@ public final class PaymentOrchestrator {
     }
 
     return new CardCharge(
-        cardPayment(body, charged, charged.compareTo(grossTotal) < 0), grossTotal, saleTransaction);
+        cardPayment(body, charged, charged.compareTo(grossTotal) < 0),
+        grossTotal,
+        saleTransaction,
+        cardMovement);
   }
 
   /** One card payment's amount, references, acquirer data, and receipts. */
@@ -2068,36 +2238,51 @@ public final class PaymentOrchestrator {
         }
         return total;
       } catch (RuntimeException callbackFailure) {
-        SessionError error =
-            new SessionError(
-                SessionErrorCode.UNKNOWN,
-                "unexpected error in " + step + " handler: " + callbackFailure,
-                null,
-                callbackFailure);
-        SettlementFailure context =
-            SettlementFailure.builder()
-                .step(step)
-                .error(error)
-                .amountDue(suggested)
-                .committedMovements(movements)
-                .outcomeCertainty(SettlementFailure.OutcomeCertainty.DEFINITIVE)
-                .build();
-        SettlementRecovery recovery = consultRecovery(request, committed, context);
-        if (recovery == null || recovery.getAction() == SettlementRecovery.Action.ABORT) {
-          throw abort(request, committed, error);
-        }
-        if (recovery.getAction() == SettlementRecovery.Action.ABANDON) {
-          throw abandon(request, context, movements, suggested);
-        }
-        if (recovery.getAction() == SettlementRecovery.Action.RETRY) {
-          continue;
-        }
-        throw invalidRecovery(
-            request,
-            committed,
-            step,
-            "a committed step handler can only be retried, aborted, or abandoned");
+        recoverHandlerFailure(
+            request, committed, movements, step, step + " handler", suggested, callbackFailure);
       }
+    }
+  }
+
+  /**
+   * Reports a register handler that threw after its step committed to {@code onError}. Returns when
+   * the register retries the handler; aborts, abandons, or refuses any other recovery by throwing.
+   */
+  private void recoverHandlerFailure(
+      Request request,
+      List<Commit> committed,
+      List<SettlementMovement> movements,
+      SettlementStep step,
+      String handler,
+      BigDecimal amountDue,
+      RuntimeException callbackFailure) {
+    SessionError error =
+        new SessionError(
+            SessionErrorCode.UNKNOWN,
+            "unexpected error in " + handler + ": " + callbackFailure,
+            null,
+            callbackFailure);
+    SettlementFailure context =
+        SettlementFailure.builder()
+            .step(step)
+            .error(error)
+            .amountDue(amountDue)
+            .committedMovements(movements)
+            .outcomeCertainty(SettlementFailure.OutcomeCertainty.DEFINITIVE)
+            .build();
+    SettlementRecovery recovery = consultRecovery(request, committed, context);
+    if (recovery == null || recovery.getAction() == SettlementRecovery.Action.ABORT) {
+      throw abort(request, committed, error);
+    }
+    if (recovery.getAction() == SettlementRecovery.Action.ABANDON) {
+      throw abandon(request, context, movements, amountDue);
+    }
+    if (recovery.getAction() != SettlementRecovery.Action.RETRY) {
+      throw invalidRecovery(
+          request,
+          committed,
+          step,
+          "a committed step handler can only be retried, aborted, or abandoned");
     }
   }
 
