@@ -9,23 +9,33 @@ import {
   type VasData,
   type Money,
   type Operation,
-  type Receipt,
+  type PartialApprovalDecision,
+  type PartialCardApproval,
   type Reward,
   type SettlementFailure,
+  type SettlementMovement,
   type SettlementRecovery,
   type SettlementRecoveryAction,
   type SettlementResult,
   type ShopperSession,
+  type StepInfo,
   type StoredValueCard,
+  type TenderMovement,
   type TerminalShopperSession,
 } from '@biltorg/pos-sdk';
 import type { LocalBridgeOptions } from '@biltorg/pos-sdk/bridge';
 import { isCustomSku, nextCustomSku, customItem, toBasketItem, type Product } from '../catalog';
 import { storedValueCard, GIFT_CARD_SKU } from '../gift-cards';
+import { cardReceipts, receiptText, toCardPaymentUi } from './card-payments';
 import type { LineLog } from '../log';
 import { describeError, SESSION_EVENT_TYPES, summarize } from '../log';
 import { cents, formatMinor, money, recomputeTotal } from '../money';
-import { originalSaleRecord, toSaleRecord, type RefundRecord } from '../store/sale-record';
+import {
+  cardLegs,
+  originalSaleRecord,
+  toSaleRecord,
+  type RefundRecord,
+} from '../store/sale-record';
 import { defaultReversalDecision, reversalProgress } from '../store/reversals';
 import type { SaleStore } from '../store/sales-store';
 import {
@@ -39,10 +49,13 @@ import {
   type PendingReturn,
 } from './returns';
 import {
+  DEFAULT_CARD_OPTIONS,
   INITIAL_STATE,
   RECOVERY_ACTIONS,
   memberHeadline,
   type BasketLine,
+  cardLine,
+  type CardOptions,
   type EmulatorController,
   type EmulatorState,
   type LoyaltyOptions,
@@ -52,9 +65,13 @@ import {
   type MemberRewardUi,
   type VasUi,
   vasLines,
+  type OutcomeReceipt,
   type PaymentOutcome,
+  type PartialApprovalAction,
   type PaymentRecoveryAction,
   type StoredValueOptions,
+  partialApprovalActions,
+  partialApprovalChoice,
 } from './state';
 
 /** What the controller needs to know about the lane; the Settings fields of the connection card. */
@@ -89,9 +106,48 @@ function truncate(text: string): string {
   return text.length > MAX_BODY ? `${text.slice(0, MAX_BODY)}… (${text.length} chars)` : text;
 }
 
-function receiptText(customer?: Receipt, merchant?: Receipt): string | undefined {
-  const receipt = customer ?? merchant;
-  return receipt?.plainText ?? receipt?.html;
+/** The charge-side steps whose movement stands until a reversal notice names it. */
+const STANDING_STEPS: ReadonlySet<SettlementMovement['step']> = new Set([
+  'REBATE_REDEMPTION',
+  'POINT_REDEMPTION',
+  'STORED_VALUE_CHARGE',
+  'CARD_CHARGE',
+  'STORED_VALUE_LOAD',
+  'AWARD',
+]);
+
+const STANDING_LABELS: Readonly<Partial<Record<SettlementMovement['step'], string>>> = {
+  CARD_CHARGE: 'card payment',
+  STORED_VALUE_CHARGE: 'gift card charge',
+  STORED_VALUE_LOAD: 'gift card load',
+  REBATE_REDEMPTION: 'rebate redemption',
+  POINT_REDEMPTION: 'points redemption',
+  AWARD: 'points award',
+};
+
+/** What names a movement: its POI transaction, else the request it was sent with. */
+function movementKey(movement: SettlementMovement): string {
+  return movement.poiTransactionId ?? movement.serviceId ?? `${movement.step}:${movement.amount}`;
+}
+
+/** `card payment $60.00 (txn POI-C1)`, one standing charge. */
+function standingLine(movement: SettlementMovement): string {
+  const txn = movement.poiTransactionId ?? movement.serviceId;
+  return `${STANDING_LABELS[movement.step] ?? movement.step} $${movement.amount} (txn ${txn ?? '?'})`;
+}
+
+function bullets(lines: readonly string[]): string {
+  return lines.map((line) => `• ${line}`).join('\n');
+}
+
+/** The warning of an aborted or failed settlement whose rollback left charges standing. */
+function rollbackWarning(lines: readonly string[]): string {
+  return `WARNING: the rollback was incomplete; these charges may still stand:\n${bullets(lines)}\nReconcile them manually before settling again.`;
+}
+
+/** The warning of a cancelled sale whose rollback left charges standing. */
+function cancelWarning(lines: readonly string[]): string {
+  return `WARNING: the sale was cancelled but these charges could not be reversed and may still stand:\n${bullets(lines)}\nReconcile them manually before settling again.`;
 }
 
 function isTerminal(session: ShopperSession | null): session is TerminalShopperSession {
@@ -209,6 +265,9 @@ export class BrowserEmulatorController implements EmulatorController {
   private refundSession: TerminalShopperSession | null = null;
   private refundAbortRequested = false;
   private resolveRecovery: ((action: PaymentRecoveryAction) => void) | null = null;
+  /** True once the cashier chose Cancel sale in the partial-approval dialog of this settlement. */
+  private saleCancelled = false;
+  private resolvePartialApproval: ((action: PartialApprovalAction) => void) | null = null;
   private unsubscribeSales: (() => void) | null = null;
   /** Serializes the keypad's basket edits, so keystrokes land in the order they were typed. */
   private keypadQueue: Promise<unknown> = Promise.resolve();
@@ -385,6 +444,7 @@ export class BrowserEmulatorController implements EmulatorController {
     this.pos = null;
     this.detachSession();
     this.resolveRecovery?.('ABORT');
+    this.resolvePartialApproval?.('ABORT');
     this.pendingGiftCards = [];
     this.pendingReturns = [];
     this.operationClaimed = false;
@@ -398,6 +458,7 @@ export class BrowserEmulatorController implements EmulatorController {
       refundInProgress: false,
       paymentOutcome: null,
       paymentRecovery: null,
+      partialApproval: null,
     });
     this.checkoutCleared(null, false);
     if (session?.state === 'open') {
@@ -1141,12 +1202,41 @@ export class BrowserEmulatorController implements EmulatorController {
 
   // ---- settlement -------------------------------------------------------------------------
 
-  settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions | null, net: boolean): void {
+  settle(
+    loyalty: LoyaltyOptions,
+    storedValue: StoredValueOptions | null,
+    net: boolean,
+    cardOptions: CardOptions = DEFAULT_CARD_OPTIONS,
+  ): void {
     const session = this.terminalCheckout();
-    if (!session || !this.claim()) return;
+    if (!session) return;
+    let planned: string[];
+    try {
+      planned = cardOptions.plannedAmounts.map((amount, index) =>
+        money(requireMoney(amount, `Card ${index + 1} amount`, false)),
+      );
+    } catch (error) {
+      this.fail('Settlement not started', error);
+      return;
+    }
+    if (planned.length > 0 && loyalty.implicit) {
+      // the SDK refuses this combination when it builds the options; nothing is sent
+      this.log(
+        'Settlement not started: planned card payments cannot use implicit loyalty — clear Implicit Loyalty first',
+      );
+      return;
+    }
+    if (!this.claim()) return;
     const generation = this.generation;
     this.update({ paymentInProgress: true, paymentOutcome: null });
     let attempt: 'RUNNING' | 'FAILED' | 'SUCCEEDED' = 'RUNNING';
+    let cardPayments = 0;
+    this.saleCancelled = false;
+    // Charge-side movements reported committed and not since reported reversed: what an
+    // incomplete rollback leaves standing. An abandoned settlement does no rollback.
+    const standing = new Map<string, SettlementMovement>();
+    let abandoned = false;
+    let failureMessage: string | null = null;
     const card = storedValue ? storedValueCard(storedValue.cardNumber) : null;
     const giftCards = this.pendingGiftCards;
     const required = requiredRefundMinor(session.basket.current, net);
@@ -1158,6 +1248,10 @@ export class BrowserEmulatorController implements EmulatorController {
           ? 'loyalty implicit'
           : `rebates ${onOff(loyalty.rebates)}, redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}`) +
         (card ? `, gift card ${card.storedValueId ?? '(swipe on terminal)'}` : '') +
+        (planned.length
+          ? `, split card: ${planned.map((amount) => `$${amount}`).join(' + ')} then the remainder`
+          : '') +
+        `, partial approvals ${onOff(cardOptions.partialApprovals)}` +
         (giftCards.length ? `, ${giftCards.length} gift card purchase(s) to load` : '') +
         (returns.length
           ? `, ${returns.length} prior sale(s) returned ($${formatMinor(required)} to refund after netting)`
@@ -1188,6 +1282,7 @@ export class BrowserEmulatorController implements EmulatorController {
                   ),
                 },
             ...(allocations.length ? { refunds: allocations } : {}),
+            ...(planned.length ? { cardPayments: planned.map((amount) => ({ amount })) } : {}),
             ...(giftCards.length
               ? {
                   fulfillments: giftCards.map((gift) => ({
@@ -1229,23 +1324,47 @@ export class BrowserEmulatorController implements EmulatorController {
             },
             onStoredValueLoaded: (movement) =>
               this.log(`Gift card loaded: $${movement.amount} (txn ${movement.poiTransactionId})`),
+            onCardCharged: (movement) =>
+              this.log(
+                `Card payment ${++cardPayments} charged: $${movement.amount} (txn ${movement.poiTransactionId})`,
+              ),
+            // a card payment the SDK reversed (before a retry, or in an abort) is no longer one
+            onMovement: (movement) => {
+              if (movement.reversal) {
+                const reversed = movement.reversedMovement;
+                if (reversed) standing.delete(movementKey(reversed));
+              } else if (STANDING_STEPS.has(movement.step)) {
+                standing.set(movementKey(movement), movement);
+              }
+            },
+            onCardChargeReversed: (movement) => {
+              cardPayments = Math.max(0, cardPayments - 1);
+              this.log(
+                `Card payment reversed: $${movement.amount} (reversal txn ${movement.poiTransactionId ?? movement.serviceId ?? '?'}, reverses txn ${movement.reversedMovement?.poiTransactionId ?? '?'})`,
+              );
+            },
+            // Registered only with the toggle on: without a handler the SDK charges the
+            // shortfall on another card itself, up to its cap, and then fails the step into
+            // `onError`, the recovery dialog's path.
+            ...(cardOptions.partialApprovals
+              ? {
+                  onPartialCardApproval: (partial: PartialCardApproval, info: StepInfo) =>
+                    this.awaitPartialApproval(generation, partial, info.signal),
+                }
+              : {}),
             onError: async (failure, info) => {
               this.log(`Settlement failed: ${failure.error.code} — ${failure.error.message}`);
               const recovery = await this.awaitPaymentRecovery(generation, failure, info.signal);
               if (recovery === 'ABORT') {
+                // the popup waits for the unwind, so it can say what it left standing
                 attempt = 'FAILED';
-                if (generation === this.generation) {
-                  this.outcome({
-                    success: false,
-                    title: 'Settlement failed',
-                    message: `${failure.error.code}\n${failure.error.message}`,
-                  });
-                }
+                failureMessage = `${failure.error.code}\n${failure.error.message}`;
               }
               return recovery;
             },
             onAbandoned: (record) => {
               attempt = 'FAILED';
+              abandoned = true;
               const message = `No rollback was performed. Reconcile these movements manually before settling again.\n\n${this.failureDetails(record.failure)}`;
               this.log(`Settlement abandoned: ${message}`);
               if (generation === this.generation) {
@@ -1278,21 +1397,54 @@ export class BrowserEmulatorController implements EmulatorController {
           });
         },
         (error: unknown) => {
-          if (generation !== this.generation) return;
-          if (attempt === 'RUNNING') {
-            if (error instanceof SessionError && error.code === 'ABORTED') {
+          if (generation !== this.generation || abandoned) return;
+          const lines = [...standing.values()].map(standingLine);
+          const warning = lines.length > 0 ? rollbackWarning(lines) : null;
+          if (this.saleCancelled) {
+            // the cashier's own Cancel sale: the SDK reversed every committed charge it could
+            if (lines.length > 0) {
               this.log(
-                'Settlement aborted; committed steps reversed — the basket is intact, Settle again to retry',
+                `Sale cancelled by the cashier: ${cancelWarning(lines).replace(/\n/g, ' ')}`,
               );
+              lines.forEach((line) => this.log(`Still standing: ${line}`));
+            } else {
+              this.log('Sale cancelled — every card payment was reversed; the basket is intact');
+            }
+            this.outcome({
+              success: false,
+              title: 'Sale cancelled',
+              message:
+                lines.length > 0
+                  ? cancelWarning(lines)
+                  : 'Every card payment was reversed and the sale stopped. The basket is intact.',
+            });
+          } else if (attempt === 'FAILED') {
+            if (warning) this.log(warning.replace(/\n/g, ' '));
+            this.outcome({
+              success: false,
+              title: 'Settlement failed',
+              message: `${failureMessage ?? describeError(error)}${warning ? `\n\n${warning}` : ''}`,
+            });
+          } else if (attempt === 'RUNNING') {
+            if (error instanceof SessionError && error.code === 'ABORTED') {
+              if (warning) {
+                this.log(warning.replace(/\n/g, ' '));
+                this.outcome({ success: false, title: 'Settlement aborted', message: warning });
+              } else {
+                this.log(
+                  'Settlement aborted; committed steps reversed — the basket is intact, Settle again to retry',
+                );
+              }
             } else {
               this.fail('Settlement failed', error);
               this.outcome({
                 success: false,
                 title: 'Settlement failed',
-                message:
+                message: `${
                   error instanceof SessionError
                     ? `${error.code}\n${error.message}`
-                    : describeError(error),
+                    : describeError(error)
+                }${warning ? `\n\n${warning}` : ''}`,
               });
             }
           }
@@ -1340,6 +1492,11 @@ export class BrowserEmulatorController implements EmulatorController {
     }
     const step = failure.step;
     const definitive = failure.outcomeCertainty === 'DEFINITIVE';
+    // planned cards that reach the total are refused before any card is charged: only a
+    // different plan (Abort, then Settle again) helps
+    if (failure.error.code === 'CARD_PAYMENTS_EXCEED_TOTAL') {
+      return this.holdRecovery(step, ['ABORT', 'ABANDON'], failure, signal);
+    }
     const actions: PaymentRecoveryAction[] = ['RETRY'];
     if (
       definitive &&
@@ -1352,6 +1509,16 @@ export class BrowserEmulatorController implements EmulatorController {
     }
     if (definitive && step === 'CARD_CHARGE' && cents(failure.amountDue) > 0) actions.push('CASH');
     actions.push('ABORT', 'ABANDON');
+    return this.holdRecovery(step, actions, failure, signal);
+  }
+
+  /** Opens the recovery dialog with exactly `actions` and resolves with the cashier's choice. */
+  private holdRecovery(
+    step: string,
+    actions: readonly PaymentRecoveryAction[],
+    failure: SettlementFailure,
+    signal: AbortSignal,
+  ): Promise<SettlementRecovery | SettlementRecoveryAction> {
     return new Promise((resolve) => {
       const choose = (action: PaymentRecoveryAction) => {
         if (this.resolveRecovery !== choose || !actions.includes(action)) return;
@@ -1377,6 +1544,63 @@ export class BrowserEmulatorController implements EmulatorController {
       signal.addEventListener('abort', onDeadline, { once: true });
       this.update({
         paymentRecovery: { message: this.failureDetails(failure), actions, choose },
+      });
+    });
+  }
+
+  /**
+   * Holds the settlement's partial-approval step open on the partial-approval dialog: Another
+   * card and Rest in cash always, Add to next card while a planned card payment is left, and
+   * Cancel sale. The host's deadline answers Cancel sale.
+   */
+  private awaitPartialApproval(
+    generation: number,
+    partial: PartialCardApproval,
+    signal: AbortSignal,
+  ): Promise<PartialApprovalDecision> {
+    this.log(
+      `Partial approval: card approved $${partial.approved} of $${partial.requested}, $${partial.amountDue} still due`,
+    );
+    if (generation !== this.generation) return Promise.resolve({ action: 'ABORT' });
+    // amountDue is the shortfall plus every card payment still to come
+    const plannedLeft = cents(partial.amountDue) > cents(partial.shortfall);
+    const actions = partialApprovalActions(plannedLeft);
+    return new Promise((resolve) => {
+      const choose = (action: PartialApprovalAction) => {
+        if (this.resolvePartialApproval !== choose || !actions.includes(action)) return;
+        this.resolvePartialApproval = null;
+        signal.removeEventListener('abort', onDeadline);
+        this.update({ partialApproval: null });
+        if (action === 'ABORT') this.saleCancelled = true;
+        this.log(
+          `Cashier chose ${partialApprovalChoice(action, partial).label} for the partial approval`,
+        );
+        resolve(
+          action === 'EXTERNAL'
+            ? {
+                action,
+                externalPayment: { tenderType: 'CASH', amount: partial.amountDue },
+              }
+            : { action },
+        );
+      };
+      const onDeadline = () => {
+        if (this.resolvePartialApproval !== choose) return;
+        this.log('Partial approval deadline passed — the host applies Cancel sale');
+        choose('ABORT');
+      };
+      this.resolvePartialApproval = choose;
+      signal.addEventListener('abort', onDeadline, { once: true });
+      this.update({
+        partialApproval: {
+          approved: partial.approved,
+          requested: partial.requested,
+          shortfall: partial.shortfall,
+          amountDue: partial.amountDue,
+          plannedLeft,
+          actions,
+          choose,
+        },
       });
     });
   }
@@ -1430,45 +1654,71 @@ export class BrowserEmulatorController implements EmulatorController {
   private publishPaymentResult(result: SettlementResult, returnParts: readonly string[]): void {
     this.publishBasket(result.finalBasket);
     const positive = (value: Money) => cents(value) > 0;
-    const parts = [
-      ...returnParts,
-      positive(result.externalPaymentAmount)
-        ? `cash $${result.externalPaymentAmount} (register-managed; refund manually)`
-        : null,
-      positive(result.cardAmountCharged)
-        ? `card $${result.cardAmountCharged}${result.paymentBrand ? ` (${result.paymentBrand})` : ''}`
-        : null,
-      positive(result.storedValueAmountUsed) ? `gift card $${result.storedValueAmountUsed}` : null,
-      positive(result.storedValueLoadedAmount)
-        ? `gift card loaded $${result.storedValueLoadedAmount}`
-        : null,
-      positive(result.totalRebateAmount) ? `rebates −$${result.totalRebateAmount}` : null,
-      result.pointsRedeemed > 0
-        ? `${result.pointsRedeemed} pts −$${result.pointsMonetaryValue}`
-        : null,
-      result.totalPointsEarned > 0
-        ? `earned ${result.totalPointsEarned} pts (balance ${result.pointsBalance})`
-        : null,
-    ].filter((part): part is string => part !== null);
+    const cardUi = (result.cardPayments ?? []).map(toCardPaymentUi);
+    const split = cardUi.length > 1;
+    // A split sale lists one line per card payment; a single payment keeps the short form. An
+    // older host reports only the single-payment fields.
+    const brand = result.paymentBrand ? ` (${result.paymentBrand})` : '';
+    const cardLines = split
+      ? cardUi.map((card, index) => cardLine(index, card))
+      : positive(result.cardAmountCharged)
+        ? [`card $${result.cardAmountCharged}${brand}`]
+        : [];
+    const cardSummary = split
+      ? `${cardUi.length} cards ${cardUi.map((card) => `$${card.amount}`).join(' + ')}`
+      : positive(result.cardAmountCharged)
+        ? `card $${result.cardAmountCharged}${brand}`
+        : null;
+    const otherParts = (card: readonly (string | null)[]) =>
+      [
+        ...returnParts,
+        positive(result.externalPaymentAmount)
+          ? `cash $${result.externalPaymentAmount} (register-managed; refund manually)`
+          : null,
+        ...card,
+        positive(result.storedValueAmountUsed)
+          ? `gift card $${result.storedValueAmountUsed}`
+          : null,
+        positive(result.storedValueLoadedAmount)
+          ? `gift card loaded $${result.storedValueLoadedAmount}`
+          : null,
+        positive(result.totalRebateAmount) ? `rebates −$${result.totalRebateAmount}` : null,
+        result.pointsRedeemed > 0
+          ? `${result.pointsRedeemed} pts −$${result.pointsMonetaryValue}`
+          : null,
+        result.totalPointsEarned > 0
+          ? `earned ${result.totalPointsEarned} pts (balance ${result.pointsBalance})`
+          : null,
+      ].filter((part): part is string => part !== null);
+    const parts = otherParts([cardSummary]);
     const authorized = money(cents(result.authorizedAmount));
     const summary = `Settled $${authorized}${parts.length ? ` — ${parts.join(', ')}` : ''}`;
     const popup = [
       `Settled $${authorized}`,
-      ...parts,
+      ...otherParts(cardLines),
       ...result.promotionMessages,
       ...result.warnings.map((warning) => `Warning: ${warning}`),
     ].join('\n');
-    const receipt = receiptText(result.customerReceipt, result.merchantReceipt);
+    // every card payment's receipt; the settlement's own when no card payment printed one (a
+    // gift-card-only sale, or a card response without a receipt)
+    const cardReceiptList = cardReceipts(result.cardPayments ?? []);
+    const receipts: OutcomeReceipt[] =
+      cardReceiptList.length > 0
+        ? cardReceiptList
+        : [receiptText(result.customerReceipt, result.merchantReceipt)].flatMap((text) =>
+            text === undefined ? [] : [{ text }],
+          );
     this.update({
       lastPayment: summary,
       paymentOutcome: {
         success: true,
         title: 'Settlement complete',
         message: popup,
-        ...(receipt ? { receipt } : {}),
+        ...(receipts.length > 0 ? { receipts } : {}),
       },
     });
     this.log(summary);
+    if (split) cardLines.forEach((line) => this.log(line));
     result.promotionMessages.forEach((message) => this.log(`Promo: ${message}`));
     result.warnings.forEach((warning) => this.log(`Warning: ${warning}`));
   }
@@ -1502,7 +1752,11 @@ export class BrowserEmulatorController implements EmulatorController {
     );
   }
 
-  addReturnToBasket(saleId: string, skus: ReadonlySet<string>): void {
+  addReturnToBasket(
+    saleId: string,
+    skus: ReadonlySet<string>,
+    cardPoiTransactionId?: string,
+  ): void {
     const session = this.checkout();
     if (!session || !this.claim()) return;
     const generation = this.generation;
@@ -1515,7 +1769,12 @@ export class BrowserEmulatorController implements EmulatorController {
           this.log(`Sale ${saleId} is not in the store`);
           return;
         }
-        const plan = planReturn(stored, skus, (sku) => this.pendingQuantity(saleId, sku));
+        const plan = planReturn(
+          stored,
+          skus,
+          (sku) => this.pendingQuantity(saleId, sku),
+          cardPoiTransactionId,
+        );
         if ('error' in plan) {
           this.log(plan.error);
           return;
@@ -1537,7 +1796,11 @@ export class BrowserEmulatorController implements EmulatorController {
           `Return rung in: ${plan.pending.items
             .map((item) => `${item.quantity}× ${item.description}`)
             .join(', ')} — restores to the ${
-            plan.pending.leg.type === 'STORED_VALUE' ? 'gift card' : 'card'
+            plan.pending.leg.type === 'STORED_VALUE'
+              ? 'gift card'
+              : plan.cardCount > 1
+                ? `card ${plan.cardNumber}`
+                : 'card'
           } on settlement`,
         );
       })
@@ -1654,14 +1917,46 @@ export class BrowserEmulatorController implements EmulatorController {
             ? null
             : 'WARNING: the refund could NOT be recorded — the sale will still offer what was just refunded; refunding it again would return the money twice',
         ].filter((part): part is string => part !== null);
+        // Several tender legs (card payments, a gift card): one line and one receipt per leg;
+        // a single leg keeps the result's own receipt.
+        const legs = [...(result.cardReversals ?? [])];
+        if (result.storedValueReversal) legs.push(result.storedValueReversal);
+        const several = legs.length > 1;
+        const cardIds = cardLegs(sale).map((leg) => leg.poiTransactionId);
+        const labelOf = (leg: TenderMovement): string =>
+          leg.tenderType === 'STORED_VALUE'
+            ? 'Gift card'
+            : cardIds.length > 1 && leg.originalPoiTransactionId !== undefined
+              ? `Card ${cardIds.indexOf(leg.originalPoiTransactionId) + 1}`
+              : 'Card';
+        const legLines = several
+          ? legs.map(
+              (leg) =>
+                `${labelOf(leg)} reversed${leg.amount === undefined ? '' : ` $${leg.amount}`} (txn ${
+                  leg.poiTransactionId ?? leg.serviceId ?? '?'
+                })`,
+            )
+          : [];
+        const logged = [parts[0], ...legLines, ...parts.slice(1)].filter(
+          (part): part is string => part !== undefined,
+        );
         this.log(parts.join(', '));
+        legLines.forEach((line) => this.log(line));
         if (generation === this.generation) {
+          const receipts: OutcomeReceipt[] = several
+            ? legs.flatMap((leg) => {
+                const text = receiptText(leg.customerReceipt, leg.merchantReceipt);
+                return text === undefined
+                  ? []
+                  : [{ caption: `${labelOf(leg)} reversal receipt`, text }];
+              })
+            : [];
           const receipt = receiptText(result.customerReceipt, result.merchantReceipt);
           this.outcome({
             success: true,
             title: hasCash ? 'Terminal refund complete' : 'Refund complete',
-            message: parts.join('\n'),
-            ...(receipt ? { receipt } : {}),
+            message: logged.join('\n'),
+            ...(several ? (receipts.length > 0 ? { receipts } : {}) : receipt ? { receipt } : {}),
           });
         }
       } catch (error) {
@@ -1699,6 +1994,10 @@ export class BrowserEmulatorController implements EmulatorController {
   }
 
   abort(): void {
+    if (this.state.partialApproval) {
+      this.state.partialApproval.choose('ABORT');
+      return;
+    }
     if (this.state.paymentRecovery) {
       this.state.paymentRecovery.choose('ABORT');
       return;

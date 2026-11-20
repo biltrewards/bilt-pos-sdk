@@ -7,6 +7,7 @@ import type {
 } from '@biltorg/pos-sdk';
 import { cents, formatMinor, money } from '../money';
 import {
+  cardLegs,
   isFullyRefunded,
   isPartiallyRefunded,
   legOf,
@@ -19,7 +20,7 @@ import {
   type StoredSale,
   type TransactionLeg,
 } from '../store/sale-record';
-import type { StoredSaleUi } from './state';
+import type { SaleCardUi, StoredSaleUi } from './state';
 
 /**
  * Item-based returns and full refunds of stored sales, the desktop controller's
@@ -67,19 +68,27 @@ export function returnLine(item: SaleItem): BasketItem {
 }
 
 export type ReturnPlan =
-  | { readonly pending: PendingReturn; readonly notes: readonly string[] }
+  | {
+      readonly pending: PendingReturn;
+      readonly notes: readonly string[];
+      /** Which card payment of the sale the return restores to (1-based), of how many it has. */
+      readonly cardNumber: number;
+      readonly cardCount: number;
+    }
   | { readonly error: string };
 
 /**
  * Plans an item return of the selected `skus` of a stored sale, as the desktop's
  * `addReturnToBasket` does: refused for a voided or refunded sale, a sale with a gift-card
  * purchase, or one without a tender leg; each line capped at what earlier refunds and returns
- * already in the basket (`pendingQuantity`) have not consumed.
+ * already in the basket (`pendingQuantity`) have not consumed. A sale with several card payments
+ * restores to the one named by `cardPoiTransactionId`, else the first still standing.
  */
 export function planReturn(
   stored: StoredSale,
   skus: ReadonlySet<string>,
   pendingQuantity: (sku: string) => number,
+  cardPoiTransactionId?: string,
 ): ReturnPlan {
   if (stored.voided) return { error: 'The sale was voided — nothing left to refund' };
   if (isFullyRefunded(stored)) {
@@ -98,8 +107,25 @@ export function planReturn(
       error: 'The sale has no tender leg (rewards covered everything) — use the full refund',
     };
   }
-  const outstanding = legs.filter((leg) => !legRefunded(stored, leg.type));
-  const leg = outstanding.find((candidate) => candidate.type === 'CARD') ?? outstanding[0];
+  const outstanding = legs.filter((leg) => !legRefunded(stored, leg));
+  const chosen =
+    cardPoiTransactionId === undefined
+      ? undefined
+      : outstanding.find(
+          (candidate) =>
+            candidate.type === 'CARD' && candidate.poiTransactionId === cardPoiTransactionId,
+        );
+  if (cardPoiTransactionId !== undefined && !chosen) {
+    return { error: 'That card payment was already refunded in full — pick another card' };
+  }
+  // by default the first card still holding something: one drawn down to nothing would send
+  // the whole return to the register
+  const outstandingCards = outstanding.filter((candidate) => candidate.type === 'CARD');
+  const leg =
+    chosen ??
+    outstandingCards.find((card) => remainingLegAmount(stored, card) !== '0.00') ??
+    outstandingCards[0] ??
+    outstanding[0];
   if (!leg) {
     return {
       error: 'Every tender leg was already refunded in full — nothing left to draw from',
@@ -122,9 +148,12 @@ export function planReturn(
       return [];
     });
   if (items.length === 0) return { error: 'Nothing left to return among the selected items' };
-  const capacity = remainingLegAmount(stored, leg.type);
+  const capacity = remainingLegAmount(stored, leg);
+  const cards = cardLegs(sale);
   return {
     notes,
+    cardNumber: cards.indexOf(leg) + 1,
+    cardCount: cards.length,
     pending: {
       saleId: sale.id,
       leg,
@@ -173,9 +202,11 @@ export function planAllocations(
   pending: readonly PendingReturn[],
   requiredMinor: number,
 ): { readonly returns: readonly PlannedReturn[]; readonly allocations: RefundAllocation[] } {
+  // One share per sale and card: returns to two cards of a split sale are refunded separately.
   const groups = new Map<string, PendingReturn[]>();
   for (const entry of pending) {
-    groups.set(entry.saleId, [...(groups.get(entry.saleId) ?? []), entry]);
+    const key = `${entry.saleId}|${entry.leg.poiTransactionId}`;
+    groups.set(key, [...(groups.get(key) ?? []), entry]);
   }
   let unallocated = requiredMinor;
   const returns: PlannedReturn[] = [];
@@ -262,7 +293,13 @@ export function settledReturns(
         ? {}
         : { poiTimestamp: movement.poiTransactionTimestamp }),
       full: false,
-      ...(refunded ? { leg: planned.leg.type, tenderAmount: money(planned.allocatedMinor) } : {}),
+      ...(refunded
+        ? {
+            leg: planned.leg.type,
+            legPoiTransactionId: planned.leg.poiTransactionId,
+            tenderAmount: money(planned.allocatedMinor),
+          }
+        : {}),
       awardReversed: false,
       reversalProgress: false,
       items: planned.items.map((item) => ({ sku: item.sku, quantity: item.quantity })),
@@ -330,6 +367,20 @@ export function toStoredSaleUi(
       };
     }),
     hasGiftCardPurchase: sale.giftCardLoads.length > 0,
+    cardPayments: cardLegs(sale).map((card): SaleCardUi => {
+      const refunded = legRefunded(stored, card);
+      const remaining = remainingLegAmount(stored, card);
+      return {
+        poiTransactionId: card.poiTransactionId,
+        ...(card.amount === undefined ? {} : { amount: card.amount }),
+        ...(card.brand === undefined ? {} : { brand: card.brand }),
+        ...(card.lastDigits === undefined ? {} : { lastDigits: card.lastDigits }),
+        ...(card.approvalCode === undefined ? {} : { approvalCode: card.approvalCode }),
+        partial: card.partial === true,
+        refunded,
+        remainingMinor: refunded ? 0 : remaining === undefined ? null : cents(remaining),
+      };
+    }),
     refunded: stored.refunds.length > 0,
     fullyRefunded,
     voided,

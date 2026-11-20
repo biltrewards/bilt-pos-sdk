@@ -32,6 +32,96 @@ export const RECOVERY_ACTIONS: Readonly<
   },
 };
 
+/** What the cashier can do when a card approves less than it was asked for. */
+export type PartialApprovalAction = 'ANOTHER_CARD' | 'ADD_TO_NEXT' | 'EXTERNAL' | 'ABORT';
+
+/** One card payment of a settlement, as the partial-approval dialog and the outcome list it. */
+export interface CardPaymentUi {
+  readonly amount: Money;
+  readonly brand?: string;
+  /** The last four digits of the masked card number, when the terminal reported it. */
+  readonly lastDigits?: string;
+  readonly approvalCode?: string;
+  readonly poiTransactionId?: string;
+  /** True when the terminal approved less than this payment asked for. */
+  readonly partial: boolean;
+}
+
+/**
+ * One line per card payment, `Card 1 $60.00 · Visa ····1111 · approval APPR-1 · partial`: the
+ * outcome popup, the event log and the Refund tab all word a card payment this way.
+ */
+export function cardLine(
+  index: number,
+  card: {
+    readonly amount?: Money | undefined;
+    readonly brand?: string | undefined;
+    readonly lastDigits?: string | undefined;
+    readonly approvalCode?: string | undefined;
+    readonly partial: boolean;
+  },
+): string {
+  return [
+    `Card ${index + 1}${card.amount === undefined ? '' : ` $${card.amount}`}`,
+    [card.brand, card.lastDigits ? `····${card.lastDigits}` : null].filter(Boolean).join(' '),
+    card.approvalCode ? `approval ${card.approvalCode}` : null,
+    card.partial ? 'partial' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/**
+ * A card approved less than it was asked for and the host waits for the cashier: the amounts the
+ * `PartialApprovalDialog` shows and the actions it offers. `plannedLeft` is true when a planned
+ * card payment is still to come, which is when Add to next card applies.
+ */
+export interface PartialApprovalPrompt {
+  readonly approved: Money;
+  readonly requested: Money;
+  readonly shortfall: Money;
+  /** Everything the card phase still owes: the shortfall plus the card payments still to come. */
+  readonly amountDue: Money;
+  readonly plannedLeft: boolean;
+  readonly actions: readonly PartialApprovalAction[];
+  choose(action: PartialApprovalAction): void;
+}
+
+export function partialApprovalActions(plannedLeft: boolean): readonly PartialApprovalAction[] {
+  return plannedLeft
+    ? ['ANOTHER_CARD', 'ADD_TO_NEXT', 'EXTERNAL', 'ABORT']
+    : ['ANOTHER_CARD', 'EXTERNAL', 'ABORT'];
+}
+
+/** The button text and one-line description of a partial-approval choice, from the prompt's amounts. */
+export function partialApprovalChoice(
+  action: PartialApprovalAction,
+  prompt: Pick<PartialApprovalPrompt, 'shortfall' | 'amountDue'>,
+): { readonly label: string; readonly description: string } {
+  switch (action) {
+    case 'ANOTHER_CARD':
+      return {
+        label: `Another card ($${prompt.shortfall})`,
+        description: `Charge the $${prompt.shortfall} shortfall on another card, then continue the sale.`,
+      };
+    case 'ADD_TO_NEXT':
+      return {
+        label: 'Add to next card',
+        description: `Add the $${prompt.shortfall} shortfall to the next planned card payment.`,
+      };
+    case 'EXTERNAL':
+      return {
+        label: `Rest in cash ($${prompt.amountDue})`,
+        description: `Record $${prompt.amountDue} as cash and keep the card payments. Choose only after collecting it.`,
+      };
+    case 'ABORT':
+      return {
+        label: 'Cancel sale',
+        description: 'Reverse every card payment and stop the sale.',
+      };
+  }
+}
+
 export interface PaymentRecoveryPrompt {
   readonly message: string;
   readonly actions: readonly PaymentRecoveryAction[];
@@ -63,12 +153,20 @@ export interface BasketLine {
   readonly giftCard: boolean;
 }
 
+/** One receipt of an outcome; `caption` names the card payment it belongs to, when there are several. */
+export interface OutcomeReceipt {
+  readonly caption?: string;
+  readonly text: string;
+}
+
 /** The last settlement, refund or stored-value operation, shown as a popup until dismissed. */
 export interface PaymentOutcome {
   readonly success: boolean;
   readonly title: string;
   readonly message: string;
   readonly receipt?: string;
+  /** A settlement's card receipts, one per card payment in order; replaces `receipt` when set. */
+  readonly receipts?: readonly OutcomeReceipt[];
 }
 
 /** Which loyalty steps the next settlement runs. */
@@ -79,6 +177,19 @@ export interface LoyaltyOptions {
   readonly redemption: boolean;
   readonly award: boolean;
 }
+
+/**
+ * How the card amount is charged. `plannedAmounts` are the fixed card payments of a split sale,
+ * each on its own card, with the remainder on one more; none means one card payment for the
+ * whole amount. With `partialApprovals` on, a card that approves less asks the cashier what to
+ * do; off, the short approval fails the step into the recovery dialog.
+ */
+export interface CardOptions {
+  readonly plannedAmounts: readonly string[];
+  readonly partialApprovals: boolean;
+}
+
+export const DEFAULT_CARD_OPTIONS: CardOptions = { plannedAmounts: [], partialApprovals: true };
 
 /** A gift card tender, charged first; blank card number means the terminal reads it. */
 export interface StoredValueOptions {
@@ -222,6 +333,20 @@ export function refundLabel(item: SaleItemUi): string {
   return `$${formatMinor(item.refundMinor)}`;
 }
 
+/** One card payment of a stored sale, as the Refund tab lists it and its return picker offers it. */
+export interface SaleCardUi {
+  readonly poiTransactionId: string;
+  readonly amount?: Money;
+  readonly brand?: string;
+  readonly lastDigits?: string;
+  readonly approvalCode?: string;
+  readonly partial: boolean;
+  /** True once a full refund or void reversed this payment. */
+  readonly refunded: boolean;
+  /** What the payment can still return, in cents; `null` when unknown. */
+  readonly remainingMinor: number | null;
+}
+
 /** A completed sale as the Refund tab lists it. */
 export interface StoredSaleUi {
   readonly id: string;
@@ -230,6 +355,8 @@ export interface StoredSaleUi {
   readonly memberId: string | null;
   readonly items: readonly SaleItemUi[];
   readonly hasGiftCardPurchase: boolean;
+  /** Every card payment the sale made, in order. */
+  readonly cardPayments: readonly SaleCardUi[];
   readonly refunded: boolean;
   readonly fullyRefunded: boolean;
   readonly voided: boolean;
@@ -285,6 +412,7 @@ export interface EmulatorState {
   readonly lastPayment: string | null;
   readonly paymentOutcome: PaymentOutcome | null;
   readonly paymentRecovery: PaymentRecoveryPrompt | null;
+  readonly partialApproval: PartialApprovalPrompt | null;
   readonly acquiredCard: AcquiredCard | null;
   readonly member: MemberIdentity | null;
   readonly sales: readonly StoredSaleUi[];
@@ -305,6 +433,7 @@ export const INITIAL_STATE: EmulatorState = {
   lastPayment: null,
   paymentOutcome: null,
   paymentRecovery: null,
+  partialApproval: null,
   acquiredCard: null,
   member: null,
   sales: [],
@@ -350,7 +479,12 @@ export interface EmulatorController {
   activateStoredValue(cardNumber: string): void;
   applyCredit(itemId: string, amount: string, label: string): void;
   applyDiscount(itemId: string, amount: string, label: string): void;
-  settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions | null, net: boolean): void;
+  settle(
+    loyalty: LoyaltyOptions,
+    storedValue: StoredValueOptions | null,
+    net: boolean,
+    card?: CardOptions,
+  ): void;
   identifyMember(): void;
   /**
    * Identifies the member from a value the register supplies, with no terminal prompt. A phone,
@@ -361,7 +495,12 @@ export interface EmulatorController {
   identifyMemberBy(kind: MemberLookupKind, value: string): void;
   acquireCard(): void;
   refundSale(saleId: string): void;
-  addReturnToBasket(saleId: string, skus: ReadonlySet<string>): void;
+  /**
+   * Rings the selected lines of a stored sale into the basket as returns. `cardPoiTransactionId`
+   * picks which card payment of a split sale the refund goes back to; the first card payment
+   * still standing when absent.
+   */
+  addReturnToBasket(saleId: string, skus: ReadonlySet<string>, cardPoiTransactionId?: string): void;
   clearBasket(): void;
   abort(): void;
   dismissPaymentOutcome(): void;

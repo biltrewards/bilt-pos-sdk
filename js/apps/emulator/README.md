@@ -87,15 +87,26 @@ Abort).
 - **Sale**: the Products grid, and the Keypad for an amount the catalog does not carry (✓ rings it;
   tap a custom basket line to re-price it as you type; ✓ at zero drops it).
 - **Basket**: per-line **Discount** (replaces the line's register discount; 0 clears) and
-  **Credit** (a credit line tied to the sale line), then Rebates, Redemption, Award, Gift card and
-  Net settlement, and **Settle**. A failed charge-side step opens the recovery dialog with the
-  desktop's choices; the outcome popup carries the summary and the terminal's receipt.
+  **Credit** (a credit line tied to the sale line), then Rebates, Redemption, Award, Gift card,
+  Split card, Partial approvals and Net settlement, and **Settle**. A failed charge-side step opens
+  the recovery dialog with the desktop's choices; the outcome popup carries the summary, one line
+  per card payment and each card payment's receipt.
+- **Split card** (disabled while Implicit Loyalty is on, because the SDK refuses planned card payments with implicit loyalty; checking Implicit Loyalty clears it) plans the card payments of a sale: **Card 1 $** … amount fields (**+ Add card**
+  adds one) become `cardPayments`, and the read-only last line, `Card N: remainder $X`, is what
+  the basket total leaves for the card that follows. **Partial approvals** (on by default)
+  registers `onPartialCardApproval`: a card that approves less than it was asked opens the
+  **Partial approval** dialog (**Another card**, **Add to next card** while a planned payment
+  is left, **Rest in cash**, **Cancel sale**). Off, the SDK charges the shortfall on another card
+  by itself, at most 3 card requests in all, and a short approval after that fails the step into
+  the recovery dialog. On the simulator, an amount whose cents end in `456` is approved for 60%.
 - **Stored Value**: balance inquiry, activation with a zero balance, and a gift-card purchase rung
   into the basket and loaded at settlement. **Read card** fills the card field from a terminal read.
 - **Refund**: completed sales from IndexedDB. **Full amount** voids every standing movement of the
   sale on a fresh session (no checkout open); **Selected items** rings the checked lines, capped at
   what earlier refunds left, into the active checkout as returns, settled against the original card
-  (or gift card) leg, with any shortfall of a netted tender paid out by the register.
+  (or gift card) leg, with any shortfall of a netted tender paid out by the register. A sale with
+  several card payments lists them, and **Return to:** picks the card a returned item goes back to;
+  the full refund voids every card payment and lists each reversed leg with its own receipt.
 - **Log**: Events (one line per action and answer), Detailed (with failure causes), Protocol (the
   HTTP requests to the bridge with their bodies, and the session events it streams back).
 
@@ -106,5 +117,5 @@ double with IndexedDB from `fake-indexeddb`, querying by the desktop's labels.
 `pnpm --filter @biltorg/pos-emulator test:contract` drives the real Session Host and the scripted
 terminal of the SDK's contract suite (needs a JDK 21): a sale whose rebate is re-taxed and whose
 declined charge is retried through the recovery decision, the sale persisted, a gift-card tender,
-and an item return of the persisted sale from a later session. `BILT_HOST_LOG=/path` keeps the
+an item return of the persisted sale from a later session, a split sale and the partial-approval choices. The host's simulated terminal approves a card payment whose cents end in `456` for 60%, and the suite also drives that trigger (it skips while the checkout has none). `BILT_HOST_LOG=/path` keeps the
 host's output.

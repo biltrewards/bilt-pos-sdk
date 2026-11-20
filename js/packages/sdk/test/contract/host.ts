@@ -54,6 +54,11 @@ export interface TerminalSpec {
   readonly model?: string;
 }
 
+/** The host's built-in simulated terminal (`terminal.simulated`), which approves every payment. */
+export interface SimulatedTerminalSpec {
+  readonly simulated: true;
+}
+
 export interface RunningHost {
   readonly port: number;
   readonly baseUrl: string;
@@ -61,10 +66,13 @@ export interface RunningHost {
   stop(): Promise<void>;
 }
 
-/** Starts the host on an ephemeral port, bridged to the given plaintext terminal if any. */
+/**
+ * Starts the host on an ephemeral port, bridged to the given plaintext terminal if any, or to its
+ * simulated terminal.
+ */
 export async function startHost(
   location: HostLocation,
-  terminal?: TerminalSpec,
+  terminal?: TerminalSpec | SimulatedTerminalSpec,
 ): Promise<RunningHost> {
   const dir = mkdtempSync(join(tmpdir(), 'bilt-host-'));
   const config = join(dir, 'host.json');
@@ -72,17 +80,19 @@ export async function startHost(
     config,
     JSON.stringify({
       port: 0,
-      ...(terminal
-        ? {
-            terminal: {
-              host: terminal.host,
-              port: terminal.port,
-              tls: false,
-              encryption: false,
-              ...(terminal.model ? { model: terminal.model } : {}),
-            },
-          }
-        : {}),
+      ...(terminal && 'simulated' in terminal
+        ? { terminal: { simulated: true } }
+        : terminal
+          ? {
+              terminal: {
+                host: terminal.host,
+                port: terminal.port,
+                tls: false,
+                encryption: false,
+                ...(terminal.model ? { model: terminal.model } : {}),
+              },
+            }
+          : {}),
     }),
   );
   const child: ChildProcess = spawn(location.bin, [config], {

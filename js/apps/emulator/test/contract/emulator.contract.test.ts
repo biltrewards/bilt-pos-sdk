@@ -18,7 +18,7 @@ import {
   type RunningHost,
 } from '../../../../packages/sdk/test/contract/host';
 import { connectTo } from '../../../../packages/sdk/test/contract/setup';
-import { CATALOG, toBasketItem } from '../../src/catalog';
+import { CATALOG, customItem, toBasketItem } from '../../src/catalog';
 import { BrowserEmulatorController, totalAfterRebates } from '../../src/emulator/controller';
 import type { MemberLookupKind } from '../../src/emulator/state';
 import { LineLog } from '../../src/log';
@@ -30,7 +30,7 @@ import {
   settledReturns,
   toStoredSaleUi,
 } from '../../src/emulator/returns';
-import { remainingLegAmount, toSaleRecord } from '../../src/store/sale-record';
+import { legOf, remainingLegAmount, toSaleRecord } from '../../src/store/sale-record';
 import { IndexedDbSaleStore } from '../../src/store/sales-store';
 
 const POI = 'VictaLane-EMU';
@@ -49,6 +49,8 @@ const PAYMENT_DECLINED =
   '"Response":{"Result":"Failure","ErrorCondition":"Refusal","AdditionalResponse":"Do not honour"},' +
   '"POIData":{"POITransactionID":{"TransactionID":"POI-PAY-DECLINED","TimeStamp":"2026-10-06T10:00:02Z"}},' +
   '"PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":0}}}}}';
+
+const REVERSAL_OK = '{"SaleToPOIResponse":{"ReversalResponse":{"Response":{"Result":"Success"}}}}';
 
 const BALANCE_FOUND =
   '{"SaleToPOIResponse":{"BalanceInquiryResponse":{"Response":{"Result":"Success"},' +
@@ -69,6 +71,44 @@ function accountOf(body: object): unknown {
       };
     }
   ).SaleToPOIRequest.BalanceInquiryRequest.LoyaltyAccountReq.LoyaltyAccountID;
+}
+
+/** A card payment response: approved or partly approved for `amount`, under its own POI reference. */
+function cardPayment(poiId: string, amount: number, partial = false, brand = 'Visa'): string {
+  return (
+    '{"SaleToPOIResponse":{"PaymentResponse":{' +
+    `"Response":{"Result":"${partial ? 'Partial' : 'Success'}"},` +
+    `"POIData":{"POITransactionID":{"TransactionID":"${poiId}","TimeStamp":"2026-10-06T10:00:0${poiId.slice(-1)}Z"}},` +
+    `"PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":${amount.toFixed(2)}},` +
+    `"PaymentAcquirerData":{"ApprovalCode":"APPR-${poiId}","AcquirerTransactionID":{"TransactionID":"ACQ-${poiId}"}},` +
+    `"PaymentInstrumentData":{"CardData":{"PaymentBrand":"${brand}","MaskedPAN":"************4242"}}}}}}`
+  );
+}
+
+interface PaymentWire {
+  readonly SaleToPOIRequest: {
+    PaymentRequest: {
+      SaleData: { SaleTransactionID: { TransactionID: string } };
+      PaymentTransaction: { AmountsReq: { RequestedAmount: number; PaidAmount?: number } };
+      PaymentData?: { SplitPaymentFlag?: boolean; PaymentType?: string };
+    };
+  };
+}
+
+/** What a card payment request told the terminal: its share, what was already paid, the split flag. */
+function wireOf(body: object): {
+  requested: number;
+  paid: number | undefined;
+  split: boolean | undefined;
+  saleTransactionId: string;
+} {
+  const request = (body as PaymentWire).SaleToPOIRequest.PaymentRequest;
+  return {
+    requested: request.PaymentTransaction.AmountsReq.RequestedAmount,
+    paid: request.PaymentTransaction.AmountsReq.PaidAmount,
+    split: request.PaymentData?.SplitPaymentFlag,
+    saleTransactionId: request.SaleData.SaleTransactionID.TransactionID,
+  };
 }
 
 const lamp = CATALOG.find((product) => product.sku === 'SKU-0013')!;
@@ -269,7 +309,7 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
       full: false,
       items: [{ sku: 'SKU-0013', quantity: 1 }],
     });
-    expect(remainingLegAmount(after!, 'CARD')).toBe('0.00');
+    expect(remainingLegAmount(after!, legOf(after!.sale, 'CARD')!)).toBe('0.00');
     expect(toStoredSaleUi(after!, () => 0).items[0]?.remainingQuantity).toBe(0);
     await session.end();
   });
@@ -278,48 +318,261 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
   // IdentifyResult.vasData; the in-memory tests cover the emulator's rendering until it lands.
   it.todo('shows the wallet pass on the sign-in card when a keyed sign-in reads one');
 
-  describe('the identify control', () => {
-    const controllers: BrowserEmulatorController[] = [];
+  const controllers: BrowserEmulatorController[] = [];
 
-    afterAll(async () => {
-      for (const controller of controllers.splice(0)) {
-        controller.endSession();
-        await vi.waitFor(() => expect(controller.getState().sessionId).toBeNull(), 30_000);
-        controller.dispose();
-      }
-    });
+  afterAll(async () => {
+    for (const controller of controllers.splice(0)) {
+      controller.endSession();
+      await vi.waitFor(() => expect(controller.getState().sessionId).toBeNull(), 30_000);
+      controller.dispose();
+    }
+  });
 
-    /** A controller with an open terminal checkout, as after Connect and Start Checkout. */
-    async function checkout() {
-      const events = new LineLog();
-      const controller = new BrowserEmulatorController(
-        {
-          connect: () => connectTo(host.port),
-          sales: store,
-          events,
-          detailed: new LineLog(),
-          protocol: new LineLog(),
-        },
-        {
-          mode: 'terminal',
-          poiId: POI,
-          saleId: 'LANE-EMU',
-          currency: 'USD',
-          storeLocation: 'STR-0142',
-        },
-      );
-      controllers.push(controller);
-      controller.connect();
-      await vi.waitFor(
-        () => expect(controller.getState().connection.phase).toBe('CONNECTED'),
-        30_000,
-      );
-      controller.startSession();
-      await vi.waitFor(() => expect(controller.getState().sessionId).not.toBeNull(), 30_000);
-      const logged = (text: string) => events.snapshot().some((line) => line.includes(text));
-      return { controller, logged };
+  /** A controller with an open terminal checkout, as after Connect and Start Checkout. */
+  async function checkout() {
+    const events = new LineLog();
+    const controller = new BrowserEmulatorController(
+      {
+        connect: () => connectTo(host.port),
+        sales: store,
+        events,
+        detailed: new LineLog(),
+        protocol: new LineLog(),
+      },
+      {
+        mode: 'terminal',
+        poiId: POI,
+        saleId: 'LANE-EMU',
+        currency: 'USD',
+        storeLocation: 'STR-0142',
+      },
+    );
+    controllers.push(controller);
+    controller.connect();
+    await vi.waitFor(
+      () => expect(controller.getState().connection.phase).toBe('CONNECTED'),
+      30_000,
+    );
+    controller.startSession();
+    await vi.waitFor(() => expect(controller.getState().sessionId).not.toBeNull(), 30_000);
+    const logged = (text: string) => events.snapshot().some((line) => line.includes(text));
+    return { controller, logged };
+  }
+
+  describe('split and partial card payments', () => {
+    const NO_LOYALTY = { implicit: false, rebates: false, redemption: false, award: false };
+
+    /** Settles the lamp ($37.31) through the controller and waits for the outcome popup. */
+    async function sellLamp(options: { plannedAmounts: string[]; partialApprovals: boolean }) {
+      return sellLampWith(NO_LOYALTY, options);
     }
 
+    async function sellLampWith(
+      loyalty: typeof NO_LOYALTY,
+      options: { plannedAmounts: string[]; partialApprovals: boolean },
+    ) {
+      const { controller, logged } = await checkout();
+      controller.addProduct(lamp);
+      await vi.waitFor(() => expect(controller.getState().basketTotal).toBe('37.31'));
+      const before = terminal.requestsOf('Payment').length;
+      controller.settle(loyalty, null, true, options);
+      return { controller, logged, payments: () => terminal.requestsOf('Payment').slice(before) };
+    }
+
+    it('refuses planned card payments with implicit loyalty and sends nothing', async () => {
+      const { controller, logged, payments } = await sellLampWith(
+        { implicit: true, rebates: false, redemption: false, award: false },
+        { plannedAmounts: ['20.00'], partialApprovals: true },
+      );
+      await vi.waitFor(() =>
+        expect(
+          logged('Settlement not started: planned card payments cannot use implicit loyalty'),
+        ).toBe(true),
+      );
+      expect(payments()).toHaveLength(0);
+      expect(controller.getState().paymentInProgress).toBe(false);
+    });
+
+    it('charges a planned split on two cards, stores both and voids both', async () => {
+      terminal.reply('Reversal', REVERSAL_OK);
+      let call = 0;
+      terminal.reply('Payment', (request) => {
+        const { requested } = wireOf(request as object);
+        return cardPayment(++call === 1 ? 'POI-SPLIT-1' : 'POI-SPLIT-2', requested);
+      });
+      const { controller, payments } = await sellLamp({
+        plannedAmounts: ['20.00'],
+        partialApprovals: true,
+      });
+      await vi.waitFor(() => expect(controller.getState().paymentOutcome).not.toBeNull(), 30_000);
+
+      // the second card payment is a nexo split payment under the first one's sale transaction
+      const [first, second] = payments().map((body) => wireOf(body as object));
+      expect(first).toMatchObject({ requested: 20, paid: undefined });
+      expect(first?.split).toBeUndefined();
+      expect(second).toMatchObject({ requested: 17.31, paid: 20, split: true });
+      expect(second?.saleTransactionId).toBe(first?.saleTransactionId);
+
+      const outcome = controller.getState().paymentOutcome!;
+      expect(outcome.title).toBe('Settlement complete');
+      expect(outcome.message).toContain(
+        'Card 1 $20.00 · Visa ····4242 · approval APPR-POI-SPLIT-1',
+      );
+      expect(outcome.message).toContain(
+        'Card 2 $17.31 · Visa ····4242 · approval APPR-POI-SPLIT-2',
+      );
+
+      await vi.waitFor(async () => expect((await store.listSales())[0]?.sale.legs).toHaveLength(2));
+      const [stored] = await store.listSales();
+      const cards = stored!.sale.legs.filter((leg) => leg.type === 'CARD');
+      expect(cards.map((leg) => [leg.poiTransactionId, leg.amount])).toEqual([
+        ['POI-SPLIT-1', '20.00'],
+        ['POI-SPLIT-2', '17.31'],
+      ]);
+      expect(toStoredSaleUi(stored!, () => 0).cardPayments).toHaveLength(2);
+
+      // the full refund reverses every card payment, newest first
+      const reversals = terminal.requestsOf('Reversal').length;
+      await vi.waitFor(() => expect(controller.getState().sessionId).toBeNull(), 30_000);
+      controller.refundSale(stored!.sale.id);
+      await vi.waitFor(
+        () => expect(controller.getState().paymentOutcome?.title).toBe('Refund complete'),
+        30_000,
+      );
+      const reversed = terminal
+        .requestsOf('Reversal')
+        .slice(reversals)
+        .map((body) => JSON.stringify(body).match(/"TransactionID":"(POI-SPLIT-\d)"/)?.[1]);
+      expect(reversed).toEqual(['POI-SPLIT-2', 'POI-SPLIT-1']);
+      // the outcome lists each reversed card payment, newest first
+      const popup = controller.getState().paymentOutcome!.message;
+      expect(popup).toContain('Card 2 reversed $17.31');
+      expect(popup).toContain('Card 1 reversed $20.00');
+      expect(popup.indexOf('Card 2 reversed')).toBeLessThan(popup.indexOf('Card 1 reversed'));
+      await vi.waitFor(async () =>
+        expect((await store.findSale(stored!.sale.id))?.refunds.some((refund) => refund.full)).toBe(
+          true,
+        ),
+      );
+    });
+
+    it('answers a partial approval with Another card and continues on the next card', async () => {
+      const requests: number[] = [];
+      terminal.reply('Payment', (request) => {
+        const { requested } = wireOf(request as object);
+        requests.push(requested);
+        // the first card approves 60% of what it was asked, the next one the whole shortfall
+        return requests.length === 1
+          ? cardPayment('POI-PART-1', Math.round(requested * 60) / 100, true)
+          : cardPayment('POI-PART-2', requested, false, 'Mastercard');
+      });
+      const { controller, payments } = await sellLamp({
+        plannedAmounts: [],
+        partialApprovals: true,
+      });
+      await vi.waitFor(() => expect(controller.getState().partialApproval).not.toBeNull(), 30_000);
+      const prompt = controller.getState().partialApproval!;
+      expect(prompt).toMatchObject({
+        approved: '22.39',
+        requested: '37.31',
+        shortfall: '14.92',
+        amountDue: '14.92',
+        plannedLeft: false,
+        actions: ['ANOTHER_CARD', 'EXTERNAL', 'ABORT'],
+      });
+      prompt.choose('ANOTHER_CARD');
+      await vi.waitFor(() => expect(controller.getState().paymentOutcome).not.toBeNull(), 30_000);
+
+      const [first, second] = payments().map((body) => wireOf(body as object));
+      expect(first?.requested).toBe(37.31);
+      expect(second).toMatchObject({ requested: 14.92, paid: 22.39, split: true });
+      expect(second?.saleTransactionId).toBe(first?.saleTransactionId);
+      const message = controller.getState().paymentOutcome!.message;
+      expect(message).toContain(
+        'Card 1 $22.39 · Visa ····4242 · approval APPR-POI-PART-1 · partial',
+      );
+      expect(message).toContain('Card 2 $14.92 · Mastercard ····4242 · approval APPR-POI-PART-2');
+    });
+
+    it('records the rest in cash and keeps the partial card payment', async () => {
+      terminal.reply('Payment', (request) =>
+        cardPayment('POI-CASH-1', Math.round(wireOf(request as object).requested * 60) / 100, true),
+      );
+      const { controller, payments } = await sellLamp({
+        plannedAmounts: [],
+        partialApprovals: true,
+      });
+      await vi.waitFor(() => expect(controller.getState().partialApproval).not.toBeNull(), 30_000);
+      controller.getState().partialApproval!.choose('EXTERNAL');
+      await vi.waitFor(() => expect(controller.getState().paymentOutcome).not.toBeNull(), 30_000);
+      expect(payments()).toHaveLength(1);
+      const message = controller.getState().paymentOutcome!.message;
+      expect(message).toContain('cash $14.92 (register-managed; refund manually)');
+      expect(message).toContain('card $22.39 (Visa)');
+    });
+
+    it('cancels the sale and reverses the partial card payment', async () => {
+      terminal.reply('Reversal', REVERSAL_OK);
+      terminal.reply('Payment', (request) =>
+        cardPayment('POI-VOID-1', Math.round(wireOf(request as object).requested * 60) / 100, true),
+      );
+      const { controller } = await sellLamp({ plannedAmounts: [], partialApprovals: true });
+      await vi.waitFor(() => expect(controller.getState().partialApproval).not.toBeNull(), 30_000);
+      const reversals = terminal.requestsOf('Reversal').length;
+      controller.getState().partialApproval!.choose('ABORT');
+      await vi.waitFor(
+        () => expect(controller.getState().paymentOutcome?.title).toBe('Sale cancelled'),
+        30_000,
+      );
+      expect(controller.getState().paymentOutcome?.message).toContain(
+        'Every card payment was reversed',
+      );
+      expect(terminal.requestsOf('Reversal').length).toBe(reversals + 1);
+    });
+
+    it('with Partial approvals off, the SDK follows up itself and then fails into the recovery dialog', async () => {
+      terminal.reply('Reversal', REVERSAL_OK);
+      let call = 0;
+      terminal.reply('Payment', (request) =>
+        cardPayment(
+          `POI-AUTO-${++call}`,
+          Math.round(wireOf(request as object).requested * 60) / 100,
+          true,
+        ),
+      );
+      const { controller, payments } = await sellLamp({
+        plannedAmounts: [],
+        partialApprovals: false,
+      });
+      await vi.waitFor(() => expect(controller.getState().paymentRecovery).not.toBeNull(), 30_000);
+      expect(controller.getState().partialApproval).toBeNull();
+      // three card requests in all: the first and two automatic follow-ups
+      expect(payments()).toHaveLength(3);
+      expect(controller.getState().paymentRecovery?.message).toContain('DECLINED');
+      controller.getState().paymentRecovery!.choose('ABORT');
+      await vi.waitFor(
+        () => expect(controller.getState().paymentOutcome?.title).toBe('Settlement failed'),
+        30_000,
+      );
+    });
+
+    it('refuses planned cards that reach the total before any card is charged', async () => {
+      terminal.reply('Payment', paymentEcho);
+      const { controller, payments } = await sellLamp({
+        plannedAmounts: ['40.00'],
+        partialApprovals: true,
+      });
+      await vi.waitFor(() => expect(controller.getState().paymentRecovery).not.toBeNull(), 30_000);
+      expect(controller.getState().paymentRecovery?.message).toContain(
+        'CARD_PAYMENTS_EXCEED_TOTAL',
+      );
+      expect(payments()).toHaveLength(0);
+      controller.getState().paymentRecovery!.choose('ABORT');
+      await vi.waitFor(() => expect(controller.getState().paymentOutcome).not.toBeNull(), 30_000);
+    });
+  });
+
+  describe('the identify control', () => {
     function lastInquiry(): unknown {
       return accountOf(terminal.requestsOf('BalanceInquiry').at(-1)!);
     }
@@ -442,5 +695,137 @@ describe.skipIf(!hostAvailable)('the emulator against the Session Host', () => {
       await vi.waitFor(() => expect(logged('Background operation failed (')).toBe(true));
       expect(controller.getState().member).toMatchObject({ kind: 'found', memberId: '98234' });
     });
+  });
+});
+
+/**
+ * The host's simulated terminal approves a card payment whose amount in cents ends in 456 for 60%,
+ * rounded down. A branch stacked below the change that adds the trigger (#201) has none, so the
+ * suite probes the behaviour once and skips its tests when a $4.56 payment is approved in full.
+ */
+describe.skipIf(!hostAvailable)('partial approvals against the simulated terminal', () => {
+  let host: RunningHost;
+  let store: IndexedDbSaleStore;
+  let hasTrigger = false;
+  const controllers: BrowserEmulatorController[] = [];
+  const NO_LOYALTY = { implicit: false, rebates: false, redemption: false, award: false };
+
+  beforeAll(async () => {
+    if (!('location' in hostProbe)) return;
+    buildHost(hostProbe.location);
+    host = await startHost(hostProbe.location, { simulated: true });
+    store = new IndexedDbSaleStore(indexedDB, `contract-sim-${Date.now()}`);
+    // one $4.56 payment: a partial approval reaches the handler, which cancels the sale
+    const probePos = await connectTo(host.port);
+    const probe = await probePos.startTerminalSession({
+      saleId: 'LANE-PROBE',
+      poiId: POI,
+      currency: 'USD',
+      storeLocation: 'STR-0142',
+      autoDisplay: false,
+    });
+    try {
+      await probe.basket.addItem(customItem('PROBE-456', '4.56', 'Probe', false));
+      await probe.settle(
+        { loyalty: { handling: 'FORBIDDEN' } },
+        {
+          onPartialCardApproval: () => {
+            hasTrigger = true;
+            return 'ABORT';
+          },
+        },
+      );
+    } catch {
+      // the cancelled probe sale fails; only whether the handler ran matters
+    } finally {
+      await probe.forceEnd('trigger probe').catch(() => undefined);
+      await probePos.close();
+    }
+  }, 120_000);
+
+  afterAll(async () => {
+    for (const controller of controllers.splice(0)) {
+      controller.endSession();
+      await vi.waitFor(() => expect(controller.getState().sessionId).toBeNull(), 30_000);
+      controller.dispose();
+    }
+    await host?.stop();
+  });
+
+  /** A checkout whose basket is one untaxed custom amount of `priceMinor` cents. */
+  async function checkoutWith(priceMinor: number) {
+    const controller = new BrowserEmulatorController(
+      {
+        connect: () => connectTo(host.port),
+        sales: store,
+        events: new LineLog(),
+        detailed: new LineLog(),
+        protocol: new LineLog(),
+      },
+      {
+        mode: 'terminal',
+        poiId: POI,
+        saleId: 'LANE-SIM',
+        currency: 'USD',
+        storeLocation: 'STR-0142',
+      },
+    );
+    controllers.push(controller);
+    controller.connect();
+    await vi.waitFor(
+      () => expect(controller.getState().connection.phase).toBe('CONNECTED'),
+      30_000,
+    );
+    controller.startSession();
+    await vi.waitFor(() => expect(controller.getState().sessionId).not.toBeNull(), 30_000);
+    await controller.addCustomItem(priceMinor);
+    return controller;
+  }
+
+  it('approves $104.56 for $62.73 and charges the $41.83 shortfall on another card', async (context) => {
+    if (!hasTrigger) context.skip('the simulated terminal has no partial-approval trigger (#201)');
+    const controller = await checkoutWith(10456);
+    expect(controller.getState().basketTotal).toBe('104.56');
+    controller.settle(NO_LOYALTY, null, true, { plannedAmounts: [], partialApprovals: true });
+    await vi.waitFor(() => expect(controller.getState().partialApproval).not.toBeNull(), 30_000);
+    expect(controller.getState().partialApproval).toMatchObject({
+      approved: '62.73',
+      requested: '104.56',
+      shortfall: '41.83',
+      amountDue: '41.83',
+      plannedLeft: false,
+    });
+    controller.getState().partialApproval!.choose('ANOTHER_CARD');
+    await vi.waitFor(() => expect(controller.getState().paymentOutcome).not.toBeNull(), 30_000);
+    const outcome = controller.getState().paymentOutcome!;
+    expect(outcome.title).toBe('Settlement complete');
+    expect(outcome.message).toContain('Card 1 $62.73');
+    expect(outcome.message).toContain('· partial');
+    expect(outcome.message).toContain('Card 2 $41.83');
+    await vi.waitFor(async () => expect((await store.listSales())[0]?.sale.legs).toHaveLength(2));
+  });
+
+  it('splits $104.56 as $50.00 plus a remainder that approves partially', async (context) => {
+    if (!hasTrigger) context.skip('the simulated terminal has no partial-approval trigger (#201)');
+    const controller = await checkoutWith(10456);
+    controller.settle(NO_LOYALTY, null, true, {
+      plannedAmounts: ['50.00'],
+      partialApprovals: true,
+    });
+    // card 1 is $50.00, card 2 asks for $54.56, which ends in 456
+    await vi.waitFor(() => expect(controller.getState().partialApproval).not.toBeNull(), 30_000);
+    expect(controller.getState().partialApproval).toMatchObject({
+      approved: '32.73',
+      requested: '54.56',
+      shortfall: '21.83',
+      amountDue: '21.83',
+      plannedLeft: false,
+    });
+    controller.getState().partialApproval!.choose('EXTERNAL');
+    await vi.waitFor(() => expect(controller.getState().paymentOutcome).not.toBeNull(), 30_000);
+    const message = controller.getState().paymentOutcome!.message;
+    expect(message).toContain('cash $21.83 (register-managed; refund manually)');
+    expect(message).toContain('Card 1 $50.00');
+    expect(message).toContain('Card 2 $32.73');
   });
 });

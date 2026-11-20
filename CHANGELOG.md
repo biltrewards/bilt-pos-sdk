@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.53.0]
+
+### Added
+
+- Emulator (browser): split card payments and partial card approvals, matching the desktop emulator. A **Split card** checkbox next to Gift card (disabled while Implicit Loyalty is on, which the SDK refuses together with planned card payments; checking Implicit Loyalty clears it) plans the card payments of a sale: one `Card N $` amount field per fixed payment, **+ Add card**, and a read-only `Card N: remainder $X` line computed from the basket total; the amounts are sent as `cardPayments`, and the host refuses amounts that reach the card total before charging any card. A **Partial approvals** checkbox, on by default, registers `onPartialCardApproval`: a card that approves less than it was asked opens a **Partial approval** dialog, not dismissible, with **Another card ($shortfall)**, **Add to next card** (only while a planned card payment is left), **Rest in cash ($amount due)** and **Cancel sale**, each with a one-line description. With it off, no handler is registered, so the SDK charges the shortfall on another card by itself, at most 3 card requests in all, and a short approval after that fails the step into the recovery dialog. The outcome popup lists one line per card payment (amount, brand, last digits, approval code, a "partial" tag) with every card payment's receipt, and the Events log has one line per card payment, partial approval and decision. Cancel sale reverses every card payment and ends with a **Sale cancelled** popup; the basket stays intact. The emulator tracks the charges the SDK reported committed and not since reversed (`onMovement` and its reversal notices): a cancelled, aborted or failed settlement that leaves any standing lists them in a warning, in the popup and the Events log, and the Events log has a line per reversed card payment. Planned cards that reach the total are refused by the SDK before any card is charged, and the recovery dialog then offers only Abort and Abandon.
+- Emulator (browser): a sale stores each card payment as its own leg. A full refund of a sale with several tender payments lists each reversed leg (`Card N reversed $X (txn …)`, `Gift card reversed …`) with a `<leg> reversal receipt` block each. The Refund tab lists the card payments of a split sale, the full refund voids all of them through `cardPayments`, a stopped void resumes at the card payments still standing, and an item return of a split sale asks which card it goes back to (**Return to:**). Refund records name the card they drew from, so one card's refunds never count against another's capacity.
+
 ## [0.52.0]
 
 ### Added

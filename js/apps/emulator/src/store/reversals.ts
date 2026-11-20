@@ -39,6 +39,7 @@ export function reversalProgress(
         recordedAt: new Date().toISOString(),
         poiTransactionId: movement.poiTransactionId,
         leg,
+        legPoiTransactionId: movement.poiTransactionId,
         full: true,
         awardReversed: leg === 'AWARD',
         reversalProgress: true,
