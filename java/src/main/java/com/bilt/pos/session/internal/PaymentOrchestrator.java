@@ -44,6 +44,7 @@ import com.bilt.pos.nexo.model.TransactionIdentificationType;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
+import com.bilt.pos.session.SettlementFlow;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.identity.IdentifyResult;
@@ -57,6 +58,8 @@ import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
 import com.bilt.pos.session.settlement.CardPayment;
 import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.ExternalPayment;
+import com.bilt.pos.session.settlement.PartialApprovalDecision;
+import com.bilt.pos.session.settlement.PartialCardApproval;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementLoyalty;
@@ -98,6 +101,7 @@ public final class PaymentOrchestrator {
     public Function<RebateRedemptionResult, BigDecimal> onRebatesRedeemed;
     public Function<PointRedemptionResult, BigDecimal> onPointsRedeemed;
     public Function<GiftCardPaymentResult, BigDecimal> onGiftCardPayment;
+    public Function<PartialCardApproval, PartialApprovalDecision> onPartialCardApproval;
     public Consumer<SettlementMovement> onMovement;
     public Function<SettlementFailure, SettlementRecovery> onError;
   }
@@ -180,14 +184,49 @@ public final class PaymentOrchestrator {
     }
   }
 
-  /** A committed step paired with the action that reverses it. */
+  /** The terminal request that reversed a committed step, as the terminal reported it. */
+  private static final class Reversal {
+    final String serviceId;
+    final String poiTransactionId;
+    final Instant poiTransactionTimestamp;
+
+    Reversal(String serviceId, String poiTransactionId, Instant poiTransactionTimestamp) {
+      this.serviceId = serviceId;
+      this.poiTransactionId = poiTransactionId;
+      this.poiTransactionTimestamp = poiTransactionTimestamp;
+    }
+
+    static Reversal of(String serviceId, com.bilt.pos.nexo.model.POIData poiData) {
+      TransactionIdentificationType poiTxn = Wire.poiRef(poiData);
+      return new Reversal(
+          serviceId,
+          poiTxn == null ? null : poiTxn.getTransactionID(),
+          poiTxn == null ? null : Wire.instant(poiTxn.getTimeStamp()));
+    }
+  }
+
+  /** Reverses a committed step; throws {@link SessionException} on failure. */
+  @FunctionalInterface
+  private interface Rollback {
+    Reversal reverse();
+  }
+
+  /**
+   * A committed step paired with the action that reverses it, and the movement it reported once
+   * that has been published.
+   */
   private static final class Commit {
     final CommittedStep info;
-    final Runnable rollback;
+    final Rollback rollback;
+    SettlementMovement movement;
 
-    Commit(CommittedStep info, Runnable rollback) {
+    Commit(CommittedStep info, Rollback rollback) {
       this.info = info;
       this.rollback = rollback;
+    }
+
+    StandingMovement standing() {
+      return new StandingMovement(info, rollback::reverse);
     }
   }
 
@@ -287,21 +326,48 @@ public final class PaymentOrchestrator {
     void charged() {
       planned.pollFirst();
     }
+
+    /** Puts a card payment of {@code amount} before the rest of the plan. */
+    void insert(BigDecimal amount) {
+      planned.addFirst(amount);
+    }
+
+    /**
+     * Adds {@code amount} to the next planned payment. With no planned amount left, the remainder
+     * payment is the next one, and it already grows by whatever the last payment left unpaid.
+     */
+    void addToNext(BigDecimal amount) {
+      BigDecimal next = planned.pollFirst();
+      if (next != null) {
+        planned.addFirst(next.add(amount));
+      }
+    }
   }
 
-  /** One committed card payment, with what it asked for and the sale transaction it used. */
+  /**
+   * One committed card payment, with what it asked for, the sale transaction it used and its
+   * movement.
+   */
   private static final class CardCharge {
     final CardPaymentResult payment;
     final BigDecimal requested;
     final TransactionIdentificationType saleTransaction;
+    final SettlementMovement movement;
 
     CardCharge(
         CardPaymentResult payment,
         BigDecimal requested,
-        TransactionIdentificationType saleTransaction) {
+        TransactionIdentificationType saleTransaction,
+        SettlementMovement movement) {
       this.payment = payment;
       this.requested = requested;
       this.saleTransaction = saleTransaction;
+      this.movement = movement;
+    }
+
+    /** Whether the terminal authorized less than this payment requested. */
+    boolean partial() {
+      return payment.getAmount().compareTo(requested) < 0;
     }
   }
 
@@ -533,12 +599,23 @@ public final class PaymentOrchestrator {
       BigDecimal paidBefore = storedValueCharged;
       // nexo Rule 8: every split payment carries the first card payment's SaleTransactionID
       TransactionIdentificationType splitSaleTransaction = null;
+      boolean partialHandler = request.handlers.onPartialCardApproval != null;
+      // card requests the SDK added on its own for a shortfall (no onPartialCardApproval)
+      int automaticFollowUps = 0;
       while (cardDue.signum() > 0) {
         // before every card payment: the screen the previous card left must not linger while the
         // shopper presents the next one
         if (options.paymentProcessingDisplay != null) {
           showProcessingDisplay(options.paymentProcessingDisplay);
         }
+        // A partial approval is kept only on a sale without cashback: a partial there (including
+        // a refused cashback) fails as DECLINED. The register's handler decides on every one;
+        // without it the SDK sends another card request for the shortfall, until the request
+        // that comes back partial is the last of SettlementFlow.MAX_AUTOMATIC_CARD_REQUESTS.
+        boolean acceptPartial =
+            options.cashback == null
+                && (partialHandler
+                    || automaticFollowUps < SettlementFlow.MAX_AUTOMATIC_CARD_REQUESTS - 1);
         BigDecimal amount = plan.next(cardDue);
         BigDecimal stepDue = cardDue;
         BigDecimal paidAmount = splitSaleTransaction == null ? null : paidBefore;
@@ -560,6 +637,7 @@ public final class PaymentOrchestrator {
                         stepBasket,
                         amount,
                         paidAmount,
+                        acceptPartial,
                         options,
                         loyaltyHandling,
                         saleTransaction,
@@ -580,14 +658,34 @@ public final class PaymentOrchestrator {
         plan.charged();
         BigDecimal approved = charge.payment.getAmount();
         paidBefore = paidBefore.add(approved);
-        // Partial approvals: cardStep fails a payment that authorized less than charge.requested
-        // (its share plus any cashback) as DECLINED, so every payment that reaches this point
-        // covered its whole share, and a cashback sale, which has no plan, ends here. An
-        // authorization above what was requested also counts towards the sale.
+        // An authorization above what was requested also counts towards the sale; one below it
+        // leaves its shortfall in cardDue for the decision below.
         cardDue = cardDue.subtract(amount.add(approved.subtract(charge.requested)));
-        // A decision on a partial approval (another card, add the shortfall to the next planned
-        // payment, cash for the rest, abort) belongs here, between this payment and
-        // plan.next(cardDue).
+        // A partial reaches this point only when cardStep let it through (acceptPartial): never on
+        // a cashback sale, which cardStep fails as DECLINED with no follow-up, so cardDue never
+        // keeps a cashback amount the next card would carry again.
+        if (charge.partial() && !partialHandler) {
+          // cardStep let it through only while the automatic limit allows another request
+          automaticFollowUps++;
+          plan.insert(charge.requested.subtract(approved));
+        } else if (charge.partial()) {
+          // the register's decision reshapes the plan before plan.next(cardDue)
+          ExternalPayment external =
+              decidePartialApproval(
+                  request,
+                  committed,
+                  movements,
+                  stepBasket,
+                  plan,
+                  charge,
+                  cardPayments,
+                  cardDue,
+                  stepDue);
+          if (external != null) {
+            externalPaid = external.getAmount();
+            break;
+          }
+        }
       }
     }
     for (CardPaymentResult cardPayment : cardPayments) {
@@ -1065,7 +1163,7 @@ public final class PaymentOrchestrator {
   }
 
   private SessionException abort(Request request, List<Commit> committed, SessionError failure) {
-    List<StandingMovement> unreversed = unwind(committed);
+    List<StandingMovement> unreversed = unwind(request, committed);
     request.onUnreversed.accept(unreversed);
     SessionError error = withRollbackFailures(failure, unreversed);
     BigDecimal externalStanding = BigDecimal.ZERO;
@@ -1165,11 +1263,114 @@ public final class PaymentOrchestrator {
     }
   }
 
+  /**
+   * Asks the register what to do about a card payment that authorized less than it requested, and
+   * carries the decision out. Another card puts a payment for the shortfall before the rest of
+   * {@code plan}; add to next grows the next card payment by it; both return {@code null} so the
+   * card loop continues. An external payment for everything still due is recorded through the
+   * {@code EXTERNAL_PAYMENT} step and returned, ending the card phase with every card payment
+   * standing. Abort unwinds every committed step. A decision the plan cannot carry out is refused
+   * like an invalid recovery, and a handler that throws or answers {@code null} goes to {@code
+   * onError} like a throwing step handler.
+   *
+   * @param cardDue what the card phase still owes after this payment
+   * @param stepDue what the card phase owed before it; a payment that asked for all of it was the
+   *     last card payment of the plan
+   */
+  private ExternalPayment decidePartialApproval(
+      Request request,
+      List<Commit> committed,
+      List<SettlementMovement> movements,
+      Basket basket,
+      CardPlan plan,
+      CardCharge charge,
+      List<CardPaymentResult> cardPayments,
+      BigDecimal cardDue,
+      BigDecimal stepDue) {
+    PartialCardApproval partial =
+        PartialCardApproval.builder()
+            .approved(charge.payment.getAmount())
+            .requested(charge.requested)
+            .amountDue(cardDue)
+            .cardPayments(cardPayments)
+            .movement(charge.movement)
+            .build();
+    PartialApprovalDecision decision;
+    while (true) {
+      try {
+        decision = request.handlers.onPartialCardApproval.apply(partial);
+        if (decision == null) {
+          throw new IllegalArgumentException("onPartialCardApproval returned no decision");
+        }
+        break;
+      } catch (RuntimeException callbackFailure) {
+        recoverHandlerFailure(
+            request,
+            committed,
+            movements,
+            SettlementStep.CARD_CHARGE,
+            "onPartialCardApproval handler",
+            cardDue,
+            callbackFailure);
+      }
+    }
+    switch (decision.getAction()) {
+      case ANOTHER_CARD:
+        plan.insert(partial.getShortfall());
+        return null;
+      case ADD_TO_NEXT:
+        if (charge.requested.compareTo(stepDue) >= 0) {
+          throw invalidRecovery(
+              request,
+              committed,
+              SettlementStep.CARD_CHARGE,
+              "addToNext() needs a card payment after the partial one, but it was the last;"
+                  + " anotherCard() charges the shortfall on one more card");
+        }
+        plan.addToNext(partial.getShortfall());
+        return null;
+      case EXTERNAL:
+        ExternalPayment payment = decision.getExternalPayment();
+        if (payment.getAmount().compareTo(cardDue) != 0) {
+          throw invalidRecovery(
+              request,
+              committed,
+              SettlementStep.CARD_CHARGE,
+              "external payment " + payment.getAmount() + " must equal the outstanding " + cardDue);
+        }
+        return runStep(
+                request,
+                committed,
+                movements,
+                SettlementStep.EXTERNAL_PAYMENT,
+                basket,
+                cardDue,
+                false,
+                false,
+                (externalTxnId, serviceId, response) ->
+                    externalPaymentStep(request, payment, externalTxnId, movements))
+            .value;
+      case ABORT:
+        throw abort(
+            request,
+            committed,
+            new SessionError(
+                SessionErrorCode.DECLINED,
+                "the card payment authorized only "
+                    + partial.getApproved()
+                    + " of the requested "
+                    + partial.getRequested()
+                    + "; the register aborted the settlement"));
+      default:
+        throw new AssertionError("unknown partial approval decision " + decision.getAction());
+    }
+  }
+
   private static void preserveStanding(Request request, List<Commit> committed) {
     List<StandingMovement> standing = new ArrayList<>();
     for (Commit commit : committed) {
       if (commit.rollback != null) {
-        standing.add(new StandingMovement(commit.info, commit.rollback));
+        standing.add(commit.standing());
       }
     }
     request.onUnreversed.accept(standing);
@@ -1187,13 +1388,15 @@ public final class PaymentOrchestrator {
     for (int i = committed.size() - 1; i >= commitCheckpoint; i--) {
       Commit commit = committed.get(i);
       if (commit.rollback != null) {
+        Reversal reversal;
         try {
-          commit.rollback.run();
+          reversal = commit.rollback.reverse();
         } catch (RuntimeException e) {
           LOGGER.log(Level.WARNING, "rollback of partially committed " + step + " failed", e);
-          unreversed.add(new StandingMovement(commit.info, commit.rollback));
+          unreversed.add(commit.standing());
           continue;
         }
+        notifyReversed(request, commit, reversal);
       }
       committed.remove(i);
     }
@@ -1294,8 +1497,9 @@ public final class PaymentOrchestrator {
                 request.member.getMemberId(),
                 saleTransaction)
             : null);
-    publishMovement(
+    publishCommitted(
         request,
+        committed,
         movements,
         movement(
             SettlementStep.REBATE_REDEMPTION,
@@ -1388,8 +1592,9 @@ public final class PaymentOrchestrator {
                 request.member.getMemberId(),
                 saleTransaction)
             : null);
-    publishMovement(
+    publishCommitted(
         request,
+        committed,
         movements,
         movement(
             SettlementStep.POINT_REDEMPTION,
@@ -1465,8 +1670,9 @@ public final class PaymentOrchestrator {
         saleTransaction,
         body.getPoiData(),
         reversalRollback(Wire.poiRef(body.getPoiData()), saleTransaction));
-    publishMovement(
+    publishCommitted(
         request,
+        committed,
         movements,
         movement(
             SettlementStep.STORED_VALUE_CHARGE,
@@ -1530,17 +1736,26 @@ public final class PaymentOrchestrator {
           responseReceived);
     }
     BigDecimal actualAmount = loaded.getAmount() == null ? amount : loaded.getAmount();
-    Runnable rollback =
+    Rollback rollback =
         loaded.getPoiTransactionId() == null
             ? null
-            : () ->
-                storedValueManager.operation(
-                    StoredValueTransactionTypeEnum.REVERSE,
-                    null,
-                    null,
-                    loaded.getPoiTransactionId(),
-                    loaded.getPoiTransactionTimestamp(),
-                    saleTransaction);
+            : () -> {
+              String reversalServiceId =
+                  exchange.factory().mintServiceId(MessageCategoryType.STORED_VALUE);
+              StoredValueOperationResult reversed =
+                  storedValueManager.operation(
+                      StoredValueTransactionTypeEnum.REVERSE,
+                      null,
+                      null,
+                      loaded.getPoiTransactionId(),
+                      loaded.getPoiTransactionTimestamp(),
+                      saleTransaction,
+                      reversalServiceId);
+              return new Reversal(
+                  reversalServiceId,
+                  reversed.getPoiTransactionId(),
+                  reversed.getPoiTransactionTimestamp());
+            };
     commit(
         committed,
         SettlementStep.STORED_VALUE_LOAD,
@@ -1548,8 +1763,9 @@ public final class PaymentOrchestrator {
         loaded.getPoiTransactionId(),
         loaded.getPoiTransactionTimestamp(),
         rollback);
-    publishMovement(
+    publishCommitted(
         request,
+        committed,
         movements,
         movement(
             SettlementStep.STORED_VALUE_LOAD,
@@ -1587,6 +1803,7 @@ public final class PaymentOrchestrator {
       Basket basket,
       BigDecimal amount,
       BigDecimal paidAmount,
+      boolean acceptPartial,
       AttemptOptions options,
       LoyaltyHandlingEnum loyaltyHandling,
       TransactionIdentificationType saleTransaction,
@@ -1649,9 +1866,7 @@ public final class PaymentOrchestrator {
         saleTransaction,
         body.getPoiData(),
         reversalRollback(Wire.poiRef(body.getPoiData()), saleTransaction));
-    publishMovement(
-        request,
-        movements,
+    SettlementMovement cardMovement =
         movement(
             SettlementStep.CARD_CHARGE,
             charged,
@@ -1660,13 +1875,17 @@ public final class PaymentOrchestrator {
             body.getPoiData(),
             null,
             null,
-            null));
+            null);
+    publishCommitted(request, committed, movements, cardMovement);
 
     // a partial authorization on the stored value step is the split
-    // tender mechanism, but each card payment must cover its own share —
-    // an under-authorization here would complete a short-paid sale (or
-    // hand out cashback the sale never collected)
-    if (charged.compareTo(grossTotal) < 0) {
+    // tender mechanism; a short card payment is kept only when the card
+    // loop collects its shortfall (acceptPartial: the register's
+    // onPartialCardApproval, or an automatic follow-up request) —
+    // otherwise an under-authorization here would complete a short-paid
+    // sale (or hand out cashback the sale never collected). An
+    // authorization of zero is a decline.
+    if (charged.compareTo(grossTotal) < 0 && (!acceptPartial || charged.signum() <= 0)) {
       throw new StepFailure(
           new SessionError(
               SessionErrorCode.DECLINED,
@@ -1675,7 +1894,10 @@ public final class PaymentOrchestrator {
     }
 
     return new CardCharge(
-        cardPayment(body, charged, charged.compareTo(grossTotal) < 0), grossTotal, saleTransaction);
+        cardPayment(body, charged, charged.compareTo(grossTotal) < 0),
+        grossTotal,
+        saleTransaction,
+        cardMovement);
   }
 
   /** One card payment's amount, references, acquirer data, and receipts. */
@@ -1809,8 +2031,9 @@ public final class PaymentOrchestrator {
         parsePromotionMessages(body.getResponse().getAdditionalResponse());
     List<EarnedReward> earnedRewards =
         LoyaltyPayloadCodec.parseEarnedRewards(body.getResponse().getAdditionalResponse());
-    publishMovement(
+    publishCommitted(
         request,
+        committed,
         movements,
         movement(
             SettlementStep.AWARD,
@@ -2073,36 +2296,51 @@ public final class PaymentOrchestrator {
         }
         return total;
       } catch (RuntimeException callbackFailure) {
-        SessionError error =
-            new SessionError(
-                SessionErrorCode.UNKNOWN,
-                "unexpected error in " + step + " handler: " + callbackFailure,
-                null,
-                callbackFailure);
-        SettlementFailure context =
-            SettlementFailure.builder()
-                .step(step)
-                .error(error)
-                .amountDue(suggested)
-                .committedMovements(movements)
-                .outcomeCertainty(SettlementFailure.OutcomeCertainty.DEFINITIVE)
-                .build();
-        SettlementRecovery recovery = consultRecovery(request, committed, context);
-        if (recovery == null || recovery.getAction() == SettlementRecovery.Action.ABORT) {
-          throw abort(request, committed, error);
-        }
-        if (recovery.getAction() == SettlementRecovery.Action.ABANDON) {
-          throw abandon(request, context, movements, suggested);
-        }
-        if (recovery.getAction() == SettlementRecovery.Action.RETRY) {
-          continue;
-        }
-        throw invalidRecovery(
-            request,
-            committed,
-            step,
-            "a committed step handler can only be retried, aborted, or abandoned");
+        recoverHandlerFailure(
+            request, committed, movements, step, step + " handler", suggested, callbackFailure);
       }
+    }
+  }
+
+  /**
+   * Reports a register handler that threw after its step committed to {@code onError}. Returns when
+   * the register retries the handler; aborts, abandons, or refuses any other recovery by throwing.
+   */
+  private void recoverHandlerFailure(
+      Request request,
+      List<Commit> committed,
+      List<SettlementMovement> movements,
+      SettlementStep step,
+      String handler,
+      BigDecimal amountDue,
+      RuntimeException callbackFailure) {
+    SessionError error =
+        new SessionError(
+            SessionErrorCode.UNKNOWN,
+            "unexpected error in " + handler + ": " + callbackFailure,
+            null,
+            callbackFailure);
+    SettlementFailure context =
+        SettlementFailure.builder()
+            .step(step)
+            .error(error)
+            .amountDue(amountDue)
+            .committedMovements(movements)
+            .outcomeCertainty(SettlementFailure.OutcomeCertainty.DEFINITIVE)
+            .build();
+    SettlementRecovery recovery = consultRecovery(request, committed, context);
+    if (recovery == null || recovery.getAction() == SettlementRecovery.Action.ABORT) {
+      throw abort(request, committed, error);
+    }
+    if (recovery.getAction() == SettlementRecovery.Action.ABANDON) {
+      throw abandon(request, context, movements, amountDue);
+    }
+    if (recovery.getAction() != SettlementRecovery.Action.RETRY) {
+      throw invalidRecovery(
+          request,
+          committed,
+          step,
+          "a committed step handler can only be retried, aborted, or abandoned");
     }
   }
 
@@ -2120,7 +2358,7 @@ public final class PaymentOrchestrator {
       SettlementStep step,
       TransactionIdentificationType saleTransaction,
       com.bilt.pos.nexo.model.POIData poiData,
-      Runnable rollback) {
+      Rollback rollback) {
     TransactionIdentificationType poiTxn = poiData == null ? null : poiData.getPoiTransactionID();
     commit(
         committed,
@@ -2137,7 +2375,7 @@ public final class PaymentOrchestrator {
       TransactionIdentificationType saleTransaction,
       String poiTransactionId,
       Instant poiTransactionTimestamp,
-      Runnable rollback) {
+      Rollback rollback) {
     committed.add(
         new Commit(
             new CommittedStep(
@@ -2197,6 +2435,19 @@ public final class PaymentOrchestrator {
         .build();
   }
 
+  /**
+   * {@link #publishMovement} for the movement of the step just committed: links it to that commit
+   * first, so a later reversal of the commit can name it (see {@link #notifyReversed}).
+   */
+  private static void publishCommitted(
+      Request request,
+      List<Commit> committed,
+      List<SettlementMovement> movements,
+      SettlementMovement movement) {
+    committed.get(committed.size() - 1).movement = movement;
+    publishMovement(request, movements, movement);
+  }
+
   private static void publishMovement(
       Request request, List<SettlementMovement> movements, SettlementMovement movement) {
     movements.add(movement);
@@ -2212,7 +2463,7 @@ public final class PaymentOrchestrator {
    * stops the others. Returns every movement that could NOT be reversed and is still standing, with
    * its reversal action; the caller must surface those and must not retry over them.
    */
-  private List<StandingMovement> unwind(List<Commit> committed) {
+  private List<StandingMovement> unwind(Request request, List<Commit> committed) {
     List<StandingMovement> unreversed = new ArrayList<>();
     for (int i = committed.size() - 1; i >= 0; i--) {
       Commit commit = committed.get(i);
@@ -2220,7 +2471,7 @@ public final class PaymentOrchestrator {
         continue;
       }
       try {
-        commit.rollback.run();
+        notifyReversed(request, commit, commit.rollback.reverse());
       } catch (RuntimeException e) {
         LOGGER.log(
             Level.WARNING,
@@ -2228,10 +2479,44 @@ public final class PaymentOrchestrator {
                 + commit.info.getStep()
                 + " failed; manual reconciliation may be required",
             e);
-        unreversed.add(new StandingMovement(commit.info, commit.rollback));
+        unreversed.add(commit.standing());
       }
     }
     return unreversed;
+  }
+
+  /**
+   * Tells the register, through {@code onMovement}, that {@code commit}'s movement was reversed.
+   * Only a movement already reported gets a notice, and the notice stays out of the ledger: the
+   * caller drops the reversed movement from it. The settlement is already undoing work when this
+   * runs, so a handler that throws is logged and the unwind goes on.
+   */
+  private static void notifyReversed(Request request, Commit commit, Reversal reversal) {
+    SettlementMovement reversed = commit.movement;
+    if (reversed == null || request.handlers.onMovement == null) {
+      return;
+    }
+    SettlementMovement notice =
+        SettlementMovement.builder()
+            .step(reversed.getStep())
+            .target(reversed.getTarget())
+            .amount(reversed.getAmount())
+            .saleTransactionId(reversed.getSaleTransactionId())
+            .serviceId(reversal.serviceId)
+            .poiTransactionId(reversal.poiTransactionId)
+            .poiTransactionTimestamp(reversal.poiTransactionTimestamp)
+            .memberId(reversed.getMemberId())
+            .points(reversed.getPoints())
+            .reversedMovement(reversed)
+            .build();
+    try {
+      request.handlers.onMovement.accept(notice);
+    } catch (RuntimeException e) {
+      LOGGER.log(
+          Level.WARNING,
+          "reversal notification for " + reversed.getStep() + " failed in the register handler",
+          e);
+    }
   }
 
   /**
@@ -2255,12 +2540,13 @@ public final class PaymentOrchestrator {
         error.getCause());
   }
 
-  private Runnable loyaltyRollback(
+  private Rollback loyaltyRollback(
       LoyaltyTransactionTypeEnum refundType,
       TransactionIdentificationType originalPoiTxn,
       String memberId,
       TransactionIdentificationType saleTransaction) {
     return () -> {
+      String serviceId = exchange.factory().mintServiceId(MessageCategoryType.LOYALTY);
       SaleToPOIRequest wireRequest =
           exchange
               .factory()
@@ -2269,32 +2555,35 @@ public final class PaymentOrchestrator {
                   Wire.originalTransaction(originalPoiTxn),
                   memberId,
                   saleTransaction,
-                  exchange.factory().mintServiceId(MessageCategoryType.LOYALTY));
+                  serviceId);
       SaleToPOIResponse response =
           exchange.sendExpectingBody(MessageCategoryType.LOYALTY, wireRequest);
-      if (response.getLoyaltyResponse() != null) {
-        exchange.requireSuccess(
-            MessageCategoryType.LOYALTY, response.getLoyaltyResponse().getResponse());
+      if (response.getLoyaltyResponse() == null) {
+        return Reversal.of(serviceId, null);
       }
+      exchange.requireSuccess(
+          MessageCategoryType.LOYALTY, response.getLoyaltyResponse().getResponse());
+      return Reversal.of(serviceId, response.getLoyaltyResponse().getPoiData());
     };
   }
 
-  private Runnable reversalRollback(
+  private Rollback reversalRollback(
       TransactionIdentificationType originalPoiTxn, TransactionIdentificationType saleTransaction) {
     return () -> {
+      String serviceId = exchange.factory().mintServiceId(MessageCategoryType.REVERSAL);
       SaleToPOIRequest wireRequest =
           exchange
               .factory()
               .reversalRequest(
-                  Wire.originalTransaction(originalPoiTxn),
-                  saleTransaction,
-                  exchange.factory().mintServiceId(MessageCategoryType.REVERSAL));
+                  Wire.originalTransaction(originalPoiTxn), saleTransaction, serviceId);
       SaleToPOIResponse response =
           exchange.sendExpectingBody(MessageCategoryType.REVERSAL, wireRequest);
-      if (response.getReversalResponse() != null) {
-        exchange.requireSuccess(
-            MessageCategoryType.REVERSAL, response.getReversalResponse().getResponse());
+      if (response.getReversalResponse() == null) {
+        return Reversal.of(serviceId, null);
       }
+      exchange.requireSuccess(
+          MessageCategoryType.REVERSAL, response.getReversalResponse().getResponse());
+      return Reversal.of(serviceId, response.getReversalResponse().getPoiData());
     };
   }
 
