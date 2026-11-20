@@ -44,7 +44,7 @@ A sale that loaded a gift card (a `STORED_VALUE_LOAD` movement) also needs `stor
 
 The bridge is still running, and so are the session and any operation in flight:
 
-- The operation finishes on its own. A step the page declared in `handledSteps` takes its default when its deadline passes: 30 s for totals and before-step, 120 s for recovery and reversal decisions. The default for a recovery decision is `ABORT`, which unwinds what the settlement had committed.
+- The operation finishes on its own. A step the page declared in `handledSteps` takes its default when its deadline passes: 30 s for totals and before-step, 120 s for recovery, partial approval and reversal decisions. The default for a recovery or a partial approval decision is `ABORT`, which unwinds what the settlement had committed, every card payment of a split sale included.
 - The new page can reattach to the old session with the JavaScript SDK (below), or read its state over HTTP. Read requests need no `Idempotency-Key`:
 
   ```bash

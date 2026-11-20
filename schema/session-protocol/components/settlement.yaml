@@ -118,6 +118,18 @@ SettlementLoyalty:
         type: string
         enum: [REBATES, POINTS, AWARD]
 
+PlannedCardPayment:
+  type: object
+  description: |
+    One planned card payment of a split settlement, mirroring `CardPayment`: a fixed amount
+    charged on its own card before the next one. An object rather than a bare amount so a
+    planned payment can grow fields.
+  required: [amount]
+  properties:
+    amount:
+      description: What this card payment requests; positive.
+      $ref: './common.yaml#/Money'
+
 SettlementOptions:
   type: object
   description: The register's plan for resolving a basket, mirroring `SettlementOptions`; all fields optional.
@@ -125,8 +137,23 @@ SettlementOptions:
     loyalty:
       $ref: '#/SettlementLoyalty'
     cashback:
-      description: Positive cashback requested with the card payment.
+      description: Positive cashback requested with the card payment. Not allowed together with `cardPayments`.
       $ref: './common.yaml#/Money'
+    cardPayments:
+      type: array
+      description: |
+        Splits the card amount into card payments planned up front: each entry is charged in
+        order on its own card, and one more card payment for the remainder always follows.
+        `[{ "amount": "20.00" }]` charges $20 on the first card and the rest on the next.
+        Absent or empty, the settlement makes one card payment for the whole card amount. The
+        amounts are checked when the card step starts, after rebates, points and the gift card:
+        they must add up to less than the card amount, or the step fails with
+        `CARD_PAYMENTS_EXCEED_TOTAL` before any card is charged. Each card payment is its own
+        `CARD_CHARGE` step with its own `BEFORE_STEP`, and every one after the first is a nexo
+        split payment sent with the first one's sale transaction id. Rejected with 400 together
+        with `cashback`.
+      items:
+        $ref: '#/PlannedCardPayment'
     paymentProcessingDisplay:
       description: Overrides the display shown while the card payment is processing.
       $ref: './display.yaml#/DisplayPayload'
@@ -144,9 +171,31 @@ SettlementOptions:
 
 SettlementMovement:
   type: object
-  description: One money or loyalty movement committed as part of a settlement.
+  description: |
+    One money or loyalty movement committed as part of a settlement, or the notice that the
+    SDK reversed one (`reversal: true`).
+
+    A reversal notice is sent as an `operation.movement` event, when the `settle` request set
+    `reversalNotices`, whenever the settlement itself
+    successfully reverses a movement it had already reported: before a `RETRY`, `SKIP` or
+    `EXTERNAL` recovery replaces a failed step that had committed (a partial approval the SDK
+    can't keep, a handler that threw after the commit, a recovered response that failed
+    processing), and once per movement an abort unwinds, newest first. It covers every
+    charge-side step (card, stored value, rebates, points, award). It copies the reversed
+    movement's `step`, `target`, `amount`, `saleTransactionId`, `memberId` and `points`; its
+    `serviceId`, `poiTransactionId` and `poiTransactionTimestamp` are the reversal request's own,
+    and `reversedMovement` is the movement it reverses. A reversal that fails gets no notice.
+    Notices never appear in `SettlementResult.movements` or `SettlementFailure.committedMovements`:
+    the reversed movement leaves the ledger instead.
   required: [step, target, amount]
   properties:
+    reversal:
+      type: boolean
+      default: false
+      description: '`true` when this is a reversal notice rather than a movement of its own; absent otherwise.'
+    reversedMovement:
+      description: 'The movement this notice reverses; present only with `reversal: true`.'
+      $ref: '#/SettlementMovement'
     step:
       $ref: '#/SettlementStep'
     target:
@@ -200,10 +249,20 @@ SettlementContext:
     currentBasket:
       $ref: './basket.yaml#/Basket'
     currentTotal:
+      description: Everything the card phase still owes, for a card step; the running total otherwise.
+      $ref: './common.yaml#/Money'
+    stepAmount:
+      description: |
+        What this step's terminal request is about to charge: a split card payment's own share,
+        while `currentTotal` stays everything the card phase still owes. Equal to `currentTotal`
+        for every other step.
       $ref: './common.yaml#/Money'
     defaultTransactionId:
       type: string
-      description: The basket's shared sale transaction id, used when the reply names nothing else.
+      description: |
+        The basket's shared sale transaction id, used when the reply names nothing else. For a
+        card payment after the first of a split settlement it is the first card payment's id, and
+        a different reply is refused with `INVALID_STATE`.
     priorSteps:
       type: array
       items:
@@ -256,6 +315,59 @@ SettlementRecovery:
     action:
       type: string
       enum: [RETRY, SKIP, EXTERNAL, ABORT, ABANDON]
+    externalPayment:
+      description: Required for `EXTERNAL`.
+      $ref: '#/ExternalPayment'
+
+PartialCardApproval:
+  type: object
+  description: |
+    What `onPartialCardApproval` sees, mirroring `PartialCardApproval`: a card payment the
+    terminal approved for less than it requested. By then the payment's movement has been
+    published. The `PARTIAL_CARD_APPROVAL` step carries these fields.
+  required: [approved, requested, shortfall, amountDue, cardPayments, movement]
+  properties:
+    approved:
+      description: What the terminal authorized for this card payment.
+      $ref: './common.yaml#/Money'
+    requested:
+      description: What this card payment asked for.
+      $ref: './common.yaml#/Money'
+    shortfall:
+      description: '`requested` minus `approved`.'
+      $ref: './common.yaml#/Money'
+    amountDue:
+      description: |
+        Everything the card phase still owes after this payment: the shortfall plus the card
+        payments still to come. An `EXTERNAL` decision must pay exactly this amount.
+      $ref: './common.yaml#/Money'
+    cardPayments:
+      type: array
+      description: The card payments committed so far, in order, this partial one last. Count them to cap how many cards a sale takes.
+      items:
+        $ref: '#/CardPaymentResult'
+    movement:
+      description: The `CARD_CHARGE` movement of this partial card payment.
+      $ref: '#/SettlementMovement'
+
+PartialApprovalDecision:
+  type: object
+  description: |
+    The register's answer to a `PARTIAL_CARD_APPROVAL` step, mirroring `PartialApprovalDecision`.
+    The partial card payment stays committed unless the action is `ABORT`. `ANOTHER_CARD` charges
+    the shortfall on another card, then continues the plan. `ADD_TO_NEXT` adds the shortfall to
+    the next card payment, and is refused while none is left. `EXTERNAL` records
+    `externalPayment` for everything the card phase still owes (`amountDue` of the step) and ends
+    the card phase, keeping every card payment. `ABORT` reverses every committed charge-side step
+    and fails the settlement as `DECLINED`. A decision the settlement cannot carry out
+    (`ADD_TO_NEXT` with no card payment left, an `EXTERNAL` amount other than `amountDue`) is
+    refused as an invalid `SettlementRecovery` is: the settlement fails with `INVALID_STATE`,
+    with the committed steps left standing for `voidTransaction`.
+  required: [action]
+  properties:
+    action:
+      type: string
+      enum: [ANOTHER_CARD, ADD_TO_NEXT, EXTERNAL, ABORT]
     externalPayment:
       description: Required for `EXTERNAL`.
       $ref: '#/ExternalPayment'

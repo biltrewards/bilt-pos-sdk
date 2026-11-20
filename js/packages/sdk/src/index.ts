@@ -37,6 +37,7 @@ export type {
 } from './session';
 export type {
   MaybePromise,
+  PartialApprovalAction,
   ReversalHandlers,
   ReversalResult,
   SettlementHandlers,
@@ -84,9 +85,12 @@ export type {
   Money,
   Offer,
   OriginalSaleRecord,
+  PartialApprovalDecision,
+  PartialCardApproval,
   PinOptions,
   PinResult,
   PlacementConfig,
+  PlannedCardPayment,
   PointRedemptionResult,
   PrintPayload,
   RebateRedemptionResult,

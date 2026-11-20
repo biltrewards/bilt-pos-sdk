@@ -1,0 +1,37 @@
+{
+  "seq": 12,
+  "at": "2026-10-06T14:06:02.318Z",
+  "type": "operation.step",
+  "payload": {
+    "operationId": "op_01J9Q2N8K2M3P4Q5R6S7T8V9W0",
+    "stepId": "stp_01J9Q2R4C5D6E7F8G9H0J1K2M3",
+    "kind": "PARTIAL_CARD_APPROVAL",
+    "deadlineAt": "2026-10-06T14:08:02.318Z",
+    "default": { "stepId": "stp_01J9Q2R4C5D6E7F8G9H0J1K2M3", "partialApprovalDecision": { "action": "ABORT" } },
+    "approved": "60.00",
+    "requested": "100.00",
+    "shortfall": "40.00",
+    "amountDue": "40.00",
+    "cardPayments": [
+      {
+        "amount": "60.00",
+        "poiTransactionId": "POI-88214",
+        "poiTransactionTimestamp": "2026-10-06T14:06:01.000Z",
+        "approvalCode": "A1B2C3",
+        "acquirerTransactionId": "ACQ-99120031",
+        "paymentBrand": "Visa",
+        "maskedPan": "411111******1111",
+        "partialApproval": true
+      }
+    ],
+    "movement": {
+      "step": "CARD_CHARGE",
+      "target": { "type": "SALES" },
+      "amount": "60.00",
+      "saleTransactionId": "7c1b8e9a-5d3f-4a2b-9c8d-1e2f3a4b5c6d",
+      "poiTransactionId": "POI-88214",
+      "poiTransactionTimestamp": "2026-10-06T14:06:01.000Z",
+      "serviceId": "SVC-0007"
+    }
+  }
+}

@@ -14,6 +14,9 @@ import type { MemberInput } from '@biltorg/pos-protocol';
 import type { Money } from '@biltorg/pos-protocol';
 import { Operation } from '@biltorg/pos-sdk';
 import { OperationStatus } from '@biltorg/pos-sdk';
+import { PartialApprovalAction } from '@biltorg/pos-sdk';
+import type { PartialApprovalDecision } from '@biltorg/pos-protocol';
+import type { PartialCardApproval } from '@biltorg/pos-protocol';
 import type { PointRedemptionResult } from '@biltorg/pos-protocol';
 import { ReactNode } from 'react';
 import type { RebateRedemptionResult } from '@biltorg/pos-protocol';
@@ -67,7 +70,7 @@ export type BiltPosProviderProps = {
 });
 
 // @public
-export type InteractiveStepKind = 'BEFORE_STEP' | 'TOTAL_REQUIRED' | 'RECOVERY_REQUIRED';
+export type InteractiveStepKind = 'BEFORE_STEP' | 'TOTAL_REQUIRED' | 'RECOVERY_REQUIRED' | 'PARTIAL_CARD_APPROVAL';
 
 // @public
 export interface PendingBeforeStep extends PendingStepBase {
@@ -75,6 +78,12 @@ export interface PendingBeforeStep extends PendingStepBase {
     readonly context: SettlementContext;
     // (undocumented)
     readonly kind: 'BEFORE_STEP';
+}
+
+// @public
+export interface PendingPartialApprovalStep extends PendingStepBase, PartialCardApproval {
+    // (undocumented)
+    readonly kind: 'PARTIAL_CARD_APPROVAL';
 }
 
 // @public
@@ -86,7 +95,7 @@ export interface PendingRecoveryStep extends PendingStepBase {
 }
 
 // @public (undocumented)
-export type PendingSettlementStep = PendingTotalStep | PendingRecoveryStep | PendingBeforeStep;
+export type PendingSettlementStep = PendingTotalStep | PendingRecoveryStep | PendingPartialApprovalStep | PendingBeforeStep;
 
 // @public
 export interface PendingStepBase extends StepInfo {
@@ -140,6 +149,8 @@ export type SettlementStepReply = {
     readonly total: Money;
 } | {
     readonly recovery: SettlementRecovery | SettlementRecoveryAction;
+} | {
+    readonly partialApproval: PartialApprovalDecision | PartialApprovalAction;
 } | {
     readonly saleTransactionId: string | null | undefined;
 };

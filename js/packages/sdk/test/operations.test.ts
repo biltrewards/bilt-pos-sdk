@@ -3,7 +3,7 @@
 import type { OperationStep, SessionError as SessionErrorData } from '@biltorg/pos-protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BiltPos, SessionError, type TerminalShopperSession } from '../src/index';
-import { rebateStep, ScriptedEngine } from './scripted-engine';
+import { partialApprovalStep, rebateStep, ScriptedEngine } from './scripted-engine';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -45,6 +45,7 @@ describe('starting an operation', () => {
       type: 'settle',
       options: { loyalty: { handling: 'FORBIDDEN' }, cashback: '5.00' },
       handledSteps: ['TOTAL_REQUIRED', 'RECOVERY_REQUIRED'],
+      reversalNotices: true,
     });
     expect(request.options?.idempotencyKey).toMatch(UUID_V4);
 
@@ -495,6 +496,80 @@ describe('starting an operation', () => {
     engine.complete(session.id, id, { result: {} } as never);
     await op;
   });
+
+  it('routes a reversal notice to onMovement and onCardChargeReversed, not to the charge handlers', async () => {
+    const { engine, session } = await lane();
+    const onMovement = vi.fn();
+    const onCardCharged = vi.fn();
+    const onCardChargeReversed = vi.fn();
+    const onAwarded = vi.fn();
+    const op = session.settle({}, { onMovement, onCardCharged, onCardChargeReversed, onAwarded });
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    const id = engine.lastOperation(session.id).id;
+    const charge = {
+      step: 'CARD_CHARGE' as const,
+      target: { type: 'SALES' as const },
+      amount: '60.00',
+      poiTransactionId: 'POI-1',
+      serviceId: 'SVC-1',
+    };
+    engine.movement(session.id, id, charge);
+    engine.movement(session.id, id, {
+      ...charge,
+      poiTransactionId: 'POI-R1',
+      serviceId: 'SVC-R1',
+      reversal: true,
+      reversedMovement: charge,
+    });
+    // a reversed award reaches onMovement only: there is no per-step handler for a reversal
+    const award = { step: 'AWARD' as const, target: { type: 'SALES' as const }, amount: '0' };
+    engine.movement(session.id, id, {
+      ...award,
+      serviceId: 'SVC-R2',
+      reversal: true,
+      reversedMovement: award,
+    });
+    await vi.waitFor(() => expect(onMovement).toHaveBeenCalledTimes(3));
+    expect(onCardCharged).toHaveBeenCalledTimes(1);
+    expect(onCardChargeReversed).toHaveBeenCalledTimes(1);
+    expect(onCardChargeReversed.mock.calls[0]![0]).toMatchObject({
+      reversal: true,
+      serviceId: 'SVC-R1',
+      poiTransactionId: 'POI-R1',
+      reversedMovement: { poiTransactionId: 'POI-1', serviceId: 'SVC-1' },
+    });
+    expect(onAwarded).not.toHaveBeenCalled();
+    engine.complete(session.id, id, { result: {} } as never);
+    await op;
+  });
+
+  it('reports a throwing onCardChargeReversed without keeping onMovement from hearing the notice', async () => {
+    const { engine, session } = await lane();
+    const onMovement = vi.fn();
+    const errors: unknown[] = [];
+    session.on('background.error', (e) => errors.push(e));
+    const op = session.settle(
+      {},
+      {
+        onMovement,
+        onCardChargeReversed: () => {
+          throw new Error('ledger down');
+        },
+      },
+    );
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(1));
+    const id = engine.lastOperation(session.id).id;
+    const charge = {
+      step: 'CARD_CHARGE' as const,
+      target: { type: 'SALES' as const },
+      amount: '1',
+    };
+    engine.movement(session.id, id, { ...charge, reversal: true, reversedMovement: charge });
+    await vi.waitFor(() => expect(errors).toHaveLength(1));
+    expect(onMovement).toHaveBeenCalledTimes(1);
+    engine.complete(session.id, id, { result: {} } as never);
+    await op;
+  });
 });
 
 describe('identifyMember', () => {
@@ -706,6 +781,111 @@ describe('steps', () => {
     });
     await vi.waitFor(() => expect(engine.replies).toHaveLength(2));
     expect(engine.replies[1]!.reply).toEqual({ stepId: 'r1', recovery: { action: 'RETRY' } });
+  });
+
+  it('sends cardPayments in the settle options and declares PARTIAL_CARD_APPROVAL only with a handler', async () => {
+    const { engine, session } = await lane();
+    void session.settle(
+      { cardPayments: [{ amount: '20.00' }] },
+      { onPartialCardApproval: () => 'ANOTHER_CARD' },
+    );
+    void session.settle(
+      { cardPayments: [{ amount: '20.00' }] },
+      { onCardCharged: () => undefined },
+    );
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(2));
+    expect(engine.requests[0]!.operation).toEqual({
+      type: 'settle',
+      options: { cardPayments: [{ amount: '20.00' }] },
+      handledSteps: ['PARTIAL_CARD_APPROVAL'],
+    });
+    // no handler, no declaration: the host leaves the SDK's automatic follow-up cards in place
+    expect(engine.requests[1]!.operation).toEqual({
+      type: 'settle',
+      options: { cardPayments: [{ amount: '20.00' }] },
+    });
+  });
+
+  it('asks for reversal notices only when a handler can receive them', async () => {
+    const { engine, session } = await lane();
+    void session.settle({}, { onCardChargeReversed: () => undefined });
+    void session.settle({}, { onMovement: () => undefined });
+    void session.settle({}, { onCardCharged: () => undefined, onAwarded: () => undefined });
+    void session.settle();
+    await vi.waitFor(() => expect(engine.requests).toHaveLength(4));
+    expect(engine.requests.map((r) => 'reversalNotices' in r.operation)).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+    expect(engine.requests[0]!.operation).toMatchObject({ reversalNotices: true });
+  });
+
+  it('gives onPartialCardApproval the partial approval and sends the decision', async () => {
+    const { engine, session } = await lane();
+    const handler = vi.fn(
+      (
+        partial: { approved: string; amountDue: string; cardPayments: unknown[] },
+        info: { deadline: Date },
+      ) => {
+        expect(info.deadline).toBeInstanceOf(Date);
+        return partial.cardPayments.length > 1 ? 'ABORT' : ('ANOTHER_CARD' as const);
+      },
+    );
+    const { id } = await settleWith(engine, session, { onPartialCardApproval: handler });
+    engine.step(session.id, id, partialApprovalStep('p1', '60.00'));
+    await vi.waitFor(() => expect(engine.replies).toHaveLength(1));
+    expect(handler).toHaveBeenCalledTimes(1);
+    const partial = handler.mock.calls[0]![0];
+    expect(partial).toMatchObject({
+      approved: '60.00',
+      requested: '100.00',
+      shortfall: '40.00',
+      amountDue: '40.00',
+    });
+    expect(partial.cardPayments).toHaveLength(1);
+    expect(partial).toHaveProperty('movement.poiTransactionId', 'POI-1');
+    // the step's own bookkeeping is not part of the handler's argument
+    expect(partial).not.toHaveProperty('stepId');
+    expect(engine.replies[0]!.reply).toEqual({
+      stepId: 'p1',
+      partialApprovalDecision: { action: 'ANOTHER_CARD' },
+    });
+    expect(engine.replies[0]!.options?.idempotencyKey).toMatch(UUID_V4);
+  });
+
+  it('passes an EXTERNAL partial approval decision through with its payment', async () => {
+    const { engine, session } = await lane();
+    const { id } = await settleWith(engine, session, {
+      onPartialCardApproval: async (partial) => ({
+        action: 'EXTERNAL',
+        externalPayment: { tenderType: 'CASH', amount: partial.amountDue },
+      }),
+    });
+    engine.step(session.id, id, partialApprovalStep('p1', '60.00'));
+    await vi.waitFor(() => expect(engine.replies).toHaveLength(1));
+    expect(engine.replies[0]!.reply).toEqual({
+      stepId: 'p1',
+      partialApprovalDecision: {
+        action: 'EXTERNAL',
+        externalPayment: { tenderType: 'CASH', amount: '40.00' },
+      },
+    });
+  });
+
+  it('sends nothing for a throwing partial approval handler, leaving the abort default to the host', async () => {
+    const { engine, session } = await lane();
+    const errors: unknown[] = [];
+    session.on('background.error', (e) => errors.push(e));
+    const { id } = await settleWith(engine, session, {
+      onPartialCardApproval: () => {
+        throw new Error('drawer jammed');
+      },
+    });
+    engine.step(session.id, id, partialApprovalStep('p1', '60.00'));
+    await vi.waitFor(() => expect(errors).toHaveLength(1));
+    expect(engine.replies).toEqual([]);
   });
 
   it('gives a reversal handler the step and a SessionError and treats no answer as ABORT', async () => {

@@ -131,9 +131,13 @@ OperationMovementEvent:
       required: [type, payload]
       description: |
         A money or loyalty movement committed during a settlement (`onMovement` and the
-        per-step callbacks). Provisional: an abort or a same-run recovery may reverse
-        charge-side movements without a compensating event; `SettlementResult.movements` is
-        the final ledger.
+        per-step callbacks), or the notice that the SDK reversed one (`movement.reversal` is
+        `true`, `movement.reversedMovement` is the movement it reverses; sent only when the `settle`
+        request set `reversalNotices`). Charge-side
+        movements are provisional: an abort or a same-run recovery reverses them, and a
+        reversal notice follows every reversal the SDK performs during the settlement, so a
+        register that mirrors movements can undo what it recorded. A reversal that fails gets no
+        notice. `SettlementResult.movements` is the final ledger and never lists a notice.
       properties:
         type:
           type: string

@@ -39,6 +39,7 @@ public final class PendingStep<T> {
     BEFORE_STEP,
     TOTAL_REQUIRED,
     RECOVERY_REQUIRED,
+    PARTIAL_CARD_APPROVAL,
     REVERSAL_DECISION_REQUIRED
   }
 

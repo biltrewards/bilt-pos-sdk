@@ -37,7 +37,7 @@ SessionHost host = SessionHost.builder()
     .terminal(myTerminal)                    // TerminalClientProvider: the one terminal
     .allowedOrigins(List.of("https://pos.example.com")) // CORS; "*" for a dev host; a Supplier is read per request
     .auth(HostAuth.permitAll())              // default; the bridge plugs pairing in here
-    .stepDeadlines(StepDeadlines.defaults()) // 30 s totals, 120 s recovery decisions
+    .stepDeadlines(StepDeadlines.defaults()) // 30 s totals, 120 s recovery and partial approval decisions
     .build();
 host.start();
 int open = host.activeSessions();            // for a tray icon
@@ -206,6 +206,27 @@ rest. A settlement that redeems rebates then publishes an `operation.step` of
 kind `TOTAL_REQUIRED`; answer it with `{"stepId":"...","total":"89.50"}` or let
 the deadline apply the suggested total. Leave `handledSteps` out to take every
 default without being asked.
+
+`options.cardPayments` (`[{"amount":"20.00"}]`) splits the card amount into
+several card payments: the planned amounts first, then one for the remainder.
+With `"PARTIAL_CARD_APPROVAL"` in `handledSteps`, a card payment the terminal
+approves for less than it was asked publishes an `operation.step` of that kind
+(`approved`, `requested`, `shortfall`, `amountDue`, `cardPayments`, `movement`).
+Answer it with `{"stepId":"...","partialApprovalDecision":{"action":"ANOTHER_CARD"}}`
+(or `ADD_TO_NEXT`, `ABORT`, or `EXTERNAL` with an `externalPayment` for
+`amountDue`); at the deadline `ABORT` applies and every card payment is reversed.
+Left out of `handledSteps`, the host registers no handler and the SDK charges
+the shortfall on another card itself, at most three card requests in all.
+
+Movements reach the register as `operation.movement` events. Charge-side ones
+are provisional: whenever the settlement reverses a movement it already
+reported (before a retry, skip or external recovery replaces a step, and for
+each movement an abort unwinds), a request that set `"reversalNotices":true` is
+sent one more `operation.movement` whose `movement` has `"reversal":true` and a
+`reversedMovement`. Without that flag the host drops the notices, since a
+client that predates them would read one as another charge. Its `serviceId`
+and `poiTransactionId` are the reversal request's own. A reversal that fails
+gets no event.
 
 `identifyMember` takes `options.forceEntryModes` (names of the SDK's
 `ForceEntryMode`) and passes them straight to the terminal. The terminal reads a

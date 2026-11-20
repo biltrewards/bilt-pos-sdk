@@ -38,6 +38,11 @@ function Pay({
       <span data-testid="failure">
         {step?.kind === 'RECOVERY_REQUIRED' ? step.failure.error.code : ''}
       </span>
+      <span data-testid="partial">
+        {step?.kind === 'PARTIAL_CARD_APPROVAL'
+          ? `${step.approved}/${step.requested}/${step.amountDue}/${step.cardPayments.length}`
+          : ''}
+      </span>
       <span data-testid="charged">{settlement.result?.cardAmountCharged ?? ''}</span>
       <span data-testid="movements">{settlement.movements.map((m) => m.step).join(',')}</span>
       <span data-testid="error">{settlement.error?.message ?? ''}</span>
@@ -45,6 +50,21 @@ function Pay({
       <button onClick={() => settlement.reply({ total: '3.00' })}>reply total</button>
       <button onClick={() => settlement.reply({ recovery: 'RETRY' })}>retry</button>
       <button onClick={() => settlement.reply({ recovery: 'ABORT' })}>give up</button>
+      <button onClick={() => settlement.reply({ partialApproval: 'ANOTHER_CARD' })}>
+        another card
+      </button>
+      <button
+        onClick={() =>
+          settlement.reply({
+            partialApproval: {
+              action: 'EXTERNAL',
+              externalPayment: { tenderType: 'CASH', amount: '1.00' },
+            },
+          })
+        }
+      >
+        cash
+      </button>
       <button onClick={() => step?.useDefault()}>default</button>
       <button
         onClick={() => {
@@ -118,6 +138,87 @@ describe('useSettlement', () => {
     act(() => screen.getByText('retry').click());
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('succeeded'));
     expect(session.recoveries).toEqual(['RETRY']);
+  });
+
+  it('surfaces PARTIAL_CARD_APPROVAL and continues with { partialApproval: "ANOTHER_CARD" }', async () => {
+    const session = await laneWithItem();
+    session.partialNextChargeApproving = '4.00';
+    renderWithPos(
+      new MockBiltPos(),
+      <Pay session={session} interactive={['PARTIAL_CARD_APPROVAL']} />,
+    );
+    act(() => screen.getByText('pay').click());
+    await waitFor(() =>
+      expect(screen.getByTestId('step').textContent).toBe('PARTIAL_CARD_APPROVAL'),
+    );
+    expect(screen.getByTestId('partial').textContent).toBe('4.00/5.43/1.43/1');
+    // the partial payment's movement was reported before the step
+    expect(screen.getByTestId('movements').textContent).toBe('CARD_CHARGE');
+
+    act(() => screen.getByText('another card').click());
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('succeeded'));
+    expect(session.partialDecisions).toEqual(['ANOTHER_CARD']);
+    expect(screen.getByTestId('movements').textContent).toBe('CARD_CHARGE,CARD_CHARGE');
+  });
+
+  it('sends an EXTERNAL partial approval decision with its payment', async () => {
+    const session = await laneWithItem();
+    session.partialNextChargeApproving = '4.00';
+    renderWithPos(
+      new MockBiltPos(),
+      <Pay session={session} interactive={['PARTIAL_CARD_APPROVAL']} />,
+    );
+    act(() => screen.getByText('pay').click());
+    await waitFor(() =>
+      expect(screen.getByTestId('step').textContent).toBe('PARTIAL_CARD_APPROVAL'),
+    );
+    act(() => screen.getByText('cash').click());
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('succeeded'));
+    expect(session.partialDecisions).toEqual(['EXTERNAL']);
+    expect(screen.getByTestId('movements').textContent).toBe('CARD_CHARGE,EXTERNAL_PAYMENT');
+  });
+
+  it('aborts a partial approval on useDefault()', async () => {
+    const session = await laneWithItem();
+    session.partialNextChargeApproving = '4.00';
+    renderWithPos(
+      new MockBiltPos(),
+      <Pay session={session} interactive={['PARTIAL_CARD_APPROVAL']} />,
+    );
+    act(() => screen.getByText('pay').click());
+    await waitFor(() =>
+      expect(screen.getByTestId('step').textContent).toBe('PARTIAL_CARD_APPROVAL'),
+    );
+    act(() => screen.getByText('default').click());
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('failed'));
+    expect(session.partialDecisions).toEqual(['ABORT']);
+  });
+
+  it('refuses a reply of the wrong kind for a partial approval step', async () => {
+    const session = await laneWithItem();
+    session.partialNextChargeApproving = '4.00';
+    renderWithPos(
+      new MockBiltPos(),
+      <Pay session={session} interactive={['PARTIAL_CARD_APPROVAL']} />,
+    );
+    act(() => screen.getByText('pay').click());
+    await waitFor(() =>
+      expect(screen.getByTestId('step').textContent).toBe('PARTIAL_CARD_APPROVAL'),
+    );
+    act(() => screen.getByText('wrong reply').click());
+    expect(screen.getByTestId('mismatch').textContent).toBe(
+      'a PARTIAL_CARD_APPROVAL step takes { partialApproval }',
+    );
+    expect(screen.getByTestId('step').textContent).toBe('PARTIAL_CARD_APPROVAL');
+  });
+
+  it('leaves a partial approval to the SDK when the step is not interactive', async () => {
+    const session = await laneWithItem();
+    session.partialNextChargeApproving = '4.00';
+    renderWithPos(new MockBiltPos(), <Pay session={session} interactive={[]} />);
+    act(() => screen.getByText('pay').click());
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('succeeded'));
+    expect(session.partialDecisions).toEqual(['AUTOMATIC']);
   });
 
   it('fails with the SessionError when recovery aborts, and resets', async () => {

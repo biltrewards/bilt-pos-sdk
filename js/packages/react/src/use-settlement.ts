@@ -1,6 +1,8 @@
 import type {
   GiftCardPaymentResult,
   Money,
+  PartialApprovalDecision,
+  PartialCardApproval,
   PointRedemptionResult,
   RebateRedemptionResult,
   SettlementContext,
@@ -12,6 +14,7 @@ import type {
 import {
   SessionError,
   type Operation,
+  type PartialApprovalAction,
   type SettlementHandlers,
   type SettlementOptions,
   type SettlementRecoveryAction,
@@ -28,7 +31,8 @@ export type SettlementStatus =
   'idle' | 'running' | 'awaitingReply' | 'succeeded' | 'failed' | 'aborted';
 
 /** The step kinds the hook can hold open for an interactive answer. */
-export type InteractiveStepKind = 'BEFORE_STEP' | 'TOTAL_REQUIRED' | 'RECOVERY_REQUIRED';
+export type InteractiveStepKind =
+  'BEFORE_STEP' | 'TOTAL_REQUIRED' | 'RECOVERY_REQUIRED' | 'PARTIAL_CARD_APPROVAL';
 
 /** Options for `useSettlement`. */
 export interface UseSettlementOptions {
@@ -65,18 +69,31 @@ export interface PendingRecoveryStep extends PendingStepBase {
   readonly failure: SettlementFailure;
 }
 
+/**
+ * A `PARTIAL_CARD_APPROVAL` step: a card approved less than it was asked for, and the register
+ * decides what happens to the shortfall: `ANOTHER_CARD`, `ADD_TO_NEXT`, `EXTERNAL` (cash for
+ * `amountDue`) or `ABORT`, which reverses every card payment. The default, applied by
+ * `useDefault()` and at the deadline, is `ABORT`. Listing this kind in `interactive` replaces the
+ * SDK's automatic follow-up card requests with this prompt.
+ */
+export interface PendingPartialApprovalStep extends PendingStepBase, PartialCardApproval {
+  readonly kind: 'PARTIAL_CARD_APPROVAL';
+}
+
 /** A `BEFORE_STEP` step: the register may supply the `SaleTransactionID` for the next step. */
 export interface PendingBeforeStep extends PendingStepBase {
   readonly kind: 'BEFORE_STEP';
   readonly context: SettlementContext;
 }
 
-export type PendingSettlementStep = PendingTotalStep | PendingRecoveryStep | PendingBeforeStep;
+export type PendingSettlementStep =
+  PendingTotalStep | PendingRecoveryStep | PendingPartialApprovalStep | PendingBeforeStep;
 
 /** The answer to a pending step; the field must match the step's kind. */
 export type SettlementStepReply =
   | { readonly total: Money }
   | { readonly recovery: SettlementRecovery | SettlementRecoveryAction }
+  | { readonly partialApproval: PartialApprovalDecision | PartialApprovalAction }
   | { readonly saleTransactionId: string | null | undefined };
 
 /** What `useSettlement` returns. */
@@ -105,7 +122,11 @@ export interface UseSettlementResult {
   /** Why it `failed` or was `aborted`: a `SessionError`, with `abandonedSettlement` set after `ABANDON`. */
   readonly error: Error | null;
 
-  /** Every movement the running or last settlement reported, in order. */
+  /**
+   * Every movement the running or last settlement reported, in order, reversal notices
+   * (`movement.reversal`) included: when summing what is committed, subtract each notice's
+   * `reversedMovement` instead of adding the notice.
+   */
   readonly movements: readonly SettlementMovement[];
 
   /** The `Operation` handle of the running or last settlement. */
@@ -160,7 +181,8 @@ function toError(value: unknown): Error {
 /**
  * Runs settlements as React state: `settle()` starts one, `status`, `movements`, `result` and
  * `error` follow it, and steps the register wants to answer interactively (a recomputed total
- * after rebates, a recovery decision after a decline) are held open as `pendingStep` until
+ * after rebates, a recovery decision after a decline, what to do about a partial card approval)
+ * are held open as `pendingStep` until
  * `reply()`. Unanswered steps fall back to their SDK defaults at the host's deadline, exactly
  * as a missing handler would.
  *
@@ -320,6 +342,25 @@ export function useSettlement(
                 throw new Error('a RECOVERY_REQUIRED step takes { recovery }');
               }
               return reply.recovery;
+            },
+          );
+      }
+      if (!settleHandlers.onPartialCardApproval && wants('PARTIAL_CARD_APPROVAL')) {
+        wrapped.onPartialCardApproval = (partial, info) =>
+          ask<PartialApprovalDecision | PartialApprovalAction>(
+            {
+              kind: 'PARTIAL_CARD_APPROVAL',
+              ...partial,
+              deadline: info.deadline,
+              signal: info.signal,
+            },
+            info,
+            () => 'ABORT',
+            (reply) => {
+              if (!('partialApproval' in reply)) {
+                throw new Error('a PARTIAL_CARD_APPROVAL step takes { partialApproval }');
+              }
+              return reply.partialApproval;
             },
           );
       }

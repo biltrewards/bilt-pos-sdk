@@ -3,6 +3,7 @@ import type {
   ReversalContext,
   SettlementContext,
   SettlementMovement,
+  PartialApprovalDecision,
   SettlementRecovery,
   StepKind,
   StepReply,
@@ -35,13 +36,35 @@ export function handledSteps(steps: StepHandlers | undefined): StepKind[] {
     kinds.push('TOTAL_REQUIRED');
   }
   if (h.onError) kinds.push('RECOVERY_REQUIRED');
+  // declared only with a handler: an undeclared kind leaves the Java flow with no
+  // onPartialCardApproval, so the SDK's automatic follow-up card requests apply
+  if (h.onPartialCardApproval) kinds.push('PARTIAL_CARD_APPROVAL');
   return kinds;
+}
+
+/**
+ * Whether a settlement's handlers want reversal notices: the host sends them only on request,
+ * because a client that predates them would read one as another charge. `onCardChargeReversed`
+ * and `onMovement` are the handlers a notice reaches.
+ */
+export function wantsReversalNotices(steps: StepHandlers | undefined): boolean {
+  return (
+    steps?.kind === 'settlement' &&
+    !!(steps.handlers.onMovement || steps.handlers.onCardChargeReversed)
+  );
 }
 
 /** `"RETRY"` becomes `{ action: "RETRY" }`; an object passes through. */
 export function normalizeRecovery(
   answer: SettlementRecovery | SettlementRecovery['action'],
 ): SettlementRecovery {
+  return typeof answer === 'string' ? { action: answer } : answer;
+}
+
+/** `"ABORT"` becomes `{ action: "ABORT" }`; an object passes through. */
+export function normalizePartialApprovalDecision(
+  answer: PartialApprovalDecision | PartialApprovalDecision['action'],
+): PartialApprovalDecision {
   return typeof answer === 'string' ? { action: answer } : answer;
 }
 
@@ -57,18 +80,22 @@ export function fanOutMovement(
 ): void {
   if (!steps || steps.kind !== 'settlement') return;
   const h = steps.handlers;
-  const specific = {
-    CARD_CHARGE: h.onCardCharged,
-    EXTERNAL_PAYMENT: h.onExternallyPaid,
-    AWARD: h.onAwarded,
-    STORED_VALUE_LOAD: h.onStoredValueLoaded,
-    CARD_REFUND: h.onCardRefunded,
-    STORED_VALUE_REFUND: h.onGiftCardRefunded,
-    EXTERNAL_REFUND: h.onExternalRefunded,
-    POINT_REDEMPTION_REFUND: h.onPointsRefunded,
-    REBATE_REFUND: h.onRebateRefunded,
-    AWARD_REFUND: h.onAwardRefunded,
-  }[movement.step as string];
+  // a reversal notice carries the reversed movement's step: it goes to onCardChargeReversed for a
+  // card payment and to no other per-step handler, which are about movements of their own
+  const specific = movement.reversal
+    ? { CARD_CHARGE: h.onCardChargeReversed }[movement.step as string]
+    : {
+        CARD_CHARGE: h.onCardCharged,
+        EXTERNAL_PAYMENT: h.onExternallyPaid,
+        AWARD: h.onAwarded,
+        STORED_VALUE_LOAD: h.onStoredValueLoaded,
+        CARD_REFUND: h.onCardRefunded,
+        STORED_VALUE_REFUND: h.onGiftCardRefunded,
+        EXTERNAL_REFUND: h.onExternalRefunded,
+        POINT_REDEMPTION_REFUND: h.onPointsRefunded,
+        REBATE_REFUND: h.onRebateRefunded,
+        AWARD_REFUND: h.onAwardRefunded,
+      }[movement.step as string];
   for (const [context, handler] of [
     ['onMovement threw', h.onMovement],
     [`the ${movement.step} movement handler threw`, specific],
@@ -182,6 +209,20 @@ function pickHandler(step: OperationStep, steps: StepHandlers | undefined): Invo
       return async (info) => ({
         stepId,
         recovery: normalizeRecovery(await onError(step.failure, info)),
+      });
+    }
+    case 'PARTIAL_CARD_APPROVAL': {
+      const onPartialCardApproval = h.onPartialCardApproval;
+      if (!onPartialCardApproval) return undefined;
+      const { approved, requested, shortfall, amountDue, cardPayments, movement } = step;
+      return async (info) => ({
+        stepId,
+        partialApprovalDecision: normalizePartialApprovalDecision(
+          await onPartialCardApproval(
+            { approved, requested, shortfall, amountDue, cardPayments, movement },
+            info,
+          ),
+        ),
       });
     }
     default:

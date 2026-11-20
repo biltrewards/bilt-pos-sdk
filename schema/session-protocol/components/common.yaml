@@ -13,8 +13,10 @@ Duration:
 SessionErrorCode:
   type: string
   description: |
-    Why a session operation failed. The first twelve values are the Java `SessionErrorCode`
+    Why a session operation failed. The first thirteen values are the Java `SessionErrorCode`
     constants; `VALIDATION`, `NOT_FOUND` and `UNAUTHORIZED` exist only on the wire.
+    `CARD_PAYMENTS_EXCEED_TOTAL` is the planned `cardPayments` of a `settle` adding up to the
+    card amount or more, reported before any card is charged.
   enum:
     - NETWORK
     - TIMEOUT
@@ -24,6 +26,7 @@ SessionErrorCode:
     - ABANDONED
     - LOYALTY_UNAVAILABLE
     - STORED_VALUE_INSUFFICIENT
+    - CARD_PAYMENTS_EXCEED_TOTAL
     - INVALID_STATE
     - UNSUPPORTED
     - TERMINAL_ERROR

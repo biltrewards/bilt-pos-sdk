@@ -8,6 +8,7 @@ import {
   useSessionEvent,
   useSettlement,
   useTerminalSession,
+  type UseSettlementResult,
 } from '@biltorg/pos-react';
 import { BridgeGate, InstallBridgePrompt, useBridge } from '@biltorg/pos-react/bridge';
 import { BiltPos } from '@biltorg/pos-sdk';
@@ -33,6 +34,38 @@ declare function RecoveryPrompt(props: {
   onChoose(recovery: SettlementRecoveryAction): void;
   onDefault(): void;
 }): ReactNode;
+
+export function PartialApprovalPrompt({
+  settlement,
+}: {
+  settlement: UseSettlementResult;
+}): ReactNode {
+  const step = settlement.pendingStep;
+  if (step?.kind !== 'PARTIAL_CARD_APPROVAL') return null;
+  return (
+    <div role="dialog">
+      <p>
+        Card approved {step.approved} of {step.requested}: {step.amountDue} still due
+      </p>
+      <button onClick={() => settlement.reply({ partialApproval: 'ANOTHER_CARD' })}>
+        Another card
+      </button>
+      <button
+        onClick={() =>
+          settlement.reply({
+            partialApproval: {
+              action: 'EXTERNAL',
+              externalPayment: { tenderType: 'CASH', amount: step.amountDue },
+            },
+          })
+        }
+      >
+        Rest in cash
+      </button>
+      <button onClick={() => settlement.reply({ partialApproval: 'ABORT' })}>Cancel sale</button>
+    </div>
+  );
+}
 
 const GUIDE_URL = 'https://biltrewards.github.io/bilt-pos-sdk/terminal-bridge.html';
 

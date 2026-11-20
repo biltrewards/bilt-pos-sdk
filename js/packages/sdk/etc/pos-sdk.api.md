@@ -45,9 +45,12 @@ import type { OperationRequest } from '@biltorg/pos-protocol';
 import type { OperationStatus } from '@biltorg/pos-protocol';
 import type { OperationType } from '@biltorg/pos-protocol';
 import { OriginalSaleRecord } from '@biltorg/pos-protocol';
+import { PartialApprovalDecision } from '@biltorg/pos-protocol';
+import { PartialCardApproval } from '@biltorg/pos-protocol';
 import { PinOptions } from '@biltorg/pos-protocol';
 import { PinResult } from '@biltorg/pos-protocol';
 import { PlacementConfig } from '@biltorg/pos-protocol';
+import { PlannedCardPayment } from '@biltorg/pos-protocol';
 import { PointRedemptionResult } from '@biltorg/pos-protocol';
 import { PrintPayload } from '@biltorg/pos-protocol';
 import { RebateRedemptionResult } from '@biltorg/pos-protocol';
@@ -377,11 +380,20 @@ export { OperationType }
 
 export { OriginalSaleRecord }
 
+// @public
+export type PartialApprovalAction = Exclude<PartialApprovalDecision['action'], 'EXTERNAL'>;
+
+export { PartialApprovalDecision }
+
+export { PartialCardApproval }
+
 export { PinOptions }
 
 export { PinResult }
 
 export { PlacementConfig }
+
+export { PlannedCardPayment }
 
 export { PointRedemptionResult }
 
@@ -557,8 +569,8 @@ export interface SettlementHandlers {
     onAwarded?(movement: SettlementMovement): void;
     // (undocumented)
     onAwardRefunded?(movement: SettlementMovement): void;
-    // (undocumented)
     onCardCharged?(movement: SettlementMovement): void;
+    onCardChargeReversed?(movement: SettlementMovement): void;
     // (undocumented)
     onCardRefunded?(movement: SettlementMovement): void;
     onError?(failure: SettlementFailure, step: StepInfo): MaybePromise<SettlementRecovery | SettlementRecoveryAction>;
@@ -570,6 +582,7 @@ export interface SettlementHandlers {
     // (undocumented)
     onGiftCardRefunded?(movement: SettlementMovement): void;
     onMovement?(movement: SettlementMovement): void;
+    onPartialCardApproval?(partial: PartialCardApproval, step: StepInfo): MaybePromise<PartialApprovalDecision | PartialApprovalAction>;
     onPointsRedeemed?(result: PointRedemptionResult, step: StepInfo): MaybePromise<Money>;
     // (undocumented)
     onPointsRefunded?(movement: SettlementMovement): void;

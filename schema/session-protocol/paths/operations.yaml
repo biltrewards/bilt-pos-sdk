@@ -106,7 +106,8 @@ reply:
       the `operation.step` event and carries the one field that step kind takes: `total` for
       `TOTAL_REQUIRED`, `saleTransactionId` for a settlement's `BEFORE_STEP` (a refund's or
       void's takes none), `recovery` for
-      `RECOVERY_REQUIRED`, `decision` for `REVERSAL_DECISION_REQUIRED`. A reply after the
+      `RECOVERY_REQUIRED`, `partialApprovalDecision` for `PARTIAL_CARD_APPROVAL`, `decision`
+      for `REVERSAL_DECISION_REQUIRED`. A reply after the
       step's deadline, for a step already answered, or for a step the operation is not awaiting
       is refused with 422; the default has already applied or will apply.
     parameters:

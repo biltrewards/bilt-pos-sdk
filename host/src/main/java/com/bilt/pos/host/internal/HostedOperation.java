@@ -67,6 +67,7 @@ public final class HostedOperation {
   private volatile PendingStep<?> pendingStep;
   private boolean launched;
   private boolean abortedBeforeLaunch;
+  private volatile boolean abortRequested;
 
   HostedOperation(String type, boolean ordered) {
     this.type = type;
@@ -136,6 +137,18 @@ public final class HostedOperation {
   void started() {
     startedAt = Instant.now();
     status = Status.RUNNING;
+  }
+
+  /**
+   * Remembers that an abort was requested. A step parked after the abort looked for a pending one
+   * must still be released, so {@link OperationRunner} checks this once a step is installed.
+   */
+  void abortRequested() {
+    abortRequested = true;
+  }
+
+  boolean isAbortRequested() {
+    return abortRequested;
   }
 
   void awaiting(PendingStep<?> step) {
