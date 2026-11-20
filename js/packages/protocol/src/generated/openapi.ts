@@ -1443,6 +1443,11 @@ export interface components {
          * @description Final outcome of a successful settlement. `movements` is the authoritative ledger of what
          *     remained committed; movement events during the run are provisional. The loyalty award is
          *     best-effort: a failed award does not fail the checkout and is reported in `warnings`.
+         *
+         *     A settlement may make several card payments: `cardPayments` lists them in order. The
+         *     single-payment fields (`poiTransactionId`, `approvalCode`, `customerReceipt` and the like)
+         *     describe the first one; where its response lacks a value they keep the stored value
+         *     payment's, and a gift-card-only sale reports its stored value payment there.
          */
         SettlementResult: {
             success: boolean;
@@ -1450,10 +1455,16 @@ export interface components {
             authorizedAmount: components["schemas"]["Money"];
             storedValueAmountUsed: components["schemas"]["Money"];
             storedValueLoadedAmount: components["schemas"]["Money"];
+            /** @description The sum of `cardPayments`. */
             cardAmountCharged: components["schemas"]["Money"];
+            /** @description Every card payment the settlement made and kept, in order; empty when no card was charged. */
+            cardPayments: components["schemas"]["CardPaymentResult"][];
             externalPaymentAmount: components["schemas"]["Money"];
+            /** @description The first card payment's. */
             approvalCode?: string;
+            /** @description The first card payment's. */
             acquirerTransactionId?: string;
+            /** @description The first card payment's. */
             paymentBrand?: string;
             redeemedRebates: components["schemas"]["RedeemedRebate"][];
             totalRebateAmount: components["schemas"]["Money"];
@@ -1465,7 +1476,7 @@ export interface components {
             promotionMessages: string[];
             customerReceipt?: components["schemas"]["Receipt"];
             merchantReceipt?: components["schemas"]["Receipt"];
-            /** @description Terminal reference of the card payment, for void and refund. */
+            /** @description Terminal reference of the first card payment, for void and refund; a gift-card-only sale reports its stored value payment here. */
             poiTransactionId?: string;
             /** Format: date-time */
             poiTransactionTimestamp?: string;
@@ -1563,10 +1574,21 @@ export interface components {
             outstandingAmount: components["schemas"]["Money"];
             committedMovements: components["schemas"]["SettlementMovement"][];
         };
-        /** @description References from a completed sale that a later session uses to void the whole transaction or allocate return settlement. */
+        /**
+         * @description References from a completed sale that a later session uses to void the whole transaction or
+         *     allocate return settlement. A sale may hold several card payments: `cardPayments` lists them
+         *     in the order they were made, and when it is non-empty it takes precedence over
+         *     `cardPoiTransactionId` and `cardPoiTransactionTimestamp`. Those single-card fields, kept for
+         *     compatibility, are read when `cardPayments` is absent or empty and stand for one card payment.
+         */
         OriginalSaleRecord: {
+            cardPayments?: components["schemas"]["CardPaymentRecord"][];
+            /** @description The first card payment's reference. Ignored when `cardPayments` is non-empty. */
             cardPoiTransactionId?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description The first card payment's timestamp. Ignored when `cardPayments` is non-empty.
+             */
             cardPoiTransactionTimestamp?: string;
             storedValuePoiTransactionId?: string;
             /** Format: date-time */
@@ -1583,11 +1605,20 @@ export interface components {
             awardPoiTransactionTimestamp?: string;
             memberId?: string;
         };
-        /** @description Outcome of a refund. A linked refund also reverses loyalty points awarded on the original transaction, best-effort. */
+        /**
+         * @description Outcome of a refund. A linked refund also reverses loyalty points awarded on the original
+         *     transaction, best-effort. A refund of a sale with several card payments sends one refund per
+         *     card payment: `cardRefunds` lists each with its receipts, and `refundedAmountByTender` breaks
+         *     `refundedAmount` down. The single-value fields describe the first refund sent.
+         */
         RefundResult: {
             success: boolean;
-            /** @description Absent when the terminal did not echo it. */
+            /** @description The sum of `refundedAmountByTender`. Absent when any refund's amount is unknown. */
             refundedAmount?: components["schemas"]["Money"];
+            /** @description Every card payment this call refunded, in the order sent (newest first). Every entry's `tenderType` is `CARD`. */
+            cardRefunds: components["schemas"]["TenderMovement"][];
+            /** @description The amount each tender leg returned, in the order sent; the entries sum to `refundedAmount`. */
+            refundedAmountByTender: components["schemas"]["TenderAmount"][];
             approvalCode?: string;
             poiTransactionId?: string;
             /** Format: date-time */
@@ -1601,11 +1632,24 @@ export interface components {
         /**
          * @description Outcome of `voidTransaction`: the movements *this call* reversed. A resumed void after a
          *     partial abort does not restate what earlier attempts reversed; its amount, reference and
-         *     receipts cover only the legs sent this time and may all be absent.
+         *     receipts cover only the legs sent this time and may all be absent. `cardReversals` lists each
+         *     card payment reversed with its receipts, and `reversedAmountByTender` breaks the money tender
+         *     legs down; the single-value fields describe the first leg sent (the newest card payment).
          */
         VoidResult: {
             success: boolean;
+            /**
+             * @description When any tender leg was reversed, the sum of `reversedAmountByTender`, absent when a leg's
+             *     amount is unknown. A void with no tender leg reports the value of the loyalty or stored
+             *     value load reversals.
+             */
             reversedAmount?: components["schemas"]["Money"];
+            /** @description Every card payment this call reversed, in the order sent (newest first). Every entry's `tenderType` is `CARD`. */
+            cardReversals: components["schemas"]["TenderMovement"][];
+            /** @description The stored value (gift card) payment this call reversed, with its receipts; absent when it reversed none. A sale has at most one. */
+            storedValueReversal?: components["schemas"]["TenderMovement"];
+            /** @description The amount each money tender leg returned, in the order sent. Loyalty reversals are not listed. */
+            reversedAmountByTender: components["schemas"]["TenderAmount"][];
             poiTransactionId?: string;
             /** Format: date-time */
             poiTransactionTimestamp?: string;
@@ -2131,6 +2175,23 @@ export interface components {
              */
             type: "storedValueActivate" | "storedValueLoad" | "storedValueUnload" | "storedValueDeactivate" | "storedValueReserve" | "storedValueReverse" | "storedValueDuplicate";
         };
+        /** @description One card payment a settlement made. Each reference is absent when the terminal did not report it. */
+        CardPaymentResult: {
+            /** @description What the terminal authorized for this payment, cashback included. */
+            amount: components["schemas"]["Money"];
+            /** @description Terminal reference of this payment, for void and refund. */
+            poiTransactionId?: string;
+            /** Format: date-time */
+            poiTransactionTimestamp?: string;
+            approvalCode?: string;
+            acquirerTransactionId?: string;
+            paymentBrand?: string;
+            maskedPan?: string;
+            customerReceipt?: components["schemas"]["Receipt"];
+            merchantReceipt?: components["schemas"]["Receipt"];
+            /** @description Whether the terminal authorized less than this payment requested. */
+            partialApproval: boolean;
+        };
         EarnedReward: {
             /** @enum {string} */
             type?: "REWARD" | "COUPON" | "POINT";
@@ -2276,6 +2337,37 @@ export interface components {
              * @enum {string}
              */
             type: "settle";
+        };
+        /**
+         * @description The money tender a reversal or refund returned funds to. Loyalty movements are not tenders. Voids and session refunds never return to `EXTERNAL`.
+         * @enum {string}
+         */
+        TenderType: "CARD" | "STORED_VALUE" | "EXTERNAL";
+        /** @description One tender leg (a card payment or a stored value payment) a void reversed or a refund returned, with the terminal's own reference and receipts for it. */
+        TenderMovement: {
+            tenderType: components["schemas"]["TenderType"];
+            /** @description The payment's POI transaction this reversed or refunded; absent for an unlinked refund. */
+            originalPoiTransactionId?: string;
+            /** @description Absent when the terminal did not report it and the original payment's amount is unknown. */
+            amount?: components["schemas"]["Money"];
+            /** @description Terminal reference of the reversal or refund itself. */
+            poiTransactionId?: string;
+            /** Format: date-time */
+            poiTransactionTimestamp?: string;
+            /** @description A refund's approval code; absent for a reversal. */
+            approvalCode?: string;
+            /** @description The Nexo `ServiceID` the reversal or refund request was sent with. */
+            serviceId?: string;
+            customerReceipt?: components["schemas"]["Receipt"];
+            merchantReceipt?: components["schemas"]["Receipt"];
+        };
+        /** @description The amount one tender leg of a void or refund returned. Each card payment is its own entry. */
+        TenderAmount: {
+            tender: components["schemas"]["TenderType"];
+            /** @description The original POI transaction reversed or refunded; absent for an external tender or an unlinked refund. */
+            poiTransactionId?: string;
+            /** @description Absent when the terminal did not report it and the original payment's amount is unknown. */
+            amount?: components["schemas"]["Money"];
         };
         RefundOperation: components["schemas"]["OperationBase"] & {
             /** @enum {string} */
@@ -2589,6 +2681,14 @@ export interface components {
             type: "refundUnlinked";
             amount: components["schemas"]["Money"];
             handledSteps?: components["schemas"]["HandledSteps"];
+        };
+        /** @description Persistable reference for voiding or refunding one card payment of an original sale. */
+        CardPaymentRecord: {
+            poiTransactionId: string;
+            /** Format: date-time */
+            poiTransactionTimestamp?: string;
+            /** @description What the payment authorized; absent when only its reference was kept. */
+            amount?: components["schemas"]["Money"];
         };
         /** @description Persistable reference for reversing one fulfilled stored value basket line. */
         StoredValueLoadRecord: {

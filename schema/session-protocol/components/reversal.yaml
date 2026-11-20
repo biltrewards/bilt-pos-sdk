@@ -39,16 +39,79 @@ ReversedMovement:
       type: string
       description: The Nexo `ServiceID` of the reversal request that reversed the movement, as its `BEFORE_STEP` context reported it.
 
+TenderType:
+  type: string
+  description: The money tender a reversal or refund returned funds to. Loyalty movements are not tenders. Voids and session refunds never return to `EXTERNAL`.
+  enum: [CARD, STORED_VALUE, EXTERNAL]
+
+TenderAmount:
+  type: object
+  description: The amount one tender leg of a void or refund returned. Each card payment is its own entry.
+  required: [tender]
+  properties:
+    tender:
+      $ref: '#/TenderType'
+    poiTransactionId:
+      type: string
+      description: The original POI transaction reversed or refunded; absent for an external tender or an unlinked refund.
+    amount:
+      description: Absent when the terminal did not report it and the original payment's amount is unknown.
+      $ref: './common.yaml#/Money'
+
+TenderMovement:
+  type: object
+  description: One tender leg (a card payment or a stored value payment) a void reversed or a refund returned, with the terminal's own reference and receipts for it.
+  required: [tenderType]
+  properties:
+    tenderType:
+      $ref: '#/TenderType'
+    originalPoiTransactionId:
+      type: string
+      description: The payment's POI transaction this reversed or refunded; absent for an unlinked refund.
+    amount:
+      description: Absent when the terminal did not report it and the original payment's amount is unknown.
+      $ref: './common.yaml#/Money'
+    poiTransactionId:
+      type: string
+      description: Terminal reference of the reversal or refund itself.
+    poiTransactionTimestamp:
+      type: string
+      format: date-time
+    approvalCode:
+      type: string
+      description: A refund's approval code; absent for a reversal.
+    serviceId:
+      type: string
+      description: The Nexo `ServiceID` the reversal or refund request was sent with.
+    customerReceipt:
+      $ref: './common.yaml#/Receipt'
+    merchantReceipt:
+      $ref: './common.yaml#/Receipt'
+
 RefundResult:
   type: object
-  description: Outcome of a refund. A linked refund also reverses loyalty points awarded on the original transaction, best-effort.
-  required: [success, pointsReversed, remainingPointBalance]
+  description: |
+    Outcome of a refund. A linked refund also reverses loyalty points awarded on the original
+    transaction, best-effort. A refund of a sale with several card payments sends one refund per
+    card payment: `cardRefunds` lists each with its receipts, and `refundedAmountByTender` breaks
+    `refundedAmount` down. The single-value fields describe the first refund sent.
+  required: [success, cardRefunds, refundedAmountByTender, pointsReversed, remainingPointBalance]
   properties:
     success:
       type: boolean
     refundedAmount:
-      description: Absent when the terminal did not echo it.
+      description: The sum of `refundedAmountByTender`. Absent when any refund's amount is unknown.
       $ref: './common.yaml#/Money'
+    cardRefunds:
+      type: array
+      description: Every card payment this call refunded, in the order sent (newest first). Every entry's `tenderType` is `CARD`.
+      items:
+        $ref: '#/TenderMovement'
+    refundedAmountByTender:
+      type: array
+      description: The amount each tender leg returned, in the order sent; the entries sum to `refundedAmount`.
+      items:
+        $ref: '#/TenderAmount'
     approvalCode:
       type: string
     poiTransactionId:
@@ -71,13 +134,32 @@ VoidResult:
   description: |
     Outcome of `voidTransaction`: the movements *this call* reversed. A resumed void after a
     partial abort does not restate what earlier attempts reversed; its amount, reference and
-    receipts cover only the legs sent this time and may all be absent.
-  required: [success, pointsReversed, remainingPointBalance]
+    receipts cover only the legs sent this time and may all be absent. `cardReversals` lists each
+    card payment reversed with its receipts, and `reversedAmountByTender` breaks the money tender
+    legs down; the single-value fields describe the first leg sent (the newest card payment).
+  required: [success, cardReversals, reversedAmountByTender, pointsReversed, remainingPointBalance]
   properties:
     success:
       type: boolean
     reversedAmount:
+      description: |
+        When any tender leg was reversed, the sum of `reversedAmountByTender`, absent when a leg's
+        amount is unknown. A void with no tender leg reports the value of the loyalty or stored
+        value load reversals.
       $ref: './common.yaml#/Money'
+    cardReversals:
+      type: array
+      description: Every card payment this call reversed, in the order sent (newest first). Every entry's `tenderType` is `CARD`.
+      items:
+        $ref: '#/TenderMovement'
+    storedValueReversal:
+      description: The stored value (gift card) payment this call reversed, with its receipts; absent when it reversed none. A sale has at most one.
+      $ref: '#/TenderMovement'
+    reversedAmountByTender:
+      type: array
+      description: The amount each money tender leg returned, in the order sent. Loyalty reversals are not listed.
+      items:
+        $ref: '#/TenderAmount'
     poiTransactionId:
       type: string
     poiTransactionTimestamp:

@@ -28,6 +28,10 @@ import java.util.concurrent.ConcurrentHashMap;
  *       re-crediting the award.
  * </ul>
  *
+ * <p>{@link #refundedInFull(String)} is the full refund's resume state: the card payments a {@code
+ * refund()} already refunded in full, so a retried full refund of a sale with several card payments
+ * sends only the ones still standing, and a repeated one is refused instead of refunding twice.
+ *
  * <p>{@link #reversedMovements()} is the current void attempt's resume state — the sale's movements
  * already reversed, fed to and updated by {@code ReversalManager.voidMovements}. It is cleared when
  * the void completes; the terminal, not the SDK, decides whether a later void is a duplicate.
@@ -35,6 +39,7 @@ import java.util.concurrent.ConcurrentHashMap;
 final class ReversalGuards {
 
   private final Set<ReversalMovement.Key> reversedMovements = ConcurrentHashMap.newKeySet();
+  private final Set<String> refundedInFull = ConcurrentHashMap.newKeySet();
   private volatile boolean refundIssued;
   private final String subject;
 
@@ -60,7 +65,9 @@ final class ReversalGuards {
                   + subject
                   + " was already refunded from this session; a void "
                   + "would return the full amount on top of the refund — use "
-                  + "refund(amount) for further returns"));
+                  + "refund(amount) for further returns, or with several card "
+                  + "payments, return lines and RefundAllocation.card(amount, "
+                  + "poiTransactionId, timestamp) per card payment in settle()"));
     }
   }
 
@@ -85,10 +92,23 @@ final class ReversalGuards {
     refundIssued = true;
   }
 
+  /**
+   * A full refund returned card payment {@code poiTransactionId}; it must not be refunded again.
+   */
+  void markRefundedInFull(String poiTransactionId) {
+    refundedInFull.add(poiTransactionId);
+  }
+
+  /** Whether a full refund already returned card payment {@code poiTransactionId}. */
+  boolean refundedInFull(String poiTransactionId) {
+    return refundedInFull.contains(poiTransactionId);
+  }
+
   /** A new payment replaced the guarded sale and all of its reversal progress. */
   void reset() {
     refundIssued = false;
     reversedMovements.clear();
+    refundedInFull.clear();
   }
 
   /** A completed void no longer needs in-memory resume progress. */

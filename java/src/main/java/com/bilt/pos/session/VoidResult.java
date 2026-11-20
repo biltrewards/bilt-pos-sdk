@@ -11,6 +11,10 @@ package com.bilt.pos.session;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Outcome of {@code voidTransaction()}: the payment reversal plus a best-effort loyalty award
@@ -26,6 +30,9 @@ public final class VoidResult {
 
   private final boolean success;
   private final BigDecimal reversedAmount;
+  private final List<TenderMovement> cardReversals;
+  private final TenderMovement storedValueReversal;
+  private final List<TenderAmount> reversedAmountByTender;
   private final String poiTransactionId;
   private final Instant poiTransactionTimestamp;
   private final String serviceId;
@@ -37,6 +44,10 @@ public final class VoidResult {
   private VoidResult(Builder builder) {
     this.success = builder.success;
     this.reversedAmount = builder.reversedAmount;
+    this.cardReversals = Collections.unmodifiableList(new ArrayList<>(builder.cardReversals));
+    this.storedValueReversal = builder.storedValueReversal;
+    this.reversedAmountByTender =
+        Collections.unmodifiableList(new ArrayList<>(builder.reversedAmountByTender));
     this.poiTransactionId = builder.poiTransactionId;
     this.poiTransactionTimestamp = builder.poiTransactionTimestamp;
     this.serviceId = builder.serviceId;
@@ -54,12 +65,21 @@ public final class VoidResult {
     return success;
   }
 
-  /** Amount reversed; {@code null} when the terminal did not echo it. */
+  /**
+   * Amount reversed by this call's money tender legs: the sum of {@link
+   * #getReversedAmountByTender()}. A leg the terminal did not echo an amount for counts the
+   * original card payment's amount when known; otherwise the total is {@code null} rather than
+   * understated.
+   */
   public BigDecimal getReversedAmount() {
     return reversedAmount;
   }
 
-  /** Terminal reference of the reversal. */
+  /**
+   * Terminal reference of the first reversal this call sent (the newest card payment when there are
+   * several), for later status checks; see {@link #getCardReversals()} for every card payment's
+   * reference and receipts.
+   */
   public String getPoiTransactionId() {
     return poiTransactionId;
   }
@@ -76,12 +96,49 @@ public final class VoidResult {
     return serviceId;
   }
 
+  /**
+   * Receipt of the first leg this call sent; see {@link #getCardReversals()} for every card
+   * payment's.
+   */
   public Receipt getCustomerReceipt() {
     return customerReceipt;
   }
 
+  /**
+   * Receipt of the first leg this call sent; see {@link #getCardReversals()} for every card
+   * payment's.
+   */
   public Receipt getMerchantReceipt() {
     return merchantReceipt;
+  }
+
+  /**
+   * Every card payment this call reversed, in the order the requests were sent (newest card payment
+   * first), each with the terminal's own reference and receipts. Empty when no card payment was
+   * reversed by this call. Every entry's {@link TenderMovement#getTenderType()} is {@code CARD}.
+   * The stored value leg is {@link #getStoredValueReversal()}.
+   */
+  public List<TenderMovement> getCardReversals() {
+    return cardReversals;
+  }
+
+  /**
+   * The stored value (gift card) payment this call reversed, with the terminal's own reference and
+   * receipts for it; {@code null} when this call reversed none. A sale has at most one.
+   */
+  public TenderMovement getStoredValueReversal() {
+    return storedValueReversal;
+  }
+
+  /**
+   * The amount each money tender leg of this call returned, in the order the legs were sent: one
+   * entry per card payment and one for a stored value payment. Loyalty movements are not tenders
+   * and are not listed. When there is any entry, the entries sum to {@link #getReversedAmount()};
+   * when a leg's amount is unknown, that entry's amount and {@link #getReversedAmount()} are both
+   * {@code null}.
+   */
+  public List<TenderAmount> getReversedAmountByTender() {
+    return reversedAmountByTender;
   }
 
   /** Loyalty points reversed alongside the void; best-effort. */
@@ -99,6 +156,9 @@ public final class VoidResult {
 
     private boolean success;
     private BigDecimal reversedAmount;
+    private List<TenderMovement> cardReversals = new ArrayList<>();
+    private TenderMovement storedValueReversal;
+    private List<TenderAmount> reversedAmountByTender = new ArrayList<>();
     private String poiTransactionId;
     private Instant poiTransactionTimestamp;
     private String serviceId;
@@ -108,6 +168,30 @@ public final class VoidResult {
     private int remainingPointBalance;
 
     private Builder() {}
+
+    public Builder cardReversals(List<TenderMovement> cardReversals) {
+      this.cardReversals =
+          cardReversals == null ? new ArrayList<>() : new ArrayList<>(cardReversals);
+      return this;
+    }
+
+    public Builder addCardReversal(TenderMovement cardReversal) {
+      this.cardReversals.add(Objects.requireNonNull(cardReversal, "cardReversal"));
+      return this;
+    }
+
+    public Builder storedValueReversal(TenderMovement storedValueReversal) {
+      this.storedValueReversal = storedValueReversal;
+      return this;
+    }
+
+    public Builder reversedAmountByTender(List<TenderAmount> reversedAmountByTender) {
+      this.reversedAmountByTender =
+          reversedAmountByTender == null
+              ? new ArrayList<>()
+              : new ArrayList<>(reversedAmountByTender);
+      return this;
+    }
 
     public Builder success(boolean success) {
       this.success = success;

@@ -30,6 +30,7 @@ import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
+import com.bilt.pos.session.Receipt;
 import com.bilt.pos.session.RefundResult;
 import com.bilt.pos.session.ReversalContext;
 import com.bilt.pos.session.ReversalDecision;
@@ -38,6 +39,9 @@ import com.bilt.pos.session.ReversedMovement;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
+import com.bilt.pos.session.TenderAmount;
+import com.bilt.pos.session.TenderMovement;
+import com.bilt.pos.session.TenderType;
 import com.bilt.pos.session.VoidResult;
 import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
 import java.math.BigDecimal;
@@ -144,39 +148,139 @@ public final class ReversalManager {
       Runnable onRefunded,
       Runnable onAwardReversed,
       String refundServiceId) {
+    return refund(
+        amount,
+        saleItems,
+        List.of(
+            new ReversalMovement(
+                ReversalStep.CARD,
+                originalPoiTxnId,
+                originalPoiTimestamp,
+                amount,
+                TenderType.CARD)),
+        awardPoiTxnId,
+        awardPoiTimestamp,
+        memberId,
+        saleTransaction,
+        decider,
+        beforeStep,
+        original -> onRefunded.run(),
+        onAwardReversed,
+        refundServiceId);
+  }
+
+  /**
+   * Refund of several tender payments of one original sale — each its own {@code
+   * PaymentRequest(Refund)}, sent in the given order — then the award reversal. A tender refund
+   * that fails is resolved by {@code decider} like the single refund; one aborted after others
+   * completed reports those in its error, and a skipped one leaves the others standing refunded.
+   * The result lists every tender refund that completed, with its receipts and its amount by
+   * tender; its single reference, approval code, and receipts describe the first, and its amount
+   * sums every one.
+   *
+   * @param originals the original payments to refund, in the order to send them, each with the
+   *     amount a full refund returns when known and its tender; an entry without a POI transaction
+   *     ID is an unlinked refund. Must not be empty unless an award is to be reversed.
+   * @param onRefunded told each original's POI transaction ID ({@code null} for an unlinked refund)
+   *     the moment its tender refund completes
+   * @see #refund(BigDecimal, List, String, Instant, String, Instant, String,
+   *     TransactionIdentificationType, StepDecider, Consumer, Runnable, Runnable, String)
+   */
+  public RefundResult refund(
+      BigDecimal amount,
+      List<SaleItem> saleItems,
+      List<ReversalMovement> originals,
+      String awardPoiTxnId,
+      Instant awardPoiTimestamp,
+      String memberId,
+      TransactionIdentificationType saleTransaction,
+      StepDecider decider,
+      Consumer<ReversalContext> beforeStep,
+      Consumer<String> onRefunded,
+      Runnable onAwardReversed,
+      String refundServiceId) {
     // the tender refund anchors the flow, so the award is best-effort
     StepDecider effective = decider != null ? decider : defaultPolicy(true);
     SessionException[] lastFailure = new SessionException[1];
     String[] presetServiceId = {refundServiceId};
+    List<PaymentResponse> refunded = new ArrayList<>();
+    List<String> refundedOriginals = new ArrayList<>();
+    List<TenderMovement> cardRefunds = new ArrayList<>();
+    List<TenderAmount> byTender = new ArrayList<>();
+    // the first refund's receipts, parsed once for its entry and the single-value fields
+    Receipt[] firstReceipts = null;
 
-    PaymentResponse body =
-        runStep(
-            ReversalStep.CARD,
-            effective,
-            decider == null,
-            () -> {
-              String serviceId = presetServiceId[0];
-              presetServiceId[0] = null;
-              return sendRefund(
-                  amount,
-                  saleItems,
-                  originalPoiTxnId,
-                  originalPoiTimestamp,
-                  saleTransaction,
-                  serviceId != null
-                      ? serviceId
-                      : mintServiceId(ReversalStep.CARD, MessageCategoryType.PAYMENT, beforeStep));
-            },
-            e -> {
-              lastFailure[0] = e;
-              LOGGER.warning(
-                  "the tender refund was skipped by decision; "
-                      + "no money moved: "
-                      + e.getError());
-            },
-            e -> e);
-    if (body != null) {
-      onRefunded.run();
+    for (ReversalMovement original : originals) {
+      String originalPoiTxnId = original.poiTransactionId;
+      Instant originalPoiTimestamp = original.poiTransactionTimestamp;
+      String[] sentServiceId = new String[1];
+      PaymentResponse body =
+          runStep(
+              ReversalStep.CARD,
+              effective,
+              decider == null,
+              () -> {
+                String serviceId = presetServiceId[0];
+                presetServiceId[0] = null;
+                sentServiceId[0] =
+                    serviceId != null
+                        ? serviceId
+                        : mintServiceId(ReversalStep.CARD, MessageCategoryType.PAYMENT, beforeStep);
+                return sendRefund(
+                    amount,
+                    saleItems,
+                    originalPoiTxnId,
+                    originalPoiTimestamp,
+                    saleTransaction,
+                    sentServiceId[0]);
+              },
+              e -> {
+                lastFailure[0] = e;
+                LOGGER.warning(
+                    "the tender refund"
+                        + (originalPoiTxnId == null ? "" : " of " + originalPoiTxnId)
+                        + " was skipped by decision; no money moved: "
+                        + e.getError());
+              },
+              e ->
+                  refundedOriginals.isEmpty()
+                      ? e
+                      : new SessionException(
+                          Wire.annotated(
+                              e.getError(),
+                              "the tender refund of "
+                                  + String.join(" and ", refundedOriginals)
+                                  + " completed but "
+                                  + originalPoiTxnId
+                                  + " was not refunded: "
+                                  + e.getError().getMessage(),
+                              e)));
+      if (body != null) {
+        BigDecimal legAmount = refundedAmount(body, original.amount);
+        Receipt customerReceipt = ReceiptMapper.customerReceipt(body.getPaymentReceipt());
+        Receipt merchantReceipt = ReceiptMapper.merchantReceipt(body.getPaymentReceipt());
+        if (firstReceipts == null) {
+          firstReceipts = new Receipt[] {customerReceipt, merchantReceipt};
+        }
+        refunded.add(body);
+        refundedOriginals.add(String.valueOf(originalPoiTxnId));
+        byTender.add(new TenderAmount(original.tender, originalPoiTxnId, legAmount));
+        if (original.tender == TenderType.CARD) {
+          cardRefunds.add(
+              TenderMovement.builder()
+                  .tenderType(original.tender)
+                  .originalPoiTransactionId(originalPoiTxnId)
+                  .amount(legAmount)
+                  .poiTransactionId(Wire.txnId(body.getPoiData()))
+                  .poiTransactionTimestamp(Wire.txnTimestamp(body.getPoiData()))
+                  .approvalCode(Wire.approvalCode(body))
+                  .serviceId(sentServiceId[0])
+                  .customerReceipt(customerReceipt)
+                  .merchantReceipt(merchantReceipt)
+                  .build());
+        }
+        onRefunded.accept(originalPoiTxnId);
+      }
     }
 
     LoyaltyReversal loyalty = NO_REVERSAL;
@@ -201,7 +305,7 @@ public final class ReversalManager {
                     "AwardRefund failed (terminal may retry via " + "SAF): " + e.getError());
               },
               e ->
-                  body == null
+                  refunded.isEmpty()
                       ? e
                       : new SessionException(
                           Wire.annotated(
@@ -218,7 +322,7 @@ public final class ReversalManager {
       }
     }
 
-    if (body == null) {
+    if (refunded.isEmpty()) {
       if (!awardReversed) {
         // every step was skipped: nothing moved, so the refund
         // must not report success
@@ -231,21 +335,47 @@ public final class ReversalManager {
           .remainingPointBalance(loyalty.remainingBalance)
           .build();
     }
+    PaymentResponse first = refunded.get(0);
+    return RefundResult.builder()
+        .success(true)
+        .refundedAmount(sum(byTender))
+        .cardRefunds(cardRefunds)
+        .refundedAmountByTender(byTender)
+        .approvalCode(Wire.approvalCode(first))
+        .poiTransactionId(Wire.txnId(first.getPoiData()))
+        .poiTransactionTimestamp(Wire.txnTimestamp(first.getPoiData()))
+        .customerReceipt(firstReceipts[0])
+        .merchantReceipt(firstReceipts[1])
+        .pointsReversed(loyalty.pointsReversed)
+        .remainingPointBalance(loyalty.remainingBalance)
+        .build();
+  }
+
+  /**
+   * What one tender refund returned: the amount the terminal echoed, else {@code fallback} (the
+   * requested amount, or for a full refund the original payment's), else {@code null}.
+   */
+  private static BigDecimal refundedAmount(PaymentResponse body, BigDecimal fallback) {
     Double authorized =
         body.getPaymentResult() != null && body.getPaymentResult().getAmountsResp() != null
             ? body.getPaymentResult().getAmountsResp().getAuthorizedAmount()
             : null;
-    return RefundResult.builder()
-        .success(true)
-        .refundedAmount(authorized != null ? BigDecimal.valueOf(authorized) : amount)
-        .approvalCode(Wire.approvalCode(body))
-        .poiTransactionId(Wire.txnId(body.getPoiData()))
-        .poiTransactionTimestamp(Wire.txnTimestamp(body.getPoiData()))
-        .customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()))
-        .merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()))
-        .pointsReversed(loyalty.pointsReversed)
-        .remainingPointBalance(loyalty.remainingBalance)
-        .build();
+    return authorized != null ? Wire.money(authorized) : fallback;
+  }
+
+  /**
+   * The sum of the per-tender amounts; {@code null} when any is unknown, since a partial sum would
+   * understate what was returned.
+   */
+  private static BigDecimal sum(List<TenderAmount> byTender) {
+    BigDecimal sum = BigDecimal.ZERO;
+    for (TenderAmount leg : byTender) {
+      if (leg.getAmount() == null) {
+        return null;
+      }
+      sum = sum.add(leg.getAmount());
+    }
+    return sum;
   }
 
   private PaymentResponse sendRefund(
@@ -368,7 +498,7 @@ public final class ReversalManager {
     if (remaining.isEmpty()) {
       return VoidResult.builder().success(true).build();
     }
-    Map<ReversalStep, ReversalResponse> money = new EnumMap<>(ReversalStep.class);
+    List<MoneyLeg> money = new ArrayList<>();
     Map<ReversalStep, LoyaltyResponse> loyalty = new EnumMap<>(ReversalStep.class);
     List<StoredValueOperationResult> storedValueLoads = new ArrayList<>();
     List<ReversedMovement> reversed = new ArrayList<>();
@@ -474,7 +604,7 @@ public final class ReversalManager {
       ReversalMovement movement,
       String memberId,
       TransactionIdentificationType saleTransaction,
-      Map<ReversalStep, ReversalResponse> money,
+      List<MoneyLeg> money,
       Map<ReversalStep, LoyaltyResponse> loyalty,
       List<StoredValueOperationResult> storedValueLoads,
       String serviceId) {
@@ -492,13 +622,14 @@ public final class ReversalManager {
       return;
     }
     if (isMoneyLeg(step)) {
-      money.put(
-          step,
+      ReversalResponse response =
           reverse(
               movement.poiTransactionId,
               movement.poiTransactionTimestamp,
               saleTransaction,
-              serviceId));
+              serviceId);
+      // a sale may hold several card payments, each its own reversal
+      money.add(new MoneyLeg(movement, response, serviceId));
       return;
     }
     LoyaltyTransactionTypeEnum refundType = LOYALTY_REFUND_TYPES.get(step);
@@ -516,24 +647,76 @@ public final class ReversalManager {
             serviceId));
   }
 
+  /** One tender reversal this attempt sent: the movement, the terminal's answer, its ServiceID. */
+  private static final class MoneyLeg {
+    final ReversalMovement movement;
+    final ReversalResponse response;
+    final String serviceId;
+    // parsed once: the leg's entry and the result's single-value fields share them
+    final Receipt customerReceipt;
+    final Receipt merchantReceipt;
+
+    MoneyLeg(ReversalMovement movement, ReversalResponse response, String serviceId) {
+      this.movement = movement;
+      this.response = response;
+      this.serviceId = serviceId;
+      this.customerReceipt = ReceiptMapper.customerReceipt(response.getPaymentReceipt());
+      this.merchantReceipt = ReceiptMapper.merchantReceipt(response.getPaymentReceipt());
+    }
+
+    /** What the reversal returned: as echoed, else the original movement's amount, else null. */
+    BigDecimal amount() {
+      return response.getReversedAmount() != null
+          ? Wire.money(response.getReversedAmount())
+          : movement.amount;
+    }
+  }
+
+  /**
+   * The void's outcome. Every tender leg reversed is listed by tender, and each card payment with
+   * its receipts; the amount sums the tender legs. The single reference and receipts describe the
+   * first tender leg this attempt reversed — the newest card payment, else the stored value leg.
+   */
   private static VoidResult buildVoidResult(
-      Map<ReversalStep, ReversalResponse> money,
+      List<MoneyLeg> money,
       Map<ReversalStep, LoyaltyResponse> loyalty,
       List<StoredValueOperationResult> storedValueLoads,
       List<ReversedMovement> reversed) {
-    ReversalResponse cardLeg = money.get(ReversalStep.CARD);
-    ReversalResponse storedValueLeg = money.get(ReversalStep.STORED_VALUE);
-    ReversalResponse primaryMoney = cardLeg != null ? cardLeg : storedValueLeg;
     LoyaltyResponse awardLeg = loyalty.get(ReversalStep.AWARD);
     LoyaltyReversal points = awardLeg == null ? NO_REVERSAL : parseReversal(awardLeg);
 
-    // the reversed amount is what the money legs report; a void with no
-    // money legs reports the monetary value of the loyalty refunds
+    List<TenderAmount> byTender = new ArrayList<>();
+    List<TenderMovement> cardReversals = new ArrayList<>();
+    TenderMovement storedValueReversal = null;
+    for (MoneyLeg leg : money) {
+      BigDecimal amount = leg.amount();
+      byTender.add(new TenderAmount(leg.movement.tender, leg.movement.poiTransactionId, amount));
+      TenderMovement movement =
+          TenderMovement.builder()
+              .tenderType(leg.movement.tender)
+              .originalPoiTransactionId(leg.movement.poiTransactionId)
+              .amount(amount)
+              .poiTransactionId(Wire.txnId(leg.response.getPoiData()))
+              .poiTransactionTimestamp(Wire.txnTimestamp(leg.response.getPoiData()))
+              .serviceId(leg.serviceId)
+              .customerReceipt(leg.customerReceipt)
+              .merchantReceipt(leg.merchantReceipt)
+              .build();
+      if (leg.movement.tender == TenderType.CARD) {
+        cardReversals.add(movement);
+      } else {
+        // a sale has at most one stored value payment
+        storedValueReversal = movement;
+      }
+    }
+
+    // the reversed amount is what the tender legs return; a void with no
+    // tender legs reports the monetary value of the loyalty refunds
     BigDecimal loyaltyAmount =
         sumLoyaltyAmounts(loyalty.get(ReversalStep.REDEMPTION), loyalty.get(ReversalStep.REBATE));
     BigDecimal reversedAmount =
-        primaryMoney != null
-            ? sumReversedAmounts(cardLeg, storedValueLeg)
+        !money.isEmpty()
+            ? sum(byTender)
             : loyaltyAmount != null && loyaltyAmount.signum() != 0
                 ? loyaltyAmount
                 : sumStoredValueAmounts(storedValueLoads);
@@ -542,18 +725,20 @@ public final class ReversalManager {
         VoidResult.builder()
             .success(true)
             .reversedAmount(reversedAmount)
+            .cardReversals(cardReversals)
+            .storedValueReversal(storedValueReversal)
+            .reversedAmountByTender(byTender)
             .pointsReversed(points.pointsReversed)
             .remainingPointBalance(points.remainingBalance);
 
-    if (primaryMoney != null) {
+    if (!money.isEmpty()) {
+      MoneyLeg primary = money.get(0);
       result
-          .poiTransactionId(Wire.txnId(primaryMoney.getPoiData()))
-          .poiTransactionTimestamp(Wire.txnTimestamp(primaryMoney.getPoiData()))
-          .serviceId(
-              serviceIdOf(
-                  reversed, cardLeg != null ? ReversalStep.CARD : ReversalStep.STORED_VALUE))
-          .customerReceipt(ReceiptMapper.customerReceipt(primaryMoney.getPaymentReceipt()))
-          .merchantReceipt(ReceiptMapper.merchantReceipt(primaryMoney.getPaymentReceipt()));
+          .poiTransactionId(Wire.txnId(primary.response.getPoiData()))
+          .poiTransactionTimestamp(Wire.txnTimestamp(primary.response.getPoiData()))
+          .serviceId(primary.serviceId)
+          .customerReceipt(primary.customerReceipt)
+          .merchantReceipt(primary.merchantReceipt);
     } else if (!loyalty.isEmpty()) {
       ReversalStep primaryStep = loyalty.keySet().iterator().next();
       LoyaltyResponse primary = loyalty.get(primaryStep);
@@ -825,17 +1010,6 @@ public final class ReversalManager {
       }
       BigDecimal value = BigDecimal.valueOf(amount.getAmountValue());
       sum = sum == null ? value : sum.add(value);
-    }
-    return sum;
-  }
-
-  private static BigDecimal sumReversedAmounts(ReversalResponse... legs) {
-    BigDecimal sum = null;
-    for (ReversalResponse leg : legs) {
-      if (leg != null && leg.getReversedAmount() != null) {
-        BigDecimal amount = BigDecimal.valueOf(leg.getReversedAmount());
-        sum = sum == null ? amount : sum.add(amount);
-      }
     }
     return sum;
   }

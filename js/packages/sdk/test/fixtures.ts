@@ -109,6 +109,15 @@ export function settlementResult(finalBasket: Basket, charged: string): Settleme
     storedValueAmountUsed: '0.00',
     storedValueLoadedAmount: '0.00',
     cardAmountCharged: charged,
+    cardPayments: [
+      {
+        amount: charged,
+        poiTransactionId: 'POI-1',
+        approvalCode: 'A1B2C3',
+        paymentBrand: 'Visa',
+        partialApproval: false,
+      },
+    ],
     externalPaymentAmount: '0.00',
     approvalCode: 'A1B2C3',
     paymentBrand: 'Visa',

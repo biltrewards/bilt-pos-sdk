@@ -29,6 +29,7 @@ import com.bilt.pos.nexo.model.PaymentInstrumentData;
 import com.bilt.pos.nexo.model.PaymentInstrumentTypeEnum;
 import com.bilt.pos.nexo.model.PaymentRequest;
 import com.bilt.pos.nexo.model.PaymentResponse;
+import com.bilt.pos.nexo.model.PaymentResult;
 import com.bilt.pos.nexo.model.PaymentTransaction;
 import com.bilt.pos.nexo.model.Rebates;
 import com.bilt.pos.nexo.model.SaleData;
@@ -39,13 +40,13 @@ import com.bilt.pos.nexo.model.SaleToPOIResponse;
 import com.bilt.pos.nexo.model.StoredValueTransactionTypeEnum;
 import com.bilt.pos.nexo.model.TransactionConditions;
 import com.bilt.pos.nexo.model.TransactionIdentificationType;
-import com.bilt.pos.session.Receipt;
 import com.bilt.pos.session.SessionError;
 import com.bilt.pos.session.SessionErrorCode;
 import com.bilt.pos.session.SessionException;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.identity.IdentifyResult;
+import com.bilt.pos.session.payment.CardPaymentResult;
 import com.bilt.pos.session.payment.EarnedReward;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
 import com.bilt.pos.session.payment.PointRedemptionResult;
@@ -281,6 +282,7 @@ public final class PaymentOrchestrator {
     BigDecimal pointsValue = BigDecimal.ZERO;
     BigDecimal storedValueCharged = BigDecimal.ZERO;
     BigDecimal cardCharged = BigDecimal.ZERO;
+    List<CardPaymentResult> cardPayments = new ArrayList<>();
     BigDecimal externalPaid = BigDecimal.ZERO;
     BigDecimal storedValueLoaded = BigDecimal.ZERO;
 
@@ -460,7 +462,7 @@ public final class PaymentOrchestrator {
       Basket stepBasket = workingBasket;
       BigDecimal stepTotal = currentTotal;
       LoyaltyHandlingEnum loyaltyHandling = options.cardLoyaltyHandling;
-      StepOutcome<BigDecimal> recovered =
+      StepOutcome<CardPaymentResult> recovered =
           runStep(
               request,
               committed,
@@ -481,13 +483,18 @@ public final class PaymentOrchestrator {
                       serviceId,
                       committed,
                       movements,
-                      result,
                       response));
       if (recovered.externalPayment != null) {
         externalPaid = recovered.externalPayment.getAmount();
       } else {
-        cardCharged = recovered.value;
+        cardPayments.add(recovered.value);
       }
+    }
+    for (CardPaymentResult cardPayment : cardPayments) {
+      cardCharged = cardCharged.add(cardPayment.getAmount());
+    }
+    if (!cardPayments.isEmpty()) {
+      copyFirstCardPayment(cardPayments.get(0), result);
     }
 
     // 6. Award wire failures are best-effort; register callback failures
@@ -542,6 +549,7 @@ public final class PaymentOrchestrator {
         .authorizedAmount(storedValueCharged.add(cardCharged))
         .storedValueAmountUsed(storedValueCharged)
         .cardAmountCharged(cardCharged)
+        .cardPayments(cardPayments)
         .externalPaymentAmount(externalPaid)
         .storedValueLoadedAmount(storedValueLoaded)
         .redeemedRebates(redeemedRebates)
@@ -1360,7 +1368,7 @@ public final class PaymentOrchestrator {
     return actualAmount;
   }
 
-  private BigDecimal cardStep(
+  private CardPaymentResult cardStep(
       Request request,
       Basket basket,
       BigDecimal currentTotal,
@@ -1370,7 +1378,6 @@ public final class PaymentOrchestrator {
       String serviceId,
       List<Commit> committed,
       List<SettlementMovement> movements,
-      SettlementResult.Builder result,
       SaleToPOIResponse recoveredResponse) {
     // nexo contract: RequestedAmount is the TOTAL requested for payment
     // INCLUDING cashback — the terminal authorizes sale + cashback as
@@ -1443,49 +1450,76 @@ public final class PaymentOrchestrator {
           false);
     }
 
-    copyPaymentArtifacts(body, result);
-    return charged;
+    return cardPayment(body, charged, charged.compareTo(grossTotal) < 0);
   }
 
-  /**
-   * Copies transaction references, acquirer data, and receipts from a payment response onto the
-   * checkout result. Both the stored value and card steps are payments; the card step runs last, so
-   * in a split tender its (non-null) values take precedence.
-   */
-  private static void copyPaymentArtifacts(PaymentResponse body, SettlementResult.Builder result) {
-    if (body.getPaymentResult() != null
-        && body.getPaymentResult().getPaymentAcquirerData() != null) {
-      if (body.getPaymentResult().getPaymentAcquirerData().getApprovalCode() != null) {
-        result.approvalCode(body.getPaymentResult().getPaymentAcquirerData().getApprovalCode());
-      }
-      if (body.getPaymentResult().getPaymentAcquirerData().getAcquirerTransactionID() != null) {
-        result.acquirerTransactionId(
-            body.getPaymentResult()
-                .getPaymentAcquirerData()
-                .getAcquirerTransactionID()
-                .getTransactionID());
+  /** One card payment's amount, references, acquirer data, and receipts. */
+  private static CardPaymentResult cardPayment(
+      PaymentResponse body, BigDecimal charged, boolean partialApproval) {
+    CardPaymentResult.Builder payment =
+        CardPaymentResult.builder()
+            .amount(charged)
+            .partialApproval(partialApproval)
+            .customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()))
+            .merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()));
+    PaymentResult paymentResult = body.getPaymentResult();
+    if (paymentResult != null && paymentResult.getPaymentAcquirerData() != null) {
+      payment.approvalCode(paymentResult.getPaymentAcquirerData().getApprovalCode());
+      if (paymentResult.getPaymentAcquirerData().getAcquirerTransactionID() != null) {
+        payment.acquirerTransactionId(
+            paymentResult.getPaymentAcquirerData().getAcquirerTransactionID().getTransactionID());
       }
     }
-    if (body.getPaymentResult() != null
-        && body.getPaymentResult().getPaymentInstrumentData() != null
-        && body.getPaymentResult().getPaymentInstrumentData().getCardData() != null
-        && body.getPaymentResult().getPaymentInstrumentData().getCardData().getPaymentBrand()
-            != null) {
-      result.paymentBrand(
-          body.getPaymentResult().getPaymentInstrumentData().getCardData().getPaymentBrand());
-    }
-    Receipt customerReceipt = ReceiptMapper.customerReceipt(body.getPaymentReceipt());
-    if (customerReceipt != null) {
-      result.customerReceipt(customerReceipt);
-    }
-    Receipt merchantReceipt = ReceiptMapper.merchantReceipt(body.getPaymentReceipt());
-    if (merchantReceipt != null) {
-      result.merchantReceipt(merchantReceipt);
+    if (paymentResult != null
+        && paymentResult.getPaymentInstrumentData() != null
+        && paymentResult.getPaymentInstrumentData().getCardData() != null) {
+      payment
+          .paymentBrand(paymentResult.getPaymentInstrumentData().getCardData().getPaymentBrand())
+          .maskedPan(paymentResult.getPaymentInstrumentData().getCardData().getMaskedPAN());
     }
     TransactionIdentificationType poiTxn = Wire.poiRef(body.getPoiData());
     if (poiTxn != null) {
-      result.poiTransactionId(poiTxn.getTransactionID());
-      result.poiTransactionTimestamp(Wire.instant(poiTxn.getTimeStamp()));
+      payment
+          .poiTransactionId(poiTxn.getTransactionID())
+          .poiTransactionTimestamp(Wire.instant(poiTxn.getTimeStamp()));
+    }
+    return payment.build();
+  }
+
+  /**
+   * Copies transaction references, acquirer data, and receipts from a stored value payment response
+   * onto the checkout result: a gift-card-only checkout has no card payment, so these are its
+   * references. {@link #copyFirstCardPayment} later overrides them with the first card payment's
+   * non-null values.
+   */
+  private static void copyPaymentArtifacts(PaymentResponse body, SettlementResult.Builder result) {
+    copyFirstCardPayment(cardPayment(body, BigDecimal.ZERO, false), result);
+  }
+
+  /**
+   * Puts a payment's non-null values onto the result's single-payment fields. Values the payment
+   * lacks keep what an earlier stored value payment put there.
+   */
+  private static void copyFirstCardPayment(
+      CardPaymentResult payment, SettlementResult.Builder result) {
+    if (payment.getApprovalCode() != null) {
+      result.approvalCode(payment.getApprovalCode());
+    }
+    if (payment.getAcquirerTransactionId() != null) {
+      result.acquirerTransactionId(payment.getAcquirerTransactionId());
+    }
+    if (payment.getPaymentBrand() != null) {
+      result.paymentBrand(payment.getPaymentBrand());
+    }
+    if (payment.getCustomerReceipt() != null) {
+      result.customerReceipt(payment.getCustomerReceipt());
+    }
+    if (payment.getMerchantReceipt() != null) {
+      result.merchantReceipt(payment.getMerchantReceipt());
+    }
+    if (payment.getPoiTransactionId() != null) {
+      result.poiTransactionId(payment.getPoiTransactionId());
+      result.poiTransactionTimestamp(payment.getPoiTransactionTimestamp());
     }
   }
 

@@ -2228,6 +2228,10 @@ class TerminalShopperSessionPaymentTest {
         "POI-PAY-1",
         result.getPoiTransactionId(),
         "in a split tender the card payment's reference wins");
+    assertEquals(1, result.getCardPayments().size(), "the gift card is not a card payment");
+    assertEquals("POI-PAY-1", result.getCardPayments().get(0).getPoiTransactionId());
+    assertEquals(0, new BigDecimal("50.00").compareTo(result.getCardPayments().get(0).getAmount()));
+    assertEquals("POI-GC-1", result.getStoredValuePoiTransactionId());
 
     List<SaleToPOIRequest> requests = drainRequests();
     assertEquals(5, requests.size());
@@ -2275,6 +2279,11 @@ class TerminalShopperSessionPaymentTest {
         result.getPoiTransactionId(),
         "the gift card payment's reference must reach the result");
     assertEquals("APPR7", result.getApprovalCode());
+    assertTrue(result.getCardPayments().isEmpty(), "a gift card payment is not a card payment");
+    assertEquals(
+        "POI-GC-1",
+        result.toOriginalSaleRecord(null).getCardPoiTransactionId(),
+        "the record keeps the gift card payment as its single payment reference");
     assertEquals(1, drainRequests().size(), "no card payment when the gift card covers it");
 
     // and the checkout is voidable via that reference
