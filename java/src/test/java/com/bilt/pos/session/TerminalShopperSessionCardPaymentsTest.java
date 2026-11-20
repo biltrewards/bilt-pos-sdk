@@ -6,9 +6,11 @@ import com.bilt.pos.nexo.client.BiltNexoTerminalClient;
 import com.bilt.pos.nexo.model.NexoTerminalAPI;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
 import com.bilt.pos.session.basket.BasketItem;
+import com.bilt.pos.session.settlement.CardPayment;
 import com.bilt.pos.session.settlement.CardPaymentRecord;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.RefundAllocation;
+import com.bilt.pos.session.settlement.SettlementLoyalty;
 import com.bilt.pos.session.settlement.SettlementOptions;
 import com.bilt.pos.session.settlement.SettlementResult;
 import com.bilt.pos.session.settlement.SettlementStep;
@@ -18,6 +20,7 @@ import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -43,6 +46,26 @@ class TerminalShopperSessionCardPaymentsTest {
   private static final String REVERSAL_UNREACHABLE =
       "{\"SaleToPOIResponse\":{\"ReversalResponse\":{"
           + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"UnreachableHost\"}}}}";
+  private static final String IDENTIFY_OK =
+      "{\"SaleToPOIResponse\":{\"CardAcquisitionResponse\":{"
+          + "\"Response\":{\"Result\":\"Success\"},"
+          + "\"LoyaltyAccount\":[{\"LoyaltyAccountID\":{\"LoyaltyID\":\"98234\"},"
+          + "\"LoyaltyBrand\":\"K-Club\"}]}}}";
+  private static final String GIFT_CARD_PARTIAL_5 =
+      "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+          + "\"Response\":{\"Result\":\"Partial\"},"
+          + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\""
+          + STORED_VALUE
+          + "\",\"TimeStamp\":\"2026-07-20T10:00:00Z\"}},"
+          + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":5.00}}}}}";
+  private static final String AWARD_OK =
+      "{\"SaleToPOIResponse\":{\"LoyaltyResponse\":{"
+          + "\"Response\":{\"Result\":\"Success\"},"
+          + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\""
+          + AWARD
+          + "\",\"TimeStamp\":\"2026-07-20T10:00:00Z\"}},"
+          + "\"LoyaltyResult\":[{\"CurrentBalance\":789,"
+          + "\"LoyaltyAmount\":{\"AmountValue\":65,\"LoyaltyUnit\":\"Point\"}}]}}}";
   private static final String REFUND_DECLINED =
       "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
           + "\"Response\":{\"Result\":\"Failure\",\"ErrorCondition\":\"Refusal\"}}}}";
@@ -325,7 +348,7 @@ class TerminalShopperSessionCardPaymentsTest {
 
   @Test
   void sessionVoidReversesEveryCardPaymentAndARetryResumes() throws Exception {
-    settledWith(threeCardSale().build());
+    settleThreeCardSale();
     server.enqueue(new MockResponse().setBody(reversalOk("POI-REV-3", 30.00)));
     server.enqueue(new MockResponse().setBody(reversalOk("POI-REV-2", 20.00)));
     server.enqueue(new MockResponse().setBody(REVERSAL_UNREACHABLE));
@@ -350,7 +373,7 @@ class TerminalShopperSessionCardPaymentsTest {
 
   @Test
   void sessionRefundRefundsEveryCardPaymentInFullNewestFirst() throws Exception {
-    settledWith(threeCardSale().memberId("98234").build());
+    settleThreeCardSale();
     server.enqueue(new MockResponse().setBody(refundOk("POI-REF-3", 30.00)));
     server.enqueue(new MockResponse().setBody(refundOk("POI-REF-2", 20.00)));
     server.enqueue(new MockResponse().setBody(refundOk("POI-REF-1", 10.00)));
@@ -407,11 +430,7 @@ class TerminalShopperSessionCardPaymentsTest {
   @Test
   void sessionRefundFallsBackToTheCardPaymentsAmountWhenTheTerminalDoesNotEchoIt()
       throws Exception {
-    settledWith(
-        OriginalSaleRecord.builder()
-            .addCardPayment(card(CARD_1, "20.00"))
-            .addCardPayment(card(CARD_2, "30.00"))
-            .build());
+    settleTwoCardSale();
     server.enqueue(new MockResponse().setBody(refundWithoutAmount("POI-REF-2")));
     server.enqueue(new MockResponse().setBody(refundOk("POI-REF-1", 20.00)));
 
@@ -452,7 +471,7 @@ class TerminalShopperSessionCardPaymentsTest {
 
   @Test
   void sessionRefundRetryResumesAtTheFirstCardPaymentStillStanding() throws Exception {
-    settledWith(threeCardSale().build());
+    settleThreeCardSale();
     server.enqueue(new MockResponse().setBody(refundOk("POI-REF-3", 30.00)));
     server.enqueue(new MockResponse().setBody(REFUND_DECLINED));
 
@@ -480,7 +499,7 @@ class TerminalShopperSessionCardPaymentsTest {
 
   @Test
   void sessionPartialRefundWithSeveralCardPaymentsIsRefused() throws Exception {
-    settledWith(threeCardSale().build());
+    settleThreeCardSale();
 
     SessionException e =
         assertThrows(SessionException.class, () -> session.refund(new BigDecimal("5.00")).get());
@@ -627,9 +646,55 @@ class TerminalShopperSessionCardPaymentsTest {
   }
 
   /**
-   * Makes {@code record} the session's most recent settlement, as a settle() with several card
-   * payments would. Until settle() can make several card payments, the record is put in place
-   * directly.
+   * Settles a $65 sale for an identified member like {@link #threeCardSale()}: $5 on the gift card,
+   * card payments of $10 and $20 planned up front, $30 on a third card for the remainder, and the
+   * award.
+   */
+  private void settleThreeCardSale() throws Exception {
+    server.enqueue(new MockResponse().setBody(IDENTIFY_OK));
+    session.identifyMember().executeSync();
+    session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("65.00")));
+    session.setStoredValueCard("GC-1234-5678");
+    server.enqueue(new MockResponse().setBody(GIFT_CARD_PARTIAL_5));
+    server.enqueue(new MockResponse().setBody(paymentOk(CARD_1, 10.00)));
+    server.enqueue(new MockResponse().setBody(paymentOk(CARD_2, 20.00)));
+    server.enqueue(new MockResponse().setBody(paymentOk(CARD_3, 30.00)));
+    server.enqueue(new MockResponse().setBody(AWARD_OK));
+
+    SettlementResult sale =
+        session
+            .settle(
+                SettlementOptions.builder()
+                    .loyalty(SettlementLoyalty.explicit(EnumSet.of(SettlementLoyalty.Step.AWARD)))
+                    .cardPayments(
+                        CardPayment.of(new BigDecimal("10.00")),
+                        CardPayment.of(new BigDecimal("20.00")))
+                    .build())
+            .get();
+
+    assertEquals(List.of(CARD_1, CARD_2, CARD_3), cardIds(sale.toOriginalSaleRecord(null)));
+    assertEquals(STORED_VALUE, sale.getStoredValuePoiTransactionId());
+    assertEquals(AWARD, sale.getAwardPoiTransactionId());
+    drainRequests();
+  }
+
+  /** Settles a $50 guest sale as $20 on a first card and the remaining $30 on a second. */
+  private void settleTwoCardSale() throws Exception {
+    session.basket().addItem(BasketItem.sale("SKU-1", "Item", 1, new BigDecimal("50.00")));
+    server.enqueue(new MockResponse().setBody(paymentOk(CARD_1, 20.00)));
+    server.enqueue(new MockResponse().setBody(paymentOk(CARD_2, 30.00)));
+    session
+        .settle(
+            SettlementOptions.builder()
+                .cardPayments(CardPayment.of(new BigDecimal("20.00")))
+                .build())
+        .get();
+    drainRequests();
+  }
+
+  /**
+   * Makes {@code record} the session's most recent settlement. Only for records no settlement
+   * produces, such as card payments without amounts; the other tests settle for real.
    */
   private void settledWith(OriginalSaleRecord record) throws Exception {
     Field field = NexoTerminalShopperSession.class.getDeclaredField("lastSettlementRecord");

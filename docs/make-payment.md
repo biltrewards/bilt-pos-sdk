@@ -77,6 +77,58 @@ To initiate a card payment, send a Terminal API request from your POS app. The t
 
 ---
 
+## Split payments
+
+To pay one sale with several cards, send one payment request per card. The first is a normal payment request. Every later one is a split payment, and adds:
+
+- **`PaymentData.SplitPaymentFlag`** — `true`.
+- **`PaymentData.PaymentType`** — `Normal`. Split payments can't be another payment type.
+- **`PaymentTransaction.AmountsReq.PaidAmount`** — The sum already authorized by the earlier payment requests of this sale (gift card and card payments). Required when `SplitPaymentFlag` is set.
+- **`PaymentTransaction.AmountsReq.RequestedAmount`** — This payment's share, not the sale total.
+
+Every payment request of the sale uses the **same `SaleData.SaleTransactionID`**, the first payment's, and a new `ServiceID`. Each may carry the whole basket as `SaleItem`s.
+
+Example second payment, after $20 on the first card of a $94.50 sale:
+
+```json
+{
+  "SaleToPOIRequest": {
+    "MessageHeader": {
+      "ProtocolVersion": "3.0",
+      "MessageClass": "Service",
+      "MessageCategory": "Payment",
+      "MessageType": "Request",
+      "ServiceID": "SVC-00843",
+      "SaleID": "BiltPOS-Lane3",
+      "POIID": "VictaLane-275839164"
+    },
+    "PaymentRequest": {
+      "SaleData": {
+        "SaleTransactionID": {
+          "TransactionID": "TXN-20260302-00391",
+          "TimeStamp": "2026-03-02T14:35:00+00:00"
+        }
+      },
+      "PaymentTransaction": {
+        "AmountsReq": {
+          "Currency": "USD",
+          "RequestedAmount": 74.50,
+          "PaidAmount": 20.00
+        }
+      },
+      "PaymentData": {
+        "PaymentType": "Normal",
+        "SplitPaymentFlag": true
+      }
+    }
+  }
+}
+```
+
+With the Java SDK, `SettlementOptions.cardPayments(...)` sends these for you: see [split card payments](./checkout-session-integration.md#variant-split-card-payments).
+
+---
+
 ## Payment response
 
 The result is returned in the API response. The main payment result is in `PaymentResponse.Response.Result`.

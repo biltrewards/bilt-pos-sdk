@@ -204,7 +204,8 @@ loadScripts(document, 'script');</script>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onCardCharged(java.util.function.Consumer)" class="member-name-link">onCardCharged</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Called when the card charge leg commits.</div>
+<div class="block">Called when a card charge leg commits: once per card payment, so several times for a split
+ settlement (<code>SettlementOptions.cardPayments</code>).</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#onCardRefunded(java.util.function.Consumer)" class="member-name-link">onCardRefunded</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</code></div>
@@ -310,7 +311,14 @@ loadScripts(document, 'script');</script>
 <h3>beforeStep</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">beforeStep</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Function.html" title="class or interface in java.util.function" class="external-link">Function</a>&lt;<a href="settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a>,<wbr><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&gt;&nbsp;handler)</span></div>
 <div class="block">Called before each step; returns the <code>SaleTransactionID</code> to use for that step. Default:
- the basket's shared sale transaction ID, carried by every checkout request of that basket.</div>
+ the basket's shared sale transaction ID, carried by every checkout request of that basket.
+
+ <p>A split settlement (<code>SettlementOptions.cardPayments</code>) calls it before every card
+ payment. Card payments after the first must reuse the first card payment's ID, as nexo requires
+ of split payments: for them the context's default ID is that ID, and returning any other ID
+ fails that card payment before anything is sent, as a throwing handler does: <a href="#onError(java.util.function.Function)"><code>onError(java.util.function.Function&lt;com.bilt.pos.session.settlement.SettlementFailure, com.bilt.pos.session.settlement.SettlementRecovery&gt;)</code></a>
+ gets an <code>INVALID_STATE</code> failure with the amount still due and the card payments already
+ committed, and decides as for any card payment failure.</div>
 </section>
 </li>
 <li>
@@ -341,8 +349,9 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="onCardCharged(java.util.function.Consumer)">
 <h3>onCardCharged</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></span>&nbsp;<span class="element-name">onCardCharged</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/function/Consumer.html" title="class or interface in java.util.function" class="external-link">Consumer</a>&lt;<a href="settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a>&gt;&nbsp;handler)</span></div>
-<div class="block">Called when the card charge leg commits. See <a href="#onMovement(java.util.function.Consumer)"><code>onMovement(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a> for the provisional
- charge-side callback contract.</div>
+<div class="block">Called when a card charge leg commits: once per card payment, so several times for a split
+ settlement (<code>SettlementOptions.cardPayments</code>). See <a href="#onMovement(java.util.function.Consumer)"><code>onMovement(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a> for the
+ provisional charge-side callback contract.</div>
 </section>
 </li>
 <li>

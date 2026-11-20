@@ -137,7 +137,7 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 3. **Point redemption** (identified members, if enabled and a balance remains) — terminal redeems points for monetary value → `onPointsRedeemed`
 4. **Stored value fulfillment** (for each supplied fulfillment targeting a referenced sale line) — terminal activates or reloads the purchased card before collecting payment → `onStoredValueLoaded`. A failed load prevents the tender charges; aborting a later charge failure reverses completed loads.
 5. **Stored value charge** (if a card was registered and a balance remains) — terminal charges the gift card → `onGiftCardPayment`
-6. **Card charge** (if a balance remains) — terminal processes the card for the remaining amount → `onCardCharged`; after a failure, the register may satisfy this final tender externally (for example, with cash) → `onExternallyPaid`
+6. **Card charge** (if a balance remains) — terminal processes the card for the remaining amount → `onCardCharged`; after a failure, the register may satisfy this final tender externally (for example, with cash) → `onExternallyPaid`. With `SettlementOptions.cardPayments(...)` the remaining amount is split over several card payments, each its own step → `onCardCharged` once per payment (see [split card payments](#variant-split-card-payments))
 7. **Award** — terminal submits the loyalty award (Store-and-Forward if loyalty is down) → `onAwarded`
 8. `onSuccess` / `onError` / `onAbandoned`
 
@@ -410,7 +410,7 @@ When the gift card balance is insufficient, the charge is a partial authorizatio
 
 `SettlementResult.getCardPayments()` lists every card payment the settlement made, in order, as `CardPaymentResult`s: the amount, POI transaction ID and timestamp, approval code, acquirer transaction ID, payment brand, masked PAN when the terminal reports it, the customer and merchant receipts, and whether the terminal approved less than it was asked for. `getCardAmountCharged()` is their sum. A gift card payment is never a card payment: the stored value payment of a split tender, or of a gift-card-only sale, stays on `getStoredValuePoiTransactionId()`, and a gift-card-only sale has no card payments.
 
-`settle()` makes one card payment today, so the list holds at most one entry. Registers that print or persist card payments should still read the list: the single-payment getters (`getPoiTransactionId()`, `getApprovalCode()`, `getPaymentBrand()`, `getCustomerReceipt()`, `getMerchantReceipt()` and the like) describe the first card payment only. Where that payment's response lacks a value they keep the stored value payment's, and a gift-card-only sale reports its stored value payment there, as before.
+Without [split card payments](#variant-split-card-payments), `settle()` makes one card payment, so the list holds at most one entry. Registers that print or persist card payments should still read the list: the single-payment getters (`getPoiTransactionId()`, `getApprovalCode()`, `getPaymentBrand()`, `getCustomerReceipt()`, `getMerchantReceipt()` and the like) describe the first card payment only. Where that payment's response lacks a value they keep the stored value payment's, and a gift-card-only sale reports its stored value payment there, as before.
 
 ```java
 for (CardPaymentResult card : result.getCardPayments()) {
@@ -418,6 +418,37 @@ for (CardPaymentResult card : result.getCardPayments()) {
     journal.recordCard(card.getPoiTransactionId(), card.getPoiTransactionTimestamp(), card.getAmount());
 }
 ```
+
+### Variant: split card payments
+
+The shopper pays with several cards: "$20 on this card, the rest on the next". Plan the fixed amounts with `SettlementOptions.cardPayments(...)`; one more card payment always follows for the remainder.
+
+```java
+session.settle(SettlementOptions.builder()
+        .cardPayments(CardPayment.of(new BigDecimal("20.00")))  // $20 on the first card, the rest on the next
+        .build())
+    .onCardCharged(m -> register.showMessage("Card: $" + m.getAmount()))  // once per card payment
+    .onError(failure -> {
+        if (failure.getError().getCode() == SessionErrorCode.CARD_PAYMENTS_EXCEED_TOTAL) {
+            return SettlementRecovery.abort();  // the plan leaves nothing for the last card
+        }
+        // a later card payment failed: the earlier ones stay committed, cash covers the rest
+        return SettlementRecovery.external(ExternalPayment.cash(failure.getAmountDue()));
+    })
+    .onSuccess(result -> {
+        for (CardPaymentResult payment : result.getCardPayments()) {
+            register.printReceipt(payment.getMerchantReceipt());
+        }
+    })
+    .execute();
+```
+
+- **The plan applies to the card amount**, what is left after rebates, points and the gift card. It is known only when the card step starts, so the check runs there: the planned amounts must add up to less than the card amount. Otherwise the card step fails before any card is charged, and `onError` gets `CARD_PAYMENTS_EXCEED_TOTAL` with the whole card amount as `getAmountDue()`. Only `abort()` and `abandon()` are valid then; a retry would refuse the same plan again. When rebates, points or the gift card leave nothing for the cards, no card payment runs and the plan doesn't apply. A planned amount must be positive and in whole cents. `build()` refuses `cardPayments` together with `cashback`, and with `SettlementLoyalty.implicit()`: with implicit loyalty the terminal books the whole sale's earn when card payment 1 is approved, before the sale is paid, and keeps it if a later card fails and the sale is aborted, and its hosted checkout can lower card payment 1 below its planned amount. Use explicit loyalty (the default), whose award runs once after every tender.
+- **Each card payment is its own step:** its own `beforeStep`, `ServiceID`, TransactionStatus recovery, `onCardCharged` and movement. Payment 1 is a normal payment; every later one is a nexo split payment (`SplitPaymentFlag`, `PaidAmount`, see [Make a payment](./make-payment.md#split-payments)). Each carries the whole adjusted basket as its sale items.
+- **One sale transaction.** Every card payment of the settlement uses card payment 1's `SaleTransactionID`, as nexo requires. `beforeStep` still runs before each later payment with that ID as `ctx.getDefaultTransactionId()`; returning `null` or that ID keeps it, and returning any other ID fails that card payment before anything is sent, as a throwing `beforeStep` does: `onError` gets an `INVALID_STATE` failure with the amount still due and the card payments already committed, and `retry()` calls `beforeStep` again. For a split payment, `ctx.getCurrentTotal()` is what the card phase still owes (the same as `onError`'s `getAmountDue()`), and `ctx.getStepAmount()` is what this request is about to charge, that payment's own share. For every other step the two are equal.
+- **A failure on a later card payment** reaches `onError` with `getAmountDue()` = that payment's amount plus everything after it. `retry()` resends that payment, with the same split fields and sale transaction. `external(payment)` must equal `getAmountDue()`; it keeps the earlier card payments and ends the card phase. `abort()` reverses every committed step, every card payment included, newest first. `skip()` is invalid, as for any card payment. The earlier card payments stay committed unless the register aborts.
+- **Each payment must cover its own share.** A card that approves less than it was asked for fails as `DECLINED`, as a single card payment does today.
+- **The result** lists every payment in `getCardPayments()`, in order, and `getCardAmountCharged()` is their sum. The single-payment getters (`getPoiTransactionId()`, `getApprovalCode()`, receipts) return the first card payment. The award covers every tender. A same-session `voidTransaction()` reverses every card payment, newest first; `refund()` refunds each one in full, and `refund(amount)` is refused.
 
 ### Variant: skip unavailable loyalty
 

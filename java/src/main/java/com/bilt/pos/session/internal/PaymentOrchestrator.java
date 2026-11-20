@@ -31,6 +31,7 @@ import com.bilt.pos.nexo.model.PaymentRequest;
 import com.bilt.pos.nexo.model.PaymentResponse;
 import com.bilt.pos.nexo.model.PaymentResult;
 import com.bilt.pos.nexo.model.PaymentTransaction;
+import com.bilt.pos.nexo.model.PaymentTypeEnum;
 import com.bilt.pos.nexo.model.Rebates;
 import com.bilt.pos.nexo.model.SaleData;
 import com.bilt.pos.nexo.model.SaleItem;
@@ -53,6 +54,7 @@ import com.bilt.pos.session.payment.PointRedemptionResult;
 import com.bilt.pos.session.payment.RebateRedemptionResult;
 import com.bilt.pos.session.payment.RedeemedRebate;
 import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
+import com.bilt.pos.session.settlement.CardPayment;
 import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.ExternalPayment;
 import com.bilt.pos.session.settlement.SettlementContext;
@@ -69,6 +71,7 @@ import com.bilt.pos.session.storedvalue.StoredValueOperationResult;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -196,9 +199,14 @@ public final class PaymentOrchestrator {
     final boolean disablePoints;
     final boolean disableAward;
     final LoyaltyHandlingEnum cardLoyaltyHandling;
+    final List<BigDecimal> plannedCardPayments;
 
     AttemptOptions(SettlementOptions request) {
       this.cashback = request.getCashback();
+      this.plannedCardPayments = new ArrayList<>();
+      for (CardPayment cardPayment : request.getCardPayments()) {
+        this.plannedCardPayments.add(cardPayment.getAmount());
+      }
       this.paymentProcessingDisplay = request.getPaymentProcessingDisplay();
       SettlementLoyalty loyalty = request.getLoyalty();
       this.disableRebates = !loyalty.runs(SettlementLoyalty.Step.REBATES);
@@ -240,6 +248,60 @@ public final class PaymentOrchestrator {
 
     static <T> StepOutcome<T> external(ExternalPayment payment) {
       return new StepOutcome<>(null, false, payment);
+    }
+  }
+
+  /**
+   * The card amounts still to charge: the register's planned fixed amounts, in order, and after
+   * them the remainder of whatever the card phase still owes. A partial-approval decision reshapes
+   * the plan between payments (another card for the shortfall, the shortfall added to the next
+   * planned payment).
+   */
+  private static final class CardPlan {
+    private final ArrayDeque<BigDecimal> planned;
+
+    CardPlan(List<BigDecimal> planned) {
+      this.planned = new ArrayDeque<>(planned);
+    }
+
+    /** The sum of the planned amounts not yet charged. */
+    BigDecimal plannedTotal() {
+      BigDecimal total = BigDecimal.ZERO;
+      for (BigDecimal amount : planned) {
+        total = total.add(amount);
+      }
+      return total;
+    }
+
+    /**
+     * The amount of the next card payment: the next planned amount, or everything still due once
+     * the plan is used up. A planned amount that would reach what is still due becomes the
+     * remainder payment instead, so the card phase never asks for more than it owes.
+     */
+    BigDecimal next(BigDecimal cardDue) {
+      BigDecimal amount = planned.peekFirst();
+      return amount == null || amount.compareTo(cardDue) >= 0 ? cardDue : amount;
+    }
+
+    /** Marks the payment {@link #next} named as charged. */
+    void charged() {
+      planned.pollFirst();
+    }
+  }
+
+  /** One committed card payment, with what it asked for and the sale transaction it used. */
+  private static final class CardCharge {
+    final CardPaymentResult payment;
+    final BigDecimal requested;
+    final TransactionIdentificationType saleTransaction;
+
+    CardCharge(
+        CardPaymentResult payment,
+        BigDecimal requested,
+        TransactionIdentificationType saleTransaction) {
+      this.payment = payment;
+      this.requested = requested;
+      this.saleTransaction = saleTransaction;
     }
   }
 
@@ -454,40 +516,78 @@ public final class PaymentOrchestrator {
       }
     }
 
-    // 5. Card payment
+    // 5. Card payments: one per planned amount (SettlementOptions.cardPayments), then one for the
+    // remainder; without a plan, the remainder payment is the only one. Each payment is its own
+    // checkpointed CARD_CHARGE step: a failure on payment N reaches onError with everything the
+    // card phase still owes, and the payments before it stay committed unless the register aborts.
     if (currentTotal.signum() > 0) {
-      if (options.paymentProcessingDisplay != null) {
-        showProcessingDisplay(options.paymentProcessingDisplay);
-      }
       Basket stepBasket = workingBasket;
-      BigDecimal stepTotal = currentTotal;
       LoyaltyHandlingEnum loyaltyHandling = options.cardLoyaltyHandling;
-      StepOutcome<CardPaymentResult> recovered =
-          runStep(
-              request,
-              committed,
-              movements,
-              SettlementStep.CARD_CHARGE,
-              stepBasket,
-              stepTotal,
-              false,
-              options.cashback == null,
-              (saleTransaction, serviceId, response) ->
-                  cardStep(
-                      request,
-                      stepBasket,
-                      stepTotal,
-                      options,
-                      loyaltyHandling,
-                      saleTransaction,
-                      serviceId,
-                      committed,
-                      movements,
-                      response));
-      if (recovered.externalPayment != null) {
-        externalPaid = recovered.externalPayment.getAmount();
-      } else {
-        cardPayments.add(recovered.value);
+      CardPlan plan = new CardPlan(options.plannedCardPayments);
+      BigDecimal plannedTotal = plan.plannedTotal();
+      if (plannedTotal.compareTo(currentTotal) >= 0) {
+        throw refuseCardPlan(request, committed, movements, currentTotal, plannedTotal);
+      }
+      BigDecimal cardDue = currentTotal;
+      // nexo PaidAmount: what the earlier payment requests of this sale authorized
+      BigDecimal paidBefore = storedValueCharged;
+      // nexo Rule 8: every split payment carries the first card payment's SaleTransactionID
+      TransactionIdentificationType splitSaleTransaction = null;
+      while (cardDue.signum() > 0) {
+        // before every card payment: the screen the previous card left must not linger while the
+        // shopper presents the next one
+        if (options.paymentProcessingDisplay != null) {
+          showProcessingDisplay(options.paymentProcessingDisplay);
+        }
+        BigDecimal amount = plan.next(cardDue);
+        BigDecimal stepDue = cardDue;
+        BigDecimal paidAmount = splitSaleTransaction == null ? null : paidBefore;
+        StepOutcome<CardCharge> recovered =
+            runStep(
+                request,
+                committed,
+                movements,
+                SettlementStep.CARD_CHARGE,
+                stepBasket,
+                stepDue,
+                false,
+                options.cashback == null,
+                amount,
+                splitSaleTransaction,
+                (saleTransaction, serviceId, response) ->
+                    cardStep(
+                        request,
+                        stepBasket,
+                        amount,
+                        paidAmount,
+                        options,
+                        loyaltyHandling,
+                        saleTransaction,
+                        serviceId,
+                        committed,
+                        movements,
+                        response));
+        if (recovered.externalPayment != null) {
+          // external covers everything still due and ends the card phase
+          externalPaid = recovered.externalPayment.getAmount();
+          break;
+        }
+        CardCharge charge = recovered.value;
+        cardPayments.add(charge.payment);
+        if (splitSaleTransaction == null) {
+          splitSaleTransaction = charge.saleTransaction;
+        }
+        plan.charged();
+        BigDecimal approved = charge.payment.getAmount();
+        paidBefore = paidBefore.add(approved);
+        // Partial approvals: cardStep fails a payment that authorized less than charge.requested
+        // (its share plus any cashback) as DECLINED, so every payment that reaches this point
+        // covered its whole share, and a cashback sale, which has no plan, ends here. An
+        // authorization above what was requested also counts towards the sale.
+        cardDue = cardDue.subtract(amount.add(approved.subtract(charge.requested)));
+        // A decision on a partial approval (another card, add the shortfall to the next planned
+        // payment, cash for the rest, abort) belongs here, between this payment and
+        // plan.next(cardDue).
       }
     }
     for (CardPaymentResult cardPayment : cardPayments) {
@@ -574,6 +674,41 @@ public final class PaymentOrchestrator {
       boolean maySkip,
       boolean mayPayExternally,
       StepAttempt<T> attempt) {
+    return runStep(
+        request,
+        committed,
+        movements,
+        step,
+        basket,
+        amountDue,
+        maySkip,
+        mayPayExternally,
+        amountDue,
+        null,
+        attempt);
+  }
+
+  /**
+   * {@link #runStep} for a step that charges {@code stepAmount}, a share of {@code amountDue}, and
+   * whose {@code SaleTransactionID} may be fixed by an earlier step: a split card payment must
+   * reuse the first card payment's. {@code beforeStep} is still called, with the locked ID as its
+   * default, and an override returning any other ID fails the step like a throwing {@code
+   * beforeStep}: nothing is sent, and {@code onError} gets an {@code INVALID_STATE} failure with
+   * the amount due and the committed movements, to retry (which calls {@code beforeStep} again),
+   * pay externally, abort or abandon. {@code null} locks nothing.
+   */
+  private <T> StepOutcome<T> runStep(
+      Request request,
+      List<Commit> committed,
+      List<SettlementMovement> movements,
+      SettlementStep step,
+      Basket basket,
+      BigDecimal amountDue,
+      boolean maySkip,
+      boolean mayPayExternally,
+      BigDecimal stepAmount,
+      TransactionIdentificationType lockedSaleTransaction,
+      StepAttempt<T> attempt) {
     while (true) {
       if (request.abortRequested.getAsBoolean()) {
         throw abort(
@@ -588,7 +723,32 @@ public final class PaymentOrchestrator {
       try {
         MessageCategoryType category = stepCategory(step);
         serviceId = category == null ? null : exchange.factory().mintServiceId(category);
-        saleTransaction = beforeStep(request, step, basket, amountDue, committed, serviceId);
+        saleTransaction =
+            beforeStep(
+                request,
+                step,
+                basket,
+                amountDue,
+                stepAmount,
+                committed,
+                serviceId,
+                lockedSaleTransaction);
+        if (lockedSaleTransaction != null
+            && !lockedSaleTransaction
+                .getTransactionID()
+                .equals(saleTransaction.getTransactionID())) {
+          // refused like a throwing beforeStep: nothing is sent, and onError sees the step, what
+          // is still due and the card payments already standing
+          throw new SessionException(
+              new SessionError(
+                  SessionErrorCode.INVALID_STATE,
+                  "invalid SaleTransactionID for "
+                      + step
+                      + ": every split card payment must use the first card payment's "
+                      + lockedSaleTransaction.getTransactionID()
+                      + " (nexo Rule 8), but beforeStep returned "
+                      + saleTransaction.getTransactionID()));
+        }
       } catch (RuntimeException e) {
         StepFailure failure = normalizeFailure(e, step);
         StepOutcome<T> outcome =
@@ -956,6 +1116,53 @@ public final class PaymentOrchestrator {
     return new SessionException(
         new SessionError(
             SessionErrorCode.INVALID_STATE, "invalid recovery for " + step + ": " + reason));
+  }
+
+  /**
+   * Fails a card phase whose planned payments leave nothing for the remainder, before any card is
+   * charged. {@code onError} sees {@link SessionErrorCode#CARD_PAYMENTS_EXCEED_TOTAL} with the
+   * whole card amount due. Only abort (unwind the earlier steps) and abandon (hand them to the
+   * register) are valid: a retry would refuse the same plan again, and an external payment for the
+   * whole card amount would silently drop the plan the register asked for.
+   */
+  private SessionException refuseCardPlan(
+      Request request,
+      List<Commit> committed,
+      List<SettlementMovement> movements,
+      BigDecimal cardTotal,
+      BigDecimal plannedTotal) {
+    checkAbort(request, committed);
+    SessionError error =
+        new SessionError(
+            SessionErrorCode.CARD_PAYMENTS_EXCEED_TOTAL,
+            "the planned card payments add up to "
+                + plannedTotal
+                + ", which must be less than the card amount "
+                + cardTotal
+                + " to leave a remainder payment");
+    SettlementFailure context =
+        SettlementFailure.builder()
+            .step(SettlementStep.CARD_CHARGE)
+            .error(error)
+            .amountDue(cardTotal)
+            .committedMovements(movements)
+            .outcomeCertainty(SettlementFailure.OutcomeCertainty.DEFINITIVE)
+            .build();
+    SettlementRecovery recovery = consultRecovery(request, committed, context);
+    switch (recovery.getAction()) {
+      case ABORT:
+        return abort(request, committed, error);
+      case ABANDON:
+        return abandon(request, context, movements, cardTotal);
+      default:
+        return invalidRecovery(
+            request,
+            committed,
+            SettlementStep.CARD_CHARGE,
+            recovery.getAction().name().toLowerCase()
+                + " cannot proceed with planned card payments that exceed the card amount;"
+                + " abort or abandon");
+    }
   }
 
   private static void preserveStanding(Request request, List<Commit> committed) {
@@ -1368,10 +1575,18 @@ public final class PaymentOrchestrator {
     return actualAmount;
   }
 
-  private CardPaymentResult cardStep(
+  /**
+   * Charges one card payment of {@code amount}. {@code paidAmount} is {@code null} for the first
+   * card payment, a normal payment; every later one is a nexo split payment ({@code
+   * SplitPaymentFlag}, {@code PaymentType=Normal}) whose {@code PaidAmount} is what the earlier
+   * payment requests of this sale authorized. Each payment sends the whole adjusted basket as its
+   * {@code SaleItem}s (nexo Rule 6 allows it), so every request describes the same sale.
+   */
+  private CardCharge cardStep(
       Request request,
       Basket basket,
-      BigDecimal currentTotal,
+      BigDecimal amount,
+      BigDecimal paidAmount,
       AttemptOptions options,
       LoyaltyHandlingEnum loyaltyHandling,
       TransactionIdentificationType saleTransaction,
@@ -1382,12 +1597,14 @@ public final class PaymentOrchestrator {
     // nexo contract: RequestedAmount is the TOTAL requested for payment
     // INCLUDING cashback — the terminal authorizes sale + cashback as
     // one amount, with CashBackAmount identifying the cash portion
-    BigDecimal grossTotal =
-        options.cashback != null ? currentTotal.add(options.cashback) : currentTotal;
+    BigDecimal grossTotal = options.cashback != null ? amount.add(options.cashback) : amount;
     AmountsReq.Builder amounts =
         AmountsReq.builder().currency(currency).requestedAmount(grossTotal.doubleValue());
     if (options.cashback != null) {
       amounts.cashBackAmount(options.cashback.doubleValue());
+    }
+    if (paidAmount != null) {
+      amounts.paidAmount(paidAmount.doubleValue());
     }
     PaymentTransaction.Builder transaction =
         PaymentTransaction.builder()
@@ -1397,17 +1614,24 @@ public final class PaymentOrchestrator {
       transaction.transactionConditions(
           TransactionConditions.builder().loyaltyHandling(loyaltyHandling).build());
     }
+    PaymentRequest.Builder payment =
+        PaymentRequest.builder()
+            .saleData(exchange.factory().saleData(saleTransaction))
+            .paymentTransaction(transaction.build());
+    if (paidAmount != null) {
+      payment.paymentData(
+          PaymentData.builder()
+              .paymentType(PaymentTypeEnum.NORMAL)
+              .splitPaymentFlag(Boolean.TRUE)
+              .build());
+    }
     SaleToPOIRequest wireRequest =
         SaleToPOIRequest.builder()
             .messageHeader(
                 exchange
                     .factory()
                     .header(MessageClassType.SERVICE, MessageCategoryType.PAYMENT, serviceId))
-            .paymentRequest(
-                PaymentRequest.builder()
-                    .saleData(exchange.factory().saleData(saleTransaction))
-                    .paymentTransaction(transaction.build())
-                    .build())
+            .paymentRequest(payment.build())
             .build();
 
     PaymentResponse body =
@@ -1439,8 +1663,8 @@ public final class PaymentOrchestrator {
             null));
 
     // a partial authorization on the stored value step is the split
-    // tender mechanism, but the card step is the FINAL tender — an
-    // under-authorization here would complete a short-paid sale (or
+    // tender mechanism, but each card payment must cover its own share —
+    // an under-authorization here would complete a short-paid sale (or
     // hand out cashback the sale never collected)
     if (charged.compareTo(grossTotal) < 0) {
       throw new StepFailure(
@@ -1450,7 +1674,8 @@ public final class PaymentOrchestrator {
           false);
     }
 
-    return cardPayment(body, charged, charged.compareTo(grossTotal) < 0);
+    return new CardCharge(
+        cardPayment(body, charged, charged.compareTo(grossTotal) < 0), grossTotal, saleTransaction);
   }
 
   /** One card payment's amount, references, acquirer data, and receipts. */
@@ -1790,15 +2015,24 @@ public final class PaymentOrchestrator {
       SettlementStep step,
       Basket basket,
       BigDecimal currentTotal,
+      BigDecimal stepAmount,
       List<Commit> committed,
-      String serviceId) {
+      String serviceId,
+      TransactionIdentificationType lockedSaleTransaction) {
     List<CommittedStep> prior = new ArrayList<>();
     prior.addAll(request.priorSteps);
     for (Commit commit : committed) {
       prior.add(commit.info);
     }
     return SettlementContext.resolveSaleTransactionId(
-        step, basket, currentTotal, prior, serviceId, request.handlers.beforeStep);
+        step,
+        basket,
+        currentTotal,
+        stepAmount,
+        prior,
+        serviceId,
+        request.handlers.beforeStep,
+        lockedSaleTransaction == null ? basket.getSaleTransactionID() : lockedSaleTransaction);
   }
 
   /** The category of the wire request a charge-side step sends, or {@code null} for none. */

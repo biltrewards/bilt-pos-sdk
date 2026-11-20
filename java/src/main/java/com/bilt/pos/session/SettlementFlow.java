@@ -127,6 +127,13 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
   /**
    * Called before each step; returns the {@code SaleTransactionID} to use for that step. Default:
    * the basket's shared sale transaction ID, carried by every checkout request of that basket.
+   *
+   * <p>A split settlement ({@code SettlementOptions.cardPayments}) calls it before every card
+   * payment. Card payments after the first must reuse the first card payment's ID, as nexo requires
+   * of split payments: for them the context's default ID is that ID, and returning any other ID
+   * fails that card payment before anything is sent, as a throwing handler does: {@link #onError}
+   * gets an {@code INVALID_STATE} failure with the amount still due and the card payments already
+   * committed, and decides as for any card payment failure.
    */
   public SettlementFlow beforeStep(Function<SettlementContext, String> handler) {
     return register(() -> this.beforeStepHandler = requireHandler(handler));
@@ -157,8 +164,9 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
   }
 
   /**
-   * Called when the card charge leg commits. See {@link #onMovement} for the provisional
-   * charge-side callback contract.
+   * Called when a card charge leg commits: once per card payment, so several times for a split
+   * settlement ({@code SettlementOptions.cardPayments}). See {@link #onMovement} for the
+   * provisional charge-side callback contract.
    */
   public SettlementFlow onCardCharged(Consumer<SettlementMovement> handler) {
     return register(() -> this.cardChargeHandler = requireHandler(handler));
