@@ -544,7 +544,7 @@ public final class OperationRunner {
     if (originalSale == null) {
       return true;
     }
-    return originalSale.getCardPoiTransactionId() != null
+    return !originalSale.getCardPayments().isEmpty()
         || originalSale.getStoredValuePoiTransactionId() != null
         || !originalSale.getStoredValueLoads().isEmpty();
   }

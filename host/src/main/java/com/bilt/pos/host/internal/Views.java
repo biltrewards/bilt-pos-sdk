@@ -20,6 +20,8 @@ import com.bilt.pos.session.ReversalContext;
 import com.bilt.pos.session.ReversedMovement;
 import com.bilt.pos.session.SessionContextSnapshot;
 import com.bilt.pos.session.SessionError;
+import com.bilt.pos.session.TenderAmount;
+import com.bilt.pos.session.TenderMovement;
 import com.bilt.pos.session.TransactionStatusResult;
 import com.bilt.pos.session.VoidResult;
 import com.bilt.pos.session.basket.Basket;
@@ -37,6 +39,7 @@ import com.bilt.pos.session.identity.VasService;
 import com.bilt.pos.session.input.MenuSelection;
 import com.bilt.pos.session.input.PinResult;
 import com.bilt.pos.session.input.Signature;
+import com.bilt.pos.session.payment.CardPaymentResult;
 import com.bilt.pos.session.payment.EarnedReward;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
 import com.bilt.pos.session.payment.PointRedemptionResult;
@@ -319,6 +322,7 @@ public final class Views {
     node.put("storedValueLoadedAmount", moneyOrZero(result.getStoredValueLoadedAmount()));
     node.put("cardAmountCharged", moneyOrZero(result.getCardAmountCharged()));
     node.put("externalPaymentAmount", moneyOrZero(result.getExternalPaymentAmount()));
+    node.set("cardPayments", cardPayments(result.getCardPayments()));
     Json.putText(node, "approvalCode", result.getApprovalCode());
     Json.putText(node, "acquirerTransactionId", result.getAcquirerTransactionId());
     Json.putText(node, "paymentBrand", result.getPaymentBrand());
@@ -367,6 +371,24 @@ public final class Views {
 
   private static String moneyOrZero(java.math.BigDecimal amount) {
     return amount == null ? "0" : amount.toPlainString();
+  }
+
+  private static ArrayNode cardPayments(List<CardPaymentResult> payments) {
+    ArrayNode array = Json.array();
+    for (CardPaymentResult payment : payments) {
+      ObjectNode node = array.addObject();
+      node.put("amount", moneyOrZero(payment.getAmount()));
+      Json.putText(node, "poiTransactionId", payment.getPoiTransactionId());
+      Json.putInstant(node, "poiTransactionTimestamp", payment.getPoiTransactionTimestamp());
+      Json.putText(node, "approvalCode", payment.getApprovalCode());
+      Json.putText(node, "acquirerTransactionId", payment.getAcquirerTransactionId());
+      Json.putText(node, "paymentBrand", payment.getPaymentBrand());
+      Json.putText(node, "maskedPan", payment.getMaskedPan());
+      putReceipt(node, "customerReceipt", payment.getCustomerReceipt());
+      putReceipt(node, "merchantReceipt", payment.getMerchantReceipt());
+      node.put("partialApproval", payment.isPartialApproval());
+    }
+    return array;
   }
 
   private static ArrayNode redeemedRebates(List<RedeemedRebate> rebates) {
@@ -560,6 +582,8 @@ public final class Views {
     ObjectNode node = Json.object();
     node.put("success", result.isSuccess());
     Json.putMoney(node, "refundedAmount", result.getRefundedAmount());
+    node.set("cardRefunds", tenderMovements(result.getCardRefunds()));
+    node.set("refundedAmountByTender", tenderAmounts(result.getRefundedAmountByTender()));
     Json.putText(node, "approvalCode", result.getApprovalCode());
     Json.putText(node, "poiTransactionId", result.getPoiTransactionId());
     Json.putInstant(node, "poiTransactionTimestamp", result.getPoiTransactionTimestamp());
@@ -574,6 +598,11 @@ public final class Views {
     ObjectNode node = Json.object();
     node.put("success", result.isSuccess());
     Json.putMoney(node, "reversedAmount", result.getReversedAmount());
+    node.set("cardReversals", tenderMovements(result.getCardReversals()));
+    if (result.getStoredValueReversal() != null) {
+      node.set("storedValueReversal", tenderMovement(result.getStoredValueReversal()));
+    }
+    node.set("reversedAmountByTender", tenderAmounts(result.getReversedAmountByTender()));
     Json.putText(node, "poiTransactionId", result.getPoiTransactionId());
     Json.putInstant(node, "poiTransactionTimestamp", result.getPoiTransactionTimestamp());
     putReceipt(node, "customerReceipt", result.getCustomerReceipt());
@@ -581,6 +610,39 @@ public final class Views {
     node.put("pointsReversed", result.getPointsReversed());
     node.put("remainingPointBalance", result.getRemainingPointBalance());
     return node;
+  }
+
+  private static ArrayNode tenderMovements(List<TenderMovement> movements) {
+    ArrayNode array = Json.array();
+    for (TenderMovement movement : movements) {
+      array.add(tenderMovement(movement));
+    }
+    return array;
+  }
+
+  private static ObjectNode tenderMovement(TenderMovement movement) {
+    ObjectNode node = Json.object();
+    node.put("tenderType", movement.getTenderType().name());
+    Json.putText(node, "originalPoiTransactionId", movement.getOriginalPoiTransactionId());
+    Json.putMoney(node, "amount", movement.getAmount());
+    Json.putText(node, "poiTransactionId", movement.getPoiTransactionId());
+    Json.putInstant(node, "poiTransactionTimestamp", movement.getPoiTransactionTimestamp());
+    Json.putText(node, "approvalCode", movement.getApprovalCode());
+    Json.putText(node, "serviceId", movement.getServiceId());
+    putReceipt(node, "customerReceipt", movement.getCustomerReceipt());
+    putReceipt(node, "merchantReceipt", movement.getMerchantReceipt());
+    return node;
+  }
+
+  private static ArrayNode tenderAmounts(List<TenderAmount> amounts) {
+    ArrayNode array = Json.array();
+    for (TenderAmount amount : amounts) {
+      ObjectNode node = array.addObject();
+      node.put("tender", amount.getTender().name());
+      Json.putText(node, "poiTransactionId", amount.getPoiTransactionId());
+      Json.putMoney(node, "amount", amount.getAmount());
+    }
+    return array;
   }
 
   private static void putReceipt(ObjectNode node, String field, Receipt receipt) {

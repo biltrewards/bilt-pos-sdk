@@ -44,6 +44,41 @@ class RefundAllocationTest {
   }
 
   @Test
+  void linkedCardRefundFromOriginalSaleTargetsItsOnlyCardPayment() {
+    OriginalSaleRecord originalSale =
+        OriginalSaleRecord.builder()
+            .addCardPayment(
+                CardPaymentRecord.builder()
+                    .poiTransactionId("POI-CARD-ORIG")
+                    .poiTransactionTimestamp(ORIGINAL_TIMESTAMP)
+                    .amount(new BigDecimal("40.00"))
+                    .build())
+            .build();
+
+    RefundAllocation allocation = RefundAllocation.card(new BigDecimal("10.00"), originalSale);
+
+    assertEquals("POI-CARD-ORIG", allocation.getOriginalPoiTransactionId());
+    assertEquals(ORIGINAL_TIMESTAMP, allocation.getOriginalPoiTransactionTimestamp());
+  }
+
+  @Test
+  void linkedCardRefundFromOriginalSaleWithSeveralCardPaymentsIsRefused() {
+    OriginalSaleRecord originalSale =
+        OriginalSaleRecord.builder()
+            .addCardPayment(CardPaymentRecord.builder().poiTransactionId("POI-CARD-1").build())
+            .addCardPayment(CardPaymentRecord.builder().poiTransactionId("POI-CARD-2").build())
+            .build();
+
+    IllegalArgumentException error =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> RefundAllocation.card(new BigDecimal("10.00"), originalSale));
+
+    assertTrue(error.getMessage().contains("2 card payments"));
+    assertTrue(error.getMessage().contains("getCardPayments()"));
+  }
+
+  @Test
   void unlinkedCardRefundDoesNotRequireOriginalTransactionId() {
     assertDoesNotThrow(() -> RefundAllocation.cardUnlinked(new BigDecimal("10.00")));
   }

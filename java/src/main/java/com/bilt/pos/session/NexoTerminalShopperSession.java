@@ -63,6 +63,7 @@ import com.bilt.pos.session.internal.SaleItemMapper;
 import com.bilt.pos.session.internal.SessionSignalCodec;
 import com.bilt.pos.session.internal.StoredValueManager;
 import com.bilt.pos.session.internal.Wire;
+import com.bilt.pos.session.settlement.CardPaymentRecord;
 import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
 import com.bilt.pos.session.settlement.RefundAllocation;
@@ -1446,25 +1447,85 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       guards.requireNoReversedMoneyLeg();
     }
     OriginalSaleRecord paid = linked ? lastSettlementRecord : NO_SETTLEMENT;
-    if (linked && paid.getCardPoiTransactionId() == null) {
+    // a linked refund returns the card payments; a gift-card-only sale has none, and its
+    // refund returns the stored value payment, as it always did
+    List<ReversalMovement> targets = new ArrayList<>();
+    for (CardPaymentRecord payment : paid.getCardPayments()) {
+      targets.add(
+          new ReversalMovement(
+              ReversalStep.CARD,
+              payment.getPoiTransactionId(),
+              payment.getPoiTransactionTimestamp(),
+              payment.getAmount(),
+              TenderType.CARD));
+    }
+    if (targets.isEmpty() && paid.getStoredValuePoiTransactionId() != null) {
+      targets.add(
+          new ReversalMovement(
+              ReversalStep.CARD,
+              paid.getStoredValuePoiTransactionId(),
+              paid.getStoredValuePoiTransactionTimestamp(),
+              null,
+              TenderType.STORED_VALUE));
+    }
+    if (linked && targets.isEmpty()) {
       throw invalidState(
           "a linked refund requires a completed payment in this "
               + "session; refund a prior sale through settle() with return lines "
               + "and SettlementOptions refund allocations");
     }
+    if (linked && amount != null && targets.size() > 1) {
+      throw invalidState(
+          "refund(amount) cannot choose between the "
+              + targets.size()
+              + " card payments of this payment; refund() refunds every one in full, or "
+              + "settle() with return lines and a RefundAllocation.card(amount, "
+              + "poiTransactionId, timestamp) per card payment refunds part of them");
+    }
     boolean awardReversed = linked && guards.awardReversed();
+    // a full refund sends one refund per card payment, newest first like a void, and skips
+    // those an earlier full refund already returned
+    List<ReversalMovement> originals = new ArrayList<>();
+    if (!linked) {
+      originals.add(new ReversalMovement(ReversalStep.CARD, null, null, amount, TenderType.CARD));
+    }
+    for (int i = targets.size() - 1; linked && i >= 0; i--) {
+      ReversalMovement target = targets.get(i);
+      if (amount != null || !guards.refundedInFull(target.getPoiTransactionId())) {
+        originals.add(
+            amount == null
+                ? target
+                : new ReversalMovement(
+                    ReversalStep.CARD,
+                    target.getPoiTransactionId(),
+                    target.getPoiTransactionTimestamp(),
+                    amount,
+                    target.getTender()));
+      }
+    }
+    if (originals.isEmpty() && (awardReversed || paid.getAwardPoiTransactionId() == null)) {
+      throw invalidState(
+          "the payment was already refunded in full from this session; nothing is left to "
+              + "refund");
+    }
     return reversalManager.refund(
         amount,
         null,
-        paid.getCardPoiTransactionId(),
-        paid.getCardPoiTransactionTimestamp(),
+        originals,
         awardReversed ? null : paid.getAwardPoiTransactionId(),
         awardReversed ? null : paid.getAwardPoiTransactionTimestamp(),
         linked ? paid.getMemberId() : null,
         currentSaleTransaction(),
         flow.decider(),
         flow.beforeStepHandler(),
-        linked ? guards::markRefunded : () -> {},
+        linked
+            ? original -> {
+              guards.markRefunded();
+              if (amount == null) {
+                guards.markRefundedInFull(original);
+              }
+            }
+            : original -> {},
         linked ? () -> guards.markAwardReversed(paid.getAwardPoiTransactionId()) : () -> {},
         refundServiceId);
   }
@@ -1627,8 +1688,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   private static List<ReversalMovement> voidTarget(OriginalSaleRecord originalSale) {
     return ReversalMovement.ofSale(
         originalSale.getStoredValueLoads(),
-        PoiRef.ofNullable(
-            originalSale.getCardPoiTransactionId(), originalSale.getCardPoiTransactionTimestamp()),
+        cardRefs(originalSale),
         PoiRef.ofNullable(
             originalSale.getStoredValuePoiTransactionId(),
             originalSale.getStoredValuePoiTransactionTimestamp()),
@@ -1641,6 +1701,19 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         PoiRef.ofNullable(
             originalSale.getAwardPoiTransactionId(),
             originalSale.getAwardPoiTransactionTimestamp()));
+  }
+
+  /** The sale's card payments as POI references, in the order they were made. */
+  private static List<PoiRef> cardRefs(OriginalSaleRecord originalSale) {
+    List<PoiRef> cards = new ArrayList<>();
+    for (CardPaymentRecord payment : originalSale.getCardPayments()) {
+      cards.add(
+          PoiRef.ofNullable(
+              payment.getPoiTransactionId(),
+              payment.getPoiTransactionTimestamp(),
+              payment.getAmount()));
+    }
+    return cards;
   }
 
   private Set<ReversalMovement.Key> priorSaleVoidProgress(OriginalSaleRecord originalSale) {

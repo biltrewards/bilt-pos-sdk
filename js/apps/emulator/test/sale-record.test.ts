@@ -248,6 +248,8 @@ describe('return and refund plans', () => {
     const record = fullRefundRecord(tenderOnly, {
       success: true,
       reversedAmount: '62.31',
+      cardReversals: [],
+      reversedAmountByTender: [{ tender: 'CARD', poiTransactionId: 'POI-PAY-1', amount: '62.31' }],
       poiTransactionId: 'POI-V-1',
       pointsReversed: 62,
       remainingPointBalance: 0,

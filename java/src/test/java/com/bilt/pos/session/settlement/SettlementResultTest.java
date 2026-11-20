@@ -2,15 +2,18 @@ package com.bilt.pos.session.settlement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.identity.RewardType;
+import com.bilt.pos.session.payment.CardPaymentResult;
 import com.bilt.pos.session.payment.EarnedReward;
 import com.bilt.pos.session.payment.RedeemedRebate;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 class SettlementResultTest {
@@ -124,5 +127,47 @@ class SettlementResultTest {
     assertEquals(List.of("warning", "second warning"), copy.getWarnings());
     assertEquals(List.of(movement), original.getMovements());
     assertEquals(List.of("warning"), original.getWarnings());
+  }
+
+  @Test
+  void cardPaymentsKeepTheirOrderThroughToBuilderAndIntoTheSaleRecord() {
+    Instant timestamp = Instant.parse("2026-07-20T10:00:00Z");
+    CardPaymentResult first =
+        CardPaymentResult.builder()
+            .amount(new BigDecimal("20.00"))
+            .poiTransactionId("CARD-1")
+            .poiTransactionTimestamp(timestamp)
+            .build();
+    CardPaymentResult second =
+        CardPaymentResult.builder()
+            .amount(new BigDecimal("30.00"))
+            .poiTransactionId("CARD-2")
+            .poiTransactionTimestamp(timestamp.plusSeconds(1))
+            .partialApproval(true)
+            .build();
+    List<CardPaymentResult> payments = new ArrayList<>(List.of(first, second));
+    SettlementResult original =
+        SettlementResult.builder()
+            .cardPayments(payments)
+            .cardAmountCharged(new BigDecimal("50.00"))
+            .poiTransactionId("CARD-1")
+            .poiTransactionTimestamp(timestamp)
+            .build();
+    payments.clear();
+
+    SettlementResult copy = original.toBuilder().build();
+
+    assertEquals(List.of(first, second), original.getCardPayments());
+    assertEquals(List.of(first, second), copy.getCardPayments());
+    assertThrows(UnsupportedOperationException.class, () -> copy.getCardPayments().clear());
+    assertEquals(
+        List.of("CARD-1", "CARD-2"),
+        copy.toOriginalSaleRecord(null).getCardPayments().stream()
+            .map(CardPaymentRecord::getPoiTransactionId)
+            .collect(Collectors.toList()));
+    assertEquals(
+        List.of(),
+        SettlementResult.builder().build().getCardPayments(),
+        "a settlement without a card charge has no card payments");
   }
 }

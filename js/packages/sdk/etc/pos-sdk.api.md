@@ -15,6 +15,8 @@ import { BasketLineItem } from '@biltorg/pos-protocol';
 import type { BasketMutation } from '@biltorg/pos-protocol';
 import { CardAcquisitionOptions } from '@biltorg/pos-protocol';
 import { CardAcquisitionResult } from '@biltorg/pos-protocol';
+import { CardPaymentRecord } from '@biltorg/pos-protocol';
+import { CardPaymentResult } from '@biltorg/pos-protocol';
 import { CheckoutPhase } from '@biltorg/pos-protocol';
 import type { ClientCapabilities } from '@biltorg/pos-protocol';
 import { ConfirmationOptions } from '@biltorg/pos-protocol';
@@ -80,6 +82,9 @@ import { StoredValueBalance } from '@biltorg/pos-protocol';
 import { StoredValueCard } from '@biltorg/pos-protocol';
 import { StoredValueOperationResult } from '@biltorg/pos-protocol';
 import { SurfaceKind } from '@biltorg/pos-protocol';
+import { TenderAmount } from '@biltorg/pos-protocol';
+import { TenderMovement } from '@biltorg/pos-protocol';
+import { TenderType } from '@biltorg/pos-protocol';
 import type { TerminalInfo } from '@biltorg/pos-protocol';
 import { TransactionStatusOptions } from '@biltorg/pos-protocol';
 import { TransactionStatusResult } from '@biltorg/pos-protocol';
@@ -199,6 +204,10 @@ export interface BiltPosStatic {
 export { CardAcquisitionOptions }
 
 export { CardAcquisitionResult }
+
+export { CardPaymentRecord }
+
+export { CardPaymentResult }
 
 export { CheckoutPhase }
 
@@ -638,6 +647,12 @@ export { StoredValueCard }
 export { StoredValueOperationResult }
 
 export { SurfaceKind }
+
+export { TenderAmount }
+
+export { TenderMovement }
+
+export { TenderType }
 
 // @public
 export interface Terminal {

@@ -715,6 +715,8 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
   refund() {
     return this.op('refund', async () => ({
       success: true,
+      cardRefunds: [],
+      refundedAmountByTender: [],
       pointsReversed: 0,
       remainingPointBalance: 0,
     }));
@@ -722,6 +724,8 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
   refundUnlinked() {
     return this.op('refundUnlinked', async () => ({
       success: true,
+      cardRefunds: [],
+      refundedAmountByTender: [],
       pointsReversed: 0,
       remainingPointBalance: 0,
     }));
@@ -729,6 +733,8 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
   voidTransaction() {
     return this.op('voidTransaction', async () => ({
       success: true,
+      cardReversals: [],
+      reversedAmountByTender: [],
       pointsReversed: 0,
       remainingPointBalance: 0,
     }));

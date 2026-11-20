@@ -11,6 +11,7 @@ package com.bilt.pos.session.settlement;
 
 import com.bilt.pos.session.Receipt;
 import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.payment.CardPaymentResult;
 import com.bilt.pos.session.payment.EarnedReward;
 import com.bilt.pos.session.payment.RedeemedRebate;
 import java.math.BigDecimal;
@@ -18,6 +19,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Final outcome of a successful settlement orchestration.
@@ -26,6 +28,12 @@ import java.util.List;
  * visible money and loyalty movements that remain committed after settlement. The refund aggregate
  * getters report the amounts returned by card, stored value, external register-managed tender, and
  * loyalty restoration.
+ *
+ * <p>A settlement may make several card payments; {@link #getCardPayments()} lists them in order.
+ * The single-payment getters ({@link #getPoiTransactionId()}, {@link #getApprovalCode()}, {@link
+ * #getCustomerReceipt()} and the like) describe the first card payment. Where that payment's
+ * response lacks a value, they keep the stored value payment's, and a gift-card-only sale reports
+ * its stored value payment there.
  *
  * <p>The loyalty award is best-effort (the terminal stores-and-forwards when the loyalty host is
  * down): a failed award does not fail the checkout but is reported in {@link #getWarnings()}.
@@ -41,6 +49,7 @@ public final class SettlementResult {
   private final BigDecimal storedValueLoadedAmount;
   private final BigDecimal cardAmountCharged;
   private final BigDecimal externalPaymentAmount;
+  private final List<CardPaymentResult> cardPayments;
   private final String approvalCode;
   private final String acquirerTransactionId;
   private final String paymentBrand;
@@ -88,6 +97,7 @@ public final class SettlementResult {
     this.storedValueLoadedAmount = builder.storedValueLoadedAmount;
     this.cardAmountCharged = builder.cardAmountCharged;
     this.externalPaymentAmount = builder.externalPaymentAmount;
+    this.cardPayments = Collections.unmodifiableList(new ArrayList<>(builder.cardPayments));
     this.approvalCode = builder.approvalCode;
     this.acquirerTransactionId = builder.acquirerTransactionId;
     this.paymentBrand = builder.paymentBrand;
@@ -178,9 +188,21 @@ public final class SettlementResult {
     return Collections.unmodifiableList(loads);
   }
 
-  /** Amount charged to the payment card; zero if fully covered otherwise. */
+  /**
+   * Amount charged to payment cards, the sum of {@link #getCardPayments()}; zero if fully covered
+   * otherwise.
+   */
   public BigDecimal getCardAmountCharged() {
     return cardAmountCharged;
+  }
+
+  /**
+   * Every card payment this settlement made and kept, in the order they were made; empty when no
+   * card was charged. Stored value payments are not card payments: see {@link
+   * #getStoredValuePoiTransactionId()}.
+   */
+  public List<CardPaymentResult> getCardPayments() {
+    return cardPayments;
   }
 
   /** Amount collected through register-managed tenders such as cash. */
@@ -188,14 +210,17 @@ public final class SettlementResult {
     return externalPaymentAmount;
   }
 
+  /** Approval code of the first card payment; see {@link #getCardPayments()} for every one. */
   public String getApprovalCode() {
     return approvalCode;
   }
 
+  /** Acquirer reference of the first card payment; see {@link #getCardPayments()} for every one. */
   public String getAcquirerTransactionId() {
     return acquirerTransactionId;
   }
 
+  /** Brand of the first card payment; see {@link #getCardPayments()} for every one. */
   public String getPaymentBrand() {
     return paymentBrand;
   }
@@ -234,19 +259,25 @@ public final class SettlementResult {
     return promotionMessages;
   }
 
+  /** Customer receipt of the first card payment; see {@link #getCardPayments()} for every one. */
   public Receipt getCustomerReceipt() {
     return customerReceipt;
   }
 
+  /** Merchant receipt of the first card payment; see {@link #getCardPayments()} for every one. */
   public Receipt getMerchantReceipt() {
     return merchantReceipt;
   }
 
-  /** Terminal reference of the card payment, for void/refund. */
+  /**
+   * Terminal reference of the first card payment, for void/refund; see {@link #getCardPayments()}
+   * for every one. A gift-card-only sale reports its stored value payment here.
+   */
   public String getPoiTransactionId() {
     return poiTransactionId;
   }
 
+  /** Terminal timestamp of the first card payment; see {@link #getPoiTransactionId()}. */
   public Instant getPoiTransactionTimestamp() {
     return poiTransactionTimestamp;
   }
@@ -348,6 +379,7 @@ public final class SettlementResult {
     private BigDecimal storedValueLoadedAmount = BigDecimal.ZERO;
     private BigDecimal cardAmountCharged = BigDecimal.ZERO;
     private BigDecimal externalPaymentAmount = BigDecimal.ZERO;
+    private List<CardPaymentResult> cardPayments = new ArrayList<>();
     private String approvalCode;
     private String acquirerTransactionId;
     private String paymentBrand;
@@ -388,6 +420,7 @@ public final class SettlementResult {
       this.storedValueLoadedAmount = result.storedValueLoadedAmount;
       this.cardAmountCharged = result.cardAmountCharged;
       this.externalPaymentAmount = result.externalPaymentAmount;
+      this.cardPayments = new ArrayList<>(result.cardPayments);
       this.approvalCode = result.approvalCode;
       this.acquirerTransactionId = result.acquirerTransactionId;
       this.paymentBrand = result.paymentBrand;
@@ -451,6 +484,19 @@ public final class SettlementResult {
 
     public Builder externalPaymentAmount(BigDecimal externalPaymentAmount) {
       this.externalPaymentAmount = externalPaymentAmount;
+      return this;
+    }
+
+    public Builder cardPayments(List<CardPaymentResult> cardPayments) {
+      this.cardPayments = new ArrayList<>();
+      if (cardPayments != null) {
+        cardPayments.forEach(this::addCardPayment);
+      }
+      return this;
+    }
+
+    public Builder addCardPayment(CardPaymentResult cardPayment) {
+      this.cardPayments.add(Objects.requireNonNull(cardPayment, "cardPayment"));
       return this;
     }
 

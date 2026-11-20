@@ -50,6 +50,21 @@
       "storedValueAmountUsed": "0.00",
       "storedValueLoadedAmount": "0.00",
       "cardAmountCharged": "3.43",
+      "cardPayments": [
+        {
+          "amount": "3.43",
+          "poiTransactionId": "POI-88214",
+          "poiTransactionTimestamp": "2026-10-06T14:06:19.000Z",
+          "approvalCode": "A1B2C3",
+          "acquirerTransactionId": "ACQ-99120031",
+          "paymentBrand": "Visa",
+          "maskedPan": "411111******1111",
+          "customerReceipt": {
+            "plainText": "BILT MART\nToothpaste  4.99\n..."
+          },
+          "partialApproval": false
+        }
+      ],
       "externalPaymentAmount": "0.00",
       "approvalCode": "A1B2C3",
       "acquirerTransactionId": "ACQ-99120031",

@@ -281,9 +281,14 @@ loadScripts(document, 'script');</script>
 <h3>card</h3>
 <div class="member-signature"><span class="modifiers">public static</span>&nbsp;<span class="return-type"><a href="RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></span>&nbsp;<span class="element-name">card</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;amount,
  <a href="OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a>&nbsp;originalSale)</span></div>
-<div class="block">Linked card refund against a persisted original sale record. The record must contain a card
- leg; use <a href="#cardUnlinked(java.math.BigDecimal)"><code>cardUnlinked(BigDecimal)</code></a> when the refund should be issued against a card
- presented at the terminal.</div>
+<div class="block">Linked card refund against a persisted original sale record. The record must contain exactly
+ one card payment: with several, the refund cannot tell which one to return to, so pick one of
+ <a href="OriginalSaleRecord.html#getCardPayments()"><code>OriginalSaleRecord.getCardPayments()</code></a> and use <a href="#card(java.math.BigDecimal,java.lang.String,java.time.Instant)"><code>card(BigDecimal, String, Instant)</code></a>, one allocation per card payment. Use <a href="#cardUnlinked(java.math.BigDecimal)"><code>cardUnlinked(BigDecimal)</code></a> when the
+ refund should be issued against a card presented at the terminal.</div>
+<dl class="notes">
+<dt>Throws:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalArgumentException.html" title="class or interface in java.lang" class="external-link">IllegalArgumentException</a></code> - if the record holds more than one card payment</dd>
+</dl>
 </section>
 </li>
 <li>

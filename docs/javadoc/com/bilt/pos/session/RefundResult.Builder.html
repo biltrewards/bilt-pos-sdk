@@ -112,10 +112,16 @@ loadScripts(document, 'script');</script>
 <div class="table-header col-second">Method</div>
 <div class="table-header col-last">Description</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#approvalCode(java.lang.String)" class="member-name-link">approvalCode</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;approvalCode)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#addCardRefund(com.bilt.pos.session.TenderMovement)" class="member-name-link">addCardRefund</a><wbr>(<a href="TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a>&nbsp;cardRefund)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#build()" class="member-name-link">build</a>()</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#approvalCode(java.lang.String)" class="member-name-link">approvalCode</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a>&nbsp;approvalCode)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="RefundResult.html" title="class in com.bilt.pos.session">RefundResult</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#build()" class="member-name-link">build</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#cardRefunds(java.util.List)" class="member-name-link">cardRefunds</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a>&gt;&nbsp;cardRefunds)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#customerReceipt(com.bilt.pos.session.Receipt)" class="member-name-link">customerReceipt</a><wbr>(<a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a>&nbsp;customerReceipt)</code></div>
@@ -136,11 +142,14 @@ loadScripts(document, 'script');</script>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#refundedAmount(java.math.BigDecimal)" class="member-name-link">refundedAmount</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;refundedAmount)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#remainingPointBalance(int)" class="member-name-link">remainingPointBalance</a><wbr>(int&nbsp;remainingPointBalance)</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#refundedAmountByTender(java.util.List)" class="member-name-link">refundedAmountByTender</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="TenderAmount.html" title="class in com.bilt.pos.session">TenderAmount</a>&gt;&nbsp;refundedAmountByTender)</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#success(boolean)" class="member-name-link">success</a><wbr>(boolean&nbsp;success)</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#remainingPointBalance(int)" class="member-name-link">remainingPointBalance</a><wbr>(int&nbsp;remainingPointBalance)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#success(boolean)" class="member-name-link">success</a><wbr>(boolean&nbsp;success)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 </div>
 </div>
 </div>
@@ -158,6 +167,24 @@ loadScripts(document, 'script');</script>
 <section class="method-details" id="method-detail">
 <h2>Method Details</h2>
 <ul class="member-list">
+<li>
+<section class="detail" id="cardRefunds(java.util.List)">
+<h3>cardRefunds</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></span>&nbsp;<span class="element-name">cardRefunds</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a>&gt;&nbsp;cardRefunds)</span></div>
+</section>
+</li>
+<li>
+<section class="detail" id="addCardRefund(com.bilt.pos.session.TenderMovement)">
+<h3>addCardRefund</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></span>&nbsp;<span class="element-name">addCardRefund</span><wbr><span class="parameters">(<a href="TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a>&nbsp;cardRefund)</span></div>
+</section>
+</li>
+<li>
+<section class="detail" id="refundedAmountByTender(java.util.List)">
+<h3>refundedAmountByTender</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="RefundResult.Builder.html" title="class in com.bilt.pos.session">RefundResult.Builder</a></span>&nbsp;<span class="element-name">refundedAmountByTender</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="TenderAmount.html" title="class in com.bilt.pos.session">TenderAmount</a>&gt;&nbsp;refundedAmountByTender)</span></div>
+</section>
+</li>
 <li>
 <section class="detail" id="success(boolean)">
 <h3>success</h3>

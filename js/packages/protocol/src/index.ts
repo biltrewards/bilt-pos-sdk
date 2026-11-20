@@ -92,6 +92,8 @@ export type SettlementRecovery = Schemas['SettlementRecovery'];
 export type SettlementContext = Schemas['SettlementContext'];
 export type AbandonedSettlementRecord = Schemas['AbandonedSettlementRecord'];
 export type OriginalSaleRecord = Schemas['OriginalSaleRecord'];
+export type CardPaymentRecord = Schemas['CardPaymentRecord'];
+export type CardPaymentResult = Schemas['CardPaymentResult'];
 
 export type RebateRedemptionResult = Schemas['RebateRedemptionResult'];
 export type PointRedemptionResult = Schemas['PointRedemptionResult'];
@@ -100,6 +102,9 @@ export type ReversedMovement = Schemas['ReversedMovement'];
 
 export type RefundResult = Schemas['RefundResult'];
 export type VoidResult = Schemas['VoidResult'];
+export type TenderAmount = Schemas['TenderAmount'];
+export type TenderMovement = Schemas['TenderMovement'];
+export type TenderType = Schemas['TenderType'];
 export type ReversalDecision = Schemas['ReversalDecision'];
 export type ReversalStep = Schemas['ReversalStep'];
 export type ReversalContext = Schemas['ReversalContext'];
