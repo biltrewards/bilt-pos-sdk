@@ -527,6 +527,10 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
   /** What the next `settle()` fails with, if anything; the recovery handler's answer is recorded. */
   failNextChargeWith: SessionError | null = null;
   recoveries: string[] = [];
+  /** How much the next `settle()`'s first card payment approves, when that is less than asked. */
+  partialNextChargeApproving: Money | null = null;
+  /** What `onPartialCardApproval` answered, or `AUTOMATIC` when no handler was registered. */
+  partialDecisions: string[] = [];
 
   constructor(options: TerminalSessionOptions) {
     super(options);
@@ -699,6 +703,54 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
           await this.context.setPhase('SCANNING');
           throw error;
         }
+      }
+      const approving = this.partialNextChargeApproving;
+      this.partialNextChargeApproving = null;
+      if (approving !== null) {
+        const shortfall = (Number(total) - Number(approving)).toFixed(2);
+        const first = {
+          step: 'CARD_CHARGE' as const,
+          target: { type: 'SALES' as const },
+          amount: approving,
+        };
+        handlers.onMovement?.(first);
+        handlers.onCardCharged?.(first);
+        const answer = handlers.onPartialCardApproval
+          ? await handlers.onPartialCardApproval(
+              {
+                approved: approving,
+                requested: total,
+                shortfall,
+                amountDue: shortfall,
+                cardPayments: [
+                  { amount: approving, poiTransactionId: 'POI-1', partialApproval: true },
+                ],
+                movement: first,
+              },
+              step,
+            )
+          : 'AUTOMATIC';
+        const action = typeof answer === 'string' ? answer : answer.action;
+        this.partialDecisions.push(action);
+        if (action === 'ABORT') {
+          await this.context.setPhase('SCANNING');
+          throw new SessionError({ code: 'DECLINED', message: 'partial approval aborted' });
+        }
+        if (action === 'EXTERNAL') {
+          const paid = {
+            step: 'EXTERNAL_PAYMENT' as const,
+            target: { type: 'SALES' as const },
+            amount: shortfall,
+          };
+          handlers.onMovement?.(paid);
+          handlers.onExternallyPaid?.(paid);
+        } else {
+          const second = { ...first, amount: shortfall };
+          handlers.onMovement?.(second);
+          handlers.onCardCharged?.(second);
+        }
+        await this.context.setPhase('COMPLETE');
+        return fx.settlementResult(this.basket.current, total);
       }
       const movement = {
         step: 'CARD_CHARGE' as const,

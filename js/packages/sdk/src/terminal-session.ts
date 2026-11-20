@@ -14,6 +14,8 @@ import type {
   MenuSelection,
   Money,
   OriginalSaleRecord,
+  PartialApprovalDecision,
+  PartialCardApproval,
   PinOptions,
   PinResult,
   PointRedemptionResult,
@@ -63,18 +65,30 @@ export interface StepInfo {
 export type SettlementRecoveryAction = Exclude<SettlementRecovery['action'], 'EXTERNAL'>;
 
 /**
+ * The short form of a partial approval decision; `"ANOTHER_CARD"` is `{ action: "ANOTHER_CARD" }`.
+ * `EXTERNAL` has no short form because it must carry the `externalPayment` that records the
+ * tender.
+ */
+export type PartialApprovalAction = Exclude<PartialApprovalDecision['action'], 'EXTERNAL'>;
+
+/**
  * The register's handlers for a settlement — the `SettlementFlow` handlers in Java. Each is
  * optional and consulted only when present, exactly as a Java handler is consulted only when
  * registered: a settlement with no `onError` aborts on a charge-side failure, one with no
- * `onRebatesRedeemed` accepts the suggested total.
+ * `onRebatesRedeemed` accepts the suggested total, one with no `onPartialCardApproval` has the
+ * SDK charge a short card payment's remainder on another card (at most three card requests).
  *
  * The three total handlers return the running total for the next step, letting the register
  * recompute tax on the discounted amount; `beforeStep` returns the `SaleTransactionID` for the
  * step, or nothing to keep the basket's. Its `context.serviceId` is the `ServiceID` the step's
  * terminal request is sent with once the handler has answered, so the register can record it
  * first; a retried step is asked again with a new id. Movement callbacks are observations, not the final
- * ledger: an abort or a same-run recovery can reverse charge-side movements without a
- * compensating callback, and `SettlementResult.movements` is authoritative.
+ * ledger: an abort or a same-run recovery reverses charge-side movements the register was
+ * already told about. Every reversal the SDK performs during the settlement is reported as a
+ * movement with `reversal: true` and the `reversedMovement` it undoes, to `onMovement` and, for a
+ * card payment, to `onCardChargeReversed` (never to `onCardCharged` or another per-step handler),
+ * so a register that mirrors movements can undo what it recorded. `SettlementResult.movements`
+ * is the final ledger and never lists a reversal notice.
  */
 export interface SettlementHandlers {
   beforeStep?(context: SettlementContext, step: StepInfo): MaybePromise<string | null | undefined>;
@@ -88,9 +102,20 @@ export interface SettlementHandlers {
   /** The stored value card was charged; default `result.suggestedTotal`. */
   onGiftCardPayment?(result: GiftCardPaymentResult, step: StepInfo): MaybePromise<Money>;
 
-  /** Any money or loyalty movement committed. */
+  /**
+   * Any money or loyalty movement committed, and every reversal notice (`movement.reversal`).
+   * Charge-side movements are provisional: a notice follows each one the SDK later reverses.
+   */
   onMovement?(movement: SettlementMovement): void;
+  /** A card payment committed; once per card payment, partial approvals included. */
   onCardCharged?(movement: SettlementMovement): void;
+  /**
+   * The SDK reversed a card payment it had reported through `onCardCharged`: before a recovery
+   * replaces a failed card step that had committed, and for each card payment an abort unwinds,
+   * newest first. `movement` is the reversal notice: `reversedMovement` is the charge, and its
+   * own `serviceId` and `poiTransactionId` are the reversal request's. Also reaches `onMovement`.
+   */
+  onCardChargeReversed?(movement: SettlementMovement): void;
   onExternallyPaid?(movement: SettlementMovement): void;
   onAwarded?(movement: SettlementMovement): void;
   onStoredValueLoaded?(movement: SettlementMovement): void;
@@ -111,6 +136,34 @@ export interface SettlementHandlers {
     failure: SettlementFailure,
     step: StepInfo,
   ): MaybePromise<SettlementRecovery | SettlementRecoveryAction>;
+
+  /**
+   * A card payment was approved for less than it requested (the terminal answered `Partial`). Its
+   * movement and `onCardCharged` have fired. Returns what happens to the shortfall:
+   *
+   * - `"ANOTHER_CARD"` charges the shortfall on another card, then continues the plan.
+   * - `"ADD_TO_NEXT"` adds the shortfall to the next planned card payment or the remainder
+   *   payment; refused when no card payment is left.
+   * - `{ action: "EXTERNAL", externalPayment }` records a register-managed payment, such as
+   *   cash, for exactly `partial.amountDue` and keeps every card payment.
+   * - `"ABORT"` reverses every committed step, the card payments included, and fails the
+   *   settlement as `DECLINED`. Card brand rules require a partial approval that the sale does
+   *   not complete to be reversed. This is also the default if the handler does not answer
+   *   before the deadline.
+   *
+   * A decision the settlement cannot carry out is refused like an invalid recovery: the
+   * settlement fails with `INVALID_STATE` and the committed steps stand for `voidTransaction()`.
+   *
+   * Without this handler the SDK sends the shortfall to another card by itself, up to three card
+   * requests for the balance in all, and then fails as `DECLINED` through `onError`. Registering
+   * it replaces that default and has no limit: count `partial.cardPayments` to cap how many
+   * cards a sale takes. Never called for a sale with cashback (a partial there fails as
+   * `DECLINED`) or for an authorization of zero.
+   */
+  onPartialCardApproval?(
+    partial: PartialCardApproval,
+    step: StepInfo,
+  ): MaybePromise<PartialApprovalDecision | PartialApprovalAction>;
 
   /** Recovery was abandoned; the record is now the register's reconciliation responsibility. */
   onAbandoned?(record: AbandonedSettlementRecord): void;

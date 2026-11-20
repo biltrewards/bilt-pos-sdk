@@ -198,6 +198,28 @@ export class ScriptedEngine extends MockEngine {
 }
 
 /** A `TOTAL_REQUIRED` step for a rebate redemption, due in `inMs`. */
+/** A `PARTIAL_CARD_APPROVAL` step: a $100.00 card payment approved for `approved`. */
+export function partialApprovalStep(stepId: string, approved: string, inMs = 120_000): StepInput {
+  const shortfall = (100 - Number(approved)).toFixed(2);
+  return {
+    stepId,
+    kind: 'PARTIAL_CARD_APPROVAL',
+    deadlineAt: new Date(Date.now() + inMs).toISOString(),
+    default: { stepId, partialApprovalDecision: { action: 'ABORT' } },
+    approved,
+    requested: '100.00',
+    shortfall,
+    amountDue: shortfall,
+    cardPayments: [{ amount: approved, poiTransactionId: 'POI-1', partialApproval: true }],
+    movement: {
+      step: 'CARD_CHARGE',
+      target: { type: 'SALES' },
+      amount: approved,
+      poiTransactionId: 'POI-1',
+    },
+  };
+}
+
 export function rebateStep(stepId: string, suggestedTotal: string, inMs = 30_000): StepInput {
   const previous = (Number(suggestedTotal) + 10).toFixed(2);
   return {

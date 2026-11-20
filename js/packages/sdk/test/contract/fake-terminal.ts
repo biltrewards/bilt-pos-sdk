@@ -51,6 +51,29 @@ export function paymentEcho(request: NexoBody): string {
   );
 }
 
+/**
+ * Approves each payment for the given share of what it asked for, in order, then in full: `0.6`
+ * is a partial approval (`Result=Partial`) of 60%. Every payment gets its own POI reference.
+ */
+export function paymentApproving(...shares: number[]): Script {
+  let count = 0;
+  return (request) => {
+    const requested =
+      request.SaleToPOIRequest?.PaymentRequest?.PaymentTransaction?.AmountsReq?.RequestedAmount ??
+      0;
+    const share = shares[count] ?? 1;
+    count += 1;
+    return (
+      '{"SaleToPOIResponse":{"PaymentResponse":{' +
+      `"Response":{"Result":"${share < 1 ? 'Partial' : 'Success'}"},` +
+      `"POIData":{"POITransactionID":{"TransactionID":"POI-PAY-${count}","TimeStamp":"2026-07-20T10:00:03Z"}},` +
+      `"PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":${(requested * share).toFixed(2)}},` +
+      '"PaymentAcquirerData":{"ApprovalCode":"APPR7","AcquirerTransactionID":{"TransactionID":"ACQ-1"}},' +
+      '"PaymentInstrumentData":{"CardData":{"PaymentBrand":"Visa"}}}}}}'
+    );
+  };
+}
+
 function keyOf(body: NexoBody): string | undefined {
   const request = body.SaleToPOIRequest;
   const category = request?.MessageHeader?.MessageCategory;

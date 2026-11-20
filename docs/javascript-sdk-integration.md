@@ -366,19 +366,20 @@ export async function markTendering(session: ShopperSession): Promise<void> {
 
 ## Settle
 
-`session.settle(options, handlers)` runs the settlement sequence the [TerminalShopperSession guide](./checkout-session-integration.md#the-settlement-sequence-explained) describes: refund allocations, rebate redemption, point redemption, stored value, card charge, award. `options` takes the Java `SettlementOptions` (`settlementType`, `loyalty`, `cashback`, `refunds`, `fulfillments`, `paymentProcessingDisplay`) and `handlers` the `SettlementFlow` handlers. `loyalty` is `{ handling: 'EXPLICIT' | 'IMPLICIT' | 'FORBIDDEN', steps?: ('REBATES' | 'POINTS' | 'AWARD')[] }` and also sets the card payment's Nexo `LoyaltyHandling` as [the mapping table](./checkout-session-integration.md#the-settlement-sequence-explained) shows.
+`session.settle(options, handlers)` runs the settlement sequence the [TerminalShopperSession guide](./checkout-session-integration.md#the-settlement-sequence-explained) describes: refund allocations, rebate redemption, point redemption, stored value, card charge, award. `options` takes the Java `SettlementOptions` (`settlementType`, `loyalty`, `cashback`, `cardPayments`, `refunds`, `fulfillments`, `paymentProcessingDisplay`) and `handlers` the `SettlementFlow` handlers. `loyalty` is `{ handling: 'EXPLICIT' | 'IMPLICIT' | 'FORBIDDEN', steps?: ('REBATES' | 'POINTS' | 'AWARD')[] }` and also sets the card payment's Nexo `LoyaltyHandling` as [the mapping table](./checkout-session-integration.md#the-settlement-sequence-explained) shows.
 
 ### Steps, deadlines and defaults
 
-Three handler groups are **steps**: the host pauses the sequence, asks the register, and applies a default when no answer arrives by the deadline. Each handler receives a `StepInfo` with the `deadline` and an `AbortSignal` that fires at it, so a slow tax service or a cashier prompt can be cut off in time.
+Four handler groups are **steps**: the host pauses the sequence, asks the register, and applies a default when no answer arrives by the deadline. Each handler receives a `StepInfo` with the `deadline` and an `AbortSignal` that fires at it, so a slow tax service or a cashier prompt can be cut off in time.
 
 | Handler | Step | Reply | Default at the deadline |
 |---|---|---|---|
 | `beforeStep(context, step)` | `BEFORE_STEP` | the `SaleTransactionID` for the next step, or nothing; `context.serviceId` is the `ServiceID` the step is then sent with | the basket's shared transaction id |
 | `onRebatesRedeemed`, `onPointsRedeemed`, `onGiftCardPayment` | `TOTAL_REQUIRED` | the running total for the next step | `result.suggestedTotal`: previous total minus the step's amount |
 | `onError(failure, step)` | `RECOVERY_REQUIRED` | `RETRY`, `SKIP`, `{ action: 'EXTERNAL', externalPayment }`, `ABORT`, `ABANDON` | `ABORT` |
+| `onPartialCardApproval(partial, step)` | `PARTIAL_CARD_APPROVAL` | `ANOTHER_CARD`, `ADD_TO_NEXT`, `{ action: 'EXTERNAL', externalPayment }`, `ABORT` | `ABORT`; with no handler the step is never asked and the SDK charges the shortfall on another card itself |
 
-Deadlines are the host's (30 seconds for totals, 120 for recovery decisions by default) and the SDK never extends them. A handler that is absent does not hold the sequence at all: the SDK tells the host which steps it handles, and the rest resolve to their defaults host-side without a round trip, exactly as an unregistered Java handler. The movement callbacks (`onMovement` and the per-step `onCardCharged`, `onAwarded`, `onCardRefunded`, ...) are observations with no reply; `SettlementResult.movements` is the authoritative ledger, since an abort or a same-run recovery can reverse charge-side movements without a compensating callback.
+Deadlines are the host's (30 seconds for totals, 120 for recovery and partial approval decisions by default) and the SDK never extends them. A handler that is absent does not hold the sequence at all: the SDK tells the host which steps it handles, and the rest resolve to their defaults host-side without a round trip, exactly as an unregistered Java handler. The movement callbacks (`onMovement` and the per-step `onCardCharged`, `onAwarded`, `onCardRefunded`, ...) are observations with no reply. Charge-side movements are provisional: a recovery that replaces a failed step, and an abort, reverse movements the register was already told about, and a **reversal notice** follows each reversal the SDK performs. It is a `SettlementMovement` with `reversal: true` and the `reversedMovement` it undoes; it copies that movement's `step`, `amount` and `saleTransactionId`, and its own `serviceId` and `poiTransactionId` are the reversal request's. `onMovement` receives every notice, and `onCardChargeReversed` the card payment ones (the SDK asks the host for notices when either is registered, so a register that uses neither is never sent one); a notice never reaches `onCardCharged` or another per-step handler, so a register that books `onCardCharged` and undoes it in `onCardChargeReversed` stays balanced. A reversal that fails gets no notice and stays standing for `voidTransaction()`. `SettlementResult.movements` is the authoritative ledger and never lists a notice.
 
 ```ts
 export function pay(session: TerminalShopperSession): Promise<SettlementResult> {
@@ -413,6 +414,58 @@ async function decideRecovery(
     : choice;
 }
 ```
+
+### Split card payments and partial approvals
+
+A sale can be paid with several cards. `cardPayments` plans them up front: each entry is a fixed amount charged on its own card, and one more card payment for the remainder always follows. With no `cardPayments` the settlement makes one card payment for the whole card amount, as before.
+
+```ts
+export function splitPay(session: TerminalShopperSession): Promise<SettlementResult> {
+  return session.settle(
+    // $20.00 on the first card, whatever is left on the next one
+    { cardPayments: [{ amount: '20.00' }] },
+    {
+      // Each card payment is its own BEFORE_STEP; stepAmount is this payment's share.
+      beforeStep: (context) => (log(context.step, context.stepAmount), undefined),
+      // Once per card payment, partial approvals included; a notice undoes one it reported.
+      onCardCharged: (movement) => ledger.record(movement),
+      onCardChargeReversed: (notice) => ledger.reverse(notice),
+      onPartialCardApproval: (partial, step) => decidePartial(partial, step),
+    },
+  );
+}
+```
+
+- The planned amounts are checked when the card step starts, after rebates, points and a gift card, so the card total is known. They must add up to **less** than it; otherwise the settlement fails before any card is charged with `SessionError.code` `CARD_PAYMENTS_EXCEED_TOTAL` and `onError` hears of it with the whole card amount as `amountDue`. `cardPayments` together with `cashback` is refused when the request is made (`VALIDATION`).
+- `SettlementContext.stepAmount` is what a step's terminal request is about to charge: a split card payment's own share, while `currentTotal` stays everything the card phase still owes. For every other step they are equal. A card payment after the first is a Nexo split payment sent with the first card payment's `SaleTransactionID`: `beforeStep` is asked before each, but a different id for a later one fails the settlement with `INVALID_STATE`.
+- `SettlementResult.cardPayments` lists every card payment in order, with its amount, POI reference, brand, receipts and `partialApproval`; `cardAmountCharged` is their sum, and the single-payment fields (`poiTransactionId`, `customerReceipt`, ...) describe the first one.
+- A failure on a later card payment reaches `onError` with `amountDue` = that payment's amount plus everything still due. `RETRY` sends that payment again, `EXTERNAL` covers everything still due and keeps the earlier card payments, and `ABORT` reverses them all.
+
+A card can also approve **less than it was asked for** (the terminal answers `Partial`). The payment's movement and `onCardCharged` fire first, then `onPartialCardApproval` receives a `PartialCardApproval`: `approved`, `requested`, `shortfall`, `amountDue` (everything the card phase still owes, the shortfall included), `cardPayments` (committed so far, this one last) and the `movement`. It answers with a decision:
+
+| Decision | What happens |
+|---|---|
+| `'ANOTHER_CARD'` | The shortfall is charged on another card, then the plan continues. |
+| `'ADD_TO_NEXT'` | The shortfall is added to the next planned card payment, or to the remainder payment. Refused when no card payment is left. |
+| `{ action: 'EXTERNAL', externalPayment }` | A register-managed payment, such as cash, for exactly `amountDue`. Every card payment stays. |
+| `'ABORT'` | Every committed step is reversed, the card payments included, and the settlement fails as `DECLINED`. |
+
+```ts
+async function decidePartial(
+  partial: PartialCardApproval,
+  step: StepInfo,
+): Promise<PartialApprovalDecision | PartialApprovalAction> {
+  if (partial.cardPayments.length >= 4) return 'ABORT'; // no cap of its own: count the cards
+  const choice = await cashier.choosePartial(partial, step.signal); // aborts at step.deadline
+  return choice === 'EXTERNAL'
+    ? { action: 'EXTERNAL', externalPayment: { tenderType: 'CASH', amount: partial.amountDue } }
+    : choice;
+}
+```
+
+A decision the settlement cannot carry out (`ADD_TO_NEXT` with no card payment left, an `EXTERNAL` amount other than `amountDue`) fails the settlement with `INVALID_STATE`, and the committed steps stand until `voidTransaction()` reverses them. A handler that does not answer by the deadline gets `ABORT`: card brand rules require a partial approval the sale does not complete to be reversed. The handler is never called for a sale with cashback or for an authorization of zero; those fail as `DECLINED`.
+
+**Without** `onPartialCardApproval` the step is not declared, the host asks nothing, and the SDK collects the shortfall itself, as the Java SDK does for a register with no handler: it sends another card request for it, at most three card requests in all for the balance (the first included; planned payments and your own retries do not count). If money is still due after that, the settlement fails as `DECLINED` through `onError`, and the default abort reverses every card payment. Registering the handler replaces that default and has no limit.
 
 ### Outcome
 
@@ -586,10 +639,11 @@ Every rejected operation rejects with a `SessionError`, the JavaScript form of t
 |---|---|
 | `NETWORK` | The host cannot reach the terminal, or the page lost the host mid-request after its retries. |
 | `TIMEOUT` | A terminal exchange or a prompt timed out. |
-| `DECLINED` | The card was declined; inside `settle()` this arrives as a `RECOVERY_REQUIRED` step first. |
+| `DECLINED` | The card was declined, or approved for less than it was asked and the sale could not collect the rest; inside `settle()` this arrives as a `RECOVERY_REQUIRED` step first. |
 | `CANCELLED` | The shopper cancelled on the terminal. |
 | `ABORTED` | The register called `abort()`; a settlement has been unwound. |
 | `ABANDONED` | The register answered `ABANDON`; `abandonedSettlement` carries the record. |
+| `CARD_PAYMENTS_EXCEED_TOTAL` | The planned `cardPayments` of a `settle()` add up to the card amount or more; nothing was charged. |
 | `LOYALTY_UNAVAILABLE`, `STORED_VALUE_INSUFFICIENT` | The loyalty host is down, or the gift card cannot cover its share. |
 | `INVALID_STATE` | A guard: a mutation while money moves, `end()` with money unresolved, `settle()` on a consumed basket, a terminal that already has a session. |
 | `UNSUPPORTED` | A provider without the requested operation, such as stored value. |
@@ -719,7 +773,43 @@ function Lane(): ReactNode {
 }
 ```
 
-`useSettlement` keeps the step semantics: only the kinds in `interactive` are held open as `pendingStep` (a `PendingTotalStep`, `PendingRecoveryStep` or `PendingBeforeStep`, each with `deadline`, `signal` and `useDefault()`); a handler passed to `settle()` for a step wins over the list; everything else takes its default at once; an unanswered `pendingStep` falls back to its default at the host's deadline. `settlement.status` runs `idle`, `running`, `awaitingReply`, then `succeeded`, `failed` or `aborted`; `reset()` returns to `idle` for the next shopper.
+`useSettlement` keeps the step semantics: only the kinds in `interactive` are held open as `pendingStep` (a `PendingTotalStep`, `PendingRecoveryStep`, `PendingPartialApprovalStep` or `PendingBeforeStep`, each with `deadline`, `signal` and `useDefault()`); a handler passed to `settle()` for a step wins over the list; everything else takes its default at once; an unanswered `pendingStep` falls back to its default at the host's deadline. `settlement.status` runs `idle`, `running`, `awaitingReply`, then `succeeded`, `failed` or `aborted`; `reset()` returns to `idle` for the next shopper.
+
+A partial card approval is a step like the others. List `PARTIAL_CARD_APPROVAL` in `interactive` and `pendingStep` becomes a `PendingPartialApprovalStep` carrying the `PartialCardApproval` fields (`approved`, `requested`, `shortfall`, `amountDue`, `cardPayments`, `movement`) beside `deadline`, `signal` and `useDefault()` (`ABORT`); answer it with `settlement.reply({ partialApproval })`. Leave the kind out of `interactive` and the SDK charges the shortfall on another card by itself, as described under [Settle](#split-card-payments-and-partial-approvals).
+
+```tsx
+export function PartialApprovalPrompt({
+  settlement,
+}: {
+  settlement: UseSettlementResult;
+}): ReactNode {
+  const step = settlement.pendingStep;
+  if (step?.kind !== 'PARTIAL_CARD_APPROVAL') return null;
+  return (
+    <div role="dialog">
+      <p>
+        Card approved {step.approved} of {step.requested}: {step.amountDue} still due
+      </p>
+      <button onClick={() => settlement.reply({ partialApproval: 'ANOTHER_CARD' })}>
+        Another card
+      </button>
+      <button
+        onClick={() =>
+          settlement.reply({
+            partialApproval: {
+              action: 'EXTERNAL',
+              externalPayment: { tenderType: 'CASH', amount: step.amountDue },
+            },
+          })
+        }
+      >
+        Rest in cash
+      </button>
+      <button onClick={() => settlement.reply({ partialApproval: 'ABORT' })}>Cancel sale</button>
+    </div>
+  );
+}
+```
 
 Any other operation is tracked by holding it in state:
 
@@ -781,7 +871,8 @@ For everything the guide touches in one place, [`js/apps/emulator`](https://gith
 | Attach a member | `session.member.set({ id })`, `session.member.set({ resolver: { type: 'PHONE', value } })`, `.clear()` |
 | Identify on the terminal | `await session.identifyMember()` |
 | Phase and attributes | `session.context.setPhase('TENDERING')`, `.setAttribute(key, value)` |
-| Settle | `await session.settle({ settlementType }, { onRebatesRedeemed, onError, onMovement })` |
+| Settle | `await session.settle({ settlementType }, { onRebatesRedeemed, onError, onMovement, onCardChargeReversed })` |
+| Split across cards | `session.settle({ cardPayments: [{ amount: '20.00' }] }, { onPartialCardApproval })` |
 | Follow or cancel an operation | `operation.status`, `await operation.abort()` |
 | Outcome of a lost request | `await session.getTransactionStatus(serviceId, { originalSaleId?, receiptReprint? })` → `found`, repeated response |
 | Refund, void | `session.refund(amount?)`, `session.refundUnlinked(amount)`, `session.voidTransaction(record?, handlers?)` |

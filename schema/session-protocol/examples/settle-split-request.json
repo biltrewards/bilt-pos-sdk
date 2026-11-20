@@ -1,0 +1,8 @@
+{
+  "type": "settle",
+  "options": {
+    "loyalty": { "handling": "EXPLICIT", "steps": ["REBATES", "POINTS", "AWARD"] },
+    "cardPayments": [{ "amount": "20.00" }]
+  },
+  "handledSteps": ["RECOVERY_REQUIRED", "PARTIAL_CARD_APPROVAL"]
+}

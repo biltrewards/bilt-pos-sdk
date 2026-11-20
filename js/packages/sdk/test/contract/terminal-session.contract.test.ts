@@ -4,17 +4,18 @@
 import type {
   OperationStep,
   OriginalSaleRecord,
+  PartialCardApproval,
   RebateRedemptionResult,
   SettlementMovement,
 } from '@biltorg/pos-protocol';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   SessionError,
   type BiltPos,
   type StepInfo,
   type TerminalShopperSession,
 } from '../../src/index';
-import { FakeTerminal } from './fake-terminal';
+import { FakeTerminal, paymentEcho, paymentApproving } from './fake-terminal';
 import {
   buildHost,
   hostAvailable,
@@ -187,6 +188,179 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
       .map((body) => JSON.stringify(body).match(/"TransactionID":"(POI-PAY-\d)"/)?.[1]);
     expect(reversed).toEqual(['POI-PAY-2', 'POI-PAY-1']);
     await session.end();
+  });
+
+  describe('split and partial card payments', () => {
+    // the terminal is shared by the whole file: count only what this test sent
+    let seen = 0;
+    beforeEach(() => {
+      seen = terminal.requests.length;
+    });
+    afterEach(() => {
+      terminal.reply('Payment', paymentEcho);
+    });
+
+    function sent(category: string): string[] {
+      return terminal.requests
+        .slice(seen)
+        .filter((body) => body.SaleToPOIRequest?.MessageHeader?.MessageCategory === category)
+        .map((body) => JSON.stringify(body));
+    }
+    const paymentRequests = () => sent('Payment');
+
+    it('splits the card amount into the planned payments and the remainder', async () => {
+      terminal.reply('Payment', paymentApproving());
+      const session = await lane();
+      const contexts: { stepAmount: string | undefined; currentTotal: string }[] = [];
+      const charged: SettlementMovement[] = [];
+
+      const result = await session.settle(
+        { cardPayments: [{ amount: '20.00' }] },
+        {
+          beforeStep: (context) => {
+            if (context.step === 'CARD_CHARGE') {
+              contexts.push({ stepAmount: context.stepAmount, currentTotal: context.currentTotal });
+            }
+            return undefined;
+          },
+          onCardCharged: (m) => charged.push(m),
+        },
+      );
+
+      expect(result.cardPayments.map((p) => p.amount)).toEqual(['20.00', '70.00']);
+      expect(result.cardAmountCharged).toBe('90.00');
+      expect(result.cardPayments.map((p) => p.partialApproval)).toEqual([false, false]);
+      expect(charged.map((m) => m.amount)).toEqual(['20.00', '70.00']);
+      expect(contexts).toEqual([
+        { stepAmount: '20.00', currentTotal: '90.00' },
+        { stepAmount: '70.00', currentTotal: '70.00' },
+      ]);
+      const sent = paymentRequests();
+      expect(sent).toHaveLength(2);
+      expect(sent[0]).not.toContain('SplitPaymentFlag');
+      expect(sent[1]).toContain('"SplitPaymentFlag":true');
+      expect(sent[1]).toMatch(/"PaidAmount":20(\.0+)?[,}]/);
+      await session.end();
+    });
+
+    it('fails planned payments that add up to the total with CARD_PAYMENTS_EXCEED_TOTAL', async () => {
+      const session = await lane();
+      const failure = await session
+        .settle({ cardPayments: [{ amount: '90.00' }] })
+        .catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(SessionError);
+      expect((failure as SessionError).code).toBe('CARD_PAYMENTS_EXCEED_TOTAL');
+      expect(paymentRequests()).toEqual([]);
+    });
+
+    it('asks onPartialCardApproval and charges the shortfall on another card', async () => {
+      terminal.reply('Payment', paymentApproving(0.6));
+      const session = await lane();
+      const steps: OperationStep[] = [];
+      session.on('operation.step', (step) => steps.push(step));
+      const order: string[] = [];
+      const handler = vi.fn((_partial: PartialCardApproval, _step: StepInfo) => {
+        order.push('partial');
+        return 'ANOTHER_CARD' as const;
+      });
+
+      const result = await session.settle(undefined, {
+        onCardCharged: (m) => order.push(`charged ${m.amount}`),
+        onPartialCardApproval: handler,
+      });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      const partial = handler.mock.calls[0]![0];
+      expect(partial).toMatchObject({
+        approved: '54.00',
+        requested: '90.00',
+        shortfall: '36.00',
+        amountDue: '36.00',
+      });
+      expect(partial.cardPayments).toHaveLength(1);
+      expect(partial.movement).toMatchObject({ step: 'CARD_CHARGE', amount: '54.00' });
+      expect(steps.map((s) => s.kind)).toEqual(['PARTIAL_CARD_APPROVAL']);
+      expect(order).toEqual(['charged 54.00', 'partial', 'charged 36.00']);
+      expect(result.cardPayments.map((p) => [p.amount, p.partialApproval])).toEqual([
+        ['54.00', true],
+        ['36.00', false],
+      ]);
+      expect(result.cardAmountCharged).toBe('90.00');
+      expect(paymentRequests()[1]).toContain('"SplitPaymentFlag":true');
+      await session.end();
+    });
+
+    it('records the rest as an external payment and keeps the card payment', async () => {
+      terminal.reply('Payment', paymentApproving(0.6));
+      const session = await lane();
+      const result = await session.settle(undefined, {
+        onPartialCardApproval: (partial) => ({
+          action: 'EXTERNAL',
+          externalPayment: { tenderType: 'CASH', amount: partial.amountDue },
+        }),
+      });
+      expect(result.cardPayments).toHaveLength(1);
+      expect(result.cardAmountCharged).toBe('54.00');
+      expect(result.externalPaymentAmount).toBe('36.00');
+      expect(paymentRequests()).toHaveLength(1);
+      await session.end();
+    });
+
+    it('aborts a partial approval: every card payment is reversed, reported, and the sale is DECLINED', async () => {
+      terminal.reply('Payment', paymentApproving(0.6));
+      const session = await lane();
+      const charged: SettlementMovement[] = [];
+      const reversed: SettlementMovement[] = [];
+      const everything: SettlementMovement[] = [];
+      const failure = await session
+        .settle(undefined, {
+          onPartialCardApproval: () => 'ABORT',
+          onCardCharged: (m) => charged.push(m),
+          onCardChargeReversed: (m) => reversed.push(m),
+          onMovement: (m) => everything.push(m),
+        })
+        .catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(SessionError);
+      expect((failure as SessionError).code).toBe('DECLINED');
+      expect(sent('Reversal').filter((json) => json.includes('POI-PAY-1'))).toHaveLength(1);
+
+      // the abort's reversal comes back as a notice that undoes the reported charge
+      expect(charged.map((m) => m.amount)).toEqual(['54.00']);
+      expect(reversed).toHaveLength(1);
+      expect(reversed[0]).toMatchObject({
+        step: 'CARD_CHARGE',
+        amount: '54.00',
+        reversal: true,
+        reversedMovement: { poiTransactionId: 'POI-PAY-1', serviceId: charged[0]?.serviceId },
+      });
+      expect(reversed[0]?.serviceId).toBeTruthy();
+      expect(reversed[0]?.serviceId).not.toBe(charged[0]?.serviceId);
+      expect(everything.filter((m) => m.reversal).map((m) => m.step)).toContain('CARD_CHARGE');
+    });
+
+    it('leaves the shortfall to the SDK when no handler is registered', async () => {
+      terminal.reply('Payment', paymentApproving(0.6, 0.5));
+      const session = await lane();
+      const steps: OperationStep[] = [];
+      session.on('operation.step', (step) => steps.push(step));
+
+      const result = await session.settle(undefined, { onCardCharged: () => undefined });
+
+      expect(steps).toEqual([]);
+      // 90.00: 54.00 approved, then 36.00 asked and 18.00 approved, then the last 18.00
+      expect(result.cardPayments.map((p) => p.amount)).toEqual(['54.00', '18.00', '18.00']);
+      expect(result.cardAmountCharged).toBe('90.00');
+      await session.end();
+    });
+
+    it('stops the automatic follow-ups at three card requests and fails as DECLINED', async () => {
+      terminal.reply('Payment', paymentApproving(0.5, 0.5, 0.5, 0.5));
+      const session = await lane();
+      const failure = await session.settle().catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(SessionError);
+      expect((failure as SessionError).code).toBe('DECLINED');
+      expect(paymentRequests()).toHaveLength(3);
+    });
   });
 
   it('applies the host default when no handler was given', async () => {

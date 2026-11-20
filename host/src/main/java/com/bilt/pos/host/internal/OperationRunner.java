@@ -26,6 +26,8 @@ import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.identity.Member;
 import com.bilt.pos.session.internal.PresetServiceIds;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
+import com.bilt.pos.session.settlement.PartialApprovalDecision;
+import com.bilt.pos.session.settlement.PartialCardApproval;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
 import com.bilt.pos.session.settlement.SettlementOptions;
@@ -137,6 +139,9 @@ public final class OperationRunner {
       terminalAbort.execute();
       terminalAbort.isSuccess();
     }
+    // remembered only now that the SDK's abort flag is up: a step parked from here on is released
+    // by ask(), one parked before is released below, and neither can let the flow run on
+    operation.abortRequested();
     PendingStep<?> step = operation.pendingStep();
     if (step != null) {
       step.abort();
@@ -446,7 +451,9 @@ public final class OperationRunner {
         {
           SettlementOptions settlementOptions = Parsers.settlementOptions(options);
           Set<PendingStep.Kind> steps = handledSteps(body);
-          return settlement(hosted, operation, () -> terminal.settle(settlementOptions), steps);
+          boolean reversalNotices = Json.bool(body, "reversalNotices", false);
+          return settlement(
+              hosted, operation, () -> terminal.settle(settlementOptions), steps, reversalNotices);
         }
       case "refund":
         {
@@ -588,7 +595,8 @@ public final class OperationRunner {
       HostedSession hosted,
       HostedOperation operation,
       Supplier<SettlementFlow> factory,
-      Set<PendingStep.Kind> steps) {
+      Set<PendingStep.Kind> steps,
+      boolean reversalNotices) {
     return () -> {
       try {
         SettlementFlow flow = factory.get();
@@ -632,9 +640,8 @@ public final class OperationRunner {
         }
         flow.onMovement(
             movement -> {
-              if (movement.isReversal()) {
-                // the session protocol has no reversal notice yet; sending one as a plain
-                // operation.movement would read as another charge
+              if (movement.isReversal() && !reversalNotices) {
+                // a client that did not ask for notices would read one as another charge
                 return;
               }
               ObjectNode payload = Json.object();
@@ -650,6 +657,12 @@ public final class OperationRunner {
                   failure.getStep() == null
                       ? SettlementRecovery.abort()
                       : ask(hosted, operation, recoveryStep(operation, failure)));
+        }
+        if (steps.contains(PendingStep.Kind.PARTIAL_CARD_APPROVAL)) {
+          // registered only when declared: without a handler the SDK sends the shortfall to
+          // another card by itself, as it does for a Java register that sets none
+          flow.onPartialCardApproval(
+              partial -> ask(hosted, operation, partialApprovalStep(operation, partial)));
         }
         flow.onAbandoned(record -> operation.abandoned(Views.abandonedSettlement(record)));
         flow.execute();
@@ -712,6 +725,10 @@ public final class OperationRunner {
   private <T> T ask(HostedSession hosted, HostedOperation operation, PendingStep<T> step) {
     operation.awaiting(step);
     hosted.publish("operation.step", step.toJson());
+    if (operation.isAbortRequested()) {
+      // an abort that came while the SDK was still on its way here found no step to release
+      step.abort();
+    }
     try {
       return step.await();
     } finally {
@@ -796,6 +813,29 @@ public final class OperationRunner {
             throw HostError.badRequest("a RECOVERY_REQUIRED reply needs recovery");
           }
           return Parsers.recovery(recovery);
+        });
+  }
+
+  private PendingStep<PartialApprovalDecision> partialApprovalStep(
+      HostedOperation operation, PartialCardApproval partial) {
+    // an unanswered partial approval aborts: card brand rules require a partial approval the
+    // sale does not complete to be reversed, and the register is not there to take the money
+    ObjectNode defaults = Json.object();
+    defaults.putObject("partialApprovalDecision").put("action", "ABORT");
+    return new PendingStep<>(
+        operation.id(),
+        PendingStep.Kind.PARTIAL_CARD_APPROVAL,
+        Views.partialCardApproval(partial),
+        defaults,
+        defaults.deepCopy(),
+        deadlines.partialApproval(),
+        answer -> {
+          JsonNode decision = answer.get("partialApprovalDecision");
+          if (decision == null || decision.isNull()) {
+            throw HostError.badRequest(
+                "a PARTIAL_CARD_APPROVAL reply needs partialApprovalDecision");
+          }
+          return Parsers.partialApprovalDecision(decision);
         });
   }
 

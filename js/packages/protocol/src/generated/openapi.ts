@@ -589,7 +589,8 @@ export interface paths {
          *     the `operation.step` event and carries the one field that step kind takes: `total` for
          *     `TOTAL_REQUIRED`, `saleTransactionId` for a settlement's `BEFORE_STEP` (a refund's or
          *     void's takes none), `recovery` for
-         *     `RECOVERY_REQUIRED`, `decision` for `REVERSAL_DECISION_REQUIRED`. A reply after the
+         *     `RECOVERY_REQUIRED`, `partialApprovalDecision` for `PARTIAL_CARD_APPROVAL`, `decision`
+         *     for `REVERSAL_DECISION_REQUIRED`. A reply after the
          *     step's deadline, for a step already answered, or for a step the operation is not awaiting
          *     is refused with 422; the default has already applied or will apply.
          */
@@ -794,11 +795,13 @@ export interface components {
             };
         };
         /**
-         * @description Why a session operation failed. The first twelve values are the Java `SessionErrorCode`
+         * @description Why a session operation failed. The first thirteen values are the Java `SessionErrorCode`
          *     constants; `VALIDATION`, `NOT_FOUND` and `UNAUTHORIZED` exist only on the wire.
+         *     `CARD_PAYMENTS_EXCEED_TOTAL` is the planned `cardPayments` of a `settle` adding up to the
+         *     card amount or more, reported before any card is charged.
          * @enum {string}
          */
-        SessionErrorCode: "NETWORK" | "TIMEOUT" | "DECLINED" | "CANCELLED" | "ABORTED" | "ABANDONED" | "LOYALTY_UNAVAILABLE" | "STORED_VALUE_INSUFFICIENT" | "INVALID_STATE" | "UNSUPPORTED" | "TERMINAL_ERROR" | "UNKNOWN" | "VALIDATION" | "NOT_FOUND" | "UNAUTHORIZED";
+        SessionErrorCode: "NETWORK" | "TIMEOUT" | "DECLINED" | "CANCELLED" | "ABORTED" | "ABANDONED" | "LOYALTY_UNAVAILABLE" | "STORED_VALUE_INSUFFICIENT" | "CARD_PAYMENTS_EXCEED_TOTAL" | "INVALID_STATE" | "UNSUPPORTED" | "TERMINAL_ERROR" | "UNKNOWN" | "VALIDATION" | "NOT_FOUND" | "UNAUTHORIZED";
         /**
          * @description A decimal amount as a string, in the session currency; never a float.
          * @example 12.34
@@ -1430,8 +1433,21 @@ export interface components {
         /** @description The register's plan for resolving a basket, mirroring `SettlementOptions`; all fields optional. */
         SettlementOptions: {
             loyalty?: components["schemas"]["SettlementLoyalty"];
-            /** @description Positive cashback requested with the card payment. */
+            /** @description Positive cashback requested with the card payment. Not allowed together with `cardPayments`. */
             cashback?: components["schemas"]["Money"];
+            /**
+             * @description Splits the card amount into card payments planned up front: each entry is charged in
+             *     order on its own card, and one more card payment for the remainder always follows.
+             *     `[{ "amount": "20.00" }]` charges $20 on the first card and the rest on the next.
+             *     Absent or empty, the settlement makes one card payment for the whole card amount. The
+             *     amounts are checked when the card step starts, after rebates, points and the gift card:
+             *     they must add up to less than the card amount, or the step fails with
+             *     `CARD_PAYMENTS_EXCEED_TOTAL` before any card is charged. Each card payment is its own
+             *     `CARD_CHARGE` step with its own `BEFORE_STEP`, and every one after the first is a nexo
+             *     split payment sent with the first one's sale transaction id. Rejected with 400 together
+             *     with `cashback`.
+             */
+            cardPayments?: components["schemas"]["PlannedCardPayment"][];
             /** @description Overrides the display shown while the card payment is processing. */
             paymentProcessingDisplay?: components["schemas"]["DisplayPayload"];
             refunds?: components["schemas"]["RefundAllocation"][];
@@ -1499,8 +1515,31 @@ export interface components {
             movements: components["schemas"]["SettlementMovement"][];
             warnings: string[];
         };
-        /** @description One money or loyalty movement committed as part of a settlement. */
+        /**
+         * @description One money or loyalty movement committed as part of a settlement, or the notice that the
+         *     SDK reversed one (`reversal: true`).
+         *
+         *     A reversal notice is sent as an `operation.movement` event, when the `settle` request set
+         *     `reversalNotices`, whenever the settlement itself
+         *     successfully reverses a movement it had already reported: before a `RETRY`, `SKIP` or
+         *     `EXTERNAL` recovery replaces a failed step that had committed (a partial approval the SDK
+         *     can't keep, a handler that threw after the commit, a recovered response that failed
+         *     processing), and once per movement an abort unwinds, newest first. It covers every
+         *     charge-side step (card, stored value, rebates, points, award). It copies the reversed
+         *     movement's `step`, `target`, `amount`, `saleTransactionId`, `memberId` and `points`; its
+         *     `serviceId`, `poiTransactionId` and `poiTransactionTimestamp` are the reversal request's own,
+         *     and `reversedMovement` is the movement it reverses. A reversal that fails gets no notice.
+         *     Notices never appear in `SettlementResult.movements` or `SettlementFailure.committedMovements`:
+         *     the reversed movement leaves the ledger instead.
+         */
         SettlementMovement: {
+            /**
+             * @description `true` when this is a reversal notice rather than a movement of its own; absent otherwise.
+             * @default false
+             */
+            reversal?: boolean;
+            /** @description The movement this notice reverses; present only with `reversal: true`. */
+            reversedMovement?: components["schemas"]["SettlementMovement"];
             step: components["schemas"]["SettlementStep"];
             target: components["schemas"]["SettlementTarget"];
             amount: components["schemas"]["Money"];
@@ -1550,8 +1589,19 @@ export interface components {
         SettlementContext: {
             step: components["schemas"]["SettlementStep"];
             currentBasket: components["schemas"]["Basket"];
+            /** @description Everything the card phase still owes, for a card step; the running total otherwise. */
             currentTotal: components["schemas"]["Money"];
-            /** @description The basket's shared sale transaction id, used when the reply names nothing else. */
+            /**
+             * @description What this step's terminal request is about to charge: a split card payment's own share,
+             *     while `currentTotal` stays everything the card phase still owes. Equal to `currentTotal`
+             *     for every other step.
+             */
+            stepAmount?: components["schemas"]["Money"];
+            /**
+             * @description The basket's shared sale transaction id, used when the reply names nothing else. For a
+             *     card payment after the first of a split settlement it is the first card payment's id, and
+             *     a different reply is refused with `INVALID_STATE`.
+             */
             defaultTransactionId: string;
             priorSteps: components["schemas"]["CommittedStep"][];
             /**
@@ -1722,8 +1772,8 @@ export interface components {
          * @description A register handler the host is waiting on, emitted as `operation.step` while the
          *     operation is `awaitingReply`. The client answers before `deadlineAt` with
          *     `POST .../operations/{id}/reply`; otherwise `default` applies. The deadline is the host's
-         *     (30 seconds for totals and transaction ids, 120 seconds for recovery and reversal
-         *     decisions by default, configurable per host).
+         *     (30 seconds for totals and transaction ids, 120 seconds for recovery, partial approval and
+         *     reversal decisions by default, configurable per host).
          *
          *     | Java handler | kind | reply | default |
          *     |---|---|---|---|
@@ -1731,17 +1781,23 @@ export interface components {
          *     | `ReversalFlow.beforeStep` (`refund`, `voidTransaction`, retries of `refundUnlinked`) | `BEFORE_STEP` | none | none; the leg is sent |
          *     | `onRebatesRedeemed`, `onPointsRedeemed`, `onGiftCardPayment` | `TOTAL_REQUIRED` | `total` | `suggestedTotal`: the previous total minus the step's amount |
          *     | `SettlementFlow.onError` | `RECOVERY_REQUIRED` | `recovery` | `ABORT` |
+         *     | `SettlementFlow.onPartialCardApproval` | `PARTIAL_CARD_APPROVAL` | `partialApprovalDecision` | `ABORT`; a request that does not declare the kind never raises the step, and the SDK charges the shortfall on another card by itself (3 card requests in total) |
          *     | `ReversalFlow.onError` | `REVERSAL_DECISION_REQUIRED` | `decision` | the Java default policy: `ABORT` for a money step or a loyalty movement that is the substance of the reversal, `SKIP` for a loyalty movement riding along with a money step; `default.decision` says which |
          *
          *     `onMovement` and the per-movement callbacks, `onCardCharged` and `onAwarded` are
-         *     `operation.movement` events and take no reply.
+         *     `operation.movement` events and take no reply; so are the reversal notices
+         *     (`SettlementMovement.reversal`) that follow every reversal the SDK performs mid-settlement.
+         *
+         *     The deadline of `PARTIAL_CARD_APPROVAL` and its default `ABORT` release every card payment
+         *     the settlement committed: the abort unwinds them all, newest first, with a reversal notice
+         *     each.
          */
-        OperationStep: components["schemas"]["BeforeStepStep"] | components["schemas"]["TotalRequiredStep"] | components["schemas"]["RecoveryRequiredStep"] | components["schemas"]["ReversalDecisionRequiredStep"];
+        OperationStep: components["schemas"]["BeforeStepStep"] | components["schemas"]["TotalRequiredStep"] | components["schemas"]["RecoveryRequiredStep"] | components["schemas"]["PartialCardApprovalStep"] | components["schemas"]["ReversalDecisionRequiredStep"];
         /**
          * @description Which register handler a step stands for; see `OperationStep`.
          * @enum {string}
          */
-        StepKind: "BEFORE_STEP" | "TOTAL_REQUIRED" | "RECOVERY_REQUIRED" | "REVERSAL_DECISION_REQUIRED";
+        StepKind: "BEFORE_STEP" | "TOTAL_REQUIRED" | "RECOVERY_REQUIRED" | "PARTIAL_CARD_APPROVAL" | "REVERSAL_DECISION_REQUIRED";
         /** @description The answer to a pending step; set the one field the step kind takes. */
         StepReply: {
             stepId: string;
@@ -1751,6 +1807,8 @@ export interface components {
             total?: components["schemas"]["Money"];
             /** @description For `RECOVERY_REQUIRED`. */
             recovery?: components["schemas"]["SettlementRecovery"];
+            /** @description For `PARTIAL_CARD_APPROVAL`. */
+            partialApprovalDecision?: components["schemas"]["PartialApprovalDecision"];
             /** @description For `REVERSAL_DECISION_REQUIRED`. */
             decision?: components["schemas"]["ReversalDecision"];
         };
@@ -1900,6 +1958,24 @@ export interface components {
             /** @description A register transaction reference. */
             reference?: string;
         };
+        /**
+         * @description The register's answer to a `PARTIAL_CARD_APPROVAL` step, mirroring `PartialApprovalDecision`.
+         *     The partial card payment stays committed unless the action is `ABORT`. `ANOTHER_CARD` charges
+         *     the shortfall on another card, then continues the plan. `ADD_TO_NEXT` adds the shortfall to
+         *     the next card payment, and is refused while none is left. `EXTERNAL` records
+         *     `externalPayment` for everything the card phase still owes (`amountDue` of the step) and ends
+         *     the card phase, keeping every card payment. `ABORT` reverses every committed charge-side step
+         *     and fails the settlement as `DECLINED`. A decision the settlement cannot carry out
+         *     (`ADD_TO_NEXT` with no card payment left, an `EXTERNAL` amount other than `amountDue`) is
+         *     refused as an invalid `SettlementRecovery` is: the settlement fails with `INVALID_STATE`,
+         *     with the committed steps left standing for `voidTransaction`.
+         */
+        PartialApprovalDecision: {
+            /** @enum {string} */
+            action: "ANOTHER_CARD" | "ADD_TO_NEXT" | "EXTERNAL" | "ABORT";
+            /** @description Required for `EXTERNAL`. */
+            externalPayment?: components["schemas"]["ExternalPayment"];
+        };
         StepBase: {
             operationId: string;
             /** @description Unique per step; the reply names it. */
@@ -2014,6 +2090,55 @@ export interface components {
              * @enum {string}
              */
             kind: "RECOVERY_REQUIRED";
+        };
+        /** @description One card payment a settlement made. Each reference is absent when the terminal did not report it. */
+        CardPaymentResult: {
+            /** @description What the terminal authorized for this payment, cashback included. */
+            amount: components["schemas"]["Money"];
+            /** @description Terminal reference of this payment, for void and refund. */
+            poiTransactionId?: string;
+            /** Format: date-time */
+            poiTransactionTimestamp?: string;
+            approvalCode?: string;
+            acquirerTransactionId?: string;
+            paymentBrand?: string;
+            maskedPan?: string;
+            customerReceipt?: components["schemas"]["Receipt"];
+            merchantReceipt?: components["schemas"]["Receipt"];
+            /** @description Whether the terminal authorized less than this payment requested. */
+            partialApproval: boolean;
+        };
+        /**
+         * @description What `onPartialCardApproval` sees, mirroring `PartialCardApproval`: a card payment the
+         *     terminal approved for less than it requested. By then the payment's movement has been
+         *     published. The `PARTIAL_CARD_APPROVAL` step carries these fields.
+         */
+        PartialCardApproval: {
+            /** @description What the terminal authorized for this card payment. */
+            approved: components["schemas"]["Money"];
+            /** @description What this card payment asked for. */
+            requested: components["schemas"]["Money"];
+            /** @description `requested` minus `approved`. */
+            shortfall: components["schemas"]["Money"];
+            /**
+             * @description Everything the card phase still owes after this payment: the shortfall plus the card
+             *     payments still to come. An `EXTERNAL` decision must pay exactly this amount.
+             */
+            amountDue: components["schemas"]["Money"];
+            /** @description The card payments committed so far, in order, this partial one last. Count them to cap how many cards a sale takes. */
+            cardPayments: components["schemas"]["CardPaymentResult"][];
+            /** @description The `CARD_CHARGE` movement of this partial card payment. */
+            movement: components["schemas"]["SettlementMovement"];
+        };
+        PartialCardApprovalStep: components["schemas"]["StepBase"] & components["schemas"]["PartialCardApproval"] & {
+            /** @enum {string} */
+            kind?: "PARTIAL_CARD_APPROVAL";
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "PARTIAL_CARD_APPROVAL";
         };
         ReversalDecisionRequiredStep: components["schemas"]["StepBase"] & {
             /** @enum {string} */
@@ -2175,23 +2300,6 @@ export interface components {
              */
             type: "storedValueActivate" | "storedValueLoad" | "storedValueUnload" | "storedValueDeactivate" | "storedValueReserve" | "storedValueReverse" | "storedValueDuplicate";
         };
-        /** @description One card payment a settlement made. Each reference is absent when the terminal did not report it. */
-        CardPaymentResult: {
-            /** @description What the terminal authorized for this payment, cashback included. */
-            amount: components["schemas"]["Money"];
-            /** @description Terminal reference of this payment, for void and refund. */
-            poiTransactionId?: string;
-            /** Format: date-time */
-            poiTransactionTimestamp?: string;
-            approvalCode?: string;
-            acquirerTransactionId?: string;
-            paymentBrand?: string;
-            maskedPan?: string;
-            customerReceipt?: components["schemas"]["Receipt"];
-            merchantReceipt?: components["schemas"]["Receipt"];
-            /** @description Whether the terminal authorized less than this payment requested. */
-            partialApproval: boolean;
-        };
         EarnedReward: {
             /** @enum {string} */
             type?: "REWARD" | "COUPON" | "POINT";
@@ -2208,6 +2316,15 @@ export interface components {
             handling?: "EXPLICIT" | "IMPLICIT" | "FORBIDDEN";
             /** @description The SDK loyalty steps to run; only with `EXPLICIT`. An empty list is `FORBIDDEN`. */
             steps?: ("REBATES" | "POINTS" | "AWARD")[];
+        };
+        /**
+         * @description One planned card payment of a split settlement, mirroring `CardPayment`: a fixed amount
+         *     charged on its own card before the next one. An object rather than a bare amount so a
+         *     planned payment can grow fields.
+         */
+        PlannedCardPayment: {
+            /** @description What this card payment requests; positive. */
+            amount: components["schemas"]["Money"];
         };
         DisplayHeaderFooter: {
             text: string;
@@ -2642,6 +2759,10 @@ export interface components {
          *     void partially reversed. Charge-side failures consult the register through
          *     `RECOVERY_REQUIRED` steps when declared; refund allocation failures are never retried in
          *     the same run and the register retries `settle` with the same committed allocation prefix.
+         *     `options.cardPayments` splits the card amount into several card payments. A card payment
+         *     the terminal approves for less than it requested asks the register through a
+         *     `PARTIAL_CARD_APPROVAL` step when declared; otherwise the SDK charges the shortfall on
+         *     another card by itself, up to 3 card requests in total.
          */
         SettleRequest: {
             /**
@@ -2651,6 +2772,15 @@ export interface components {
             type: "settle";
             options?: components["schemas"]["SettlementOptions"];
             handledSteps?: components["schemas"]["HandledSteps"];
+            /**
+             * @description Whether the host sends reversal notices (`SettlementMovement.reversal`) as
+             *     `operation.movement` events. A client that predates them would read a notice as another
+             *     charge, so they are sent only on request; the JavaScript SDK asks when `onMovement` or
+             *     `onCardChargeReversed` is registered. Without it the host drops them, and
+             *     `SettlementResult.movements` stays the only record of what was reversed.
+             * @default false
+             */
+            reversalNotices?: boolean;
         };
         /**
          * @description Full (no `amount`) or partial linked refund of this session's completed payment, also

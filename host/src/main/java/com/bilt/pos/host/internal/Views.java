@@ -46,7 +46,9 @@ import com.bilt.pos.session.payment.PointRedemptionResult;
 import com.bilt.pos.session.payment.RebateRedemptionResult;
 import com.bilt.pos.session.payment.RedeemedRebate;
 import com.bilt.pos.session.settlement.AbandonedSettlementRecord;
+import com.bilt.pos.session.settlement.CardPayment;
 import com.bilt.pos.session.settlement.CommittedStep;
+import com.bilt.pos.session.settlement.PartialCardApproval;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.SettlementContext;
 import com.bilt.pos.session.settlement.SettlementFailure;
@@ -373,6 +375,18 @@ public final class Views {
     return amount == null ? "0" : amount.toPlainString();
   }
 
+  /** The {@code PARTIAL_CARD_APPROVAL} step's own fields. */
+  public static ObjectNode partialCardApproval(PartialCardApproval partial) {
+    ObjectNode node = Json.object();
+    node.put("approved", moneyOrZero(partial.getApproved()));
+    node.put("requested", moneyOrZero(partial.getRequested()));
+    node.put("shortfall", moneyOrZero(partial.getShortfall()));
+    node.put("amountDue", moneyOrZero(partial.getAmountDue()));
+    node.set("cardPayments", cardPayments(partial.getCardPayments()));
+    node.set("movement", movement(partial.getMovement()));
+    return node;
+  }
+
   private static ArrayNode cardPayments(List<CardPaymentResult> payments) {
     ArrayNode array = Json.array();
     for (CardPaymentResult payment : payments) {
@@ -436,6 +450,10 @@ public final class Views {
     Json.putText(node, "externalTenderType", movement.getExternalTenderType());
     Json.putText(node, "externalReference", movement.getExternalReference());
     Json.putText(node, "serviceId", movement.getServiceId());
+    if (movement.isReversal()) {
+      node.put("reversal", true);
+      node.set("reversedMovement", movement(movement.getReversedMovement()));
+    }
     return node;
   }
 
@@ -466,6 +484,12 @@ public final class Views {
       node.set(
           "paymentProcessingDisplay",
           Json.MAPPER.valueToTree(options.getPaymentProcessingDisplay()));
+    }
+    if (!options.getCardPayments().isEmpty()) {
+      ArrayNode planned = node.putArray("cardPayments");
+      for (CardPayment payment : options.getCardPayments()) {
+        planned.addObject().put("amount", moneyOrZero(payment.getAmount()));
+      }
     }
     ArrayNode refunds = node.putArray("refunds");
     for (RefundAllocation allocation : options.getRefunds()) {
@@ -526,6 +550,7 @@ public final class Views {
     node.put("step", context.getStep().name());
     node.set("currentBasket", basket(context.getCurrentBasket()));
     node.put("currentTotal", moneyOrZero(context.getCurrentTotal()));
+    node.put("stepAmount", moneyOrZero(context.getStepAmount()));
     node.put("defaultTransactionId", context.getDefaultTransactionId());
     Json.putText(node, "serviceId", context.getServiceId());
     ArrayNode prior = node.putArray("priorSteps");

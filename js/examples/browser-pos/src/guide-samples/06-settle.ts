@@ -4,6 +4,9 @@ import type {
   AbandonedSettlementRecord,
   Basket,
   Money,
+  PartialApprovalAction,
+  PartialApprovalDecision,
+  PartialCardApproval,
   SettlementFailure,
   SettlementMovement,
   SettlementRecovery,
@@ -19,13 +22,19 @@ declare const cashier: {
     failure: SettlementFailure,
     signal: AbortSignal,
   ): Promise<SettlementRecoveryAction | 'EXTERNAL'>;
+  choosePartial(
+    partial: PartialCardApproval,
+    signal: AbortSignal,
+  ): Promise<PartialApprovalAction | 'EXTERNAL'>;
 };
 declare const ledger: {
   record(movement: SettlementMovement): void;
+  reverse(notice: SettlementMovement): void;
   file(record: AbandonedSettlementRecord): void;
 };
 declare const cancelButton: { onclick: (() => void) | null };
 declare function showStatus(status: string): void;
+declare function log(step: string, amount: Money | undefined): void;
 declare function print(text: string | undefined): void;
 declare function showError(code: string, message: string): void;
 
@@ -52,6 +61,32 @@ async function decideRecovery(
   const choice = await cashier.chooseRecovery(failure, step.signal); // aborts at step.deadline
   return choice === 'EXTERNAL'
     ? { action: 'EXTERNAL', externalPayment: { tenderType: 'CASH', amount: failure.amountDue } }
+    : choice;
+}
+
+export function splitPay(session: TerminalShopperSession): Promise<SettlementResult> {
+  return session.settle(
+    // $20.00 on the first card, whatever is left on the next one
+    { cardPayments: [{ amount: '20.00' }] },
+    {
+      // Each card payment is its own BEFORE_STEP; stepAmount is this payment's share.
+      beforeStep: (context) => (log(context.step, context.stepAmount), undefined),
+      // Once per card payment, partial approvals included; a notice undoes one it reported.
+      onCardCharged: (movement) => ledger.record(movement),
+      onCardChargeReversed: (notice) => ledger.reverse(notice),
+      onPartialCardApproval: (partial, step) => decidePartial(partial, step),
+    },
+  );
+}
+
+async function decidePartial(
+  partial: PartialCardApproval,
+  step: StepInfo,
+): Promise<PartialApprovalDecision | PartialApprovalAction> {
+  if (partial.cardPayments.length >= 4) return 'ABORT'; // no cap of its own: count the cards
+  const choice = await cashier.choosePartial(partial, step.signal); // aborts at step.deadline
+  return choice === 'EXTERNAL'
+    ? { action: 'EXTERNAL', externalPayment: { tenderType: 'CASH', amount: partial.amountDue } }
     : choice;
 }
 

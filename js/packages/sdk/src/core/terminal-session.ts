@@ -38,7 +38,7 @@ import type {
 import type { AttachSessionOptions } from '../session';
 import { newIdempotencyKey } from './ids';
 import { ShopperSessionImpl, type SessionRuntime } from './session';
-import { handledSteps, type StepHandlers } from './steps';
+import { handledSteps, wantsReversalNotices, type StepHandlers } from './steps';
 import { TerminalImpl } from './terminal';
 
 /** A bare card number is a keyed PAN, as in Java. */
@@ -228,6 +228,7 @@ export class TerminalShopperSessionImpl
     if (Object.keys(options).length > 0) request.options = options;
     const declared = handledSteps(steps);
     if (declared.length > 0) request.handledSteps = declared;
+    if (wantsReversalNotices(steps)) request.reversalNotices = true;
     return this.request(request, steps);
   }
 

@@ -69,10 +69,20 @@ final class ScriptedTerminalClient implements TerminalClient {
         + "\"PaymentInstrumentData\":{\"CardData\":{\"PaymentBrand\":\"Visa\"}}}}}}";
   }
 
+  /** A card payment the terminal approved for {@code authorized}, less than it was asked for. */
+  static String paymentPartial(String poiTxn, String authorized) {
+    return paymentOk(poiTxn, authorized)
+        .replace("\"Result\":\"Success\"", "\"Result\":\"Partial\"");
+  }
+
+  static final String REVERSAL_OK =
+      "{\"SaleToPOIResponse\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Success\"}}}}";
+
   private static final ObjectMapper MAPPER =
       new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
   private final Map<String, String> scripts = new ConcurrentHashMap<>();
+  private final Map<String, ConcurrentLinkedQueue<String>> sequences = new ConcurrentHashMap<>();
   private final ConcurrentLinkedQueue<SaleToPOIRequest> requests = new ConcurrentLinkedQueue<>();
   private volatile MessageCategoryType held;
   private volatile CountDownLatch holdReached = new CountDownLatch(1);
@@ -80,6 +90,18 @@ final class ScriptedTerminalClient implements TerminalClient {
 
   ScriptedTerminalClient reply(MessageCategoryType category, String responseJson) {
     scripts.put(category.name(), responseJson);
+    return this;
+  }
+
+  /**
+   * Answers the next requests of the category one by one, in order, before the category's plain
+   * script applies again.
+   */
+  ScriptedTerminalClient replyInOrder(MessageCategoryType category, String... responseJsons) {
+    ConcurrentLinkedQueue<String> queue =
+        sequences.computeIfAbsent(category.name(), name -> new ConcurrentLinkedQueue<>());
+    queue.clear();
+    queue.addAll(List.of(responseJsons));
     return this;
   }
 
@@ -133,7 +155,15 @@ final class ScriptedTerminalClient implements TerminalClient {
         throw new BiltNexoClientException("interrupted while held");
       }
     }
-    String script = category == null ? null : scripts.get(key(body, category));
+    String script = null;
+    ConcurrentLinkedQueue<String> sequence =
+        category == null ? null : sequences.get(category.name());
+    if (sequence != null) {
+      script = sequence.poll();
+    }
+    if (script == null && category != null) {
+      script = scripts.get(key(body, category));
+    }
     if (script == null && category != null) {
       script = scripts.get(category.name());
     }

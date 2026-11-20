@@ -34,6 +34,7 @@ export {
   useSettlement,
   type InteractiveStepKind,
   type PendingBeforeStep,
+  type PendingPartialApprovalStep,
   type PendingRecoveryStep,
   type PendingSettlementStep,
   type PendingStepBase,

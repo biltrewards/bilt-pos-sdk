@@ -7,6 +7,9 @@ import type {
   BiltPosStatic,
   EngineFactory,
   Operation,
+  PartialApprovalAction,
+  PartialCardApproval,
+  PlannedCardPayment,
   SessionError,
   SettlementHandlers,
   SettlementOptions,
@@ -81,6 +84,17 @@ describe('the public surface', () => {
     // External recovery must carry the payment that records the tender, so it has no short form.
     expectTypeOf<SettlementRecoveryAction>().toEqualTypeOf<
       'RETRY' | 'SKIP' | 'ABORT' | 'ABANDON'
+    >();
+    // A partial approval decision is a recovery decision: EXTERNAL must carry its payment too.
+    expectTypeOf<PartialApprovalAction>().toEqualTypeOf<'ANOTHER_CARD' | 'ADD_TO_NEXT' | 'ABORT'>();
+    expectTypeOf<NonNullable<SettlementHandlers['onPartialCardApproval']>>()
+      .parameter(0)
+      .toEqualTypeOf<PartialCardApproval>();
+    expectTypeOf<NonNullable<SettlementHandlers['onPartialCardApproval']>>()
+      .parameter(1)
+      .toEqualTypeOf<StepInfo>();
+    expectTypeOf<NonNullable<SettlementOptions['cardPayments']>>().toEqualTypeOf<
+      PlannedCardPayment[]
     >();
     expectTypeOf<SettlementOptions['settlementType']>().toEqualTypeOf<
       'REFUND_THEN_CHARGE' | 'NET' | undefined

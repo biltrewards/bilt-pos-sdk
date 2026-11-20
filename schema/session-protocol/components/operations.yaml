@@ -8,7 +8,7 @@ OperationStatus:
 StepKind:
   type: string
   description: Which register handler a step stands for; see `OperationStep`.
-  enum: [BEFORE_STEP, TOTAL_REQUIRED, RECOVERY_REQUIRED, REVERSAL_DECISION_REQUIRED]
+  enum: [BEFORE_STEP, TOTAL_REQUIRED, RECOVERY_REQUIRED, PARTIAL_CARD_APPROVAL, REVERSAL_DECISION_REQUIRED]
 
 HandledSteps:
   type: array
@@ -248,6 +248,10 @@ SettleRequest:
     void partially reversed. Charge-side failures consult the register through
     `RECOVERY_REQUIRED` steps when declared; refund allocation failures are never retried in
     the same run and the register retries `settle` with the same committed allocation prefix.
+    `options.cardPayments` splits the card amount into several card payments. A card payment
+    the terminal approves for less than it requested asks the register through a
+    `PARTIAL_CARD_APPROVAL` step when declared; otherwise the SDK charges the shortfall on
+    another card by itself, up to 3 card requests in total.
   required: [type]
   properties:
     type:
@@ -257,6 +261,15 @@ SettleRequest:
       $ref: './settlement.yaml#/SettlementOptions'
     handledSteps:
       $ref: '#/HandledSteps'
+    reversalNotices:
+      type: boolean
+      default: false
+      description: |
+        Whether the host sends reversal notices (`SettlementMovement.reversal`) as
+        `operation.movement` events. A client that predates them would read a notice as another
+        charge, so they are sent only on request; the JavaScript SDK asks when `onMovement` or
+        `onCardChargeReversed` is registered. Without it the host drops them, and
+        `SettlementResult.movements` stays the only record of what was reversed.
 
 RefundRequest:
   type: object
@@ -373,6 +386,9 @@ StepReply:
     recovery:
       description: For `RECOVERY_REQUIRED`.
       $ref: './settlement.yaml#/SettlementRecovery'
+    partialApprovalDecision:
+      description: For `PARTIAL_CARD_APPROVAL`.
+      $ref: './settlement.yaml#/PartialApprovalDecision'
     decision:
       description: For `REVERSAL_DECISION_REQUIRED`.
       $ref: './reversal.yaml#/ReversalDecision'
@@ -382,8 +398,8 @@ OperationStep:
     A register handler the host is waiting on, emitted as `operation.step` while the
     operation is `awaitingReply`. The client answers before `deadlineAt` with
     `POST .../operations/{id}/reply`; otherwise `default` applies. The deadline is the host's
-    (30 seconds for totals and transaction ids, 120 seconds for recovery and reversal
-    decisions by default, configurable per host).
+    (30 seconds for totals and transaction ids, 120 seconds for recovery, partial approval and
+    reversal decisions by default, configurable per host).
 
     | Java handler | kind | reply | default |
     |---|---|---|---|
@@ -391,14 +407,21 @@ OperationStep:
     | `ReversalFlow.beforeStep` (`refund`, `voidTransaction`, retries of `refundUnlinked`) | `BEFORE_STEP` | none | none; the leg is sent |
     | `onRebatesRedeemed`, `onPointsRedeemed`, `onGiftCardPayment` | `TOTAL_REQUIRED` | `total` | `suggestedTotal`: the previous total minus the step's amount |
     | `SettlementFlow.onError` | `RECOVERY_REQUIRED` | `recovery` | `ABORT` |
+    | `SettlementFlow.onPartialCardApproval` | `PARTIAL_CARD_APPROVAL` | `partialApprovalDecision` | `ABORT`; a request that does not declare the kind never raises the step, and the SDK charges the shortfall on another card by itself (3 card requests in total) |
     | `ReversalFlow.onError` | `REVERSAL_DECISION_REQUIRED` | `decision` | the Java default policy: `ABORT` for a money step or a loyalty movement that is the substance of the reversal, `SKIP` for a loyalty movement riding along with a money step; `default.decision` says which |
 
     `onMovement` and the per-movement callbacks, `onCardCharged` and `onAwarded` are
-    `operation.movement` events and take no reply.
+    `operation.movement` events and take no reply; so are the reversal notices
+    (`SettlementMovement.reversal`) that follow every reversal the SDK performs mid-settlement.
+
+    The deadline of `PARTIAL_CARD_APPROVAL` and its default `ABORT` release every card payment
+    the settlement committed: the abort unwinds them all, newest first, with a reversal notice
+    each.
   oneOf:
     - $ref: '#/BeforeStepStep'
     - $ref: '#/TotalRequiredStep'
     - $ref: '#/RecoveryRequiredStep'
+    - $ref: '#/PartialCardApprovalStep'
     - $ref: '#/ReversalDecisionRequiredStep'
   discriminator:
     propertyName: kind
@@ -406,6 +429,7 @@ OperationStep:
       BEFORE_STEP: '#/BeforeStepStep'
       TOTAL_REQUIRED: '#/TotalRequiredStep'
       RECOVERY_REQUIRED: '#/RecoveryRequiredStep'
+      PARTIAL_CARD_APPROVAL: '#/PartialCardApprovalStep'
       REVERSAL_DECISION_REQUIRED: '#/ReversalDecisionRequiredStep'
 
 StepBase:
@@ -475,6 +499,21 @@ RecoveryRequiredStep:
           enum: [RECOVERY_REQUIRED]
         failure:
           $ref: './settlement.yaml#/SettlementFailure'
+
+PartialCardApprovalStep:
+  allOf:
+    - $ref: '#/StepBase'
+    - $ref: './settlement.yaml#/PartialCardApproval'
+    - type: object
+      description: |
+        A card payment committed with an authorized amount below the amount it requested. The
+        payment's `operation.movement` has already been published, so `movement` is also the
+        last movement event. Not raised for a sale with cashback or an authorization of zero,
+        which fail as `DECLINED`.
+      properties:
+        kind:
+          type: string
+          enum: [PARTIAL_CARD_APPROVAL]
 
 ReversalDecisionRequiredStep:
   allOf:

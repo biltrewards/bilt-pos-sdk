@@ -130,7 +130,7 @@ const settlement = useSettlement(session, { interactive: ['TOTAL_REQUIRED', 'REC
 settlement.settle({ settlementType: 'NET' }); // any SettleOptions; handlers passed here still run
 settlement.status; // idle | running | awaitingReply | succeeded | failed | aborted
 settlement.pendingStep; // the step waiting on reply(), or null
-settlement.reply({ total: '12.34' }); // or { recovery: 'RETRY' } or { saleTransactionId }
+settlement.reply({ total: '12.34' }); // or { recovery: 'RETRY' }, { partialApproval: 'ANOTHER_CARD' } or { saleTransactionId }
 settlement.pendingStep?.useDefault(); // answer with the SDK default
 settlement.movements; // every SettlementMovement so far
 settlement.result; // SettlementResult once succeeded
@@ -142,7 +142,10 @@ settlement.reset();
 The steps are the register callbacks of the Java `SettlementFlow`, surfaced over the wire as
 `TOTAL_REQUIRED` (after rebates, points or a gift card moved: set the new running total),
 `RECOVERY_REQUIRED` (a charge-side failure: retry, skip, record an external tender, abort or
-abandon) and `BEFORE_STEP` (the `SaleTransactionID` for the next step). Only the kinds listed in
+abandon), `PARTIAL_CARD_APPROVAL` (a card approved less than it was asked for: another card,
+add the shortfall to the next payment, an external tender for `amountDue`, or abort; without it
+in `interactive` the SDK charges the shortfall on another card by itself) and `BEFORE_STEP` (the
+`SaleTransactionID` for the next step). Only the kinds listed in
 `interactive` are held open as `pendingStep`; a handler given to `settle()` for a step always
 wins; everything else takes its SDK default at once. An unanswered step falls back to its
 default at the host's deadline (`pendingStep.deadline`, `pendingStep.signal`), the same as a

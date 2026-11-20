@@ -35,9 +35,11 @@ import com.bilt.pos.session.input.ConfirmationOptions;
 import com.bilt.pos.session.input.InputOptions;
 import com.bilt.pos.session.input.MenuOptions;
 import com.bilt.pos.session.input.PinOptions;
+import com.bilt.pos.session.settlement.CardPayment;
 import com.bilt.pos.session.settlement.CardPaymentRecord;
 import com.bilt.pos.session.settlement.ExternalPayment;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
+import com.bilt.pos.session.settlement.PartialApprovalDecision;
 import com.bilt.pos.session.settlement.RefundAllocation;
 import com.bilt.pos.session.settlement.RefundAllocationType;
 import com.bilt.pos.session.settlement.SettlementLoyalty;
@@ -584,8 +586,14 @@ public final class Parsers {
     }
     SettlementOptions.Builder builder =
         SettlementOptions.builder().loyalty(settlementLoyalty(Json.objectField(node, "loyalty")));
-    // TODO(split payments PR 4): map cardPayments (SettlementOptions.cardPayments) and add
-    // CARD_PAYMENTS_EXCEED_TOTAL to the protocol's SessionErrorCode
+    ArrayNode cardPayments = Json.array(node, "cardPayments");
+    if (cardPayments != null) {
+      List<CardPayment> planned = new ArrayList<>();
+      for (JsonNode payment : cardPayments) {
+        planned.add(plannedCardPayment(payment));
+      }
+      builder.cardPayments(planned);
+    }
     BigDecimal cashback = Json.decimal(node, "cashback");
     if (cashback != null) {
       try {
@@ -614,7 +622,24 @@ public final class Parsers {
         builder.addFulfillment(storedValueLoad(fulfillment));
       }
     }
-    return builder.build();
+    try {
+      return builder.build();
+    } catch (IllegalStateException e) {
+      // cardPayments together with cashback
+      throw HostError.badRequest(e.getMessage());
+    }
+  }
+
+  private static CardPayment plannedCardPayment(JsonNode node) {
+    if (node == null || !node.isObject()) {
+      throw HostError.badRequest("cardPayments entries must be objects with an amount");
+    }
+    BigDecimal amount = Json.requireDecimal(node, "amount");
+    try {
+      return CardPayment.of(amount);
+    } catch (IllegalArgumentException e) {
+      throw HostError.badRequest(e.getMessage());
+    }
   }
 
   public static RefundAllocation refundAllocation(JsonNode node) {
@@ -720,6 +745,30 @@ public final class Parsers {
       default:
         throw HostError.badRequest(
             "recovery.action must be RETRY, SKIP, EXTERNAL, ABORT or ABANDON, not '"
+                + action
+                + "'");
+    }
+  }
+
+  /** {@code PartialApprovalDecision}: {@code { action, externalPayment? }}. */
+  public static PartialApprovalDecision partialApprovalDecision(JsonNode node) {
+    if (node == null || !node.isObject()) {
+      throw HostError.badRequest("partialApprovalDecision must be an object with an action");
+    }
+    String action = Json.requireText(node, "action");
+    switch (action.toUpperCase(java.util.Locale.ROOT)) {
+      case "ANOTHER_CARD":
+        return PartialApprovalDecision.anotherCard();
+      case "ADD_TO_NEXT":
+        return PartialApprovalDecision.addToNext();
+      case "ABORT":
+        return PartialApprovalDecision.abort();
+      case "EXTERNAL":
+        return PartialApprovalDecision.external(externalPayment(node.get("externalPayment")));
+      default:
+        throw HostError.badRequest(
+            "partialApprovalDecision.action must be ANOTHER_CARD, ADD_TO_NEXT, EXTERNAL or ABORT,"
+                + " not '"
                 + action
                 + "'");
     }

@@ -20,7 +20,7 @@ import java.util.Objects;
  * {@code operation.step} event and parks the flow until {@code POST .../operations/{id}/reply}
  * arrives or the deadline passes. The defaults mirror the design: 30 seconds for the totals and
  * {@code BEFORE_STEP} questions, which a register answers from local state, and two minutes for a
- * recovery or reversal decision, which usually needs a human.
+ * recovery, partial approval or reversal decision, which usually needs a human.
  */
 public final class StepDeadlines {
 
@@ -29,45 +29,59 @@ public final class StepDeadlines {
           Duration.ofSeconds(30),
           Duration.ofSeconds(30),
           Duration.ofSeconds(120),
+          Duration.ofSeconds(120),
           Duration.ofSeconds(120));
 
   private final Duration beforeStep;
   private final Duration total;
   private final Duration recovery;
+  private final Duration partialApproval;
   private final Duration reversalDecision;
 
   private StepDeadlines(
-      Duration beforeStep, Duration total, Duration recovery, Duration reversalDecision) {
+      Duration beforeStep,
+      Duration total,
+      Duration recovery,
+      Duration partialApproval,
+      Duration reversalDecision) {
     this.beforeStep = requirePositive(beforeStep, "beforeStep");
     this.total = requirePositive(total, "total");
     this.recovery = requirePositive(recovery, "recovery");
+    this.partialApproval = requirePositive(partialApproval, "partialApproval");
     this.reversalDecision = requirePositive(reversalDecision, "reversalDecision");
   }
 
-  /** 30 s for totals and {@code BEFORE_STEP}, 120 s for recovery and reversal decisions. */
+  /**
+   * 30 s for totals and {@code BEFORE_STEP}, 120 s for recovery, partial approval and reversal
+   * decisions.
+   */
   public static StepDeadlines defaults() {
     return DEFAULTS;
   }
 
   /** The same deadline for every step kind; handy for tests that want steps to time out fast. */
   public static StepDeadlines uniform(Duration deadline) {
-    return new StepDeadlines(deadline, deadline, deadline, deadline);
+    return new StepDeadlines(deadline, deadline, deadline, deadline, deadline);
   }
 
   public StepDeadlines withBeforeStep(Duration deadline) {
-    return new StepDeadlines(deadline, total, recovery, reversalDecision);
+    return new StepDeadlines(deadline, total, recovery, partialApproval, reversalDecision);
   }
 
   public StepDeadlines withTotal(Duration deadline) {
-    return new StepDeadlines(beforeStep, deadline, recovery, reversalDecision);
+    return new StepDeadlines(beforeStep, deadline, recovery, partialApproval, reversalDecision);
   }
 
   public StepDeadlines withRecovery(Duration deadline) {
-    return new StepDeadlines(beforeStep, total, deadline, reversalDecision);
+    return new StepDeadlines(beforeStep, total, deadline, partialApproval, reversalDecision);
+  }
+
+  public StepDeadlines withPartialApproval(Duration deadline) {
+    return new StepDeadlines(beforeStep, total, recovery, deadline, reversalDecision);
   }
 
   public StepDeadlines withReversalDecision(Duration deadline) {
-    return new StepDeadlines(beforeStep, total, recovery, deadline);
+    return new StepDeadlines(beforeStep, total, recovery, partialApproval, deadline);
   }
 
   /** Deadline for {@code BEFORE_STEP}, the sale transaction ID question. */
@@ -83,6 +97,11 @@ public final class StepDeadlines {
   /** Deadline for {@code RECOVERY_REQUIRED} after a charge-side failure. */
   public Duration recovery() {
     return recovery;
+  }
+
+  /** Deadline for {@code PARTIAL_CARD_APPROVAL} after a card payment approved less than asked. */
+  public Duration partialApproval() {
+    return partialApproval;
   }
 
   /** Deadline for {@code REVERSAL_DECISION_REQUIRED} after a failed reversal leg. */
@@ -106,6 +125,8 @@ public final class StepDeadlines {
         + total
         + ", recovery="
         + recovery
+        + ", partialApproval="
+        + partialApproval
         + ", reversalDecision="
         + reversalDecision
         + "}";
