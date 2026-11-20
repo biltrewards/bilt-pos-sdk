@@ -584,6 +584,8 @@ public final class Parsers {
     }
     SettlementOptions.Builder builder =
         SettlementOptions.builder().loyalty(settlementLoyalty(Json.objectField(node, "loyalty")));
+    // TODO(split payments PR 4): map cardPayments (SettlementOptions.cardPayments) and add
+    // CARD_PAYMENTS_EXCEED_TOTAL to the protocol's SessionErrorCode
     BigDecimal cashback = Json.decimal(node, "cashback");
     if (cashback != null) {
       try {

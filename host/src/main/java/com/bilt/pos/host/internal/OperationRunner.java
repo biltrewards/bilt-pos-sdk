@@ -632,6 +632,11 @@ public final class OperationRunner {
         }
         flow.onMovement(
             movement -> {
+              if (movement.isReversal()) {
+                // the session protocol has no reversal notice yet; sending one as a plain
+                // operation.movement would read as another charge
+                return;
+              }
               ObjectNode payload = Json.object();
               payload.put("operationId", operation.id());
               payload.set("movement", Views.movement(movement));

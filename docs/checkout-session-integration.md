@@ -137,7 +137,7 @@ The terminal forwards loyalty requests to POS Loyalty for offer evaluation, rede
 3. **Point redemption** (identified members, if enabled and a balance remains) — terminal redeems points for monetary value → `onPointsRedeemed`
 4. **Stored value fulfillment** (for each supplied fulfillment targeting a referenced sale line) — terminal activates or reloads the purchased card before collecting payment → `onStoredValueLoaded`. A failed load prevents the tender charges; aborting a later charge failure reverses completed loads.
 5. **Stored value charge** (if a card was registered and a balance remains) — terminal charges the gift card → `onGiftCardPayment`
-6. **Card charge** (if a balance remains) — terminal processes the card for the remaining amount → `onCardCharged`; after a failure, the register may satisfy this final tender externally (for example, with cash) → `onExternallyPaid`
+6. **Card charge** (if a balance remains) — terminal processes the card for the remaining amount → `onCardCharged`; after a failure, the register may satisfy this final tender externally (for example, with cash) → `onExternallyPaid`. With `SettlementOptions.cardPayments(...)` the remaining amount is split over several card payments, each its own step → `onCardCharged` once per payment (see [split card payments](#variant-split-card-payments)). A card that approves less than it was asked for goes to `onPartialCardApproval` when one is registered (see [Variant: partial card approval](#variant-partial-card-approval))
 7. **Award** — terminal submits the loyalty award (Store-and-Forward if loyalty is down) → `onAwarded`
 8. `onSuccess` / `onError` / `onAbandoned`
 
@@ -156,7 +156,7 @@ With `SettlementType.NET`, the SDK uses the complete signed basket instead. A po
 
 **Callbacks are synchronous and blocking.** The total-returning callbacks run on the calling thread, and the `BigDecimal` they return becomes the total passed to the next step. This is deliberate: some jurisdictions tax the discounted price, so the register may need to recompute tax after each discount and feed the corrected total forward. That total → tax → total pipeline only works if the steps are sequential. Movement callbacks are also synchronous, but they report movement observations instead of changing the running total.
 
-Treat charge-side movement callbacks as provisional until settlement succeeds. `abort()` can unwind them, while retry, skip, or external replacement can reverse only a partially committed failed step before continuing. Earlier completed steps remain committed. These reversals do not emit compensating movement callbacks. Refund allocation movements are durable because the SDK never unwinds them; for the final successful transaction ledger, use `SettlementResult.getMovements()` from `onSuccess` or the blocking result.
+Treat charge-side movement callbacks as provisional until settlement succeeds. `abort()` can unwind them, while retry, skip, or external replacement can reverse only a partially committed failed step before continuing. Earlier completed steps remain committed. Every movement the SDK reverses successfully is reported again through `onMovement` as a reversal notice: `SettlementMovement.isReversal()` is true, `getReversedMovement()` is the movement it reverses, and its `ServiceID` and POI reference are the reversal request's. A reversed card payment also goes to `onCardChargeReversed`. A movement whose reversal failed gets no notice; it stays standing for `voidTransaction()`. Notices never enter the ledger: the reversed movement leaves `SettlementResult.getMovements()` and `SettlementFailure.getCommittedMovements()` instead. Refund allocation movements are durable because the SDK never unwinds them; for the final successful transaction ledger, use `SettlementResult.getMovements()` from `onSuccess` or the blocking result.
 
 **Defaults when a callback isn't registered:**
 
@@ -166,12 +166,13 @@ Treat charge-side movement callbacks as provisional until settlement succeeds. `
 | `onRebatesRedeemed` | Accept rebates. New total = previous − rebate amount. |
 | `onPointsRedeemed` | Accept points. New total = previous − monetary value. |
 | `onGiftCardPayment` | Accept charge. New total = previous − amount charged. |
-| `onMovement` and per-movement callbacks | No-op. |
+| `onPartialCardApproval` | Keep the partial charge and send another card request for the shortfall, up to `SettlementFlow.MAX_AUTOMATIC_CARD_REQUESTS` (3) card requests per settlement, the one that came back partial included. When the last one is partial too, the card step fails as `DECLINED` to `onError`. Cashback sales never get a follow-up. |
+| `onMovement` and per-movement callbacks (`onCardChargeReversed` included) | No-op. |
 | `onSuccess` | No-op (the result is still available via `.get()`). |
 | `onError` | For charge-side failures, `SettlementRecovery.abort()` — roll back and fail the settlement. Refund allocation failures notify `onError`, but the returned recovery decision is ignored. |
 | `onAbandoned` | No-op (the record is still available from `SessionException.getAbandonedSettlement()`). |
 
-**Abort / error recovery.** `abort()` returns a lazy `SessionResult<Void>` like every terminal operation — `abort().execute()` returns immediately, `abort().executeSync()` blocks for the roundtrip — and is deliberately **unordered**: it exists to interrupt the operation occupying the session's operation lane, so it overtakes whatever is in flight instead of queueing behind the very thing it cancels (`updateInputDisplay` shares this lane for the same reason). It is operation-scoped: it interrupts the in-flight operation and the session continues. If it fires mid-settlement (e.g. after rebates committed but before card charge), the session reverses the committed charge-side movements — rebate refunds, redemption refunds, stored-value loads, and tender reversals — and leaves the basket intact so `settle()` can retry (the thrown error carries the `ABORTED` code); these unwind reversals do not produce movement callbacks. If a reversal fails, `voidTransaction()` finishes the unwind. Refund allocations that have already committed are reported in `SettlementResult` movements and are not automatically re-charged as compensation. Aborted prompts (input, PIN, identification) deliver their aborted/cancelled outcome; with nothing in flight `abort()` is a no-op. `abort()` is safe to call from any thread. An operation that completes on the terminal despite a racing abort always delivers its outcome — a prompt was genuinely answered, money may have genuinely moved, and the register must know.
+**Abort / error recovery.** `abort()` returns a lazy `SessionResult<Void>` like every terminal operation — `abort().execute()` returns immediately, `abort().executeSync()` blocks for the roundtrip — and is deliberately **unordered**: it exists to interrupt the operation occupying the session's operation lane, so it overtakes whatever is in flight instead of queueing behind the very thing it cancels (`updateInputDisplay` shares this lane for the same reason). It is operation-scoped: it interrupts the in-flight operation and the session continues. If it fires mid-settlement (e.g. after rebates committed but before card charge), the session reverses the committed charge-side movements — rebate refunds, redemption refunds, stored-value loads, and tender reversals — and leaves the basket intact so `settle()` can retry (the thrown error carries the `ABORTED` code); each reversal that goes through is reported as a reversal notice through `onMovement` (and `onCardChargeReversed` for a card payment). If a reversal fails, `voidTransaction()` finishes the unwind. Refund allocations that have already committed are reported in `SettlementResult` movements and are not automatically re-charged as compensation. Aborted prompts (input, PIN, identification) deliver their aborted/cancelled outcome; with nothing in flight `abort()` is a no-op. `abort()` is safe to call from any thread. An operation that completes on the terminal despite a racing abort always delivers its outcome — a prompt was genuinely answered, money may have genuinely moved, and the register must know.
 
 For a charge-side error with a known outcome, `onError` receives a `SettlementFailure` before any register-directed recovery or unwind. If a terminal request's outcome is indeterminate, the SDK first resolves its `ServiceID` with TransactionStatus. A recovered success is consumed as the step result and settlement continues without calling `onError`; `NOT_FOUND` or a recovered failure reaches `onError` with `DEFINITIVE` certainty. If TransactionStatus itself cannot resolve the request, `onError` receives an `INDETERMINATE` failure. The failure identifies the step, outstanding amount, and committed movement ledger, and its returned `SettlementRecovery` controls the next action:
 
@@ -410,7 +411,7 @@ When the gift card balance is insufficient, the charge is a partial authorizatio
 
 `SettlementResult.getCardPayments()` lists every card payment the settlement made, in order, as `CardPaymentResult`s: the amount, POI transaction ID and timestamp, approval code, acquirer transaction ID, payment brand, masked PAN when the terminal reports it, the customer and merchant receipts, and whether the terminal approved less than it was asked for. `getCardAmountCharged()` is their sum. A gift card payment is never a card payment: the stored value payment of a split tender, or of a gift-card-only sale, stays on `getStoredValuePoiTransactionId()`, and a gift-card-only sale has no card payments.
 
-`settle()` makes one card payment today, so the list holds at most one entry. Registers that print or persist card payments should still read the list: the single-payment getters (`getPoiTransactionId()`, `getApprovalCode()`, `getPaymentBrand()`, `getCustomerReceipt()`, `getMerchantReceipt()` and the like) describe the first card payment only. Where that payment's response lacks a value they keep the stored value payment's, and a gift-card-only sale reports its stored value payment there, as before.
+Without [split card payments](#variant-split-card-payments), `settle()` makes one card payment, so the list holds at most one entry. Registers that print or persist card payments should still read the list: the single-payment getters (`getPoiTransactionId()`, `getApprovalCode()`, `getPaymentBrand()`, `getCustomerReceipt()`, `getMerchantReceipt()` and the like) describe the first card payment only. Where that payment's response lacks a value they keep the stored value payment's, and a gift-card-only sale reports its stored value payment there, as before.
 
 ```java
 for (CardPaymentResult card : result.getCardPayments()) {
@@ -418,6 +419,86 @@ for (CardPaymentResult card : result.getCardPayments()) {
     journal.recordCard(card.getPoiTransactionId(), card.getPoiTransactionTimestamp(), card.getAmount());
 }
 ```
+
+### Variant: split card payments
+
+The shopper pays with several cards: "$20 on this card, the rest on the next". Plan the fixed amounts with `SettlementOptions.cardPayments(...)`; one more card payment always follows for the remainder.
+
+```java
+session.settle(SettlementOptions.builder()
+        .cardPayments(CardPayment.of(new BigDecimal("20.00")))  // $20 on the first card, the rest on the next
+        .build())
+    .onCardCharged(m -> register.showMessage("Card: $" + m.getAmount()))  // once per card payment
+    .onError(failure -> {
+        if (failure.getError().getCode() == SessionErrorCode.CARD_PAYMENTS_EXCEED_TOTAL) {
+            return SettlementRecovery.abort();  // the plan leaves nothing for the last card
+        }
+        // a later card payment failed: the earlier ones stay committed, cash covers the rest
+        return SettlementRecovery.external(ExternalPayment.cash(failure.getAmountDue()));
+    })
+    .onSuccess(result -> {
+        for (CardPaymentResult payment : result.getCardPayments()) {
+            register.printReceipt(payment.getMerchantReceipt());
+        }
+    })
+    .execute();
+```
+
+- **The plan applies to the card amount**, what is left after rebates, points and the gift card. It is known only when the card step starts, so the check runs there: the planned amounts must add up to less than the card amount. Otherwise the card step fails before any card is charged, and `onError` gets `CARD_PAYMENTS_EXCEED_TOTAL` with the whole card amount as `getAmountDue()`. Only `abort()` and `abandon()` are valid then; a retry would refuse the same plan again. When rebates, points or the gift card leave nothing for the cards, no card payment runs and the plan doesn't apply. A planned amount must be positive and in whole cents. `build()` refuses `cardPayments` together with `cashback`, and with `SettlementLoyalty.implicit()`: with implicit loyalty the terminal books the whole sale's earn when card payment 1 is approved, before the sale is paid, and keeps it if a later card fails and the sale is aborted, and its hosted checkout can lower card payment 1 below its planned amount. Use explicit loyalty (the default), whose award runs once after every tender.
+- **Each card payment is its own step:** its own `beforeStep`, `ServiceID`, TransactionStatus recovery, `onCardCharged` and movement. Payment 1 is a normal payment; every later one is a nexo split payment (`SplitPaymentFlag`, `PaidAmount`, see [Make a payment](./make-payment.md#split-payments)). Each carries the whole adjusted basket as its sale items.
+- **One sale transaction.** Every card payment of the settlement uses card payment 1's `SaleTransactionID`, as nexo requires. `beforeStep` still runs before each later payment with that ID as `ctx.getDefaultTransactionId()`; returning `null` or that ID keeps it, and returning any other ID fails that card payment before anything is sent, as a throwing `beforeStep` does: `onError` gets an `INVALID_STATE` failure with the amount still due and the card payments already committed, and `retry()` calls `beforeStep` again. For a split payment, `ctx.getCurrentTotal()` is what the card phase still owes (the same as `onError`'s `getAmountDue()`), and `ctx.getStepAmount()` is what this request is about to charge, that payment's own share. For every other step the two are equal.
+- **A failure on a later card payment** reaches `onError` with `getAmountDue()` = that payment's amount plus everything after it. `retry()` resends that payment, with the same split fields and sale transaction. `external(payment)` must equal `getAmountDue()`; it keeps the earlier card payments and ends the card phase. `abort()` reverses every committed step, every card payment included, newest first. `skip()` is invalid, as for any card payment. The earlier card payments stay committed unless the register aborts.
+- **A short card payment is followed up.** A card that approves less than it was asked for keeps its charge, and the shortfall goes on another card request: automatically without `onPartialCardApproval`, or as the register decides with it (see [Variant: partial card approval](#variant-partial-card-approval)).
+- **The result** lists every payment in `getCardPayments()`, in order, and `getCardAmountCharged()` is their sum. The single-payment getters (`getPoiTransactionId()`, `getApprovalCode()`, receipts) return the first card payment. The award covers every tender. A same-session `voidTransaction()` reverses every card payment, newest first; `refund()` refunds each one in full, and `refund(amount)` is refused.
+
+### Variant: partial card approval
+
+A card can approve less than it was asked for: the terminal answers `Partial` with an `AuthorizedAmount` below the `RequestedAmount`, for example when a debit or prepaid card has $60 of a $100 sale. The payment is committed and `onCardCharged` fires either way.
+
+**Without a handler**, the SDK keeps the partial charge and asks for the shortfall on another card request right away, as `anotherCard()` does. It sends at most `SettlementFlow.MAX_AUTOMATIC_CARD_REQUESTS` (3) card requests for shortfalls per settlement, counting the request that came back partial as the first, so at most two automatic follow-ups. Planned card payments and requests the register retries from `onError` don't count. When the last request allowed comes back partial too, the card step fails as `DECLINED` to `onError`, and `amountDue` is that request's amount plus whatever is still due after it. The earlier card payments stay committed: `abort()`, the default, reverses them all, while `retry()` and `external()` first reverse only that last partial charge.
+
+Unlike planned card payments, follow-ups for a partial approval, automatic or from the handler, also work with `SettlementLoyalty.implicit()`: the terminal books no earn on a partial approval, only on the payment that completes the sale.
+
+**Register `onPartialCardApproval`** to decide at the counter what happens to every shortfall instead. A registered handler replaces the automatic follow-ups entirely and has no limit:
+
+```java
+session.settle()
+    .onCardCharged(m -> register.showMessage("Card: $" + m.getAmount()))   // the partial $60 too
+    .onPartialCardApproval(partial -> {
+        int choice = register.askShopper(
+            "Card approved $" + partial.getApproved() + " of $" + partial.getRequested()
+                + " — $" + partial.getShortfall() + " still due");
+        switch (choice) {
+            case ANOTHER_CARD: return PartialApprovalDecision.anotherCard();
+            case CASH:         return PartialApprovalDecision.external(
+                                   ExternalPayment.cash(partial.getAmountDue(), drawer.reference()));
+            default:           return PartialApprovalDecision.abort();   // reverse every card payment
+        }
+    })
+    .onSuccess(result -> result.getCardPayments().forEach(card ->
+        register.printReceipt(card.getMerchantReceipt())))
+    .execute();
+```
+
+The handler runs after the partial payment's movement and `onCardCharged`, and receives a `PartialCardApproval`: `getApproved()`, `getRequested()`, `getShortfall()`, `getAmountDue()` (everything the card phase still owes, the shortfall plus any card payments still to come), `getCardPayments()` (every card payment committed so far, this one last; there is no SDK cap, so count them to limit the cards per sale) and `getMovement()`. It returns a `PartialApprovalDecision`:
+
+| Decision | Effect |
+| --- | --- |
+| `anotherCard()` | Charges the shortfall as a new card payment right away, then continues with the planned payments. If that card is partial too, the handler is asked again. |
+| `addToNext()` | Adds the shortfall to the next card payment: the next amount planned with `SettlementOptions.cardPayments`, or the remainder payment. Refused on the last card payment of the settlement; use `anotherCard()` there. |
+| `external(ExternalPayment)` | Records a register-managed payment such as cash for everything still due → `onExternallyPaid`, and ends the card phase. Every card payment stays. The amount must equal `getAmountDue()`. |
+| `abort()` | The normal abort unwind: reverses every committed charge-side step, every card payment included, newest first, and fails the settlement as `DECLINED`. `onError` is not called afterwards: the register chose the abort. |
+
+**Card brand rules require a partial approval that the sale does not complete to be reversed.** When the shopper cannot pay the shortfall, return `abort()`; never leave a partial charge standing on a sale the register then cancels.
+
+Every card payment after the first is a nexo split payment, as with planned card payments: `PaymentData.SplitPaymentFlag=true`, `PaymentType=Normal`, `AmountsReq.PaidAmount` = what the earlier payment requests of this sale authorized (stored value and card, the partial approvals included), and the first card payment's `SaleTransactionID`. The result lists each card payment in `SettlementResult.getCardPayments()`, the partial one with `isPartialApproval()`; `getCardAmountCharged()` is their sum. `toOriginalSaleRecord()` keeps every card payment, and `voidTransaction()` reverses them all.
+
+The handler is **not** called:
+
+- on a sale with cashback. A partial there, including a refused cashback (`Partial` with `CashBackAmount=0`), fails as `DECLINED` as it does without a handler.
+- for an authorization of zero, which is a decline.
+
+A decision the settlement cannot carry out (`addToNext()` on the last card payment, an `external()` amount other than `getAmountDue()`) is refused like an invalid `SettlementRecovery`: the settlement fails with `INVALID_STATE`, and the committed card payments stay guarded until `voidTransaction()` or a retried `settle()` reverses them. A handler that throws or returns `null` is reported to `onError` like a throwing step handler: `retry()` asks the handler again, `abort()` unwinds, `abandon()` hands the settlement to the register, and any other recovery is refused.
 
 ### Variant: skip unavailable loyalty
 
@@ -904,6 +985,8 @@ Not the full API — just the methods you'll reach for most. Everything returnin
 | Basket snapshot | `session.basket().snapshot()` |
 | Start another basket in the same session | `session.basket().clear()` |
 | Register gift card for split tender | `session.setStoredValueCard(cardNumber)` |
+| Keep a partial card approval and collect the rest | `settle().onPartialCardApproval(partial -> PartialApprovalDecision.anotherCard())` |
+| Hear when the SDK reverses a card payment it reported | `settle().onCardChargeReversed(reversal -> ...)` (every step's reversals: `onMovement` with `isReversal()`) |
 | Gift card lifecycle | `storedValueBalance / Activate / Load / Unload / Deactivate / Reverse` |
 | Read card without charging | `session.acquireCard()` |
 | Settle | `session.settle()` → `.beforeStep / .onRebatesRedeemed / .onPointsRedeemed / .onGiftCardPayment / .onCardRefunded / .onGiftCardRefunded / .onExternalRefunded / .onSuccess / .onError` → `.execute()` |

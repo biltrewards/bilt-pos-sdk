@@ -14,8 +14,9 @@ import java.util.Objects;
 
 /**
  * A payment collected and owned by the register rather than the terminal. Settlement accepts it
- * only as a replacement for a failed final card tender, and its amount must exactly equal the
- * outstanding balance.
+ * only as a replacement for a failed card tender ({@code SettlementRecovery.external}) or for the
+ * rest of a partially approved one ({@code PartialApprovalDecision.external}), and its amount must
+ * exactly equal the outstanding balance.
  */
 public final class ExternalPayment {
 

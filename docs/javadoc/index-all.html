@@ -76,6 +76,12 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Builder for <a href="com/bilt/pos/session/settlement/AbandonedSettlementRecord.html" title="class in com.bilt.pos.session.settlement"><code>AbandonedSettlementRecord</code></a>.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html#abort()" class="member-name-link">abort()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement">PartialApprovalDecision</a></dt>
+<dd>
+<div class="block">Reverse every committed charge-side step, this partial card payment and the earlier card
+ payments included, and fail the settlement as <code>DECLINED</code>: the same unwind as <code>
+ SettlementRecovery.abort()</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#abort()" class="member-name-link">abort()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
 <dd>
 <div class="block">Unwind committed charge-side steps and fail the settlement.</div>
@@ -87,6 +93,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/ReversalDecision.html#ABORT" class="member-name-link">ABORT</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/ReversalDecision.html" title="enum class in com.bilt.pos.session">ReversalDecision</a></dt>
 <dd>
 <div class="block">Stop the flow.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html#ABORT" class="member-name-link">ABORT</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html" title="enum class in com.bilt.pos.session.settlement">PartialApprovalDecision.Action</a></dt>
+<dd>
+<div class="block">Reverse every committed charge-side step and fail the settlement.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html#ABORT" class="member-name-link">ABORT</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.Action.html" title="enum class in com.bilt.pos.session.settlement">SettlementRecovery.Action</a></dt>
 <dd>
@@ -156,6 +166,10 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#acValue" class="member-name-link">acValue</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html#ADD_TO_NEXT" class="member-name-link">ADD_TO_NEXT</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html" title="enum class in com.bilt.pos.session.settlement">PartialApprovalDecision.Action</a></dt>
+<dd>
+<div class="block">Add the shortfall to the next card payment.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#addCardPayment(com.bilt.pos.session.payment.CardPaymentResult)" class="member-name-link">addCardPayment(CardPaymentResult)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html#addCardPayment(com.bilt.pos.session.settlement.CardPaymentRecord)" class="member-name-link">addCardPayment(CardPaymentRecord)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord.Builder</a></dt>
@@ -219,6 +233,11 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html#addStoredValueLoad(com.bilt.pos.session.settlement.StoredValueLoadRecord)" class="member-name-link">addStoredValueLoad(StoredValueLoadRecord)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html#addToNext()" class="member-name-link">addToNext()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement">PartialApprovalDecision</a></dt>
+<dd>
+<div class="block">Add the shortfall to the next card payment: the next planned amount, or the remainder payment
+ when no planned amount is left.</div>
+</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.Builder.html#addTracking(java.lang.String,java.net.URI)" class="member-name-link">addTracking(String, URI)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.Builder.html" title="class in com.bilt.pos.widget">Rendering.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/media/service/AdEventListener.html" class="type-name-link" title="interface in com.bilt.pos.media.service">AdEventListener</a> - Interface in <a href="com/bilt/pos/media/service/package-summary.html">com.bilt.pos.media.service</a></dt>
@@ -309,11 +328,22 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/TenderMovement.Builder.html#amount(java.math.BigDecimal)" class="member-name-link">amount(BigDecimal)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TenderMovement.Builder.html" title="class in com.bilt.pos.session">TenderMovement.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html#amountDue(java.math.BigDecimal)" class="member-name-link">amountDue(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#amountDue(java.math.BigDecimal)" class="member-name-link">amountDue(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/identity/ShopperKind.html#ANONYMOUS" class="member-name-link">ANONYMOUS</a> - Enum constant in enum class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/ShopperKind.html" title="enum class in com.bilt.pos.session.identity">ShopperKind</a></dt>
 <dd>
 <div class="block">A shopper the terminal could not tie to a member.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html#ANOTHER_CARD" class="member-name-link">ANOTHER_CARD</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html" title="enum class in com.bilt.pos.session.settlement">PartialApprovalDecision.Action</a></dt>
+<dd>
+<div class="block">Charge the shortfall on another card, then continue the plan.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html#anotherCard()" class="member-name-link">anotherCard()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement">PartialApprovalDecision</a></dt>
+<dd>
+<div class="block">Charge the shortfall as a new card payment right after this one, then continue with the planned
+ payments.</div>
 </dd>
 <dt><a href="com/bilt/pos/platform/BiltEnvironment.html#apiBaseUrl()" class="member-name-link">apiBaseUrl()</a> - Method in class com.bilt.pos.platform.<a href="com/bilt/pos/platform/BiltEnvironment.html" title="class in com.bilt.pos.platform">BiltEnvironment</a></dt>
 <dd>
@@ -332,6 +362,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#approvalCode(java.lang.String)" class="member-name-link">approvalCode(String)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/TenderMovement.Builder.html#approvalCode(java.lang.String)" class="member-name-link">approvalCode(String)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TenderMovement.Builder.html" title="class in com.bilt.pos.session">TenderMovement.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html#approved(java.math.BigDecimal)" class="member-name-link">approved(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#arc" class="member-name-link">arc</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
@@ -638,6 +670,8 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.Builder.html" title="class in com.bilt.pos.session.settlement">RefundAllocation.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementFailure.Builder</a></dt>
@@ -645,7 +679,9 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></dt>
-<dd>&nbsp;</dd>
+<dd>
+<div class="block">Builds the options.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/StoredValueLoadRecord.Builder.html#build()" class="member-name-link">build()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/StoredValueLoadRecord.Builder.html" title="class in com.bilt.pos.session.settlement">StoredValueLoadRecord.Builder</a></dt>
@@ -727,6 +763,8 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/CardPaymentRecord.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CardPaymentRecord.html" title="class in com.bilt.pos.session.settlement">CardPaymentRecord</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocation.html#builder()" class="member-name-link">builder()</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocation.html" title="class in com.bilt.pos.session.settlement">RefundAllocation</a></dt>
 <dd>&nbsp;</dd>
@@ -856,6 +894,11 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Terminal processes the card payment for the remaining amount.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/SessionErrorCode.html#CARD_PAYMENTS_EXCEED_TOTAL" class="member-name-link">CARD_PAYMENTS_EXCEED_TOTAL</a> - Enum constant in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></dt>
+<dd>
+<div class="block">The planned card payments (<code>SettlementOptions.cardPayments</code>) add up to the card amount or
+ more, so no card is left for the remainder.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementStep.html#CARD_REFUND" class="member-name-link">CARD_REFUND</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementStep.html" title="enum class in com.bilt.pos.session.settlement">SettlementStep</a></dt>
 <dd>
 <div class="block">Terminal returns money to a payment card.</div>
@@ -880,6 +923,11 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#cardBrand" class="member-name-link">cardBrand</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/CardPayment.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">CardPayment</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
+<dd>
+<div class="block">One planned card payment of a split settlement: a fixed amount charged on its own card before the
+ next one.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/CardPaymentRecord.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">CardPaymentRecord</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
 <div class="block">Persistable reference for voiding or refunding one card payment of an original sale.</div>
@@ -895,8 +943,20 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Builder for <a href="com/bilt/pos/session/payment/CardPaymentResult.html" title="class in com.bilt.pos.session.payment"><code>CardPaymentResult</code></a>.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html#cardPayments(com.bilt.pos.session.settlement.CardPayment...)" class="member-name-link">cardPayments(CardPayment...)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></dt>
+<dd>
+<div class="block">Splits the card amount into several card payments planned up front: each given payment
+ charges its fixed amount on its own card, in order, and one more card payment always follows
+ for the remainder.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html#cardPayments(java.util.List)" class="member-name-link">cardPayments(List&lt;CardPaymentResult&gt;)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#cardPayments(java.util.List)" class="member-name-link">cardPayments(List&lt;CardPaymentResult&gt;)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html#cardPayments(java.util.List)" class="member-name-link">cardPayments(List&lt;CardPayment&gt;)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></dt>
+<dd>
+<div class="block">Replaces the planned card payments; see <a href="com/bilt/pos/session/settlement/SettlementOptions.Builder.html#cardPayments(com.bilt.pos.session.settlement.CardPayment...)"><code>SettlementOptions.Builder.cardPayments(CardPayment...)</code></a>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html#cardPayments(java.util.List)" class="member-name-link">cardPayments(List&lt;CardPaymentRecord&gt;)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.Builder.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord.Builder</a></dt>
 <dd>
 <div class="block">The sale's card payments in the order they were made.</div>
@@ -1665,6 +1725,8 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SessionContextSnapshot.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionContextSnapshot.html" title="class in com.bilt.pos.session">SessionContextSnapshot</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/CardPayment.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CardPayment.html" title="class in com.bilt.pos.session.settlement">CardPayment</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/CardPaymentRecord.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CardPaymentRecord.html" title="class in com.bilt.pos.session.settlement">CardPaymentRecord</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html#equals(java.lang.Object)" class="member-name-link">equals(Object)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></dt>
@@ -1779,6 +1841,11 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The SDK runs the selected loyalty steps; the card payment forbids loyalty.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html#external(com.bilt.pos.session.settlement.ExternalPayment)" class="member-name-link">external(ExternalPayment)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement">PartialApprovalDecision</a></dt>
+<dd>
+<div class="block">Record a register-managed payment, such as cash, for everything the card phase still owes, and
+ end the card phase.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#external(com.bilt.pos.session.settlement.ExternalPayment)" class="member-name-link">external(ExternalPayment)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
 <dd>
 <div class="block">Records a register-managed tender and continues after the failed card step.</div>
@@ -1790,6 +1857,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/display/DisplayTarget.html#EXTERNAL" class="member-name-link">EXTERNAL</a> - Enum constant in enum class com.bilt.pos.session.display.<a href="com/bilt/pos/session/display/DisplayTarget.html" title="enum class in com.bilt.pos.session.display">DisplayTarget</a></dt>
 <dd>
 <div class="block">A separate external display device driven by its own client.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html#EXTERNAL" class="member-name-link">EXTERNAL</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html" title="enum class in com.bilt.pos.session.settlement">PartialApprovalDecision.Action</a></dt>
+<dd>
+<div class="block">Record a register-managed payment for everything the card phase still owes.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocationType.html#EXTERNAL" class="member-name-link">EXTERNAL</a> - Enum constant in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></dt>
 <dd>
@@ -2014,6 +2085,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The call to action involved, for tap-driven kinds; <code>null</code> otherwise.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html#getAction()" class="member-name-link">getAction()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement">PartialApprovalDecision</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#getAction()" class="member-name-link">getAction()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/Cta.html#getAction()" class="member-name-link">getAction()</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Cta.html" title="class in com.bilt.pos.widget">Cta</a></dt>
@@ -2098,6 +2171,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Dollar amount subtracted from the line (or cart).</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/CardPayment.html#getAmount()" class="member-name-link">getAmount()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CardPayment.html" title="class in com.bilt.pos.session.settlement">CardPayment</a></dt>
+<dd>
+<div class="block">The amount this card payment requests.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/CardPaymentRecord.html#getAmount()" class="member-name-link">getAmount()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CardPaymentRecord.html" title="class in com.bilt.pos.session.settlement">CardPaymentRecord</a></dt>
 <dd>
 <div class="block">Amount the payment authorized, or <code>null</code> when the record was built from a bare POI
@@ -2129,6 +2206,11 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/payment/GiftCardPaymentResult.html#getAmountCharged()" class="member-name-link">getAmountCharged()</a> - Method in class com.bilt.pos.session.payment.<a href="com/bilt/pos/session/payment/GiftCardPaymentResult.html" title="class in com.bilt.pos.session.payment">GiftCardPaymentResult</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.html#getAmountDue()" class="member-name-link">getAmountDue()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval</a></dt>
+<dd>
+<div class="block">Everything the card phase still owes after this payment: the shortfall plus the card payments
+ still to come.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html#getAmountDue()" class="member-name-link">getAmountDue()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementFailure.html" title="class in com.bilt.pos.session.settlement">SettlementFailure</a></dt>
 <dd>
 <div class="block">Amount the failed step was responsible for resolving.</div>
@@ -2150,6 +2232,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/TenderMovement.html#getApprovalCode()" class="member-name-link">getApprovalCode()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a></dt>
 <dd>
 <div class="block">Approval code of a refund; <code>null</code> for a reversal or when not reported.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.html#getApproved()" class="member-name-link">getApproved()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval</a></dt>
+<dd>
+<div class="block">Amount the terminal authorized for this card payment.</div>
 </dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#getArc()" class="member-name-link">getArc()</a> - Method in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>
@@ -2233,6 +2319,15 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html#getCardPayments()" class="member-name-link">getCardPayments()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/OriginalSaleRecord.html" title="class in com.bilt.pos.session.settlement">OriginalSaleRecord</a></dt>
 <dd>
 <div class="block">The sale's card payments in the order they were made; empty when it had none.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.html#getCardPayments()" class="member-name-link">getCardPayments()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval</a></dt>
+<dd>
+<div class="block">The card payments this settlement committed so far, in order, this partial one last.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementOptions.html#getCardPayments()" class="member-name-link">getCardPayments()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></dt>
+<dd>
+<div class="block">The planned card payments, in order, each followed by the next and the last by one more card
+ payment for the remainder.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getCardPayments()" class="member-name-link">getCardPayments()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
 <dd>
@@ -2391,7 +2486,7 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#getCurrentTotal()" class="member-name-link">getCurrentTotal()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
 <dd>
-<div class="block">The running total the step will be sent with.</div>
+<div class="block">The running total still due as of this step.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/payment/CardPaymentResult.html#getCustomerReceipt()" class="member-name-link">getCustomerReceipt()</a> - Method in class com.bilt.pos.session.payment.<a href="com/bilt/pos/session/payment/CardPaymentResult.html" title="class in com.bilt.pos.session.payment">CardPaymentResult</a></dt>
 <dd>&nbsp;</dd>
@@ -2535,6 +2630,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/storedvalue/StoredValueCard.html#getExpiryDate()" class="member-name-link">getExpiryDate()</a> - Method in class com.bilt.pos.session.storedvalue.<a href="com/bilt/pos/session/storedvalue/StoredValueCard.html" title="class in com.bilt.pos.session.storedvalue">StoredValueCard</a></dt>
 <dd>
 <div class="block"><code>"MMYY"</code>, or <code>null</code>.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html#getExternalPayment()" class="member-name-link">getExternalPayment()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement">PartialApprovalDecision</a></dt>
+<dd>
+<div class="block">Register-managed payment; non-null only for <a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html#EXTERNAL"><code>PartialApprovalDecision.Action.EXTERNAL</code></a>.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementRecovery.html#getExternalPayment()" class="member-name-link">getExternalPayment()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementRecovery.html" title="class in com.bilt.pos.session.settlement">SettlementRecovery</a></dt>
 <dd>
@@ -2917,6 +3016,10 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/payment/PointRedemptionResult.html#getMonetaryValue()" class="member-name-link">getMonetaryValue()</a> - Method in class com.bilt.pos.session.payment.<a href="com/bilt/pos/session/payment/PointRedemptionResult.html" title="class in com.bilt.pos.session.payment">PointRedemptionResult</a></dt>
 <dd>
 <div class="block">Dollar value of the redeemed points/rewards.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.html#getMovement()" class="member-name-link">getMovement()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval</a></dt>
+<dd>
+<div class="block">The <code>CARD_CHARGE</code> movement of this partial card payment.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.html#getMovements()" class="member-name-link">getMovements()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.html" title="class in com.bilt.pos.session.settlement">SettlementResult</a></dt>
 <dd>
@@ -3350,6 +3453,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Member's balance after the reversal; <code>0</code> when not reported.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.html#getRequested()" class="member-name-link">getRequested()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval</a></dt>
+<dd>
+<div class="block">Amount this card payment requested.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/TransactionStatusResult.html#getReversalResponse()" class="member-name-link">getReversalResponse()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/TransactionStatusResult.html" title="class in com.bilt.pos.session">TransactionStatusResult</a></dt>
 <dd>
 <div class="block">The repeated reversal response, or <code>null</code>.</div>
@@ -3362,6 +3469,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">The amount each money tender leg of this call returned, in the order the legs were sent: one
  entry per card payment and one for a stored value payment.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#getReversedMovement()" class="member-name-link">getReversedMovement()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
+<dd>
+<div class="block">The movement this notice reverses; <code>null</code> unless <a href="com/bilt/pos/session/settlement/SettlementMovement.html#isReversal()"><code>SettlementMovement.isReversal()</code></a>.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SessionError.html#getReversedMovements()" class="member-name-link">getReversedMovements()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionError.html" title="class in com.bilt.pos.session">SessionError</a></dt>
 <dd>
@@ -3474,6 +3585,10 @@ loadScripts(document, 'script');</script>
 <div class="block">Shopper details the terminal resolved for a wallet-pass sign-in, or <code>null</code> when none was
  sent.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.html#getShortfall()" class="member-name-link">getShortfall()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval</a></dt>
+<dd>
+<div class="block">What this card payment left unpaid: <a href="com/bilt/pos/session/settlement/PartialCardApproval.html#getRequested()"><code>PartialCardApproval.getRequested()</code></a> minus <a href="com/bilt/pos/session/settlement/PartialCardApproval.html#getApproved()"><code>PartialCardApproval.getApproved()</code></a>.</div>
+</dd>
 <dt><a href="com/bilt/pos/display/InputPayload.html#getSignature()" class="member-name-link">getSignature()</a> - Method in class com.bilt.pos.display.<a href="com/bilt/pos/display/InputPayload.html" title="class in com.bilt.pos.display">InputPayload</a></dt>
 <dd>
 <div class="block">Gets the value of the signature property.</div>
@@ -3529,6 +3644,10 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#getStep()" class="member-name-link">getStep()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#getStepAmount()" class="member-name-link">getStepAmount()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
+<dd>
+<div class="block">What this step's request is about to charge.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementLoyalty.html#getSteps()" class="member-name-link">getSteps()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementLoyalty.html" title="class in com.bilt.pos.session.settlement">SettlementLoyalty</a></dt>
 <dd>
 <div class="block">The SDK-run steps; empty unless <a href="com/bilt/pos/session/settlement/SettlementLoyalty.Handling.html#EXPLICIT"><code>SettlementLoyalty.Handling.EXPLICIT</code></a>.</div>
@@ -3980,6 +4099,8 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SessionContextSnapshot.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionContextSnapshot.html" title="class in com.bilt.pos.session">SessionContextSnapshot</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/CardPayment.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CardPayment.html" title="class in com.bilt.pos.session.settlement">CardPayment</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/CardPaymentRecord.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CardPaymentRecord.html" title="class in com.bilt.pos.session.settlement">CardPaymentRecord</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/ExternalPayment.html#hashCode()" class="member-name-link">hashCode()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/ExternalPayment.html" title="class in com.bilt.pos.session.settlement">ExternalPayment</a></dt>
@@ -4259,6 +4380,11 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Whether this line returns value to the customer.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html#isReversal()" class="member-name-link">isReversal()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></dt>
+<dd>
+<div class="block">Whether this is the notice that the SDK reversed <a href="com/bilt/pos/session/settlement/SettlementMovement.html#getReversedMovement()"><code>SettlementMovement.getReversedMovement()</code></a>, rather than a
+ movement of its own.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketLineItem.html#isSale()" class="member-name-link">isSale()</a> - Method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketLineItem.html" title="class in com.bilt.pos.session.basket">BasketLineItem</a></dt>
 <dd>
 <div class="block">Whether this line adds sale value to the basket.</div>
@@ -4447,6 +4573,12 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/receipt/ReceiptDataType.html#maskedPAN" class="member-name-link">maskedPAN</a> - Variable in class com.bilt.pos.receipt.<a href="com/bilt/pos/receipt/ReceiptDataType.html" title="class in com.bilt.pos.receipt">ReceiptDataType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/SettlementFlow.html#MAX_AUTOMATIC_CARD_REQUESTS" class="member-name-link">MAX_AUTOMATIC_CARD_REQUESTS</a> - Static variable in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
+<dd>
+<div class="block">How many card requests a settlement without <a href="com/bilt/pos/session/SettlementFlow.html#onPartialCardApproval(java.util.function.Function)"><code>SettlementFlow.onPartialCardApproval(java.util.function.Function&lt;com.bilt.pos.session.settlement.PartialCardApproval, com.bilt.pos.session.settlement.PartialApprovalDecision&gt;)</code></a> sends for a
+ shortfall: the request that came back partial counts as the first, so the SDK adds at most
+ <code>MAX_AUTOMATIC_CARD_REQUESTS - 1</code> automatic follow-up requests per settlement.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/input/InputOptions.Builder.html#maxLength(java.lang.Integer)" class="member-name-link">maxLength(Integer)</a> - Method in class com.bilt.pos.session.input.<a href="com/bilt/pos/session/input/InputOptions.Builder.html" title="class in com.bilt.pos.session.input">InputOptions.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/widget/Rendering.Builder.html#media(com.bilt.pos.widget.MediaSpec)" class="member-name-link">media(MediaSpec)</a> - Method in class com.bilt.pos.widget.<a href="com/bilt/pos/widget/Rendering.Builder.html" title="class in com.bilt.pos.widget">Rendering.Builder</a></dt>
@@ -4619,6 +4751,8 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/display/MoneyType.html#%3Cinit%3E()" class="member-name-link">MoneyType()</a> - Constructor for class com.bilt.pos.display.<a href="com/bilt/pos/display/MoneyType.html" title="class in com.bilt.pos.display">MoneyType</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html#movement(com.bilt.pos.session.settlement.SettlementMovement)" class="member-name-link">movement(SettlementMovement)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#movement(com.bilt.pos.session.settlement.SettlementMovement)" class="member-name-link">movement(SettlementMovement)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html#movements(java.util.List)" class="member-name-link">movements(List&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementResult.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementResult.Builder</a></dt>
@@ -4723,6 +4857,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Register-managed payment using an integrator-defined tender name.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/CardPayment.html#of(java.math.BigDecimal)" class="member-name-link">of(BigDecimal)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CardPayment.html" title="class in com.bilt.pos.session.settlement">CardPayment</a></dt>
+<dd>
+<div class="block">A card payment of exactly <code>amount</code>, which must be positive and in whole cents.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/basket/BasketDiscount.html#offer(java.lang.String,java.lang.String,java.lang.String)" class="member-name-link">offer(String, String, String)</a> - Static method in class com.bilt.pos.session.basket.<a href="com/bilt/pos/session/basket/BasketDiscount.html" title="class in com.bilt.pos.session.basket">BasketDiscount</a></dt>
 <dd>
 <div class="block">A discount produced by a register-known offer.</div>
@@ -4797,7 +4935,16 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#onCardCharged(java.util.function.Consumer)" class="member-name-link">onCardCharged(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
-<div class="block">Called when the card charge leg commits.</div>
+<div class="block">Called when a card charge leg commits: once per card payment, so several times for a split
+ settlement (<code>SettlementOptions.cardPayments</code>).</div>
+</dd>
+<dt><a href="com/bilt/pos/session/SettlementFlow.html#onCardChargeReversed(java.util.function.Consumer)" class="member-name-link">onCardChargeReversed(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
+<dd>
+<div class="block">Called when the settlement itself successfully reverses a card payment it had already reported
+ through <a href="com/bilt/pos/session/SettlementFlow.html#onCardCharged(java.util.function.Consumer)"><code>SettlementFlow.onCardCharged(java.util.function.Consumer&lt;com.bilt.pos.session.settlement.SettlementMovement&gt;)</code></a>: before <code>retry()</code> or <code>external()</code> replaces a failed
+ card step whose charge had committed (a partial approval the SDK could not keep, a handler that
+ threw after the charge, a TransactionStatus-recovered charge whose processing failed), and for
+ each card payment an <code>abort()</code> unwind reverses.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SettlementFlow.html#onCardRefunded(java.util.function.Consumer)" class="member-name-link">onCardRefunded(Consumer&lt;SettlementMovement&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
 <dd>
@@ -4885,6 +5032,11 @@ loadScripts(document, 'script');</script>
 <div class="block">Receives every validated <a href="com/bilt/pos/media/Offer.html" title="class in com.bilt.pos.media"><code>Offer</code></a> the shopper accepted; the register applies it to its
  own pricing.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/SettlementFlow.html#onPartialCardApproval(java.util.function.Function)" class="member-name-link">onPartialCardApproval(Function&lt;PartialCardApproval, PartialApprovalDecision&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SettlementFlow.html" title="class in com.bilt.pos.session">SettlementFlow</a></dt>
+<dd>
+<div class="block">Called when a card payment commits with less than it requested: the terminal answered <code>
+ Partial</code> with an <code>AuthorizedAmount</code> below the <code>RequestedAmount</code>.</div>
+</dd>
 <dt><a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html#onPlacement(com.bilt.pos.media.Placement,com.bilt.pos.widget.Rendering...)" class="member-name-link">onPlacement(Placement, Rendering...)</a> - Method in class com.bilt.pos.media.service.<a href="com/bilt/pos/media/service/InMemoryAdDecisionService.html" title="class in com.bilt.pos.media.service">InMemoryAdDecisionService</a></dt>
 <dd>
 <div class="block">Serves <code>renderings</code> in rotation for <code>placement</code>; no renderings clears the script.</div>
@@ -4968,6 +5120,22 @@ loadScripts(document, 'script');</script>
 <h2 class="title" id="I:P">P</h2>
 <dl class="index">
 <dt><a href="com/bilt/pos/session/payment/CardPaymentResult.Builder.html#partialApproval(boolean)" class="member-name-link">partialApproval(boolean)</a> - Method in class com.bilt.pos.session.payment.<a href="com/bilt/pos/session/payment/CardPaymentResult.Builder.html" title="class in com.bilt.pos.session.payment">CardPaymentResult.Builder</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">PartialApprovalDecision</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
+<dd>
+<div class="block">The register's answer to <code>SettlementFlow.onPartialCardApproval</code>: what to do about the
+ shortfall of a card payment that the terminal approved for less than it was asked for.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html" class="type-name-link" title="enum class in com.bilt.pos.session.settlement">PartialApprovalDecision.Action</a> - Enum Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
+<dd>
+<div class="block">What the settlement does about the shortfall.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">PartialCardApproval</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
+<dd>
+<div class="block">Context supplied to <code>SettlementFlow.onPartialCardApproval</code> when a card payment committed
+ with an authorized amount below the amount it requested.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">PartialCardApproval.Builder</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/nexo/security/SecurityKey.Builder.html#passphrase(java.lang.String)" class="member-name-link">passphrase(String)</a> - Method in class com.bilt.pos.nexo.security.<a href="com/bilt/pos/nexo/security/SecurityKey.Builder.html" title="class in com.bilt.pos.nexo.security">SecurityKey.Builder</a></dt>
 <dd>&nbsp;</dd>
@@ -5684,6 +5852,8 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Prompts the customer for a digit string with explicit input options.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html#requested(java.math.BigDecimal)" class="member-name-link">requested(BigDecimal)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.Builder.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval.Builder</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/TerminalShopperSession.html#requestMenuEntry(java.lang.String,java.util.List)" class="member-name-link">requestMenuEntry(String, List&lt;String&gt;)</a> - Method in interface com.bilt.pos.session.<a href="com/bilt/pos/session/TerminalShopperSession.html" title="interface in com.bilt.pos.session">TerminalShopperSession</a></dt>
 <dd>
 <div class="block">Prompts the customer to pick from a menu of entries.</div>
@@ -5726,6 +5896,13 @@ loadScripts(document, 'script');</script>
 <dt><a href="com/bilt/pos/session/identity/Member.html#resolver()" class="member-name-link">resolver()</a> - Method in class com.bilt.pos.session.identity.<a href="com/bilt/pos/session/identity/Member.html" title="class in com.bilt.pos.session.identity">Member</a></dt>
 <dd>
 <div class="block">How this member is to be looked up, or <code>null</code> once resolved.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.math.BigDecimal,java.util.List,java.lang.String,java.util.function.Function,com.bilt.pos.nexo.model.TransactionIdentificationType)" class="member-name-link">resolveSaleTransactionId(SettlementStep, Basket, BigDecimal, BigDecimal, List&lt;CommittedStep&gt;, String, Function&lt;SettlementContext, String&gt;, TransactionIdentificationType)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
+<dd>
+<div class="block"><a href="com/bilt/pos/session/settlement/SettlementContext.html#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.util.List,java.lang.String,java.util.function.Function)"><code>SettlementContext.resolveSaleTransactionId(SettlementStep, Basket, BigDecimal, List, String, Function)</code></a>
+ for a step that charges <code>stepAmount</code> out of <code>currentTotal</code> (see <a href="com/bilt/pos/session/settlement/SettlementContext.html#getStepAmount()"><code>SettlementContext.getStepAmount()</code></a>), with an explicit default transaction instead of the basket's: the handler
+ sees its ID as <a href="com/bilt/pos/session/settlement/SettlementContext.html#getDefaultTransactionId()"><code>SettlementContext.getDefaultTransactionId()</code></a>, and <code>null</code>, an empty string, or that
+ ID keep it, timestamp included.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#resolveSaleTransactionId(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.util.List,java.lang.String,java.util.function.Function)" class="member-name-link">resolveSaleTransactionId(SettlementStep, Basket, BigDecimal, List&lt;CommittedStep&gt;, String, Function&lt;SettlementContext, String&gt;)</a> - Static method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
 <dd>
@@ -5806,6 +5983,10 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/VoidResult.Builder.html#reversedAmountByTender(java.util.List)" class="member-name-link">reversedAmountByTender(List&lt;TenderAmount&gt;)</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/VoidResult.Builder.html" title="class in com.bilt.pos.session">VoidResult.Builder</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html#reversedMovement(com.bilt.pos.session.settlement.SettlementMovement)" class="member-name-link">reversedMovement(SettlementMovement)</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a></dt>
+<dd>
+<div class="block">Makes this a reversal notice for <code>reversedMovement</code>; see <a href="com/bilt/pos/session/settlement/SettlementMovement.html#isReversal()"><code>SettlementMovement.isReversal()</code></a>.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/ReversedMovement.html" class="type-name-link" title="class in com.bilt.pos.session">ReversedMovement</a> - Class in <a href="com/bilt/pos/session/package-summary.html">com.bilt.pos.session</a></dt>
 <dd>
 <div class="block">A movement that completed before a whole-sale void stopped.</div>
@@ -6485,6 +6666,11 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#%3Cinit%3E(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.lang.String,java.util.List,java.lang.String)" class="member-name-link">SettlementContext(SettlementStep, Basket, BigDecimal, String, List&lt;CommittedStep&gt;, String)</a> - Constructor for class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/SettlementContext.html#%3Cinit%3E(com.bilt.pos.session.settlement.SettlementStep,com.bilt.pos.session.basket.Basket,java.math.BigDecimal,java.math.BigDecimal,java.lang.String,java.util.List,java.lang.String)" class="member-name-link">SettlementContext(SettlementStep, Basket, BigDecimal, BigDecimal, String, List&lt;CommittedStep&gt;, String)</a> - Constructor for class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementContext.html" title="class in com.bilt.pos.session.settlement">SettlementContext</a></dt>
+<dd>
+<div class="block">A context whose step charges <code>stepAmount</code>, a share of <code>currentTotal</code>: a card
+ payment of a split settlement.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementFailure.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementFailure</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
 <div class="block">Context supplied when <code>SettlementFlow.onError</code> must direct recovery.</div>
@@ -6518,7 +6704,8 @@ loadScripts(document, 'script');</script>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementMovement</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
-<div class="block">One money or loyalty movement committed as part of a settlement.</div>
+<div class="block">One money or loyalty movement committed as part of a settlement, or the notice that the SDK
+ reversed one.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementMovement.Builder.html" class="type-name-link" title="class in com.bilt.pos.session.settlement">SettlementMovement.Builder</a> - Class in <a href="com/bilt/pos/session/settlement/package-summary.html">com.bilt.pos.session.settlement</a></dt>
 <dd>
@@ -7293,6 +7480,12 @@ loadScripts(document, 'script');</script>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/SessionError.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionError.html" title="class in com.bilt.pos.session">SessionError</a></dt>
 <dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/CardPayment.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/CardPayment.html" title="class in com.bilt.pos.session.settlement">CardPayment</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement">PartialApprovalDecision</a></dt>
+<dd>&nbsp;</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialCardApproval.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialCardApproval.html" title="class in com.bilt.pos.session.settlement">PartialCardApproval</a></dt>
+<dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementLoyalty.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementLoyalty.html" title="class in com.bilt.pos.session.settlement">SettlementLoyalty</a></dt>
 <dd>&nbsp;</dd>
 <dt><a href="com/bilt/pos/session/settlement/SettlementTarget.html#toString()" class="member-name-link">toString()</a> - Method in class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/SettlementTarget.html" title="class in com.bilt.pos.session.settlement">SettlementTarget</a></dt>
@@ -7598,6 +7791,10 @@ loadScripts(document, 'script');</script>
 <dd>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
 </dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html" title="enum class in com.bilt.pos.session.settlement">PartialApprovalDecision.Action</a></dt>
+<dd>
+<div class="block">Returns the enum constant of this class with the specified name.</div>
+</dd>
 <dt><a href="com/bilt/pos/session/settlement/RefundAllocationType.html#valueOf(java.lang.String)" class="member-name-link">valueOf(String)</a> - Static method in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/RefundAllocationType.html" title="enum class in com.bilt.pos.session.settlement">RefundAllocationType</a></dt>
 <dd>
 <div class="block">Returns the enum constant of this class with the specified name.</div>
@@ -7752,6 +7949,11 @@ the order they are declared.</div>
 the order they are declared.</div>
 </dd>
 <dt><a href="com/bilt/pos/session/SessionErrorCode.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.session.<a href="com/bilt/pos/session/SessionErrorCode.html" title="enum class in com.bilt.pos.session">SessionErrorCode</a></dt>
+<dd>
+<div class="block">Returns an array containing the constants of this enum class, in
+the order they are declared.</div>
+</dd>
+<dt><a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html#values()" class="member-name-link">values()</a> - Static method in enum class com.bilt.pos.session.settlement.<a href="com/bilt/pos/session/settlement/PartialApprovalDecision.Action.html" title="enum class in com.bilt.pos.session.settlement">PartialApprovalDecision.Action</a></dt>
 <dd>
 <div class="block">Returns an array containing the constants of this enum class, in
 the order they are declared.</div>

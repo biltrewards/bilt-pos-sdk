@@ -123,7 +123,21 @@ loadScripts(document, 'script');</script>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#build()" class="member-name-link">build</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Builds the options.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#cardPayments(com.bilt.pos.session.settlement.CardPayment...)" class="member-name-link">cardPayments</a><wbr>(<a href="CardPayment.html" title="class in com.bilt.pos.session.settlement">CardPayment</a>...&nbsp;cardPayments)</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Splits the card amount into several card payments planned up front: each given payment
+ charges its fixed amount on its own card, in order, and one more card payment always follows
+ for the remainder.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#cardPayments(java.util.List)" class="member-name-link">cardPayments</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="CardPayment.html" title="class in com.bilt.pos.session.settlement">CardPayment</a>&gt;&nbsp;cardPayments)</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Replaces the planned card payments; see <a href="#cardPayments(com.bilt.pos.session.settlement.CardPayment...)"><code>cardPayments(CardPayment...)</code></a>.</div>
+</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#cashback(java.math.BigDecimal)" class="member-name-link">cashback</a><wbr>(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a>&nbsp;cashback)</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
@@ -188,6 +202,30 @@ loadScripts(document, 'script');</script>
 </section>
 </li>
 <li>
+<section class="detail" id="cardPayments(com.bilt.pos.session.settlement.CardPayment...)">
+<h3>cardPayments</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">cardPayments</span><wbr><span class="parameters">(<a href="CardPayment.html" title="class in com.bilt.pos.session.settlement">CardPayment</a>...&nbsp;cardPayments)</span></div>
+<div class="block">Splits the card amount into several card payments planned up front: each given payment
+ charges its fixed amount on its own card, in order, and one more card payment always follows
+ for the remainder. <code>cardPayments(CardPayment.of(new BigDecimal("20.00")))</code> charges $20
+ on the first card and the rest on the next.
+
+ <p>The card amount is known only when the card step starts, after rebates, points and stored
+ value. The planned amounts must then add up to less than it, or the card step fails before
+ any card is charged, with <a href="../SessionErrorCode.html#CARD_PAYMENTS_EXCEED_TOTAL"><code>SessionErrorCode.CARD_PAYMENTS_EXCEED_TOTAL</code></a>. Every card payment after
+ the first is sent as a nexo split payment. A split cannot carry cashback, and needs the SDK's
+ own loyalty steps (<a href="SettlementLoyalty.html#explicit()"><code>SettlementLoyalty.explicit()</code></a>, the default, or <a href="SettlementLoyalty.html#forbidden()"><code>SettlementLoyalty.forbidden()</code></a>): <a href="#build()"><code>build()</code></a> refuses it with cashback or with <a href="SettlementLoyalty.html#implicit()"><code>SettlementLoyalty.implicit()</code></a>. No card payments (the default) means one card payment for the
+ whole card amount.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="cardPayments(java.util.List)">
+<h3>cardPayments</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">cardPayments</span><wbr><span class="parameters">(<a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="CardPayment.html" title="class in com.bilt.pos.session.settlement">CardPayment</a>&gt;&nbsp;cardPayments)</span></div>
+<div class="block">Replaces the planned card payments; see <a href="#cardPayments(com.bilt.pos.session.settlement.CardPayment...)"><code>cardPayments(CardPayment...)</code></a>.</div>
+</section>
+</li>
+<li>
 <section class="detail" id="paymentProcessingDisplay(com.bilt.pos.display.DisplayPayload)">
 <h3>paymentProcessingDisplay</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.Builder.html" title="class in com.bilt.pos.session.settlement">SettlementOptions.Builder</a></span>&nbsp;<span class="element-name">paymentProcessingDisplay</span><wbr><span class="parameters">(<a href="../../display/DisplayPayload.html" title="class in com.bilt.pos.display">DisplayPayload</a>&nbsp;paymentProcessingDisplay)</span></div>
@@ -233,6 +271,16 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="build()">
 <h3>build</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementOptions.html" title="class in com.bilt.pos.session.settlement">SettlementOptions</a></span>&nbsp;<span class="element-name">build</span>()</div>
+<div class="block">Builds the options.</div>
+<dl class="notes">
+<dt>Throws:</dt>
+<dd><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/IllegalStateException.html" title="class or interface in java.lang" class="external-link">IllegalStateException</a></code> - when <code>cardPayments</code> are planned together with <code>cashback</code>, which rides on a single card authorization that a split doesn't have, or with
+     <a href="SettlementLoyalty.html#implicit()"><code>SettlementLoyalty.implicit()</code></a> loyalty. With implicit loyalty the terminal books
+     the whole sale's earn when card payment 1 is approved, before the sale is paid, and keeps
+     it if a later card payment fails and the sale is aborted; its hosted checkout can also
+     lower card payment 1 below its planned amount. Use explicit loyalty, whose award runs
+     once after every tender.</dd>
+</dl>
 </section>
 </li>
 </ul>

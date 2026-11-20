@@ -561,8 +561,12 @@ class TerminalSessionTest {
   @Test
   void anIdleEndTheSdkRefusesLeavesNoOperationBehind() throws Exception {
     String id = createWithMemberAndItem();
-    // the terminal authorises 89.50 of the 90.00 asked and has no REVERSAL scripted, so the
-    // unwind fails and the standing charge makes the SDK refuse a plain end()
+    // the terminal authorises 0.01 of whatever it is asked, so all
+    // SettlementFlow.MAX_AUTOMATIC_CARD_REQUESTS card requests come back partial and the card
+    // step fails; it has no REVERSAL scripted, so the unwind fails and the standing charges make
+    // the SDK refuse a plain end()
+    terminal.reply(
+        MessageCategoryType.PAYMENT, ScriptedTerminalClient.paymentOk("POI-PAY-1", "0.01"));
     String operationId = submit(id, SETTLE_WITH_TOTALS).path("id").asText();
     JsonNode waiting =
         client.awaitOperation(id, operationId, "awaitingReply", Duration.ofSeconds(10));

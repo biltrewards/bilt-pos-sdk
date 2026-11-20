@@ -93,8 +93,9 @@ loadScripts(document, 'script');</script>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">ExternalPayment</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">A payment collected and owned by the register rather than the terminal. Settlement accepts it
- only as a replacement for a failed final card tender, and its amount must exactly equal the
- outstanding balance.</div>
+ only as a replacement for a failed card tender (<code>SettlementRecovery.external</code>) or for the
+ rest of a partially approved one (<code>PartialApprovalDecision.external</code>), and its amount must
+ exactly equal the outstanding balance.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">

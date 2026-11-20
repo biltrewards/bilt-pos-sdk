@@ -41,6 +41,12 @@ public enum SessionErrorCode {
   /** The stored value card balance does not cover the requested amount. */
   STORED_VALUE_INSUFFICIENT,
 
+  /**
+   * The planned card payments ({@code SettlementOptions.cardPayments}) add up to the card amount or
+   * more, so no card is left for the remainder. Reported before any card is charged.
+   */
+  CARD_PAYMENTS_EXCEED_TOTAL,
+
   /** The operation is not valid in the session's current state. */
   INVALID_STATE,
 
