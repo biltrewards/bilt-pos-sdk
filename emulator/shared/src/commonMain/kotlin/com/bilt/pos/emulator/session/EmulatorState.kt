@@ -24,6 +24,58 @@ data class PaymentRecoveryPrompt(
     val choose: (PaymentRecoveryAction) -> Unit,
 )
 
+/**
+ * What the cashier can do about a card payment the terminal approved for less than it asked for.
+ * Mirrors `PartialApprovalDecision`.
+ */
+enum class PartialApprovalAction(val label: String) {
+    ANOTHER_CARD("Another card"),
+    ADD_TO_NEXT("Add to next card"),
+    CASH("Rest in cash"),
+    CANCEL_SALE("Cancel sale"),
+}
+
+/**
+ * The partial approval dialog: a card approved less than it was asked for and the sale waits for
+ * the cashier's decision. Amounts are plain decimal strings.
+ */
+data class PartialApprovalPrompt(
+    /** What the card approved. */
+    val approved: String,
+    /** What the card payment asked for. */
+    val requested: String,
+    /** What this card payment left unpaid. */
+    val shortfall: String,
+    /** Everything the card phase still owes: the shortfall plus the card payments still planned. */
+    val amountDue: String,
+    val actions: List<PartialApprovalAction>,
+    val choose: (PartialApprovalAction) -> Unit,
+) {
+    /** The dialog headline. */
+    val message: String
+        get() = "Card approved $$approved of $$requested, $$amountDue still due"
+
+    /** The one line under a button saying what choosing it does. */
+    fun describe(action: PartialApprovalAction): String =
+        when (action) {
+            PartialApprovalAction.ANOTHER_CARD ->
+                "Charge the $$shortfall shortfall on another card, then continue the sale."
+            PartialApprovalAction.ADD_TO_NEXT ->
+                "Add the $$shortfall shortfall to the next planned card payment."
+            PartialApprovalAction.CASH ->
+                "Record $$amountDue as cash and keep the card payments. Choose only after collecting it."
+            PartialApprovalAction.CANCEL_SALE -> "Reverse every card payment and stop the sale."
+        }
+
+    /** The button caption: the amount the choice puts on its tender, where it has one. */
+    fun caption(action: PartialApprovalAction): String =
+        when (action) {
+            PartialApprovalAction.ANOTHER_CARD -> "${action.label} ($$shortfall)"
+            PartialApprovalAction.CASH -> "${action.label} ($$amountDue)"
+            else -> action.label
+        }
+}
+
 enum class ConnectionPhase {
     DISCONNECTED,
     CONNECTING,
@@ -109,10 +161,60 @@ data class PaymentOutcome(
     val message: String,
     /**
      * The transaction's receipt as the terminal rendered it (customer copy, falling back to the
-     * merchant copy); null when the terminal returned none.
+     * merchant copy); null when the terminal returned none. A sale with several card payments
+     * leaves it null and lists every card payment's receipt in [receipts] instead.
      */
     val receipt: String? = null,
+    /** One receipt per card payment of a sale that made several, in payment order. */
+    val receipts: List<LabeledReceipt> = emptyList(),
 )
+
+/** A receipt as the terminal rendered it, captioned with the payment it belongs to. */
+data class LabeledReceipt(val label: String, val text: String)
+
+/**
+ * One card payment of a sale, for the outcome dialog and the Refund tab. [label] numbers it in
+ * payment order ("Card 1").
+ */
+data class CardPaymentUi(
+    val label: String,
+    /** Amount the card authorized, as a plain decimal string. */
+    val amount: String,
+    /** The POI reference a refund or void of this payment presents; null for a payment without. */
+    val poiTransactionId: String? = null,
+    val brand: String? = null,
+    /** Last digits of the card, from the terminal's masked number; null when it sent none. */
+    val lastDigits: String? = null,
+    val approvalCode: String? = null,
+    /** The card approved less than it was asked for. */
+    val partial: Boolean = false,
+    /** A full refund or void already returned this payment. */
+    val refunded: Boolean = false,
+    /**
+     * Item returns already drew everything this payment collected: nothing is left to give back.
+     */
+    val depleted: Boolean = false,
+    /** What this payment can still return, when known. */
+    val remainingAmount: String? = null,
+) {
+    /** Whether a return can still go back to this payment. */
+    val returnable: Boolean
+        get() = !refunded && !depleted
+
+    /** One line: amount, brand, last digits, approval code and the "partial" tag. */
+    val line: String
+        get() =
+            listOfNotNull(
+                    "$label $$amount",
+                    listOfNotNull(brand, lastDigits?.let { "····$it" }).joinToString(" ").ifBlank {
+                        null
+                    },
+                    approvalCode?.let { "approval $it" },
+                    "partial".takeIf { partial },
+                    "refunded".takeIf { refunded || depleted },
+                )
+                .joinToString(" · ")
+}
 
 /**
  * Payment configuration. The SDK-side loyalty steps run only for a member attached to the session —
@@ -351,6 +453,8 @@ data class StoredSaleUi(
      */
     val fullRefundAvailable: Boolean = !voided && !fullyRefunded,
     val externalPaymentAmount: String? = null,
+    /** Every card payment of the sale, in payment order. */
+    val cardPayments: List<CardPaymentUi> = emptyList(),
 ) {
     /**
      * A voided or fully refunded sale cannot be refunded again (mirrors `StoredSale.refundable`).
@@ -418,6 +522,8 @@ data class EmulatorState(
      */
     val paymentOutcome: PaymentOutcome? = null,
     val paymentRecovery: PaymentRecoveryPrompt? = null,
+    /** A card approved less than it was asked for; the settlement waits for the cashier. */
+    val partialApproval: PartialApprovalPrompt? = null,
     /**
      * Last terminal card read that carried a full card number; the gift card field adopts each new
      * read.
@@ -549,11 +655,23 @@ interface EmulatorController {
      * absorbed by it; a refund-dominant basket refunds only the difference to the original tenders.
      * Without [net], returns are refunded in full to their original tenders and the sale lines are
      * charged in full.
+     *
+     * [cardPayments] splits the card amount: the amounts of the card payments planned up front
+     * (plain decimal strings, each positive; the SDK's `SettlementOptions.cardPayments`). One more
+     * card payment for the remainder always follows them; empty is one card payment for the whole
+     * amount; the SDK refuses a plan together with implicit loyalty, so [settle] then logs and
+     * starts nothing. With [partialApprovals] the settlement waits for the cashier
+     * ([EmulatorState.partialApproval]) when a card approves less than it was asked for. With it
+     * off, no handler is registered, so the SDK charges the shortfall on another card by itself, at
+     * most 3 card requests in all, and a short approval after that fails the step into the recovery
+     * dialog.
      */
     fun settle(
         loyalty: LoyaltyOptions,
         storedValue: StoredValueOptions? = null,
         net: Boolean = true,
+        cardPayments: List<String> = emptyList(),
+        partialApprovals: Boolean = true,
     )
 
     /**
@@ -596,8 +714,12 @@ interface EmulatorController {
      * items — settlement then charges the sale lines and restores each return's value to its
      * original sale's outstanding tender via a refund allocation. Rung returns are held until the
      * settlement succeeds (recorded against their sales then) or the checkout ends.
+     *
+     * A sale with several card payments needs to know which one the return goes back to:
+     * [cardPoiTransactionId] names it (`CardPaymentUi.poiTransactionId`); null picks the first card
+     * payment not yet refunded.
      */
-    fun addReturnToBasket(saleId: String, skus: Set<String>)
+    fun addReturnToBasket(saleId: String, skus: Set<String>, cardPoiTransactionId: String? = null)
 
     /**
      * Discard every line in the active checkout basket, including pending gift-card fulfillments

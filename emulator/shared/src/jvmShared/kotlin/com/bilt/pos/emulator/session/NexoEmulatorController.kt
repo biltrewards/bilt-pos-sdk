@@ -11,6 +11,7 @@ import com.bilt.pos.emulator.store.SaleItem
 import com.bilt.pos.emulator.store.SaleRecord
 import com.bilt.pos.emulator.store.SaleStore
 import com.bilt.pos.emulator.store.StoredSale
+import com.bilt.pos.emulator.store.TransactionLeg
 import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.nexo.client.BiltNexoTerminalClient
 import com.bilt.pos.nexo.client.NexoMessageListener
@@ -23,6 +24,8 @@ import com.bilt.pos.session.SessionError
 import com.bilt.pos.session.SessionErrorCode
 import com.bilt.pos.session.SessionException
 import com.bilt.pos.session.SessionResult
+import com.bilt.pos.session.TenderMovement
+import com.bilt.pos.session.TenderType
 import com.bilt.pos.session.Terminal
 import com.bilt.pos.session.TerminalShopperSession
 import com.bilt.pos.session.basket.Basket
@@ -39,11 +42,17 @@ import com.bilt.pos.session.identity.Member
 import com.bilt.pos.session.identity.Reward
 import com.bilt.pos.session.identity.RewardType
 import com.bilt.pos.session.identity.VasData
+import com.bilt.pos.session.payment.CardPaymentResult
+import com.bilt.pos.session.settlement.CardPayment
+import com.bilt.pos.session.settlement.CardPaymentRecord
 import com.bilt.pos.session.settlement.ExternalPayment
 import com.bilt.pos.session.settlement.OriginalSaleRecord
+import com.bilt.pos.session.settlement.PartialApprovalDecision
+import com.bilt.pos.session.settlement.PartialCardApproval
 import com.bilt.pos.session.settlement.RefundAllocation
 import com.bilt.pos.session.settlement.SettlementFailure
 import com.bilt.pos.session.settlement.SettlementLoyalty
+import com.bilt.pos.session.settlement.SettlementMovement
 import com.bilt.pos.session.settlement.SettlementOptions
 import com.bilt.pos.session.settlement.SettlementRecovery
 import com.bilt.pos.session.settlement.SettlementResult
@@ -151,6 +160,13 @@ class NexoEmulatorController(
         val saleId: String,
         val original: OriginalSaleRecord,
         val legType: LegType,
+        /**
+         * The card payment a [LegType.CARD] return goes back to — a split sale has several, and the
+         * allocation must name one.
+         */
+        val leg: TransactionLeg,
+        /** What the log calls the tender: "card", "card 2" of a split sale, or "gift card". */
+        val legLabel: String,
         val items: List<SaleItem>,
         val amount: BigDecimal,
         /**
@@ -171,6 +187,8 @@ class NexoEmulatorController(
         val saleId: String,
         val original: OriginalSaleRecord,
         val legType: LegType,
+        val leg: TransactionLeg,
+        val legLabel: String,
         val items: List<SaleItem>,
         val total: BigDecimal,
         val allocated: BigDecimal,
@@ -244,6 +262,7 @@ class NexoEmulatorController(
          */
         val operationClaimed = AtomicBoolean(false)
         var paymentRecovery: CompletableFuture<SettlementRecovery>? = null
+        var partialApproval: CompletableFuture<PartialApprovalDecision>? = null
     }
 
     /**
@@ -654,7 +673,11 @@ class NexoEmulatorController(
                     connection = null
                     it?.paymentRecovery?.complete(SettlementRecovery.abort())
                     it?.paymentRecovery = null
-                    _state.update { state -> state.copy(paymentRecovery = null) }
+                    it?.partialApproval?.complete(PartialApprovalDecision.abort())
+                    it?.partialApproval = null
+                    _state.update { state ->
+                        state.copy(paymentRecovery = null, partialApproval = null)
+                    }
                 }
             }
         if (conn != null) {
@@ -1467,7 +1490,31 @@ class NexoEmulatorController(
             .execute()
     }
 
-    override fun settle(loyalty: LoyaltyOptions, storedValue: StoredValueOptions?, net: Boolean) {
+    override fun settle(
+        loyalty: LoyaltyOptions,
+        storedValue: StoredValueOptions?,
+        net: Boolean,
+        cardPayments: List<String>,
+        partialApprovals: Boolean,
+    ) {
+        // checked before the operation claim: a refused plan must not leave it held
+        val plannedCards =
+            try {
+                cardPayments.mapIndexed { index, amount ->
+                    CardPayment.of(requireMoney(amount, "Card ${index + 1} amount", false))
+                }
+            } catch (e: IllegalArgumentException) {
+                log("Settlement not started: ${e.message}")
+                return
+            }
+        if (plannedCards.isNotEmpty() && loyalty.implicit) {
+            // the SDK's own refusal (SettlementOptions.build), caught here so nothing is claimed
+            log(
+                "Settlement not started: planned card payments cannot use implicit loyalty — " +
+                    "the terminal would book the whole sale's earn at card payment 1"
+            )
+            return
+        }
         val conn = connection
         val session = conn?.session
         if (conn == null || session == null) {
@@ -1504,7 +1551,9 @@ class NexoEmulatorController(
         var unallocated = required
         val returns =
             conn.pendingReturns
-                .groupBy { it.saleId }
+                // one allocation per sale and card payment: returns from one sale may go back to
+                // different cards of a split sale, and each keeps the cashier's pick and capacity
+                .groupBy { it.saleId to it.leg.poiTransactionId }
                 .values
                 .map { group ->
                     val total =
@@ -1522,6 +1571,8 @@ class NexoEmulatorController(
                     PlannedReturn(
                         saleId = group.first().saleId,
                         legType = group.first().legType,
+                        leg = group.first().leg,
+                        legLabel = group.first().legLabel,
                         original = group.first().original,
                         items = group.flatMap { it.items },
                         total = total,
@@ -1533,11 +1584,18 @@ class NexoEmulatorController(
             SettlementOptions.builder()
                 .settlementType(settlementType)
                 .loyalty(loyalty.toSettlementLoyalty())
+                .cardPayments(plannedCards)
         returns.forEach { planned ->
             if (planned.allocated.signum() > 0) {
                 optionsBuilder.addRefund(
                     if (planned.legType == LegType.CARD) {
-                        RefundAllocation.card(planned.allocated, planned.original)
+                        // by the payment's own reference: the record-based overload refuses a
+                        // sale with several card payments
+                        RefundAllocation.card(
+                            planned.allocated,
+                            planned.leg.poiTransactionId,
+                            parseInstant(planned.leg.poiTimestamp),
+                        )
                     } else {
                         RefundAllocation.storedValue(planned.allocated, planned.original)
                     }
@@ -1560,6 +1618,12 @@ class NexoEmulatorController(
                     "rebates ${onOff(loyalty.rebates)}, " +
                         "redemption ${onOff(loyalty.redemption)}, award ${onOff(loyalty.award)}") +
                 (card?.let { ", gift card ${it.storedValueId ?: "(swipe on terminal)"}" } ?: "") +
+                (if (plannedCards.isEmpty()) ""
+                else
+                    ", split card: " +
+                        plannedCards.joinToString { "$${it.amount.toPlainString()}" } +
+                        " then the remainder") +
+                ", partial approvals ${onOff(partialApprovals)}" +
                 (if (giftCards.isEmpty()) ""
                 else ", ${giftCards.size} gift card purchase(s) to load") +
                 (if (returns.isEmpty()) ""
@@ -1567,9 +1631,41 @@ class NexoEmulatorController(
                     ", ${returns.size} prior sale(s) returned" +
                         " ($${required.toPlainString()} to refund after netting)")
         )
-        session
-            .settle(options)
-            .callbackOn(Executor { it.run() })
+        // a Cancel sale decision reverses everything and fails the flow without reaching onError
+        // (the register chose it), so onComplete is where the cashier hears about it
+        var saleCancelled = false
+        var abandoned = false
+        // numbers the card payments in the log, in the order they commit
+        var cardPaymentsCharged = 0
+        // charge-side movements reported and not reversed: after an abort, what is left stands
+        val standing = StandingMovements()
+        val flow = session.settle(options).callbackOn(Executor { it.run() })
+        if (partialApprovals) {
+            flow.onPartialCardApproval { partial ->
+                val decision = awaitPartialApproval(conn, partial)
+                if (decision.action == PartialApprovalDecision.Action.ABORT) saleCancelled = true
+                decision
+            }
+        }
+        flow
+            .onMovement { movement ->
+                if (movement.isReversal) standing.reversed(movement)
+                else standing.committed(movement)
+            }
+            .onCardChargeReversed { reversal ->
+                log(
+                    "Card payment reversed: $${reversal.amount?.toPlainString()} " +
+                        "(reversal txn ${reversal.poiTransactionId}, " +
+                        "reverses txn ${reversal.reversedMovement?.poiTransactionId})"
+                )
+            }
+            .onCardCharged { movement ->
+                cardPaymentsCharged++
+                log(
+                    "Card payment $cardPaymentsCharged charged: $${movement.amount?.toPlainString()}" +
+                        " (txn ${movement.poiTransactionId})"
+                )
+            }
             .onCardRefunded { movement ->
                 log(
                     "Card refund committed: $${movement.amount?.toPlainString()}" +
@@ -1632,6 +1728,7 @@ class NexoEmulatorController(
             }
             .onAbandoned { record ->
                 attempt = PaymentAttempt.FAILED
+                abandoned = true
                 val message =
                     "No rollback was performed. Reconcile these movements manually before settling again.\n\n" +
                         paymentFailureDetails(record.failure)
@@ -1662,7 +1759,14 @@ class NexoEmulatorController(
             }
             .onComplete {
                 if (attempt != PaymentAttempt.SUCCEEDED && connection === conn) {
-                    if (attempt == PaymentAttempt.RUNNING) {
+                    // the unwind has run by now: whatever its reversal notices did not take off
+                    // the list is still charged
+                    val stillStanding = if (abandoned) emptyList() else standing.snapshot()
+                    if (saleCancelled) {
+                        publishSaleCancelled(stillStanding)
+                    } else if (stillStanding.isNotEmpty()) {
+                        warnStanding(stillStanding, attempt == PaymentAttempt.RUNNING)
+                    } else if (attempt == PaymentAttempt.RUNNING) {
                         log(
                             "Settlement aborted; committed steps reversed — " +
                                 "the basket is intact, Settle again to retry"
@@ -1679,6 +1783,54 @@ class NexoEmulatorController(
                 finishPaymentAttempt(conn)
             }
             .execute()
+    }
+
+    /**
+     * What the cashier sees after Cancel sale. The SDK reverses every committed step, but a
+     * register-chosen abort bypasses `onError`, so the outcome comes from the reversal notices: a
+     * movement they did not take off [standing] is still charged, and the popup says so instead of
+     * claiming everything was reversed.
+     */
+    private fun publishSaleCancelled(standing: List<SettlementMovement>) {
+        val message =
+            if (standing.isEmpty()) {
+                "Every card payment was reversed and the sale stopped. The basket is intact."
+            } else {
+                "WARNING: the sale was cancelled but these charges could not be reversed and may " +
+                    "still stand:\n" +
+                    standing.joinToString("\n") { "• ${it.describeStanding()}" } +
+                    "\nReconcile them manually before settling again."
+            }
+        log("Sale cancelled by the cashier: ${message.lineSequence().first()}")
+        if (standing.isNotEmpty()) {
+            standing.forEach { log("Still standing: ${it.describeStanding()}") }
+        }
+        _state.update { it.copy(paymentOutcome = PaymentOutcome(false, "Sale cancelled", message)) }
+    }
+
+    /**
+     * An aborted or failed settlement whose unwind left charges standing: logged, and added to the
+     * failure popup the recovery dialog's choice already published ([aborted] says no popup exists
+     * yet, as for an abort the register asked for).
+     */
+    private fun warnStanding(standing: List<SettlementMovement>, aborted: Boolean) {
+        val warning =
+            "WARNING: the rollback was incomplete; these charges may still stand:\n" +
+                standing.joinToString("\n") { "• ${it.describeStanding()}" } +
+                "\nReconcile them manually before settling again."
+        log(warning.replace("\n", " "))
+        _state.update { state ->
+            val outcome = state.paymentOutcome
+            state.copy(
+                paymentOutcome =
+                    when {
+                        outcome != null && !outcome.success ->
+                            outcome.copy(message = outcome.message + "\n\n" + warning)
+                        aborted -> PaymentOutcome(false, "Settlement aborted", warning)
+                        else -> outcome
+                    }
+            )
+        }
     }
 
     /**
@@ -1724,7 +1876,7 @@ class NexoEmulatorController(
         failure: SettlementFailure,
     ): SettlementRecovery {
         if (failure.step == null) return SettlementRecovery.abort()
-        val actions = buildList {
+        val offered = buildList {
             add(PaymentRecoveryAction.RETRY)
             if (!failure.isIndeterminate) {
                 if (
@@ -1744,6 +1896,16 @@ class NexoEmulatorController(
             add(PaymentRecoveryAction.ABORT)
             add(PaymentRecoveryAction.ABANDON)
         }
+        // a plan that reaches the card total fails before any card is charged: the SDK accepts
+        // only abort and abandon there, and a retry would fail the same way
+        val actions =
+            if (failure.code == SessionErrorCode.CARD_PAYMENTS_EXCEED_TOTAL) {
+                offered.filter {
+                    it == PaymentRecoveryAction.ABORT || it == PaymentRecoveryAction.ABANDON
+                }
+            } else {
+                offered
+            }
         val decision = CompletableFuture<SettlementRecovery>()
         val prompt =
             PaymentRecoveryPrompt(paymentFailureDetails(failure), actions) { action ->
@@ -1783,6 +1945,80 @@ class NexoEmulatorController(
                 if (conn.paymentRecovery === decision) {
                     conn.paymentRecovery = null
                     if (connection === conn) _state.update { it.copy(paymentRecovery = null) }
+                }
+            }
+        }
+    }
+
+    /**
+     * Shows the partial approval dialog and blocks the payment thread until the cashier chooses,
+     * like [awaitPaymentRecovery]. The SDK refuses a decision it cannot carry out, so the dialog
+     * offers only the ones it can: Add to next card needs a planned card payment left after this
+     * one, which is whatever the card phase still owes beyond this payment's own shortfall.
+     */
+    private fun awaitPartialApproval(
+        conn: Connection,
+        partial: PartialCardApproval,
+    ): PartialApprovalDecision {
+        val nextCardLeft = partial.amountDue.compareTo(partial.shortfall) > 0
+        val actions = buildList {
+            add(PartialApprovalAction.ANOTHER_CARD)
+            if (nextCardLeft) add(PartialApprovalAction.ADD_TO_NEXT)
+            add(PartialApprovalAction.CASH)
+            add(PartialApprovalAction.CANCEL_SALE)
+        }
+        log(
+            "Partial approval: card approved $${partial.approved.toPlainString()} of " +
+                "$${partial.requested.toPlainString()}, " +
+                "$${partial.amountDue.toPlainString()} still due"
+        )
+        val decision = CompletableFuture<PartialApprovalDecision>()
+        lateinit var prompt: PartialApprovalPrompt
+        prompt =
+            PartialApprovalPrompt(
+                approved = partial.approved.toPlainString(),
+                requested = partial.requested.toPlainString(),
+                shortfall = partial.shortfall.toPlainString(),
+                amountDue = partial.amountDue.toPlainString(),
+                actions = actions,
+            ) { action ->
+                synchronized(connectionLock) {
+                    if (
+                        connection === conn &&
+                            conn.partialApproval === decision &&
+                            action in actions
+                    ) {
+                        conn.partialApproval = null
+                        _state.update { it.copy(partialApproval = null) }
+                        log("Cashier chose ${prompt.caption(action)} for the partial approval")
+                        decision.complete(
+                            when (action) {
+                                PartialApprovalAction.ANOTHER_CARD ->
+                                    PartialApprovalDecision.anotherCard()
+                                PartialApprovalAction.ADD_TO_NEXT ->
+                                    PartialApprovalDecision.addToNext()
+                                PartialApprovalAction.CASH ->
+                                    PartialApprovalDecision.external(
+                                        ExternalPayment.cash(partial.amountDue)
+                                    )
+                                PartialApprovalAction.CANCEL_SALE -> PartialApprovalDecision.abort()
+                            }
+                        )
+                    }
+                }
+            }
+        synchronized(connectionLock) {
+            if (connection !== conn) return PartialApprovalDecision.abort()
+            conn.partialApproval = decision
+            _state.update { it.copy(partialApproval = prompt) }
+        }
+        return try {
+            decision.get()
+        } finally {
+            synchronized(connectionLock) {
+                if (conn.partialApproval === decision) {
+                    conn.partialApproval = null
+                    if (connection === conn) _state.update { it.copy(partialApproval = null) }
                 }
             }
         }
@@ -1959,7 +2195,11 @@ class NexoEmulatorController(
         }
     }
 
-    override fun addReturnToBasket(saleId: String, skus: Set<String>) {
+    override fun addReturnToBasket(
+        saleId: String,
+        skus: Set<String>,
+        cardPoiTransactionId: String?,
+    ) {
         val conn = connection
         val session = conn?.session
         if (conn == null || session == null) {
@@ -2020,10 +2260,32 @@ class NexoEmulatorController(
                 }
                 // Returns restore to the primary OUTSTANDING tender: the card
                 // leg unless an earlier refund already returned it, else the
-                // stored value leg
-                val outstanding = stored.moneyLegs.filterNot { stored.legRefunded(it.type) }
+                // stored value leg. A sale with several card payments needs the
+                // cashier's pick — each payment is its own refund target.
+                val outstanding = stored.moneyLegs.filterNot { stored.legRefunded(it) }
                 val leg =
-                    outstanding.firstOrNull { it.type == LegType.CARD } ?: outstanding.firstOrNull()
+                    if (cardPoiTransactionId != null) {
+                        val picked = outstanding.firstOrNull {
+                            it.type == LegType.CARD && it.poiTransactionId == cardPoiTransactionId
+                        }
+                        if (picked == null) {
+                            log(
+                                "The chosen card payment ($cardPoiTransactionId) is not on this " +
+                                    "sale or was already refunded in full"
+                            )
+                            return@launch
+                        }
+                        picked
+                    } else {
+                        // a card with nothing left to give back would send the whole return to the
+                        // register while another card still has room
+                        outstanding.firstOrNull {
+                            it.type == LegType.CARD &&
+                                stored.availableLegAmount(conn, it)?.signum() != 0
+                        }
+                            ?: outstanding.firstOrNull { it.type == LegType.CARD }
+                            ?: outstanding.firstOrNull()
+                    }
                 if (leg == null) {
                     // unreachable while refundable, kept against future drift
                     log("Every tender leg was already refunded in full — nothing left to draw from")
@@ -2090,6 +2352,8 @@ class NexoEmulatorController(
                                 saleId = sale.id,
                                 original = originalSaleRecord(sale, stored),
                                 legType = leg.type,
+                                leg = leg,
+                                legLabel = legLabel(sale, leg),
                                 items = items,
                                 amount =
                                     items
@@ -2097,7 +2361,7 @@ class NexoEmulatorController(
                                             acc.add(refundValue(item, item.quantity))
                                         }
                                         .setScale(2, RoundingMode.HALF_UP),
-                                legCapacity = stored.remainingLegAmount(leg.type),
+                                legCapacity = stored.availableLegAmount(conn, leg),
                             )
                     publishBasket(session.basket().snapshot())
                     // the sales projection nets rung returns off the remaining
@@ -2106,7 +2370,7 @@ class NexoEmulatorController(
                     log(
                         "Return rung in: " +
                             items.joinToString { "${it.quantity}× ${it.description}" } +
-                            " — restores to the ${legLabel(leg.type)} on settlement"
+                            " — restores to the ${legLabel(sale, leg)} on settlement"
                     )
                 } catch (e: Exception) {
                     // e.g. the basket sealed against mutation by session state
@@ -2122,6 +2386,25 @@ class NexoEmulatorController(
             }
         }
     }
+
+    /**
+     * What returns already rung into the active basket will draw from the tender payment [leg] of
+     * sale [saleId] once they settle.
+     */
+    private fun pendingDraw(conn: Connection?, saleId: String, leg: TransactionLeg): BigDecimal =
+        conn
+            ?.pendingReturns
+            .orEmpty()
+            .filter { it.saleId == saleId && it.leg.poiTransactionId == leg.poiTransactionId }
+            .fold(BigDecimal.ZERO) { acc, pending -> acc.add(pending.amount) }
+
+    /**
+     * What [leg] can still return: [StoredSale.remainingLegAmount] less what the returns waiting in
+     * the basket will take, the way item quantities already count them. Null when the leg's
+     * collected amount is unknown.
+     */
+    private fun StoredSale.availableLegAmount(conn: Connection?, leg: TransactionLeg): BigDecimal? =
+        remainingLegAmount(leg)?.subtract(pendingDraw(conn, sale.id, leg))?.max(BigDecimal.ZERO)
 
     /**
      * Quantity of [sku] from sale [saleId] already rung into the active basket as returns but not
@@ -2146,6 +2429,9 @@ class NexoEmulatorController(
         if (returns.isEmpty()) {
             return emptyList()
         }
+        // settled: they no longer wait in the basket, so the sales projection each recorded refund
+        // refreshes must not count their draw twice (once as pending, once as refunded)
+        conn.pendingReturns = emptyList()
         // refund movements commit in allocation order — one per planned
         // return with money actually flowing back; fully netted returns
         // have none
@@ -2163,7 +2449,7 @@ class NexoEmulatorController(
             val netted = planned.total.subtract(planned.allocated).subtract(planned.external)
             parts +=
                 if (planned.allocated == planned.total) {
-                    "returned $${planned.total.toPlainString()} to the ${legLabel(planned.legType)}"
+                    "returned $${planned.total.toPlainString()} to the ${planned.legLabel}"
                 } else if (
                     planned.total.signum() > 0 &&
                         planned.allocated.signum() == 0 &&
@@ -2173,14 +2459,12 @@ class NexoEmulatorController(
                 } else {
                     val details = buildList {
                         if (refunded) {
-                            add(
-                                "$${planned.allocated.toPlainString()} to the ${legLabel(planned.legType)}"
-                            )
+                            add("$${planned.allocated.toPlainString()} to the ${planned.legLabel}")
                         }
                         if (planned.external.signum() > 0) {
                             add(
                                 "$${planned.external.toPlainString()} register-paid — the " +
-                                    "${legLabel(planned.legType)} collected less than the shelf value"
+                                    "${planned.legLabel} collected less than the shelf value"
                             )
                         }
                         if (netted.signum() > 0) {
@@ -2204,12 +2488,12 @@ class NexoEmulatorController(
                         // netted return touched none — and only the allocated
                         // portion drew on it, not the netted/register-paid shares
                         leg = planned.legType.takeIf { refunded },
+                        legPoiTransactionId = planned.leg.poiTransactionId.takeIf { refunded },
                         tenderAmount = planned.allocated.toPlainString().takeIf { refunded },
                         items = planned.items.map { RefundedItem(it.sku, it.quantity) },
                     ),
                 ) && recorded
         }
-        conn.pendingReturns = emptyList()
         if (!recorded) {
             parts +=
                 "WARNING: a return could NOT be recorded — its sale " +
@@ -2302,12 +2586,19 @@ class NexoEmulatorController(
                             awardReversed = sale.leg(LegType.AWARD) != null,
                         ),
                     )
+                // each tender payment the void reversed has its own reference and receipts; with
+                // more than one, the popup lists every one instead of the first leg's alone
+                val legs = result.cardReversals + listOfNotNull(result.storedValueReversal)
+                val perLeg = legs.size > 1
                 val parts = buildList {
                     // the terminal does not always echo the reversed amount
                     add(
                         (if (hasCash) "Terminal movements reversed" else "Refunded") +
                             (result.reversedAmount?.let { " $${it.toPlainString()}" } ?: "")
                     )
+                    if (perLeg) {
+                        legs.forEach { add("${reversalLabel(sale, it)} reversed${it.line()}") }
+                    }
                     if (hasCash) {
                         add(
                             "Return ${sale.currency} ${sale.externalPaymentAmount} cash manually; the terminal did not reimburse it."
@@ -2323,8 +2614,22 @@ class NexoEmulatorController(
                     conn,
                     parts,
                     recorded,
-                    receiptText(result.customerReceipt, result.merchantReceipt),
+                    if (perLeg) null
+                    else receiptText(result.customerReceipt, result.merchantReceipt),
                     title = if (hasCash) "Terminal refund complete" else "Refund complete",
+                    receipts =
+                        if (perLeg) {
+                            legs.mapNotNull { leg ->
+                                receiptText(leg.customerReceipt, leg.merchantReceipt)?.let {
+                                    LabeledReceipt(
+                                        "${reversalLabel(sale, leg)} reversal receipt",
+                                        it,
+                                    )
+                                }
+                            }
+                        } else {
+                            emptyList()
+                        },
                 )
             }
         }
@@ -2414,12 +2719,19 @@ class NexoEmulatorController(
      */
     private fun originalSaleRecord(sale: SaleRecord, stored: StoredSale): OriginalSaleRecord {
         val builder = OriginalSaleRecord.builder()
-        sale
-            .leg(LegType.CARD)
-            ?.takeUnless { stored.legRefunded(LegType.CARD) }
-            ?.let {
-                builder.cardPoiTransactionId(it.poiTransactionId)
-                parseInstant(it.poiTimestamp)?.let(builder::cardPoiTransactionTimestamp)
+        // every card payment still standing: a split sale's void reverses them all
+        sale.cardLegs
+            .filterNot { stored.legRefunded(it) }
+            .forEach {
+                builder.addCardPayment(
+                    CardPaymentRecord.builder()
+                        .poiTransactionId(it.poiTransactionId)
+                        .apply {
+                            parseInstant(it.poiTimestamp)?.let(::poiTransactionTimestamp)
+                            it.amount?.toBigDecimalOrNull()?.let(::amount)
+                        }
+                        .build()
+                )
             }
         sale
             .leg(LegType.STORED_VALUE)
@@ -2487,36 +2799,51 @@ class NexoEmulatorController(
                         it.poiTransactionId !in stored.reversedGiftCardLoadIds
                 }
                 .map { it.poiTransactionId }
-        val committedCard =
-            sale
-                .leg(LegType.CARD)
-                ?.takeUnless { stored.legRefunded(LegType.CARD) }
-                ?.takeIf { card ->
+        // every card payment this attempt reversed — a split sale reverses them newest first,
+        // so a failure partway leaves the older ones standing
+        val reversedCards =
+            sale.cardLegs
+                .filterNot { stored.legRefunded(it) }
+                .filter { card ->
                     reversedMovements.any {
                         it.step == ReversalStep.CARD && it.poiTransactionId == card.poiTransactionId
                     }
                 }
-        if (reversedLoads.isEmpty() && committedCard == null) {
+        if (reversedLoads.isEmpty() && reversedCards.isEmpty()) {
             return true
         }
-        val recorded =
-            recordRefund(
-                sale.id,
-                RefundRecord(
-                    amount = committedCard?.amount,
-                    recordedAt = Instant.now().toString(),
-                    full = committedCard != null,
-                    leg = committedCard?.type,
-                    // a void reverses the leg itself: the tender returned exactly
-                    // what it collected
-                    tenderAmount = committedCard?.amount,
-                    reversedGiftCardLoadIds = reversedLoads,
-                    reversalProgress = true,
-                ),
-            )
+        // one record per reversed payment, each naming it, so the next retry skips exactly those;
+        // the reversed loads ride on the first, or get a record of their own without a card
+        val records =
+            reversedCards
+                .mapIndexed { index, card ->
+                    RefundRecord(
+                        amount = card.amount,
+                        recordedAt = Instant.now().toString(),
+                        full = true,
+                        leg = card.type,
+                        legPoiTransactionId = card.poiTransactionId,
+                        // a void reverses the leg itself: the tender returned exactly
+                        // what it collected
+                        tenderAmount = card.amount,
+                        reversedGiftCardLoadIds = if (index == 0) reversedLoads else emptyList(),
+                        reversalProgress = true,
+                    )
+                }
+                .ifEmpty {
+                    listOf(
+                        RefundRecord(
+                            recordedAt = Instant.now().toString(),
+                            reversedGiftCardLoadIds = reversedLoads,
+                            reversalProgress = true,
+                        )
+                    )
+                }
+        val recorded = records.fold(true) { all, record -> recordRefund(sale.id, record) && all }
         val movements = buildList {
             if (reversedLoads.isNotEmpty()) add("${reversedLoads.size} gift card load(s)")
-            if (committedCard != null) add("the ${legLabel(committedCard.type)} leg")
+            if (reversedCards.size == 1) add("the card leg")
+            if (reversedCards.size > 1) add("${reversedCards.size} card legs")
         }
             .joinToString(" and ")
         log(
@@ -2581,6 +2908,7 @@ class NexoEmulatorController(
         recorded: Boolean,
         receipt: String?,
         title: String,
+        receipts: List<LabeledReceipt> = emptyList(),
     ) {
         val all =
             if (recorded) parts
@@ -2599,14 +2927,39 @@ class NexoEmulatorController(
                             title = title,
                             message = all.joinToString("\n"),
                             receipt = receipt,
+                            receipts = receipts,
                         )
                 )
             }
         }
     }
 
+    /** "Card 2" for the card payment of a split sale the void reversed, "Gift card", or "Card". */
+    private fun reversalLabel(sale: SaleRecord, movement: TenderMovement): String =
+        when {
+            movement.tenderType == TenderType.STORED_VALUE -> "Gift card"
+            sale.cardLegs.size > 1 ->
+                "Card ${sale.cardLegs.indexOfFirst { it.poiTransactionId == movement.originalPoiTransactionId } + 1}"
+            else -> "Card"
+        }
+
+    /** The amount and terminal reference of a reversed tender payment, for a log or popup line. */
+    private fun TenderMovement.line(): String =
+        (amount?.let { " $${it.toPlainString()}" } ?: "") +
+            " (txn ${poiTransactionId ?: serviceId})"
+
     private fun legLabel(type: LegType): String =
         if (type == LegType.STORED_VALUE) "gift card" else "card"
+
+    /** [legLabel] that numbers the card payments of a split sale: "card 2". */
+    private fun legLabel(sale: SaleRecord, leg: TransactionLeg): String {
+        val cards = sale.cardLegs
+        return if (leg.type == LegType.CARD && cards.size > 1) {
+            "card ${cards.indexOfFirst { it.poiTransactionId == leg.poiTransactionId } + 1}"
+        } else {
+            legLabel(leg.type)
+        }
+    }
 
     /**
      * The popup's receipt block: the customer copy when the terminal returned one, else the
@@ -2652,6 +3005,10 @@ class NexoEmulatorController(
         synchronized(connectionLock) {
             _state.value.paymentRecovery?.let {
                 it.choose(PaymentRecoveryAction.ABORT)
+                return
+            }
+            _state.value.partialApproval?.let {
+                it.choose(PartialApprovalAction.CANCEL_SALE)
                 return
             }
         }
@@ -2743,7 +3100,14 @@ class NexoEmulatorController(
                     "cash $${result.externalPaymentAmount.toPlainString()} (register-managed; refund manually)"
                 )
             }
-            if (result.cardAmountCharged.signum() > 0) {
+            if (result.cardPayments.size > 1) {
+                add(
+                    "${result.cardPayments.size} cards " +
+                        result.cardPayments.joinToString(" + ") {
+                            "$${it.amount?.toPlainString()}"
+                        }
+                )
+            } else if (result.cardAmountCharged.signum() > 0) {
                 add(
                     "card $${result.cardAmountCharged.toPlainString()}" +
                         (result.paymentBrand?.let { " ($it)" } ?: "")
@@ -2773,6 +3137,12 @@ class NexoEmulatorController(
         val popup = buildList {
             add("Settled $${result.authorizedAmount.toPlainString()}")
             addAll(parts)
+            // one line per card payment: amount, brand, last digits, approval code, partial tag
+            if (result.cardPayments.size > 1) {
+                result.cardPayments.forEachIndexed { index, payment ->
+                    add(payment.toUi(index).line)
+                }
+            }
             result.promotionMessages.forEach { add(it) }
             result.warnings.forEach { add("Warning: $it") }
         }
@@ -2785,14 +3155,48 @@ class NexoEmulatorController(
                         success = true,
                         title = "Settlement complete",
                         message = popup,
-                        receipt = receiptText(result.customerReceipt, result.merchantReceipt),
+                        receipt =
+                            if (result.cardPayments.size > 1) {
+                                null
+                            } else {
+                                receiptText(result.customerReceipt, result.merchantReceipt)
+                            },
+                        receipts = cardReceipts(result),
                     ),
             )
         }
         log(summary)
+        result.cardPayments.forEachIndexed { index, payment -> log(payment.toUi(index).line) }
         result.promotionMessages.forEach { log("Promo: $it") }
         result.warnings.forEach { log("Warning: $it") }
     }
+
+    /**
+     * The receipt of every card payment of a sale that made several, each captioned with its
+     * payment; a sale with one card payment keeps the plain [PaymentOutcome.receipt].
+     */
+    private fun cardReceipts(result: SettlementResult): List<LabeledReceipt> =
+        if (result.cardPayments.size > 1) {
+            result.cardPayments.mapIndexedNotNull { index, payment ->
+                receiptText(payment.customerReceipt, payment.merchantReceipt)?.let {
+                    LabeledReceipt("Card ${index + 1} receipt", it)
+                }
+            }
+        } else {
+            emptyList()
+        }
+
+    /** The outcome dialog's view of card payment number [index] (zero-based) of a sale. */
+    private fun CardPaymentResult.toUi(index: Int) =
+        CardPaymentUi(
+            label = "Card ${index + 1}",
+            amount = amount?.toPlainString() ?: "?",
+            poiTransactionId = poiTransactionId,
+            brand = paymentBrand,
+            lastDigits = lastDigits(maskedPan),
+            approvalCode = approvalCode,
+            partial = isPartialApproval,
+        )
 
     override fun dismissPaymentOutcome() {
         _state.update { it.copy(paymentOutcome = null) }
@@ -2851,6 +3255,24 @@ class NexoEmulatorController(
             externalPaymentAmount =
                 sale.externalPaymentAmount.takeIf { it.toBigDecimal().signum() > 0 },
             voided = voided != null,
+            cardPayments =
+                sale.cardLegs.mapIndexed { index, leg ->
+                    CardPaymentUi(
+                        label = "Card ${index + 1}",
+                        amount = leg.amount ?: "?",
+                        poiTransactionId = leg.poiTransactionId,
+                        brand = leg.brand,
+                        lastDigits = lastDigits(leg.maskedPan),
+                        approvalCode = leg.approvalCode,
+                        partial = leg.partial,
+                        // a voided sale returned every payment, as a completed full refund did
+                        refunded = legRefunded(leg) || voided != null,
+                        depleted = availableLegAmount(connection, leg)?.signum() == 0,
+                        remainingAmount =
+                            if (legRefunded(leg) || voided != null) "0.00"
+                            else availableLegAmount(connection, leg)?.toPlainString(),
+                    )
+                },
         )
 
     /**
@@ -3130,3 +3552,59 @@ private fun LoyaltyOptions.toSettlementLoyalty(): SettlementLoyalty =
             }
         )
     }
+
+/** The last four digits of a card's masked number, or null when it has none. */
+private fun lastDigits(maskedPan: String?): String? =
+    maskedPan?.filter { it.isDigit() }?.takeLast(4)?.ifEmpty { null }
+
+/**
+ * The steps an abort unwinds, and so the ones whose standing charge the cashier must hear about.
+ */
+private val UNWOUND_STEPS =
+    setOf(
+        SettlementStep.REBATE_REDEMPTION,
+        SettlementStep.POINT_REDEMPTION,
+        SettlementStep.STORED_VALUE_CHARGE,
+        SettlementStep.CARD_CHARGE,
+        SettlementStep.STORED_VALUE_LOAD,
+        SettlementStep.AWARD,
+    )
+
+/**
+ * The charge-side movements one settlement has reported through `onMovement` and not yet seen
+ * reversed. Handlers of a settlement never overlap, and the snapshot is taken from `onComplete`.
+ */
+private class StandingMovements {
+    private val movements = LinkedHashMap<String, SettlementMovement>()
+
+    private fun key(movement: SettlementMovement): String? =
+        movement.poiTransactionId ?: movement.serviceId
+
+    fun committed(movement: SettlementMovement) {
+        if (movement.step in UNWOUND_STEPS) key(movement)?.let { movements[it] = movement }
+    }
+
+    /** A reversal notice names the movement it reversed. */
+    fun reversed(notice: SettlementMovement) {
+        notice.reversedMovement?.let { key(it)?.let(movements::remove) }
+    }
+
+    fun snapshot(): List<SettlementMovement> = movements.values.toList()
+}
+
+/** One line for a charge that may still stand: what it is, how much, and its terminal reference. */
+private fun SettlementMovement.describeStanding(): String {
+    val what =
+        when (step) {
+            SettlementStep.CARD_CHARGE -> "card payment"
+            SettlementStep.STORED_VALUE_CHARGE -> "gift card charge"
+            SettlementStep.STORED_VALUE_LOAD -> "gift card load"
+            SettlementStep.REBATE_REDEMPTION -> "rebate redemption"
+            SettlementStep.POINT_REDEMPTION -> "points redemption"
+            SettlementStep.AWARD -> "points award"
+            else -> step.name.lowercase()
+        }
+    return what +
+        (amount?.let { " $${it.toPlainString()}" } ?: "") +
+        " (txn ${poiTransactionId ?: serviceId})"
+}

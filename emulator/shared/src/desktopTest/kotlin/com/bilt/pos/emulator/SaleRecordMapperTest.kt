@@ -4,6 +4,7 @@ import com.bilt.pos.emulator.store.LegType
 import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketLineItem
+import com.bilt.pos.session.payment.CardPaymentResult
 import com.bilt.pos.session.settlement.SettlementMovement
 import com.bilt.pos.session.settlement.SettlementResult
 import com.bilt.pos.session.settlement.SettlementStep
@@ -248,5 +249,46 @@ class SaleRecordMapperTest {
         assertEquals("25.00", load.amount)
         assertEquals("poi-load", load.poiTransactionId)
         assertEquals(cardTime.toString(), load.poiTimestamp)
+    }
+
+    @Test
+    fun mapsEveryCardPaymentOfASplitSaleToItsOwnLeg() {
+        val result =
+            SettlementResult.builder()
+                .success(true)
+                .authorizedAmount(BigDecimal("100.00"))
+                .cardAmountCharged(BigDecimal("100.00"))
+                .poiTransactionId("poi-c1")
+                .cardPayments(
+                    listOf(
+                        CardPaymentResult.builder()
+                            .amount(BigDecimal("60.00"))
+                            .poiTransactionId("poi-c1")
+                            .poiTransactionTimestamp(cardTime)
+                            .approvalCode("APPR-1")
+                            .acquirerTransactionId("acq-1")
+                            .paymentBrand("Visa")
+                            .maskedPan("411111******1111")
+                            .partialApproval(true)
+                            .build(),
+                        CardPaymentResult.builder()
+                            .amount(BigDecimal("40.00"))
+                            .poiTransactionId("poi-c2")
+                            .paymentBrand("Mastercard")
+                            .build(),
+                    )
+                )
+                .build()
+
+        val cards = record(result).legs.filter { it.type == LegType.CARD }
+
+        assertEquals(listOf("poi-c1", "poi-c2"), cards.map { it.poiTransactionId })
+        assertEquals(listOf("60.00", "40.00"), cards.map { it.amount })
+        assertEquals(cardTime.toString(), cards[0].poiTimestamp)
+        assertNull(cards[1].poiTimestamp)
+        assertEquals("APPR-1", cards[0].approvalCode)
+        assertEquals("411111******1111", cards[0].maskedPan)
+        assertEquals(listOf(true, false), cards.map { it.partial })
+        assertEquals(listOf("Visa", "Mastercard"), cards.map { it.brand })
     }
 }

@@ -57,11 +57,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -88,10 +92,12 @@ import com.bilt.pos.emulator.session.BasketLineType
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
+import com.bilt.pos.emulator.session.LabeledReceipt
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.MemberIdentity
 import com.bilt.pos.emulator.session.MemberLookupKind
 import com.bilt.pos.emulator.session.MemberRewardUi
+import com.bilt.pos.emulator.session.PartialApprovalPrompt
 import com.bilt.pos.emulator.session.PaymentOutcome
 import com.bilt.pos.emulator.session.PaymentRecoveryPrompt
 import com.bilt.pos.emulator.session.StoredSaleUi
@@ -211,6 +217,7 @@ internal fun EmulatorApp(
 
     MaterialTheme {
         state.paymentRecovery?.let { PaymentRecoveryDialog(it) }
+        state.partialApproval?.let { PartialApprovalDialog(it) }
         state.paymentOutcome?.let { outcome ->
             PaymentOutcomeDialog(outcome) { controller.dismissPaymentOutcome() }
         }
@@ -433,6 +440,12 @@ private fun SalesListCard(
                                     )
                                 }
                                 Text(sale.statusLabel, style = MaterialTheme.typography.labelSmall)
+                                // a split sale lists every card payment under its badge
+                                if (sale.cardPayments.size > 1) {
+                                    sale.cardPayments.forEach {
+                                        Text(it.line, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
                             }
                         }
                     }
@@ -441,6 +454,15 @@ private fun SalesListCard(
         }
     }
 }
+
+/**
+ * Opens the payment controls with Split card checked and these amounts typed in. Local UI state
+ * cannot be changed by a headless render after composition, so the screenshot generator provides
+ * this through [LocalSplitCardSeed]; the app itself never does.
+ */
+internal class SplitCardSeed(val amounts: List<String>)
+
+internal val LocalSplitCardSeed = staticCompositionLocalOf<SplitCardSeed?> { null }
 
 /** What the Refund button returns: everything, or the checked items. */
 private enum class RefundMode {
@@ -466,6 +488,14 @@ private fun RefundDetailsCard(
             mutableStateOf(if (fullAvailable) RefundMode.FULL else RefundMode.ITEMS)
         }
     var selectedSkus by remember(sale.id) { mutableStateOf(emptySet<String>()) }
+    // A sale with several card payments: which one an item return goes back to. Falls back to
+    // the first payment not yet refunded, so a pick that a refresh made stale cannot target a
+    // refunded one.
+    var pickedCard by remember(sale.id) { mutableStateOf<String?>(null) }
+    val splitCards = sale.cardPayments.size > 1
+    val returnCard =
+        sale.cardPayments.firstOrNull { it.poiTransactionId == pickedCard && it.returnable }
+            ?: sale.cardPayments.firstOrNull { it.returnable }
     // Gift-card loads and their funding must stay atomic: the controller
     // only unwinds them via a full refund, so mixed sales cannot offer their
     // ordinary merchandise as a separate item refund.
@@ -479,6 +509,9 @@ private fun RefundDetailsCard(
                 "$${sale.totalAmount} · ${sale.completedAtLabel} · ${sale.memberLabel}",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            sale.cardPayments.forEach {
+                Text(it.line, style = MaterialTheme.typography.bodySmall)
+            }
             sale.externalPaymentAmount?.let { amount ->
                 Text(
                     "Cash $$amount must be reimbursed manually; this refund reverses terminal movements only.",
@@ -525,6 +558,25 @@ private fun RefundDetailsCard(
                     sale.refundable && itemsAvailable,
                 ) {
                     mode = RefundMode.ITEMS
+                }
+            }
+            if (splitCards && mode == RefundMode.FULL) {
+                Text(
+                    "Reverses all ${sale.cardPayments.size} card payments, newest first",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (splitCards && mode == RefundMode.ITEMS && sale.refundable) {
+                // each card payment is its own refund target, so the return must name one
+                Text("Return to:", style = MaterialTheme.typography.bodySmall)
+                sale.cardPayments.forEach { card ->
+                    LabeledRadio(
+                        card.line + (card.remainingAmount?.let { " · up to $$it" }.orEmpty()),
+                        selected = card.poiTransactionId == returnCard?.poiTransactionId,
+                        enabled = card.returnable && sale.refundable,
+                    ) {
+                        pickedCard = card.poiTransactionId
+                    }
                 }
             }
             if (hasRecordedItems) {
@@ -621,7 +673,11 @@ private fun RefundDetailsCard(
                     when (mode) {
                         RefundMode.FULL -> controller.refundSale(sale.id)
                         RefundMode.ITEMS -> {
-                            controller.addReturnToBasket(sale.id, selectedSkus)
+                            controller.addReturnToBasket(
+                                sale.id,
+                                selectedSkus,
+                                returnCard?.poiTransactionId.takeIf { splitCards },
+                            )
                             // the rung lines re-project with zero remaining;
                             // a stale selection would just read confusingly
                             selectedSkus = emptySet()
@@ -718,6 +774,44 @@ private fun PaymentRecoveryDialog(prompt: PaymentRecoveryPrompt) {
     )
 }
 
+/**
+ * A card approved less than it was asked for and the sale waits for the cashier. Built like
+ * [PaymentRecoveryDialog], and like it not dismissible: the sale cannot go on until one of the
+ * buttons decides what happens to the shortfall.
+ */
+@Composable
+private fun PartialApprovalDialog(prompt: PartialApprovalPrompt) {
+    AlertDialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        title = { Text("Partial approval", color = MaterialTheme.colorScheme.error) },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(prompt.message)
+                Text("Choose how to collect the rest:")
+                prompt.actions.forEach { action ->
+                    Button(
+                        onClick = { prompt.choose(action) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(prompt.caption(action))
+                            Text(
+                                prompt.describe(action),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+    )
+}
+
 @Composable
 private fun PaymentOutcomeDialog(outcome: PaymentOutcome, onDismiss: () -> Unit) {
     AlertDialog(
@@ -729,16 +823,25 @@ private fun PaymentOutcomeDialog(outcome: PaymentOutcome, onDismiss: () -> Unit)
             )
         },
         text = {
-            Column {
+            // scrolls as a whole: a split sale adds a line and a receipt per card payment
+            Column(
+                modifier = Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState())
+            ) {
                 Text(outcome.message)
-                outcome.receipt?.let { receipt ->
+                val receipts =
+                    listOfNotNull(outcome.receipt?.let { LabeledReceipt("", it) }) +
+                        outcome.receipts
+                receipts.forEach { receipt ->
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    if (receipt.label.isNotEmpty()) {
+                        Text(receipt.label, style = MaterialTheme.typography.labelMedium)
+                    }
                     // the receipt as the terminal rendered it: monospace to
                     // keep its column layout, capped and scrollable so a
                     // long one doesn't push the dialog off screen
                     SelectionContainer {
                         Text(
-                            receipt,
+                            receipt.text,
                             style = MaterialTheme.typography.bodySmall,
                             fontFamily = FontFamily.Monospace,
                             modifier =
@@ -1864,9 +1967,29 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
     var rebates by rememberSaveable { mutableStateOf(false) }
     var redemption by rememberSaveable { mutableStateOf(false) }
     var award by rememberSaveable { mutableStateOf(false) }
-    var implicitLoyalty by rememberSaveable { mutableStateOf(true) }
+    val seed = LocalSplitCardSeed.current
+    // a seeded split sale starts with explicit loyalty, which planned card payments require
+    var implicitLoyalty by rememberSaveable { mutableStateOf(seed == null) }
     // Gift card tender: charged first, remainder goes to the card payment
     var giftCard by rememberSaveable { mutableStateOf(false) }
+    // Split card: the planned card amounts ("Card 1 $___"), with the remainder going on one more
+    // card. The SDK refuses planned card payments with implicit loyalty (the terminal would book
+    // the whole sale's earn at card payment 1), so the checkbox needs it off. Partial approvals:
+    // on, the cashier decides at the counter what happens to a card's shortfall; off, the SDK
+    // retries on its own and then fails into the recovery dialog. Partial follow-ups work with
+    // implicit loyalty, so that checkbox stays available.
+    var splitCard by rememberSaveable { mutableStateOf(seed != null) }
+    val cardAmounts =
+        rememberSaveable(
+            saver =
+                listSaver<SnapshotStateList<String>, String>(
+                    save = { it.toList() },
+                    restore = { it.toMutableStateList() },
+                )
+        ) {
+            mutableStateListOf(*(seed?.amounts ?: listOf("")).toTypedArray())
+        }
+    var partialApprovals by rememberSaveable { mutableStateOf(true) }
     // Net by default: a mixed basket moves only the signed difference;
     // unchecked, returns refund in full to their original tenders and the
     // sale lines are charged in full
@@ -1875,9 +1998,12 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
 
     // One payment per checkout: pay again only after the next Start Checkout
     val paid = state.lastPayment != null
+    // each planned card amount must be a positive amount; a plan that reaches the card total is
+    // left to the SDK, whose failure the recovery dialog shows
+    val splitValid = !splitCard || cardAmounts.all { positiveMoneyMinor(it) != null }
     // no Pay during a card read or identify prompt: the shared operation
     // claim would refuse it
-    val canPay = state.canOperate && state.basket.isNotEmpty() && !paid
+    val canPay = state.canOperate && state.basket.isNotEmpty() && !paid && splitValid
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // FlowRow: five labeled checkboxes overflow a narrow card; wrap
@@ -1888,12 +2014,20 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
             // implicit: the terminal handles all loyalty in the card payment, so no SDK steps
             LoyaltyCheckbox("Implicit Loyalty", implicitLoyalty, !state.paymentInProgress) {
                 implicitLoyalty = it
+                // planned card payments cannot use it: switching it on drops the split
+                if (it) splitCard = false
             }
             val stepsEnabled = !state.paymentInProgress && !implicitLoyalty
             LoyaltyCheckbox("Rebates", rebates, stepsEnabled) { rebates = it }
             LoyaltyCheckbox("Redemption", redemption, stepsEnabled) { redemption = it }
             LoyaltyCheckbox("Award", award, stepsEnabled) { award = it }
             LoyaltyCheckbox("Gift card", giftCard, !state.paymentInProgress) { giftCard = it }
+            LoyaltyCheckbox("Split card", splitCard, !state.paymentInProgress && !implicitLoyalty) {
+                splitCard = it
+            }
+            LoyaltyCheckbox("Partial approvals", partialApprovals, !state.paymentInProgress) {
+                partialApprovals = it
+            }
             LoyaltyCheckbox("Net settlement", netSettlement, !state.paymentInProgress) {
                 netSettlement = it
             }
@@ -1931,6 +2065,19 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                 }
             }
         }
+        if (implicitLoyalty) {
+            Text(
+                "Split card needs explicit loyalty: clear Implicit Loyalty first",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (splitCard) {
+            SplitCardFields(
+                amounts = cardAmounts,
+                total = state.basketTotal,
+                enabled = !state.paymentInProgress,
+            )
+        }
         if (paid) {
             // the checkout auto-ends on full payment; the hint covers the
             // fallback where that end failed and the session is still open
@@ -1957,6 +2104,8 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                     ),
                     if (giftCard) StoredValueOptions(cardNumber = giftCardNumber) else null,
                     net = netSettlement,
+                    cardPayments = if (splitCard) cardAmounts.map { it.trim() } else emptyList(),
+                    partialApprovals = partialApprovals,
                 )
             },
             enabled = canPay,
@@ -1974,6 +2123,69 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
                 }
             )
         }
+    }
+}
+
+/**
+ * The planned card payments of a split sale: one amount field per card, **+ Add card**, and below
+ * them the read-only line for the card that takes the rest. The remainder is worked out from the
+ * basket total; rebates, points and a gift card reduce what the card phase owes further, and the
+ * SDK checks the plan against that figure when the card step starts.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SplitCardFields(
+    amounts: SnapshotStateList<String>,
+    total: String,
+    enabled: Boolean,
+) {
+    amounts.forEachIndexed { index, amount ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Card ${index + 1} $", style = MaterialTheme.typography.bodySmall)
+            CompactTextField(
+                value = amount,
+                onValueChange = { amounts[index] = it },
+                placeholder = "0.00",
+                enabled = enabled,
+                modifier = Modifier.width(120.dp),
+            )
+            if (amounts.size > 1) {
+                TextButton(onClick = { amounts.removeAt(index) }, enabled = enabled) {
+                    Text("Remove")
+                }
+            }
+        }
+    }
+    val planned = amounts.sumOf { positiveMoneyMinor(it) ?: 0L }
+    val remainder = (nonNegativeMoneyMinor(total) ?: 0L) - planned
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Button(onClick = { amounts.add("") }, enabled = enabled) { Text("+ Add card") }
+        Text(
+            "Card ${amounts.size + 1}: remainder $${minorUnitsToDecimal(remainder.coerceAtLeast(0))}",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+    if (amounts.any { positiveMoneyMinor(it) == null }) {
+        Text(
+            "Enter a positive amount for every card",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    } else if (remainder <= 0) {
+        Text(
+            "The planned cards reach the total: the settlement will be refused",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
     }
 }
 

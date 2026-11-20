@@ -279,6 +279,156 @@ class SimulatedTerminalClientTest {
   }
 
   @Test
+  void approvesSixtyPercentOfTheDocumentedPartialAmount() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    SaleToPOIResponse partial =
+        terminal
+            .request(request("Payment", "partial", paymentBody("104.56", null)))
+            .getSaleToPOIResponse();
+    assertEquals("Partial", partial.getPaymentResponse().getResponse().getResult().toValue());
+    // 62.736 rounds down to the cent
+    assertEquals(
+        62.73,
+        partial.getPaymentResponse().getPaymentResult().getAmountsResp().getAuthorizedAmount());
+    assertEquals(
+        "Visa",
+        partial
+            .getPaymentResponse()
+            .getPaymentResult()
+            .getPaymentInstrumentData()
+            .getCardData()
+            .getPaymentBrand());
+    String poiId =
+        partial.getPaymentResponse().getPoiData().getPoiTransactionID().getTransactionID();
+
+    SaleToPOIResponse neighbour =
+        terminal
+            .request(request("Payment", "neighbour", paymentBody("104.57", null)))
+            .getSaleToPOIResponse();
+    assertEquals("Success", neighbour.getPaymentResponse().getResponse().getResult().toValue());
+    assertEquals(
+        104.57,
+        neighbour.getPaymentResponse().getPaymentResult().getAmountsResp().getAuthorizedAmount());
+
+    // the ledger holds what was approved: a refund cannot take back more than that
+    SaleToPOIResponse tooMuch =
+        terminal
+            .request(request("Payment", "partial-refund-over", paymentBody("104.56", poiId)))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "Refusal", tooMuch.getPaymentResponse().getResponse().getErrorCondition().toValue());
+    SaleToPOIResponse refund =
+        terminal
+            .request(request("Payment", "partial-refund", paymentBody("62.73", poiId)))
+            .getSaleToPOIResponse();
+    assertEquals("Success", refund.getPaymentResponse().getResponse().getResult().toValue());
+
+    // the recorded response replays as partial for a TransactionStatus recovery
+    SaleToPOIResponse status =
+        terminal
+            .request(
+                request(
+                    "TransactionStatus",
+                    "partial-status",
+                    "{\"TransactionStatusRequest\":{\"MessageReference\":{\"ServiceID\":\"partial\"}}}"))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "Partial",
+        status
+            .getTransactionStatusResponse()
+            .getRepeatedMessageResponse()
+            .getRepeatedResponseMessageBody()
+            .getPaymentResponse()
+            .getResponse()
+            .getResult()
+            .toValue());
+  }
+
+  @Test
+  void partialApprovalTriggerDoesNotApplyToGiftCardPayments() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    terminal.request(
+        request(
+            "StoredValue",
+            "partial-gift-load",
+            "{\"StoredValueRequest\":{\"StoredValueData\":[{"
+                + "\"StoredValueTransactionType\":\"Load\",\"Currency\":\"USD\","
+                + "\"ItemAmount\":50.00,\"StoredValueAccountID\":"
+                + "{\"StoredValueID\":\"partial-gift\"}}]}}"));
+    SaleToPOIResponse payment =
+        terminal
+            .request(
+                request(
+                    "Payment",
+                    "partial-gift-payment",
+                    storedValuePaymentBody("4.56", "partial-gift")))
+            .getSaleToPOIResponse();
+    assertEquals("Success", payment.getPaymentResponse().getResponse().getResult().toValue());
+    assertEquals(
+        4.56,
+        payment.getPaymentResponse().getPaymentResult().getAmountsResp().getAuthorizedAmount());
+  }
+
+  @Test
+  void acceptsSplitPaymentWithPaidAmountAndNormalType() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    SaleToPOIResponse payment =
+        terminal
+            .request(request("Payment", "split-ok", splitPaymentBody("40.00", "60.00", "Normal")))
+            .getSaleToPOIResponse();
+    assertEquals("Success", payment.getPaymentResponse().getResponse().getResult().toValue());
+    // a payment with no PaymentType is Normal
+    SaleToPOIResponse untyped =
+        terminal
+            .request(request("Payment", "split-untyped", splitPaymentBody("40.00", "60.00", null)))
+            .getSaleToPOIResponse();
+    assertEquals("Success", untyped.getPaymentResponse().getResponse().getResult().toValue());
+  }
+
+  @Test
+  void refusesSplitPaymentWithoutPaidAmount() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    SaleToPOIResponse payment =
+        terminal
+            .request(request("Payment", "split-no-paid", splitPaymentBody("40.00", null, "Normal")))
+            .getSaleToPOIResponse();
+    assertEquals("Failure", payment.getPaymentResponse().getResponse().getResult().toValue());
+    assertEquals(
+        "NotAllowed", payment.getPaymentResponse().getResponse().getErrorCondition().toValue());
+    SaleToPOIResponse status =
+        terminal
+            .request(
+                request(
+                    "TransactionStatus",
+                    "split-no-paid-status",
+                    "{\"TransactionStatusRequest\":{\"MessageReference\":{\"ServiceID\":\"split-no-paid\"}}}"))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "NotFound",
+        status.getTransactionStatusResponse().getResponse().getErrorCondition().toValue());
+  }
+
+  @Test
+  void refusesSplitPaymentThatIsNotNormal() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    SaleToPOIResponse payment =
+        terminal
+            .request(
+                request("Payment", "split-refund", splitPaymentBody("40.00", "60.00", "Refund")))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "NotAllowed", payment.getPaymentResponse().getResponse().getErrorCondition().toValue());
+    SaleToPOIResponse recurring =
+        terminal
+            .request(
+                request(
+                    "Payment", "split-recurring", splitPaymentBody("40.00", "60.00", "Recurring")))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "NotAllowed", recurring.getPaymentResponse().getResponse().getErrorCondition().toValue());
+  }
+
+  @Test
   void timeoutIsNotRecordedAndDroppedApprovalIsRecoverable() throws Exception {
     SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
     terminal.timeoutNextRequest();
@@ -1002,6 +1152,15 @@ class SimulatedTerminalClientTest {
                 + originalPoiId
                 + "\"}}")
         + "}}}";
+  }
+
+  private static String splitPaymentBody(String amount, String paidAmount, String paymentType) {
+    return "{\"PaymentRequest\":{\"PaymentData\":{"
+        + (paymentType == null ? "" : "\"PaymentType\":\"" + paymentType + "\",")
+        + "\"SplitPaymentFlag\":true},\"PaymentTransaction\":{\"AmountsReq\":{\"RequestedAmount\":"
+        + amount
+        + (paidAmount == null ? "" : ",\"PaidAmount\":" + paidAmount)
+        + ",\"Currency\":\"USD\"}}}}";
   }
 
   private static String storedValuePaymentBody(String amount, String storedValueId) {

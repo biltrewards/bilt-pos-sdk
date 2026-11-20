@@ -105,6 +105,24 @@ Settings tabs; the lane phase control; quantity steppers and the POS-owned cart 
 the unreferenced refund and the "void this payment" shortcut; and the "mark reconciled" gate after
 an abandoned settlement (the desktop reports it in the outcome popup instead).
 
+## Split and partial card payments
+
+The desktop emulator gained these in 0.52.0. The browser emulator follows once the JavaScript SDK
+and the session protocol carry `cardPayments` and the partial card approval step; every row is
+**missing** in the browser until then.
+
+| Desktop                                                                                                                                                                                                                                                                                                   | Browser |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| **Split card** checkbox next to Gift card: "Card N $___" amount fields, **+ Add card**, a read-only "Card N: remainder $X" line, positive amounts only; disabled while Implicit Loyalty is checked (the SDK refuses planned card payments with implicit loyalty), and checking Implicit Loyalty clears it | missing |
+| **Partial approvals** checkbox, on by default; off registers no handler: the SDK charges the shortfall on another card itself (3 card requests at most), then fails into the recovery dialog                                                                                                              | missing |
+| Partial approval dialog (`PartialApprovalPrompt`), not dismissible: Another card, Add to next card (only with a planned payment left), Rest in cash, Cancel sale                                                                                                                                          | missing |
+| Recovery dialog for `CARD_PAYMENTS_EXCEED_TOTAL` offers only Abort and Abandon                                                                                                                                                                                                                            | missing |
+| Outcome dialog: one line per card payment (amount, brand, last digits, approval code, "partial" tag) and every card payment's receipt                                                                                                                                                                     | missing |
+| Sales list and Refund tab show every card payment; Void reverses them all; an item return names the card payment it goes back to when the sale has several                                                                                                                                                | missing |
+| Event log: a line per card payment, partial approval and decision                                                                                                                                                                                                                                         | missing |
+| Event log: a line per reversed card payment (`onCardChargeReversed`); Cancel sale and any aborted or failed settlement list the charges the reversal notices did not take off as still standing, in the outcome and the log                                                                               | missing |
+| Full refund (void) of a sale with several tender payments: one line per reversed card or gift card payment (`getCardReversals()`, `getStoredValueReversal()`) and each one's reversal receipt, captioned "Card N reversal receipt"                                                                        | missing |
+
 ## Deliberate differences
 
 - The log's Nexo tab is **Protocol**: the browser never sees Nexo, so it lists the HTTP requests to
