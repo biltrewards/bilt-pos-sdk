@@ -552,6 +552,37 @@ class TerminalShopperSessionStoredValuePurchaseTest {
   }
 
   @Test
+  void aDeclinedChargeReportsTheReversedLoad() throws Exception {
+    session.basket().addItem(giftCard("gift-card-1", "Gift card", new BigDecimal("25.00")));
+    server.enqueue(new MockResponse().setBody(storedValueOk("Load", "POI-LOAD-1", 25.00, 25.00)));
+    server.enqueue(new MockResponse().setBody(paymentFailure("Refusal")));
+    server.enqueue(
+        new MockResponse().setBody(storedValueOk("Reverse", "POI-REVERSE-1", 25.00, 0.00)));
+    List<SettlementMovement> notices = new ArrayList<>();
+
+    assertThrows(
+        SessionException.class,
+        () ->
+            session
+                .settle(reloadOptions())
+                .onMovement(
+                    movement -> {
+                      if (movement.isReversal()) {
+                        notices.add(movement);
+                      }
+                    })
+                .get());
+
+    assertEquals(1, notices.size());
+    SettlementMovement notice = notices.get(0);
+    assertEquals(SettlementStep.STORED_VALUE_LOAD, notice.getStep());
+    assertEquals("POI-LOAD-1", notice.getReversedMovement().getPoiTransactionId());
+    assertEquals("POI-REVERSE-1", notice.getPoiTransactionId());
+    assertEquals(0, new BigDecimal("25.00").compareTo(notice.getAmount()));
+    drainRequests();
+  }
+
+  @Test
   void abortAfterLoadingReversesTheLoadWithoutCharging() throws Exception {
     session.basket().addItem(giftCard("gift-card-1", "Gift card", new BigDecimal("25.00")));
     server.enqueue(new MockResponse().setBody(storedValueOk("Load", "POI-LOAD-1", 25.00, 25.00)));

@@ -716,9 +716,20 @@ class TerminalShopperSessionSplitPaymentTest {
   }
 
   @Test
-  void underAuthorizedLaterCardPaymentFailsAsDeclined() throws Exception {
+  void underAuthorizedLaterCardPaymentFailsAsDeclinedOnceTheAutomaticRequestsRunOut()
+      throws Exception {
     addHundredDollarItem();
-    enqueue(paymentOk("POI-PAY-1", 20.00), paymentOk("POI-PAY-2", 50.00), REVERSAL_OK, REVERSAL_OK);
+    // the remainder payment of 80 approves 50; the automatic follow-ups for 30 and then 10 come
+    // back partial too, and the third request is the last of MAX_AUTOMATIC_CARD_REQUESTS
+    enqueue(
+        paymentOk("POI-PAY-1", 20.00),
+        paymentOk("POI-PAY-2", 50.00),
+        paymentOk("POI-PAY-3", 20.00),
+        paymentOk("POI-PAY-4", 5.00),
+        REVERSAL_OK,
+        REVERSAL_OK,
+        REVERSAL_OK,
+        REVERSAL_OK);
     AtomicReference<SettlementFailure> seen = new AtomicReference<>();
 
     SessionException failure =
@@ -735,11 +746,14 @@ class TerminalShopperSessionSplitPaymentTest {
                     .get());
 
     assertEquals(SessionErrorCode.DECLINED, failure.getError().getCode());
-    assertAmount("80.00", seen.get().getAmountDue());
-    assertEquals(2, seen.get().getCommittedMovements().size(), "the partial charge is committed");
+    assertAmount("10.00", seen.get().getAmountDue());
+    assertEquals(4, seen.get().getCommittedMovements().size(), "the partial charges are committed");
     List<SaleToPOIRequest> requests = drainRequests();
-    assertEquals("POI-PAY-2", reversedPoiTransaction(requests.get(2)));
-    assertEquals("POI-PAY-1", reversedPoiTransaction(requests.get(3)));
+    assertEquals(8, requests.size());
+    assertEquals("POI-PAY-4", reversedPoiTransaction(requests.get(4)));
+    assertEquals("POI-PAY-3", reversedPoiTransaction(requests.get(5)));
+    assertEquals("POI-PAY-2", reversedPoiTransaction(requests.get(6)));
+    assertEquals("POI-PAY-1", reversedPoiTransaction(requests.get(7)));
   }
 
   @Test

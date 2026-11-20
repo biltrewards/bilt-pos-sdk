@@ -865,6 +865,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     request.handlers.onRebatesRedeemed = flow.rebatesHandler();
     request.handlers.onPointsRedeemed = flow.pointsHandler();
     request.handlers.onGiftCardPayment = flow.giftCardHandler();
+    request.handlers.onPartialCardApproval = flow.partialCardApprovalHandler();
     request.handlers.onMovement = flow.movementHandler();
     request.handlers.onError = flow.errorHandler();
 

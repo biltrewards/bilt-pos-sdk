@@ -3337,58 +3337,57 @@ class TerminalShopperSessionPaymentTest {
   }
 
   @Test
-  void underAuthorizedCardPaymentIsReversedAndFailsTheCheckout() throws Exception {
+  void underAuthorizedCardPaymentIsReversedAndFailsOnceTheAutomaticRequestsRunOut()
+      throws Exception {
     addHundredDollarItem();
 
-    server.enqueue(
-        new MockResponse()
-            .setBody(
-                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
-                    + "\"Response\":{\"Result\":\"Partial\"},"
-                    + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-PAY-1\"}},"
-                    + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":60.00}}}}}"));
-    server.enqueue(new MockResponse().setBody(REVERSAL_OK)); // partial auth reversed
+    // without onPartialCardApproval the SDK asks for the shortfall on up to
+    // MAX_AUTOMATIC_CARD_REQUESTS card requests: 60 of 100, then 20 of 40, then 10 of 20
+    server.enqueue(new MockResponse().setBody(partialCardPayment("POI-PAY-1", 60.00)));
+    server.enqueue(new MockResponse().setBody(partialCardPayment("POI-PAY-2", 20.00)));
+    server.enqueue(new MockResponse().setBody(partialCardPayment("POI-PAY-3", 10.00)));
+    server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+    server.enqueue(new MockResponse().setBody(REVERSAL_OK));
+    server.enqueue(new MockResponse().setBody(REVERSAL_OK));
 
-    AtomicReference<SessionError> seen = new AtomicReference<>();
+    AtomicReference<SettlementFailure> seen = new AtomicReference<>();
     SettlementFlow flow =
         session
             .settle()
             .onError(
                 error -> {
-                  seen.set(error.getError());
+                  seen.set(error);
                   return SettlementRecovery.abort();
                 });
 
     assertNull(flow.getOrNull());
     assertEquals(SessionErrorCode.DECLINED, seen.get().getCode());
-    assertTrue(seen.get().getMessage().contains("60.00"));
-    assertTrue(seen.get().getMessage().contains("100.00"));
+    assertEquals(
+        "the card payment authorized only 10.00 of the requested 20.00", seen.get().getMessage());
+    assertEquals(0, new BigDecimal("20.00").compareTo(seen.get().getAmountDue()));
 
     List<SaleToPOIRequest> requests = drainRequests();
-    assertEquals(2, requests.size());
+    assertEquals(6, requests.size());
     assertEquals(
-        "POI-PAY-1",
-        requests
-            .get(1)
-            .getReversalRequest()
-            .getOriginalPOITransaction()
-            .getPoiTransactionID()
-            .getTransactionID(),
-        "the partial authorization must be reversed");
+        List.of("POI-PAY-3", "POI-PAY-2", "POI-PAY-1"),
+        requests.subList(3, 6).stream()
+            .map(
+                request ->
+                    request
+                        .getReversalRequest()
+                        .getOriginalPOITransaction()
+                        .getPoiTransactionID()
+                        .getTransactionID())
+            .collect(java.util.stream.Collectors.toList()),
+        "every partial authorization must be reversed");
   }
 
   @Test
   void abandoningUnderAuthorizedCardReportsTheStandingMovementHonestly() throws Exception {
     addHundredDollarItem();
-    server.enqueue(
-        new MockResponse()
-            .setBody(
-                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
-                    + "\"Response\":{\"Result\":\"Partial\"},"
-                    + "\"POIData\":{\"POITransactionID\":{"
-                    + "\"TransactionID\":\"POI-PAY-1\"}},"
-                    + "\"PaymentResult\":{\"AmountsResp\":{"
-                    + "\"AuthorizedAmount\":60.00}}}}}"));
+    server.enqueue(new MockResponse().setBody(partialCardPayment("POI-PAY-1", 60.00)));
+    server.enqueue(new MockResponse().setBody(partialCardPayment("POI-PAY-2", 20.00)));
+    server.enqueue(new MockResponse().setBody(partialCardPayment("POI-PAY-3", 10.00)));
 
     SessionException abandoned =
         assertThrows(
@@ -3398,45 +3397,63 @@ class TerminalShopperSessionPaymentTest {
     SettlementFailure failure = abandoned.getAbandonedSettlement().getFailure();
     assertEquals(SessionErrorCode.DECLINED, failure.getCode());
     assertEquals(
-        "the card payment authorized only 60.00 of the requested 100.00", failure.getMessage());
-    assertEquals(1, failure.getCommittedMovements().size());
-    assertEquals(SettlementStep.CARD_CHARGE, failure.getCommittedMovements().get(0).getStep());
-    assertEquals("POI-PAY-1", failure.getCommittedMovements().get(0).getPoiTransactionId());
+        "the card payment authorized only 10.00 of the requested 20.00", failure.getMessage());
+    assertEquals(3, failure.getCommittedMovements().size());
+    assertEquals(SettlementStep.CARD_CHARGE, failure.getCommittedMovements().get(2).getStep());
+    assertEquals("POI-PAY-3", failure.getCommittedMovements().get(2).getPoiTransactionId());
     assertEquals(
-        1, drainRequests().size(), "abandon must leave the partial authorization standing");
+        3, drainRequests().size(), "abandon must leave the partial authorizations standing");
   }
 
   @Test
   void retryResetsOnlyAPartiallyCommittedFailedCardStep() throws Exception {
     addHundredDollarItem();
-    server.enqueue(
-        new MockResponse()
-            .setBody(
-                "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
-                    + "\"Response\":{\"Result\":\"Partial\"},"
-                    + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\"POI-PAY-1\"}},"
-                    + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":60.00}}}}}"));
+    server.enqueue(new MockResponse().setBody(partialCardPayment("POI-PAY-1", 60.00)));
+    server.enqueue(new MockResponse().setBody(partialCardPayment("POI-PAY-2", 20.00)));
+    server.enqueue(new MockResponse().setBody(partialCardPayment("POI-PAY-3", 10.00)));
     server.enqueue(new MockResponse().setBody(REVERSAL_OK));
-    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-2", 100.00)));
+    server.enqueue(new MockResponse().setBody(paymentOk("POI-PAY-4", 20.00)));
 
     SettlementResult result = session.settle().onError(error -> SettlementRecovery.retry()).get();
 
-    assertEquals("POI-PAY-2", result.getPoiTransactionId());
+    assertEquals("POI-PAY-1", result.getPoiTransactionId());
     assertEquals(
-        1,
-        result.getMovements().size(),
+        List.of("POI-PAY-1", "POI-PAY-2", "POI-PAY-4"),
+        result.getMovements().stream()
+            .map(SettlementMovement::getPoiTransactionId)
+            .collect(java.util.stream.Collectors.toList()),
         "the reversed partial authorization must leave the final ledger");
+    assertEquals(0, new BigDecimal("100.00").compareTo(result.getCardAmountCharged()));
     List<SaleToPOIRequest> requests = drainRequests();
-    assertEquals(3, requests.size());
+    assertEquals(5, requests.size());
     assertEquals(
-        "POI-PAY-1",
+        "POI-PAY-3",
         requests
-            .get(1)
+            .get(3)
             .getReversalRequest()
             .getOriginalPOITransaction()
             .getPoiTransactionID()
-            .getTransactionID());
-    assertNotNull(requests.get(2).getPaymentRequest());
+            .getTransactionID(),
+        "retry reverses only the failed request, the last partial");
+    assertEquals(
+        20.00,
+        requests
+            .get(4)
+            .getPaymentRequest()
+            .getPaymentTransaction()
+            .getAmountsReq()
+            .getRequestedAmount());
+  }
+
+  private static String partialCardPayment(String poiTxn, double authorized) {
+    return "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+        + "\"Response\":{\"Result\":\"Partial\"},"
+        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\""
+        + poiTxn
+        + "\"}},"
+        + "\"PaymentResult\":{\"AmountsResp\":{\"AuthorizedAmount\":"
+        + authorized
+        + "}}}}}";
   }
 
   @Test
