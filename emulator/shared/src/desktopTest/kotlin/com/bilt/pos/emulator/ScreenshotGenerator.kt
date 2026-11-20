@@ -1,5 +1,6 @@
 package com.bilt.pos.emulator
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
@@ -7,15 +8,20 @@ import com.bilt.pos.emulator.catalog.CustomItem
 import com.bilt.pos.emulator.catalog.MockProductProvider
 import com.bilt.pos.emulator.catalog.Product
 import com.bilt.pos.emulator.session.BasketLine
+import com.bilt.pos.emulator.session.CardPaymentUi
 import com.bilt.pos.emulator.session.ConnectionPhase
 import com.bilt.pos.emulator.session.ConnectionStatus
 import com.bilt.pos.emulator.session.EmulatorController
 import com.bilt.pos.emulator.session.EmulatorState
+import com.bilt.pos.emulator.session.LabeledReceipt
 import com.bilt.pos.emulator.session.LoyaltyOptions
 import com.bilt.pos.emulator.session.MemberIdentity
 import com.bilt.pos.emulator.session.MemberLookupKind
 import com.bilt.pos.emulator.session.MemberRewardKind
 import com.bilt.pos.emulator.session.MemberRewardUi
+import com.bilt.pos.emulator.session.PartialApprovalAction
+import com.bilt.pos.emulator.session.PartialApprovalPrompt
+import com.bilt.pos.emulator.session.PaymentOutcome
 import com.bilt.pos.emulator.session.PaymentRecoveryAction
 import com.bilt.pos.emulator.session.PaymentRecoveryPrompt
 import com.bilt.pos.emulator.session.SaleItemUi
@@ -79,6 +85,8 @@ class ScreenshotGenerator {
             loyalty: LoyaltyOptions,
             storedValue: StoredValueOptions?,
             net: Boolean,
+            cardPayments: List<String>,
+            partialApprovals: Boolean,
         ) = Unit
 
         override fun identifyMember() = Unit
@@ -89,7 +97,11 @@ class ScreenshotGenerator {
 
         override fun refundSale(saleId: String) = Unit
 
-        override fun addReturnToBasket(saleId: String, skus: Set<String>) = Unit
+        override fun addReturnToBasket(
+            saleId: String,
+            skus: Set<String>,
+            cardPoiTransactionId: String?,
+        ) = Unit
 
         override fun clearBasket() = Unit
 
@@ -106,17 +118,20 @@ class ScreenshotGenerator {
         initialSalePane: SaleTabPane = SaleTabPane.PRODUCTS,
         widthDp: Int = 1500,
         heightDp: Int = 1000,
+        splitCard: SplitCardSeed? = null,
     ) {
         // the default 1500x1000 dp at 2x density is the desktop window's
         // default size, above the side-log breakpoint so the log column renders
         val scene =
             ImageComposeScene(width = widthDp * 2, height = heightDp * 2, density = Density(2f)) {
-                EmulatorApp(
-                    FakeController(state),
-                    MockProductProvider.products(),
-                    initialTab,
-                    initialSalePane,
-                )
+                CompositionLocalProvider(LocalSplitCardSeed provides splitCard) {
+                    EmulatorApp(
+                        FakeController(state),
+                        MockProductProvider.products(),
+                        initialTab,
+                        initialSalePane,
+                    )
+                }
             }
         repeat(3) { scene.render(it * 1_000_000_000L) }
         val png = scene.render(3_000_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes
@@ -322,5 +337,122 @@ class ScreenshotGenerator {
                     )
             )
         render(refund, File(dir, "emulator-refund.png"), initialTab = EmulatorTab.REFUND)
+
+        // split card: two planned amounts typed in, the remainder on a third card
+        render(
+            midCheckout,
+            File(dir, "emulator-split-card.png"),
+            heightDp = 1250,
+            splitCard = SplitCardSeed(listOf("60.00", "50.00")),
+        )
+
+        // a card approved $60.00 of $100.00 on a sale with no planned payment left
+        val partialPrompt =
+            PartialApprovalPrompt(
+                approved = "60.00",
+                requested = "100.00",
+                shortfall = "40.00",
+                amountDue = "40.00",
+                actions =
+                    listOf(
+                        PartialApprovalAction.ANOTHER_CARD,
+                        PartialApprovalAction.CASH,
+                        PartialApprovalAction.CANCEL_SALE,
+                    ),
+                choose = {},
+            )
+        render(
+            midCheckout.copy(paymentInProgress = true, partialApproval = partialPrompt),
+            File(dir, "emulator-partial-approval.png"),
+        )
+        render(
+            midCheckout.copy(
+                paymentInProgress = true,
+                partialApproval =
+                    PartialApprovalPrompt(
+                        approved = "12.00",
+                        requested = "20.00",
+                        shortfall = "8.00",
+                        amountDue = "88.00",
+                        actions = PartialApprovalAction.entries,
+                        choose = {},
+                    ),
+            ),
+            File(dir, "emulator-partial-approval-planned.png"),
+        )
+
+        // a settled split sale: a line and a receipt per card payment
+        render(
+            paid.copy(
+                paymentOutcome =
+                    PaymentOutcome(
+                        success = true,
+                        title = "Settlement complete",
+                        message =
+                            "Settled $100.00\n2 cards $60.00 + $40.00\n" +
+                                "Card 1 $60.00 · Visa ····1111 · approval SIM-APPROVED · partial\n" +
+                                "Card 2 $40.00 · Visa ····1111 · approval SIM-APPROVED",
+                        receipts =
+                            listOf(
+                                LabeledReceipt(
+                                    "Card 1 receipt",
+                                    "BILT CAFE\nSALE            $60.00\nVISA ****1111\nAPPROVED (PARTIAL)",
+                                ),
+                                LabeledReceipt(
+                                    "Card 2 receipt",
+                                    "BILT CAFE\nSALE            $40.00\nVISA ****1111\nAPPROVED",
+                                ),
+                            ),
+                    )
+            ),
+            File(dir, "emulator-split-outcome.png"),
+        )
+
+        // a split sale on the Refund tab, partly refunded so item returns are on offer
+        val cards =
+            listOf(
+                CardPaymentUi(
+                    "Card 1",
+                    "60.00",
+                    "poi-1",
+                    "Visa",
+                    "1111",
+                    "SIM-APPROVED",
+                    partial = true,
+                    remainingAmount = "60.00",
+                ),
+                CardPaymentUi(
+                    "Card 2",
+                    "40.00",
+                    "poi-2",
+                    "Visa",
+                    "4242",
+                    "SIM-APPROVED",
+                    remainingAmount = "40.00",
+                ),
+            )
+        render(
+            paid.copy(
+                sessionId = "3f9c2a7e-5d41-4b8a-9c16-8e2f70d1b634",
+                sales =
+                    listOf(
+                        StoredSaleUi(
+                            id = "9d1f4c2b-7a53-4e08-b1d9-2c6e91f0a487",
+                            completedAtLabel = "Aug 6, 10:42",
+                            totalAmount = "100.00",
+                            items =
+                                listOf(
+                                    SaleItemUi("SKU-014", "Wireless Earbuds", 1, 6000),
+                                    SaleItemUi("SKU-021", "Desk Lamp", 1, 4000),
+                                ),
+                            refunded = true,
+                            fullRefundAvailable = false,
+                            cardPayments = cards,
+                        )
+                    ),
+            ),
+            File(dir, "emulator-split-refund.png"),
+            initialTab = EmulatorTab.REFUND,
+        )
     }
 }

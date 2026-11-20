@@ -166,11 +166,16 @@ built-in fixture, which contains two sample members (one Gold member with 12,000
 ```
 
 The simulator has no customer delay and confirms input prompts by default. A payment request whose
-amount in cents ends in `123` declines (for example, `$41.23`); `$41.24` approves. The simulated
-terminal is reported reachable, but no network endpoint is contacted. Gift-card charges use the
-stored-value card balance, are partially approved up to that balance, and refuse when the balance is
-zero; linked refunds restore the refunded amount, and a void restores the approved amount when no
-refund has already been processed.
+amount in cents ends in `123` declines (for example, `$41.23`); `$41.24` approves. A card payment
+whose amount in cents ends in `456` (for example, `$104.56`) is approved for 60% of the requested
+amount, rounded down to the cent (`$62.73`), with `Result=Partial`: use it to try split and partial
+card payments. The rule applies to card payments only, not to gift-card charges or refunds. Like
+the terminal's parser, the simulator refuses a payment that sets `SplitPaymentFlag` without
+`AmountsReq.PaidAmount`, or with a `PaymentType` other than `Normal`, with the `NotAllowed` error
+condition. The simulated terminal is reported reachable, but no network endpoint is contacted.
+Gift-card charges use the stored-value card balance, are partially approved up to that balance, and
+refuse when the balance is zero; linked refunds restore the refunded amount, and a void restores
+the approved amount when no refund has already been processed.
 
 ## A local session with curl
 

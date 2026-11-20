@@ -31,6 +31,10 @@ data class TransactionLeg(
     val approvalCode: String? = null,
     val acquirerTransactionId: String? = null,
     val brand: String? = null,
+    /** The card's masked number as the terminal reported it; set on card legs. */
+    val maskedPan: String? = null,
+    /** True when the card approved less than it was asked for. Only card legs set it. */
+    val partial: Boolean = false,
     /**
      * The rewardRefs the redemption carried; a referenced redemption reversal must replay the same
      * refs. Unset until the SDK exposes them on SettlementResult.
@@ -100,6 +104,10 @@ data class SaleRecord(
     }
 
     fun leg(type: LegType): TransactionLeg? = legs.firstOrNull { it.type == type }
+
+    /** Every card payment of the sale, in payment order. */
+    val cardLegs: List<TransactionLeg>
+        get() = legs.filter { it.type == LegType.CARD }
 }
 
 /**
@@ -128,6 +136,13 @@ data class RefundRecord(
      * legless full record counts for the whole sale.
      */
     val leg: LegType? = null,
+    /**
+     * The POI reference of the one tender payment this refund drew from, which tells the card
+     * payments of a split sale apart. Null on records from before split card payments, and for
+     * refunds that did not draw on a particular payment: a record without it counts for every
+     * payment of its [leg] type.
+     */
+    val legPoiTransactionId: String? = null,
     /**
      * What actually flowed back to [leg] — [amount] is the whole return value, which may include
      * shares netted against a charge or paid out by the register. Null on records from before the
@@ -161,6 +176,14 @@ data class RefundRecord(
     val isPartialRefund: Boolean
         get() = !full && !reversalProgress
 }
+
+/**
+ * Whether this refund drew on [leg]: it names the leg's type, and either names no particular
+ * payment (records from before split card payments) or names this one.
+ */
+private fun RefundRecord.drewOn(leg: TransactionLeg): Boolean =
+    this.leg == leg.type &&
+        (legPoiTransactionId == null || legPoiTransactionId == leg.poiTransactionId)
 
 /** A void issued against a stored sale. */
 @Serializable
@@ -203,10 +226,26 @@ data class StoredSale(
     val fullyRefunded: Boolean
         get() =
             refunds.any { it.full && it.leg == null } ||
-                (moneyLegs.isNotEmpty() && moneyLegs.all { legRefunded(it.type) })
+                (moneyLegs.isNotEmpty() && moneyLegs.all { legRefunded(it) })
 
-    /** Whether a full refund already returned the [type] tender leg. */
-    fun legRefunded(type: LegType): Boolean = refunds.any { it.full && it.leg == type }
+    /** Whether full refunds already returned every tender leg of the [type]. */
+    fun legRefunded(type: LegType): Boolean {
+        val legs = sale.legs.filter { it.type == type }
+        return if (legs.isEmpty()) {
+            refunds.any { it.full && it.leg == type }
+        } else {
+            legs.all { legRefunded(it) }
+        }
+    }
+
+    /**
+     * Whether a full refund already returned this tender payment — a card payment of a split sale
+     * is told apart by its POI reference. A full refund that names no leg (what a completed void
+     * records) exhausted the whole sale, so it returned every payment.
+     */
+    fun legRefunded(leg: TransactionLeg): Boolean = refunds.any {
+        it.full && (it.leg == null || it.drewOn(leg))
+    }
 
     /**
      * Whether an earlier refund already reversed the loyalty award — reversing it again would debit
@@ -222,17 +261,21 @@ data class StoredSale(
         get() = voided == null && !fullyRefunded
 
     /**
-     * What the [type] tender leg can still return: the amount it collected minus what earlier
-     * refunds already drew from it. Null when unknown (missing leg or unrecorded amounts) — the
-     * acquirer then enforces the cap. Matters for netted sales, whose tender collected less than
-     * the items' shelf value: a later item refund must not ask the terminal for more than the
-     * transaction took.
+     * What this tender leg can still return: the amount it collected minus what earlier refunds
+     * already drew from it. Null when unknown (missing leg or unrecorded amounts) — the acquirer
+     * then enforces the cap. Matters for netted sales, whose tender collected less than the items'
+     * shelf value: a later item refund must not ask the terminal for more than the transaction
+     * took.
      */
-    fun remainingLegAmount(type: LegType): java.math.BigDecimal? {
-        val collected = sale.leg(type)?.amount?.toBigDecimalOrNull() ?: return null
+    fun remainingLegAmount(type: LegType): java.math.BigDecimal? =
+        sale.leg(type)?.let { remainingLegAmount(it) }
+
+    /** [remainingLegAmount] for one particular tender payment. */
+    fun remainingLegAmount(leg: TransactionLeg): java.math.BigDecimal? {
+        val collected = leg.amount?.toBigDecimalOrNull() ?: return null
         val drawn =
             refunds
-                .filter { it.leg == type }
+                .filter { it.drewOn(leg) }
                 .sumOf {
                     (it.tenderAmount ?: it.amount)?.toBigDecimalOrNull()
                         ?: java.math.BigDecimal.ZERO

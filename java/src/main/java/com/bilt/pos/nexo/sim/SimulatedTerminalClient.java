@@ -401,6 +401,12 @@ public final class SimulatedTerminalClient implements TerminalClient {
         request.getPaymentRequest() == null || request.getPaymentRequest().getPaymentData() == null
             ? null
             : request.getPaymentRequest().getPaymentData().getPaymentType();
+    if (!splitPaymentAllowed(request)) {
+      return failure(
+          requestHeader(header, MessageCategoryType.PAYMENT),
+          MessageCategoryType.PAYMENT,
+          "NotAllowed");
+    }
     if (type == PaymentTypeEnum.REFUND) {
       return refund(request, header);
     }
@@ -436,8 +442,15 @@ public final class SimulatedTerminalClient implements TerminalClient {
       storedValueBalance = storedValueBalance.subtract(amount);
       storedValueBalances.put(storedValueId, storedValueBalance);
     }
+    boolean partialCardApproval = !storedValuePayment && partiallyApproves(amount);
+    if (partialCardApproval) {
+      amount = partialApprovedAmount(amount);
+    }
     String currency = paymentCurrency(request);
     ObjectNode body = successBody();
+    if (partialCardApproval) {
+      ((ObjectNode) body.get("Response")).put("Result", "Partial");
+    }
     ObjectNode paymentResult = body.putObject("PaymentResult");
     paymentResult
         .putObject("AmountsResp")
@@ -1163,13 +1176,51 @@ public final class SimulatedTerminalClient implements TerminalClient {
   }
 
   private static boolean declines(BigDecimal amount) {
+    return centsRemainder(amount) == 123;
+  }
+
+  /** The last three digits of the amount in cents, ignoring its sign. */
+  private static int centsRemainder(BigDecimal amount) {
     return amount
-            .movePointRight(2)
-            .setScale(0, java.math.RoundingMode.HALF_UP)
-            .abs()
-            .remainder(BigDecimal.valueOf(1000))
-            .intValue()
-        == 123;
+        .movePointRight(2)
+        .setScale(0, java.math.RoundingMode.HALF_UP)
+        .abs()
+        .remainder(BigDecimal.valueOf(1000))
+        .intValue();
+  }
+
+  /**
+   * Whether a card payment of this amount is approved for only part of it: its amount in cents ends
+   * in {@code 456} (for example, {@code $4.56} or {@code $104.56}).
+   */
+  private static boolean partiallyApproves(BigDecimal amount) {
+    return centsRemainder(amount) == 456;
+  }
+
+  /** The 60% of a partially approved amount, rounded down to the cent. */
+  private static BigDecimal partialApprovedAmount(BigDecimal amount) {
+    return amount.multiply(new BigDecimal("0.6")).setScale(2, java.math.RoundingMode.DOWN);
+  }
+
+  /**
+   * The terminal parser's split-payment checks (nexo section 4.3.2.2): a payment that sets {@code
+   * SplitPaymentFlag} must carry {@code AmountsReq.PaidAmount} and must be a {@code Normal}
+   * payment, and the terminal answers {@code NotAllowed} when it is not. An absent {@code
+   * PaymentType} is {@code Normal}.
+   */
+  private static boolean splitPaymentAllowed(SaleToPOIRequest request) {
+    com.bilt.pos.nexo.model.PaymentRequest payment = request.getPaymentRequest();
+    if (payment == null
+        || payment.getPaymentData() == null
+        || !Boolean.TRUE.equals(payment.getPaymentData().getSplitPaymentFlag())) {
+      return true;
+    }
+    PaymentTypeEnum type = payment.getPaymentData().getPaymentType();
+    boolean hasPaidAmount =
+        payment.getPaymentTransaction() != null
+            && payment.getPaymentTransaction().getAmountsReq() != null
+            && payment.getPaymentTransaction().getAmountsReq().getPaidAmount() != null;
+    return hasPaidAmount && (type == null || type == PaymentTypeEnum.NORMAL);
   }
 
   private String storedValueId(com.bilt.pos.nexo.model.PaymentAccountReq request) {

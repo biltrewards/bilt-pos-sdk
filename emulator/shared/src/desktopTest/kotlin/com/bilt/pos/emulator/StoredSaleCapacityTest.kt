@@ -71,4 +71,80 @@ class StoredSaleCapacityTest {
     fun unknownLegAmountMeansNoCap() {
         assertNull(StoredSale(sale(null)).remainingLegAmount(LegType.CARD))
     }
+
+    private fun splitSale() =
+        SaleRecord(
+            id = "s",
+            sessionId = "x",
+            saleId = "pos",
+            poiId = "poi",
+            currency = "USD",
+            completedAt = "2026-09-01T00:00:00Z",
+            authorizedAmount = "50.00",
+            legs =
+                listOf(
+                    TransactionLeg(LegType.CARD, "poi-1", amount = "30.00"),
+                    TransactionLeg(LegType.CARD, "poi-2", amount = "20.00"),
+                ),
+        )
+
+    @Test
+    fun aRefundNamingOneCardPaymentLeavesTheOtherUntouched() {
+        val stored =
+            StoredSale(
+                splitSale(),
+                refunds =
+                    listOf(
+                        RefundRecord(
+                            amount = "5.00",
+                            tenderAmount = "5.00",
+                            leg = LegType.CARD,
+                            legPoiTransactionId = "poi-2",
+                            recordedAt = "2026-09-01T01:00:00Z",
+                        )
+                    ),
+            )
+        val (first, second) = stored.sale.cardLegs
+        assertEquals(BigDecimal("30.00"), stored.remainingLegAmount(first))
+        assertEquals(BigDecimal("15.00"), stored.remainingLegAmount(second))
+    }
+
+    @Test
+    fun theSaleIsRefundedInFullOnlyOnceEveryCardPaymentIs() {
+        fun fullRefund(poi: String) =
+            RefundRecord(
+                full = true,
+                leg = LegType.CARD,
+                legPoiTransactionId = poi,
+                recordedAt = "2026-09-01T01:00:00Z",
+            )
+        val one = StoredSale(splitSale(), refunds = listOf(fullRefund("poi-2")))
+        assertEquals(false, one.fullyRefunded)
+        assertEquals(true, one.legRefunded(one.sale.cardLegs[1]))
+        assertEquals(false, one.legRefunded(one.sale.cardLegs[0]))
+        assertEquals(false, one.legRefunded(LegType.CARD))
+
+        val both =
+            StoredSale(splitSale(), refunds = listOf(fullRefund("poi-2"), fullRefund("poi-1")))
+        assertEquals(true, both.fullyRefunded)
+        assertEquals(true, both.legRefunded(LegType.CARD))
+    }
+
+    @Test
+    fun aRecordWithoutAPaymentReferenceCountsForEveryCardPayment() {
+        // records from before split card payments name only the leg type
+        val legacy =
+            RefundRecord(full = true, leg = LegType.CARD, recordedAt = "2026-09-01T01:00:00Z")
+        val stored = StoredSale(splitSale(), refunds = listOf(legacy))
+        assertEquals(true, stored.fullyRefunded)
+    }
+
+    @Test
+    fun aFullRefundNamingNoLegReturnedEveryCardPayment() {
+        // what a completed void records: it exhausted the whole sale
+        val voidRecord = RefundRecord(full = true, recordedAt = "2026-09-01T01:00:00Z")
+        val stored = StoredSale(splitSale(), refunds = listOf(voidRecord))
+        assertEquals(listOf(true, true), stored.sale.cardLegs.map { stored.legRefunded(it) })
+        assertEquals(true, stored.legRefunded(LegType.CARD))
+    }
 }

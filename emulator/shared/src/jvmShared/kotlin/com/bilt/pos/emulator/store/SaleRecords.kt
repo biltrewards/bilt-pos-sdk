@@ -34,7 +34,26 @@ fun SettlementResult.toSaleRecord(
                 add(TransactionLeg(type, id, timestamp?.toString(), amount?.toPlainString()))
             }
         }
-        if (!storedValueIsPrimary) {
+        // every card payment of the sale is its own leg: a split sale holds several,
+        // each with the reference its own void or refund presents
+        cardPayments.forEach { payment ->
+            payment.poiTransactionId?.let {
+                add(
+                    TransactionLeg(
+                        type = LegType.CARD,
+                        poiTransactionId = it,
+                        poiTimestamp = payment.poiTransactionTimestamp?.toString(),
+                        amount = payment.amount?.toPlainString(),
+                        approvalCode = payment.approvalCode,
+                        acquirerTransactionId = payment.acquirerTransactionId,
+                        brand = payment.paymentBrand,
+                        maskedPan = payment.maskedPan,
+                        partial = payment.isPartialApproval,
+                    )
+                )
+            }
+        }
+        if (cardPayments.isEmpty() && !storedValueIsPrimary) {
             poiTransactionId?.let {
                 add(
                     TransactionLeg(
