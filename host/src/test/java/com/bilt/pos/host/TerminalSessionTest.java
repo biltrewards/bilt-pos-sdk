@@ -332,6 +332,11 @@ class TerminalSessionTest {
 
     JsonNode done = client.awaitOperation(id, operationId, "succeeded", Duration.ofSeconds(10));
     assertEquals("89.50", done.path("result").path("cardAmountCharged").asText());
+    JsonNode cardPayments = done.path("result").path("cardPayments");
+    assertEquals(1, cardPayments.size());
+    assertEquals("89.50", cardPayments.path(0).path("amount").asText());
+    assertEquals("POI-PAY-1", cardPayments.path(0).path("poiTransactionId").asText());
+    assertFalse(cardPayments.path(0).path("partialApproval").asBoolean());
     assertEquals("10.00", done.path("result").path("totalRebateAmount").asText());
     assertEquals(89, done.path("result").path("totalPointsEarned").asInt());
 
@@ -356,6 +361,92 @@ class TerminalSessionTest {
     assertEquals("TOTAL_REQUIRED", stepEvent.path("payload").path("kind").asText());
     assertEquals(
         "succeeded", events.get(events.size() - 1).path("payload").path("status").asText());
+  }
+
+  @Test
+  void aPriorSaleVoidReversesEveryCardPaymentOfTheRecordNewestFirst() throws Exception {
+    terminal.reply(
+        MessageCategoryType.REVERSAL,
+        "{\"SaleToPOIResponse\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Success\"}}}}");
+    String id =
+        client
+            .post(
+                "/v1/sessions",
+                json(
+                    "{'kind':'terminal','saleId':'LANE-1','poiId':'"
+                        + POI
+                        + "','currency':'USD','autoDisplay':false}"))
+            .expect(201)
+            .text("id");
+
+    // the list takes precedence over the single-card fields kept for compatibility
+    String operationId =
+        submit(
+                id,
+                json(
+                    "{'type':'voidTransaction','originalSale':{"
+                        + "'cardPayments':["
+                        + "{'poiTransactionId':'POI-CARD-1','poiTransactionTimestamp':"
+                        + "'2026-07-20T10:00:00Z','amount':'20.00'},"
+                        + "{'poiTransactionId':'POI-CARD-2','amount':'30.00'}],"
+                        + "'cardPoiTransactionId':'POI-IGNORED'}}"))
+            .path("id")
+            .asText();
+    JsonNode voided = client.awaitOperation(id, operationId, "succeeded", Duration.ofSeconds(10));
+    JsonNode result = voided.path("result");
+    assertEquals("50.00", result.path("reversedAmount").asText());
+    assertEquals(2, result.path("cardReversals").size());
+    assertEquals(
+        "POI-CARD-2",
+        result.path("cardReversals").path(0).path("originalPoiTransactionId").asText());
+    assertFalse(result.path("cardReversals").path(0).path("serviceId").asText("").isEmpty());
+    JsonNode byTender = result.path("reversedAmountByTender");
+    assertEquals(2, byTender.size());
+    assertEquals("CARD", byTender.path(0).path("tender").asText());
+    assertEquals("POI-CARD-2", byTender.path(0).path("poiTransactionId").asText());
+    assertEquals("30.00", byTender.path(0).path("amount").asText());
+    assertEquals("20.00", byTender.path(1).path("amount").asText());
+
+    String legacyId =
+        submit(
+                id,
+                json(
+                    "{'type':'voidTransaction','originalSale':{'cardPayments':[],"
+                        + "'cardPoiTransactionId':'POI-CARD-OLD',"
+                        + "'cardPoiTransactionTimestamp':'2026-07-20T10:00:00Z'}}"))
+            .path("id")
+            .asText();
+    client.awaitOperation(id, legacyId, "succeeded", Duration.ofSeconds(10));
+
+    // a legacy gift-card-only record: the card reference is the stored value payment
+    String giftCardId =
+        submit(
+                id,
+                json(
+                    "{'type':'voidTransaction','originalSale':{"
+                        + "'cardPoiTransactionId':'POI-GC-1',"
+                        + "'storedValuePoiTransactionId':'POI-GC-1'}}"))
+            .path("id")
+            .asText();
+    JsonNode giftCard =
+        client.awaitOperation(id, giftCardId, "succeeded", Duration.ofSeconds(10)).path("result");
+    assertEquals(0, giftCard.path("cardReversals").size());
+    assertEquals("STORED_VALUE", giftCard.path("storedValueReversal").path("tenderType").asText());
+    assertEquals(
+        "POI-GC-1", giftCard.path("storedValueReversal").path("originalPoiTransactionId").asText());
+
+    List<String> reversed =
+        terminal.requests().stream()
+            .filter(request -> request.getReversalRequest() != null)
+            .map(
+                request ->
+                    request
+                        .getReversalRequest()
+                        .getOriginalPOITransaction()
+                        .getPoiTransactionID()
+                        .getTransactionID())
+            .toList();
+    assertEquals(List.of("POI-CARD-2", "POI-CARD-1", "POI-CARD-OLD", "POI-GC-1"), reversed);
   }
 
   @Test

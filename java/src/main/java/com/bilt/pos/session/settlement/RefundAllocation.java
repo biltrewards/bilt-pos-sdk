@@ -57,12 +57,24 @@ public final class RefundAllocation {
   }
 
   /**
-   * Linked card refund against a persisted original sale record. The record must contain a card
-   * leg; use {@link #cardUnlinked(BigDecimal)} when the refund should be issued against a card
-   * presented at the terminal.
+   * Linked card refund against a persisted original sale record. The record must contain exactly
+   * one card payment: with several, the refund cannot tell which one to return to, so pick one of
+   * {@link OriginalSaleRecord#getCardPayments()} and use {@link #card(BigDecimal, String,
+   * Instant)}, one allocation per card payment. Use {@link #cardUnlinked(BigDecimal)} when the
+   * refund should be issued against a card presented at the terminal.
+   *
+   * @throws IllegalArgumentException if the record holds more than one card payment
    */
   public static RefundAllocation card(BigDecimal amount, OriginalSaleRecord originalSale) {
     Objects.requireNonNull(originalSale, "originalSale");
+    int cardPayments = originalSale.getCardPayments().size();
+    if (cardPayments > 1) {
+      throw new IllegalArgumentException(
+          "originalSale has "
+              + cardPayments
+              + " card payments; refund each with RefundAllocation.card(amount, "
+              + "poiTransactionId, timestamp) from originalSale.getCardPayments()");
+    }
     return card(
         amount,
         Objects.requireNonNull(

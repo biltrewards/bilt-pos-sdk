@@ -3,6 +3,7 @@
 // reconnect mid-settlement with the pending step replayed through `since`.
 import type {
   OperationStep,
+  OriginalSaleRecord,
   RebateRedemptionResult,
   SettlementMovement,
 } from '@biltorg/pos-protocol';
@@ -131,6 +132,60 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
     expect(movements.map((m) => m.step)).toContain('AWARD');
     // The host moves the phase with a context event that can land after the settle result.
     await vi.waitFor(() => expect(session.context.phase()).toBe('COMPLETE'));
+    await session.end();
+  });
+
+  it('reports each card payment and voids a sale record holding several', async () => {
+    terminal.reply(
+      'Reversal',
+      '{"SaleToPOIResponse":{"ReversalResponse":{"Response":{"Result":"Success"}}}}',
+    );
+    const session = await lane();
+    const result = await session.settle();
+    expect(result.cardPayments).toEqual([
+      expect.objectContaining({
+        amount: '90.00',
+        poiTransactionId: 'POI-PAY-1',
+        approvalCode: 'APPR7',
+        acquirerTransactionId: 'ACQ-1',
+        paymentBrand: 'Visa',
+        partialApproval: false,
+      }),
+    ]);
+
+    // A record the register persisted, with a second card payment from another lane.
+    const record: OriginalSaleRecord = {
+      cardPayments: [
+        ...result.cardPayments.flatMap(({ poiTransactionId, poiTransactionTimestamp, amount }) =>
+          poiTransactionId
+            ? [
+                {
+                  poiTransactionId,
+                  amount,
+                  ...(poiTransactionTimestamp ? { poiTransactionTimestamp } : {}),
+                },
+              ]
+            : [],
+        ),
+        { poiTransactionId: 'POI-PAY-2', amount: '10.00' },
+      ],
+      memberId: '98234',
+    };
+    const later = await lane();
+    const voided = await later.voidTransaction(record);
+    expect(voided.cardReversals.map((c) => c.originalPoiTransactionId)).toEqual([
+      'POI-PAY-2',
+      'POI-PAY-1',
+    ]);
+    expect(voided.reversedAmountByTender).toEqual([
+      { tender: 'CARD', poiTransactionId: 'POI-PAY-2', amount: '10.00' },
+      { tender: 'CARD', poiTransactionId: 'POI-PAY-1', amount: '90.00' },
+    ]);
+    expect(voided.reversedAmount).toBe('100.00');
+    const reversed = terminal
+      .requestsOf('Reversal')
+      .map((body) => JSON.stringify(body).match(/"TransactionID":"(POI-PAY-\d)"/)?.[1]);
+    expect(reversed).toEqual(['POI-PAY-2', 'POI-PAY-1']);
     await session.end();
   });
 

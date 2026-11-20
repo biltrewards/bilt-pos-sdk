@@ -406,6 +406,19 @@ session.settle()
 
 When the gift card balance is insufficient, the charge is a partial authorization and the remainder flows to the card payment step.
 
+### Card payments on the result
+
+`SettlementResult.getCardPayments()` lists every card payment the settlement made, in order, as `CardPaymentResult`s: the amount, POI transaction ID and timestamp, approval code, acquirer transaction ID, payment brand, masked PAN when the terminal reports it, the customer and merchant receipts, and whether the terminal approved less than it was asked for. `getCardAmountCharged()` is their sum. A gift card payment is never a card payment: the stored value payment of a split tender, or of a gift-card-only sale, stays on `getStoredValuePoiTransactionId()`, and a gift-card-only sale has no card payments.
+
+`settle()` makes one card payment today, so the list holds at most one entry. Registers that print or persist card payments should still read the list: the single-payment getters (`getPoiTransactionId()`, `getApprovalCode()`, `getPaymentBrand()`, `getCustomerReceipt()`, `getMerchantReceipt()` and the like) describe the first card payment only. Where that payment's response lacks a value they keep the stored value payment's, and a gift-card-only sale reports its stored value payment there, as before.
+
+```java
+for (CardPaymentResult card : result.getCardPayments()) {
+    register.printReceipt(card.getMerchantReceipt());
+    journal.recordCard(card.getPoiTransactionId(), card.getPoiTransactionTimestamp(), card.getAmount());
+}
+```
+
 ### Variant: skip unavailable loyalty
 
 ```java
@@ -557,9 +570,19 @@ A `TerminalShopperSession` moves the phase itself around settlement: `TENDERING`
 
 `TerminalShopperSession` can still reverse the positive sale it took itself: `refund()` and `voidTransaction()` work on the session's most recent completed pure-sale settlement, no references needed. Returns from an earlier sale are handled in `settle(...)` by adding return lines to the basket and supplying register-selected `RefundAllocation`s in `SettlementOptions`. A pure older-sale void uses `voidTransaction(OriginalSaleRecord)` — see [Reversing a prior sale](#reversing-a-prior-sale-originalsalerecord) below.
 
-- `refund()` / `refund(amount)` — linked refunds of the most recent successful settlement's card payment; also reverse the loyalty award when one ran, best-effort by default. Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once a linked refund has returned money, that payment can no longer be voided from the session: a void would return the full amount on top of the refund. Refunds cover the card leg + award only; the sale's committed rebate and redemption movements are reversed by `voidTransaction()`.
+- `refund()` / `refund(amount)` — linked refunds of the most recent successful settlement's card payments; also reverse the loyalty award when one ran, best-effort by default. `refund()` sends one full refund per card payment, newest first; if it stops part-way, a retried `refund()` sends only the card payments still standing, and once every card payment was refunded in full another `refund()` is refused. `refund(amount)` works on a payment with one card payment; with several it is refused (`INVALID_STATE`), because the amount does not say which card to return to — ring return lines into `settle(...)` with one `RefundAllocation.card(amount, poiTransactionId, timestamp)` per card payment instead (see [Item-based refunds](#item-based-refunds-in-settlement)). Repeated partial refunds against the same payment are allowed (the acquirer enforces the cumulative limit), but once a linked refund has returned money, that payment can no longer be voided from the session: a void would return the full amount on top of the refund. Refunds cover the card payments + award only; the sale's committed rebate and redemption movements are reversed by `voidTransaction()`.
 - `refundUnlinked(amount)` — payment-only, not tied to a prior transaction, no loyalty reversal, and does not alter the latest settlement's refund/void guards.
-- `voidTransaction()` — reverses every movement the completed pure-sale settlement committed, in order: card and stored value legs (nexo `ReversalRequest`), then the redemption, rebate, and award (their `LoyaltyRequest` refund types). A checkout fully covered by rewards has no money leg; voiding it refunds the loyalty movements alone. When a failed settlement's rollback was incomplete (the error names the movements still standing), `voidTransaction()` on that session finishes the unwind by retrying the reversals that did not go through. After a successful void the SDK discards its resume progress; a later void or linked refund is sent to the terminal, which owns already-voided transaction enforcement.
+- `voidTransaction()` — reverses every movement the completed pure-sale settlement committed, in order: each card payment (newest first) and the stored value leg (nexo `ReversalRequest`), then the redemption, rebate, and award (their `LoyaltyRequest` refund types). A checkout fully covered by rewards has no money leg; voiding it refunds the loyalty movements alone. When a failed settlement's rollback was incomplete (the error names the movements still standing), `voidTransaction()` on that session finishes the unwind by retrying the reversals that did not go through. After a successful void the SDK discards its resume progress; a later void or linked refund is sent to the terminal, which owns already-voided transaction enforcement.
+
+Every card payment a void reverses or a refund returns gets its own terminal reference and receipts. `VoidResult.getCardReversals()` and `RefundResult.getCardRefunds()` list them as `TenderMovement`s in the order they were sent (newest card payment first): the tender type (`CARD` there), the original POI transaction, the amount, the reversal's or refund's own POI transaction and timestamp, the approval code (refunds), the `ServiceID`, and the customer and merchant receipts. Print and store each one. A void also reverses the stored value leg of a split tender or a gift-card-only sale; `VoidResult.getStoredValueReversal()` is that leg's `TenderMovement` (tender type `STORED_VALUE`) with its own receipts, or `null`. `getReversedAmountByTender()` / `getRefundedAmountByTender()` break the total down by money tender: one `TenderAmount` (`CARD`, `STORED_VALUE`, or `EXTERNAL`; the POI transaction it returned; the amount) per card payment and one for a stored value leg. Loyalty reversals are not tenders and are not listed. When there is any entry, the entries sum to `getReversedAmount()` / `getRefundedAmount()`. A leg whose amount the terminal does not echo counts the card payment's recorded amount; if that is unknown too, the entry's amount and the total are `null`, never a partial sum. The single-value getters (`getPoiTransactionId()`, the receipts, `getServiceId()`) describe the first leg sent.
+
+```java
+VoidResult voided = session.voidTransaction().get();
+for (TenderMovement card : voided.getCardReversals()) {
+    register.printReceipt(card.getMerchantReceipt());
+    journal.recordReversal(card.getOriginalPoiTransactionId(), card.getPoiTransactionId(), card.getAmount());
+}
+```
 
 Both return a `ReversalFlow` — lazy like every session operation (`execute()` / `get()` / `getOrNull()`). When a step fails, the `onError` handler decides how to proceed:
 
@@ -592,16 +615,25 @@ Every movement of a completed sale can be voided from a fresh process — days l
 
 | Movement | Persist from `SettlementResult` | `OriginalSaleRecord.Builder` fields |
 |---|---|---|
-| Card payment | `getPoiTransactionId()` / `getPoiTransactionTimestamp()` | `cardPoiTransactionId` / `cardPoiTransactionTimestamp` |
+| Card payments | `getCardPayments()`: each one's `getPoiTransactionId()`, `getPoiTransactionTimestamp()`, `getAmount()` | `addCardPayment(CardPaymentRecord)` / `cardPayments(list)`, in the order they were made |
 | Stored value (gift card) leg | `getStoredValuePoiTransactionId()` / `getStoredValuePoiTransactionTimestamp()` | `storedValuePoiTransactionId` / `storedValuePoiTransactionTimestamp` |
 | Rebate (coupons) | `getRebatePoiTransactionId()` / `getRebatePoiTransactionTimestamp()` | `rebatePoiTransactionId` / `rebatePoiTransactionTimestamp` |
 | Redemption (points) | `getRedemptionPoiTransactionId()` / `getRedemptionPoiTransactionTimestamp()` | `redemptionPoiTransactionId` / `redemptionPoiTransactionTimestamp` |
 | Award | `getAwardPoiTransactionId()` / `getAwardPoiTransactionTimestamp()` | `awardPoiTransactionId` / `awardPoiTransactionTimestamp` |
 | Member | `IdentifyResult.getMemberId()` (or POS records) | `memberId` |
 
+`SettlementResult.toOriginalSaleRecord(memberId)` builds the record with every one of these references; persist that when you can. To rebuild it from your own storage:
+
 ```java
-OriginalSaleRecord originalSale = OriginalSaleRecord.builder()
-        .cardPoiTransactionId(stored.cardTxnId).cardPoiTransactionTimestamp(stored.cardTs)
+OriginalSaleRecord.Builder builder = OriginalSaleRecord.builder();
+for (StoredCard card : stored.cards) {             // in the order they were charged
+    builder.addCardPayment(CardPaymentRecord.builder()
+            .poiTransactionId(card.txnId)
+            .poiTransactionTimestamp(card.ts)
+            .amount(card.amount)
+            .build());
+}
+OriginalSaleRecord originalSale = builder
         .storedValuePoiTransactionId(stored.giftCardTxnId)
         .storedValuePoiTransactionTimestamp(stored.giftCardTs)
         .rebatePoiTransactionId(stored.rebateTxnId)
@@ -619,13 +651,15 @@ try (TerminalShopperSession session = TerminalShopperSession.builder()
         .currency("USD")
         .start()
         .get()) {
-    session.voidTransaction(originalSale).execute();   // card, gift card, redemption, rebate, award
+    session.voidTransaction(originalSale).execute();   // cards (newest first), gift card, redemption, rebate, award
 }
 ```
 
+A gift-card-only sale's record has no card payments: its payment is in the stored value fields only. Records persisted before card payment lists keep working, and one whose card reference equals its stored value reference (how a gift-card-only sale used to be recorded) is read as the stored value payment only and voided once: `cardPoiTransactionId` / `cardPoiTransactionTimestamp` on the builder record a single card payment (with no amount), and `getCardPoiTransactionId()` / `getCardPoiTransactionTimestamp()` return the first card payment's reference. Used together with the list, the single-card setters replace the first entry's reference.
+
 Only the movements you supply references for are reversed: a sale with no card leg (rewards covered everything) is voided by its loyalty references alone, and the loyalty refunds are then strict rather than best-effort. The award is reversed only by its own reference; if `awardPoiTransactionId` was not persisted, no award reversal is sent. The same `ReversalFlow` decision handling applies as on `TerminalShopperSession`. If the record includes any POI transaction ID from this session's most recent settlement, the call is refused; use parameterless `voidTransaction()` so an in-progress partial void or prior refund cannot be bypassed.
 
-If a prior-sale void partially fails after reversing one or more legs, retry that void on the same `TerminalShopperSession` instance. The reversed-movement progress is held in memory so the retry resumes at the first still-standing movement; `end()` is refused until the void finishes because a new session created with the same `OriginalSaleRecord` has no memory of that progress and would send the full void sequence again.
+If a prior-sale void partially fails after reversing one or more legs, retry that void on the same `TerminalShopperSession` instance. The reversed-movement progress is held in memory so the retry resumes at the first still-standing movement — with several card payments, at the first card payment not yet reversed; `end()` is refused until the void finishes because a new session created with the same `OriginalSaleRecord` has no memory of that progress and would send the full void sequence again.
 
 ### Item-based refunds in settlement
 
@@ -653,6 +687,15 @@ try (TerminalShopperSession session = TerminalShopperSession.builder()
                     new BigDecimal("5.00")))
             .build())
             .execute();
+}
+```
+
+`RefundAllocation.card(amount, originalSale)` targets the record's card payment, so it needs a record with exactly one; with several it throws `IllegalArgumentException`. Pick the card payments to return to and add one `RefundAllocation.card(amount, poiTransactionId, timestamp)` for each:
+
+```java
+for (CardPaymentRecord card : originalSale.getCardPayments()) {
+    options.addRefund(RefundAllocation.card(
+            amountFor(card), card.getPoiTransactionId(), card.getPoiTransactionTimestamp()));
 }
 ```
 

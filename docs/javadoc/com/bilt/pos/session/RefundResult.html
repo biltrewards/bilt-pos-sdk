@@ -133,30 +133,52 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getApprovalCode()" class="member-name-link">getApprovalCode</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCustomerReceipt()" class="member-name-link">getCustomerReceipt</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getMerchantReceipt()" class="member-name-link">getMerchantReceipt</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPointsReversed()" class="member-name-link">getPointsReversed</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Approval code of the first refund this call sent; see <a href="#getCardRefunds()"><code>getCardRefunds()</code></a>.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCardRefunds()" class="member-name-link">getCardRefunds</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Every card payment this call refunded, in the order the requests were sent (newest card payment
+ first), each with the terminal's own reference and receipts.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCustomerReceipt()" class="member-name-link">getCustomerReceipt</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Receipt of the first leg this call sent; see <a href="#getCardRefunds()"><code>getCardRefunds()</code></a> for every card
+ payment's.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getMerchantReceipt()" class="member-name-link">getMerchantReceipt</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Receipt of the first leg this call sent; see <a href="#getCardRefunds()"><code>getCardRefunds()</code></a> for every card
+ payment's.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPointsReversed()" class="member-name-link">getPointsReversed</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Loyalty points reversed by a linked refund; <code>0</code> for unlinked.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPoiTransactionId()" class="member-name-link">getPoiTransactionId</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Terminal reference of the refund, for later status checks.</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPoiTransactionId()" class="member-name-link">getPoiTransactionId</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Terminal reference of the first refund this call sent (the newest card payment when there are
+ several), for later status checks; see <a href="#getCardRefunds()"><code>getCardRefunds()</code></a> for every card payment's
+ reference and receipts.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPoiTransactionTimestamp()" class="member-name-link">getPoiTransactionTimestamp</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRefundedAmount()" class="member-name-link">getRefundedAmount</a>()</code></div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPoiTransactionTimestamp()" class="member-name-link">getPoiTransactionTimestamp</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRefundedAmount()" class="member-name-link">getRefundedAmount</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Amount refunded by this call's money tender legs: the sum of <a href="#getRefundedAmountByTender()"><code>getRefundedAmountByTender()</code></a>.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="TenderAmount.html" title="class in com.bilt.pos.session">TenderAmount</a>&gt;</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRefundedAmountByTender()" class="member-name-link">getRefundedAmountByTender</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Amount refunded; <code>null</code> when the terminal did not echo it.</div>
+<div class="block">The amount each money tender leg of this call returned, in the order the legs were sent: one
+ entry per card payment and one for a stored value payment.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRemainingPointBalance()" class="member-name-link">getRemainingPointBalance</a>()</code></div>
@@ -199,20 +221,25 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getRefundedAmount()">
 <h3>getRefundedAmount</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getRefundedAmount</span>()</div>
-<div class="block">Amount refunded; <code>null</code> when the terminal did not echo it.</div>
+<div class="block">Amount refunded by this call's money tender legs: the sum of <a href="#getRefundedAmountByTender()"><code>getRefundedAmountByTender()</code></a>. A leg the terminal did not echo an amount for counts the
+ original card payment's amount when known; otherwise the total is <code>null</code> rather than
+ understated.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="getApprovalCode()">
 <h3>getApprovalCode</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">getApprovalCode</span>()</div>
+<div class="block">Approval code of the first refund this call sent; see <a href="#getCardRefunds()"><code>getCardRefunds()</code></a>.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="getPoiTransactionId()">
 <h3>getPoiTransactionId</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></span>&nbsp;<span class="element-name">getPoiTransactionId</span>()</div>
-<div class="block">Terminal reference of the refund, for later status checks.</div>
+<div class="block">Terminal reference of the first refund this call sent (the newest card payment when there are
+ several), for later status checks; see <a href="#getCardRefunds()"><code>getCardRefunds()</code></a> for every card payment's
+ reference and receipts.</div>
 </section>
 </li>
 <li>
@@ -225,12 +252,36 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getCustomerReceipt()">
 <h3>getCustomerReceipt</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></span>&nbsp;<span class="element-name">getCustomerReceipt</span>()</div>
+<div class="block">Receipt of the first leg this call sent; see <a href="#getCardRefunds()"><code>getCardRefunds()</code></a> for every card
+ payment's.</div>
 </section>
 </li>
 <li>
 <section class="detail" id="getMerchantReceipt()">
 <h3>getMerchantReceipt</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></span>&nbsp;<span class="element-name">getMerchantReceipt</span>()</div>
+<div class="block">Receipt of the first leg this call sent; see <a href="#getCardRefunds()"><code>getCardRefunds()</code></a> for every card
+ payment's.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getCardRefunds()">
+<h3>getCardRefunds</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a>&gt;</span>&nbsp;<span class="element-name">getCardRefunds</span>()</div>
+<div class="block">Every card payment this call refunded, in the order the requests were sent (newest card payment
+ first), each with the terminal's own reference and receipts. Empty when no card payment was
+ refunded by this call. Every entry's <a href="TenderMovement.html#getTenderType()"><code>TenderMovement.getTenderType()</code></a> is <code>CARD</code>.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getRefundedAmountByTender()">
+<h3>getRefundedAmountByTender</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="TenderAmount.html" title="class in com.bilt.pos.session">TenderAmount</a>&gt;</span>&nbsp;<span class="element-name">getRefundedAmountByTender</span>()</div>
+<div class="block">The amount each money tender leg of this call returned, in the order the legs were sent: one
+ entry per card payment and one for a stored value payment. Loyalty movements are not tenders
+ and are not listed. When there is any entry, the entries sum to <a href="#getRefundedAmount()"><code>getRefundedAmount()</code></a>;
+ when a leg's amount is unknown, that entry's amount and <a href="#getRefundedAmount()"><code>getRefundedAmount()</code></a> are both
+ <code>null</code>.</div>
 </section>
 </li>
 <li>

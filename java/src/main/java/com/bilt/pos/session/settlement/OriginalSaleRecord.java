@@ -9,20 +9,32 @@
  */
 package com.bilt.pos.session.settlement;
 
+import com.bilt.pos.session.payment.CardPaymentResult;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 
 /**
  * References from a completed sale that a later checkout session can use to void the whole original
  * transaction or allocate return settlement.
+ *
+ * <p>A sale may hold several card payments ({@link #getCardPayments()}, in the order they were
+ * made). The single-card accessors and builder methods ({@link #getCardPoiTransactionId()}, {@link
+ * Builder#cardPoiTransactionId(String)}) keep working and describe the first card payment.
+ *
+ * <p>A gift card payment is never a card payment. A card reference equal to the stored value
+ * reference — how a gift-card-only sale was recorded before card payment lists — is read as the
+ * stored value payment only: it is left out of {@link #getCardPayments()}, and the single-card
+ * getters still return it.
  */
 public final class OriginalSaleRecord {
 
-  private final String cardPoiTransactionId;
-  private final Instant cardPoiTransactionTimestamp;
+  private final List<CardPaymentRecord> cardPayments;
+  // a single-card reference that was the stored value payment, kept for the single-card getters
+  private final CardPaymentRecord storedValueAsCard;
   private final String storedValuePoiTransactionId;
   private final Instant storedValuePoiTransactionTimestamp;
   private final List<StoredValueLoadRecord> storedValueLoads;
@@ -35,8 +47,17 @@ public final class OriginalSaleRecord {
   private final String memberId;
 
   private OriginalSaleRecord(Builder builder) {
-    this.cardPoiTransactionId = builder.cardPoiTransactionId;
-    this.cardPoiTransactionTimestamp = builder.cardPoiTransactionTimestamp;
+    List<CardPaymentRecord> resolved = builder.resolvedCardPayments();
+    CardPaymentRecord giftCard = null;
+    for (Iterator<CardPaymentRecord> it = resolved.iterator(); it.hasNext(); ) {
+      CardPaymentRecord payment = it.next();
+      if (payment.getPoiTransactionId().equals(builder.storedValuePoiTransactionId)) {
+        giftCard = giftCard == null ? payment : giftCard;
+        it.remove();
+      }
+    }
+    this.cardPayments = Collections.unmodifiableList(resolved);
+    this.storedValueAsCard = giftCard;
     this.storedValuePoiTransactionId = builder.storedValuePoiTransactionId;
     this.storedValuePoiTransactionTimestamp = builder.storedValuePoiTransactionTimestamp;
     this.storedValueLoads = Collections.unmodifiableList(new ArrayList<>(builder.storedValueLoads));
@@ -53,11 +74,26 @@ public final class OriginalSaleRecord {
     return new Builder();
   }
 
-  /** Builds a record from a completed settlement result. */
+  /**
+   * Builds a record from a completed settlement result, with every card payment the terminal
+   * reported a POI reference for. A result without such a card payment keeps its single payment
+   * reference ({@link SettlementResult#getPoiTransactionId()}) as the card payment, unless that is
+   * the stored value payment: a gift-card-only sale has no card payments, and its payment is only
+   * in the stored value fields (the single-card getters still return it, as before).
+   */
   public static OriginalSaleRecord from(SettlementResult result, String memberId) {
-    return builder()
-        .cardPoiTransactionId(result.getPoiTransactionId())
-        .cardPoiTransactionTimestamp(result.getPoiTransactionTimestamp())
+    Builder builder = builder();
+    for (CardPaymentResult payment : result.getCardPayments()) {
+      if (payment.getPoiTransactionId() != null) {
+        builder.addCardPayment(CardPaymentRecord.from(payment));
+      }
+    }
+    if (builder.cardPayments.isEmpty()) {
+      builder
+          .cardPoiTransactionId(result.getPoiTransactionId())
+          .cardPoiTransactionTimestamp(result.getPoiTransactionTimestamp());
+    }
+    return builder
         .storedValuePoiTransactionId(result.getStoredValuePoiTransactionId())
         .storedValuePoiTransactionTimestamp(result.getStoredValuePoiTransactionTimestamp())
         .storedValueLoads(result.getStoredValueLoads())
@@ -71,12 +107,29 @@ public final class OriginalSaleRecord {
         .build();
   }
 
-  public String getCardPoiTransactionId() {
-    return cardPoiTransactionId;
+  /** The sale's card payments in the order they were made; empty when it had none. */
+  public List<CardPaymentRecord> getCardPayments() {
+    return cardPayments;
   }
 
+  /**
+   * POI reference of the first card payment, or {@code null} when the sale had none. With several
+   * card payments, see {@link #getCardPayments()}.
+   */
+  public String getCardPoiTransactionId() {
+    CardPaymentRecord first = firstPaymentReference();
+    return first == null ? null : first.getPoiTransactionId();
+  }
+
+  /** POI timestamp of the first card payment, or {@code null}. */
   public Instant getCardPoiTransactionTimestamp() {
-    return cardPoiTransactionTimestamp;
+    CardPaymentRecord first = firstPaymentReference();
+    return first == null ? null : first.getPoiTransactionTimestamp();
+  }
+
+  /** The first card payment; for a gift-card-only sale, its payment, as the getters always gave. */
+  private CardPaymentRecord firstPaymentReference() {
+    return cardPayments.isEmpty() ? storedValueAsCard : cardPayments.get(0);
   }
 
   public String getStoredValuePoiTransactionId() {
@@ -122,7 +175,7 @@ public final class OriginalSaleRecord {
 
   /** Whether the record contains at least one movement reference. */
   public boolean hasMovement() {
-    return cardPoiTransactionId != null
+    return !cardPayments.isEmpty()
         || storedValuePoiTransactionId != null
         || !storedValueLoads.isEmpty()
         || rebatePoiTransactionId != null
@@ -141,8 +194,12 @@ public final class OriginalSaleRecord {
    */
   public boolean sharesMovementWith(OriginalSaleRecord other) {
     Objects.requireNonNull(other, "other");
-    if (references(other.cardPoiTransactionId)
-        || references(other.storedValuePoiTransactionId)
+    for (CardPaymentRecord payment : other.cardPayments) {
+      if (references(payment.getPoiTransactionId())) {
+        return true;
+      }
+    }
+    if (references(other.storedValuePoiTransactionId)
         || references(other.rebatePoiTransactionId)
         || references(other.redemptionPoiTransactionId)
         || references(other.awardPoiTransactionId)) {
@@ -160,12 +217,16 @@ public final class OriginalSaleRecord {
     if (poiTransactionId == null) {
       return false;
     }
-    if (poiTransactionId.equals(cardPoiTransactionId)
-        || poiTransactionId.equals(storedValuePoiTransactionId)
+    if (poiTransactionId.equals(storedValuePoiTransactionId)
         || poiTransactionId.equals(rebatePoiTransactionId)
         || poiTransactionId.equals(redemptionPoiTransactionId)
         || poiTransactionId.equals(awardPoiTransactionId)) {
       return true;
+    }
+    for (CardPaymentRecord payment : cardPayments) {
+      if (poiTransactionId.equals(payment.getPoiTransactionId())) {
+        return true;
+      }
     }
     for (StoredValueLoadRecord load : storedValueLoads) {
       if (poiTransactionId.equals(load.getPoiTransactionId())) {
@@ -184,8 +245,8 @@ public final class OriginalSaleRecord {
       return false;
     }
     OriginalSaleRecord that = (OriginalSaleRecord) other;
-    return Objects.equals(cardPoiTransactionId, that.cardPoiTransactionId)
-        && Objects.equals(cardPoiTransactionTimestamp, that.cardPoiTransactionTimestamp)
+    return cardPayments.equals(that.cardPayments)
+        && Objects.equals(storedValueAsCard, that.storedValueAsCard)
         && Objects.equals(storedValuePoiTransactionId, that.storedValuePoiTransactionId)
         && Objects.equals(
             storedValuePoiTransactionTimestamp, that.storedValuePoiTransactionTimestamp)
@@ -202,8 +263,8 @@ public final class OriginalSaleRecord {
   @Override
   public int hashCode() {
     return Objects.hash(
-        cardPoiTransactionId,
-        cardPoiTransactionTimestamp,
+        cardPayments,
+        storedValueAsCard,
         storedValuePoiTransactionId,
         storedValuePoiTransactionTimestamp,
         storedValueLoads,
@@ -219,6 +280,7 @@ public final class OriginalSaleRecord {
   /** Builder for {@link OriginalSaleRecord}. */
   public static final class Builder {
 
+    private List<CardPaymentRecord> cardPayments = new ArrayList<>();
     private String cardPoiTransactionId;
     private Instant cardPoiTransactionTimestamp;
     private String storedValuePoiTransactionId;
@@ -234,11 +296,33 @@ public final class OriginalSaleRecord {
 
     private Builder() {}
 
+    /** The sale's card payments in the order they were made. Replaces any added before. */
+    public Builder cardPayments(List<CardPaymentRecord> cardPayments) {
+      this.cardPayments = new ArrayList<>();
+      if (cardPayments != null) {
+        cardPayments.forEach(this::addCardPayment);
+      }
+      return this;
+    }
+
+    /** Appends the sale's next card payment. */
+    public Builder addCardPayment(CardPaymentRecord cardPayment) {
+      this.cardPayments.add(Objects.requireNonNull(cardPayment, "cardPayment"));
+      return this;
+    }
+
+    /**
+     * POI reference of the sale's first card payment. On its own it records a single card payment
+     * with no amount; together with {@link #cardPayments(List)} or {@link
+     * #addCardPayment(CardPaymentRecord)} it replaces the first one's reference. A timestamp
+     * without a reference is ignored.
+     */
     public Builder cardPoiTransactionId(String cardPoiTransactionId) {
       this.cardPoiTransactionId = cardPoiTransactionId;
       return this;
     }
 
+    /** POI timestamp of the sale's first card payment; see {@link #cardPoiTransactionId}. */
     public Builder cardPoiTransactionTimestamp(Instant cardPoiTransactionTimestamp) {
       this.cardPoiTransactionTimestamp = cardPoiTransactionTimestamp;
       return this;
@@ -302,6 +386,26 @@ public final class OriginalSaleRecord {
 
     public OriginalSaleRecord build() {
       return new OriginalSaleRecord(this);
+    }
+
+    /** The card payment list with the single-card setters applied to its first entry. */
+    private List<CardPaymentRecord> resolvedCardPayments() {
+      List<CardPaymentRecord> resolved = new ArrayList<>(cardPayments);
+      if (cardPoiTransactionId == null) {
+        return resolved;
+      }
+      CardPaymentRecord first =
+          CardPaymentRecord.builder()
+              .poiTransactionId(cardPoiTransactionId)
+              .poiTransactionTimestamp(cardPoiTransactionTimestamp)
+              .amount(resolved.isEmpty() ? null : resolved.get(0).getAmount())
+              .build();
+      if (resolved.isEmpty()) {
+        resolved.add(first);
+      } else {
+        resolved.set(0, first);
+      }
+      return resolved;
     }
   }
 }

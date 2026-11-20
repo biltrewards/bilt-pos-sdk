@@ -285,15 +285,40 @@ AbandonedSettlementRecord:
       items:
         $ref: '#/SettlementMovement'
 
+CardPaymentRecord:
+  type: object
+  description: Persistable reference for voiding or refunding one card payment of an original sale.
+  required: [poiTransactionId]
+  properties:
+    poiTransactionId:
+      type: string
+    poiTransactionTimestamp:
+      type: string
+      format: date-time
+    amount:
+      description: What the payment authorized; absent when only its reference was kept.
+      $ref: './common.yaml#/Money'
+
 OriginalSaleRecord:
   type: object
-  description: References from a completed sale that a later session uses to void the whole transaction or allocate return settlement.
+  description: |
+    References from a completed sale that a later session uses to void the whole transaction or
+    allocate return settlement. A sale may hold several card payments: `cardPayments` lists them
+    in the order they were made, and when it is non-empty it takes precedence over
+    `cardPoiTransactionId` and `cardPoiTransactionTimestamp`. Those single-card fields, kept for
+    compatibility, are read when `cardPayments` is absent or empty and stand for one card payment.
   properties:
+    cardPayments:
+      type: array
+      items:
+        $ref: '#/CardPaymentRecord'
     cardPoiTransactionId:
       type: string
+      description: The first card payment's reference. Ignored when `cardPayments` is non-empty.
     cardPoiTransactionTimestamp:
       type: string
       format: date-time
+      description: The first card payment's timestamp. Ignored when `cardPayments` is non-empty.
     storedValuePoiTransactionId:
       type: string
     storedValuePoiTransactionTimestamp:
@@ -399,13 +424,48 @@ GiftCardPaymentResult:
     suggestedTotal:
       $ref: './common.yaml#/Money'
 
+CardPaymentResult:
+  type: object
+  description: One card payment a settlement made. Each reference is absent when the terminal did not report it.
+  required: [amount, partialApproval]
+  properties:
+    amount:
+      description: What the terminal authorized for this payment, cashback included.
+      $ref: './common.yaml#/Money'
+    poiTransactionId:
+      type: string
+      description: Terminal reference of this payment, for void and refund.
+    poiTransactionTimestamp:
+      type: string
+      format: date-time
+    approvalCode:
+      type: string
+    acquirerTransactionId:
+      type: string
+    paymentBrand:
+      type: string
+    maskedPan:
+      type: string
+    customerReceipt:
+      $ref: './common.yaml#/Receipt'
+    merchantReceipt:
+      $ref: './common.yaml#/Receipt'
+    partialApproval:
+      type: boolean
+      description: Whether the terminal authorized less than this payment requested.
+
 SettlementResult:
   type: object
   description: |
     Final outcome of a successful settlement. `movements` is the authoritative ledger of what
     remained committed; movement events during the run are provisional. The loyalty award is
     best-effort: a failed award does not fail the checkout and is reported in `warnings`.
-  required: [success, finalBasket, authorizedAmount, storedValueAmountUsed, storedValueLoadedAmount, cardAmountCharged, externalPaymentAmount, redeemedRebates, totalRebateAmount, pointsRedeemed, pointsMonetaryValue, earnedRewards, totalPointsEarned, pointsBalance, promotionMessages, cardRefundedAmount, storedValueRefundedAmount, externalRefundedAmount, loyaltyRefundedAmount, movements, warnings]
+
+    A settlement may make several card payments: `cardPayments` lists them in order. The
+    single-payment fields (`poiTransactionId`, `approvalCode`, `customerReceipt` and the like)
+    describe the first one; where its response lacks a value they keep the stored value
+    payment's, and a gift-card-only sale reports its stored value payment there.
+  required: [success, finalBasket, authorizedAmount, storedValueAmountUsed, storedValueLoadedAmount, cardAmountCharged, cardPayments, externalPaymentAmount, redeemedRebates, totalRebateAmount, pointsRedeemed, pointsMonetaryValue, earnedRewards, totalPointsEarned, pointsBalance, promotionMessages, cardRefundedAmount, storedValueRefundedAmount, externalRefundedAmount, loyaltyRefundedAmount, movements, warnings]
   properties:
     success:
       type: boolean
@@ -418,15 +478,24 @@ SettlementResult:
     storedValueLoadedAmount:
       $ref: './common.yaml#/Money'
     cardAmountCharged:
+      description: The sum of `cardPayments`.
       $ref: './common.yaml#/Money'
+    cardPayments:
+      type: array
+      description: Every card payment the settlement made and kept, in order; empty when no card was charged.
+      items:
+        $ref: '#/CardPaymentResult'
     externalPaymentAmount:
       $ref: './common.yaml#/Money'
     approvalCode:
       type: string
+      description: The first card payment's.
     acquirerTransactionId:
       type: string
+      description: The first card payment's.
     paymentBrand:
       type: string
+      description: The first card payment's.
     redeemedRebates:
       type: array
       items:
@@ -455,7 +524,7 @@ SettlementResult:
       $ref: './common.yaml#/Receipt'
     poiTransactionId:
       type: string
-      description: Terminal reference of the card payment, for void and refund.
+      description: Terminal reference of the first card payment, for void and refund; a gift-card-only sale reports its stored value payment here.
     poiTransactionTimestamp:
       type: string
       format: date-time

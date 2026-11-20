@@ -13,13 +13,16 @@ Settlement runs on the bridge, not in the page, so what can be recovered depends
 - the `ServiceID` of every money request: `context.serviceId` from each settlement `beforeStep` and each refund/void `beforeStep`. These run before the request is sent, and again with a new id on a retry.
 - `op.serviceId` of `refundUnlinked` and stored value changes. The bridge assigns it when it accepts the operation, but it starts the operation before the page receives that response. If the bridge crashes in between, the terminal may already have the request while the page never learned its id. That request can only be found by hand (step 4 of [The bridge stopped or crashed](#the-bridge-stopped-or-crashed)).
 
-The record is the result's per-leg POI references plus the member. The JavaScript SDK has no helper for this (Java has `OriginalSaleRecord.from(result, memberId)`), so copy the fields:
+The record is the result's per-leg POI references plus the member, with one `cardPayments` entry per card payment of the sale, in order. The JavaScript SDK has no helper for this (Java has `OriginalSaleRecord.from(result, memberId)`), so copy the fields:
 
 ```ts
 const result = await session.settle();
 const record: OriginalSaleRecord = {
-  cardPoiTransactionId: result.poiTransactionId,
-  cardPoiTransactionTimestamp: result.poiTransactionTimestamp,
+  cardPayments: result.cardPayments.flatMap(({ poiTransactionId, poiTransactionTimestamp, amount }) =>
+    poiTransactionId
+      ? [{ poiTransactionId, amount, ...(poiTransactionTimestamp ? { poiTransactionTimestamp } : {}) }]
+      : [],
+  ),
   storedValuePoiTransactionId: result.storedValuePoiTransactionId,
   storedValuePoiTransactionTimestamp: result.storedValuePoiTransactionTimestamp,
   rebatePoiTransactionId: result.rebatePoiTransactionId,
@@ -32,6 +35,8 @@ const record: OriginalSaleRecord = {
 };
 persist(record);
 ```
+
+A record saved before `cardPayments` existed, with `cardPoiTransactionId` and `cardPoiTransactionTimestamp`, still works: the bridge reads those as one card payment when `cardPayments` is absent or empty, and ignores them when it lists any. A gift-card-only sale has no card payments; its payment is voided through `storedValuePoiTransactionId`.
 
 A sale that loaded a gift card (a `STORED_VALUE_LOAD` movement) also needs `storedValueLoads`: one `{ basketReference, amount, poiTransactionId, poiTransactionTimestamp }` per loaded basket line. The result does not carry the basket reference, so build these from your basket line and the matching movement.
 
