@@ -10,6 +10,10 @@
 package com.bilt.pos.session;
 
 import com.bilt.pos.session.internal.ReversalMovement;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -39,7 +43,9 @@ import java.util.concurrent.ConcurrentHashMap;
 final class ReversalGuards {
 
   private final Set<ReversalMovement.Key> reversedMovements = ConcurrentHashMap.newKeySet();
-  private final Set<String> refundedInFull = ConcurrentHashMap.newKeySet();
+  // in refund order, so a retry can restate what earlier attempts refunded
+  private final Map<String, ReversedMovement> refundedInFull =
+      Collections.synchronizedMap(new LinkedHashMap<>());
   private volatile boolean refundIssued;
   private final String subject;
 
@@ -93,15 +99,22 @@ final class ReversalGuards {
   }
 
   /**
-   * A full refund returned card payment {@code poiTransactionId}; it must not be refunded again.
+   * A full refund returned the card payment {@code refund} names; it must not be refunded again.
    */
-  void markRefundedInFull(String poiTransactionId) {
-    refundedInFull.add(poiTransactionId);
+  void markRefundedInFull(ReversedMovement refund) {
+    refundedInFull.put(refund.getPoiTransactionId(), refund);
+  }
+
+  /** The card payments a full refund already returned, in the order they were refunded. */
+  List<ReversedMovement> refundedInFull() {
+    synchronized (refundedInFull) {
+      return List.copyOf(refundedInFull.values());
+    }
   }
 
   /** Whether a full refund already returned card payment {@code poiTransactionId}. */
   boolean refundedInFull(String poiTransactionId) {
-    return refundedInFull.contains(poiTransactionId);
+    return refundedInFull.containsKey(poiTransactionId);
   }
 
   /** A new payment replaced the guarded sale and all of its reversal progress. */

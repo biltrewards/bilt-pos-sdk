@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.53.1]
+
+### Fixed
+
+- A `refund()` of a sale with several card payments that stops part-way (after refunding some of the card payments, or all of them but not the award) no longer lets the session discard its progress. The error now lists the card payments already refunded in `SessionError.getReversedMovements()` (step `CARD`, the original POI transaction ID and the refund's `ServiceID`), and so does the error a `ReversalFlow.onError` handler receives, so it can persist them before it aborts. Until a retried `refund()` succeeds, the session refuses `basket().clear()`, another `settle()` and `end()`, as it already does for a partially complete void.
+
 ## [0.53.0]
 
 ### Added

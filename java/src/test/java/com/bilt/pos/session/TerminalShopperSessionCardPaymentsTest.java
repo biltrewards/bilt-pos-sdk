@@ -478,7 +478,23 @@ class TerminalShopperSessionCardPaymentsTest {
     SessionException failure = assertThrows(SessionException.class, () -> session.refund().get());
     assertTrue(failure.getError().getMessage().contains("the tender refund of " + CARD_3));
     assertTrue(failure.getError().getMessage().contains(CARD_2 + " was not refunded"));
+    assertEquals(
+        List.of(CARD_3),
+        failure.getError().getReversedMovements().stream()
+            .map(ReversedMovement::getPoiTransactionId)
+            .collect(Collectors.toList()),
+        "the completed card refunds are reported as structured progress");
     assertEquals(List.of(CARD_3, CARD_2), refundedIds(drainRequests()));
+
+    // the progress lives in this session: nothing may discard it before the retry
+    SessionException endRefused = assertThrows(SessionException.class, () -> session.end().get());
+    assertEquals(SessionErrorCode.INVALID_STATE, endRefused.getError().getCode());
+    assertTrue(endRefused.getError().getMessage().contains("retry refund()"));
+    assertThrows(IllegalStateException.class, () -> session.basket().clear());
+    SessionException settleRefused =
+        assertThrows(SessionException.class, () -> session.settle().get());
+    assertTrue(settleRefused.getError().getMessage().contains("retry refund()"));
+    assertEquals(0, drainRequests().size());
 
     SessionException voidRefused =
         assertThrows(SessionException.class, () -> session.voidTransaction().get());
@@ -487,14 +503,117 @@ class TerminalShopperSessionCardPaymentsTest {
         voidRefused.getError().getCode(),
         "money already returned by the refund rules out a void");
 
+    // a retry that stops again reports the earlier card refund along with its own
     server.enqueue(new MockResponse().setBody(refundOk("POI-REF-2", 20.00)));
+    server.enqueue(new MockResponse().setBody(REFUND_DECLINED));
+    SessionException stoppedAgain =
+        assertThrows(SessionException.class, () -> session.refund().get());
+    assertEquals(
+        List.of(CARD_3, CARD_2),
+        stoppedAgain.getError().getReversedMovements().stream()
+            .map(ReversedMovement::getPoiTransactionId)
+            .collect(Collectors.toList()));
+    assertEquals(List.of(CARD_2, CARD_1), refundedIds(drainRequests()));
+
     server.enqueue(new MockResponse().setBody(refundOk("POI-REF-1", 10.00)));
     server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.LOYALTY_REFUND_OK));
 
     RefundResult retried = session.refund().get();
 
-    assertEquals(0, new BigDecimal("30.00").compareTo(retried.getRefundedAmount()));
-    assertEquals(List.of(CARD_2, CARD_1), refundedIds(drainRequests()));
+    assertEquals(0, new BigDecimal("10.00").compareTo(retried.getRefundedAmount()));
+    assertEquals(List.of(CARD_1), refundedIds(drainRequests()));
+    assertDoesNotThrow(() -> session.basket().clear(), "a finished refund lifts the guard");
+  }
+
+  @Test
+  void sessionRefundOnErrorSeesTheCardPaymentsAlreadyRefunded() throws Exception {
+    settledWith(threeCardSale().build());
+    server.enqueue(new MockResponse().setBody(refundOk("POI-REF-3", 30.00)));
+    server.enqueue(new MockResponse().setBody(REFUND_DECLINED));
+    List<List<String>> seen = new ArrayList<>();
+
+    assertThrows(
+        SessionException.class,
+        () ->
+            session
+                .refund()
+                .onError(
+                    (step, error) -> {
+                      seen.add(
+                          error.getReversedMovements().stream()
+                              .map(ReversedMovement::getPoiTransactionId)
+                              .collect(Collectors.toList()));
+                      return ReversalDecision.ABORT;
+                    })
+                .get());
+
+    assertEquals(
+        List.of(List.of(CARD_3)),
+        seen,
+        "the handler can persist the completed refunds before it aborts");
+    drainRequests();
+  }
+
+  @Test
+  void anAwardAbortAfterEveryCardRefundKeepsTheProgressAndTheGuard() throws Exception {
+    settledWith(
+        OriginalSaleRecord.builder()
+            .addCardPayment(card(CARD_1, "10.00"))
+            .addCardPayment(card(CARD_2, "20.00"))
+            .awardPoiTransactionId(AWARD)
+            .awardPoiTransactionTimestamp(ORIGINAL_TIME)
+            .build());
+    server.enqueue(new MockResponse().setBody(refundOk("POI-REF-2", 20.00)));
+    server.enqueue(new MockResponse().setBody(refundOk("POI-REF-1", 10.00)));
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.LOYALTY_REFUND_FAILED));
+
+    SessionException failure =
+        assertThrows(
+            SessionException.class,
+            () -> session.refund().onError((step, error) -> ReversalDecision.ABORT).get());
+
+    assertEquals(
+        List.of(CARD_2, CARD_1),
+        failure.getError().getReversedMovements().stream()
+            .map(ReversedMovement::getPoiTransactionId)
+            .collect(Collectors.toList()),
+        "the thrown error lists every card refunded before the award aborted");
+    drainRequests();
+    SessionException endRefused = assertThrows(SessionException.class, () -> session.end().get());
+    assertTrue(endRefused.getError().getMessage().contains("retry refund()"));
+
+    // under the default policy an award-only retry skips the failed award; with nothing else left
+    // to send it fails, and still reports the cards refunded before
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.LOYALTY_REFUND_FAILED));
+    SessionException skipped = assertThrows(SessionException.class, () -> session.refund().get());
+    assertEquals(
+        List.of(CARD_2, CARD_1),
+        skipped.getError().getReversedMovements().stream()
+            .map(ReversedMovement::getPoiTransactionId)
+            .collect(Collectors.toList()),
+        "a retry that skipped every step still restates the earlier refunds");
+    drainRequests();
+
+    // an award-only retry that fails again still reports the cards refunded before
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.LOYALTY_REFUND_FAILED));
+    SessionException again =
+        assertThrows(
+            SessionException.class,
+            () -> session.refund().onError((step, error) -> ReversalDecision.ABORT).get());
+    assertEquals(
+        List.of(CARD_2, CARD_1),
+        again.getError().getReversedMovements().stream()
+            .map(ReversedMovement::getPoiTransactionId)
+            .collect(Collectors.toList()),
+        "a retry's error restates what earlier attempts refunded");
+    drainRequests();
+
+    server.enqueue(new MockResponse().setBody(TerminalShopperSessionTest.LOYALTY_REFUND_OK));
+    assertTrue(session.refund().get().isSuccess());
+    List<SaleToPOIRequest> retry = drainRequests();
+    assertEquals(List.of(), refundedIds(retry), "the retry sends only the award");
+    assertEquals(1, retry.size());
+    assertDoesNotThrow(() -> session.basket().clear());
   }
 
   @Test

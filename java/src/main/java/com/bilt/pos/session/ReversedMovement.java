@@ -12,7 +12,8 @@ package com.bilt.pos.session;
 import java.util.Objects;
 
 /**
- * A movement that completed before a whole-sale void stopped.
+ * A movement that completed before a whole-sale void, or a refund of several card payments,
+ * stopped. For a refund, each entry is a card payment (step {@code CARD}) already refunded in full.
  *
  * <p>Use the step and POI transaction ID to persist cross-session reversal progress. A later void
  * can omit these references from its {@code OriginalSaleRecord}, avoiding a second reversal of

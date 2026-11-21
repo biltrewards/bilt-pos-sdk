@@ -144,6 +144,10 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   // before failing. Replacing or ending the session would discard the
   // in-memory progress that makes the next void retry idempotent.
   private volatile boolean lastPaymentVoidIncomplete;
+  // Raised when a full refund() stops after returning some of the payment's card payments but not
+  // all. Ending the session or replacing the payment would discard the progress that makes the
+  // next refund() send only the card payments still standing.
+  private volatile boolean lastPaymentRefundIncomplete;
   // Refund/void mutual exclusion and void-resume progress for the most
   // recent successful settlement (see ReversalGuards). A later settlement
   // replaces this target and resets the guard.
@@ -274,6 +278,12 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
           "the basket cannot be cleared while a void "
               + "of the most recent payment is partially complete; retry "
               + "voidTransaction() first");
+    }
+    if (lastPaymentRefundIncomplete) {
+      throw new IllegalStateException(
+          "the basket cannot be cleared while a refund "
+              + "of the most recent payment's card payments is partially complete; retry "
+              + "refund() first");
     }
     if (hasCommittedRefundAllocations()) {
       throw new IllegalStateException(
@@ -804,6 +814,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
             "a void of the most recent payment is partially complete; "
                 + "retry voidTransaction() before starting another settlement");
       }
+      if (lastPaymentRefundIncomplete) {
+        throw invalidState(
+            "a refund of the most recent payment's card payments is partially complete; "
+                + "retry refund() before starting another settlement");
+      }
       if (basketConsumed) {
         throw invalidState(
             "the basket has already settled; call basket().clear() "
@@ -918,6 +933,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                 request.member == null ? null : request.member.getMemberId());
         lastSettlementIncludesRefunds = returnTotal.signum() > 0;
         lastPaymentVoidIncomplete = false;
+        lastPaymentRefundIncomplete = false;
         clearCommittedRefundAllocations();
         // this settlement replaced the void target, so the guard on
         // the previous one and all of its resume progress lift.
@@ -1509,10 +1525,51 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
           "the payment was already refunded in full from this session; nothing is left to "
               + "refund");
     }
+    RefundResult result;
+    try {
+      result =
+          refundOriginals(flow, amount, linked, refundServiceId, paid, awardReversed, originals);
+    } catch (RuntimeException e) {
+      if (linked && amount == null && refundIncomplete(targets, paid)) {
+        lastPaymentRefundIncomplete = true;
+      }
+      throw e;
+    }
+    if (linked && amount == null) {
+      lastPaymentRefundIncomplete = false;
+    }
+    return result;
+  }
+
+  /**
+   * Whether a failed full refund left progress to resume: it returned some of the payment's targets
+   * but not all of them, or all of them but not the award.
+   */
+  private boolean refundIncomplete(List<ReversalMovement> targets, OriginalSaleRecord paid) {
+    long refunded =
+        targets.stream()
+            .filter(target -> guards.refundedInFull(target.getPoiTransactionId()))
+            .count();
+    if (refunded == 0) {
+      return false;
+    }
+    return refunded < targets.size()
+        || (paid.getAwardPoiTransactionId() != null && !guards.awardReversed());
+  }
+
+  private RefundResult refundOriginals(
+      ReversalFlow<RefundResult> flow,
+      BigDecimal amount,
+      boolean linked,
+      String refundServiceId,
+      OriginalSaleRecord paid,
+      boolean awardReversed,
+      List<ReversalMovement> originals) {
     return reversalManager.refund(
         amount,
         null,
         originals,
+        linked && amount == null ? guards.refundedInFull() : List.of(),
         awardReversed ? null : paid.getAwardPoiTransactionId(),
         awardReversed ? null : paid.getAwardPoiTransactionTimestamp(),
         linked ? paid.getMemberId() : null,
@@ -1520,13 +1577,13 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         flow.decider(),
         flow.beforeStepHandler(),
         linked
-            ? original -> {
+            ? refund -> {
               guards.markRefunded();
-              if (amount == null) {
-                guards.markRefundedInFull(original);
+              if (amount == null && refund != null) {
+                guards.markRefundedInFull(refund);
               }
             }
-            : original -> {},
+            : refund -> {},
         linked ? () -> guards.markAwardReversed(paid.getAwardPoiTransactionId()) : () -> {},
         refundServiceId);
   }
@@ -2172,6 +2229,11 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
           "a void of the most recent payment is partially "
               + "complete; retry voidTransaction() before ending the session");
     }
+    if (lastPaymentRefundIncomplete) {
+      throw invalidState(
+          "a refund of the most recent payment's card payments is partially "
+              + "complete; retry refund() before ending the session");
+    }
     if (!priorSaleVoidReversedMovements.isEmpty()) {
       throw invalidState(
           "a prior-sale void is partially complete; retry "
@@ -2194,6 +2256,9 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     if (lastPaymentVoidIncomplete) {
       unresolved.add(guards.reversedMovements().size() + " reversed same-session void movement(s)");
     }
+    if (lastPaymentRefundIncomplete) {
+      unresolved.add("a partially complete refund of the most recent payment");
+    }
     if (!priorSaleVoidReversedMovements.isEmpty()) {
       unresolved.add(
           priorSaleVoidReversedMovements.size() + " reversed prior-sale void movement(s)");
@@ -2212,6 +2277,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         committedRefundAllocations = List.of();
         committedRefundMovements = List.of();
         lastPaymentVoidIncomplete = false;
+        lastPaymentRefundIncomplete = false;
         guards.reset();
         priorSaleVoidTarget = null;
         priorSaleVoidReversedMovements = ConcurrentHashMap.newKeySet();

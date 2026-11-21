@@ -158,13 +158,14 @@ public final class ReversalManager {
                 originalPoiTimestamp,
                 amount,
                 TenderType.CARD)),
+        List.of(),
         awardPoiTxnId,
         awardPoiTimestamp,
         memberId,
         saleTransaction,
         decider,
         beforeStep,
-        original -> onRefunded.run(),
+        refund -> onRefunded.run(),
         onAwardReversed,
         refundServiceId);
   }
@@ -181,8 +182,11 @@ public final class ReversalManager {
    * @param originals the original payments to refund, in the order to send them, each with the
    *     amount a full refund returns when known and its tender; an entry without a POI transaction
    *     ID is an unlinked refund. Must not be empty unless an award is to be reversed.
-   * @param onRefunded told each original's POI transaction ID ({@code null} for an unlinked refund)
-   *     the moment its tender refund completes
+   * @param priorRefunds the card payments earlier attempts of this refund already returned; they
+   *     are not sent again, but every error restates them with this attempt's refunds in {@link
+   *     SessionError#getReversedMovements()}
+   * @param onRefunded told each tender refund the moment it completes, as the movement it reversed
+   *     ({@code null} for an unlinked refund)
    * @see #refund(BigDecimal, List, String, Instant, String, Instant, String,
    *     TransactionIdentificationType, StepDecider, Consumer, Runnable, Runnable, String)
    */
@@ -190,13 +194,14 @@ public final class ReversalManager {
       BigDecimal amount,
       List<SaleItem> saleItems,
       List<ReversalMovement> originals,
+      List<ReversedMovement> priorRefunds,
       String awardPoiTxnId,
       Instant awardPoiTimestamp,
       String memberId,
       TransactionIdentificationType saleTransaction,
       StepDecider decider,
       Consumer<ReversalContext> beforeStep,
-      Consumer<String> onRefunded,
+      Consumer<ReversedMovement> onRefunded,
       Runnable onAwardReversed,
       String refundServiceId) {
     // the tender refund anchors the flow, so the award is best-effort
@@ -205,6 +210,14 @@ public final class ReversalManager {
     String[] presetServiceId = {refundServiceId};
     List<PaymentResponse> refunded = new ArrayList<>();
     List<String> refundedOriginals = new ArrayList<>();
+    // the tender refunds that completed, as structured progress for an abort error
+    List<ReversedMovement> refundedMovements = new ArrayList<>(priorRefunds);
+    // the register's onError sees the card refunds already completed, as a void's does, so it can
+    // persist them before it aborts
+    StepDecider progressAware =
+        (step, error) ->
+            effective.decide(
+                step, Wire.withReversedMovements(error, List.copyOf(refundedMovements)));
     List<TenderMovement> cardRefunds = new ArrayList<>();
     List<TenderAmount> byTender = new ArrayList<>();
     // the first refund's receipts, parsed once for its entry and the single-value fields
@@ -217,7 +230,7 @@ public final class ReversalManager {
       PaymentResponse body =
           runStep(
               ReversalStep.CARD,
-              effective,
+              progressAware,
               decider == null,
               () -> {
                 String serviceId = presetServiceId[0];
@@ -244,7 +257,7 @@ public final class ReversalManager {
               },
               e ->
                   refundedOriginals.isEmpty()
-                      ? e
+                      ? withProgress(e, refundedMovements)
                       : new SessionException(
                           Wire.annotated(
                               e.getError(),
@@ -254,7 +267,8 @@ public final class ReversalManager {
                                   + originalPoiTxnId
                                   + " was not refunded: "
                                   + e.getError().getMessage(),
-                              e)));
+                              e,
+                              List.copyOf(refundedMovements))));
       if (body != null) {
         BigDecimal legAmount = refundedAmount(body, original.amount);
         Receipt customerReceipt = ReceiptMapper.customerReceipt(body.getPaymentReceipt());
@@ -264,6 +278,13 @@ public final class ReversalManager {
         }
         refunded.add(body);
         refundedOriginals.add(String.valueOf(originalPoiTxnId));
+        ReversedMovement refund =
+            originalPoiTxnId != null && sentServiceId[0] != null
+                ? new ReversedMovement(ReversalStep.CARD, originalPoiTxnId, sentServiceId[0])
+                : null;
+        if (refund != null) {
+          refundedMovements.add(refund);
+        }
         byTender.add(new TenderAmount(original.tender, originalPoiTxnId, legAmount));
         if (original.tender == TenderType.CARD) {
           cardRefunds.add(
@@ -279,7 +300,7 @@ public final class ReversalManager {
                   .merchantReceipt(merchantReceipt)
                   .build());
         }
-        onRefunded.accept(originalPoiTxnId);
+        onRefunded.accept(refund);
       }
     }
 
@@ -289,7 +310,7 @@ public final class ReversalManager {
       LoyaltyResponse awardLeg =
           runStep(
               ReversalStep.AWARD,
-              effective,
+              progressAware,
               decider == null,
               () ->
                   loyaltyRefund(
@@ -306,7 +327,7 @@ public final class ReversalManager {
               },
               e ->
                   refunded.isEmpty()
-                      ? e
+                      ? withProgress(e, refundedMovements)
                       : new SessionException(
                           Wire.annotated(
                               e.getError(),
@@ -314,7 +335,8 @@ public final class ReversalManager {
                                   + awardPoiTxnId
                                   + " was not reversed: "
                                   + e.getError().getMessage(),
-                              e)));
+                              e,
+                              List.copyOf(refundedMovements))));
       if (awardLeg != null) {
         loyalty = parseReversal(awardLeg);
         awardReversed = true;
@@ -326,7 +348,7 @@ public final class ReversalManager {
       if (!awardReversed) {
         // every step was skipped: nothing moved, so the refund
         // must not report success
-        throw lastFailure[0];
+        throw withProgress(lastFailure[0], refundedMovements);
       }
       // the tender refund was skipped by decision; only the award moved
       return RefundResult.builder()
@@ -349,6 +371,16 @@ public final class ReversalManager {
         .pointsReversed(loyalty.pointsReversed)
         .remainingPointBalance(loyalty.remainingBalance)
         .build();
+  }
+
+  /** {@code failure} carrying the tender refunds completed so far, when there are any. */
+  private static SessionException withProgress(
+      SessionException failure, List<ReversedMovement> refunds) {
+    if (refunds.isEmpty()) {
+      return failure;
+    }
+    return new SessionException(
+        Wire.withReversedMovements(failure.getError(), List.copyOf(refunds)));
   }
 
   /**
